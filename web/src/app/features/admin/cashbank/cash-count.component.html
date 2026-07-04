@@ -1,0 +1,224 @@
+<section class="admin-page" aria-label="End-of-Day Cash Count">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-cash-coin me-2" aria-hidden="true"></i>
+        Cash Count@if (entity(); as c) { — <span class="mono">{{ c.countNumber }}</span>}
+      </h1>
+      <p class="subtitle">Reconcile the till's counted drawer against the expected book balance.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/cash/counts" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Counts
+      </a>
+    </div>
+  </div>
+
+  @if (!canManage() && isNewMode()) {
+    <div class="alert alert-warning" role="alert">You do not have permission to open a cash count (CASH.COUNT.MANAGE).</div>
+  }
+
+  <!-- Detail-mode loading / error / forbidden -->
+  @if (!isNewMode()) {
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mt-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading cash count…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mt-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load this cash count.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mt-3" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+        </p>
+      }
+      @default {}
+    }
+  }
+
+  <!-- New-count form -->
+  @if (isNewMode() && !entity() && canManage()) {
+    <div class="erp-card mt-3">
+      <div class="erp-card__head">
+        <h2>Open a Count</h2>
+      </div>
+      <div class="erp-card__body">
+        @if (openError()) {
+          <div class="alert alert-danger py-2 mb-3" role="alert">{{ openError() }}</div>
+        }
+        <div class="erp-form-grid">
+          @if (companies().length > 1) {
+            <div class="erp-field">
+              <label for="ccCompany">Company</label>
+              <select id="ccCompany" class="form-select form-select-sm"
+                      [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <div class="erp-field">
+            <label for="ccTill">Till (Cash Account) <span aria-hidden="true">*</span></label>
+            <select id="ccTill" class="form-select form-select-sm"
+                    [ngModel]="selectedTillUid()" (ngModelChange)="selectedTillUid.set($event)"
+                    required>
+              <option value="">— select till —</option>
+              @for (t of tills(); track t.uid) {
+                <option [value]="t.uid">{{ t.code }} — {{ t.name }}</option>
+              }
+            </select>
+            @if (tills().length === 0) {
+              <div class="form-text">No CASH-type accounts found for this company.</div>
+            }
+          </div>
+
+          <div class="erp-field">
+            <label for="ccDate">Business Date <span aria-hidden="true">*</span></label>
+            <input id="ccDate" type="date" class="form-control form-control-sm"
+                   [ngModel]="businessDate()" (ngModelChange)="businessDate.set($event)"
+                   required />
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 px-3 pb-3" style="border-top:1px solid var(--erp-border); padding-top:0.75rem">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="openCount()" [disabled]="openDisabled()">
+          @if (opening()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Open Count
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Count workspace (opened or loaded) -->
+  @if (entity(); as c) {
+    <div class="erp-card mt-3">
+      <div class="erp-card__head">
+        <h2 class="mono">{{ c.countNumber }}</h2>
+        <span class="spacer"></span>
+        <span class="status-tag"
+              [class.status-tag--warn]="c.status === 'OPEN'"
+              [class.status-tag--neutral]="c.status === 'COUNTED'"
+              [class.status-tag--ok]="c.status === 'RECONCILED'">
+          {{ c.status }}
+        </span>
+        <span style="font-size:0.82rem;color:var(--erp-text-2)">
+          {{ c.cashBankAccountName }} — {{ c.businessDate }}
+        </span>
+      </div>
+      <div class="erp-card__body">
+
+        <!-- KPIs -->
+        <div class="d-flex flex-wrap gap-3 mb-3">
+          <div class="erp-kpi">
+            <div class="erp-kpi__label">Expected</div>
+            <div class="erp-kpi__value">{{ c.currency }} {{ fmtMoney(expectedAmount()) }}</div>
+          </div>
+          <div class="erp-kpi">
+            <div class="erp-kpi__label">Counted</div>
+            <output class="erp-kpi__value d-block" aria-live="polite">
+              {{ c.currency }} {{ fmtMoney(countedAmount()) }}
+            </output>
+          </div>
+          <div class="erp-kpi">
+            <div class="erp-kpi__label">Variance</div>
+            <output class="d-flex align-items-center gap-2 mt-1" aria-live="polite"
+                     [attr.aria-label]="'Variance ' + varianceLabel() + ' ' + fmtMoney(varianceAmount())">
+              <span class="status-tag"
+                    [class.status-tag--ok]="varianceTone() === 'ok'"
+                    [class.status-tag--danger]="varianceTone() === 'danger'"
+                    [class.status-tag--neutral]="varianceTone() === 'neutral'">
+                <span class="status-tag__dot"></span>{{ varianceLabel() }}
+              </span>
+              <span class="mono fw-semibold">{{ c.currency }} {{ fmtMoney(varianceAmount()) }}</span>
+            </output>
+          </div>
+        </div>
+
+        <!-- Denomination grid -->
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="visually-hidden">Denomination count</caption>
+            <thead>
+              <tr>
+                <th scope="col">Denomination</th>
+                <th scope="col" class="num">Quantity</th>
+                <th scope="col" class="num">Line Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (denom of DENOMINATION_LADDER; track denom) {
+                <tr>
+                  <th scope="row" class="mono">{{ denom.toLocaleString('en-US') }}</th>
+                  <td class="num">
+                    <label class="visually-hidden" [for]="'ccQty-' + denom">Quantity of {{ denom }} notes/coins</label>
+                    <input [id]="'ccQty-' + denom" type="number" min="0" step="1"
+                           class="form-control form-control-sm text-end" style="max-width:8rem;margin-left:auto"
+                           [ngModel]="quantityOf(denom)" (ngModelChange)="setQuantity(denom, $event)"
+                           [disabled]="!editable()" />
+                  </td>
+                  <td class="num mono">{{ fmtMoney(lineAmountFor(denom)) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td></td>
+                <td class="num mono fw-semibold">{{ fmtMoney(countedAmount()) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        @if (saveError()) {
+          <div class="alert alert-danger py-2 mt-3" role="alert">{{ saveError() }}</div>
+        }
+        @if (reconcileError()) {
+          <div class="alert alert-danger py-2 mt-3" role="alert">{{ reconcileError() }}</div>
+        }
+
+        @if (canManage()) {
+          <div class="d-flex gap-2 mt-3">
+            @if (c.status !== 'RECONCILED') {
+              <button type="button" class="btn btn-primary btn-sm"
+                      (click)="saveCount()" [disabled]="!editable() || saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Save Count
+              </button>
+            }
+            @if (c.status === 'COUNTED') {
+              <button type="button" class="btn btn-success btn-sm"
+                      (click)="reconcileCount()" [disabled]="reconciling()">
+                @if (reconciling()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Reconcile
+              </button>
+            }
+          </div>
+        }
+
+        @if (c.status === 'RECONCILED') {
+          <output class="alert alert-success d-flex align-items-center gap-2 mt-3">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+            Reconciled@if (c.reconciledAt) { at {{ c.reconciledAt }}}.
+            @if (c.journalEntryRef) {
+              <a [routerLink]="['/admin/gl/journals/uid', c.journalEntryRef]" class="ms-auto">View GL Entry</a>
+            }
+          </output>
+        }
+      </div>
+    </div>
+  }
+</section>

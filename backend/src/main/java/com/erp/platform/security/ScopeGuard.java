@@ -40,6 +40,7 @@ import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.cashbank.repository.BankReconciliationRepository;
 import com.erp.modules.cashbank.repository.CashBankAccountRepository;
+import com.erp.modules.cashbank.repository.CashCountRepository;
 import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.cashbank.repository.CashTransferRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
@@ -172,6 +173,8 @@ public class ScopeGuard {
     private final CashTransferRepository     cashTransfers;
     private final ChequeRepository           cheques;
     private final BankReconciliationRepository bankReconciliations;
+    // ADR-0050 D-7 PR-A: cash count
+    private final CashCountRepository        cashCounts;
     // VAT / WHT repositories (ADR-0017 D-11)
     private final VatReturnRepository        vatReturns;
     private final VatAdjustmentRepository    vatAdjustments;
@@ -362,6 +365,8 @@ public class ScopeGuard {
                       WorkOrderRepository workOrdersRepo,
                       WorkOrderComponentRepository workOrderComponentsRepo,
                       WorkOrderOperationRepository workOrderOperationsRepo,
+                      // cash count (ADR-0050 D-7 PR-A)
+                      CashCountRepository cashCounts,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -470,6 +475,8 @@ public class ScopeGuard {
         this.workOrdersRepo           = workOrdersRepo;
         this.workOrderComponentsRepo  = workOrderComponentsRepo;
         this.workOrderOperationsRepo  = workOrderOperationsRepo;
+        // cash count (ADR-0050 D-7 PR-A)
+        this.cashCounts               = cashCounts;
         this.audit               = audit;
     }
 
@@ -601,6 +608,8 @@ public class ScopeGuard {
             case "workorder"           -> workOrdersRepo.findCompanyIdByUid(uid);
             case "workordercomponent"  -> workOrderComponentsRepo.findCompanyIdByUid(uid);
             case "workorderoperation"  -> workOrderOperationsRepo.findCompanyIdByUid(uid);
+            // cash count (ADR-0050 D-7 PR-A)
+            case "cashcount"           -> cashCounts.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

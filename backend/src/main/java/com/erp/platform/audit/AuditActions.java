@@ -186,6 +186,11 @@ public final class AuditActions {
     public static final String CASH_RECONCILE_MARK     = "CASH.RECONCILE.MARK";
     public static final String CASH_RECONCILE_COMPLETE = "CASH.RECONCILE.COMPLETE";
 
+    // ---- Cash Count (ADR-0050 D-7 PR-A) ----
+    public static final String CASH_COUNT_OPEN         = "CASH.COUNT.OPEN";
+    public static final String CASH_COUNT_COUNT        = "CASH.COUNT.COUNT";
+    public static final String CASH_COUNT_RECONCILE    = "CASH.COUNT.RECONCILE";
+
     // ---- VAT / Tax module (ADR-0017 D-13) ----
     public static final String VAT_RETURN_PREPARE  = "VAT.RETURN.PREPARE";
     public static final String VAT_RETURN_FILE     = "VAT.RETURN.FILE";

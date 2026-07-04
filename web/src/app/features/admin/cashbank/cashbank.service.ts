@@ -9,13 +9,16 @@ import {
   CashAccountBalanceDto,
   CashAccountStatementDto,
   CashBankAccountDto,
+  CashCountDto,
   CashGlReconciliationDto,
   CashTransferDto,
   CashTransactionDto,
   ChequeDto,
   CreateCashBankAccountRequest,
   MarkClearedRequest,
+  OpenCashCountRequest,
   OpenReconciliationRequest,
+  RecordDenominationsRequest,
   RecordDirectEntryRequest,
   RecordTransferRequest,
   RegisterChequeRequest,
@@ -254,5 +257,37 @@ export class CashbankService {
     return this.http.get<CashGlReconciliationDto>(
       `${this.base}/statements/accounts/uid/${accountUid}/gl-reconciliation`,
     );
+  }
+
+  // ── Cash Counts (D-7 PR-A) ────────────────────────────────────────────────
+
+  /** Open a new end-of-day cash count for a till; server derives expectedAmount. Status OPEN. */
+  openCashCount(request: OpenCashCountRequest): Observable<CashCountDto> {
+    return this.http.post<CashCountDto>(`${this.base}/counts`, request);
+  }
+
+  /** Record/replace the denomination breakdown; server computes countedAmount + varianceAmount. Status COUNTED. */
+  recordDenominations(uid: string, request: RecordDenominationsRequest): Observable<CashCountDto> {
+    return this.http.put<CashCountDto>(`${this.base}/counts/uid/${uid}/denominations`, request);
+  }
+
+  /** Post the variance to GL and lock the count. Status RECONCILED. */
+  reconcileCashCount(uid: string): Observable<CashCountDto> {
+    return this.http.post<CashCountDto>(`${this.base}/counts/uid/${uid}/reconcile`, {});
+  }
+
+  getCashCount(uid: string): Observable<CashCountDto> {
+    return this.http.get<CashCountDto>(`${this.base}/counts/uid/${uid}`);
+  }
+
+  /**
+   * Cash-count history for ONE till. Note: unlike the other cashbank lists, the backend
+   * (`CashCountController#listByAccount`) requires BOTH `companyId` AND `accountId` — no
+   * company-wide listing and no pagination (returns a plain unwrapped array, newest first).
+   * `accountId` is the till's numeric `id` (not its `uid`).
+   */
+  listCashCounts(companyId: string, accountId: string): Observable<CashCountDto[]> {
+    const params = new HttpParams().set('companyId', companyId).set('accountId', accountId);
+    return this.http.get<CashCountDto[]>(`${this.base}/counts`, { params });
   }
 }
