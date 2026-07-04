@@ -381,15 +381,24 @@ Bulk packs define how many base units fit into a larger packaging unit (for exam
 
 ### Product prices
 
-A **product price** is the selling price of this product on a specific price list. A price must be set on a price list before the product can be sold at that list's rate. You can maintain different prices on different lists — for example, a higher retail price and a lower wholesale price for the same product.
+A **product price** is the selling price of this product on a specific price list, for a specific **unit**. A price must be set on a price list before the product can be sold at that list's rate. You can maintain different prices on different lists — for example, a higher retail price and a lower wholesale price for the same product — and, on each list, a separate price for each pack the product is sold in.
+
+The **Prices** table has three columns: **Price list**, **Unit**, and **Price**. The **Unit** column shows **Base** for a price set against the product's base unit, or the pack's unit name (for example, `Carton`) for a per-pack price.
 
 You can set a selling price for this product on each of your price lists.
 
-1. In the **Prices** panel, select the **Price list** by its code and name.
-2. Enter the **Amount**. The **Currency** beside it is the **Currency Picker** (the company's enabled currencies, defaulting to the company default) — you pick from the list rather than typing a code (see **Getting Started › Common UI Patterns**).
-3. Click **Set Price**.
+1. In the **Prices** panel, under **Set Price**, select the **Price list** by its code and name.
+2. Choose the **Unit**. This dropdown defaults to **Base unit** and also lists every **bulk pack** you have configured for the product (see *Bulk packs* above). Pick **Base unit** to price the base unit, or a pack unit to set that pack's own price.
+3. Enter the **Amount**. The **Currency** beside it is the **Currency Picker** (the company's enabled currencies, defaulting to the company default) — you pick from the list rather than typing a code (see **Getting Started › Common UI Patterns**).
+4. Click **Set Price**.
 
-Setting a price on a price list that already has a price for this product overwrites the existing price. To remove a price, click **Remove** on the row.
+**You can only price a pack unit that is already a configured bulk pack.** If the unit you want is not in the dropdown, add it in the **Bulk Packs** panel first (with its factor to base), then return here. Trying to price a unit that is not the base unit and not a configured pack is rejected.
+
+**How the base row and pack prices work together.** Setting a **Base unit** price is the normal case and is all most products need: when the product is sold in a pack, the system multiplies the base-unit price by that pack's **factor to base**. So a product priced at 5 per base unit, sold in a `Carton` of factor 24, is offered at 120 for the carton automatically — you do not have to enter it.
+
+**Non-linear pack pricing.** When a pack should *not* simply be the base price times the factor — for example a 1,000 g pack that you sell for less than 1,000 times the per-gram price as a bulk incentive — set a price directly against that pack's unit. That explicit per-unit price is then used as-is for the pack and overrides the factor calculation; the base-unit price still governs every other unit. This lets you price a big pack independently of the per-unit rate.
+
+Each price list holds **one price per unit** for the product: setting a price for a price-list-and-unit combination that already has one overwrites it. Setting a **Base unit** price does not touch any pack price, and vice versa. To remove a price, click **Remove** on its row — this removes only that price list's price for that specific unit (Base or the named pack).
 
 ### Product components (recipe)
 
@@ -414,10 +423,11 @@ Scenario: Catalogue manager sets up a new FMCG line before the first purchase or
 3. Click the **Edit** action on `PROD-0034` to open `/admin/products/uid/<uid>`.
 4. **Barcodes panel:** Enter `6009876543210`, tick **Set as primary**, click **Add Barcode**.
 5. **Bulk Packs panel:** Select Unit `CTN — Carton`, Factor to base `50`. Click **Add Bulk Pack**. (50 kg bags per carton.)
-6. **Prices panel:** Select Price list `RETAIL — Retail Price List`, Amount `2500`, leave **Currency** at the default. Click **Set Price**.
-7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
+6. **Prices panel:** Select Price list `RETAIL — Retail Price List`, leave **Unit** at **Base unit**, Amount `2500`, leave **Currency** at the default. Click **Set Price**.
+7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, **Unit** `Base unit`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
+8. **Prices panel (non-linear carton price):** Select Price list `WHOLESALE — Wholesale Price List`, **Unit** `Carton`, Amount `105000`, leave **Currency** at the default. Click **Set Price**. (Fifty 1 kg bags would otherwise resolve to 50 × 2,200 = 110,000; pricing the carton directly at 105,000 gives buyers a bulk discount independent of the per-kilogram wholesale rate.)
 
-The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price and will appear in stock movements tracked in kilograms.
+The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price, at a discounted wholesale carton price, and will appear in stock movements tracked in kilograms. The Prices table shows three rows: `RETAIL / Base`, `WHOLESALE / Base`, and `WHOLESALE / Carton`.
 
 ---
 

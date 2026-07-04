@@ -818,6 +818,79 @@ Select an account by name to view:
 
 ---
 
+### End-of-Day Cash Count
+
+**What it is.** An end-of-day cash count is a reconciliation of a physical **till** (a CASH-type cash/bank account) against its book balance. The cashier counts the drawer note-by-note and coin-by-coin, the system compares that counted total against the amount the books say should be there (the **expected** balance), and any **over** or **short** difference is posted to the ledger.
+
+**Why it exists.** A till's book balance is only as trustworthy as the physical cash behind it. Counting the drawer at the end of the day catches theft, miscounts at the counter, and un-rung sales while they are still traceable. Posting the over/short variance to the GL means the cash account on the balance sheet always matches the money actually in the drawer, and the loss or gain is recognised in the period it happened.
+
+**When it is used.** At the close of each business day (or each shift), by a cashier or supervisor with the `CASH.COUNT.MANAGE` permission. Viewing past counts requires `CASH.COUNT.VIEW`.
+
+**How it works.** A count moves through three states — **OPEN** (started; the expected balance has been captured), **COUNTED** (the denomination breakdown has been entered and the counted total and variance computed), and **RECONCILED** (finalised; any variance posted to the GL and the count locked). Only CASH-type accounts can be counted — a bank account has no physical drawer. When the count is reconciled, an over posts **DR till cash / CR Cash Over (income)** and a short posts **DR Cash Short (expense) / CR till cash**, and a matching cash-book entry is written so the till's cash book and its GL account always move together to the counted figure. A count with **zero variance posts no journal** — nothing needs correcting. A count is locked once reconciled and can never be re-opened or re-counted.
+
+**Viewing counts.** Navigate to **Accounting > Cash Counts** (`/admin/cash/counts`). Because counts are held per till, pick the **company** (if multi-company) and then the **till** from the selectors; the table then lists that till's counts with count number, business date, expected, counted, variance (green for over, red for short), and status. Click the eye icon to open a count.
+
+**Opening a count (requires `CASH.COUNT.MANAGE`):**
+
+1. From the Cash Counts list, click **New Count** (or go to `/admin/cash/counts/new`).
+2. Choose the **company** (if you belong to more than one), the **Till (Cash Account)** — only CASH-type accounts are listed — and the **Business Date** (defaults to today).
+3. Click **Open Count**. The system records the till's **expected** book balance as at that date and opens the count in **OPEN** status. You are taken to the count workspace.
+
+> Only one live count per till per day. If an OPEN or COUNTED count already exists for that till and date, opening another is rejected — finish or reconcile the first.
+
+**Entering the count and saving:**
+
+1. In the count workspace, the top shows three figures: **Expected** (the book balance), **Counted** (the live total of what you have entered), and **Variance** with an **Over** / **Short** / **Balanced** tag.
+2. In the **denomination grid**, enter the **quantity** of each note and coin you counted (the ladder is 10,000 / 5,000 / 2,000 / 1,000 / 500 / 200 / 100 / 50). The line amount and the running counted total update as you type.
+3. Click **Save Count**. The count moves to **COUNTED** and the server records the counted total and the variance. You can re-save as many times as you need while the count is not yet reconciled.
+
+**Reconciling (posting the variance):**
+
+1. Once the count is COUNTED, click **Reconcile**.
+2. The count moves to **RECONCILED** and locks. If there is an over or short, the variance is posted to the GL and a **View GL Entry** link appears; a zero-variance count simply locks with no posting.
+
+> The denomination ladder is fixed to the standard TZS notes and coins in this release — a configurable per-currency ladder is a planned follow-up.
+
+---
+
+### Petty Cash
+
+**What it is.** A petty cash fund is a small **imprest float** — a fixed amount of cash held by a named custodian to pay for minor day-to-day expenses (taxi fares, tea, small stationery) that do not justify a cheque or bank payment. This screen tracks each fund's float, its current balance, and every disbursement and replenishment against it.
+
+**Why it exists.** Small cash payments still need a record. Without a petty cash ledger, these amounts leave no trail, the custodian cannot be held accountable for the float, and the balance on hand can drift with no way to check it. Tracking each movement keeps the custodian's cash box auditable and shows at a glance how much of the float has been spent and needs replenishing.
+
+**When it is used.** By a user with the `PETTY_CASH.MANAGE` permission to create funds and record movements; `PETTY_CASH.VIEW` to view. Movements are recorded as they happen — a disbursement when cash is paid out, a replenishment when the float is topped back up.
+
+**How it works.** Each fund has a **float** (the authorised ceiling) and a **balance** (the cash actually on hand, which starts at zero and moves only through recorded transactions). Three transaction types move the balance: a **Disbursement** decreases it (cash paid out), a **Replenishment** increases it (float topped back up), and an **Adjustment** is a signed correction (a positive amount increases the balance, a negative amount decreases it). The system refuses any transaction that would push the balance below zero. The float is informational — it does not hard-block a disbursement, it simply tells you the ceiling the fund should be topped up to.
+
+> **Record-only.** Petty cash movements are **not posted to the general ledger** in this release. Even the optional expense GL account on a disbursement is captured for reference only — it does not create a journal. Reflect petty cash spending in the GL through a manual journal or the periodic replenishment payment.
+
+**Viewing funds.** Navigate to **Accounting > Petty Cash Funds** (`/admin/petty-cash/funds`). Pick the **company** (if multi-company); the table lists each fund's code, name, custodian, float, current balance, and status (ACTIVE / INACTIVE / ARCHIVED). Click the eye icon to open a fund.
+
+**Creating a fund (requires `PETTY_CASH.MANAGE`):**
+
+1. From the Petty Cash Funds list, click **New Fund** (or go to `/admin/petty-cash/funds/new`).
+2. Enter a unique **Fund Code** (e.g. `PCF-001`) and a **Fund Name** (e.g. "Front Office Petty Cash").
+3. Optionally select a **Custodian** (a user in the company) who is responsible for the float.
+4. Enter the **Float Amount** (the authorised ceiling) and the **Currency** (defaults to the company base currency).
+5. Click **Create Fund**. The fund opens with a balance of zero — record a replenishment to put the opening cash in.
+
+> The company must already have at least one branch before a petty cash fund can be created.
+
+**Recording a transaction (requires `PETTY_CASH.MANAGE`):**
+
+On the fund detail screen, use the **Record Transaction** panel:
+
+1. Choose the **Type**: **Disbursement** (cash out), **Replenishment** (cash in), or **Adjustment** (a correction).
+2. Enter the **Amount** (must be positive for a disbursement or replenishment; for an adjustment, enter a negative amount to decrease the balance) and the **Date**.
+3. For a **Disbursement**, optionally pick the **Expense GL Account** the spend relates to (captured for the record only — see the record-only note above).
+4. Optionally add a **Reference** and a **Description**.
+5. Click **Record Transaction**. The fund balance updates immediately and the movement appears in the **Transaction Ledger** below, showing the transaction number, type, amount, and the running balance after each entry.
+
+> A transaction that would take the balance below zero is rejected. Transactions can be recorded only against an **ACTIVE** fund.
+
+---
+
 ## Tax
 
 **What it is.** The Tax module covers two statutory obligations: the monthly **VAT return** (filed with TRA) and the **WHT (Withholding Tax) register**. Both work from the same underlying transaction data — sales invoices for output VAT, supplier bills for input VAT, and AR/AP payment legs for WHT — but they are separate filings with separate regulatory purposes.

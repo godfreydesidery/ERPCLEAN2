@@ -80,14 +80,15 @@ An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requi
 
 ### 1.4 Convert a requisition
 
-An approved requisition can be converted into either a Purchase Order or an RFQ:
+Converting an approved requisition creates the target document — a Purchase Order or an RFQ — in one step, carrying over the requisition lines. You choose the target type **and** the supplier(s) up front; the requisition then locks to CONVERTED and a link opens the document that was created.
 
 1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
-2. Click **Convert**. An inline conversion form opens.
-3. Choose the target type:
-   - **Purchase Order** — a DRAFT PO is created immediately from the requisition lines.
-   - **RFQ** — a DRAFT RFQ is created; proceed to section 2 to send it to suppliers.
-4. Click **Confirm Convert**. A link to the created document appears. The requisition status changes to **CONVERTED**.
+2. Click **Convert**. An inline **Convert Requisition** form opens.
+3. In **Convert to**, choose the target type. The rest of the form changes to suit it:
+   - **Purchase Order** — pick a single **Supplier** (required; only active suppliers of the requisition's company are listed) and optionally a **Currency** (a 3-letter code such as `USD` — leave blank to use the company default). A DRAFT PO is created at this supplier for the requisition lines.
+   - **Request for Quotation (RFQ)** — build the invite list: choose a supplier in **Add a supplier** and click the **+** button to add it, repeating for each supplier you want to quote (remove one with the **✕** on its row). At least one supplier is required. A DRAFT RFQ is created inviting those suppliers.
+4. Click **Confirm Convert**. This button stays disabled until you have chosen the required supplier(s) — a PO needs one supplier, an RFQ needs at least one invitee.
+5. The requisition status changes to **CONVERTED**. A **Converted to …** line appears in the summary card with a **View RFQ** / **View Purchase Order** link that opens the document that was just created — continue there (section 2 for an RFQ, section 3 for a PO).
 
 ### 1.5 Cancel a requisition
 
@@ -118,7 +119,7 @@ Store clerk Amani opens **Purchasing › Purchase Requisitions** (`/admin/purcha
 
 He clicks **Create Requisition** — requisition **REQ-0072** is created in DRAFT. He opens it and clicks **Submit for Approval** — status → SUBMITTED.
 
-Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert**, picks **RFQ**, and clicks **Confirm Convert** — RFQ **RFQ-0031** is created in DRAFT.
+Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert**, sets **Convert to** to **RFQ**, adds **Ofisi Supplies Ltd** and **Karatasi Traders** to the invite list, and clicks **Confirm Convert** — RFQ **RFQ-0031** is created in DRAFT and the **View RFQ** link opens it.
 
 ---
 
@@ -328,7 +329,7 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (section 4.3) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
@@ -349,12 +350,29 @@ The goods receipt is created with status **RECEIVED** and assigned a GRN-#### nu
 
 If the supplier delivers in stages, create a separate goods receipt for each delivery. Each GRN records the quantity received on that date. The PO tracks the cumulative received and outstanding quantities across all GRNs.
 
-### 4.3 Goods receipt status reference
+### 4.3 Void a goods receipt
+
+If a receipt was recorded in error, void it to fully reverse it. Voiding is available from the goods receipt detail page and requires the `PURCHASE.VOID` permission.
+
+1. Open the receipt (navigate to `/admin/goods-receipts/uid/{uid}`) — it must be in status RECEIVED.
+2. Click **Void Receipt**. An inline form opens.
+3. Enter a mandatory **Reason** and click **Confirm Void**.
+4. The receipt status changes to **VOID** and the void reason is shown on the receipt.
+
+**What the void reverses.** Voiding is a complete unwind of the receipt, not just a stock adjustment:
+
+- **Quantity** — the received quantity is removed from stock on-hand at the branch, and the PO's outstanding quantities are restored so the lines can be received again.
+- **General ledger** — the goods-received accounting entry is reversed.
+- **Batch (lot) and serial/IMEI tracking** — any lot/batch quantities and serial or IMEI numbers that were captured on the original receipt (see section 4.1, step 5) are backed out too: batch balances are decremented and the serials recorded by that receipt are removed from stock. This keeps the Stock Batches and Stock Serials screens (Inventory & Manufacturing chapter, sections 6–7) consistent with the reversal.
+
+A serial that has already moved on (for example, one that has since been issued) is left untouched; the rest of the reversal still completes.
+
+### 4.4 Goods receipt status reference
 
 | Status | Meaning |
 |---|---|
 | RECEIVED | Active receipt; stock increased |
-| VOID | Voided (reversed); stock decremented (API only) |
+| VOID | Voided (reversed); stock, GL, and batch/serial tracking all backed out |
 
 ---
 
@@ -642,7 +660,7 @@ Purchasing manager Neema opens REQ-0080 and clicks **Approve** (status → APPRO
 
 **Step 3 — Convert to RFQ**
 
-Neema clicks **Convert**, selects **RFQ**, and clicks **Confirm Convert** — RFQ-0031 is created in DRAFT.
+Neema clicks **Convert**, sets **Convert to** to **RFQ**, adds the two suppliers she wants to quote (**Tanzania Cement Distributors** and **Simba Cement Ltd**) to the invite list, and clicks **Confirm Convert** — RFQ-0031 is created in DRAFT and the **View RFQ** link opens it.
 
 **Step 4 — Invite suppliers and send**
 

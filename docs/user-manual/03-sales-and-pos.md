@@ -28,6 +28,8 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 | Blanket Orders | `SALES.BLANKET.VIEW`, `SALES.BLANKET.CREATE` |
 | Standing Orders | `SALES.STANDING.VIEW`, `SALES.STANDING.CREATE` |
 | Pricing Rules | `SALES.PRICING.RULE.VIEW`, `SALES.PRICING.RULE.MANAGE` |
+| Sales Settings (SO approval threshold) | `SALES.SETTINGS.MANAGE` |
+| Fiscal (EFD) receipts | `FISCAL.VIEW`, `FISCAL.MANAGE` |
 | POS (tills) | `POS.TILL.VIEW`, `POS.TILL.MANAGE` |
 | POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW` |
 | POS (reverse / age override) | `POS.SALE.VOID`, `POS.SALE.AGE_OVERRIDE` |
@@ -72,6 +74,8 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
 
 **Unit choices are product-scoped.** The **Unit** dropdown is disabled until a product is selected. Once a product is chosen, it lists only that product's configured units — its base unit plus any active bulk-pack units (e.g. CARTON) — never the full company unit list, and it defaults to the base unit. This applies to every line form in this chapter (quotations, sales orders, invoices, blanket orders, standing orders, and POS sales): you can no longer select a unit that is not configured on the product, which previously could silently mis-record the quantity.
+
+**Prices are per the selected unit.** Each product can carry a distinct price for each of its units — a price per PCS and a separate price per CARTON, for example. When you choose the **Unit**, the price the system resolves (and the amount shown in the line's **Unit Price** column) is the price for **that** unit, not the base-unit price multiplied out. So a line of 5 CARTON is priced at the carton price × 5, not the piece price × 5. If you type a **Price Override**, enter it as the price for the unit you selected. Switching the unit re-prices the line, so pick the unit first, then confirm or override the price.
 
 Repeat for each product. You can also add **Service** products; these are priced the same way but do not affect stock.
 
@@ -144,8 +148,10 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 2. Click **New Sales Order**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — the list is limited to the company's enabled currencies and defaults to the company default).
-5. Set **Order Date**. Optionally pick an **Agent** by name and add **Notes**.
+5. Set **Order Date**. The **Agent** field is pre-filled with **your own agent** (if your user is linked to a sales agent) — you can leave it, clear it, or type another agent's name to change it. Optionally add **Notes**.
 6. Click **Create Order**. The order is created in **DRAFT**.
+
+> **Agent pre-fill.** The Agent box shows *your* linked agent as soon as you open the form so a route agent does not have to search for themselves every time. It is only a convenience default — the field stays fully editable, and if your user has no linked agent (for example a root/admin login) the box simply opens empty.
 
 ### 2.2 Add lines to a Sales Order
 
@@ -162,6 +168,12 @@ Confirming an order reserves stock for every GOODS line.
 5. The status changes to **CONFIRMED** and each line shows its reserved quantity. Where stock was short, the line keeps an **Open (backorder)** quantity that you fulfil with a later delivery.
 
 This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders but not confirm them will not see this button.
+
+**Approval threshold (large orders).** Your company can require manager approval for high-value orders. When the SO-approval workflow is switched on (see *Sales Settings* below) and the order's gross total is **at or above the configured threshold**, clicking **Confirm Order** does not confirm it. Instead the system automatically **submits the order for approval** and refuses the confirmation with *"This order exceeds the approval threshold and has been submitted for approval. It can be confirmed once it is approved."* The order stays in **DRAFT**, but it is now **awaiting approval**: its lines are frozen (you cannot add or remove lines while it is pending) and the **Confirm Order** button is disabled. An authorised approver acts on it from **Approvals › Approval Inbox**. Once it is **approved**, come back and click **Confirm Order** again to reserve stock as normal. If the approval is **rejected**, the order can no longer be confirmed — cancel it and raise a new one. Orders below the threshold (or when the workflow is off) confirm immediately with no approval step.
+
+> You can also submit a draft order for approval yourself, before trying to confirm it: an order that has never been submitted shows a **Submit for Approval** button on its detail page. This routes it through the same inbox.
+
+**Configuring the threshold (Sales Settings).** A user with `SALES.SETTINGS.MANAGE` sets this up under **Sales › Sales Settings** (`/admin/sales-settings`). Pick the **Company**, tick **Enable SO Approval Workflow**, enter the **Approval Threshold Amount** (sales orders above this value require approval) and its **Currency**, then click **Save Settings**. Leaving the workflow disabled means no order is ever auto-held at confirm.
 
 **Credit-control hard block.** When the customer is a **Credit Account** customer, confirming the order runs a credit-control check. Confirmation is blocked (the order stays in DRAFT and the system returns a clear conflict message) if **any one** of these three independent conditions is true:
 
@@ -185,6 +197,8 @@ Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 ### 2.5 Set or change the agent
 
 **What the order's agent is.** Every sales order carries a sales agent — the salesperson or route agent credited with the sale — which the invoicing flow depends on. An order can be created without one (Agent is optional in section 2.1), but an invoice generated from an agentless order cannot be finalised.
+
+> **New orders pre-fill your own agent.** When you create a fresh Sales Order the Agent field already shows your linked agent (section 2.1), so a route agent's own orders normally arrive with the correct agent set. Use **Assign Agent / Change Agent** below when an order was created without one, was created by someone with no linked agent (e.g. root), or was credited to the wrong agent.
 
 **Why this action exists.** Before this action, an order created with no agent (or the wrong one) had no way to be corrected in place — every attempt to invoice it would keep failing. **Assign Agent** / **Change Agent** lets an authorised user fix the agent on an existing order without recreating it.
 
@@ -212,6 +226,8 @@ The order's agent is updated immediately and a confirmation is shown.
 | PARTIALLY_INVOICED | Some deliveries invoiced |
 | CLOSED | Fully fulfilled and fully invoiced |
 | CANCELLED | Cancelled; reservations released |
+
+**Approval status is separate from order status.** When the approval workflow holds an order (see section 2.3), the order stays in **DRAFT** but its detail page shows an **awaiting approval** state; it is not a distinct row in the table above. The approval outcome (pending, approved, rejected) governs whether **Confirm Order** is available, while the statuses above track fulfilment and invoicing once the order is confirmed.
 
 ---
 
@@ -288,7 +304,7 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 2. Click **New Invoice**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-5. Optionally pick an **Agent** and a **Route**; if omitted the system uses the logged-in user's linked agent and that agent's primary route.
+5. The **Agent** field is pre-filled with **your own agent** (if your user is linked to one) — leave it, clear it, or type another agent to change it. Optionally pick a **Route**. If you clear the Agent and leave it blank, the system still falls back to your linked agent and that agent's primary route on save; the pre-fill just makes the default visible up front. (Root/admin logins with no linked agent open with the box empty.)
 6. Click **Create Invoice**. A draft invoice is created.
 
 ### 4.2 Add lines to an invoice
@@ -335,7 +351,35 @@ A finalised invoice can be voided if it was issued in error:
 
 The original invoice number is retained on the voided record. Voiding is not the same as deletion.
 
-### 4.6 Invoice status reference
+### 4.6 Issue a fiscal (EFD) receipt
+
+**What a fiscal receipt is.** In Tanzania (and similar tax regimes) a taxable sale must be recorded on an approved fiscal device — an EFD (Electronic Fiscal Device) or VFD (Virtual Fiscal Device) — which returns a government **fiscal receipt number** and a **verification URL** the customer can use to confirm the receipt with the revenue authority. This ERP sends each finalised invoice to the company's configured fiscal provider and stores the result on the invoice.
+
+**Where it appears.** A **Fiscal Receipt** panel is shown on the invoice detail page (`/admin/sales-invoices/uid/{uid}`) **only once the invoice is FINALISED** and only to users with the `FISCAL.VIEW` permission. It is the same panel for every finalised invoice regardless of origin — a walk-in DIRECT invoice, an invoice raised from a delivery, or a POS counter sale (open the sale's invoice via **View Invoice** — see section 9.4).
+
+**To issue (or retry) the receipt:**
+
+1. Open the **FINALISED** invoice.
+2. In the **Fiscal Receipt** panel, read the current status tag (see the table below). If no receipt exists yet it reads **Not issued**.
+3. Click **Issue EFD receipt** (the button reads **Retry EFD receipt** if a previous attempt exists). This needs the `FISCAL.MANAGE` permission — view-only users see the status but no button.
+4. On success the status becomes **ISSUED** and the panel shows the **Fiscal number** and, where the provider returns one, a **Verification** link (opens the authority's verification page in a new tab). Hand or print this to the customer.
+
+**Receipt states:**
+
+| Status | Meaning / what to do |
+|---|---|
+| Not issued | No attempt yet — click **Issue EFD receipt**. |
+| PENDING | Submitted to the device; awaiting its response. |
+| ISSUED | Success — fiscal number and verification URL are shown. This is final; a receipt is never re-issued. |
+| FAILED | The device rejected or could not be reached; the reason is shown. Fix the cause and click **Retry EFD receipt**. |
+| NOT_CONFIGURED | No EFD/VFD device is set up for this company yet — the panel says so. Ask your administrator to configure the fiscal provider, then retry. |
+
+**Gotchas.**
+- The receipt can only be issued **after** the invoice is finalised — there is no fiscal button on a DRAFT invoice.
+- **ISSUED is permanent** and a **VOID** invoice cannot be fiscalised, so no button is offered in either case.
+- Issuing is safe to retry: repeated clicks will not produce two fiscal numbers for the same invoice.
+
+### 4.7 Invoice status reference
 
 | Status | Meaning |
 |---|---|
@@ -673,6 +717,8 @@ A new session is created with status **OPEN**. Only one session can be open on a
 10. Click **Complete Sale**.
 
 A success receipt is displayed showing the invoice number and total. Click **View Invoice** to open the full invoice, or **New Sale** to start the next transaction.
+
+**Fiscal (EFD) receipt for a counter sale.** A completed POS sale produces a normal FINALISED invoice, so the government fiscal receipt is issued from that invoice — not from the checkout screen. Click **View Invoice** on the success panel (or open it later from **Sales › Invoices**) and use the **Fiscal Receipt** panel to issue the EFD receipt and read its fiscal number and verification URL. See section 4.6 for the full steps and the receipt states; it needs the `FISCAL.VIEW` / `FISCAL.MANAGE` permissions.
 
 **Notes:**
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
