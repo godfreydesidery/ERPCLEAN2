@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { requirePermission } from '../../core/auth/permission.guard';
+import { requirePermission, requireAnyPermission } from '../../core/auth/permission.guard';
 
 /**
  * Admin (IAM) feature routes, lazy-loaded from app.routes.ts.
@@ -462,6 +462,28 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('CASH.VIEW')],
     loadComponent: () =>
       import('./cashbank/cash-account-statement.component').then((m) => m.CashAccountStatementComponent),
+  },
+  // ── Cash Counts (ADR-0050 D-7 PR-A — end-of-day till count) ──────────────
+  {
+    path: 'cash/counts',
+    canActivate: [requireAnyPermission('CASH.COUNT.VIEW', 'CASH.COUNT.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/cash-counts-list.component').then((m) => m.CashCountsListComponent),
+  },
+  {
+    path: 'cash/counts/new',
+    canActivate: [requirePermission('CASH.COUNT.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/cash-count.component').then((m) => m.CashCountComponent),
+  },
+  {
+    // GET-by-uid is gated CASH.COUNT.VIEW server-side (ScopeGuard 'cashcount'); write actions
+    // (save/reconcile) inside the component are additionally gated on CASH.COUNT.MANAGE. Admit
+    // either code so a MANAGE-only role (who opens via /new then redirects here) is not bounced.
+    path: 'cash/counts/uid/:uid',
+    canActivate: [requireAnyPermission('CASH.COUNT.VIEW', 'CASH.COUNT.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/cash-count.component').then((m) => m.CashCountComponent),
   },
   // ── Tax (VAT Returns + WHT) ───────────────────────────────────────────────
   {

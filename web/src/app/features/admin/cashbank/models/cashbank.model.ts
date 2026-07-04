@@ -233,6 +233,69 @@ export interface MarkClearedRequest {
   cleared: boolean;
 }
 
+// ── Cash Count (D-7 PR-A — end-of-day drawer count) ─────────────────────────
+
+export type CashCountStatus = 'OPEN' | 'COUNTED' | 'RECONCILED';
+
+/**
+ * CashCountDenominationLineDto — one row of the denomination breakdown.
+ * lineAmount = denomination * quantity, computed server-side too.
+ */
+export interface CashCountDenominationLineDto {
+  /** Face value, e.g. 10000, 5000, ... — wire: number */
+  denomination: number;
+  quantity: number;
+  /** Wire: number — coerce with +v */
+  lineAmount: number;
+}
+
+/**
+ * CashCountDto — mirrors the backend record (ADR-0050, D-7 PR-A; cross-checked against
+ * com.erp.modules.cashbank.domain.dto.CashCountDto).
+ * expectedAmount/countedAmount/varianceAmount arrive as numbers — coerce with +v.
+ * expectedAmount is SERVER-DERIVED (till book balance as-of businessDate) — never typed by the user.
+ */
+export interface CashCountDto {
+  /** Wire: number */
+  id: string;
+  uid: string;
+  /** Wire: number */
+  companyId: string;
+  /** Null only if the linked till could not be resolved (defensive; not expected in normal flow). */
+  cashBankAccountUid: string | null;
+  cashBankAccountName: string | null;
+  countNumber: string;
+  businessDate: string;
+  /** Wire: number — coerce with +v. Derived server-side; read-only in the UI. */
+  expectedAmount: number | string;
+  /** Wire: number — coerce with +v. Σ denomination lines. */
+  countedAmount: number | string;
+  /** Wire: number — coerce with +v. counted - expected (over>0 / short<0). */
+  varianceAmount: number | string;
+  currency: string;
+  status: CashCountStatus;
+  journalEntryRef: string | null;
+  denominations: CashCountDenominationLineDto[];
+  countedAt: string | null;
+  reconciledAt: string | null;
+}
+
+export interface OpenCashCountRequest {
+  companyUid: string;
+  /** uid of a CASH-type cash_bank_account (the till) */
+  cashBankAccountUid: string;
+  businessDate: string;
+}
+
+export interface RecordDenominationsLineInput {
+  denomination: number;
+  quantity: number;
+}
+
+export interface RecordDenominationsRequest {
+  lines: RecordDenominationsLineInput[];
+}
+
 // ── Statements / Balances ────────────────────────────────────────────────────
 
 /**

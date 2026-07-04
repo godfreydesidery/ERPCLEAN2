@@ -1,0 +1,136 @@
+<section class="admin-page" aria-label="Cash Counts">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-cash-coin me-2" aria-hidden="true"></i>Cash Counts</h1>
+      <p class="subtitle">End-of-day till reconciliations.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (canManage()) {
+        <a routerLink="/admin/cash/counts/new" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>New Count
+        </a>
+      }
+    </div>
+  </div>
+
+  @if (!canView()) {
+    <div class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+      You don't have permission to view cash counts.
+    </div>
+  } @else {
+
+    <!-- Company + Till selectors — the backend lists cash counts PER TILL -->
+    <div class="erp-toolbar">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="ccListCompany">Company</label>
+        <select id="ccListCompany" class="form-select form-select-sm erp-toolbar__search"
+                [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+
+      <label class="visually-hidden" for="ccListTill">Till</label>
+      <select id="ccListTill" class="form-select form-select-sm erp-toolbar__search"
+              [ngModel]="selectedTillId()" (ngModelChange)="onTillChange($event)">
+        <option value="">— select till —</option>
+        @for (t of tills(); track t.id) {
+          <option [value]="t.id">{{ t.code }} — {{ t.name }}</option>
+        }
+      </select>
+    </div>
+
+    @if (companyState() !== 'loading' && tills().length === 0) {
+      <div class="erp-empty">
+        <i class="bi bi-cash-coin"></i>
+        No CASH-type accounts found for this company.
+      </div>
+    } @else if (!selectedTillId()) {
+      <div class="erp-empty">
+        <i class="bi bi-cash-coin"></i>
+        Select a till to view its cash-count history.
+      </div>
+    } @else {
+
+      <!-- Four-state list -->
+      @switch (state()) {
+        @case ('loading') {
+          <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading cash counts…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load cash counts.
+          </p>
+        }
+        @case ('forbidden') {
+          <p class="text-muted" role="alert">
+            <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+          </p>
+        }
+        @default {
+          @if (isEmpty()) {
+            <div class="erp-empty">
+              <i class="bi bi-cash-coin"></i>
+              No cash counts recorded yet for this till.
+            </div>
+          } @else {
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Cash counts</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Count #</th>
+                    <th scope="col">Till</th>
+                    <th scope="col">Business Date</th>
+                    <th scope="col" class="num">Expected</th>
+                    <th scope="col" class="num">Counted</th>
+                    <th scope="col" class="num">Variance</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of rows(); track row.uid) {
+                    <tr>
+                      <td class="mono">{{ row.countNumber }}</td>
+                      <td>{{ row.cashBankAccountName ?? '—' }}</td>
+                      <td>{{ row.businessDate }}</td>
+                      <td class="num mono">{{ row.currency }} {{ fmtMoney(row.expectedAmount) }}</td>
+                      <td class="num mono">{{ row.currency }} {{ fmtMoney(row.countedAmount) }}</td>
+                      <td class="num mono"
+                          [style.color]="+row.varianceAmount > 0 ? 'var(--erp-ok)' : (+row.varianceAmount < 0 ? 'var(--erp-danger)' : 'inherit')">
+                        {{ row.currency }} {{ fmtMoney(row.varianceAmount) }}
+                      </td>
+                      <td>
+                        <span class="status-tag"
+                              [class.status-tag--warn]="row.status === 'OPEN'"
+                              [class.status-tag--neutral]="row.status === 'COUNTED'"
+                              [class.status-tag--ok]="row.status === 'RECONCILED'">
+                          {{ row.status }}
+                        </span>
+                      </td>
+                      <td>
+                        <a [routerLink]="['/admin/cash/counts/uid', row.uid]"
+                           class="btn btn-outline-secondary btn-sm"
+                           [attr.aria-label]="'Open cash count ' + row.countNumber">
+                          <i class="bi bi-eye" aria-hidden="true"></i>
+                        </a>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        }
+      }
+    }
+  }
+</section>

@@ -18,6 +18,7 @@ public class CashBankNumberGenerator {
     private static final String KIND_TRANSFER        = "CASH_TRANSFER";
     private static final String KIND_TXN             = "CASH_TXN";
     private static final String KIND_RECONCILIATION  = "BANK_RECONCILIATION";
+    private static final String KIND_CASH_COUNT      = "CASH_COUNT";
 
     private final CodeSequenceRepository sequences;
 
@@ -55,5 +56,14 @@ public class CashBankNumberGenerator {
                 .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_RECONCILIATION)
                 .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_RECONCILIATION)));
         return "REC-" + String.format("%04d", seq.consumeNext());
+    }
+
+    /** ADR-0050 D-7 PR-A: per-company end-of-day cash-count numbering (CC-####). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public String nextCashCount(Long companyId) {
+        CodeSequence seq = sequences
+                .findByCompanyIdAndEntityKindForUpdate(companyId, KIND_CASH_COUNT)
+                .orElseGet(() -> sequences.saveAndFlush(new CodeSequence(companyId, KIND_CASH_COUNT)));
+        return "CC-" + String.format("%04d", seq.consumeNext());
     }
 }

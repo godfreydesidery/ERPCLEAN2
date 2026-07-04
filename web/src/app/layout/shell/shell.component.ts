@@ -209,6 +209,7 @@ export class ShellComponent {
         { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
         { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },
+        { label: 'Cash Counts', route: '/admin/cash/counts', icon: 'bi-cash-coin', available: true, permission: 'CASH.COUNT.VIEW' },
         { label: 'VAT Returns', route: '/admin/tax/vat-returns', icon: 'bi-file-earmark-ruled', available: true, permission: 'VAT.VIEW' },
         { label: 'WHT Types', route: '/admin/tax/wht-types', icon: 'bi-percent', available: true, permission: 'WHT.VIEW' },
         { label: 'WHT Register', route: '/admin/tax/wht-register', icon: 'bi-table', available: true, permission: 'WHT.VIEW' },

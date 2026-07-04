@@ -52,6 +52,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('BUDGETING.REPORT.EXPORT', 'budgeting', 'Export variance and departmental reports to CSV'),
     ('BUDGETING.REPORT.VIEW', 'budgeting', 'Run the budget-vs-actual variance report and departmental actuals'),
     ('CASH.ACCOUNT.MANAGE', 'cashbank', 'Create/edit/deactivate a cash/bank account, set its GL link, set the company default'),
+    ('CASH.COUNT.MANAGE', 'cashbank', 'Open an end-of-day cash count, record its denomination breakdown, and reconcile the variance'),
+    ('CASH.COUNT.VIEW', 'cashbank', 'View end-of-day cash counts and their denomination breakdown'),
     ('CASH.ENTRY.RECORD', 'cashbank', 'Record a direct cash/bank entry (bank charge, interest, sundry)'),
     ('CASH.RECONCILE', 'cashbank', 'Perform a manual bank reconciliation (open/mark-cleared/complete)'),
     ('CASH.TRANSFER', 'cashbank', 'Record an inter-account transfer (CBT-####)'),

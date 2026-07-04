@@ -18,3 +18,16 @@ export function requirePermission(code: string): CanActivateFn {
     return session.hasPermission(code) ? true : router.createUrlTree(['/admin/home']);
   };
 }
+
+/**
+ * Allows the route if the user holds ANY of {@code codes} (root always passes). Use where two atomic
+ * permissions both grant access to a screen — e.g. a detail route reachable by a VIEW role (read-only)
+ * OR a MANAGE role (who acts on it), so a MANAGE-only role is not bounced from a VIEW-guarded page.
+ */
+export function requireAnyPermission(...codes: string[]): CanActivateFn {
+  return () => {
+    const session = inject(SessionStore);
+    const router = inject(Router);
+    return codes.some((c) => session.hasPermission(c)) ? true : router.createUrlTree(['/admin/home']);
+  };
+}
