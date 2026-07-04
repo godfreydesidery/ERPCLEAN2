@@ -287,30 +287,21 @@ describe('NavSearchComponent', () => {
   });
 
   // ── Accessibility (axe) ───────────────────────────────────────────────────
-  // Skipped IN CI ONLY. These three axe scans deadlock under the parallel vitest + jsdom runner on
-  // the CI box (they hang the full per-test budget even in the closed state, whose DOM is a single
-  // <input> — so it is not axe compute time; it is an environment-specific axe-core/jsdom hang that
-  // a synchronous block prevents any timeout sentinel from interrupting). They pass in ~0.3s locally,
-  // so we keep running them for developers (real a11y regressions still fail the local gate) and skip
-  // only in CI, matching the a11y helper's documented "an infra hang must not red CI" philosophy.
-  // Follow-up: root-cause the CI-only nav-search axe hang (node 22 / linux jsdom) and re-enable.
-  const skipInCI = it.skipIf(!!(globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.['CI']);
 
-  skipInCI('has no axe violations in default (closed) state', async () => {
+  it('has no axe violations in default (closed) state', async () => {
     const fixture = createComponent();
     await assertA11y(fixture);
-  });
+  }, 15_000);
 
-  skipInCI('has no axe violations when results are shown', async () => {
+  it('has no axe violations when results are shown', async () => {
     const fixture = createComponent();
     setQuery(fixture, 'sales');
     await assertA11y(fixture);
-  });
+  }, 15_000);
 
-  skipInCI('has no axe violations in no-match state', async () => {
+  it('has no axe violations in no-match state', async () => {
     const fixture = createComponent();
     setQuery(fixture, 'zzznomatch');
     await assertA11y(fixture);
-  });
+  }, 15_000);
 });
