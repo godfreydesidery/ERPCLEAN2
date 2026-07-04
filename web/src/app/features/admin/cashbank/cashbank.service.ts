@@ -15,14 +15,19 @@ import {
   CashTransactionDto,
   ChequeDto,
   CreateCashBankAccountRequest,
+  CreatePettyCashFundRequest,
   MarkClearedRequest,
   OpenCashCountRequest,
   OpenReconciliationRequest,
+  PettyCashFundDto,
+  PettyCashTransactionDto,
   RecordDenominationsRequest,
   RecordDirectEntryRequest,
+  RecordPettyCashTransactionRequest,
   RecordTransferRequest,
   RegisterChequeRequest,
   UpdateCashBankAccountRequest,
+  UpdatePettyCashFundRequest,
 } from './models/cashbank.model';
 
 export interface CashBankAccountPage {
@@ -59,6 +64,8 @@ export interface BankReconciliationPage {
 export class CashbankService {
   private readonly http = inject(HttpClient);
   private readonly base = `${environment.apiBaseUrl}/cash`;
+  /** Petty cash is its own top-level resource (D-7 PR-B) — not nested under /cash. */
+  private readonly pettyCashBase = `${environment.apiBaseUrl}/petty-cash`;
 
   // ── Accounts ─────────────────────────────────────────────────────────────
 
@@ -289,5 +296,40 @@ export class CashbankService {
   listCashCounts(companyId: string, accountId: string): Observable<CashCountDto[]> {
     const params = new HttpParams().set('companyId', companyId).set('accountId', accountId);
     return this.http.get<CashCountDto[]>(`${this.base}/counts`, { params });
+  }
+
+  // ── Petty Cash (D-7 PR-B) ────────────────────────────────────────────────
+
+  /** Company-wide petty-cash funds — plain unwrapped array (no pagination). */
+  listPettyCashFunds(companyId: string): Observable<PettyCashFundDto[]> {
+    const params = new HttpParams().set('companyId', companyId);
+    return this.http.get<PettyCashFundDto[]>(`${this.pettyCashBase}/funds`, { params });
+  }
+
+  getPettyCashFund(uid: string): Observable<PettyCashFundDto> {
+    return this.http.get<PettyCashFundDto>(`${this.pettyCashBase}/funds/uid/${uid}`);
+  }
+
+  createPettyCashFund(request: CreatePettyCashFundRequest): Observable<PettyCashFundDto> {
+    return this.http.post<PettyCashFundDto>(`${this.pettyCashBase}/funds`, request);
+  }
+
+  updatePettyCashFund(uid: string, request: UpdatePettyCashFundRequest): Observable<PettyCashFundDto> {
+    return this.http.put<PettyCashFundDto>(`${this.pettyCashBase}/funds/uid/${uid}`, request);
+  }
+
+  /** Ledger for one fund — plain unwrapped array, newest-first (mirrors listCashCounts style). */
+  listPettyCashTransactions(fundUid: string): Observable<PettyCashTransactionDto[]> {
+    return this.http.get<PettyCashTransactionDto[]>(`${this.pettyCashBase}/funds/uid/${fundUid}/transactions`);
+  }
+
+  recordPettyCashTransaction(
+    fundUid: string,
+    request: RecordPettyCashTransactionRequest,
+  ): Observable<PettyCashTransactionDto> {
+    return this.http.post<PettyCashTransactionDto>(
+      `${this.pettyCashBase}/funds/uid/${fundUid}/transactions`,
+      request,
+    );
   }
 }

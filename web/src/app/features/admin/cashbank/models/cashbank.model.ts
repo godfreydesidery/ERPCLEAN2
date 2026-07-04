@@ -345,3 +345,85 @@ export interface CashGlReconciliationDto {
   /** Wire: number — coerce with +v */
   difference: number | string;
 }
+
+// ── Petty Cash (D-7 PR-B — imprest fund + disbursement/replenishment/adjustment ledger) ────
+
+export type PettyCashFundStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type PettyCashTxnType = 'DISBURSEMENT' | 'REPLENISHMENT' | 'ADJUSTMENT';
+
+/**
+ * PettyCashFundDto — mirrors the backend record (ADR-0050 D-7 PR-B).
+ * floatAmount/balanceAmount arrive as numbers — coerce with +v. Record-only this slice
+ * (D-7.1): the fund is its own aggregate, NOT a cash_bank_account (D-7.4) — no 1:1 GL link,
+ * kept out of the cash-book / bank-reconciliation surface. GL auto-posting is a follow-up (D-7.7).
+ */
+export interface PettyCashFundDto {
+  uid: string;
+  /** Wire: number */
+  companyId: string;
+  /** Wire: number */
+  branchId: string;
+  code: string;
+  name: string;
+  /** Wire: number | null — soft-FK to app_users; no custodian assigned if null */
+  custodianUid: string | null;
+  custodianName: string | null;
+  /** Wire: number — coerce with +v. Authorised imprest ceiling. */
+  floatAmount: number | string;
+  /** Wire: number — coerce with +v. Current cash on hand. */
+  balanceAmount: number | string;
+  currency: string;
+  status: PettyCashFundStatus;
+  version: string;
+  createdAt: string;
+}
+
+export interface CreatePettyCashFundRequest {
+  companyUid: string;
+  code: string;
+  name: string;
+  custodianUid?: string;
+  floatAmount: number;
+  currency: string;
+}
+
+export interface UpdatePettyCashFundRequest {
+  name?: string;
+  custodianUid?: string;
+  floatAmount?: number;
+  status?: PettyCashFundStatus;
+}
+
+/**
+ * PettyCashTransactionDto — mirrors the backend record (ADR-0050 D-7 PR-B).
+ * amount/balanceAfter arrive as numbers — coerce with +v. For DISBURSEMENT/REPLENISHMENT `amount`
+ * is a positive magnitude (direction implied by txnType). For ADJUSTMENT `amount` is a SIGNED delta
+ * (negative decreases the balance) — its direction is NOT implied by the type. Use the component's
+ * txnEffect() to render a consistent signed balance impact. journalEntryRef is reserved server-side
+ * (record-only this slice — see D-7.1); glAccountUid optionally captures the intended expense account
+ * on a disbursement for a later manual/GL fast-follow journal.
+ */
+export interface PettyCashTransactionDto {
+  uid: string;
+  fundUid: string;
+  txnNumber: string;
+  txnType: PettyCashTxnType;
+  txnDate: string;
+  /** Wire: number — coerce with +v */
+  amount: number | string;
+  /** Wire: number — coerce with +v. Fund balance immediately after this txn. */
+  balanceAfter: number | string;
+  glAccountUid: string | null;
+  reference: string | null;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface RecordPettyCashTransactionRequest {
+  type: PettyCashTxnType;
+  amount: number;
+  txnDate: string;
+  glAccountUid?: string;
+  reference?: string;
+  description?: string;
+}

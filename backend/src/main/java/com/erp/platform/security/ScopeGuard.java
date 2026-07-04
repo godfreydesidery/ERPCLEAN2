@@ -44,6 +44,8 @@ import com.erp.modules.cashbank.repository.CashCountRepository;
 import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.cashbank.repository.CashTransferRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
+import com.erp.modules.cashbank.repository.PettyCashFundRepository;
+import com.erp.modules.cashbank.repository.PettyCashTransactionRepository;
 import com.erp.modules.tax.repository.VatAdjustmentRepository;
 import com.erp.modules.tax.repository.VatReturnRepository;
 import com.erp.modules.tax.repository.WhtTransactionRepository;
@@ -175,6 +177,9 @@ public class ScopeGuard {
     private final BankReconciliationRepository bankReconciliations;
     // ADR-0050 D-7 PR-A: cash count
     private final CashCountRepository        cashCounts;
+    // ADR-0050 D-7 PR-B: petty cash
+    private final PettyCashFundRepository        pettyCashFunds;
+    private final PettyCashTransactionRepository pettyCashTransactions;
     // VAT / WHT repositories (ADR-0017 D-11)
     private final VatReturnRepository        vatReturns;
     private final VatAdjustmentRepository    vatAdjustments;
@@ -367,6 +372,9 @@ public class ScopeGuard {
                       WorkOrderOperationRepository workOrderOperationsRepo,
                       // cash count (ADR-0050 D-7 PR-A)
                       CashCountRepository cashCounts,
+                      // petty cash (ADR-0050 D-7 PR-B)
+                      PettyCashFundRepository pettyCashFunds,
+                      PettyCashTransactionRepository pettyCashTransactions,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -477,6 +485,9 @@ public class ScopeGuard {
         this.workOrderOperationsRepo  = workOrderOperationsRepo;
         // cash count (ADR-0050 D-7 PR-A)
         this.cashCounts               = cashCounts;
+        // petty cash (ADR-0050 D-7 PR-B)
+        this.pettyCashFunds           = pettyCashFunds;
+        this.pettyCashTransactions    = pettyCashTransactions;
         this.audit               = audit;
     }
 
@@ -610,6 +621,9 @@ public class ScopeGuard {
             case "workorderoperation"  -> workOrderOperationsRepo.findCompanyIdByUid(uid);
             // cash count (ADR-0050 D-7 PR-A)
             case "cashcount"           -> cashCounts.findCompanyIdByUid(uid);
+            // petty cash (ADR-0050 D-7 PR-B)
+            case "pettycashfund"        -> pettyCashFunds.findCompanyIdByUid(uid);
+            case "pettycashtransaction" -> pettyCashTransactions.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

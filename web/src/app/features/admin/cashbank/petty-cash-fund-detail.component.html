@@ -1,0 +1,290 @@
+<section class="admin-page" aria-label="Petty Cash Fund">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-piggy-bank me-2" aria-hidden="true"></i>
+        Petty Cash@if (fund(); as f) { — <span class="mono">{{ f.code }}</span>}
+      </h1>
+      <p class="subtitle">Imprest float, balance, disbursements, and replenishments.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      <a routerLink="/admin/petty-cash/funds" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Funds
+      </a>
+    </div>
+  </div>
+
+  @if (!canManage() && isNewMode()) {
+    <div class="alert alert-warning" role="alert">You do not have permission to create a petty cash fund (PETTY_CASH.MANAGE).</div>
+  }
+
+  <!-- Detail-mode loading / error / forbidden -->
+  @if (!isNewMode()) {
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mt-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading petty cash fund…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mt-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load this petty cash fund.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted mt-3" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+        </p>
+      }
+      @default {}
+    }
+  }
+
+  <!-- New-fund form -->
+  @if (isNewMode() && !fund() && canManage()) {
+    <div class="erp-card mt-3">
+      <div class="erp-card__head">
+        <h2>New Petty Cash Fund</h2>
+      </div>
+      <div class="erp-card__body">
+        @if (createError()) {
+          <div class="alert alert-danger py-2 mb-3" role="alert">{{ createError() }}</div>
+        }
+        <div class="erp-form-grid">
+          @if (companies().length > 1) {
+            <div class="erp-field">
+              <label for="pcfCompany">Company</label>
+              <select id="pcfCompany" class="form-select form-select-sm"
+                      [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+
+          <div class="erp-field">
+            <label for="pcfCode">Fund Code <span aria-hidden="true">*</span></label>
+            <input id="pcfCode" type="text" class="form-control form-control-sm"
+                   [ngModel]="newCode()" (ngModelChange)="newCode.set($event)"
+                   placeholder="e.g. PCF-001" maxlength="30" required />
+          </div>
+
+          <div class="erp-field">
+            <label for="pcfName">Fund Name <span aria-hidden="true">*</span></label>
+            <input id="pcfName" type="text" class="form-control form-control-sm"
+                   [ngModel]="newName()" (ngModelChange)="newName.set($event)"
+                   placeholder="e.g. Front Office Petty Cash" maxlength="120" required />
+          </div>
+
+          <div class="erp-field">
+            <label for="pcfCustodian">Custodian</label>
+            <select id="pcfCustodian" class="form-select form-select-sm"
+                    [ngModel]="newCustodianUid()" (ngModelChange)="newCustodianUid.set($event)">
+              <option value="">— none —</option>
+              @for (u of users(); track u.uid) {
+                <option [value]="u.uid">{{ u.displayName }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="erp-field">
+            <label for="pcfFloat">Float Amount <span aria-hidden="true">*</span></label>
+            <input id="pcfFloat" type="number" class="form-control form-control-sm" min="0" step="0.01"
+                   [ngModel]="newFloatAmount()" (ngModelChange)="newFloatAmount.set($event)"
+                   placeholder="0.00" required />
+          </div>
+
+          <div class="erp-field">
+            <label for="pcfCurrency">Currency <span aria-hidden="true">*</span></label>
+            <input id="pcfCurrency" type="text" class="form-control form-control-sm"
+                   [ngModel]="newCurrency()" (ngModelChange)="newCurrency.set($event)"
+                   placeholder="TZS" maxlength="3" required />
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 px-3 pb-3" style="border-top:1px solid var(--erp-border); padding-top:0.75rem">
+        <button type="button" class="btn btn-primary btn-sm"
+                (click)="createFund()" [disabled]="createDisabled()">
+          @if (creating()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+          }
+          Create Fund
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Fund workspace (loaded) -->
+  @if (fund(); as f) {
+    <div class="erp-card mt-3">
+      <div class="erp-card__head">
+        <h2 class="mono">{{ f.code }} — {{ f.name }}</h2>
+        <span class="spacer"></span>
+        <span class="status-tag"
+              [class.status-tag--ok]="f.status === 'ACTIVE'"
+              [class.status-tag--neutral]="f.status === 'INACTIVE'"
+              [class.status-tag--warn]="f.status === 'ARCHIVED'">
+          {{ f.status }}
+        </span>
+        <span style="font-size:0.82rem;color:var(--erp-text-2)">
+          Custodian: {{ f.custodianName ?? '— none —' }}
+        </span>
+      </div>
+      <div class="erp-card__body">
+
+        <!-- KPIs -->
+        <div class="d-flex flex-wrap gap-3 mb-3">
+          <div class="erp-kpi">
+            <div class="erp-kpi__label">Float (Ceiling)</div>
+            <div class="erp-kpi__value">{{ f.currency }} {{ fmtMoney(f.floatAmount) }}</div>
+          </div>
+          <div class="erp-kpi">
+            <div class="erp-kpi__label">Current Balance</div>
+            <output class="erp-kpi__value d-block fw-semibold" aria-live="polite">
+              {{ f.currency }} {{ fmtMoney(f.balanceAmount) }}
+            </output>
+          </div>
+        </div>
+
+        <!-- Record-transaction form -->
+        @if (canManage()) {
+          <div class="erp-card mb-3" aria-label="Record petty cash transaction">
+            <div class="erp-card__head">
+              <h3>Record Transaction</h3>
+            </div>
+            <div class="erp-card__body">
+              @if (recordError()) {
+                <div class="alert alert-danger py-2 mb-3" role="alert">{{ recordError() }}</div>
+              }
+              <div class="erp-form-grid">
+                <div class="erp-field">
+                  <label for="pcTxnType">Type <span aria-hidden="true">*</span></label>
+                  <select id="pcTxnType" class="form-select form-select-sm"
+                          [ngModel]="txnType()" (ngModelChange)="txnType.set($event)">
+                    <option value="DISBURSEMENT">Disbursement</option>
+                    <option value="REPLENISHMENT">Replenishment</option>
+                    <option value="ADJUSTMENT">Adjustment</option>
+                  </select>
+                </div>
+
+                <div class="erp-field">
+                  <label for="pcTxnAmount">Amount <span aria-hidden="true">*</span></label>
+                  <input id="pcTxnAmount" type="number" class="form-control form-control-sm"
+                         [min]="txnType() === 'ADJUSTMENT' ? null : 0.01" step="0.01"
+                         [ngModel]="txnAmount()" (ngModelChange)="txnAmount.set($event)"
+                         placeholder="0.00" required />
+                  @if (txnType() === 'ADJUSTMENT') {
+                    <small class="text-muted">Enter a negative amount to decrease the balance.</small>
+                  }
+                </div>
+
+                <div class="erp-field">
+                  <label for="pcTxnDate">Date <span aria-hidden="true">*</span></label>
+                  <input id="pcTxnDate" type="date" class="form-control form-control-sm"
+                         [ngModel]="txnDate()" (ngModelChange)="txnDate.set($event)"
+                         required />
+                </div>
+
+                @if (txnType() === 'DISBURSEMENT') {
+                  <div class="erp-field full">
+                    <label for="pcTxnGl">Expense GL Account</label>
+                    <select id="pcTxnGl" class="form-select form-select-sm"
+                            [ngModel]="txnGlAccountUid()" (ngModelChange)="txnGlAccountUid.set($event)">
+                      <option value="">— none —</option>
+                      @for (gl of expenseGlOptions(); track gl.uid) {
+                        <option [value]="gl.uid">{{ gl.accountCode }} — {{ gl.name }}</option>
+                      }
+                    </select>
+                    <div class="form-text">Captured for the disbursement record; not posted to GL this slice.</div>
+                  </div>
+                }
+
+                <div class="erp-field">
+                  <label for="pcTxnRef">Reference</label>
+                  <input id="pcTxnRef" type="text" class="form-control form-control-sm"
+                         [ngModel]="txnReference()" (ngModelChange)="txnReference.set($event)"
+                         placeholder="Optional" maxlength="120" />
+                </div>
+
+                <div class="erp-field full">
+                  <label for="pcTxnDesc">Description</label>
+                  <input id="pcTxnDesc" type="text" class="form-control form-control-sm"
+                         [ngModel]="txnDescription()" (ngModelChange)="txnDescription.set($event)"
+                         placeholder="Optional" maxlength="500" />
+                </div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 px-3 pb-3" style="border-top:1px solid var(--erp-border); padding-top:0.75rem">
+              <button type="button" class="btn btn-primary btn-sm"
+                      (click)="recordTransaction()" [disabled]="recordDisabled()">
+                @if (recording()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Record Transaction
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- Ledger -->
+        <h3>Transaction Ledger</h3>
+        @switch (txnState()) {
+          @case ('loading') {
+            <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading transactions…
+            </p>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load the transaction ledger.
+            </p>
+          }
+          @default {
+            @if (transactions().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-journal-text"></i>
+                No transactions recorded yet for this fund.
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Petty cash transaction ledger</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Txn #</th>
+                      <th scope="col">Date</th>
+                      <th scope="col">Type</th>
+                      <th scope="col" class="num">Amount</th>
+                      <th scope="col" class="num">Balance After</th>
+                      <th scope="col">Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (t of transactions(); track t.uid) {
+                      <tr>
+                        <td class="mono">{{ t.txnNumber }}</td>
+                        <td>{{ t.txnDate }}</td>
+                        <td>
+                          <span class="status-tag"
+                                [class.status-tag--ok]="t.txnType === 'REPLENISHMENT'"
+                                [class.status-tag--danger]="t.txnType === 'DISBURSEMENT'"
+                                [class.status-tag--neutral]="t.txnType === 'ADJUSTMENT'">
+                            {{ t.txnType }}
+                          </span>
+                        </td>
+                        <td class="num mono">{{ f.currency }} {{ fmtMoney(txnEffect(t)) }}</td>
+                        <td class="num mono fw-semibold">{{ f.currency }} {{ fmtMoney(t.balanceAfter) }}</td>
+                        <td>{{ t.reference ?? '—' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          }
+        }
+      </div>
+    </div>
+  }
+</section>

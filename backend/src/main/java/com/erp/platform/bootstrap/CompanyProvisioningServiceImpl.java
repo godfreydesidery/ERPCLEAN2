@@ -3,6 +3,7 @@ package com.erp.platform.bootstrap;
 import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
+import com.erp.modules.cashbank.service.PettyCashFundSeeder;
 import com.erp.modules.costing.service.DimensionSeeder;
 import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
@@ -50,6 +51,10 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     private final ApGlSeeder             apGlSeeder;
     // Cash & Bank seeder (ADR-0016 D-10)
     private final CashBankSeeder         cashBankSeeder;
+    // Petty cash default fund seeder (ADR-0050 D-7 PR-B) — see the class javadoc: for a brand-new
+    // company this call is a no-op (no branch yet); BootstrapRunner / BranchServiceImpl.create also
+    // call PettyCashFundSeeder once a branch exists, mirroring the StockLocationSeeder precedent.
+    private final PettyCashFundSeeder    pettyCashFundSeeder;
     // Inventory Valuation & COGS seeder (ADR-0020 D-8)
     private final InventoryGlSeeder      inventoryGlSeeder;
     // Document branding + template registry seeder (ADR-0023 D-10)
@@ -79,6 +84,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             ArGlSeeder             arGlSeeder,
             ApGlSeeder             apGlSeeder,
             CashBankSeeder         cashBankSeeder,
+            PettyCashFundSeeder    pettyCashFundSeeder,
             InventoryGlSeeder      inventoryGlSeeder,
             DocumentBrandingSeeder documentBrandingSeeder,
             FixedAssetGlSeeder     fixedAssetGlSeeder,
@@ -97,6 +103,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         this.arGlSeeder               = arGlSeeder;
         this.apGlSeeder               = apGlSeeder;
         this.cashBankSeeder           = cashBankSeeder;
+        this.pettyCashFundSeeder      = pettyCashFundSeeder;
         this.inventoryGlSeeder        = inventoryGlSeeder;
         this.documentBrandingSeeder   = documentBrandingSeeder;
         this.fixedAssetGlSeeder       = fixedAssetGlSeeder;
@@ -141,6 +148,12 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
 
         // Default Cash & Bank account (ADR-0016 D-10)
         cashBankSeeder.seedDefaults(companyId);
+
+        // Default petty-cash fund (ADR-0050 D-7 PR-B). No-op here for a brand-new company (no
+        // branch exists yet — petty_cash_funds.branch_id is NOT NULL); BootstrapRunner /
+        // BranchServiceImpl.create complete the seed once a branch exists. Effective immediately
+        // when re-provisioning an existing company via CompanyServiceImpl.reprovisionDefaults.
+        pettyCashFundSeeder.seedDefaults(companyId);
 
         // GRNI + Stock Adjustment GL accounts + gl_configs (ADR-0020 D-8)
         inventoryGlSeeder.seedDefaults(companyId);

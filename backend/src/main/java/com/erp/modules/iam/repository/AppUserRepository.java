@@ -115,4 +115,14 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      * internal sales agent (BR-PARTY-10): root is a system super-user, not a salesperson.
      */
     boolean existsByIdAndStatusAndRootFalse(Long id, MasterStatus status);
+
+    /**
+     * Load a user by an id already trusted from a scoped parent row (e.g. a petty-cash fund's
+     * {@code custodian_id}, ADR-0050 D-7 PR-B). Named finder (not the inherited {@code findById}),
+     * mirroring {@code CompanyRepository.findScopedById} — the id here was already resolved and
+     * company-verified at write time, never attacker-supplied at this call site, so this does not
+     * trip the confused-deputy guard ({@code TenantScopingRulesTest}).
+     */
+    @Query("SELECT u FROM AppUser u WHERE u.id = :id")
+    Optional<AppUser> findScopedById(@Param("id") Long id);
 }

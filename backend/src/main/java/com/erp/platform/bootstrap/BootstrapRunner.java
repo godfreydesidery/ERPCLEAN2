@@ -10,6 +10,7 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.cashbank.service.PettyCashFundSeeder;
 import com.erp.modules.stock.service.StockLocationSeeder;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.Set;
@@ -56,6 +57,10 @@ public class BootstrapRunner implements ApplicationRunner {
     // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5).
     // Branch-scoped: stays here (needs branchId), not moved into CompanyProvisioningService.
     private final StockLocationSeeder        stockLocationSeeder;
+    // Petty cash default fund seeder (ADR-0050 D-7 PR-B): CompanyProvisioningService.provisionDefaults
+    // (below) runs BEFORE the bootstrap branch exists, so it is a no-op there; this branch-scoped
+    // call completes the seed once the branch is created, mirroring stockLocationSeeder above.
+    private final PettyCashFundSeeder        pettyCashFundSeeder;
     private final CompanyProvisioningService companyProvisioningService;
 
     public BootstrapRunner(BootstrapProperties        props,
@@ -67,6 +72,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            PasswordEncoder            passwordEncoder,
                            PasswordPolicy             passwordPolicy,
                            StockLocationSeeder        stockLocationSeeder,
+                           PettyCashFundSeeder        pettyCashFundSeeder,
                            CompanyProvisioningService companyProvisioningService) {
         this.props                    = props;
         this.organisations            = organisations;
@@ -77,6 +83,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.passwordEncoder          = passwordEncoder;
         this.passwordPolicy           = passwordPolicy;
         this.stockLocationSeeder      = stockLocationSeeder;
+        this.pettyCashFundSeeder      = pettyCashFundSeeder;
         this.companyProvisioningService = companyProvisioningService;
     }
 
@@ -118,6 +125,10 @@ public class BootstrapRunner implements ApplicationRunner {
 
         // Seed WAREHOUSE default + in-transit OTHER locations for the bootstrap branch (ADR-0028 D-4/D-5).
         stockLocationSeeder.seedDefaults(company.getId(), branch.getId(), branch.getCode());
+
+        // Complete the default petty-cash fund seed now that the bootstrap branch exists (ADR-0050
+        // D-7 PR-B) — the earlier companyProvisioningService.provisionDefaults call was a no-op.
+        pettyCashFundSeeder.seedDefaults(company.getId());
 
         AppUser root = new AppUser(
                 props.adminUsername().toLowerCase(),

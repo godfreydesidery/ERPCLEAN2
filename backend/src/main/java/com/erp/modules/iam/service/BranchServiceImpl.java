@@ -9,6 +9,7 @@ import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.cashbank.service.PettyCashFundSeeder;
 import com.erp.modules.stock.service.StockLocationSeeder;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
@@ -26,14 +27,21 @@ public class BranchServiceImpl implements BranchService {
     private final CompanyRepository     companies;
     private final UserBranchRepository  userBranches;
     private final StockLocationSeeder   stockLocationSeeder;
+    // Petty cash default fund seeder (ADR-0050 D-7 PR-B): CompanyProvisioningServiceImpl's call is
+    // a no-op for a brand-new company (no branch exists at that point — petty_cash_funds.branch_id
+    // is NOT NULL), so this branch-scoped call completes the seed once a (default) branch exists,
+    // mirroring the stockLocationSeeder wiring above.
+    private final PettyCashFundSeeder   pettyCashFundSeeder;
 
     public BranchServiceImpl(BranchRepository branches, CompanyRepository companies,
                              UserBranchRepository userBranches,
-                             StockLocationSeeder stockLocationSeeder) {
+                             StockLocationSeeder stockLocationSeeder,
+                             PettyCashFundSeeder pettyCashFundSeeder) {
         this.branches            = branches;
         this.companies           = companies;
         this.userBranches        = userBranches;
         this.stockLocationSeeder = stockLocationSeeder;
+        this.pettyCashFundSeeder = pettyCashFundSeeder;
     }
 
     @Override
@@ -59,6 +67,11 @@ public class BranchServiceImpl implements BranchService {
         if (request.makeDefault()) {
             applyDefault(saved);
         }
+
+        // Complete the default petty-cash fund seed once a default branch exists (ADR-0050 D-7
+        // PR-B) — a no-op if the company already has one, or if this branch isn't (yet) the default.
+        pettyCashFundSeeder.seedDefaults(company.getId());
+
         return BranchDto.from(saved);
     }
 
@@ -90,7 +103,16 @@ public class BranchServiceImpl implements BranchService {
 
     @Override
     public BranchDto setDefault(String uid) {
-        return BranchDto.from(applyDefault(requireByUid(uid)));
+        Branch branch = applyDefault(requireByUid(uid));
+
+        // Complete the default petty-cash fund seed for every path that establishes a company's
+        // default branch (ADR-0050 D-7 PR-B) — not just branch-create-with-makeDefault. Covers the
+        // gap where a company's first branch is created NON-default (seeder deferred, no branch was
+        // default yet) and is only promoted to default afterwards via this method. Idempotent
+        // (guarded by existsByCompanyIdAndCode), so it's harmless alongside the create-time call.
+        pettyCashFundSeeder.seedDefaults(branch.getCompany().getId());
+
+        return BranchDto.from(branch);
     }
 
     @Override

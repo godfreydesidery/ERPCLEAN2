@@ -191,6 +191,13 @@ public final class AuditActions {
     public static final String CASH_COUNT_COUNT        = "CASH.COUNT.COUNT";
     public static final String CASH_COUNT_RECONCILE    = "CASH.COUNT.RECONCILE";
 
+    // ---- Petty Cash (ADR-0050 D-7 PR-B) ----
+    public static final String PETTY_CASH_FUND_CREATE  = "PETTY_CASH.FUND.CREATE";
+    public static final String PETTY_CASH_FUND_UPDATE  = "PETTY_CASH.FUND.UPDATE";
+    public static final String PETTY_CASH_DISBURSE     = "PETTY_CASH.DISBURSE";
+    public static final String PETTY_CASH_REPLENISH    = "PETTY_CASH.REPLENISH";
+    public static final String PETTY_CASH_ADJUST       = "PETTY_CASH.ADJUST";
+
     // ---- VAT / Tax module (ADR-0017 D-13) ----
     public static final String VAT_RETURN_PREPARE  = "VAT.RETURN.PREPARE";
     public static final String VAT_RETURN_FILE     = "VAT.RETURN.FILE";

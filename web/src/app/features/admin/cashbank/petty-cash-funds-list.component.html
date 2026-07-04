@@ -1,0 +1,105 @@
+<section class="admin-page" aria-label="Petty Cash Funds">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-piggy-bank me-2" aria-hidden="true"></i>Petty Cash Funds</h1>
+      <p class="subtitle">Imprest floats, balances, and disbursement/replenishment history.</p>
+    </div>
+    <div class="erp-page-head__actions">
+      @if (companyState() === 'loading') {
+        <span class="spinner-border spinner-border-sm text-secondary" aria-label="Loading companies"></span>
+      }
+      @if (companies().length > 1) {
+        <label class="visually-hidden" for="pcfCompany">Company</label>
+        <select id="pcfCompany" class="form-select form-select-sm w-auto"
+                [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+          @for (c of companies(); track c.id) {
+            <option [value]="c.id">{{ c.name }}</option>
+          }
+        </select>
+      }
+      @if (canManage()) {
+        <a routerLink="/admin/petty-cash/funds/new" class="btn btn-primary btn-sm">
+          <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>New Fund
+        </a>
+      }
+    </div>
+  </div>
+
+  @if (!canView()) {
+    <div class="alert alert-warning" role="alert">
+      <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+      You don't have permission to view petty cash funds (PETTY_CASH.VIEW).
+    </div>
+  } @else {
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading petty cash funds…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load petty cash funds.
+          <button type="button" class="btn btn-sm btn-outline-danger ms-2" (click)="load()">Retry</button>
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-piggy-bank"></i>
+            No petty cash funds found for this company.
+          </div>
+        } @else {
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Petty cash funds</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Custodian</th>
+                  <th scope="col" class="num">Float</th>
+                  <th scope="col" class="num">Balance</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.uid) {
+                  <tr>
+                    <td class="mono">{{ row.code }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.custodianName ?? '—' }}</td>
+                    <td class="num mono">{{ row.currency }} {{ fmtMoney(row.floatAmount) }}</td>
+                    <td class="num mono fw-semibold">{{ row.currency }} {{ fmtMoney(row.balanceAmount) }}</td>
+                    <td>
+                      <span class="status-tag"
+                            [class.status-tag--ok]="row.status === 'ACTIVE'"
+                            [class.status-tag--neutral]="row.status === 'INACTIVE'"
+                            [class.status-tag--warn]="row.status === 'ARCHIVED'">
+                        {{ row.status }}
+                      </span>
+                    </td>
+                    <td>
+                      <a [routerLink]="['/admin/petty-cash/funds/uid', row.uid]"
+                         class="btn btn-outline-secondary btn-sm"
+                         [attr.aria-label]="'Open petty cash fund ' + row.name">
+                        <i class="bi bi-eye" aria-hidden="true"></i>
+                      </a>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
