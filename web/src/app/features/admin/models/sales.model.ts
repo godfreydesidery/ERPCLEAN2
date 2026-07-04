@@ -162,3 +162,49 @@ export interface CreateTaxRateRequest {
   vatStatus: VatStatus;
   rate: string;
 }
+
+// ── Sales Settings DTOs / requests (D-4: SO approval threshold) ──────────────
+//
+// NOTE: unlike most amount fields on this page (typed `string` per the legacy
+// convention above), the backend SalesSettingsDto serialises
+// soApprovalThresholdAmount as a BigDecimal, which Jackson emits as a JSON
+// *number* (per the wire contract — only Long ids are stringified). Type it
+// `number` to match the real wire shape.
+
+export interface SalesSettingsDto {
+  id: string;
+  uid: string;
+  companyId: string;
+  soApprovalEnabled: boolean;
+  soApprovalThresholdAmount: number | null;
+  currency: string;
+}
+
+export interface UpdateSalesSettingsRequest {
+  companyUid: string;
+  soApprovalEnabled: boolean;
+  soApprovalThresholdAmount: number | null;
+  currency: string;
+}
+
+// ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────
+//
+// One receipt row per FINALISED invoice. GET returns 404 (mapped to `null` by
+// the service) when no receipt has been issued yet — absence is not an error.
+
+export type FiscalReceiptStatus = 'PENDING' | 'ISSUED' | 'FAILED' | 'NOT_CONFIGURED' | 'VOID';
+
+export interface FiscalReceiptDto {
+  uid: string;
+  invoiceUid: string;
+  status: FiscalReceiptStatus;
+  providerCode: string | null;
+  fiscalNumber: string | null;
+  verificationUrl: string | null;
+  deviceSerial: string | null;
+  issuedAt: string | null;
+  attemptCount: number;
+  errorDetail: string | null;
+  version: string;
+  createdAt: string;
+}

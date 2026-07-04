@@ -2,18 +2,24 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
+import com.erp.modules.products.domain.entity.Product;
+import com.erp.modules.products.domain.entity.ProductBulkPack;
+import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.Promotion;
 import com.erp.modules.products.domain.enums.PromotionEffect;
 import com.erp.modules.products.domain.enums.PromotionTarget;
 import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.PriceTierRepository;
 import com.erp.modules.products.repository.PromotionRepository;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,17 +35,20 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     private final PromotionRepository     promotions;
     private final PriceTierRepository     priceTiers;
     private final ProductPriceRepository  productPrices;
+    private final ProductBulkPackRepository bulkPacks;
     private final ProductRepository       products;
 
     public PriceResolutionServiceImpl(CustomerPriceRepository customerPrices,
                                       PromotionRepository promotions,
                                       PriceTierRepository priceTiers,
                                       ProductPriceRepository productPrices,
+                                      ProductBulkPackRepository bulkPacks,
                                       ProductRepository products) {
         this.customerPrices = customerPrices;
         this.promotions     = promotions;
         this.priceTiers     = priceTiers;
         this.productPrices  = productPrices;
+        this.bulkPacks      = bulkPacks;
         this.products       = products;
     }
 
@@ -83,19 +92,84 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         return ResolvedPriceDto.none();
     }
 
+    @Override
+    public BigDecimal resolveUnitListPrice(Long companyId, Long productId, Long unitId) {
+        // Company-scoped finder (not bare findById) — prevents a confused-deputy cross-tenant
+        // read if a caller ever passes a productId that isn't actually in companyId.
+        Product product = products.findByCompanyIdAndId(companyId, productId)
+                .orElseThrow(() -> new NotFoundException("Product not found."));
+
+        // 1 — explicit per-unit override (non-linear pack price), if configured for this unit.
+        boolean isBaseUnit = product.getBaseUnit().getId().equals(unitId);
+        if (!isBaseUnit) {
+            Optional<ProductPrice> explicit =
+                    productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productId, unitId);
+            if (explicit.isPresent()) {
+                return requireAmount(explicit.get());
+            }
+        }
+
+        // 2 — base row × factor_to_base(unit); factor is 1 for the base unit itself.
+        // First-wins across price lists: the live path is deliberately price-list-blind (ADR-0048),
+        // and a product priced on several lists has several base rows — take the lowest-id one rather
+        // than throwing on a multi-price-list product (restores the pre-D-1 findFirst tolerance).
+        ProductPrice base = productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Product has no price configured for this company."));
+        BigDecimal baseAmount = requireAmount(base);
+
+        // 3 — unit must be the base or a configured pack, else reject (mirrors computeQtyInBase).
+        return baseAmount.multiply(unitFactor(product, unitId));
+    }
+
     // ---- helpers ---------------------------------------------------------------
 
+    /**
+     * Base-unit list price, price-list scoped (ADR-0048 D-1: the ambiguous
+     * {@code findByProductIdAndPriceListId} is replaced with the disambiguated base variant so this
+     * dead path compiles and behaves correctly now that a product can carry more than one
+     * {@code product_prices} row per list). Per-unit/non-linear resolution for this price-list-aware
+     * path is left to the follow-up that activates this resolver — D-1 only fixes sales' unit-blind
+     * live path via {@link #resolveUnitListPrice}.
+     */
     private ResolvedPriceDto resolveListOrTier(ResolvePriceRequest req) {
         if (req.priceListId() == null) {
             return null;
         }
-        // Check plain list price first
-        var pp = productPrices.findByProductIdAndPriceListId(req.productId(), req.priceListId());
+        var pp = productPrices.findByProductIdAndPriceListIdAndUnitIdIsNull(
+                req.productId(), req.priceListId());
         if (pp.isPresent()) {
             var price = pp.get().getPrice();
             return ResolvedPriceDto.listPrice(price.getAmount(), price.getCurrency().value());
         }
         return null;
+    }
+
+    /** Extracts the price amount, rejecting a row whose Money is incomplete. */
+    private static BigDecimal requireAmount(ProductPrice pp) {
+        var money = pp.getPrice();
+        if (money == null || money.getAmount() == null) {
+            throw new IllegalArgumentException("Product has no price configured for this company.");
+        }
+        return money.getAmount();
+    }
+
+    /**
+     * Factor-to-base multiplier for {@code unitId} against {@code product}'s base unit — mirrors
+     * the sales modules' {@code computeQtyInBase} guard: base unit → 1, configured pack → its
+     * factor, any other unit → rejected.
+     */
+    private BigDecimal unitFactor(Product product, Long unitId) {
+        if (product.getBaseUnit().getId().equals(unitId)) {
+            return BigDecimal.ONE;
+        }
+        return bulkPacks.findByProductId(product.getId()).stream()
+                .filter(bp -> bp.getUnit().getId().equals(unitId))
+                .map(ProductBulkPack::getFactorToBase)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "This unit is not valid for this product. Use the product's base unit or "
+                                + "a configured pack unit."));
     }
 
     /**

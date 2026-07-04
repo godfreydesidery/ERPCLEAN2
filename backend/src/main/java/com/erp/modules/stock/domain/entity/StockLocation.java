@@ -64,6 +64,15 @@ public class StockLocation extends UidEntity {
     @Column(name = "gl_account_id")
     private Long glAccountId;
 
+    /**
+     * ADR-0051 D-8.4: the route agent that runs this VAN location (soft-FK to agents.id).
+     * NULL for non-VAN locations, and for a VAN with no agent assigned yet. Settable only on a
+     * VAN-type location — enforced by {@link com.erp.modules.stock.service.StockLocationServiceImpl},
+     * not here. At most one ACTIVE van per agent (DB partial unique {@code uq_stock_location_agent_active}).
+     */
+    @Column(name = "agent_id")
+    private Long agentId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private MasterStatus status;
@@ -163,6 +172,8 @@ public class StockLocation extends UidEntity {
     public void setPickable(boolean pickable)              { this.pickable = pickable; }
     public void setSellable(boolean sellable)              { this.sellable = sellable; }
     public void setGlAccountId(Long glAccountId)           { this.glAccountId = glAccountId; }
+    public Long         getAgentId()     { return agentId; }
+    public void setAgentId(Long agentId)                   { this.agentId = agentId; }
     public Instant      getCreatedAt()   { return createdAt; }
     public Long         getCreatedBy()   { return createdBy; }
     public Instant      getUpdatedAt()   { return updatedAt; }

@@ -222,8 +222,9 @@ public class ProductController {
     @DeleteMapping("/uid/{uid}/prices/{priceListUid}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.MANAGE')")
-    public void removePrice(@PathVariable String uid, @PathVariable String priceListUid) {
-        productService.removePrice(uid, priceListUid);
+    public void removePrice(@PathVariable String uid, @PathVariable String priceListUid,
+                            @RequestParam(required = false) String unitUid) {
+        productService.removePrice(uid, priceListUid, unitUid);
     }
 
     // -------------------------------------------------------------------------

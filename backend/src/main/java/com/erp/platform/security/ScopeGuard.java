@@ -40,9 +40,12 @@ import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.cashbank.repository.BankReconciliationRepository;
 import com.erp.modules.cashbank.repository.CashBankAccountRepository;
+import com.erp.modules.cashbank.repository.CashCountRepository;
 import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.cashbank.repository.CashTransferRepository;
 import com.erp.modules.cashbank.repository.ChequeRepository;
+import com.erp.modules.cashbank.repository.PettyCashFundRepository;
+import com.erp.modules.cashbank.repository.PettyCashTransactionRepository;
 import com.erp.modules.tax.repository.VatAdjustmentRepository;
 import com.erp.modules.tax.repository.VatReturnRepository;
 import com.erp.modules.tax.repository.WhtTransactionRepository;
@@ -80,6 +83,7 @@ import com.erp.modules.stock.repository.StockTransferRepository;
 import com.erp.modules.stock.repository.StockCountRepository;
 import com.erp.modules.stock.repository.StockBatchRepository;
 import com.erp.modules.stock.repository.StockSerialRepository;
+import com.erp.modules.stock.repository.VanReconciliationRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
@@ -172,6 +176,11 @@ public class ScopeGuard {
     private final CashTransferRepository     cashTransfers;
     private final ChequeRepository           cheques;
     private final BankReconciliationRepository bankReconciliations;
+    // ADR-0050 D-7 PR-A: cash count
+    private final CashCountRepository        cashCounts;
+    // ADR-0050 D-7 PR-B: petty cash
+    private final PettyCashFundRepository        pettyCashFunds;
+    private final PettyCashTransactionRepository pettyCashTransactions;
     // VAT / WHT repositories (ADR-0017 D-11)
     private final VatReturnRepository        vatReturns;
     private final VatAdjustmentRepository    vatAdjustments;
@@ -204,6 +213,8 @@ public class ScopeGuard {
     private final StockCountRepository       stockCounts;
     private final StockBatchRepository       stockBatches;
     private final StockSerialRepository      stockSerials;
+    // van-stock reconciliation (D-8, ADR-0051)
+    private final VanReconciliationRepository vanReconciliations;
     // fixed-assets (ADR-0030 D-14)
     private final AssetCategoryRepository    assetCategories;
     private final FixedAssetRepository       fixedAssets;
@@ -313,6 +324,8 @@ public class ScopeGuard {
                       StockCountRepository stockCounts,
                       StockBatchRepository stockBatches,
                       StockSerialRepository stockSerials,
+                      // van-stock reconciliation (D-8, ADR-0051)
+                      VanReconciliationRepository vanReconciliations,
                       // fixed-assets (ADR-0030 D-14)
                       AssetCategoryRepository assetCategories,
                       FixedAssetRepository fixedAssets,
@@ -362,6 +375,11 @@ public class ScopeGuard {
                       WorkOrderRepository workOrdersRepo,
                       WorkOrderComponentRepository workOrderComponentsRepo,
                       WorkOrderOperationRepository workOrderOperationsRepo,
+                      // cash count (ADR-0050 D-7 PR-A)
+                      CashCountRepository cashCounts,
+                      // petty cash (ADR-0050 D-7 PR-B)
+                      PettyCashFundRepository pettyCashFunds,
+                      PettyCashTransactionRepository pettyCashTransactions,
                       AuditService audit) {
         this.companies      = companies;
         this.branches       = branches;
@@ -421,6 +439,8 @@ public class ScopeGuard {
         this.stockCounts         = stockCounts;
         this.stockBatches        = stockBatches;
         this.stockSerials        = stockSerials;
+        // van-stock reconciliation (D-8, ADR-0051)
+        this.vanReconciliations  = vanReconciliations;
         // fixed-assets (ADR-0030 D-14)
         this.assetCategories     = assetCategories;
         this.fixedAssets         = fixedAssets;
@@ -470,6 +490,11 @@ public class ScopeGuard {
         this.workOrdersRepo           = workOrdersRepo;
         this.workOrderComponentsRepo  = workOrderComponentsRepo;
         this.workOrderOperationsRepo  = workOrderOperationsRepo;
+        // cash count (ADR-0050 D-7 PR-A)
+        this.cashCounts               = cashCounts;
+        // petty cash (ADR-0050 D-7 PR-B)
+        this.pettyCashFunds           = pettyCashFunds;
+        this.pettyCashTransactions    = pettyCashTransactions;
         this.audit               = audit;
     }
 
@@ -552,6 +577,8 @@ public class ScopeGuard {
             case "stockcount"          -> stockCounts.findCompanyIdByUid(uid);
             case "stockbatch"          -> stockBatches.findCompanyIdByUid(uid);
             case "stockserial"         -> stockSerials.findCompanyIdByUid(uid);
+            // van-stock reconciliation (D-8, ADR-0051)
+            case "vanreconciliation"   -> vanReconciliations.findCompanyIdByUid(uid);
             // fixed-assets (ADR-0030 D-14)
             case "assetcategory"       -> assetCategories.findCompanyIdByUid(uid);
             case "fixedasset"          -> fixedAssets.findCompanyIdByUid(uid);
@@ -601,6 +628,11 @@ public class ScopeGuard {
             case "workorder"           -> workOrdersRepo.findCompanyIdByUid(uid);
             case "workordercomponent"  -> workOrderComponentsRepo.findCompanyIdByUid(uid);
             case "workorderoperation"  -> workOrderOperationsRepo.findCompanyIdByUid(uid);
+            // cash count (ADR-0050 D-7 PR-A)
+            case "cashcount"           -> cashCounts.findCompanyIdByUid(uid);
+            // petty cash (ADR-0050 D-7 PR-B)
+            case "pettycashfund"        -> pettyCashFunds.findCompanyIdByUid(uid);
+            case "pettycashtransaction" -> pettyCashTransactions.findCompanyIdByUid(uid);
             // organisation is global (root-only, not company-scoped); unknown types deny.
             default -> Optional.empty();
         };

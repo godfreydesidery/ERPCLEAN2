@@ -21,6 +21,8 @@ import {
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 import { UidPickerComponent } from '../../../../shared/uid-picker/uid-picker.component';
 import type { UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { AgentService } from '../../parties/agent.service';
+import { AgentModel } from '../../models/party.model';
 
 const DEFAULT_SIZE = 20;
 
@@ -45,6 +47,7 @@ export class StockLocationListComponent {
   private readonly companyService = inject(CompanyService);
   private readonly branchService = inject(BranchService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly agentService = inject(AgentService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -57,6 +60,12 @@ export class StockLocationListComponent {
   // ── Branch picker options for create form ─────────────────────────────────
   readonly branchOptions = computed<UidOption[]>(() =>
     this.branches().map((b) => ({ uid: b.uid, label: b.name, hint: b.code })),
+  );
+
+  // ── Agent picker (VAN locations only, ADR-0051 D-8.4) — company-scoped ────
+  readonly agents = signal<AgentModel[]>([]);
+  readonly agentOptions = computed<UidOption[]>(() =>
+    this.agents().map((a) => ({ uid: a.uid, label: a.displayName, hint: a.code })),
   );
 
   // ── Branch filter (list scope) ────────────────────────────────────────────
@@ -82,6 +91,7 @@ export class StockLocationListComponent {
   readonly fLocationType = signal<LocationType>('WAREHOUSE');
   readonly fBranchUid = signal('');
   readonly fMakeDefault = signal(false);
+  readonly fAgentUid = signal('');
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
 
@@ -89,6 +99,7 @@ export class StockLocationListComponent {
   readonly editingUid = signal<string | null>(null);
   readonly eName = signal('');
   readonly eLocationType = signal<LocationType>('WAREHOUSE');
+  readonly eAgentUid = signal('');
   readonly editSaving = signal(false);
   readonly editError = signal<string | null>(null);
 
@@ -135,6 +146,7 @@ export class StockLocationListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadBranches(list[0].uid);
+              this.loadAgents(list[0].id);
               this.load(0);
             }
           },
@@ -152,11 +164,22 @@ export class StockLocationListComponent {
     });
   }
 
+  /** Agents are company-scoped (ADR-0051 D-8.4) — reloaded whenever the company selection changes. */
+  private loadAgents(companyId: string): void {
+    this.agentService.list(companyId, undefined, 0, 200).subscribe({
+      next: ({ rows }) => this.agents.set(rows.filter((a) => a.status !== 'ARCHIVED')),
+      error: () => this.agents.set([]),
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     const company = this.companies().find((c) => c.id === id);
     if (company) this.loadBranches(company.uid);
-    if (id) this.load(0);
+    if (id) {
+      this.loadAgents(id);
+      this.load(0);
+    }
   }
 
   onFilterBranchChange(branchUid: string): void {
@@ -184,6 +207,13 @@ export class StockLocationListComponent {
     this.fLocationType.set('WAREHOUSE');
     this.fBranchUid.set('');
     this.fMakeDefault.set(false);
+    this.fAgentUid.set('');
+  }
+
+  /** Agent is only meaningful for a VAN location — clear it when the type changes away from VAN. */
+  onCreateLocationTypeChange(type: LocationType): void {
+    this.fLocationType.set(type);
+    if (type !== 'VAN') this.fAgentUid.set('');
   }
 
   submitCreate(): void {
@@ -196,12 +226,17 @@ export class StockLocationListComponent {
 
     this.saving.set(true);
     this.formError.set(null);
+    const isVan = this.fLocationType() === 'VAN';
     const request: CreateStockLocationRequest = {
       code,
       name,
       locationType: this.fLocationType(),
       branchUid,
       makeDefault: this.fMakeDefault(),
+      // Send the raw picker value (never fall back to undefined) — the backend distinguishes an
+      // omitted/null agentUid ("leave unchanged") from an explicit "" ("clear"); on create there is
+      // no prior assignment so both behave the same, but this keeps create/update symmetric.
+      agentUid: isVan ? this.fAgentUid() : undefined,
     };
     this.locationService.create(request).subscribe({
       next: (loc) => {
@@ -235,6 +270,7 @@ export class StockLocationListComponent {
     this.editingUid.set(row.uid);
     this.eName.set(row.name);
     this.eLocationType.set(row.locationType);
+    this.eAgentUid.set(row.agentUid ?? '');
     this.editError.set(null);
   }
 
@@ -243,15 +279,26 @@ export class StockLocationListComponent {
     this.editError.set(null);
   }
 
+  /** Agent is only meaningful for a VAN location — clear it when the type changes away from VAN. */
+  onEditLocationTypeChange(type: LocationType): void {
+    this.eLocationType.set(type);
+    if (type !== 'VAN') this.eAgentUid.set('');
+  }
+
   submitEdit(row: StockLocationDto): void {
     const name = this.eName().trim();
     if (!name) { this.editError.set('Name is required.'); return; }
 
     this.editSaving.set(true);
     this.editError.set(null);
+    const isVan = this.eLocationType() === 'VAN';
     const request: UpdateStockLocationRequest = {
       name,
       locationType: this.eLocationType(),
+      // Send the raw picker value — the backend treats omitted/null as "leave unchanged" but an
+      // explicit "" as "clear the assignment" (see UpdateStockLocationRequest.agentUid javadoc).
+      // Falling back to `undefined` for a blank picker would silently swallow an agent-removal.
+      agentUid: isVan ? this.eAgentUid() : undefined,
     };
     this.locationService.update(row.uid, request).subscribe({
       next: (updated) => {

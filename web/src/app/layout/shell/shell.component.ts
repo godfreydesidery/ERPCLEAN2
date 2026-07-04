@@ -153,6 +153,7 @@ export class ShellComponent {
         { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
         { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
         { label: 'Pricing Rules', route: '/admin/pricing-rules', icon: 'bi-tags-fill', available: true, permission: 'SALES.PRICING.RULE.VIEW' },
+        { label: 'Sales Settings', route: '/admin/sales-settings', icon: 'bi-gear', available: true, permission: 'SALES.SETTINGS.MANAGE' },
       ],
     },
     {
@@ -166,6 +167,7 @@ export class ShellComponent {
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
+        { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],
     },
     {
@@ -208,6 +210,8 @@ export class ShellComponent {
         { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
         { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },
+        { label: 'Cash Counts', route: '/admin/cash/counts', icon: 'bi-cash-coin', available: true, permission: 'CASH.COUNT.VIEW' },
+        { label: 'Petty Cash', route: '/admin/petty-cash/funds', icon: 'bi-piggy-bank', available: true, permission: 'PETTY_CASH.VIEW' },
         { label: 'VAT Returns', route: '/admin/tax/vat-returns', icon: 'bi-file-earmark-ruled', available: true, permission: 'VAT.VIEW' },
         { label: 'WHT Types', route: '/admin/tax/wht-types', icon: 'bi-percent', available: true, permission: 'WHT.VIEW' },
         { label: 'WHT Register', route: '/admin/tax/wht-register', icon: 'bi-table', available: true, permission: 'WHT.VIEW' },

@@ -16,6 +16,13 @@ public interface StockLocationRepository extends JpaRepository<StockLocation, Lo
 
     Optional<StockLocation> findByUid(String uid);
 
+    /**
+     * Company-scoped numeric lookup (TenantScopingRulesTest) — for cross-module/enrichment callers
+     * that hold a locationId and the caller's already-established company scope, so a foreign
+     * company's row is never loaded (used by van-reconciliation DTO enrichment, ADR-0051 D-8).
+     */
+    Optional<StockLocation> findByCompanyIdAndId(Long companyId, Long id);
+
     /** Duplicate-guard for create: real unique key is (company_id, code) — uq_stock_location_company_code. */
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
@@ -28,6 +35,15 @@ public interface StockLocationRepository extends JpaRepository<StockLocation, Lo
 
     /** The branch default location (enforced unique by DB partial-unique index). */
     Optional<StockLocation> findByCompanyIdAndBranchIdAndIsDefaultTrue(Long companyId, Long branchId);
+
+    /**
+     * One-active-van-per-agent pre-check (ADR-0051 D-8.4) — a friendly duplicate-guard mirroring the
+     * DB partial unique {@code uq_stock_location_agent_active}. {@code excludeId} lets an update
+     * exclude the location being edited from the check; pass a value no real row can have (e.g. -1)
+     * when checking for a brand-new location that has no id yet.
+     */
+    boolean existsByAgentIdAndStatusAndIdNot(
+            Long agentId, com.erp.platform.common.domain.MasterStatus status, Long excludeId);
 
     /** ScopeGuard resolution (D-10). */
     @Query("SELECT sl.companyId FROM StockLocation sl WHERE sl.uid = :uid")

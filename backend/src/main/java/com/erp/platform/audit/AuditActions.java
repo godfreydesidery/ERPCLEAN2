@@ -186,6 +186,18 @@ public final class AuditActions {
     public static final String CASH_RECONCILE_MARK     = "CASH.RECONCILE.MARK";
     public static final String CASH_RECONCILE_COMPLETE = "CASH.RECONCILE.COMPLETE";
 
+    // ---- Cash Count (ADR-0050 D-7 PR-A) ----
+    public static final String CASH_COUNT_OPEN         = "CASH.COUNT.OPEN";
+    public static final String CASH_COUNT_COUNT        = "CASH.COUNT.COUNT";
+    public static final String CASH_COUNT_RECONCILE    = "CASH.COUNT.RECONCILE";
+
+    // ---- Petty Cash (ADR-0050 D-7 PR-B) ----
+    public static final String PETTY_CASH_FUND_CREATE  = "PETTY_CASH.FUND.CREATE";
+    public static final String PETTY_CASH_FUND_UPDATE  = "PETTY_CASH.FUND.UPDATE";
+    public static final String PETTY_CASH_DISBURSE     = "PETTY_CASH.DISBURSE";
+    public static final String PETTY_CASH_REPLENISH    = "PETTY_CASH.REPLENISH";
+    public static final String PETTY_CASH_ADJUST       = "PETTY_CASH.ADJUST";
+
     // ---- VAT / Tax module (ADR-0017 D-13) ----
     public static final String VAT_RETURN_PREPARE  = "VAT.RETURN.PREPARE";
     public static final String VAT_RETURN_FILE     = "VAT.RETURN.FILE";
@@ -463,4 +475,18 @@ public final class AuditActions {
     public static final String SYMBOLOGY_RULE_CREATE  = "SYMBOLOGY.RULE.CREATE";
     public static final String SYMBOLOGY_RULE_UPDATE  = "SYMBOLOGY.RULE.UPDATE";
     public static final String SYMBOLOGY_RULE_ARCHIVE = "SYMBOLOGY.RULE.ARCHIVE";
+
+    // ---- EFD / Fiscal receipts (ADR-0049 D-6; target_type = fiscal_receipts) ----
+    /** Emitted before the provider is called, on every issue/retry attempt. */
+    public static final String FISCAL_RECEIPT_ISSUE_ATTEMPT = "FISCAL.RECEIPT.ISSUE_ATTEMPT";
+    /** Emitted when the provider returns ISSUED. */
+    public static final String FISCAL_RECEIPT_ISSUED        = "FISCAL.RECEIPT.ISSUED";
+    /** Emitted when the provider returns FAILED or NOT_CONFIGURED. */
+    public static final String FISCAL_RECEIPT_FAILED        = "FISCAL.RECEIPT.FAILED";
+
+    // ---- Van-stock reconciliation (D-8, ADR-0051; target_type = van_reconciliations) ----
+    public static final String VAN_RECON_CREATE    = "VAN_RECON.CREATE";
+    public static final String VAN_RECON_ENTER     = "VAN_RECON.ENTER";
+    public static final String VAN_RECON_RECONCILE = "VAN_RECON.RECONCILE";
+    public static final String VAN_RECON_CANCEL    = "VAN_RECON.CANCEL";
 }

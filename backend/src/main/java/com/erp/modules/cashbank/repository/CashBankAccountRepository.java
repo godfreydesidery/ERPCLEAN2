@@ -13,6 +13,12 @@ public interface CashBankAccountRepository extends JpaRepository<CashBankAccount
 
     Optional<CashBankAccount> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped by-id finder (TenantScopingRulesTest) — resolve a company-owned account by its
+     * numeric id without a bare {@code findById} (ADR-0050 D-7, cash-count reconcile reload).
+     */
+    Optional<CashBankAccount> findByCompanyIdAndId(Long companyId, Long id);
+
     List<CashBankAccount> findByCompanyId(Long companyId);
 
     List<CashBankAccount> findByCompanyIdAndActive(Long companyId, boolean active);

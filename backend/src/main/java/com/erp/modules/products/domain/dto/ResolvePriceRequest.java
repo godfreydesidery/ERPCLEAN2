@@ -15,6 +15,14 @@ public record ResolvePriceRequest(
         BigDecimal quantity,
         LocalDate businessDate,
         /** The customer's assigned price list — used for tier + list lookups. */
-        Long priceListId
+        Long priceListId,
+        /**
+         * The line's selected unit (ADR-0048 D-1). Null means the product's base unit — the
+         * list-price lookup then targets the base-unit row (unit_id IS NULL), matching pre-D-1
+         * behaviour exactly. Kept per-unit-ready for whoever eventually wires this resolver into
+         * sales; {@link com.erp.modules.products.service.PriceResolutionService#resolve} itself
+         * stays unwired in D-1.
+         */
+        Long unitId
 ) {
 }

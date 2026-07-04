@@ -225,6 +225,10 @@ export interface ProductPriceDto {
   priceListName: string;
   companyId: string;
   price: Money;
+  /** ADR-0048: null = base-unit price; set = a per-unit (pack) price. */
+  unitUid: string | null;
+  unitCode: string | null;
+  unitName: string | null;
 }
 
 export interface SetProductPriceRequest {
@@ -232,6 +236,8 @@ export interface SetProductPriceRequest {
   price: Money;
   /** ISO-8601 date string. Default = today. Backend contract confirmed. */
   effectiveFrom?: string;
+  /** ADR-0048: absent/undefined = base-unit price; set = a configured pack unit's price. */
+  unitUid?: string;
 }
 
 // ── ProductComponentDto ───────────────────────────────────────────────────────

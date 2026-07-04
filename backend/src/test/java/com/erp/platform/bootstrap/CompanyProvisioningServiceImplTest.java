@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.cashbank.service.CashBankSeeder;
+import com.erp.modules.cashbank.service.PettyCashFundSeeder;
 import com.erp.modules.costing.service.DimensionSeeder;
 import com.erp.modules.crm.service.CrmStageSeeder;
 import com.erp.modules.documents.service.DocumentBrandingSeeder;
@@ -51,6 +52,7 @@ class CompanyProvisioningServiceImplTest {
     @Mock ArGlSeeder             arGlSeeder;
     @Mock ApGlSeeder             apGlSeeder;
     @Mock CashBankSeeder         cashBankSeeder;
+    @Mock PettyCashFundSeeder    pettyCashFundSeeder;
     @Mock InventoryGlSeeder      inventoryGlSeeder;
     @Mock DocumentBrandingSeeder documentBrandingSeeder;
     @Mock FixedAssetGlSeeder     fixedAssetGlSeeder;
@@ -68,10 +70,10 @@ class CompanyProvisioningServiceImplTest {
     void setUp() {
         service = new CompanyProvisioningServiceImpl(
                 unitSeeder, taxRateSeeder, chartOfAccountService, fiscalCalendarService,
-                glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, inventoryGlSeeder,
-                documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder, crmStageSeeder,
-                hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder, manufacturingGlSeeder,
-                currencyEnablementSeeder);
+                glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
+                inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
+                crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
+                manufacturingGlSeeder, currencyEnablementSeeder);
     }
 
     @Test
@@ -89,6 +91,7 @@ class CompanyProvisioningServiceImplTest {
         verify(arGlSeeder, times(1)).seedDefaults(companyId);
         verify(apGlSeeder, times(1)).seedDefaults(companyId);
         verify(cashBankSeeder, times(1)).seedDefaults(companyId);
+        verify(pettyCashFundSeeder, times(1)).seedDefaults(companyId);
         verify(inventoryGlSeeder, times(1)).seedDefaults(companyId);
         verify(documentBrandingSeeder, times(1)).seedDefaults(companyId);
         verify(fixedAssetGlSeeder, times(1)).seedDefaults(companyId);
