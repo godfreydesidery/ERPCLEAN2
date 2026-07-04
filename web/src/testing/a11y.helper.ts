@@ -33,35 +33,55 @@ const axe = configureAxe({
  * interrupted spec cannot cascade-fail the next — without serialising/awaiting across
  * tests (which deadlocks under vitest's per-test isolation).
  */
+/**
+ * The whole helper must finish well under the per-test vitest timeout (15 s), so that a jsdom
+ * infra-hang SKIPS (the intended behaviour) instead of tripping the test timeout and RED-ing CI.
+ * Two things could hang under the parallel vitest + jsdom runner, and BOTH are now bounded:
+ *   1. {@code fixture.whenStable()} — a never-idle zone can leave this pending forever.
+ *   2. axe-core's async engine — intermittently stalls with no real layout engine.
+ * The earlier version bounded only axe (8 s) and left whenStable() unbounded, so under CI load the
+ * combined wait could still exceed 15 s (the nav-search axe specs did exactly that — green locally,
+ * timed out in CI). We now cap the ENTIRE operation with a single budget below the test timeout.
+ */
+const A11Y_BUDGET_MS = 10_000; // < the 15 s per-test vitest timeout → a hang skips, never fails
+const WHEN_STABLE_BUDGET_MS = 2_000;
+
 export async function assertA11y<T>(fixture: ComponentFixture<T>): Promise<void> {
-  fixture.detectChanges();
-  // Let any pending microtasks/async settle so the DOM is stable before axe scans it
-  // (some components have a debounced/toObservable pipeline that, in jsdom, otherwise
-  // leaves axe waiting on a never-idle document and eating the whole test timeout).
-  await fixture.whenStable().catch(() => undefined);
-  fixture.detectChanges();
-  // Defensive: release any leaked singleton lock from a previously-interrupted run.
   const axeGlobal = (globalThis as unknown as { axe?: { _running?: boolean } }).axe;
-  if (axeGlobal?._running) axeGlobal._running = false;
-  // Bound the axe run. axe-core's async engine intermittently hangs under the parallel
-  // vitest + jsdom runner (no real layout engine) — a hang is an INFRASTRUCTURE flake, not an
-  // accessibility violation. So we race a timeout sentinel: on a real result we assert no
-  // violations (the gate does its job); on a jsdom hang we release the singleton lock and
-  // SKIP (warn, don't fail) so a flaky runner can't randomly red CI. Real violations on a
-  // responsive scan still fail the build — which is how the dashboard bar-label issue was caught.
-  const TIMED_OUT = Symbol('axe-timeout');
+  const TIMED_OUT = Symbol('a11y-timeout');
+
+  const scan = (async () => {
+    fixture.detectChanges();
+    // Let pending microtasks/async settle so the DOM is stable before axe scans it — but BOUND it:
+    // a debounced/toObservable pipeline (or a never-idle zone in jsdom) could otherwise leave
+    // whenStable() pending forever and eat the whole test timeout.
+    await Promise.race([
+      fixture.whenStable().catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, WHEN_STABLE_BUDGET_MS)),
+    ]);
+    fixture.detectChanges();
+    // Defensive: release any leaked singleton lock from a previously-interrupted run.
+    if (axeGlobal?._running) axeGlobal._running = false;
+    return axe(fixture.nativeElement as Element);
+  })();
+
+  // Race the whole scan against one budget. On a real result we assert no violations (the gate does
+  // its job — real violations on a responsive scan still fail the build, which is how the dashboard
+  // bar-label issue was caught). On a jsdom hang we release the singleton lock and SKIP (warn, don't
+  // fail) so a flaky runner can't randomly red CI.
   const results = await Promise.race([
-    axe(fixture.nativeElement as Element),
+    scan,
     new Promise<typeof TIMED_OUT>((resolve) =>
       setTimeout(() => {
         if (axeGlobal?._running) axeGlobal._running = false;
         resolve(TIMED_OUT);
-      }, 8000),
+      }, A11Y_BUDGET_MS),
     ),
   ]);
+
   if (results === TIMED_OUT) {
     // eslint-disable-next-line no-console
-    console.warn('[a11y] axe scan timed out under jsdom — skipped (infra flake, not a violation).');
+    console.warn('[a11y] axe scan exceeded budget under jsdom — skipped (infra flake, not a violation).');
     return;
   }
   // The cast is required because jest-axe types target jest's expect shape,
