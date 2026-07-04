@@ -108,6 +108,8 @@ export class ProductDetailComponent {
   readonly newPriceListUid = signal('');
   readonly newPriceAmount = signal('');
   readonly newPriceCurrency = signal('TZS');
+  /** '' = base-unit price; else the uid of a configured pack unit (ADR-0048). */
+  readonly newPriceUnitUid = signal('');
   readonly settingPrice = signal(false);
   readonly priceFormError = signal<string | null>(null);
   readonly rowBusyPriceId = signal<string | null>(null);
@@ -176,6 +178,11 @@ export class ProductDetailComponent {
     }
     const pl = this.priceLists().find((p) => p.uid === pp.priceListUid);
     return pl ? `${pl.code} — ${pl.name}` : pp.priceListUid;
+  }
+
+  /** ADR-0048: null unitUid = the base-unit price row. */
+  priceUnitLabel(pp: ProductPriceDto): string {
+    return pp.unitUid ? (pp.unitName ?? pp.unitCode ?? pp.unitUid) : 'Base';
   }
 
   constructor() {
@@ -403,15 +410,19 @@ export class ProductDetailComponent {
     }
     this.settingPrice.set(true);
     this.priceFormError.set(null);
+    const unitUid = this.newPriceUnitUid();
     const request: SetProductPriceRequest = {
       priceListUid,
       price: { amount, currency: this.newPriceCurrency().trim() || 'TZS' },
+      // ADR-0048: '' (base unit selected) omits unitUid ⇒ base-unit price row.
+      ...(unitUid ? { unitUid } : {}),
     };
     this.productService.setPrice(this.uid(), request).subscribe({
       next: () => {
         this.newPriceListUid.set('');
         this.newPriceAmount.set('');
         this.newPriceCurrency.set('TZS');
+        this.newPriceUnitUid.set('');
         this.settingPrice.set(false);
         this.alerts.success('Price set');
         this.loadPrices();
@@ -426,7 +437,7 @@ export class ProductDetailComponent {
   removePrice(pp: ProductPriceDto): void {
     if (this.rowBusyPriceId() !== null) return;
     this.rowBusyPriceId.set(pp.id);
-    this.productService.removePrice(this.uid(), pp.priceListUid).subscribe({
+    this.productService.removePrice(this.uid(), pp.priceListUid, pp.unitUid ?? undefined).subscribe({
       next: () => {
         this.rowBusyPriceId.set(null);
         this.alerts.success('Price removed');

@@ -16,12 +16,11 @@ import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
-import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
-import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.products.service.PriceResolutionService;
 import com.erp.modules.sales.domain.dto.CreateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
@@ -96,7 +95,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final AgentRepository agents;
     private final ProductRepository products;
     private final UnitOfMeasureRepository units;
-    private final ProductPriceRepository prices;
+    private final PriceResolutionService priceResolutionService;
     private final ProductBulkPackRepository bulkPacks;
     private final CompanyRepository companies;
     private final SalesInvoiceCodeGenerator codeGen;
@@ -124,7 +123,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    AgentRepository agents,
                                    ProductRepository products,
                                    UnitOfMeasureRepository units,
-                                   ProductPriceRepository prices,
+                                   PriceResolutionService priceResolutionService,
                                    ProductBulkPackRepository bulkPacks,
                                    CompanyRepository companies,
                                    SalesInvoiceCodeGenerator codeGen,
@@ -147,7 +146,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.agents = agents;
         this.products = products;
         this.units = units;
-        this.prices = prices;
+        this.priceResolutionService = priceResolutionService;
         this.bulkPacks = bulkPacks;
         this.companies = companies;
         this.codeGen = codeGen;
@@ -466,7 +465,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(), req.unitUid());
 
         // Snapshot price from price list (BR-SALES-03)
-        BigDecimal listPrice = resolveListPrice(product, inv.getCompanyId(), inv.getCurrency().value());
+        BigDecimal listPrice = priceResolutionService.resolveUnitListPrice(
+                inv.getCompanyId(), product.getId(), unit.getId());
 
         // Snapshot VAT rate from tax_rates (ADR-0008 D-5b)
         BigDecimal vatRate = resolveVatRate(inv.getCompanyId(), product);
@@ -968,30 +968,6 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
                 .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
-    }
-
-    /**
-     * Resolve the applicable list price for the product in the given company.
-     * Uses the company's default price list (FR-SALES-07). Rejects un-priced products (BR-SALES-03).
-     * In v1 we use the first active price found for the product in this company.
-     */
-    private BigDecimal resolveListPrice(Product product, Long companyId, String currency) {
-        List<ProductPrice> priceRows = prices.findByProductId(product.getId());
-        if (priceRows.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Product has no price on any price list.");
-        }
-        // Use first price found (company-scoped by denormalised companyId on ProductPrice)
-        ProductPrice pp = priceRows.stream()
-                .filter(p -> companyId.equals(p.getCompanyId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price configured for this company."));
-        if (pp.getPrice() == null || pp.getPrice().getAmount() == null) {
-            throw new IllegalArgumentException(
-                    "Product price is not set.");
-        }
-        return pp.getPrice().getAmount();
     }
 
     /**

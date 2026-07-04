@@ -19,12 +19,11 @@ import com.erp.modules.parties.repository.CustomerAddressRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.products.domain.entity.Product;
-import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
-import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.products.service.PriceResolutionService;
 import com.erp.modules.sales.domain.dto.AddSalesOrderLineRequest;
 import com.erp.modules.sales.domain.dto.CancelSalesOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesOrderRequest;
@@ -88,7 +87,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final BranchRepository         branches;
     private final ProductRepository        products;
     private final UnitOfMeasureRepository  units;
-    private final ProductPriceRepository   prices;
+    private final PriceResolutionService   priceResolutionService;
     private final ProductBulkPackRepository bulkPacks;
     private final TaxRateRepository        taxRates;
     private final StockReservationService  reservationService;
@@ -115,7 +114,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  BranchRepository branches,
                                  ProductRepository products,
                                  UnitOfMeasureRepository units,
-                                 ProductPriceRepository prices,
+                                 PriceResolutionService priceResolutionService,
                                  ProductBulkPackRepository bulkPacks,
                                  TaxRateRepository taxRates,
                                  StockReservationService reservationService,
@@ -139,7 +138,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.branches         = branches;
         this.products         = products;
         this.units            = units;
-        this.prices           = prices;
+        this.priceResolutionService = priceResolutionService;
         this.bulkPacks        = bulkPacks;
         this.taxRates         = taxRates;
         this.reservationService = reservationService;
@@ -214,7 +213,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         Product product = resolveProduct(order.getCompanyId(), req.productUid());
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(order.getCompanyId(), req.unitUid());
-        BigDecimal listPrice = resolveListPrice(product, order.getCompanyId());
+        BigDecimal listPrice = priceResolutionService.resolveUnitListPrice(
+                order.getCompanyId(), product.getId(), unit.getId());
         // Issue #6: unitPriceOverride must not be negative (revenue leakage / silent-zero bug).
         // @PositiveOrZero on the DTO is the first-line guard; this is defence-in-depth for
         // programmatic callers that bypass bean validation.
@@ -757,17 +757,6 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private UnitOfMeasure resolveUnit(Long companyId, String uid) {
         return units.findByCompanyIdAndUid(companyId, uid)
                 .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
-    }
-
-    private BigDecimal resolveListPrice(Product product, Long companyId) {
-        return prices.findByProductId(product.getId()).stream()
-                .filter(p -> companyId.equals(p.getCompanyId()))
-                .findFirst()
-                .map(ProductPrice::getPrice)
-                .filter(m -> m != null && m.getAmount() != null)
-                .map(m -> m.getAmount())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price configured for this company."));
     }
 
     private BigDecimal resolveVatRate(Long companyId, Product product) {

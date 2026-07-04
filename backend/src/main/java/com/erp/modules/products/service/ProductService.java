@@ -65,7 +65,12 @@ public interface ProductService {
     // --- Prices ---
     ProductPriceDto setPrice(String uid, SetProductPriceRequest req);
 
-    void removePrice(String productUid, String priceListUid);
+    /**
+     * Removes a price row. {@code unitUid} null/blank targets the base-unit row (unit_id IS NULL,
+     * back-compatible with pre-ADR-0048 callers); a supplied uid targets that unit's per-unit row
+     * (coerced to the base row when the uid resolves to the product's own base unit).
+     */
+    void removePrice(String productUid, String priceListUid, String unitUid);
 
     List<ProductPriceDto> listPrices(String uid);
 

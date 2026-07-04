@@ -122,12 +122,15 @@ export class ProductService {
     return this.http.get<ProductPriceDto[]>(`${this.base}/uid/${uid}/prices`);
   }
 
+  /** unitUid absent/undefined ⇒ base-unit price row; set ⇒ per-unit (pack) price row (ADR-0048). */
   setPrice(uid: string, request: SetProductPriceRequest): Observable<ProductPriceDto> {
     return this.http.post<ProductPriceDto>(`${this.base}/uid/${uid}/prices`, request);
   }
 
-  removePrice(uid: string, priceListUid: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/uid/${uid}/prices/${priceListUid}`);
+  /** unitUid absent ⇒ base row (back-compatible); set ⇒ the per-unit (pack) price row (ADR-0048). */
+  removePrice(uid: string, priceListUid: string, unitUid?: string): Observable<void> {
+    const params = unitUid ? new HttpParams().set('unitUid', unitUid) : undefined;
+    return this.http.delete<void>(`${this.base}/uid/${uid}/prices/${priceListUid}`, { params });
   }
 
   // ── Components / Recipe ───────────────────────────────────────────────────

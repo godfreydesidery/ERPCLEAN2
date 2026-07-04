@@ -48,6 +48,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -447,9 +448,16 @@ public class ProductServiceImpl implements ProductService {
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), req.priceListUid())
                 .orElseThrow(() -> new NotFoundException("Price list not found."));
 
-        // upsert: one price per (product, price_list)
-        ProductPrice pp = prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
-                .orElseGet(() -> new ProductPrice(p, priceList, null, actorId()));
+        // ADR-0048 D-1: null/blank unitUid (or a uid that resolves to the product's own base
+        // unit) targets the base-unit row (unit_id IS NULL); any other uid must be a configured
+        // product_bulk_pack unit for a per-unit (pack-specific) price row.
+        UnitOfMeasure unit = resolvePriceUnit(p, req.unitUid());
+
+        // upsert: one price per (product, price_list, unit) — base row when unit is null.
+        ProductPrice pp = (unit == null
+                ? prices.findByProductIdAndPriceListIdAndUnitIdIsNull(p.getId(), priceList.getId())
+                : prices.findByProductIdAndPriceListIdAndUnitId(p.getId(), priceList.getId(), unit.getId()))
+                .orElseGet(() -> new ProductPrice(p, priceList, unit, null, actorId()));
 
         pp.setPrice(MoneyDto.toMoney(req.price()));
         pp.setUpdatedAt(Instant.now());
@@ -459,24 +467,31 @@ public class ProductServiceImpl implements ProductService {
         audit.record(AuditEvent.of(AuditActions.PRODUCT_PRICE_SET, "product_prices", p.getId(), p.getUid())
                 .detail(Map.of("priceListUid", req.priceListUid(),
                         "amount", req.price().amount(),
-                        "currency", req.price().currency())));
+                        "currency", req.price().currency(),
+                        "unit", unit == null ? "BASE" : "PACK")));
         return ProductPriceDto.from(saved);
     }
 
     @Override
-    public void removePrice(String productUid, String priceListUid) {
+    public void removePrice(String productUid, String priceListUid, String unitUid) {
         Product p = require(productUid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         // Security: scope the price list to the product's company (SR finding F15).
         var priceList = priceLists.findByCompanyIdAndUid(p.getCompanyId(), priceListUid)
                 .orElseThrow(() -> new NotFoundException("Price list not found."));
-        prices.findByProductIdAndPriceListId(p.getId(), priceList.getId())
-                .ifPresent(pp -> {
-                    prices.delete(pp);
-                    audit.record(AuditEvent.of(AuditActions.PRODUCT_PRICE_REMOVE, "product_prices",
-                                    p.getId(), p.getUid())
-                            .detail(Map.of("priceListUid", priceListUid)));
-                });
+
+        Long unitId = resolveRemovalUnitId(p, unitUid);
+        Optional<ProductPrice> pp = unitId == null
+                ? prices.findByProductIdAndPriceListIdAndUnitIdIsNull(p.getId(), priceList.getId())
+                : prices.findByProductIdAndPriceListIdAndUnitId(p.getId(), priceList.getId(), unitId);
+
+        pp.ifPresent(price -> {
+            prices.delete(price);
+            audit.record(AuditEvent.of(AuditActions.PRODUCT_PRICE_REMOVE, "product_prices",
+                            p.getId(), p.getUid())
+                    .detail(Map.of("priceListUid", priceListUid,
+                            "unit", unitId == null ? "BASE" : "PACK")));
+        });
     }
 
     @Override
@@ -584,6 +599,44 @@ public class ProductServiceImpl implements ProductService {
     private UnitOfMeasure resolveUnit(Long companyId, String unitUid) {
         return units.findByCompanyIdAndUid(companyId, unitUid)
                 .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
+    }
+
+    /**
+     * Resolves {@code unitUid} to the unit a price row should be keyed on (ADR-0048 D-1 invariant).
+     * Null/blank → {@code null} (the base-unit row, unit_id IS NULL). A uid that resolves to the
+     * product's own base unit is coerced to {@code null} too — base prices always live on the NULL
+     * row. Any other uid must be a configured {@code product_bulk_pack} unit for this product, else
+     * a price for it could never be applied to a line (mirrors {@code computeQtyInBase}'s guard).
+     */
+    private UnitOfMeasure resolvePriceUnit(Product product, String unitUid) {
+        if (unitUid == null || unitUid.isBlank()) {
+            return null;
+        }
+        UnitOfMeasure unit = resolveUnit(product.getCompanyId(), unitUid);
+        if (unit.getId().equals(product.getBaseUnit().getId())) {
+            return null;
+        }
+        boolean configuredPack = bulkPacks.findByProductId(product.getId()).stream()
+                .anyMatch(bp -> bp.getUnit().getId().equals(unit.getId()));
+        if (!configuredPack) {
+            throw new IllegalArgumentException(
+                    "This unit is not configured for this product. Add it as a bulk pack first, "
+                            + "or use the product's base unit.");
+        }
+        return unit;
+    }
+
+    /**
+     * Resolves {@code unitUid} to the unit id a price row was keyed on, for removal — same base
+     * coercion as {@link #resolvePriceUnit} but without the configured-pack check (a row simply
+     * won't exist for a unit that was never a valid price target, so the lookup is a safe no-op).
+     */
+    private Long resolveRemovalUnitId(Product product, String unitUid) {
+        if (unitUid == null || unitUid.isBlank()) {
+            return null;
+        }
+        UnitOfMeasure unit = resolveUnit(product.getCompanyId(), unitUid);
+        return unit.getId().equals(product.getBaseUnit().getId()) ? null : unit.getId();
     }
 
     /**
