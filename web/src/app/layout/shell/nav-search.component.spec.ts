@@ -287,21 +287,24 @@ describe('NavSearchComponent', () => {
   });
 
   // ── Accessibility (axe) ───────────────────────────────────────────────────
-
+  // Generous per-test timeout: axe-core's scan is synchronous CPU work (~0.3s locally) that no
+  // setTimeout can interrupt, so on the CPU-oversubscribed CI runner it can stretch well past the
+  // default budget in wall-clock. This is an INFRA accommodation (the scan still runs and still
+  // fails on real violations), not a slow test — happy-path runs finish in well under a second.
   it('has no axe violations in default (closed) state', async () => {
     const fixture = createComponent();
     await assertA11y(fixture);
-  }, 15_000);
+  }, 60_000);
 
   it('has no axe violations when results are shown', async () => {
     const fixture = createComponent();
     setQuery(fixture, 'sales');
     await assertA11y(fixture);
-  }, 15_000);
+  }, 60_000);
 
   it('has no axe violations in no-match state', async () => {
     const fixture = createComponent();
     setQuery(fixture, 'zzznomatch');
     await assertA11y(fixture);
-  }, 15_000);
+  }, 60_000);
 });
