@@ -1,5 +1,6 @@
 package com.erp.modules.parties.service;
 
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.parties.domain.dto.AgentDto;
 import com.erp.modules.parties.domain.dto.AssignPartyBranchRequest;
@@ -16,6 +17,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
@@ -24,6 +26,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,7 @@ public class AgentServiceImpl implements AgentService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final UserLookupService userLookup;
+    private final CompanyRepository companies;
 
     public AgentServiceImpl(AgentRepository agents,
                             AgentBranchRepository agentBranches,
@@ -54,7 +58,8 @@ public class AgentServiceImpl implements AgentService {
                             PartyBranchGuard branchGuard,
                             ScopeGuard scopeGuard,
                             AuditService audit,
-                            UserLookupService userLookup) {
+                            UserLookupService userLookup,
+                            CompanyRepository companies) {
         this.agents = agents;
         this.agentBranches = agentBranches;
         this.codeGen = codeGen;
@@ -62,6 +67,7 @@ public class AgentServiceImpl implements AgentService {
         this.scopeGuard = scopeGuard;
         this.audit = audit;
         this.userLookup = userLookup;
+        this.companies = companies;
     }
 
     @Override
@@ -122,6 +128,27 @@ public class AgentServiceImpl implements AgentService {
             return agents.search(companyId, q, pageable).map(AgentDto::from);
         }
         return agents.findByCompanyId(companyId, pageable).map(AgentDto::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AgentDto> myAgent(String companyUid) {
+        RequestContext.Principal principal = RequestContext.get();
+
+        Long companyId = companies.findByUid(companyUid)
+                .map(c -> c.getId())
+                .orElseThrow(() -> new NotFoundException("Company not found."));
+        scopeGuard.assertCanActIn(principal, companyId);
+
+        // D-5: root (and any caller with no resolvable user, defensively) is never linked to an
+        // internal agent (BR-PARTY-10 rejects assigning root as appUserId at create) — empty, no throw.
+        if (principal == null || principal.userId() == null || principal.root()) {
+            return Optional.empty();
+        }
+
+        return agents.findFirstByCompanyIdAndAppUserIdAndAgentKindAndStatusOrderByIdAsc(
+                        companyId, principal.userId(), AgentKind.INTERNAL, MasterStatus.ACTIVE)
+                .map(AgentDto::from);
     }
 
     @Override

@@ -72,6 +72,24 @@ public interface PurchaseOrderService {
     PurchaseOrderDto createFromQuote(String quoteUid);
 
     /**
+     * Create a PO from an APPROVED purchase requisition (D-3 — requisition Convert flow).
+     * Mirrors {@link #createFromQuote}: copies the requisition's lines (requestedQty → orderedQty,
+     * estimatedUnitCost → unitCost — null defaults to zero with an auto-note to satisfy the
+     * zero-cost-needs-note rule) and sets {@code source_requisition_uid}. The supplier is NOT on the
+     * requisition — it is supplied by the caller (Convert request) and resolved company-scoped
+     * (rejects ARCHIVED, same as {@code resolveSupplier}).
+     *
+     * @param requisitionUid the source requisition uid; must resolve to an entity in the caller's
+     *                        company scope (asserted internally)
+     * @param supplierUid    the supplier to order from (required)
+     * @param currency       optional currency override; defaults to the company's base currency
+     * @return the created PO (DRAFT, with lines) — caller (PurchaseRequisitionServiceImpl) links the
+     *         requisition's convertedToUid to {@code po.uid()} and stamps each requisition line's
+     *         convertedToPoLineUid for traceability.
+     */
+    PurchaseOrderDto createFromRequisition(String requisitionUid, String supplierUid, String currency);
+
+    /**
      * APPROVALS-047: Submit a DRAFT PO to the approval engine (ADR-0027 D-6).
      * Calls {@code PoApprovalGate.submit()} in the same TX; sets approval_status = PENDING
      * (or APPROVED when the engine auto-approves per policy).  The PO remains DRAFT — it is

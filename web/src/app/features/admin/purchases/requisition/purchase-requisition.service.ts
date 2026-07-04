@@ -5,6 +5,7 @@ import { ApiResponse, PageMeta } from '../../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../../core/api/http-context.tokens';
 import { environment } from '../../../../../environments/environment';
 import {
+  ConvertRequisitionRequest,
   CreatePurchaseRequisitionRequest,
   PurchaseRequisitionDto,
 } from './purchase-requisition.model';
@@ -86,10 +87,14 @@ export class PurchaseRequisitionService {
     );
   }
 
-  /** targetType: 'PURCHASE_ORDER' | 'RFQ'. Returns uid of the created document (String). */
-  convert(uid: string, targetType: string): Observable<string> {
-    const params = new HttpParams().set('targetType', targetType);
-    return this.http.post<string>(`${this.base}/uid/${uid}/convert`, {}, { params });
+  /**
+   * Converts the requisition to a PURCHASE_ORDER or RFQ, actually creating the target document
+   * server-side (D-3). Body-based contract (no more ?targetType= query param): RFQ requires
+   * supplierUids (non-empty); PURCHASE_ORDER requires supplierUid. Returns the created
+   * document's uid (String).
+   */
+  convert(uid: string, request: ConvertRequisitionRequest): Observable<string> {
+    return this.http.post<string>(`${this.base}/uid/${uid}/convert`, request);
   }
 
   cancel(uid: string, reason: string): Observable<PurchaseRequisitionDto> {

@@ -8,6 +8,8 @@ import com.erp.modules.stock.repository.StockSerialRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 public class StockSerialServiceImpl implements StockSerialService {
+
+    private static final Logger log = LoggerFactory.getLogger(StockSerialServiceImpl.class);
 
     private final StockSerialRepository serials;
     private final ProductRepository     products;
@@ -55,6 +59,39 @@ public class StockSerialServiceImpl implements StockSerialService {
                 serialNumber, receivedDocumentUid, actorId);
         serials.save(serial);
         return toDto(serial);
+    }
+
+    // -------------------------------------------------------------------------
+    // removeReceived (D-2 — Goods Receipt void symmetry)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public void removeReceived(Long companyId, Long productId, String serialNumber, String receiptUid) {
+        StockSerial serial = serials.findByCompanyIdAndProductIdAndSerialNumber(
+                companyId, productId, serialNumber).orElse(null);
+
+        if (serial == null) {
+            log.warn("StockSerial removeReceived: no serial found for serial='{}' product={} " +
+                            "company={} receipt={} — skipping", serialNumber, productId, companyId, receiptUid);
+            return;
+        }
+        if (serial.getSerialStatus() != SerialStatus.IN_STOCK) {
+            log.warn("StockSerial removeReceived: serial='{}' product={} is {} (not IN_STOCK) — " +
+                            "refusing to delete an already-moved serial (receipt={})",
+                    serialNumber, productId, serial.getSerialStatus(), receiptUid);
+            return;
+        }
+        if (serial.getReceivedDocumentUid() == null
+                || !serial.getReceivedDocumentUid().equals(receiptUid)) {
+            log.warn("StockSerial removeReceived: serial='{}' product={} was received by a different " +
+                            "document (expected={}, actual={}) — skipping",
+                    serialNumber, productId, receiptUid, serial.getReceivedDocumentUid());
+            return;
+        }
+
+        serials.delete(serial);
+        log.debug("StockSerial removeReceived: deleted serial='{}' product={} receipt={}",
+                serialNumber, productId, receiptUid);
     }
 
     // -------------------------------------------------------------------------

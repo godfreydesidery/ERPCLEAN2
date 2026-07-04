@@ -81,4 +81,10 @@ export interface RejectRequisitionRequest {
 
 export interface ConvertRequisitionRequest {
   targetType: 'PURCHASE_ORDER' | 'RFQ';
+  /** Suppliers to invite — required (non-empty) when targetType === 'RFQ'. */
+  supplierUids?: string[];
+  /** Supplier to order from — required when targetType === 'PURCHASE_ORDER'. */
+  supplierUid?: string;
+  /** Optional PO currency override; blank defaults server-side to the company's base currency. */
+  currency?: string;
 }

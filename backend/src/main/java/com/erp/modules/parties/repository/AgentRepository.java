@@ -1,6 +1,8 @@
 package com.erp.modules.parties.repository;
 
 import com.erp.modules.parties.domain.entity.Agent;
+import com.erp.modules.parties.domain.enums.AgentKind;
+import com.erp.platform.common.domain.MasterStatus;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,4 +61,15 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
             """)
     Optional<Long> findInternalAgentIdByCompanyAndUser(@Param("companyId") Long companyId,
                                                        @Param("appUserId") Long appUserId);
+
+    /**
+     * D-5: resolves the ACTIVE internal-agent ENTITY (vs {@link #findInternalAgentIdByCompanyAndUser}
+     * which returns only the id) for the "my agent" pre-select endpoint (lets the web pre-select the
+     * current user's agent on SO/SI/POS forms). {@code findFirst...OrderByIdAsc} is deliberate — there
+     * is no DB uniqueness constraint on {@code app_user_id}, so a plain {@code findBy...} risks
+     * {@code NonUniqueResultException}; picking the earliest-created row is a safe, deterministic
+     * choice.
+     */
+    Optional<Agent> findFirstByCompanyIdAndAppUserIdAndAgentKindAndStatusOrderByIdAsc(
+            Long companyId, Long appUserId, AgentKind agentKind, MasterStatus status);
 }

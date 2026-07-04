@@ -7,7 +7,8 @@
  *  3. submit() calls POST /uid/{uid}/submit.
  *  4. approve() calls POST /uid/{uid}/approve.
  *  5. reject() passes reason as query param.
- *  6. convert() passes targetType as query param and returns string uid.
+ *  6. convert() POSTs a JSON body (targetType + supplierUids/supplierUid/currency) and returns
+ *     string uid — for both the RFQ and PURCHASE_ORDER shapes (D-3 body-based contract).
  *  7. cancel() passes reason as query param.
  */
 import { HttpClient } from '@angular/common/http';
@@ -125,7 +126,7 @@ describe('PurchaseRequisitionService', () => {
 
   // ── 6. convert() returns string uid ───────────────────────────────────────
 
-  it('convert() POSTs to /uid/{uid}/convert with targetType param', () => {
+  it('convert() POSTs to /uid/{uid}/convert with a PURCHASE_ORDER body (supplierUid + currency)', () => {
     const postSpy = vi.fn(() => of('PO-UID-999'));
     TestBed.configureTestingModule({
       providers: [
@@ -135,14 +136,41 @@ describe('PurchaseRequisitionService', () => {
     });
     const svc = TestBed.inject(PurchaseRequisitionService);
     let out: string | undefined;
-    svc.convert('REQ1', 'PURCHASE_ORDER').subscribe((r) => (out = r));
+    svc
+      .convert('REQ1', { targetType: 'PURCHASE_ORDER', supplierUid: 'SUP1', currency: 'TZS' })
+      .subscribe((r) => (out = r));
 
     expect(postSpy).toHaveBeenCalledOnce();
     const calls = postSpy.mock.calls as unknown[][];
     expect(calls[0][0] as string).toContain('/uid/REQ1/convert');
-    const opts = calls[0][2] as { params?: { toString: () => string } } | undefined;
-    expect(opts?.params?.toString()).toContain('targetType');
+    const body = calls[0][1] as { targetType: string; supplierUid?: string; currency?: string };
+    expect(body.targetType).toBe('PURCHASE_ORDER');
+    expect(body.supplierUid).toBe('SUP1');
+    expect(body.currency).toBe('TZS');
     expect(out).toBe('PO-UID-999');
+  });
+
+  it('convert() POSTs to /uid/{uid}/convert with an RFQ body (supplierUids)', () => {
+    const postSpy = vi.fn(() => of('RFQ-UID-777'));
+    TestBed.configureTestingModule({
+      providers: [
+        PurchaseRequisitionService,
+        { provide: HttpClient, useValue: { get: vi.fn(), post: postSpy } },
+      ],
+    });
+    const svc = TestBed.inject(PurchaseRequisitionService);
+    let out: string | undefined;
+    svc
+      .convert('REQ1', { targetType: 'RFQ', supplierUids: ['SUP1', 'SUP2'] })
+      .subscribe((r) => (out = r));
+
+    expect(postSpy).toHaveBeenCalledOnce();
+    const calls = postSpy.mock.calls as unknown[][];
+    expect(calls[0][0] as string).toContain('/uid/REQ1/convert');
+    const body = calls[0][1] as { targetType: string; supplierUids?: string[] };
+    expect(body.targetType).toBe('RFQ');
+    expect(body.supplierUids).toEqual(['SUP1', 'SUP2']);
+    expect(out).toBe('RFQ-UID-777');
   });
 
   // ── 7. cancel() ───────────────────────────────────────────────────────────
