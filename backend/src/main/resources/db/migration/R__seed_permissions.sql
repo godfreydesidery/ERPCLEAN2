@@ -129,6 +129,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('OTHERPARTY.VIEW', 'parties', 'View and select other/misc parties'),
     ('PARTY.BRANCH.ASSIGN', 'parties', 'Associate/dissociate any party with branches of its company'),
     ('PERMISSION.VIEW', 'iam', 'View the permission catalogue'),
+    ('PETTY_CASH.MANAGE', 'cashbank', 'Create/edit petty cash funds and record disbursements, replenishments and adjustments'),
+    ('PETTY_CASH.VIEW', 'cashbank', 'View petty cash funds and their transactions'),
     ('POS.SALE.AGE_OVERRIDE', 'pos', 'Sell an age-restricted item without an age-verification acknowledgement'),
     ('POS.SALE.CREATE', 'sales', 'Ring a POS sale on an open session'),
     ('POS.SALE.VOID', 'sales', 'Reverse / void a POS sale at the till (refund)'),

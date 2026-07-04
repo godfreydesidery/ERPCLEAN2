@@ -44,4 +44,15 @@ public interface ChartOfAccountRepository extends JpaRepository<ChartOfAccount, 
     List<ChartOfAccount> findByCompanyIdAndAccountTypeIn(
             @Param("companyId") Long companyId,
             @Param("types") Collection<AccountType> types);
+
+    /**
+     * Load an account by an id already trusted from a scoped parent row (e.g. a petty-cash
+     * transaction's captured {@code gl_account_id}, ADR-0050 D-7 PR-B) — used to resolve it back to
+     * a uid for a response DTO. Named finder (not the inherited {@code findById}), mirroring
+     * {@code CompanyRepository.findScopedById} — the id was already company-scoped-verified at
+     * write time, never attacker-supplied at this call site, so this does not trip the
+     * confused-deputy guard ({@code TenantScopingRulesTest}).
+     */
+    @Query("SELECT a FROM ChartOfAccount a WHERE a.id = :id")
+    Optional<ChartOfAccount> findScopedById(@Param("id") Long id);
 }

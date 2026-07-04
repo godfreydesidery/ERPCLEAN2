@@ -210,6 +210,7 @@ export class ShellComponent {
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
         { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },
         { label: 'Cash Counts', route: '/admin/cash/counts', icon: 'bi-cash-coin', available: true, permission: 'CASH.COUNT.VIEW' },
+        { label: 'Petty Cash', route: '/admin/petty-cash/funds', icon: 'bi-piggy-bank', available: true, permission: 'PETTY_CASH.VIEW' },
         { label: 'VAT Returns', route: '/admin/tax/vat-returns', icon: 'bi-file-earmark-ruled', available: true, permission: 'VAT.VIEW' },
         { label: 'WHT Types', route: '/admin/tax/wht-types', icon: 'bi-percent', available: true, permission: 'WHT.VIEW' },
         { label: 'WHT Register', route: '/admin/tax/wht-register', icon: 'bi-table', available: true, permission: 'WHT.VIEW' },

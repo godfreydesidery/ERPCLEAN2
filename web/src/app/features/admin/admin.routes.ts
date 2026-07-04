@@ -485,6 +485,28 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./cashbank/cash-count.component').then((m) => m.CashCountComponent),
   },
+  // ── Petty Cash (ADR-0050 D-7 PR-B — imprest fund + disbursement/replenishment ledger) ────
+  {
+    path: 'petty-cash/funds',
+    canActivate: [requireAnyPermission('PETTY_CASH.VIEW', 'PETTY_CASH.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/petty-cash-funds-list.component').then((m) => m.PettyCashFundsListComponent),
+  },
+  {
+    path: 'petty-cash/funds/new',
+    canActivate: [requirePermission('PETTY_CASH.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/petty-cash-fund-detail.component').then((m) => m.PettyCashFundDetailComponent),
+  },
+  {
+    // GET-by-uid is gated PETTY_CASH.VIEW server-side (ScopeGuard 'pettycashfund'); write actions
+    // (record transaction) inside the component are additionally gated on PETTY_CASH.MANAGE. Admit
+    // either code so a MANAGE-only role (who creates via /new then redirects here) is not bounced.
+    path: 'petty-cash/funds/uid/:uid',
+    canActivate: [requireAnyPermission('PETTY_CASH.VIEW', 'PETTY_CASH.MANAGE')],
+    loadComponent: () =>
+      import('./cashbank/petty-cash-fund-detail.component').then((m) => m.PettyCashFundDetailComponent),
+  },
   // ── Tax (VAT Returns + WHT) ───────────────────────────────────────────────
   {
     path: 'tax/vat-returns',
