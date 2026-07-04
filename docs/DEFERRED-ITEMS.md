@@ -8,20 +8,23 @@ decision (ADR) and/or a schema migration, so they are tracked here rather than r
 
 ## Migration status (updated 2026-07-04)
 
-**All schema-bound deferred items are BUILT and merged to `develop`** (build order D-4 → D-1 → D-6 → D-7 → D-8). The `proposed-migrations/` folder is now empty of drafts.
+**ALL deferred items (D-1…D-8) are BUILT and deployed to QA.** The 5 schema-bound items shipped
+first (build order D-4 → D-1 → D-6 → D-7 → D-8, migrations `V79`–`V85`); the 3 code-only items
+(D-2, D-3, D-5) followed in one **no-schema** PR (#205 → develop, #206 develop → main). The
+`proposed-migrations/` folder is empty. QA (`main`) is live at the latest with no schema change.
 
 | Item | Migration? | Version | State |
 |------|-----------|---------|-------|
 | D-1 · multi-unit pricing | yes (2) | `V80`, `V81` | ✅ **built** (ADR-0048, PR #198) |
-| D-2 · GRN batch/serial reversal | **no** | — | code-only — not yet built |
-| D-3 · requisition Convert | **no** | — | code-only — `purchase_requisitions.converted_to_uid`/`type` already exist (V32); not yet built |
+| D-2 · GRN batch/serial reversal | **no** | — | ✅ **built** (PR #205) — payload-enriched symmetric batch + serial reversal on void |
+| D-3 · requisition Convert | **no** | — | ✅ **built** (PR #205) — Convert creates the real RFQ/PO, prompts + validates supplier, sets `converted_to_uid` |
 | D-4 · SO auto-threshold | yes (1) | `V79` | ✅ **built** (PR #192) |
-| D-5 · default agent to user | **no** | — | code-only — `agents.app_user_id` **already exists**; not yet built |
+| D-5 · default agent to user | **no** | — | ✅ **built** (PR #205) — `GET /agents/mine` + SO/invoice create-form pre-select |
 | D-6 · EFD/fiscal receipt | yes (1) | `V82` | ✅ **built** (ADR-0049, PR #199) |
 | D-7 · cash count + petty cash | yes (2) | `V83`, `V84` | ✅ **built** (ADR-0050, PR #200 + #201) |
-| D-8 · van reconciliation | yes (1) | `V85` | ✅ **built** (ADR-0051, this PR) — record-only worksheet; `VAN` location type already existed |
+| D-8 · van reconciliation | yes (1) | `V85` | ✅ **built** (ADR-0051, PR #202) — record-only worksheet; `VAN` location type already existed |
 
-**Still open (no migration, not yet built):** D-2 (GRN batch/serial reversal), D-3 (requisition Convert), D-5 (default agent to user).
+**Nothing open — all 8 deferred items are built, on `main`, and deployed to QA.**
 
 ---
 
@@ -55,40 +58,52 @@ you cannot price, e.g., a chocolate sold by grams where a 500 g pack = 5,000 and
 ## D-2 · Batch / serial(IMEI) reversal on GRN void
 
 **Deferred:** 2026-06-24 (from the V76 GRN-tracking work). **Effort:** M. **Needs:** ADR.
+**Status (2026-07-04): ✅ BUILT (PR #205), no schema change, on QA.**
 
 **The gap.** Goods receipt now writes `stock_batches` (lot/expiry) and `stock_serials` (per-unit
 IMEI) on receipt (V76). Voiding a receipt correctly reverses **quantity + GL**, but does **not**
 back out those batch/serial rows — they retain their original receipt values until addressed. A
 clear `TODO` is in `GoodsReceiptReversalStockHandler`.
 
-**Way forward (outline).** Add two purpose-built reversal methods and call them from the void
-handler symmetrically with the forward path:
-- `StockBatchService.reverseReceiptQty(companyId, branchId, locationId, productId, lotNumber, qty)`
-- `StockSerialService.removeReceived(companyId, productId, serialNumber)` (delete or mark RETURNED)
+**What shipped.** The void payload (`StockReceiptVoidedPayload.LineItem`, a DTO — **not** schema)
+was enriched with `lotNumber`/`manufactureDate`/`expiryDate`/`serialNumbers`/`lotTracked`, populated
+by `GoodsReceiptServiceImpl.voidReceipt`. The reversal handler now backs out both sub-ledgers
+symmetrically with the forward path, soft (a tracking hiccup never poisons the qty/GL reversal TX):
+- `StockBatchService.reverseReceiptQty(companyId, branchId, locationId, productId, lotNumber, qty, actorId)` — find-only, negate; reverses by the matched line's own qty (not the ledger movement) and mirrors the forward `"UNTRACKED"` sentinel for lot-tracked products received with no lot; uses the receipt-time (per-movement) location.
+- `StockSerialService.removeReceived(companyId, productId, serialNumber, receiptUid)` — deletes only an `IN_STOCK` serial whose `receivedDocumentUid` matches; never touches an `ISSUED`/`RETURNED` one.
 
-**Key files:** `GoodsReceiptReversalStockHandler` (the TODO), `StockBatchServiceImpl`,
-`StockSerialServiceImpl`.
+Adversarial review caught + fixed two real data-integrity bugs here (wrong lot/qty pairing on
+multi-lot receipts; the `UNTRACKED` sentinel batch never being reversed). Covered by
+`GoodsReceiptReversalStockHandlerTest` + the two service unit tests.
+
+**Key files:** `GoodsReceiptReversalStockHandler`, `StockBatchServiceImpl`, `StockSerialServiceImpl`,
+both `StockReceiptVoidedPayload` copies, `GoodsReceiptServiceImpl.voidReceipt`.
 
 ---
 
 ## D-3 · Requisition "Convert" that actually creates the RFQ / PO
 
 **Deferred:** 2026-07-03 (round-2 persona interviews — Yusuf). **Effort:** M. **Needs:** design (ADR); **no migration** (confirmed).
+**Status (2026-07-04): ✅ BUILT (PR #205), no schema change, on QA.**
 
 **The gap.** The purchase-requisition **Convert** action (`RequisitionServiceImpl.convert`) sets
 the requisition status to `CONVERTED` and returns a success toast, **but never creates the target
 RFQ or PO** and never sets `convertedToUid` — so the "View RFQ/PO" link is a dead end. The claimed
 document does not exist.
 
-**Way forward (outline).** Decide the conversion contract: does Convert produce an RFQ (multi-
-supplier quote) or a PO directly? Either way it needs a **supplier** (Convert must prompt for one,
-or convert per-supplier) and a **line mapping** (requisition lines → RFQ/PO lines with qty + UoM).
-Create the target document in the same TX, set `convertedToUid`, and only then flip status +
-toast. Add a service test asserting the target doc is actually persisted. **No migration** — the
-RFQ/PO tables and `purchase_requisitions.converted_to_uid`/`converted_to_type` already exist (V32).
+**What shipped.** `convert(uid, ConvertRequisitionRequest{targetType, supplierUids, supplierUid, currency})`
+now creates the real target **in one TX**, sets `converted_to_uid` + `converted_to_type`, and returns
+the created doc uid — the dead "View RFQ/PO" link now works. **RFQ** reuses `RfqService.create` with
+the requisition as `sourceRequisitionUid` (lines → productId/unitId/qty, no price); **PO** uses a new
+`PurchaseOrderServiceImpl.createFromRequisition` mirroring `createFromQuote` (`estimatedUnitCost` →
+`unitCost` with null→ZERO + auto-note, currency defaults to company base, stamps each line's
+`convertedToPoLineUid`). The requisition carries no usable supplier, so Convert **prompts** for it and
+**validates** (unknown/foreign/ARCHIVED rejected on both branches). Web convert form gained the
+supplier picker (RFQ multi-invite / PO single + currency). **No migration** — the RFQ/PO tables and
+`purchase_requisitions.converted_to_uid`/`converted_to_type` already existed (V26/V27).
 
-**Key files:** `RequisitionServiceImpl.convert`, `RfqServiceImpl` / `PurchaseOrderServiceImpl`
-(create paths), the requisition detail web component (Convert button + dead link).
+**Key files:** `PurchaseRequisitionServiceImpl.convert`, `PurchaseOrderServiceImpl.createFromRequisition`,
+`RfqServiceImpl` (reused), `ConvertRequisitionRequest`, the requisition-detail web component.
 
 ---
 
@@ -120,18 +135,20 @@ approved instead of relying on a manual click.
 ## D-5 · Default the sales agent to the logged-in user
 
 **Deferred:** 2026-07-03 (round-2 persona interviews — Hamisi). **Effort:** S. **Needs:** **NO migration** — code-only.
+**Status (2026-07-04): ✅ BUILT (PR #205), no schema change, on QA.**
 
 **The gap.** Route agents want a new sales order / invoice to pre-fill the **agent = themselves**.
 
-**Correction (2026-07-04):** the schema **already has the link** — `agents.app_user_id` exists (the
-original note claiming "no link" was wrong). So this is **code-only, no migration**: (1) populate
-`app_user_id` when an agent is created/linked to a login, and (2) on new SO/invoice, resolve the
-current user's agent via `app_user_id` and pre-select it (still editable). A uniqueness guard (one
-login ↔ at most one agent) can be enforced in code, or later as an additive partial unique index if
-wanted.
+**What shipped.** The **backend already auto-defaulted** the agent on save when none was supplied
+(SO/SI/POS resolve the caller's ACTIVE INTERNAL agent via `AgentRepository.findInternalAgentIdByCompanyAndUser`).
+This item added the **UX pre-fill** so the route agent SEES agent = self (still editable): a new
+`GET /api/v1/agents/mine?companyUid=` (reuses `AGENT.VIEW`; returns the caller's own agent or empty
+for root / no internal agent — strictly scoped to `RequestContext.userId()`), and the SO + invoice
+create forms pre-select it on form-open. `agents.app_user_id` already existed (V2), so **no migration**.
 
-**Key files:** `Agent` entity + migration, `SalesOrderServiceImpl.create` / `SalesInvoiceServiceImpl.create`
-(default resolution), the SO/invoice create web forms.
+**Key files:** `AgentController` (`/mine`), `AgentServiceImpl.myAgent`, `AgentRepository`
+(`findFirstBy…` finder), `SalesOrderServiceImpl`/`SalesInvoiceServiceImpl` (existing auto-default),
+the SO/invoice create web forms.
 
 ---
 

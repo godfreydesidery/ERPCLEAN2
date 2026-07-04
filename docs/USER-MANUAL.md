@@ -696,6 +696,70 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 ---
 
+## Sales Settings — sales-order approval threshold
+
+**What this screen is.** Sales Settings is a per-company configuration screen that controls whether large **sales orders** must be approved before they can be confirmed, and above what value that approval kicks in. It holds one setting group per company.
+
+**Why it exists.** Many businesses want a manager to sign off on unusually large orders — an unusually big customer order can tie up stock, extend a lot of credit, or signal an error in data entry. Rather than force approval on every order (which slows the counter down), you set a **threshold**: orders at or above it route to approval automatically, while smaller everyday orders confirm straight through. The check happens automatically at the moment an order is confirmed, so nobody has to remember to submit large orders manually.
+
+**When to configure it.** During initial setup for each company that wants order approval, or whenever the threshold needs to change. The workflow is **off by default** — a brand-new company confirms every sales order without approval until you turn this on.
+
+**Required permission:** `SALES.SETTINGS.MANAGE` (the same permission both opens the screen and allows saving — there is no view-only tier). If you lack it the menu item is hidden and the screen shows *"You don't have permission to view sales settings."*
+
+Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sidebar.
+
+### Setting the sales-order approval threshold
+
+1. On the Sales Settings screen, choose the **Company** from the picker at the top. The settings below load for that company. (Each company is configured independently; switching the picker reloads its own settings.)
+2. In the **SO Approval** card, use the **Enable SO Approval Workflow** switch:
+   - **Off** (default) — every sales order confirms immediately, with no approval step. When the switch is off, no other fields are shown.
+   - **On** — the threshold fields appear and the approval check becomes active for this company.
+3. With the workflow enabled, fill in:
+   - **Approval Threshold Amount** — the order value at or above which approval is required. The hint beneath the field reads *"Sales orders above this value require approval."* An order whose gross total is **below** this amount confirms straight through; an order **at or above** it is routed to approval when confirmed.
+   - **Currency** — the currency the threshold amount is expressed in (defaults to `TZS`).
+4. Click **Save Settings**. A confirmation *"Sales settings saved"* appears.
+
+**What happens next.** Once enabled, the check runs automatically every time someone confirms a sales order for this company (including orders placed through the counter/POS path). Orders that meet or exceed the threshold are handed to the approvals engine and wait for a decision instead of confirming; orders below it are unaffected. Turning the switch back off removes the check entirely — subsequent orders confirm without approval.
+
+> **A zero or empty threshold catches everything.** If the workflow is enabled and you leave the threshold at `0`, every order (any value) requires approval. The amount must be zero or positive — a negative value is rejected with *"Threshold amount must be zero or positive."*
+
+> **The threshold is per company, not per branch.** All branches of the selected company share the same threshold. Configure each company separately.
+
+---
+
+## Fiscal / EFD Configuration
+
+**What this is.** In markets that require it (for example Tanzania's TRA), a finalised sales invoice must produce a **fiscal / EFD receipt** — a tax-authority-registered receipt number and verification link. The system has a fiscalisation *seam*: a pluggable provider that talks to the fiscal device or service. Which provider is active is a **deployment-level setting an administrator/IT sets at the server**, not a screen inside the app — but the result of that setting is visible to operators on every finalised invoice, so administrators need to understand it.
+
+**Why it is a deployment setting, not an in-app form.** A real fiscal device integration needs credentials and a certified adapter that are configured once per environment, not per user. The system deliberately **never fabricates** a fiscal number: until a real device is wired, it reports honestly that none is configured rather than inventing a receipt that would look like a filed tax document but is not.
+
+**The provider options.** IT selects the active provider (`erp.fiscal.provider`) when deploying:
+
+- **`none`** (the default) — no device is wired. Every fiscalisation attempt returns the honest status **NOT_CONFIGURED**; nothing is invented.
+- **`simulated`** — a demo provider that produces a clearly-marked fake number, for **development and QA only**. The application **refuses to start in production** with this setting, so a demo receipt can never masquerade as a real one.
+- **`tra`** (future) — the real tax-authority adapter, dropped in when it ships; selecting it is a configuration change, not an app change.
+
+**Required permissions (operator side).**
+- `FISCAL.VIEW` — see the Fiscal Receipt panel on an invoice.
+- `FISCAL.MANAGE` — issue or retry a fiscal receipt.
+
+These codes are seeded and granted to **ORG_ADMIN** automatically.
+
+### Where operators see fiscal status
+
+Fiscalisation happens on a **finalised** sales invoice (a draft has no invoice number or frozen totals yet; a voided invoice is not fiscalised). Open the invoice at **Sales › Invoices** and scroll to the **Fiscal Receipt** panel (shown only on finalised invoices, and only to holders of `FISCAL.VIEW`).
+
+The panel shows a status tag and, for holders of `FISCAL.MANAGE`, an **Issue EFD receipt** button (labelled **Retry EFD receipt** once an attempt already exists):
+
+- **NOT_CONFIGURED** — no EFD device is configured for this company yet. The panel reads *"No EFD device is configured for this company yet."* This is expected whenever the provider is `none`; the attempt can be retried later once a device is wired.
+- **ISSUED** — a real fiscal number and verification link were obtained; both are shown, with the verification URL opening in a new tab. This is terminal — an issued receipt is never re-issued (re-issuing would double-report to the tax authority), so no button is offered.
+- **FAILED** — a device was attempted but errored (offline, rejected, timeout); a friendly reason is shown and you can **Retry**.
+- **PENDING / VOID** — transitional/reserved states shown as a neutral tag.
+
+> **NOT_CONFIGURED and FAILED are surfaced as errors, not silent successes.** Clicking Issue on a company with no device wired does not produce a receipt — the system tells you so plainly rather than pretending it worked. To actually issue real receipts, IT must configure a fiscal provider for the environment.
+
+---
+
 ## Audit Trail
 
 **What the audit trail is.** The audit trail is a chronological, append-only log of every significant action performed in the system. Each record captures who did it (the actor), what they did (the action code), which record was affected (the target), in which company and branch, and when. It cannot be edited, backdated, or deleted — not even by `rootadmin`.
@@ -1134,15 +1198,24 @@ Bulk packs define how many base units fit into a larger packaging unit (for exam
 
 ### Product prices
 
-A **product price** is the selling price of this product on a specific price list. A price must be set on a price list before the product can be sold at that list's rate. You can maintain different prices on different lists — for example, a higher retail price and a lower wholesale price for the same product.
+A **product price** is the selling price of this product on a specific price list, for a specific **unit**. A price must be set on a price list before the product can be sold at that list's rate. You can maintain different prices on different lists — for example, a higher retail price and a lower wholesale price for the same product — and, on each list, a separate price for each pack the product is sold in.
+
+The **Prices** table has three columns: **Price list**, **Unit**, and **Price**. The **Unit** column shows **Base** for a price set against the product's base unit, or the pack's unit name (for example, `Carton`) for a per-pack price.
 
 You can set a selling price for this product on each of your price lists.
 
-1. In the **Prices** panel, select the **Price list** by its code and name.
-2. Enter the **Amount**. The **Currency** beside it is the **Currency Picker** (the company's enabled currencies, defaulting to the company default) — you pick from the list rather than typing a code (see **Getting Started › Common UI Patterns**).
-3. Click **Set Price**.
+1. In the **Prices** panel, under **Set Price**, select the **Price list** by its code and name.
+2. Choose the **Unit**. This dropdown defaults to **Base unit** and also lists every **bulk pack** you have configured for the product (see *Bulk packs* above). Pick **Base unit** to price the base unit, or a pack unit to set that pack's own price.
+3. Enter the **Amount**. The **Currency** beside it is the **Currency Picker** (the company's enabled currencies, defaulting to the company default) — you pick from the list rather than typing a code (see **Getting Started › Common UI Patterns**).
+4. Click **Set Price**.
 
-Setting a price on a price list that already has a price for this product overwrites the existing price. To remove a price, click **Remove** on the row.
+**You can only price a pack unit that is already a configured bulk pack.** If the unit you want is not in the dropdown, add it in the **Bulk Packs** panel first (with its factor to base), then return here. Trying to price a unit that is not the base unit and not a configured pack is rejected.
+
+**How the base row and pack prices work together.** Setting a **Base unit** price is the normal case and is all most products need: when the product is sold in a pack, the system multiplies the base-unit price by that pack's **factor to base**. So a product priced at 5 per base unit, sold in a `Carton` of factor 24, is offered at 120 for the carton automatically — you do not have to enter it.
+
+**Non-linear pack pricing.** When a pack should *not* simply be the base price times the factor — for example a 1,000 g pack that you sell for less than 1,000 times the per-gram price as a bulk incentive — set a price directly against that pack's unit. That explicit per-unit price is then used as-is for the pack and overrides the factor calculation; the base-unit price still governs every other unit. This lets you price a big pack independently of the per-unit rate.
+
+Each price list holds **one price per unit** for the product: setting a price for a price-list-and-unit combination that already has one overwrites it. Setting a **Base unit** price does not touch any pack price, and vice versa. To remove a price, click **Remove** on its row — this removes only that price list's price for that specific unit (Base or the named pack).
 
 ### Product components (recipe)
 
@@ -1167,10 +1240,11 @@ Scenario: Catalogue manager sets up a new FMCG line before the first purchase or
 3. Click the **Edit** action on `PROD-0034` to open `/admin/products/uid/<uid>`.
 4. **Barcodes panel:** Enter `6009876543210`, tick **Set as primary**, click **Add Barcode**.
 5. **Bulk Packs panel:** Select Unit `CTN — Carton`, Factor to base `50`. Click **Add Bulk Pack**. (50 kg bags per carton.)
-6. **Prices panel:** Select Price list `RETAIL — Retail Price List`, Amount `2500`, leave **Currency** at the default. Click **Set Price**.
-7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
+6. **Prices panel:** Select Price list `RETAIL — Retail Price List`, leave **Unit** at **Base unit**, Amount `2500`, leave **Currency** at the default. Click **Set Price**.
+7. **Prices panel:** Select Price list `WHOLESALE — Wholesale Price List`, **Unit** `Base unit`, Amount `2200`, leave **Currency** at the default. Click **Set Price**.
+8. **Prices panel (non-linear carton price):** Select Price list `WHOLESALE — Wholesale Price List`, **Unit** `Carton`, Amount `105000`, leave **Currency** at the default. Click **Set Price**. (Fifty 1 kg bags would otherwise resolve to 50 × 2,200 = 110,000; pricing the carton directly at 105,000 gives buyers a bulk discount independent of the per-kilogram wholesale rate.)
 
-The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price and will appear in stock movements tracked in kilograms.
+The product `PROD-0034 — Sugar 1kg` is now available for sale at the correct retail price, at a discounted wholesale carton price, and will appear in stock movements tracked in kilograms. The Prices table shows three rows: `RETAIL / Base`, `WHOLESALE / Base`, and `WHOLESALE / Carton`.
 
 ---
 
@@ -1501,6 +1575,8 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 | Blanket Orders | `SALES.BLANKET.VIEW`, `SALES.BLANKET.CREATE` |
 | Standing Orders | `SALES.STANDING.VIEW`, `SALES.STANDING.CREATE` |
 | Pricing Rules | `SALES.PRICING.RULE.VIEW`, `SALES.PRICING.RULE.MANAGE` |
+| Sales Settings (SO approval threshold) | `SALES.SETTINGS.MANAGE` |
+| Fiscal (EFD) receipts | `FISCAL.VIEW`, `FISCAL.MANAGE` |
 | POS (tills) | `POS.TILL.VIEW`, `POS.TILL.MANAGE` |
 | POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW` |
 | POS (reverse / age override) | `POS.SALE.VOID`, `POS.SALE.AGE_OVERRIDE` |
@@ -1543,6 +1619,8 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
 
 **Unit choices are product-scoped.** The **Unit** dropdown is disabled until a product is selected. Once a product is chosen, it lists only that product's configured units — its base unit plus any active bulk-pack units (e.g. CARTON) — never the full company unit list, and it defaults to the base unit. This applies to every line form in this chapter (quotations, sales orders, invoices, blanket orders, standing orders, and POS sales): you can no longer select a unit that is not configured on the product, which previously could silently mis-record the quantity.
+
+**Prices are per the selected unit.** Each product can carry a distinct price for each of its units — a price per PCS and a separate price per CARTON, for example. When you choose the **Unit**, the price the system resolves (and the amount shown in the line's **Unit Price** column) is the price for **that** unit, not the base-unit price multiplied out. So a line of 5 CARTON is priced at the carton price × 5, not the piece price × 5. If you type a **Price Override**, enter it as the price for the unit you selected. Switching the unit re-prices the line, so pick the unit first, then confirm or override the price.
 
 Repeat for each product. You can also add **Service** products; these are priced the same way but do not affect stock.
 
@@ -1613,8 +1691,10 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 2. Click **New Sales Order**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — the list is limited to the company's enabled currencies and defaults to the company default).
-5. Set **Order Date**. Optionally pick an **Agent** by name and add **Notes**.
+5. Set **Order Date**. The **Agent** field is pre-filled with **your own agent** (if your user is linked to a sales agent) — you can leave it, clear it, or type another agent's name to change it. Optionally add **Notes**.
 6. Click **Create Order**. The order is created in **DRAFT**.
+
+> **Agent pre-fill.** The Agent box shows *your* linked agent as soon as you open the form so a route agent does not have to search for themselves every time. It is only a convenience default — the field stays fully editable, and if your user has no linked agent (for example a root/admin login) the box simply opens empty.
 
 ### 2.2 Add lines to a Sales Order
 
@@ -1631,6 +1711,12 @@ Confirming an order reserves stock for every GOODS line.
 5. The status changes to **CONFIRMED** and each line shows its reserved quantity. Where stock was short, the line keeps an **Open (backorder)** quantity that you fulfil with a later delivery.
 
 This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders but not confirm them will not see this button.
+
+**Approval threshold (large orders).** Your company can require manager approval for high-value orders. When the SO-approval workflow is switched on (see *Sales Settings* below) and the order's gross total is **at or above the configured threshold**, clicking **Confirm Order** does not confirm it. Instead the system automatically **submits the order for approval** and refuses the confirmation with *"This order exceeds the approval threshold and has been submitted for approval. It can be confirmed once it is approved."* The order stays in **DRAFT**, but it is now **awaiting approval**: its lines are frozen (you cannot add or remove lines while it is pending) and the **Confirm Order** button is disabled. An authorised approver acts on it from **Approvals › Approval Inbox**. Once it is **approved**, come back and click **Confirm Order** again to reserve stock as normal. If the approval is **rejected**, the order can no longer be confirmed — cancel it and raise a new one. Orders below the threshold (or when the workflow is off) confirm immediately with no approval step.
+
+> You can also submit a draft order for approval yourself, before trying to confirm it: an order that has never been submitted shows a **Submit for Approval** button on its detail page. This routes it through the same inbox.
+
+**Configuring the threshold (Sales Settings).** A user with `SALES.SETTINGS.MANAGE` sets this up under **Sales › Sales Settings** (`/admin/sales-settings`). Pick the **Company**, tick **Enable SO Approval Workflow**, enter the **Approval Threshold Amount** (sales orders above this value require approval) and its **Currency**, then click **Save Settings**. Leaving the workflow disabled means no order is ever auto-held at confirm.
 
 **Credit-control hard block.** When the customer is a **Credit Account** customer, confirming the order runs a credit-control check. Confirmation is blocked (the order stays in DRAFT and the system returns a clear conflict message) if **any one** of these three independent conditions is true:
 
@@ -1654,6 +1740,8 @@ Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
 ### 2.5 Set or change the agent
 
 **What the order's agent is.** Every sales order carries a sales agent — the salesperson or route agent credited with the sale — which the invoicing flow depends on. An order can be created without one (Agent is optional in section 2.1), but an invoice generated from an agentless order cannot be finalised.
+
+> **New orders pre-fill your own agent.** When you create a fresh Sales Order the Agent field already shows your linked agent (section 2.1), so a route agent's own orders normally arrive with the correct agent set. Use **Assign Agent / Change Agent** below when an order was created without one, was created by someone with no linked agent (e.g. root), or was credited to the wrong agent.
 
 **Why this action exists.** Before this action, an order created with no agent (or the wrong one) had no way to be corrected in place — every attempt to invoice it would keep failing. **Assign Agent** / **Change Agent** lets an authorised user fix the agent on an existing order without recreating it.
 
@@ -1681,6 +1769,8 @@ The order's agent is updated immediately and a confirmation is shown.
 | PARTIALLY_INVOICED | Some deliveries invoiced |
 | CLOSED | Fully fulfilled and fully invoiced |
 | CANCELLED | Cancelled; reservations released |
+
+**Approval status is separate from order status.** When the approval workflow holds an order (see section 2.3), the order stays in **DRAFT** but its detail page shows an **awaiting approval** state; it is not a distinct row in the table above. The approval outcome (pending, approved, rejected) governs whether **Confirm Order** is available, while the statuses above track fulfilment and invoicing once the order is confirmed.
 
 ---
 
@@ -1753,7 +1843,7 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 2. Click **New Invoice**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-5. Optionally pick an **Agent** and a **Route**; if omitted the system uses the logged-in user's linked agent and that agent's primary route.
+5. The **Agent** field is pre-filled with **your own agent** (if your user is linked to one) — leave it, clear it, or type another agent to change it. Optionally pick a **Route**. If you clear the Agent and leave it blank, the system still falls back to your linked agent and that agent's primary route on save; the pre-fill just makes the default visible up front. (Root/admin logins with no linked agent open with the box empty.)
 6. Click **Create Invoice**. A draft invoice is created.
 
 ### 4.2 Add lines to an invoice
@@ -1800,7 +1890,35 @@ A finalised invoice can be voided if it was issued in error:
 
 The original invoice number is retained on the voided record. Voiding is not the same as deletion.
 
-### 4.6 Invoice status reference
+### 4.6 Issue a fiscal (EFD) receipt
+
+**What a fiscal receipt is.** In Tanzania (and similar tax regimes) a taxable sale must be recorded on an approved fiscal device — an EFD (Electronic Fiscal Device) or VFD (Virtual Fiscal Device) — which returns a government **fiscal receipt number** and a **verification URL** the customer can use to confirm the receipt with the revenue authority. This ERP sends each finalised invoice to the company's configured fiscal provider and stores the result on the invoice.
+
+**Where it appears.** A **Fiscal Receipt** panel is shown on the invoice detail page (`/admin/sales-invoices/uid/{uid}`) **only once the invoice is FINALISED** and only to users with the `FISCAL.VIEW` permission. It is the same panel for every finalised invoice regardless of origin — a walk-in DIRECT invoice, an invoice raised from a delivery, or a POS counter sale (open the sale's invoice via **View Invoice** — see section 9.4).
+
+**To issue (or retry) the receipt:**
+
+1. Open the **FINALISED** invoice.
+2. In the **Fiscal Receipt** panel, read the current status tag (see the table below). If no receipt exists yet it reads **Not issued**.
+3. Click **Issue EFD receipt** (the button reads **Retry EFD receipt** if a previous attempt exists). This needs the `FISCAL.MANAGE` permission — view-only users see the status but no button.
+4. On success the status becomes **ISSUED** and the panel shows the **Fiscal number** and, where the provider returns one, a **Verification** link (opens the authority's verification page in a new tab). Hand or print this to the customer.
+
+**Receipt states:**
+
+| Status | Meaning / what to do |
+|---|---|
+| Not issued | No attempt yet — click **Issue EFD receipt**. |
+| PENDING | Submitted to the device; awaiting its response. |
+| ISSUED | Success — fiscal number and verification URL are shown. This is final; a receipt is never re-issued. |
+| FAILED | The device rejected or could not be reached; the reason is shown. Fix the cause and click **Retry EFD receipt**. |
+| NOT_CONFIGURED | No EFD/VFD device is set up for this company yet — the panel says so. Ask your administrator to configure the fiscal provider, then retry. |
+
+**Gotchas.**
+- The receipt can only be issued **after** the invoice is finalised — there is no fiscal button on a DRAFT invoice.
+- **ISSUED is permanent** and a **VOID** invoice cannot be fiscalised, so no button is offered in either case.
+- Issuing is safe to retry: repeated clicks will not produce two fiscal numbers for the same invoice.
+
+### 4.7 Invoice status reference
 
 | Status | Meaning |
 |---|---|
@@ -2131,6 +2249,8 @@ A new session is created with status **OPEN**. Only one session can be open on a
 
 A success receipt is displayed showing the invoice number and total. Click **View Invoice** to open the full invoice, or **New Sale** to start the next transaction.
 
+**Fiscal (EFD) receipt for a counter sale.** A completed POS sale produces a normal FINALISED invoice, so the government fiscal receipt is issued from that invoice — not from the checkout screen. Click **View Invoice** on the success panel (or open it later from **Sales › Invoices**) and use the **Fiscal Receipt** panel to issue the EFD receipt and read its fiscal number and verification URL. See section 4.6 for the full steps and the receipt states; it needs the `FISCAL.VIEW` / `FISCAL.MANAGE` permissions.
+
 **Notes:**
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
@@ -2368,14 +2488,15 @@ An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requi
 
 ### 1.4 Convert a requisition
 
-An approved requisition can be converted into either a Purchase Order or an RFQ:
+Converting an approved requisition creates the target document — a Purchase Order or an RFQ — in one step, carrying over the requisition lines. You choose the target type **and** the supplier(s) up front; the requisition then locks to CONVERTED and a link opens the document that was created.
 
 1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
-2. Click **Convert**. An inline conversion form opens.
-3. Choose the target type:
-   - **Purchase Order** — a DRAFT PO is created immediately from the requisition lines.
-   - **RFQ** — a DRAFT RFQ is created; proceed to section 2 to send it to suppliers.
-4. Click **Confirm Convert**. A link to the created document appears. The requisition status changes to **CONVERTED**.
+2. Click **Convert**. An inline **Convert Requisition** form opens.
+3. In **Convert to**, choose the target type. The rest of the form changes to suit it:
+   - **Purchase Order** — pick a single **Supplier** (required; only active suppliers of the requisition's company are listed) and optionally a **Currency** (a 3-letter code such as `USD` — leave blank to use the company default). A DRAFT PO is created at this supplier for the requisition lines.
+   - **Request for Quotation (RFQ)** — build the invite list: choose a supplier in **Add a supplier** and click the **+** button to add it, repeating for each supplier you want to quote (remove one with the **✕** on its row). At least one supplier is required. A DRAFT RFQ is created inviting those suppliers.
+4. Click **Confirm Convert**. This button stays disabled until you have chosen the required supplier(s) — a PO needs one supplier, an RFQ needs at least one invitee.
+5. The requisition status changes to **CONVERTED**. A **Converted to …** line appears in the summary card with a **View RFQ** / **View Purchase Order** link that opens the document that was just created — continue there (section 2 for an RFQ, section 3 for a PO).
 
 ### 1.5 Cancel a requisition
 
@@ -2406,7 +2527,7 @@ Store clerk Amani opens **Purchasing › Purchase Requisitions** (`/admin/purcha
 
 He clicks **Create Requisition** — requisition **REQ-0072** is created in DRAFT. He opens it and clicks **Submit for Approval** — status → SUBMITTED.
 
-Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert**, picks **RFQ**, and clicks **Confirm Convert** — RFQ **RFQ-0031** is created in DRAFT.
+Purchasing manager Neema opens the requisition and clicks **Approve** — status → APPROVED, estimated total TZS 186,000. She clicks **Convert**, sets **Convert to** to **RFQ**, adds **Ofisi Supplies Ltd** and **Karatasi Traders** to the invite list, and clicks **Confirm Convert** — RFQ **RFQ-0031** is created in DRAFT and the **View RFQ** link opens it.
 
 ---
 
@@ -2610,7 +2731,7 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (an API-level operation) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (section 4.3) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
@@ -2631,12 +2752,29 @@ The goods receipt is created with status **RECEIVED** and assigned a GRN-#### nu
 
 If the supplier delivers in stages, create a separate goods receipt for each delivery. Each GRN records the quantity received on that date. The PO tracks the cumulative received and outstanding quantities across all GRNs.
 
-### 4.3 Goods receipt status reference
+### 4.3 Void a goods receipt
+
+If a receipt was recorded in error, void it to fully reverse it. Voiding is available from the goods receipt detail page and requires the `PURCHASE.VOID` permission.
+
+1. Open the receipt (navigate to `/admin/goods-receipts/uid/{uid}`) — it must be in status RECEIVED.
+2. Click **Void Receipt**. An inline form opens.
+3. Enter a mandatory **Reason** and click **Confirm Void**.
+4. The receipt status changes to **VOID** and the void reason is shown on the receipt.
+
+**What the void reverses.** Voiding is a complete unwind of the receipt, not just a stock adjustment:
+
+- **Quantity** — the received quantity is removed from stock on-hand at the branch, and the PO's outstanding quantities are restored so the lines can be received again.
+- **General ledger** — the goods-received accounting entry is reversed.
+- **Batch (lot) and serial/IMEI tracking** — any lot/batch quantities and serial or IMEI numbers that were captured on the original receipt (see section 4.1, step 5) are backed out too: batch balances are decremented and the serials recorded by that receipt are removed from stock. This keeps the Stock Batches and Stock Serials screens (Inventory & Manufacturing chapter, sections 6–7) consistent with the reversal.
+
+A serial that has already moved on (for example, one that has since been issued) is left untouched; the rest of the reversal still completes.
+
+### 4.4 Goods receipt status reference
 
 | Status | Meaning |
 |---|---|
 | RECEIVED | Active receipt; stock increased |
-| VOID | Voided (reversed); stock decremented (API only) |
+| VOID | Voided (reversed); stock, GL, and batch/serial tracking all backed out |
 
 ---
 
@@ -2920,7 +3058,7 @@ Purchasing manager Neema opens REQ-0080 and clicks **Approve** (status → APPRO
 
 **Step 3 — Convert to RFQ**
 
-Neema clicks **Convert**, selects **RFQ**, and clicks **Confirm Convert** — RFQ-0031 is created in DRAFT.
+Neema clicks **Convert**, sets **Convert to** to **RFQ**, adds the two suppliers she wants to quote (**Tanzania Cement Distributors** and **Simba Cement Ltd**) to the invite list, and clicks **Confirm Convert** — RFQ-0031 is created in DRAFT and the **View RFQ** link opens it.
 
 **Step 4 — Invite suppliers and send**
 
@@ -2987,6 +3125,8 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock counts | `STOCK.COUNT.VIEW` |
 | Create / enter / cancel stock counts | `STOCK.COUNT.CREATE` |
 | Post a stock count | `STOCK.COUNT.POST` |
+| View van-stock reconciliations | `STOCK.VAN_RECON.VIEW` |
+| Create / enter / reconcile / cancel a van reconciliation | `STOCK.VAN_RECON.MANAGE` |
 | View stock batches (by-location / detail) | `STOCK.VIEW` |
 | View stock serials (by-location / by-product / lookup) | `STOCK.VIEW` |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
@@ -3132,14 +3272,15 @@ Without locations, the business knows only how much stock is at a branch in aggr
 2. Enter a short **Code** (up to 30 characters, unique within the branch) and a **Name** (up to 120 characters).
 3. Choose the **Type**.
 4. Pick the **Branch** from the picker.
-5. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
-6. Click **Create Location**.
+5. If you chose the **VAN** type, an **Agent** picker appears. Optionally select the route agent who runs this van — the hint reads *"Assigns this van to the route agent who runs it."* The assignment is company-scoped and carries onto that van's day-end reconciliation worksheets (section 6). The Agent field is shown only for VAN locations; switching the type away from VAN clears it.
+6. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
+7. Click **Create Location**.
 
 New locations are created in **Active** status.
 
 ### 3.2 Editing a location
 
-Click the edit icon on a row. You can change the name and location type. The code is not editable after creation.
+Click the edit icon on a row. You can change the name and location type. The code is not editable after creation. For a **VAN** location, the row also exposes an **Agent** picker so you can assign, reassign, or clear (choose "No agent") the route agent — the current agent is shown in the list's **Agent** column.
 
 ### 3.3 Marking as default
 
@@ -3337,7 +3478,94 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 ---
 
-## 6. Batches and lot tracking
+## 6. Van-stock reconciliation
+
+Navigate to **Inventory > Van-Stock Reconciliations** (`/admin/van-reconciliations`).
+
+**What a van reconciliation is.**
+A van-stock reconciliation is the day-end route worksheet for a mobile (van) sales team. At the start of the day a van is loaded with stock (via stock transfers into the van's location); the driver-salesperson sells along the route and returns any unsold stock at the end of the day. The reconciliation is the sheet that answers, product by product, the question: *did the stock that left the van get accounted for by sales plus returns?* For each product it lays out **Loaded − Sold − Returned = Expected** on the van, then compares that Expected figure against the **Physical** count of what is actually still on the van. Any gap is the **Variance**.
+
+**Why it is record-only.**
+The reconciliation is a control and monitoring document, not an accounting transaction. It does **not** post any stock movement or GL entry — the underlying stock has already moved through the normal flows (transfers loaded the van, sales issued stock out, transfer-returns brought stock back). Reconciling simply freezes the worksheet as the day's agreed record and flags any variance for a supervisor to investigate (a shortage may mean under-reported cash sales, theft, or a miscount). If a variance needs to correct the books, that is done separately through a stock adjustment (section 2.2) or a stock count (section 5) — the reconciliation itself never touches on-hand.
+
+**The van ↔ agent link.**
+A VAN-type stock location can be assigned a **route agent** on the Stock Locations screen (section 3) — the person who runs that van. When a reconciliation is created for a van location, the assigned agent's name is carried onto the worksheet and shown in the list and header, so each day's sheet is attributable to the person responsible for the van. Assigning an agent is optional and applies only to VAN-type locations.
+
+### Reconciliation status lifecycle
+
+```
+OPEN --> RECONCILED
+     \-> CANCELLED
+```
+
+A reconciliation is created **Open** and stays editable until it is either **Reconciled** (frozen as the final record) or **Cancelled**. Reconciled and Cancelled are both terminal — a frozen sheet cannot be reopened; create a new one if corrections are needed.
+
+### 6.1 Creating a reconciliation
+
+1. On the Van-Stock Reconciliations list, click **New Reconciliation** (`/admin/van-reconciliations/new`).
+2. Select the **Company** and **Branch**. (The Company selector appears only when you have access to more than one company, and the Branch selector only when the chosen company has more than one branch; otherwise the single company/branch is used automatically.)
+3. Pick the **Van Location** from the picker. Only **VAN**-type locations for the branch are listed; each option shows the van's code and, where set, its assigned agent. If the branch has no VAN locations, a "No VAN-type locations found for this branch" hint is shown — create a VAN location first (section 3.1) and, ideally, assign its agent.
+4. Set the **Business Date** (defaults to today) — the route day being reconciled.
+5. Optionally add **Notes**.
+6. Click **Create Reconciliation**.
+
+The reconciliation is created with status **Open** and a system-generated reconciliation number (shown as **Recon #**). The screen opens the worksheet directly.
+
+**How the lines are pre-filled.** On creation the system reads the van's transfer activity for that business date and pre-fills one line per product that moved through the van, with:
+
+- **Loaded** — the total stock transferred *into* the van location that day (the sum of Transfer-In movements).
+- **Returned** — the total stock transferred *out of* the van that day (the returns).
+
+Both figures are pre-filled but remain **editable** on the worksheet, so you can correct them if the physical reality differs from the recorded transfers.
+
+**One per van per day.** Only one reconciliation can exist for a given van on a given business date. Attempting to create a second returns "A van reconciliation for this van on this business date already exists" — open the existing one instead.
+
+### 6.2 Entering sold and physical counts
+
+Open an Open reconciliation. The lines grid has one row per product with seven columns: **Product**, **Loaded**, **Sold**, **Returned**, **Expected**, **Physical**, and **Variance**. While the sheet is Open (and you have manage permission), the Loaded, Sold, Returned, and Physical cells are editable; Expected and Variance are computed live and cannot be typed.
+
+1. For each product, enter the **Sold** quantity — the total sold off the van that day. This is the one figure the system cannot derive for you (it is not in the stock ledger), so it must be entered.
+2. Enter the **Physical** count — what is actually still on the van at day-end. Leave it blank on any line you have not yet counted.
+3. Adjust the pre-filled **Loaded** or **Returned** figures on any line where the recorded transfers do not match reality.
+4. Click **Save Lines**.
+
+As you type, the worksheet recomputes each row instantly:
+
+- **Expected = Loaded − Sold − Returned** — how much *should* still be on the van.
+- **Variance = Physical − Expected** — the discrepancy. It is only computed once a Physical count is entered; until then the row shows **Not counted**.
+
+The Variance cell is tagged for quick scanning:
+
+| Tag | Meaning |
+|---|---|
+| **Not counted** | No physical count entered yet — variance not computed. |
+| **Balanced** | Physical matches Expected (within rounding) — nothing to explain. |
+| **Over** | Physical exceeds Expected — a surplus on the van (e.g. sales were under-reported). Shown in green. |
+| **Short** | Physical is less than Expected — a shortage. Shown in red. |
+
+Where a snapshot unit cost is available, the row also shows the variance valued in money (variance quantity × unit cost). This is an indicative figure only — it is never posted to the ledger.
+
+A row of **KPI tiles** above the grid totals Loaded, Sold, Returned, Expected, Physical, and Variance across all lines, giving the day's overall picture at a glance.
+
+**Saving is a patch.** Save Lines records only the rows you actually edited this session; untouched rows keep their existing values. You can save partway through and come back — the sheet stays Open across sessions. You must enter a Sold or Physical value on at least one line before saving.
+
+### 6.3 Reconciling
+
+When the counts are complete and the variances are understood, click **Reconcile**. The status changes to **Reconciled**, the worksheet is frozen (the cells become read-only), and a green confirmation banner notes the reconcile time and restates that this is **record-only — no stock/GL posting**. A Reconciled sheet is the day's final agreed record for that van.
+
+Reconciling requires the `STOCK.VAN_RECON.MANAGE` permission and is only available while the sheet is Open.
+
+### 6.4 Cancelling
+
+To discard a worksheet that was created in error or is no longer needed, click **Cancel** on an Open reconciliation. The status changes to **Cancelled** and the sheet becomes read-only. As with reconcile, no stock or GL entries are ever involved. A Cancelled sheet cannot be reopened — create a new reconciliation if one is still needed for that van and day.
+
+### 6.5 Viewing the reconciliation list
+
+The list shows every reconciliation for your active branch (switch the branch selector to see another branch's vans), with columns **Recon #**, **Van**, **Agent**, **Business Date**, and **Status**. Click the **View** action (eye icon) in a row to open its worksheet. Viewing requires `STOCK.VAN_RECON.VIEW`; the **New Reconciliation** button and all editing actions require `STOCK.VAN_RECON.MANAGE`.
+
+---
+
+## 7. Batches and lot tracking
 
 Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`). Requires the `STOCK.VIEW` permission.
 
@@ -3350,15 +3578,18 @@ Without lot tracking, if a product recall is announced (for example, a contamina
 **How batches are created.**
 Batches are created automatically by the purchasing flow when lot-tracked products are received via a Goods Receipt — the system assigns a lot number and records the manufacture and expiry dates at that point. You cannot create batches manually on this screen.
 
-Batches (lots) are created automatically when lot-tracked products are received. This screen provides a read-only view; you cannot create or edit batches directly.
+**What happens when a Goods Receipt is voided.**
+Voiding a Goods Receipt now backs out the batch quantities it created. When a receipt is voided, the system reverses the receipt movement and, for each lot-tracked line, reduces the batch's on-hand by the received quantity at the location it was received into — so a mistaken or reversed receipt no longer leaves a phantom batch on the books. The back-out is deliberately gentle: if the batch has already been partly consumed or the data cannot be matched cleanly, that line is skipped and logged rather than blocking the void. Voiding a receipt for a product with a blank lot number is still reversed (received-with-no-lot is tracked under an "untracked" lot placeholder). See chapter 4 (Purchasing) for how to void a Goods Receipt.
 
-### 6.1 Viewing batches by location and product
+Batches (lots) are created automatically when lot-tracked products are received, and are backed out when that receipt is voided. This screen provides a read-only view; you cannot create or edit batches directly.
+
+### 7.1 Viewing batches by location and product
 
 1. Pick a **Location** from the picker.
 2. Pick a **Product** from the picker.
 3. The table lists all batches at that location for that product, showing lot number, manufacture date, expiry date, quantity on-hand, and an expiry flag.
 
-### 6.2 Expiring batches report
+### 7.2 Expiring batches report
 
 Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today). The report lists all batches whose expiry date falls on or before the horizon and whose quantity is greater than zero.
 
@@ -3369,7 +3600,7 @@ The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
 ---
 
-## 7. Serial number tracking
+## 8. Serial number tracking
 
 Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
 
@@ -3382,28 +3613,31 @@ Serial tracking is valuable for high-value items, warranty management, and theft
 **How serials are managed.**
 Serial numbers are created and updated automatically by the purchasing (goods receipt), sales (delivery), and transfer flows. This screen is a read-only view and lookup tool; you cannot create or modify serials directly here.
 
-Serial numbers are assigned to individual units of serialised products. This screen is read-only; serials are created and updated by the purchasing, sales, and transfer flows.
+**What happens when a Goods Receipt is voided.**
+Voiding a Goods Receipt now removes the serial numbers it brought into stock. For each serialised line on the voided receipt, the system deletes the serial records it created — but only while they are still **In-Stock**. A serial that has since been **Issued** (sold/delivered) or **Returned** is left untouched, so voiding a receipt can never wipe out the history of a unit that has already moved on. As with batches, any serial that cannot be cleanly matched is skipped and logged rather than blocking the void.
+
+Serial numbers are assigned to individual units of serialised products. This screen is read-only; serials are created and updated by the purchasing, sales, and transfer flows, and In-Stock serials are removed when their originating receipt is voided.
 
 The screen has two view-mode tabs: **By Location** and **Product History**.
 
-### 7.1 Viewing serials by location
+### 8.1 Viewing serials by location
 
 1. Select the **By Location** tab.
 2. Pick a **Location** and a **Product**.
 3. Optionally filter by **Status**: All, IN_STOCK, ISSUED, RETURNED.
 4. The table shows serial number, current status, and the related documents.
 
-### 7.2 Viewing serial history by product
+### 8.2 Viewing serial history by product
 
 Switch to the **Product History** tab. Pick a product to see all of its serials across all statuses and locations.
 
-### 7.3 Looking up a serial number
+### 8.3 Looking up a serial number
 
 There is no separate lookup tab. In the **By Location** tab, once a product is selected, a **Lookup by serial #** panel appears above the table. Type the serial number and click **Lookup**. The system returns the current status and related documents, or shows a "Serial number not found for this product" message if the serial does not exist for that product.
 
 ---
 
-## 8. Inventory valuation
+## 9. Inventory valuation
 
 **What inventory valuation is.**
 Inventory valuation is the process of assigning a monetary value to the goods held in stock. The business needs to know not just how many units it has but what those units are worth — for the balance sheet (Inventory is an asset), for the cost of goods sold when items are sold (COGS reduces profit), and for management decisions (is this product profitable to sell?). The system uses the **moving-average cost method**: the average unit cost is recalculated each time stock is received, blending the new purchase cost with the existing average. This means all units of a product at a branch carry the same average cost, regardless of when they were purchased.
@@ -3411,7 +3645,7 @@ Inventory valuation is the process of assigning a monetary value to the goods he
 **How the moving average is maintained.**
 When a goods receipt is posted, the system computes the new average as: `(existing stock value + new receipt value) / (existing quantity + received quantity)`. This weighted average is then applied to all units held. When goods are sold, the COGS is the quantity sold multiplied by the current average cost at the moment of the sale. When stock is adjusted, the adjustment value is computed at the current average. This means the Inventory account on the balance sheet always equals the sum of (on-hand quantity × average cost) across all products — a relationship the valuation report verifies.
 
-### 8.1 Valuation report
+### 9.1 Valuation report
 
 Navigate to **Inventory > Stock Valuation** (`/admin/stock/valuation`). Requires the `INVENTORY.VALUATION.VIEW` permission.
 
@@ -3420,7 +3654,7 @@ The report is not loaded automatically — the initial screen shows an empty sta
 - **Reconciled to GL** (green) — the stock ledger and GL agree.
 - A red **Finance-grade alarm — Stock ledger and GL are out of sync** banner — there is a discrepancy. The stock total, the GL 1300 balance, and the difference amount are shown, and the GL Reconciliation card's status tag reads **Out of balance**. Finance review is required.
 
-### 8.2 Setting an opening valuation
+### 9.2 Setting an opening valuation
 
 **What opening valuation is.**
 Opening valuation is the one-time act of assigning an initial monetary cost to stock that already has a quantity on-hand but no established cost. This occurs at system go-live (when stock was loaded via opening balances before the cost data was entered) or when a new product is added and given an opening balance. Until an average cost is established, the system cannot post COGS for sales of that product — it will issue the stock but leave the cost leg blank, flagging the anomaly.
@@ -3437,7 +3671,7 @@ The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the p
 
 ---
 
-## 9. Bills of Materials
+## 10. Bills of Materials
 
 Navigate to **Manufacturing > Bills of Materials** (`/admin/boms`).
 
@@ -3463,7 +3697,7 @@ DRAFT --> (activate) --> ACTIVE --> (archive) --> ARCHIVED
 
 Only a DRAFT BOM can be activated. ARCHIVED is a permanent terminal state.
 
-### 9.1 Creating a BOM
+### 10.1 Creating a BOM
 
 1. On the BOM list, click **New BOM**.
 2. Pick the **Parent Product** from the picker (its placeholder reads "Select finished product"; search by name or code). The product must be a GOODS type and must be active.
@@ -3475,7 +3709,7 @@ The BOM is created in **Draft** status with the next version number for that fin
 
 **Validation.** Output quantity must be positive. Yield must be between 0.0001% and 100%.
 
-### 9.2 Adding components
+### 10.2 Adding components
 
 **What a BOM component is.**
 A BOM component is one ingredient or raw material in the recipe. Each component line specifies the product to consume, the quantity required per one run of the BOM output, and an optional scrap percentage (an allowance for material that is consumed but does not make it into the finished good — for example, offcuts when cutting fabric). A component is classified as either **MAKE** (the component is itself manufactured — the system will look for its own BOM) or **BUY** (the component is purchased from a supplier and is a raw material).
@@ -3494,11 +3728,11 @@ Open a Draft BOM detail and click **Add Component**.
 
 Components can be added, edited, or removed only while the BOM is in Draft status.
 
-### 9.3 Editing a BOM header
+### 10.3 Editing a BOM header
 
 There is no Edit button. The **BOM Header** form is always shown inline on the BOM detail. On a Draft BOM its Output Qty, Yield %, and Notes fields are editable; on an Active BOM only Notes can be changed (the structural fields are disabled). Make your changes and click **Save Header**.
 
-### 9.4 Activating a BOM
+### 10.4 Activating a BOM
 
 A BOM must have at least one component before it can be activated.
 
@@ -3511,13 +3745,13 @@ Activating a BOM automatically archives the current Active BOM (if any) for the 
 
 **Validation.** Effective From date is required. The BOM must have at least one component. A circular BOM (where a component's BOM ultimately references this product back) is rejected.
 
-### 9.5 Archiving a BOM
+### 10.5 Archiving a BOM
 
 On an Active BOM, click **Archive**. The **Archive** button is shown only while the BOM is Active — it does not appear on a Draft BOM. The BOM moves to Archived status permanently, and header and component editing controls disappear. (A Draft BOM that is never needed is simply left in Draft; archiving applies to Active BOMs, consistent with the DRAFT → ACTIVE → ARCHIVED lifecycle above.)
 
 ---
 
-## 10. Work Orders
+## 11. Work Orders
 
 Navigate to **Manufacturing > Work Orders** (`/admin/work-orders`).
 
@@ -3550,7 +3784,7 @@ PLANNED --> (release) --> RELEASED --> (first issue) --> IN_PROGRESS
 
 CANCELLED, COMPLETED (after close), and CLOSED are terminal. A COMPLETED Work Order must be closed before any other action.
 
-### 10.1 Creating a Work Order
+### 11.1 Creating a Work Order
 
 1. On the Work Orders list, click **New Work Order**.
 2. Pick the **Finished Product** from the picker.
@@ -3562,11 +3796,11 @@ CANCELLED, COMPLETED (after close), and CLOSED are terminal. A COMPLETED Work Or
 
 The Work Order is created in **Planned** status with a generated Work Order number.
 
-### 10.2 Editing a Work Order
+### 11.2 Editing a Work Order
 
 A Work Order can only be edited while in Planned status. There is no Edit button — while the order is Planned, the **Edit Work Order** form is shown inline on the detail page. You can change the Planned Qty, **BOM UID (override)**, Branch, Planned Date, and Notes, then click **Save**.
 
-### 10.3 Adding and removing operations
+### 11.3 Adding and removing operations
 
 **What operations are.**
 Operations are the discrete steps in the production process — for example, Cutting, Mixing, Assembly, Finishing. Each operation can carry an estimated and actual labour cost and overhead cost, giving the business a breakdown of where production costs are incurred within the work order. Operations are optional; a work order can be costed with a single bulk labour/overhead application if step-level detail is not needed.
@@ -3576,7 +3810,7 @@ Operations represent discrete production steps (e.g. Cutting, Assembly) with ass
 - **Add operation**: In the **Add Operation** form, enter Seq, Description, Work Centre, and optional Labour Amt / Overhead Amt. Click **Add**.
 - **Remove operation**: Click the trash-icon button in the operation row's Actions column. An operation that has already had costs applied to it cannot be removed.
 
-### 10.4 Releasing a Work Order
+### 11.4 Releasing a Work Order
 
 **What releasing means.**
 Releasing a Work Order is the act of committing to produce. At this point the system resolves and locks the BOM (so the recipe is frozen for this production run), explodes it to all leaf-level raw material components, and generates the planned component lines on the work order — the list of what will need to be issued from stock. No stock movement or GL posting happens at release; it is a planning step. Once released, the work order is ready for component issue.
@@ -3591,7 +3825,7 @@ Status changes to **Released**. The system emits a production event. No stock mo
 
 **Validation.** The finished product must have an Active BOM (or a BOM must be pinned). Releasing requires the `WORKORDER.RELEASE` permission.
 
-### 10.5 Issuing components
+### 11.5 Issuing components
 
 **What component issue means.**
 Issuing components is the physical act of taking raw materials from the stock location and bringing them to the production area. In the system, this deducts the components from inventory and charges them to the Work-in-Progress account. The GL posting is: **DR WIP / CR Inventory** for each component at its current moving-average cost. If any component has no established average cost (it has never been received or opened), the quantity deduction still posts but the WIP cost leg is skipped and the incomplete-cost flag is set on the work order — the production team should investigate and correct the missing cost.
@@ -3608,7 +3842,7 @@ Stock movements of type `PRODUCTION_ISSUE` are posted for each component. GL ent
 
 **Validation.** Posting date is required. If a component's average cost is not yet established, that component is cost-skipped (the quantity still moves but no GL leg is posted). An incomplete-cost indicator appears on the Work Order header when any component was cost-skipped.
 
-### 10.6 Applying labour and overhead costs
+### 11.6 Applying labour and overhead costs
 
 **What labour and overhead costs are.**
 Labour costs are the wages and salaries paid to the workers who produce the goods. Overhead costs are the indirect production costs that cannot be assigned to a single unit but are incurred as part of running the factory — energy, depreciation of machinery, supervision, etc. Both are debited to WIP when applied to a Work Order: **DR WIP / CR the relevant cost account**. Applying these costs ensures that the finished good's cost reflects all the inputs that went into making it, not just the raw materials.
@@ -3620,7 +3854,7 @@ Labour costs are the wages and salaries paid to the workers who produce the good
 
 GL entries: DR WIP / CR the relevant cost account. An operation can only have costs applied to it once; a second attempt is rejected.
 
-### 10.7 Completing a Work Order
+### 11.7 Completing a Work Order
 
 **What completion does.**
 Completing a Work Order records that production has finished and the finished goods are ready to move from the production area back into the finished goods warehouse. The system computes the unit cost of the finished good as: total WIP debited divided by the good quantity produced. This computed unit cost is passed to the moving-average recompute for the finished product — so the finished good acquires its average cost through the same engine that handles purchase receipts. The GL posting is: **DR Inventory (finished goods) / CR WIP** for the value relieved. Scrap (units produced but rejected) is recorded informationally; only good quantity enters inventory.
@@ -3636,7 +3870,7 @@ Status changes to **Completed**. A `PRODUCTION_RECEIPT` stock movement is posted
 
 **Validation.** Good quantity must be positive. If good + scrap exceeds planned quantity and Allow overrun is not ticked, the submission is rejected.
 
-### 10.8 Closing a Work Order
+### 11.8 Closing a Work Order
 
 **What closing does.**
 Closing a Work Order is the final step that clears any remaining WIP balance. After completion, there may be a small residual WIP balance due to rounding or small variances between the planned and actual costs. Closing posts this residual to the **Manufacturing Variance** account — a P&L account that captures the difference between what production was expected to cost (based on the BOM and standard costs) and what it actually cost. After closing, the WIP balance for this order is zero and the order is read-only.
@@ -3649,7 +3883,7 @@ Closing clears any residual WIP balance (rounding or variance) and marks the ord
 
 Status changes to **Closed**. Any residual WIP is posted to the Manufacturing Variance account. GL entries: DR or CR Manufacturing Variance / CR or DR WIP (depending on sign).
 
-### 10.9 Cancelling a Work Order
+### 11.9 Cancelling a Work Order
 
 A Work Order can be cancelled from Planned, Released, or In-Progress status.
 
@@ -3663,7 +3897,7 @@ If components have already been issued, the system reverses all issue movements 
 
 A Completed or Closed Work Order cannot be cancelled.
 
-### 10.10 Work Order cost report
+### 11.10 Work Order cost report
 
 From the Work Order detail, click **Cost Report** or navigate directly to `/admin/work-orders/uid/:uid/cost-report`.
 
@@ -3682,7 +3916,7 @@ An incomplete-cost indicator appears when any component was cost-skipped.
 
 ---
 
-## 11. WIP reconciliation
+## 12. WIP reconciliation
 
 Navigate to **Manufacturing > WIP Reconciliation** (`/admin/manufacturing/wip-reconciliation`). Requires the `MANUFACTURING.VIEW` permission.
 
@@ -3696,13 +3930,19 @@ When the two totals agree, a green **WIP balances reconcile — computed equals 
 
 ---
 
-## 12. Frequently asked questions
+## 13. Frequently asked questions
 
 **Can I adjust stock below zero?**
 Yes. The system records negative on-hand and flags the row with the Negative indicator, but it does not block the transaction. The overselling indicator is a monitoring tool; you should investigate and correct the root cause.
 
 **What is the difference between an adjustment and a stock count?**
 An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
+
+**Does reconciling a van change my stock or accounts?**
+No. A van-stock reconciliation (section 6) is record-only: neither creating, saving, nor reconciling it posts any stock movement or GL entry. It is a control worksheet that documents Loaded − Sold − Returned = Expected versus the physical count on the van, and flags variances for follow-up. If a variance must correct the books, do that separately with a stock adjustment (section 2.2) or a stock count (section 5).
+
+**Where do the Loaded and Returned figures on a van reconciliation come from?**
+They are pre-filled from the van's stock transfers for that business date — Loaded is the total transferred into the van, Returned is the total transferred back out. Both remain editable, so you can correct them if the physical reality differs. Sold is the only figure you must enter yourself; the system cannot derive it.
 
 **Can I have more than one active BOM for a product?**
 No. Only one BOM can be active at a time per product. Activating a new version automatically archives the previous one. Historical archived versions remain visible.
@@ -5164,6 +5404,79 @@ Select an account by name to view:
 - **Current balance** — the running book balance.
 - **Transaction history** — each cash transaction in date order with a running balance column (IN transactions increase the balance; OUT transactions decrease it).
 - **GL reconciliation** — compares the account's book balance against the linked GL asset account balance. A zero difference confirms agreement. A non-zero difference requires investigation.
+
+---
+
+### End-of-Day Cash Count
+
+**What it is.** An end-of-day cash count is a reconciliation of a physical **till** (a CASH-type cash/bank account) against its book balance. The cashier counts the drawer note-by-note and coin-by-coin, the system compares that counted total against the amount the books say should be there (the **expected** balance), and any **over** or **short** difference is posted to the ledger.
+
+**Why it exists.** A till's book balance is only as trustworthy as the physical cash behind it. Counting the drawer at the end of the day catches theft, miscounts at the counter, and un-rung sales while they are still traceable. Posting the over/short variance to the GL means the cash account on the balance sheet always matches the money actually in the drawer, and the loss or gain is recognised in the period it happened.
+
+**When it is used.** At the close of each business day (or each shift), by a cashier or supervisor with the `CASH.COUNT.MANAGE` permission. Viewing past counts requires `CASH.COUNT.VIEW`.
+
+**How it works.** A count moves through three states — **OPEN** (started; the expected balance has been captured), **COUNTED** (the denomination breakdown has been entered and the counted total and variance computed), and **RECONCILED** (finalised; any variance posted to the GL and the count locked). Only CASH-type accounts can be counted — a bank account has no physical drawer. When the count is reconciled, an over posts **DR till cash / CR Cash Over (income)** and a short posts **DR Cash Short (expense) / CR till cash**, and a matching cash-book entry is written so the till's cash book and its GL account always move together to the counted figure. A count with **zero variance posts no journal** — nothing needs correcting. A count is locked once reconciled and can never be re-opened or re-counted.
+
+**Viewing counts.** Navigate to **Accounting > Cash Counts** (`/admin/cash/counts`). Because counts are held per till, pick the **company** (if multi-company) and then the **till** from the selectors; the table then lists that till's counts with count number, business date, expected, counted, variance (green for over, red for short), and status. Click the eye icon to open a count.
+
+**Opening a count (requires `CASH.COUNT.MANAGE`):**
+
+1. From the Cash Counts list, click **New Count** (or go to `/admin/cash/counts/new`).
+2. Choose the **company** (if you belong to more than one), the **Till (Cash Account)** — only CASH-type accounts are listed — and the **Business Date** (defaults to today).
+3. Click **Open Count**. The system records the till's **expected** book balance as at that date and opens the count in **OPEN** status. You are taken to the count workspace.
+
+> Only one live count per till per day. If an OPEN or COUNTED count already exists for that till and date, opening another is rejected — finish or reconcile the first.
+
+**Entering the count and saving:**
+
+1. In the count workspace, the top shows three figures: **Expected** (the book balance), **Counted** (the live total of what you have entered), and **Variance** with an **Over** / **Short** / **Balanced** tag.
+2. In the **denomination grid**, enter the **quantity** of each note and coin you counted (the ladder is 10,000 / 5,000 / 2,000 / 1,000 / 500 / 200 / 100 / 50). The line amount and the running counted total update as you type.
+3. Click **Save Count**. The count moves to **COUNTED** and the server records the counted total and the variance. You can re-save as many times as you need while the count is not yet reconciled.
+
+**Reconciling (posting the variance):**
+
+1. Once the count is COUNTED, click **Reconcile**.
+2. The count moves to **RECONCILED** and locks. If there is an over or short, the variance is posted to the GL and a **View GL Entry** link appears; a zero-variance count simply locks with no posting.
+
+> The denomination ladder is fixed to the standard TZS notes and coins in this release — a configurable per-currency ladder is a planned follow-up.
+
+---
+
+### Petty Cash
+
+**What it is.** A petty cash fund is a small **imprest float** — a fixed amount of cash held by a named custodian to pay for minor day-to-day expenses (taxi fares, tea, small stationery) that do not justify a cheque or bank payment. This screen tracks each fund's float, its current balance, and every disbursement and replenishment against it.
+
+**Why it exists.** Small cash payments still need a record. Without a petty cash ledger, these amounts leave no trail, the custodian cannot be held accountable for the float, and the balance on hand can drift with no way to check it. Tracking each movement keeps the custodian's cash box auditable and shows at a glance how much of the float has been spent and needs replenishing.
+
+**When it is used.** By a user with the `PETTY_CASH.MANAGE` permission to create funds and record movements; `PETTY_CASH.VIEW` to view. Movements are recorded as they happen — a disbursement when cash is paid out, a replenishment when the float is topped back up.
+
+**How it works.** Each fund has a **float** (the authorised ceiling) and a **balance** (the cash actually on hand, which starts at zero and moves only through recorded transactions). Three transaction types move the balance: a **Disbursement** decreases it (cash paid out), a **Replenishment** increases it (float topped back up), and an **Adjustment** is a signed correction (a positive amount increases the balance, a negative amount decreases it). The system refuses any transaction that would push the balance below zero. The float is informational — it does not hard-block a disbursement, it simply tells you the ceiling the fund should be topped up to.
+
+> **Record-only.** Petty cash movements are **not posted to the general ledger** in this release. Even the optional expense GL account on a disbursement is captured for reference only — it does not create a journal. Reflect petty cash spending in the GL through a manual journal or the periodic replenishment payment.
+
+**Viewing funds.** Navigate to **Accounting > Petty Cash Funds** (`/admin/petty-cash/funds`). Pick the **company** (if multi-company); the table lists each fund's code, name, custodian, float, current balance, and status (ACTIVE / INACTIVE / ARCHIVED). Click the eye icon to open a fund.
+
+**Creating a fund (requires `PETTY_CASH.MANAGE`):**
+
+1. From the Petty Cash Funds list, click **New Fund** (or go to `/admin/petty-cash/funds/new`).
+2. Enter a unique **Fund Code** (e.g. `PCF-001`) and a **Fund Name** (e.g. "Front Office Petty Cash").
+3. Optionally select a **Custodian** (a user in the company) who is responsible for the float.
+4. Enter the **Float Amount** (the authorised ceiling) and the **Currency** (defaults to the company base currency).
+5. Click **Create Fund**. The fund opens with a balance of zero — record a replenishment to put the opening cash in.
+
+> The company must already have at least one branch before a petty cash fund can be created.
+
+**Recording a transaction (requires `PETTY_CASH.MANAGE`):**
+
+On the fund detail screen, use the **Record Transaction** panel:
+
+1. Choose the **Type**: **Disbursement** (cash out), **Replenishment** (cash in), or **Adjustment** (a correction).
+2. Enter the **Amount** (must be positive for a disbursement or replenishment; for an adjustment, enter a negative amount to decrease the balance) and the **Date**.
+3. For a **Disbursement**, optionally pick the **Expense GL Account** the spend relates to (captured for the record only — see the record-only note above).
+4. Optionally add a **Reference** and a **Description**.
+5. Click **Record Transaction**. The fund balance updates immediately and the movement appears in the **Transaction Ledger** below, showing the transaction number, type, amount, and the running balance after each entry.
+
+> A transaction that would take the balance below zero is rejected. Transactions can be recorded only against an **ACTIVE** fund.
 
 ---
 

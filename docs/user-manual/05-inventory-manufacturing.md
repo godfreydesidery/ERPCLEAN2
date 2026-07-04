@@ -21,6 +21,8 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock counts | `STOCK.COUNT.VIEW` |
 | Create / enter / cancel stock counts | `STOCK.COUNT.CREATE` |
 | Post a stock count | `STOCK.COUNT.POST` |
+| View van-stock reconciliations | `STOCK.VAN_RECON.VIEW` |
+| Create / enter / reconcile / cancel a van reconciliation | `STOCK.VAN_RECON.MANAGE` |
 | View stock batches (by-location / detail) | `STOCK.VIEW` |
 | View stock serials (by-location / by-product / lookup) | `STOCK.VIEW` |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
@@ -170,14 +172,15 @@ Without locations, the business knows only how much stock is at a branch in aggr
 2. Enter a short **Code** (up to 30 characters, unique within the branch) and a **Name** (up to 120 characters).
 3. Choose the **Type**.
 4. Pick the **Branch** from the picker.
-5. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
-6. Click **Create Location**.
+5. If you chose the **VAN** type, an **Agent** picker appears. Optionally select the route agent who runs this van — the hint reads *"Assigns this van to the route agent who runs it."* The assignment is company-scoped and carries onto that van's day-end reconciliation worksheets (section 6). The Agent field is shown only for VAN locations; switching the type away from VAN clears it.
+6. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
+7. Click **Create Location**.
 
 New locations are created in **Active** status.
 
 ### 3.2 Editing a location
 
-Click the edit icon on a row. You can change the name and location type. The code is not editable after creation.
+Click the edit icon on a row. You can change the name and location type. The code is not editable after creation. For a **VAN** location, the row also exposes an **Agent** picker so you can assign, reassign, or clear (choose "No agent") the route agent — the current agent is shown in the list's **Agent** column.
 
 ### 3.3 Marking as default
 
@@ -379,7 +382,94 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 ---
 
-## 6. Batches and lot tracking
+## 6. Van-stock reconciliation
+
+Navigate to **Inventory > Van-Stock Reconciliations** (`/admin/van-reconciliations`).
+
+**What a van reconciliation is.**
+A van-stock reconciliation is the day-end route worksheet for a mobile (van) sales team. At the start of the day a van is loaded with stock (via stock transfers into the van's location); the driver-salesperson sells along the route and returns any unsold stock at the end of the day. The reconciliation is the sheet that answers, product by product, the question: *did the stock that left the van get accounted for by sales plus returns?* For each product it lays out **Loaded − Sold − Returned = Expected** on the van, then compares that Expected figure against the **Physical** count of what is actually still on the van. Any gap is the **Variance**.
+
+**Why it is record-only.**
+The reconciliation is a control and monitoring document, not an accounting transaction. It does **not** post any stock movement or GL entry — the underlying stock has already moved through the normal flows (transfers loaded the van, sales issued stock out, transfer-returns brought stock back). Reconciling simply freezes the worksheet as the day's agreed record and flags any variance for a supervisor to investigate (a shortage may mean under-reported cash sales, theft, or a miscount). If a variance needs to correct the books, that is done separately through a stock adjustment (section 2.2) or a stock count (section 5) — the reconciliation itself never touches on-hand.
+
+**The van ↔ agent link.**
+A VAN-type stock location can be assigned a **route agent** on the Stock Locations screen (section 3) — the person who runs that van. When a reconciliation is created for a van location, the assigned agent's name is carried onto the worksheet and shown in the list and header, so each day's sheet is attributable to the person responsible for the van. Assigning an agent is optional and applies only to VAN-type locations.
+
+### Reconciliation status lifecycle
+
+```
+OPEN --> RECONCILED
+     \-> CANCELLED
+```
+
+A reconciliation is created **Open** and stays editable until it is either **Reconciled** (frozen as the final record) or **Cancelled**. Reconciled and Cancelled are both terminal — a frozen sheet cannot be reopened; create a new one if corrections are needed.
+
+### 6.1 Creating a reconciliation
+
+1. On the Van-Stock Reconciliations list, click **New Reconciliation** (`/admin/van-reconciliations/new`).
+2. Select the **Company** and **Branch**. (The Company selector appears only when you have access to more than one company, and the Branch selector only when the chosen company has more than one branch; otherwise the single company/branch is used automatically.)
+3. Pick the **Van Location** from the picker. Only **VAN**-type locations for the branch are listed; each option shows the van's code and, where set, its assigned agent. If the branch has no VAN locations, a "No VAN-type locations found for this branch" hint is shown — create a VAN location first (section 3.1) and, ideally, assign its agent.
+4. Set the **Business Date** (defaults to today) — the route day being reconciled.
+5. Optionally add **Notes**.
+6. Click **Create Reconciliation**.
+
+The reconciliation is created with status **Open** and a system-generated reconciliation number (shown as **Recon #**). The screen opens the worksheet directly.
+
+**How the lines are pre-filled.** On creation the system reads the van's transfer activity for that business date and pre-fills one line per product that moved through the van, with:
+
+- **Loaded** — the total stock transferred *into* the van location that day (the sum of Transfer-In movements).
+- **Returned** — the total stock transferred *out of* the van that day (the returns).
+
+Both figures are pre-filled but remain **editable** on the worksheet, so you can correct them if the physical reality differs from the recorded transfers.
+
+**One per van per day.** Only one reconciliation can exist for a given van on a given business date. Attempting to create a second returns "A van reconciliation for this van on this business date already exists" — open the existing one instead.
+
+### 6.2 Entering sold and physical counts
+
+Open an Open reconciliation. The lines grid has one row per product with seven columns: **Product**, **Loaded**, **Sold**, **Returned**, **Expected**, **Physical**, and **Variance**. While the sheet is Open (and you have manage permission), the Loaded, Sold, Returned, and Physical cells are editable; Expected and Variance are computed live and cannot be typed.
+
+1. For each product, enter the **Sold** quantity — the total sold off the van that day. This is the one figure the system cannot derive for you (it is not in the stock ledger), so it must be entered.
+2. Enter the **Physical** count — what is actually still on the van at day-end. Leave it blank on any line you have not yet counted.
+3. Adjust the pre-filled **Loaded** or **Returned** figures on any line where the recorded transfers do not match reality.
+4. Click **Save Lines**.
+
+As you type, the worksheet recomputes each row instantly:
+
+- **Expected = Loaded − Sold − Returned** — how much *should* still be on the van.
+- **Variance = Physical − Expected** — the discrepancy. It is only computed once a Physical count is entered; until then the row shows **Not counted**.
+
+The Variance cell is tagged for quick scanning:
+
+| Tag | Meaning |
+|---|---|
+| **Not counted** | No physical count entered yet — variance not computed. |
+| **Balanced** | Physical matches Expected (within rounding) — nothing to explain. |
+| **Over** | Physical exceeds Expected — a surplus on the van (e.g. sales were under-reported). Shown in green. |
+| **Short** | Physical is less than Expected — a shortage. Shown in red. |
+
+Where a snapshot unit cost is available, the row also shows the variance valued in money (variance quantity × unit cost). This is an indicative figure only — it is never posted to the ledger.
+
+A row of **KPI tiles** above the grid totals Loaded, Sold, Returned, Expected, Physical, and Variance across all lines, giving the day's overall picture at a glance.
+
+**Saving is a patch.** Save Lines records only the rows you actually edited this session; untouched rows keep their existing values. You can save partway through and come back — the sheet stays Open across sessions. You must enter a Sold or Physical value on at least one line before saving.
+
+### 6.3 Reconciling
+
+When the counts are complete and the variances are understood, click **Reconcile**. The status changes to **Reconciled**, the worksheet is frozen (the cells become read-only), and a green confirmation banner notes the reconcile time and restates that this is **record-only — no stock/GL posting**. A Reconciled sheet is the day's final agreed record for that van.
+
+Reconciling requires the `STOCK.VAN_RECON.MANAGE` permission and is only available while the sheet is Open.
+
+### 6.4 Cancelling
+
+To discard a worksheet that was created in error or is no longer needed, click **Cancel** on an Open reconciliation. The status changes to **Cancelled** and the sheet becomes read-only. As with reconcile, no stock or GL entries are ever involved. A Cancelled sheet cannot be reopened — create a new reconciliation if one is still needed for that van and day.
+
+### 6.5 Viewing the reconciliation list
+
+The list shows every reconciliation for your active branch (switch the branch selector to see another branch's vans), with columns **Recon #**, **Van**, **Agent**, **Business Date**, and **Status**. Click the **View** action (eye icon) in a row to open its worksheet. Viewing requires `STOCK.VAN_RECON.VIEW`; the **New Reconciliation** button and all editing actions require `STOCK.VAN_RECON.MANAGE`.
+
+---
+
+## 7. Batches and lot tracking
 
 Navigate to **Inventory > Stock Batches** (`/admin/stock/batches`). Requires the `STOCK.VIEW` permission.
 
@@ -392,15 +482,18 @@ Without lot tracking, if a product recall is announced (for example, a contamina
 **How batches are created.**
 Batches are created automatically by the purchasing flow when lot-tracked products are received via a Goods Receipt — the system assigns a lot number and records the manufacture and expiry dates at that point. You cannot create batches manually on this screen.
 
-Batches (lots) are created automatically when lot-tracked products are received. This screen provides a read-only view; you cannot create or edit batches directly.
+**What happens when a Goods Receipt is voided.**
+Voiding a Goods Receipt now backs out the batch quantities it created. When a receipt is voided, the system reverses the receipt movement and, for each lot-tracked line, reduces the batch's on-hand by the received quantity at the location it was received into — so a mistaken or reversed receipt no longer leaves a phantom batch on the books. The back-out is deliberately gentle: if the batch has already been partly consumed or the data cannot be matched cleanly, that line is skipped and logged rather than blocking the void. Voiding a receipt for a product with a blank lot number is still reversed (received-with-no-lot is tracked under an "untracked" lot placeholder). See chapter 4 (Purchasing) for how to void a Goods Receipt.
 
-### 6.1 Viewing batches by location and product
+Batches (lots) are created automatically when lot-tracked products are received, and are backed out when that receipt is voided. This screen provides a read-only view; you cannot create or edit batches directly.
+
+### 7.1 Viewing batches by location and product
 
 1. Pick a **Location** from the picker.
 2. Pick a **Product** from the picker.
 3. The table lists all batches at that location for that product, showing lot number, manufacture date, expiry date, quantity on-hand, and an expiry flag.
 
-### 6.2 Expiring batches report
+### 7.2 Expiring batches report
 
 Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today). The report lists all batches whose expiry date falls on or before the horizon and whose quantity is greater than zero.
 
@@ -411,7 +504,7 @@ The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
 ---
 
-## 7. Serial number tracking
+## 8. Serial number tracking
 
 Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
 
@@ -424,28 +517,31 @@ Serial tracking is valuable for high-value items, warranty management, and theft
 **How serials are managed.**
 Serial numbers are created and updated automatically by the purchasing (goods receipt), sales (delivery), and transfer flows. This screen is a read-only view and lookup tool; you cannot create or modify serials directly here.
 
-Serial numbers are assigned to individual units of serialised products. This screen is read-only; serials are created and updated by the purchasing, sales, and transfer flows.
+**What happens when a Goods Receipt is voided.**
+Voiding a Goods Receipt now removes the serial numbers it brought into stock. For each serialised line on the voided receipt, the system deletes the serial records it created — but only while they are still **In-Stock**. A serial that has since been **Issued** (sold/delivered) or **Returned** is left untouched, so voiding a receipt can never wipe out the history of a unit that has already moved on. As with batches, any serial that cannot be cleanly matched is skipped and logged rather than blocking the void.
+
+Serial numbers are assigned to individual units of serialised products. This screen is read-only; serials are created and updated by the purchasing, sales, and transfer flows, and In-Stock serials are removed when their originating receipt is voided.
 
 The screen has two view-mode tabs: **By Location** and **Product History**.
 
-### 7.1 Viewing serials by location
+### 8.1 Viewing serials by location
 
 1. Select the **By Location** tab.
 2. Pick a **Location** and a **Product**.
 3. Optionally filter by **Status**: All, IN_STOCK, ISSUED, RETURNED.
 4. The table shows serial number, current status, and the related documents.
 
-### 7.2 Viewing serial history by product
+### 8.2 Viewing serial history by product
 
 Switch to the **Product History** tab. Pick a product to see all of its serials across all statuses and locations.
 
-### 7.3 Looking up a serial number
+### 8.3 Looking up a serial number
 
 There is no separate lookup tab. In the **By Location** tab, once a product is selected, a **Lookup by serial #** panel appears above the table. Type the serial number and click **Lookup**. The system returns the current status and related documents, or shows a "Serial number not found for this product" message if the serial does not exist for that product.
 
 ---
 
-## 8. Inventory valuation
+## 9. Inventory valuation
 
 **What inventory valuation is.**
 Inventory valuation is the process of assigning a monetary value to the goods held in stock. The business needs to know not just how many units it has but what those units are worth — for the balance sheet (Inventory is an asset), for the cost of goods sold when items are sold (COGS reduces profit), and for management decisions (is this product profitable to sell?). The system uses the **moving-average cost method**: the average unit cost is recalculated each time stock is received, blending the new purchase cost with the existing average. This means all units of a product at a branch carry the same average cost, regardless of when they were purchased.
@@ -453,7 +549,7 @@ Inventory valuation is the process of assigning a monetary value to the goods he
 **How the moving average is maintained.**
 When a goods receipt is posted, the system computes the new average as: `(existing stock value + new receipt value) / (existing quantity + received quantity)`. This weighted average is then applied to all units held. When goods are sold, the COGS is the quantity sold multiplied by the current average cost at the moment of the sale. When stock is adjusted, the adjustment value is computed at the current average. This means the Inventory account on the balance sheet always equals the sum of (on-hand quantity × average cost) across all products — a relationship the valuation report verifies.
 
-### 8.1 Valuation report
+### 9.1 Valuation report
 
 Navigate to **Inventory > Stock Valuation** (`/admin/stock/valuation`). Requires the `INVENTORY.VALUATION.VIEW` permission.
 
@@ -464,7 +560,7 @@ The report is not loaded automatically — the initial screen shows an empty sta
 - **Reconciled to GL** (green) — the stock ledger and GL agree.
 - A red **Finance-grade alarm — Stock ledger and GL are out of sync** banner — there is a discrepancy. The stock total, the GL 1300 balance, and the difference amount are shown, and the GL Reconciliation card's status tag reads **Out of balance**. Finance review is required.
 
-### 8.2 Setting an opening valuation
+### 9.2 Setting an opening valuation
 
 **What opening valuation is.**
 Opening valuation is the one-time act of assigning an initial monetary cost to stock that already has a quantity on-hand but no established cost. This occurs at system go-live (when stock was loaded via opening balances before the cost data was entered) or when a new product is added and given an opening balance. Until an average cost is established, the system cannot post COGS for sales of that product — it will issue the stock but leave the cost leg blank, flagging the anomaly.
@@ -481,7 +577,7 @@ The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the p
 
 ---
 
-## 9. Bills of Materials
+## 10. Bills of Materials
 
 Navigate to **Manufacturing > Bills of Materials** (`/admin/boms`).
 
@@ -509,7 +605,7 @@ DRAFT --> (activate) --> ACTIVE --> (archive) --> ARCHIVED
 
 Only a DRAFT BOM can be activated. ARCHIVED is a permanent terminal state.
 
-### 9.1 Creating a BOM
+### 10.1 Creating a BOM
 
 1. On the BOM list, click **New BOM**.
 2. Pick the **Parent Product** from the picker (its placeholder reads "Select finished product"; search by name or code). The product must be a GOODS type and must be active.
@@ -521,7 +617,7 @@ The BOM is created in **Draft** status with the next version number for that fin
 
 **Validation.** Output quantity must be positive. Yield must be between 0.0001% and 100%.
 
-### 9.2 Adding components
+### 10.2 Adding components
 
 **What a BOM component is.**
 A BOM component is one ingredient or raw material in the recipe. Each component line specifies the product to consume, the quantity required per one run of the BOM output, and an optional scrap percentage (an allowance for material that is consumed but does not make it into the finished good — for example, offcuts when cutting fabric). A component is classified as either **MAKE** (the component is itself manufactured — the system will look for its own BOM) or **BUY** (the component is purchased from a supplier and is a raw material).
@@ -540,11 +636,11 @@ Open a Draft BOM detail and click **Add Component**.
 
 Components can be added, edited, or removed only while the BOM is in Draft status.
 
-### 9.3 Editing a BOM header
+### 10.3 Editing a BOM header
 
 There is no Edit button. The **BOM Header** form is always shown inline on the BOM detail. On a Draft BOM its Output Qty, Yield %, and Notes fields are editable; on an Active BOM only Notes can be changed (the structural fields are disabled). Make your changes and click **Save Header**.
 
-### 9.4 Activating a BOM
+### 10.4 Activating a BOM
 
 A BOM must have at least one component before it can be activated.
 
@@ -557,13 +653,13 @@ Activating a BOM automatically archives the current Active BOM (if any) for the 
 
 **Validation.** Effective From date is required. The BOM must have at least one component. A circular BOM (where a component's BOM ultimately references this product back) is rejected.
 
-### 9.5 Archiving a BOM
+### 10.5 Archiving a BOM
 
 On an Active BOM, click **Archive**. The **Archive** button is shown only while the BOM is Active — it does not appear on a Draft BOM. The BOM moves to Archived status permanently, and header and component editing controls disappear. (A Draft BOM that is never needed is simply left in Draft; archiving applies to Active BOMs, consistent with the DRAFT → ACTIVE → ARCHIVED lifecycle above.)
 
 ---
 
-## 10. Work Orders
+## 11. Work Orders
 
 Navigate to **Manufacturing > Work Orders** (`/admin/work-orders`).
 
@@ -598,7 +694,7 @@ PLANNED --> (release) --> RELEASED --> (first issue) --> IN_PROGRESS
 
 CANCELLED, COMPLETED (after close), and CLOSED are terminal. A COMPLETED Work Order must be closed before any other action.
 
-### 10.1 Creating a Work Order
+### 11.1 Creating a Work Order
 
 1. On the Work Orders list, click **New Work Order**.
 2. Pick the **Finished Product** from the picker.
@@ -610,11 +706,11 @@ CANCELLED, COMPLETED (after close), and CLOSED are terminal. A COMPLETED Work Or
 
 The Work Order is created in **Planned** status with a generated Work Order number.
 
-### 10.2 Editing a Work Order
+### 11.2 Editing a Work Order
 
 A Work Order can only be edited while in Planned status. There is no Edit button — while the order is Planned, the **Edit Work Order** form is shown inline on the detail page. You can change the Planned Qty, **BOM UID (override)**, Branch, Planned Date, and Notes, then click **Save**.
 
-### 10.3 Adding and removing operations
+### 11.3 Adding and removing operations
 
 **What operations are.**
 Operations are the discrete steps in the production process — for example, Cutting, Mixing, Assembly, Finishing. Each operation can carry an estimated and actual labour cost and overhead cost, giving the business a breakdown of where production costs are incurred within the work order. Operations are optional; a work order can be costed with a single bulk labour/overhead application if step-level detail is not needed.
@@ -624,7 +720,7 @@ Operations represent discrete production steps (e.g. Cutting, Assembly) with ass
 - **Add operation**: In the **Add Operation** form, enter Seq, Description, Work Centre, and optional Labour Amt / Overhead Amt. Click **Add**.
 - **Remove operation**: Click the trash-icon button in the operation row's Actions column. An operation that has already had costs applied to it cannot be removed.
 
-### 10.4 Releasing a Work Order
+### 11.4 Releasing a Work Order
 
 **What releasing means.**
 Releasing a Work Order is the act of committing to produce. At this point the system resolves and locks the BOM (so the recipe is frozen for this production run), explodes it to all leaf-level raw material components, and generates the planned component lines on the work order — the list of what will need to be issued from stock. No stock movement or GL posting happens at release; it is a planning step. Once released, the work order is ready for component issue.
@@ -639,7 +735,7 @@ Status changes to **Released**. The system emits a production event. No stock mo
 
 **Validation.** The finished product must have an Active BOM (or a BOM must be pinned). Releasing requires the `WORKORDER.RELEASE` permission.
 
-### 10.5 Issuing components
+### 11.5 Issuing components
 
 **What component issue means.**
 Issuing components is the physical act of taking raw materials from the stock location and bringing them to the production area. In the system, this deducts the components from inventory and charges them to the Work-in-Progress account. The GL posting is: **DR WIP / CR Inventory** for each component at its current moving-average cost. If any component has no established average cost (it has never been received or opened), the quantity deduction still posts but the WIP cost leg is skipped and the incomplete-cost flag is set on the work order — the production team should investigate and correct the missing cost.
@@ -656,7 +752,7 @@ Stock movements of type `PRODUCTION_ISSUE` are posted for each component. GL ent
 
 **Validation.** Posting date is required. If a component's average cost is not yet established, that component is cost-skipped (the quantity still moves but no GL leg is posted). An incomplete-cost indicator appears on the Work Order header when any component was cost-skipped.
 
-### 10.6 Applying labour and overhead costs
+### 11.6 Applying labour and overhead costs
 
 **What labour and overhead costs are.**
 Labour costs are the wages and salaries paid to the workers who produce the goods. Overhead costs are the indirect production costs that cannot be assigned to a single unit but are incurred as part of running the factory — energy, depreciation of machinery, supervision, etc. Both are debited to WIP when applied to a Work Order: **DR WIP / CR the relevant cost account**. Applying these costs ensures that the finished good's cost reflects all the inputs that went into making it, not just the raw materials.
@@ -668,7 +764,7 @@ Labour costs are the wages and salaries paid to the workers who produce the good
 
 GL entries: DR WIP / CR the relevant cost account. An operation can only have costs applied to it once; a second attempt is rejected.
 
-### 10.7 Completing a Work Order
+### 11.7 Completing a Work Order
 
 **What completion does.**
 Completing a Work Order records that production has finished and the finished goods are ready to move from the production area back into the finished goods warehouse. The system computes the unit cost of the finished good as: total WIP debited divided by the good quantity produced. This computed unit cost is passed to the moving-average recompute for the finished product — so the finished good acquires its average cost through the same engine that handles purchase receipts. The GL posting is: **DR Inventory (finished goods) / CR WIP** for the value relieved. Scrap (units produced but rejected) is recorded informationally; only good quantity enters inventory.
@@ -684,7 +780,7 @@ Status changes to **Completed**. A `PRODUCTION_RECEIPT` stock movement is posted
 
 **Validation.** Good quantity must be positive. If good + scrap exceeds planned quantity and Allow overrun is not ticked, the submission is rejected.
 
-### 10.8 Closing a Work Order
+### 11.8 Closing a Work Order
 
 **What closing does.**
 Closing a Work Order is the final step that clears any remaining WIP balance. After completion, there may be a small residual WIP balance due to rounding or small variances between the planned and actual costs. Closing posts this residual to the **Manufacturing Variance** account — a P&L account that captures the difference between what production was expected to cost (based on the BOM and standard costs) and what it actually cost. After closing, the WIP balance for this order is zero and the order is read-only.
@@ -697,7 +793,7 @@ Closing clears any residual WIP balance (rounding or variance) and marks the ord
 
 Status changes to **Closed**. Any residual WIP is posted to the Manufacturing Variance account. GL entries: DR or CR Manufacturing Variance / CR or DR WIP (depending on sign).
 
-### 10.9 Cancelling a Work Order
+### 11.9 Cancelling a Work Order
 
 A Work Order can be cancelled from Planned, Released, or In-Progress status.
 
@@ -711,7 +807,7 @@ If components have already been issued, the system reverses all issue movements 
 
 A Completed or Closed Work Order cannot be cancelled.
 
-### 10.10 Work Order cost report
+### 11.10 Work Order cost report
 
 From the Work Order detail, click **Cost Report** or navigate directly to `/admin/work-orders/uid/:uid/cost-report`.
 
@@ -730,7 +826,7 @@ An incomplete-cost indicator appears when any component was cost-skipped.
 
 ---
 
-## 11. WIP reconciliation
+## 12. WIP reconciliation
 
 Navigate to **Manufacturing > WIP Reconciliation** (`/admin/manufacturing/wip-reconciliation`). Requires the `MANUFACTURING.VIEW` permission.
 
@@ -744,13 +840,19 @@ When the two totals agree, a green **WIP balances reconcile — computed equals 
 
 ---
 
-## 12. Frequently asked questions
+## 13. Frequently asked questions
 
 **Can I adjust stock below zero?**
 Yes. The system records negative on-hand and flags the row with the Negative indicator, but it does not block the transaction. The overselling indicator is a monitoring tool; you should investigate and correct the root cause.
 
 **What is the difference between an adjustment and a stock count?**
 An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
+
+**Does reconciling a van change my stock or accounts?**
+No. A van-stock reconciliation (section 6) is record-only: neither creating, saving, nor reconciling it posts any stock movement or GL entry. It is a control worksheet that documents Loaded − Sold − Returned = Expected versus the physical count on the van, and flags variances for follow-up. If a variance must correct the books, do that separately with a stock adjustment (section 2.2) or a stock count (section 5).
+
+**Where do the Loaded and Returned figures on a van reconciliation come from?**
+They are pre-filled from the van's stock transfers for that business date — Loaded is the total transferred into the van, Returned is the total transferred back out. Both remain editable, so you can correct them if the physical reality differs. Sold is the only figure you must enter yourself; the system cannot derive it.
 
 **Can I have more than one active BOM for a product?**
 No. Only one BOM can be active at a time per product. Activating a new version automatically archives the previous one. Historical archived versions remain visible.
