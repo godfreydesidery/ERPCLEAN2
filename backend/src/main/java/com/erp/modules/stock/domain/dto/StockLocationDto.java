@@ -22,5 +22,8 @@ public record StockLocationDto(
         boolean pickable,
         boolean sellable,
         Long glAccountId,
-        MasterStatus status
+        MasterStatus status,
+        // ADR-0051 D-8.4 — van/agent link
+        String agentUid,
+        String agentName
 ) {}

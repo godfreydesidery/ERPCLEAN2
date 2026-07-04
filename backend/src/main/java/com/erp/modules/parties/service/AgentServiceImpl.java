@@ -105,6 +105,15 @@ public class AgentServiceImpl implements AgentService {
 
     @Override
     @Transactional(readOnly = true)
+    public AgentDto getByCompanyIdAndId(Long companyId, Long id) {
+        if (companyId == null || id == null) {
+            return null;
+        }
+        return agents.findByCompanyIdAndId(companyId, id).map(AgentDto::from).orElse(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<AgentDto> list(Long companyId, String q, Pageable pageable) {
         // Security fix (finding 1): guard before querying — prevents cross-company list via
         // client-supplied companyId. Root is permitted for any company (audited by assertCanActIn).

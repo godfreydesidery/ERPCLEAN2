@@ -8,6 +8,10 @@
  *  4. Success payload: create calls service and reloads.
  *  5. 403 forbidden sets state = 'forbidden'.
  *  6. Deactivate calls service and patches row status.
+ *  7. Branch filter passes branchUid.
+ *  8. Post-create filter switches to created branch.
+ *  9. Agent selector (ADR-0051 D-8.4): create sends agentUid for a VAN location.
+ * 10. Agent field is cleared client-side when the location type changes away from VAN.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -20,6 +24,7 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { CompanyService } from '../../company/company.service';
 import { BranchService } from '../../branch/branch.service';
 import { OrganisationService } from '../../organisation/organisation.service';
+import { AgentService } from '../../parties/agent.service';
 import { StockLocationService } from './stock-location.service';
 import { StockLocationListComponent } from './stock-location-list.component';
 
@@ -36,7 +41,11 @@ const STUB_LOCATION = {
   locationType: 'WAREHOUSE' as const,
   isDefault: true,
   status: 'ACTIVE' as const,
+  agentUid: null,
+  agentName: null,
 };
+const STUB_VAN_LOCATION = { ...STUB_LOCATION, uid: 'LOC-VAN', id: '102', code: 'VAN-01', name: 'Van 01', locationType: 'VAN' as const, isDefault: false };
+const STUB_AGENT = { uid: 'AGT1', id: '1', companyId: '10', code: 'AG-01', partyType: 'INDIVIDUAL' as const, displayName: 'Hamisi', legalName: null, tin: null, vatRegistered: false, vrn: null, businessRegNo: null, mobileMoneyNo: null, phone: null, email: null, physicalAddress: null, postalAddress: null, region: null, district: null, agentKind: 'EXTERNAL' as const, appUserId: null, status: 'ACTIVE' as const, version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
 // A location created in the OTHER branch (branchId 7 → uid BR-OTHER).
 const STUB_LOCATION_OTHER_BRANCH = { ...STUB_LOCATION, uid: 'LOC2', id: '101', branchId: '7', code: 'WH-02', isDefault: false };
 
@@ -54,10 +63,12 @@ function makeBed(overrides: {
   listSpy?: ReturnType<typeof vi.fn>;
   createSpy?: ReturnType<typeof vi.fn>;
   deactivateSpy?: ReturnType<typeof vi.fn>;
+  updateSpy?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listSpy = overrides.listSpy ?? vi.fn(() => of(locationPage()));
   const createSpy = overrides.createSpy ?? vi.fn(() => of(STUB_LOCATION));
   const deactivateSpy = overrides.deactivateSpy ?? vi.fn(() => of(undefined));
+  const updateSpy = overrides.updateSpy ?? vi.fn(() => of(STUB_LOCATION));
 
   TestBed.configureTestingModule({
     imports: [StockLocationListComponent],
@@ -70,7 +81,7 @@ function makeBed(overrides: {
         useValue: {
           list: listSpy,
           create: createSpy,
-          update: vi.fn(() => of(STUB_LOCATION)),
+          update: updateSpy,
           deactivate: deactivateSpy,
           reactivate: vi.fn(() => of(STUB_LOCATION)),
           setDefault: vi.fn(() => of(STUB_LOCATION)),
@@ -88,6 +99,12 @@ function makeBed(overrides: {
         provide: BranchService,
         useValue: { list: vi.fn(() => of([STUB_BRANCH_ACTIVE, STUB_BRANCH_OTHER])) },
       },
+      {
+        provide: AgentService,
+        useValue: {
+          list: vi.fn(() => of({ rows: [STUB_AGENT], meta: { page: 0, size: 200, totalElements: 1, totalPages: 1, hasNext: false } })),
+        },
+      },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       {
         provide: SessionStore,
@@ -102,7 +119,7 @@ function makeBed(overrides: {
     ],
   });
 
-  return { listSpy, createSpy, deactivateSpy };
+  return { listSpy, createSpy, deactivateSpy, updateSpy };
 }
 
 // ── Specs ─────────────────────────────────────────────────────────────────────
@@ -257,5 +274,111 @@ describe('StockLocationListComponent', () => {
     // …and the list reloads scoped to that branch so the new row is visible.
     const lastCall = listSpy.mock.calls.at(-1)!;
     expect(lastCall[2]).toBe('BR-OTHER');
+  });
+
+  // ── 9. Agent selector — create sends agentUid for a VAN location ─────────────
+
+  it('sends agentUid on create when locationType is VAN', async () => {
+    const { createSpy } = makeBed({ createSpy: vi.fn(() => of(STUB_VAN_LOCATION)) });
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.agentOptions().map((a) => a.uid)).toEqual(['AGT1']);
+
+    comp.showCreateForm.set(true);
+    comp.fCode.set('VAN-01');
+    comp.fName.set('Van 01');
+    comp.onCreateLocationTypeChange('VAN');
+    comp.fBranchUid.set('BRANCH-UID-1');
+    comp.fAgentUid.set('AGT1');
+
+    comp.submitCreate();
+    await vi.runAllTimersAsync();
+
+    expect(createSpy).toHaveBeenCalledOnce();
+    const req = createSpy.mock.calls[0][0];
+    expect(req.locationType).toBe('VAN');
+    expect(req.agentUid).toBe('AGT1');
+  });
+
+  it('omits agentUid on create when locationType is not VAN', async () => {
+    const { createSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.showCreateForm.set(true);
+    comp.fCode.set('WH-03');
+    comp.fName.set('Third Warehouse');
+    comp.onCreateLocationTypeChange('WAREHOUSE');
+    comp.fBranchUid.set('BRANCH-UID-1');
+    // Force a value into fAgentUid directly (bypassing the type-change clear) to prove the
+    // submit-time guard also suppresses agentUid for a non-VAN request, not just the UI clear.
+    comp.fAgentUid.set('AGT1');
+
+    comp.submitCreate();
+    await vi.runAllTimersAsync();
+
+    const req = createSpy.mock.calls[0][0];
+    expect(req.agentUid).toBeUndefined();
+  });
+
+  // ── 10. Agent field cleared when type changes away from VAN ─────────────────
+
+  it('onCreateLocationTypeChange clears fAgentUid when leaving VAN', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onCreateLocationTypeChange('VAN');
+    comp.fAgentUid.set('AGT1');
+    expect(comp.fAgentUid()).toBe('AGT1');
+
+    comp.onCreateLocationTypeChange('STORE');
+    expect(comp.fAgentUid()).toBe('');
+  });
+
+  it('submitEdit sends agentUid when eLocationType is VAN', async () => {
+    const { updateSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startEdit(STUB_VAN_LOCATION);
+    comp.onEditLocationTypeChange('VAN');
+    comp.eAgentUid.set('AGT1');
+    comp.submitEdit(STUB_VAN_LOCATION);
+    await vi.runAllTimersAsync();
+
+    expect(updateSpy).toHaveBeenCalledWith(STUB_VAN_LOCATION.uid, {
+      name: STUB_VAN_LOCATION.name,
+      locationType: 'VAN',
+      agentUid: 'AGT1',
+    });
+  });
+
+  it('submitEdit sends an explicit empty-string agentUid when the agent is cleared on a VAN (never omits it)', async () => {
+    // The backend distinguishes omitted/null ("leave unchanged") from "" ("clear") — a lingering
+    // `|| undefined` fallback would silently swallow a clear action. Regression for that bug.
+    const alreadyAssignedVan = { ...STUB_VAN_LOCATION, agentUid: 'AGT1', agentName: 'Hamisi' };
+    const { updateSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startEdit(alreadyAssignedVan);
+    expect(comp.eAgentUid()).toBe('AGT1');
+
+    comp.eAgentUid.set(''); // user clears the agent picker back to "no agent"
+    comp.submitEdit(alreadyAssignedVan);
+    await vi.runAllTimersAsync();
+
+    expect(updateSpy).toHaveBeenCalledWith(alreadyAssignedVan.uid, {
+      name: alreadyAssignedVan.name,
+      locationType: 'VAN',
+      agentUid: '',
+    });
   });
 });

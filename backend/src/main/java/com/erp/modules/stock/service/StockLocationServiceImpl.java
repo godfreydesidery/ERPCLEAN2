@@ -3,6 +3,8 @@ package com.erp.modules.stock.service;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.parties.domain.dto.AgentDto;
+import com.erp.modules.parties.service.AgentService;
 import com.erp.modules.stock.domain.dto.CreateStockLocationRequest;
 import com.erp.modules.stock.domain.dto.StockLocationDto;
 import com.erp.modules.stock.domain.dto.UpdateStockLocationRequest;
@@ -25,7 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Location master service (ADR-0028 D-4, FR-INVD-01..04).
+ * Location master service (ADR-0028 D-4, FR-INVD-01..04; van/agent link ADR-0051 D-8.4).
  */
 @Service
 public class StockLocationServiceImpl implements StockLocationService {
@@ -33,17 +35,20 @@ public class StockLocationServiceImpl implements StockLocationService {
     private final StockLocationRepository locations;
     private final BranchRepository        branches;
     private final UserBranchRepository    userBranches;
+    private final AgentService            agentService;
     private final ScopeGuard              scopeGuard;
     private final AuditService            audit;
 
     public StockLocationServiceImpl(StockLocationRepository locations,
                                      BranchRepository branches,
                                      UserBranchRepository userBranches,
+                                     AgentService agentService,
                                      ScopeGuard scopeGuard,
                                      AuditService audit) {
         this.locations    = locations;
         this.branches     = branches;
         this.userBranches = userBranches;
+        this.agentService = agentService;
         this.scopeGuard   = scopeGuard;
         this.audit        = audit;
     }
@@ -87,6 +92,7 @@ public class StockLocationServiceImpl implements StockLocationService {
                 principal.companyId(), branch.getId(),
                 request.code(), request.name(), request.locationType(),
                 request.makeDefault(), principal.userId());
+        applyAgentAssignment(loc, request.agentUid());
         locations.save(loc);
 
         audit.record(AuditEvent.of(AuditActions.STOCK_LOCATION_CREATE, "stock_locations",
@@ -104,6 +110,7 @@ public class StockLocationServiceImpl implements StockLocationService {
         StockLocation loc = findAndAssertScope(locationUid, principal);
 
         loc.update(request.name(), request.locationType(), principal.userId());
+        applyAgentAssignment(loc, request.agentUid());
         locations.save(loc);
 
         audit.record(AuditEvent.of(AuditActions.STOCK_LOCATION_UPDATE, "stock_locations",
@@ -243,11 +250,54 @@ public class StockLocationServiceImpl implements StockLocationService {
         return loc;
     }
 
-    private static StockLocationDto toDto(StockLocation l) {
+    /**
+     * Applies (or clears) the van/agent link (ADR-0051 D-8.4). Only a {@code VAN}-type location may
+     * carry an agent — a non-VAN location silently keeps {@code agentId == null} (auto-cleared on a
+     * type change away from VAN) and rejects an explicit assignment attempt. {@code null} means
+     * "leave the current assignment unchanged"; blank ({@code ""}) explicitly clears it.
+     */
+    private void applyAgentAssignment(StockLocation loc, String agentUidRaw) {
+        if (loc.getLocationType() != LocationType.VAN) {
+            if (agentUidRaw != null && !agentUidRaw.isBlank()) {
+                throw new IllegalArgumentException(
+                        "An agent can only be assigned to a VAN location.");
+            }
+            loc.setAgentId(null);
+            return;
+        }
+        if (agentUidRaw == null) {
+            return; // VAN, no change requested — leave the existing assignment (or none) as-is
+        }
+        if (agentUidRaw.isBlank()) {
+            loc.setAgentId(null);
+            return;
+        }
+        AgentDto agent = agentService.getByUid(agentUidRaw);
+        if (!agent.companyId().equals(loc.getCompanyId())) {
+            throw new IllegalArgumentException(
+                    "The selected agent does not belong to your company.");
+        }
+        Long excludeId = loc.getId() != null ? loc.getId() : -1L;
+        if (locations.existsByAgentIdAndStatusAndIdNot(agent.id(), MasterStatus.ACTIVE, excludeId)) {
+            throw new ConflictException("This agent already runs another active van.");
+        }
+        loc.setAgentId(agent.id());
+    }
+
+    private StockLocationDto toDto(StockLocation l) {
+        String agentUid = null;
+        String agentName = null;
+        if (l.getAgentId() != null) {
+            AgentDto agent = agentService.getByCompanyIdAndId(l.getCompanyId(), l.getAgentId());
+            if (agent != null) {
+                agentUid  = agent.uid();
+                agentName = agent.displayName();
+            }
+        }
         return new StockLocationDto(
                 l.getId(), l.getUid(), l.getCompanyId(), l.getBranchId(),
                 l.getCode(), l.getName(), l.getLocationType(), l.isDefault(),
                 l.getParentLocationId(), l.isAllowNegative(), l.isPickable(), l.isSellable(),
-                l.getGlAccountId(), l.getStatus());
+                l.getGlAccountId(), l.getStatus(), agentUid, agentName);
     }
 }

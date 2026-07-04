@@ -13,14 +13,20 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.parties.domain.dto.AgentDto;
+import com.erp.modules.parties.domain.enums.AgentKind;
+import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.service.AgentService;
 import com.erp.modules.stock.domain.dto.CreateStockLocationRequest;
 import com.erp.modules.stock.domain.dto.StockLocationDto;
+import com.erp.modules.stock.domain.dto.UpdateStockLocationRequest;
 import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.LocationType;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.util.Optional;
@@ -30,6 +36,7 @@ import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 /**
@@ -52,6 +59,7 @@ class StockLocationServiceImplTest {
     private StockLocationRepository locations;
     private BranchRepository        branches;
     private UserBranchRepository    userBranches;
+    private AgentService             agentService;
     private ScopeGuard               scopeGuard;
     private AuditService             audit;
 
@@ -66,10 +74,12 @@ class StockLocationServiceImplTest {
         locations    = mock(StockLocationRepository.class);
         branches     = mock(BranchRepository.class);
         userBranches = mock(UserBranchRepository.class);
+        agentService = mock(AgentService.class);
         scopeGuard   = mock(ScopeGuard.class);
         audit        = mock(AuditService.class);
 
-        service = new StockLocationServiceImpl(locations, branches, userBranches, scopeGuard, audit);
+        service = new StockLocationServiceImpl(
+                locations, branches, userBranches, agentService, scopeGuard, audit);
 
         RequestContext.set(new RequestContext.Principal(
                 USER_ID, "user@test.com", false, COMPANY_ID, BRANCH_ID, null));
@@ -109,7 +119,7 @@ class StockLocationServiceImplTest {
         when(locations.saveAndFlush(oldDefault)).thenReturn(oldDefault);
 
         CreateStockLocationRequest req = new CreateStockLocationRequest(
-                "LOC-001", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", true);
+                "LOC-001", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", true, null);
 
         service.create(req);
 
@@ -129,7 +139,7 @@ class StockLocationServiceImplTest {
         when(locations.save(any(StockLocation.class))).thenReturn(newLoc);
 
         CreateStockLocationRequest req = new CreateStockLocationRequest(
-                "LOC-002", "Secondary Store", LocationType.STORE, "BRANCH-UID", true);
+                "LOC-002", "Secondary Store", LocationType.STORE, "BRANCH-UID", true, null);
 
         service.create(req);
 
@@ -144,7 +154,7 @@ class StockLocationServiceImplTest {
         when(locations.save(any(StockLocation.class))).thenReturn(newLoc);
 
         CreateStockLocationRequest req = new CreateStockLocationRequest(
-                "LOC-003", "Quarantine Area", LocationType.QUARANTINE, "BRANCH-UID", false);
+                "LOC-003", "Quarantine Area", LocationType.QUARANTINE, "BRANCH-UID", false, null);
 
         service.create(req);
 
@@ -164,7 +174,7 @@ class StockLocationServiceImplTest {
         when(locations.existsByCompanyIdAndCode(COMPANY_ID, "LOC-001")).thenReturn(true);
 
         CreateStockLocationRequest req = new CreateStockLocationRequest(
-                "LOC-001", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", false);
+                "LOC-001", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", false, null);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(req))
                 .isInstanceOf(ConflictException.class)
@@ -180,7 +190,7 @@ class StockLocationServiceImplTest {
         when(locations.save(any(StockLocation.class))).thenReturn(newLoc);
 
         CreateStockLocationRequest req = new CreateStockLocationRequest(
-                "LOC-999", "New Store", LocationType.STORE, "BRANCH-UID", false);
+                "LOC-999", "New Store", LocationType.STORE, "BRANCH-UID", false, null);
 
         service.create(req);
 
@@ -246,8 +256,94 @@ class StockLocationServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // Van/agent assignment (ADR-0051 D-8.4): settable only on VAN, one active van per agent,
+    // agent must be same company.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_agentUid_onNonVanLocation_rejected() {
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-010", "Main Warehouse", LocationType.WAREHOUSE, "BRANCH-UID", false, "AGENT-UID-1");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(req))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(locations, never()).save(any());
+    }
+
+    @Test
+    void create_agentUid_onVanLocation_resolvesAndSetsAgent() {
+        when(agentService.getByUid("AGENT-UID-1")).thenReturn(agentDto(500L, COMPANY_ID, "AGENT-UID-1"));
+        when(locations.existsByAgentIdAndStatusAndIdNot(500L, MasterStatus.ACTIVE, -1L)).thenReturn(false);
+        StockLocation newLoc = stubNewLocation(false);
+        when(locations.save(any(StockLocation.class))).thenReturn(newLoc);
+
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-011", "Van 1", LocationType.VAN, "BRANCH-UID", false, "AGENT-UID-1");
+
+        service.create(req);
+
+        ArgumentCaptor<StockLocation> captor = ArgumentCaptor.forClass(StockLocation.class);
+        verify(locations).save(captor.capture());
+        assertThat(captor.getValue().getAgentId()).isEqualTo(500L);
+    }
+
+    @Test
+    void create_agentUid_alreadyActiveOnAnotherVan_conflict() {
+        when(agentService.getByUid("AGENT-UID-1")).thenReturn(agentDto(500L, COMPANY_ID, "AGENT-UID-1"));
+        when(locations.existsByAgentIdAndStatusAndIdNot(500L, MasterStatus.ACTIVE, -1L)).thenReturn(true);
+
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-012", "Van 2", LocationType.VAN, "BRANCH-UID", false, "AGENT-UID-1");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(req))
+                .isInstanceOf(ConflictException.class);
+
+        verify(locations, never()).save(any());
+    }
+
+    @Test
+    void create_agentUid_differentCompany_rejected() {
+        when(agentService.getByUid("AGENT-UID-1")).thenReturn(agentDto(500L, 999L, "AGENT-UID-1"));
+
+        CreateStockLocationRequest req = new CreateStockLocationRequest(
+                "LOC-013", "Van 3", LocationType.VAN, "BRANCH-UID", false, "AGENT-UID-1");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(req))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(locations, never()).save(any());
+    }
+
+    @Test
+    void update_changingAwayFromVan_autoClearsAgent() {
+        StockLocation existing = mock(StockLocation.class);
+        when(existing.getId()).thenReturn(700L);
+        when(existing.getUid()).thenReturn("VAN-UID-1");
+        when(existing.getCompanyId()).thenReturn(COMPANY_ID);
+        when(existing.getBranchId()).thenReturn(BRANCH_ID);
+        when(existing.getLocationType()).thenReturn(LocationType.WAREHOUSE); // after update() applies the new type
+        when(existing.getStatus()).thenReturn(MasterStatus.ACTIVE);
+        when(locations.findByUid("VAN-UID-1")).thenReturn(Optional.of(existing));
+
+        UpdateStockLocationRequest req = new UpdateStockLocationRequest(
+                "Now a warehouse", LocationType.WAREHOUSE, null);
+
+        service.update("VAN-UID-1", req);
+
+        verify(existing).setAgentId(null);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private AgentDto agentDto(Long id, Long companyId, String uid) {
+        return new AgentDto(id, uid, companyId, "AGT-001", PartyType.BUSINESS, "Test Agent",
+                "Test Agent Ltd", "TIN123", false, null, null, null, null, null, null, null,
+                null, null, null, AgentKind.EXTERNAL, null, null, null,
+                MasterStatus.ACTIVE, 0L, null, null, null, null);
+    }
 
     private StockLocation stubNewLocation(boolean isDefault) {
         StockLocation loc = mock(StockLocation.class);

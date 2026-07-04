@@ -83,6 +83,7 @@ import com.erp.modules.stock.repository.StockTransferRepository;
 import com.erp.modules.stock.repository.StockCountRepository;
 import com.erp.modules.stock.repository.StockBatchRepository;
 import com.erp.modules.stock.repository.StockSerialRepository;
+import com.erp.modules.stock.repository.VanReconciliationRepository;
 // approvals (ADR-0022)
 import com.erp.modules.approvals.repository.ApprovalPolicyRepository;
 import com.erp.modules.approvals.repository.ApprovalRequestRepository;
@@ -212,6 +213,8 @@ public class ScopeGuard {
     private final StockCountRepository       stockCounts;
     private final StockBatchRepository       stockBatches;
     private final StockSerialRepository      stockSerials;
+    // van-stock reconciliation (D-8, ADR-0051)
+    private final VanReconciliationRepository vanReconciliations;
     // fixed-assets (ADR-0030 D-14)
     private final AssetCategoryRepository    assetCategories;
     private final FixedAssetRepository       fixedAssets;
@@ -321,6 +324,8 @@ public class ScopeGuard {
                       StockCountRepository stockCounts,
                       StockBatchRepository stockBatches,
                       StockSerialRepository stockSerials,
+                      // van-stock reconciliation (D-8, ADR-0051)
+                      VanReconciliationRepository vanReconciliations,
                       // fixed-assets (ADR-0030 D-14)
                       AssetCategoryRepository assetCategories,
                       FixedAssetRepository fixedAssets,
@@ -434,6 +439,8 @@ public class ScopeGuard {
         this.stockCounts         = stockCounts;
         this.stockBatches        = stockBatches;
         this.stockSerials        = stockSerials;
+        // van-stock reconciliation (D-8, ADR-0051)
+        this.vanReconciliations  = vanReconciliations;
         // fixed-assets (ADR-0030 D-14)
         this.assetCategories     = assetCategories;
         this.fixedAssets         = fixedAssets;
@@ -570,6 +577,8 @@ public class ScopeGuard {
             case "stockcount"          -> stockCounts.findCompanyIdByUid(uid);
             case "stockbatch"          -> stockBatches.findCompanyIdByUid(uid);
             case "stockserial"         -> stockSerials.findCompanyIdByUid(uid);
+            // van-stock reconciliation (D-8, ADR-0051)
+            case "vanreconciliation"   -> vanReconciliations.findCompanyIdByUid(uid);
             // fixed-assets (ADR-0030 D-14)
             case "assetcategory"       -> assetCategories.findCompanyIdByUid(uid);
             case "fixedasset"          -> fixedAssets.findCompanyIdByUid(uid);

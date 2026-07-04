@@ -226,6 +226,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('STOCK.TRANSFER.CREATE', 'stock', 'Create and dispatch an inter-location stock transfer'),
     ('STOCK.TRANSFER.RECEIVE', 'stock', 'Receive an in-transit transfer at the destination location'),
     ('STOCK.TRANSFER.VIEW', 'stock', 'View inter-location stock transfers'),
+    ('STOCK.VAN_RECON.MANAGE', 'stock', 'Create, enter counts on, reconcile and cancel a van-stock reconciliation worksheet'),
+    ('STOCK.VAN_RECON.VIEW', 'stock', 'View van-stock reconciliation worksheets'),
     ('STOCK.VIEW', 'stock', 'View on-hand levels and movement history'),
     ('SUPPLIER.MANAGE', 'parties', 'Create, update and archive suppliers'),
     ('SUPPLIER.VIEW', 'parties', 'View and select suppliers'),

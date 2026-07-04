@@ -1004,6 +1004,35 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/count/stock-count-detail.component').then((m) => m.StockCountDetailComponent),
   },
+  // ── Van-Stock Reconciliation (ADR-0051 D-8 — route-agent day-end worksheet) ──
+  {
+    path: 'van-reconciliations',
+    canActivate: [requireAnyPermission('STOCK.VAN_RECON.VIEW', 'STOCK.VAN_RECON.MANAGE')],
+    loadComponent: () =>
+      import('./stock/van-reconciliation/van-reconciliation-list.component').then(
+        (m) => m.VanReconciliationListComponent,
+      ),
+  },
+  {
+    path: 'van-reconciliations/new',
+    canActivate: [requirePermission('STOCK.VAN_RECON.MANAGE')],
+    loadComponent: () =>
+      import('./stock/van-reconciliation/van-reconciliation.component').then(
+        (m) => m.VanReconciliationComponent,
+      ),
+  },
+  {
+    // GET-by-uid is gated STOCK.VAN_RECON.VIEW server-side (ScopeGuard 'vanreconciliation'); write
+    // actions (save lines/reconcile/cancel) inside the component are additionally gated on
+    // STOCK.VAN_RECON.MANAGE. Admit either code so a MANAGE-only role (who creates via /new then
+    // redirects here) is not bounced.
+    path: 'van-reconciliations/uid/:uid',
+    canActivate: [requireAnyPermission('STOCK.VAN_RECON.VIEW', 'STOCK.VAN_RECON.MANAGE')],
+    loadComponent: () =>
+      import('./stock/van-reconciliation/van-reconciliation.component').then(
+        (m) => m.VanReconciliationComponent,
+      ),
+  },
   // ── Purchase Requisitions ─────────────────────────────────────────────────
   {
     path: 'purchase-requisitions',

@@ -154,6 +154,16 @@ public final class DomainEventType {
     public static final String FX_REVALUATION_EXECUTED = "FX.REVALUATION.EXECUTED";
     public static final String AGG_FX_REVALUATION_RUN   = "FX_REVALUATION_RUN";
 
+    // --- van-stock reconciliation (D-8, ADR-0051) ---
+
+    /**
+     * A van reconciliation worksheet was marked RECONCILED. Informational only — RECORD-ONLY
+     * (ADR-0051 D-8.2): no stock movement or GL journal is posted for this event; it exists for
+     * downstream reporting/notification consumers.
+     */
+    public static final String VAN_RECONCILED           = "VAN.RECONCILED";
+    public static final String AGG_VAN_RECONCILIATION    = "VAN_RECONCILIATION";
+
     private DomainEventType() {
     }
 }
