@@ -12,10 +12,14 @@ import static org.mockito.Mockito.when;
 
 import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
 import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.domain.entity.Product;
+import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
@@ -23,14 +27,19 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
+import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
+import com.erp.modules.purchases.domain.entity.PurchaseRequisitionLine;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
+import com.erp.modules.purchases.repository.PurchaseRequisitionLineRepository;
+import com.erp.modules.purchases.repository.PurchaseRequisitionRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteLineRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,6 +47,7 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Unit tests for PurchaseOrderServiceImpl — approval gate (ADR-0027 D-6, FR-PROC-13)
@@ -62,6 +72,8 @@ class PurchaseOrderServiceImplTest {
     private SupplierQuoteRepository       quotes;
     private SupplierQuoteLineRepository   quoteLines;
     private BranchRepository              branches;
+    private PurchaseRequisitionRepository     requisitions;
+    private PurchaseRequisitionLineRepository requisitionLines;
 
     private PurchaseOrderServiceImpl service;
 
@@ -84,11 +96,13 @@ class PurchaseOrderServiceImplTest {
         quotes       = mock(SupplierQuoteRepository.class);
         quoteLines   = mock(SupplierQuoteLineRepository.class);
         branches     = mock(BranchRepository.class);
+        requisitions     = mock(PurchaseRequisitionRepository.class);
+        requisitionLines = mock(PurchaseRequisitionLineRepository.class);
 
         service = new PurchaseOrderServiceImpl(
                 orders, lines, receipts, suppliers, paymentTerms, products, units, bulkPacks,
                 companies, numberGen, totals, scopeGuard, audit, approvalGate,
-                quotes, quoteLines, branches);
+                quotes, quoteLines, branches, requisitions, requisitionLines);
     }
 
     // -------------------------------------------------------------------------
@@ -273,8 +287,136 @@ class PurchaseOrderServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // createFromRequisition — FIX F (D-3 requisition Convert → PO)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createFromRequisition_nullEstimatedUnitCost_defaultsToZeroAndDoesNotThrow() {
+        stubRequisitionConversion(30L, "REQ-UID-30", 200L, 300L, new BigDecimal("5"), null);
+
+        PurchaseOrderDto dto = service.createFromRequisition("REQ-UID-30", "SUP-UID-1", "TZS");
+
+        assertThat(dto).isNotNull();
+        ArgumentCaptor<PurchaseOrderLine> captor = ArgumentCaptor.forClass(PurchaseOrderLine.class);
+        verify(lines).save(captor.capture());
+        assertThat(captor.getValue().getUnitCostAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void createFromRequisition_nonNullEstimatedUnitCost_copiedThroughAndLineTotalComputed() {
+        stubRequisitionConversion(31L, "REQ-UID-31", 200L, 300L,
+                new BigDecimal("5"), new BigDecimal("12.50"));
+
+        service.createFromRequisition("REQ-UID-31", "SUP-UID-1", "TZS");
+
+        ArgumentCaptor<PurchaseOrderLine> captor = ArgumentCaptor.forClass(PurchaseOrderLine.class);
+        verify(lines).save(captor.capture());
+        assertThat(captor.getValue().getUnitCostAmount()).isEqualByComparingTo(new BigDecimal("12.50"));
+        assertThat(captor.getValue().getLineTotalAmount()).isEqualByComparingTo(new BigDecimal("62.50"));
+    }
+
+    @Test
+    void createFromRequisition_archivedSupplier_rejected() {
+        PurchaseRequisition requisition = mockRequisition(32L, "REQ-UID-32", 10L, 20L);
+        when(requisitions.findByUid("REQ-UID-32")).thenReturn(Optional.of(requisition));
+
+        Supplier archived = mock(Supplier.class);
+        when(archived.getStatus()).thenReturn(MasterStatus.ARCHIVED);
+        when(suppliers.findByCompanyIdAndUid(10L, "SUP-UID-ARCHIVED")).thenReturn(Optional.of(archived));
+
+        assertThatThrownBy(() -> service.createFromRequisition("REQ-UID-32", "SUP-UID-ARCHIVED", "TZS"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("archived");
+
+        verify(orders, never()).save(any(PurchaseOrder.class));
+    }
+
+    @Test
+    void createFromRequisition_stampsConvertedToPoLineUidOnRequisitionLine() {
+        PurchaseRequisitionLine reqLine = stubRequisitionConversion(
+                33L, "REQ-UID-33", 200L, 300L, new BigDecimal("5"), new BigDecimal("4"));
+
+        service.createFromRequisition("REQ-UID-33", "SUP-UID-1", "TZS");
+
+        verify(reqLine).setConvertedToPoLineUid(any());
+        verify(requisitionLines).save(reqLine);
+    }
+
+    @Test
+    void createFromRequisition_nullCurrency_defaultsToCompanyBaseCurrency() {
+        stubRequisitionConversion(34L, "REQ-UID-34", 200L, 300L, new BigDecimal("5"), new BigDecimal("4"));
+        Company company = mock(Company.class);
+        when(company.getBaseCurrency()).thenReturn("TZS");
+        when(companies.findScopedById(10L)).thenReturn(Optional.of(company));
+
+        service.createFromRequisition("REQ-UID-34", "SUP-UID-1", null);
+
+        ArgumentCaptor<PurchaseOrder> poCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(orders).save(poCaptor.capture());
+        assertThat(poCaptor.getValue().getCurrency().value()).isEqualTo("TZS");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private PurchaseRequisition mockRequisition(long id, String uid, long companyId, long branchId) {
+        PurchaseRequisition r = mock(PurchaseRequisition.class);
+        when(r.getId()).thenReturn(id);
+        when(r.getUid()).thenReturn(uid);
+        when(r.getCompanyId()).thenReturn(companyId);
+        when(r.getBranchId()).thenReturn(branchId);
+        return r;
+    }
+
+    /**
+     * Wires a full happy-path requisition→PO conversion: an APPROVED-shaped requisition (company
+     * 10L/branch 20L) with one line, an ACTIVE supplier at "SUP-UID-1", a base-unit product/unit
+     * pair (factor 1, no bulk-pack lookup needed), and {@code orders}/{@code lines} save() stubs
+     * that echo the argument back (mirrors real repository behaviour). Returns the mocked
+     * requisition line so callers can assert on it directly (FIX F).
+     */
+    private PurchaseRequisitionLine stubRequisitionConversion(long reqId, String reqUid,
+                                                               long productId, long unitId,
+                                                               BigDecimal requestedQty,
+                                                               BigDecimal estimatedUnitCost) {
+        long companyId = 10L;
+        long branchId  = 20L;
+
+        PurchaseRequisition requisition = mockRequisition(reqId, reqUid, companyId, branchId);
+        when(requisitions.findByUid(reqUid)).thenReturn(Optional.of(requisition));
+
+        Supplier supplier = mock(Supplier.class);
+        when(supplier.getId()).thenReturn(9L);
+        when(supplier.getCode()).thenReturn("SUP-01");
+        when(supplier.getDisplayName()).thenReturn("Acme");
+        when(supplier.getStatus()).thenReturn(MasterStatus.ACTIVE);
+        when(suppliers.findByCompanyIdAndUid(companyId, "SUP-UID-1")).thenReturn(Optional.of(supplier));
+
+        PurchaseRequisitionLine reqLine = mock(PurchaseRequisitionLine.class);
+        when(reqLine.getProductId()).thenReturn(productId);
+        when(reqLine.getUnitId()).thenReturn(unitId);
+        when(reqLine.getRequestedQty()).thenReturn(requestedQty);
+        when(reqLine.getEstimatedUnitCost()).thenReturn(estimatedUnitCost);
+        when(requisitionLines.findByPurchaseRequisitionIdOrderByLineNo(reqId)).thenReturn(List.of(reqLine));
+
+        UnitOfMeasure unit = mock(UnitOfMeasure.class);
+        when(unit.getId()).thenReturn(unitId);
+        Product product = mock(Product.class);
+        when(product.getId()).thenReturn(productId);
+        when(product.getCode()).thenReturn("PRD-01");
+        when(product.getName()).thenReturn("Widget");
+        when(product.getBaseUnit()).thenReturn(unit);
+        when(products.findByCompanyIdAndId(companyId, productId)).thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndId(companyId, unitId)).thenReturn(Optional.of(unit));
+
+        when(orders.save(any(PurchaseOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(lines.findMaxLineNo(any())).thenReturn(0);
+        when(lines.save(any(PurchaseOrderLine.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(any())).thenReturn(List.of());
+
+        return reqLine;
+    }
 
     private PurchaseOrder stubDraftPo(Long id, String uid, Long companyId, BigDecimal total) {
         PurchaseOrder po = mock(PurchaseOrder.class);

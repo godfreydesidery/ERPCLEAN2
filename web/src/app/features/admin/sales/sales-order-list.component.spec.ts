@@ -11,6 +11,8 @@
  *  7. 403 response sets state to 'forbidden'.
  *  8. Status-tag modifier: key status values.
  *  9. Numeric money guard: grossTotalAmount coerced via +value in template.
+ *  10. D-5: opening the create form pre-selects the caller's own agent (myAgent()); a null
+ *      result leaves the picker empty; the pre-selected agent can still be cleared/changed.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -70,9 +72,11 @@ function makeSessionStore(canCreate = false) {
 function makeBed(opts: {
   listImpl?: () => any;
   canCreate?: boolean;
+  myAgentImpl?: () => any;
 } = {}) {
-  const { listImpl, canCreate = false } = opts;
+  const { listImpl, canCreate = false, myAgentImpl } = opts;
   const sessionStore = makeSessionStore(canCreate);
+  const myAgentSpy = vi.fn(myAgentImpl ?? (() => of(null)));
 
   TestBed.configureTestingModule({
     imports: [SalesOrderListComponent],
@@ -101,7 +105,7 @@ function makeBed(opts: {
       },
       {
         provide: AgentService,
-        useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) },
+        useValue: { list: vi.fn(() => of({ rows: [], meta: {} })), myAgent: myAgentSpy },
       },
       {
         provide: AlertService,
@@ -110,6 +114,8 @@ function makeBed(opts: {
       { provide: SessionStore, useValue: sessionStore },
     ],
   });
+
+  return { myAgentSpy };
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
@@ -438,5 +444,80 @@ describe('SalesOrderListComponent — status filter', () => {
     comp.onStatusChange('PARTIALLY_INVOICED'); // no stub row has this status
     expect(comp.isEmpty()).toBe(true);
     expect(comp.filterHidAllRows()).toBe(true);
+  });
+});
+
+// ── D-5: pre-select the caller's own agent on create-form open ─────────────────
+
+describe('SalesOrderListComponent — agent pre-select (D-5)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('opening the create form pre-selects the agent returned by myAgent()', async () => {
+    const stubAgent = { uid: 'AGT1', code: 'AGT-01', displayName: 'Self Agent' };
+    vi.useFakeTimers();
+    const { myAgentSpy } = makeBed({ canCreate: true, myAgentImpl: () => of(stubAgent) });
+
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleCreateForm();
+    await vi.runAllTimersAsync();
+
+    expect(myAgentSpy).toHaveBeenCalledWith('CO1');
+    expect(comp.selectedAgent()).toEqual({ uid: 'AGT1', label: 'AGT-01 — Self Agent' });
+    expect(comp.agentSearchQ()).toBe('AGT-01 — Self Agent');
+  });
+
+  it('myAgent() returning null leaves the agent picker empty', async () => {
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, myAgentImpl: () => of(null) });
+
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleCreateForm();
+    await vi.runAllTimersAsync();
+
+    expect(comp.selectedAgent()).toBeNull();
+    expect(comp.agentSearchQ()).toBe('');
+  });
+
+  it('the pre-selected agent can still be cleared', async () => {
+    const stubAgent = { uid: 'AGT1', code: 'AGT-01', displayName: 'Self Agent' };
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, myAgentImpl: () => of(stubAgent) });
+
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleCreateForm();
+    await vi.runAllTimersAsync();
+    expect(comp.selectedAgent()?.uid).toBe('AGT1');
+
+    comp.clearAgent();
+
+    expect(comp.selectedAgent()).toBeNull();
+    expect(comp.agentSearchQ()).toBe('');
+  });
+
+  it('the pre-selected agent can still be changed via a new search selection', async () => {
+    const stubAgent = { uid: 'AGT1', code: 'AGT-01', displayName: 'Self Agent' };
+    const otherAgent = { uid: 'AGT2', code: 'AGT-02', displayName: 'Other Agent' };
+    vi.useFakeTimers();
+    makeBed({ canCreate: true, myAgentImpl: () => of(stubAgent) });
+
+    const comp = TestBed.createComponent(SalesOrderListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleCreateForm();
+    await vi.runAllTimersAsync();
+    expect(comp.selectedAgent()?.uid).toBe('AGT1');
+
+    comp.selectAgent(otherAgent as any);
+
+    expect(comp.selectedAgent()?.uid).toBe('AGT2');
   });
 });

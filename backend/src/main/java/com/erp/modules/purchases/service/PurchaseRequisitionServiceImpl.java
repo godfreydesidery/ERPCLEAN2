@@ -1,13 +1,19 @@
 package com.erp.modules.purchases.service;
 
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.domain.entity.Supplier;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.purchases.domain.dto.ConvertRequisitionRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseRequisitionRequest;
+import com.erp.modules.purchases.domain.dto.CreateRfqRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseRequisitionDto;
 import com.erp.modules.purchases.domain.dto.PurchaseRequisitionLineDto;
+import com.erp.modules.purchases.domain.dto.RfqDto;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisitionLine;
 import com.erp.modules.purchases.domain.enums.RequisitionStatus;
@@ -17,6 +23,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -37,26 +44,37 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
     private final CompanyRepository                 companies;
     private final ProductRepository                 products;
     private final UnitOfMeasureRepository           units;
+    // FIX E: RFQ-branch supplier validation, mirrors PurchaseOrderServiceImpl#resolveSupplier.
+    private final SupplierRepository                suppliers;
     private final PurchaseNumberGenerator           numberGen;
     private final ScopeGuard                        scopeGuard;
     private final AuditService                      audit;
+    // D-3: Convert actually creates the target document (same module — direct service call allowed)
+    private final RfqService                        rfqService;
+    private final PurchaseOrderService              purchaseOrderService;
 
     public PurchaseRequisitionServiceImpl(PurchaseRequisitionRepository requisitions,
                                            PurchaseRequisitionLineRepository reqLines,
                                            CompanyRepository companies,
                                            ProductRepository products,
                                            UnitOfMeasureRepository units,
+                                           SupplierRepository suppliers,
                                            PurchaseNumberGenerator numberGen,
                                            ScopeGuard scopeGuard,
-                                           AuditService audit) {
+                                           AuditService audit,
+                                           RfqService rfqService,
+                                           PurchaseOrderService purchaseOrderService) {
         this.requisitions = requisitions;
         this.reqLines     = reqLines;
         this.companies    = companies;
         this.products     = products;
         this.units        = units;
+        this.suppliers    = suppliers;
         this.numberGen    = numberGen;
         this.scopeGuard   = scopeGuard;
         this.audit        = audit;
+        this.rfqService           = rfqService;
+        this.purchaseOrderService = purchaseOrderService;
     }
 
     @Override
@@ -165,26 +183,72 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
     }
 
     @Override
-    public String convert(String uid, String convertToType) {
+    public String convert(String uid, ConvertRequisitionRequest req) {
         PurchaseRequisition r = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), r.getCompanyId());
         assertStatus(r, RequisitionStatus.APPROVED, "convert");
 
-        // Conversion creates the target document; return its uid.
-        // Actual creation is done by caller (controller) using the appropriate service.
-        // This method just marks the requisition as CONVERTED.
-        if (!"PURCHASE_ORDER".equals(convertToType) && !"RFQ".equals(convertToType)) {
-            throw new IllegalArgumentException("convertToType must be PURCHASE_ORDER or RFQ");
+        String targetType = req.targetType();
+        if (!"PURCHASE_ORDER".equals(targetType) && !"RFQ".equals(targetType)) {
+            throw new IllegalArgumentException("targetType must be PURCHASE_ORDER or RFQ");
         }
+
+        // D-3: Convert actually creates the target document (RFQ or PO), in the same TX.
+        String createdUid;
+        if ("RFQ".equals(targetType)) {
+            if (req.supplierUids() == null || req.supplierUids().isEmpty()) {
+                throw new IllegalArgumentException(
+                        "At least one supplier is required to convert a requisition to an RFQ.");
+            }
+            createdUid = createRfqFromRequisition(r, req);
+        } else {
+            if (req.supplierUid() == null || req.supplierUid().isBlank()) {
+                throw new IllegalArgumentException(
+                        "A supplier is required to convert a requisition to a purchase order.");
+            }
+            PurchaseOrderDto po = purchaseOrderService.createFromRequisition(
+                    r.getUid(), req.supplierUid(), req.currency());
+            createdUid = po.uid();
+        }
+
         r.setStatus(RequisitionStatus.CONVERTED);
-        r.setConvertedToType(convertToType);
+        r.setConvertedToType(targetType);
+        r.setConvertedToUid(createdUid);
         r.setConvertedAt(Instant.now());
         r.setUpdatedAt(Instant.now());
         r.setUpdatedBy(actorId());
 
         audit.record(AuditEvent.of(AuditActions.REQUISITION_CONVERT, "purchase_requisitions",
-                r.getId(), r.getUid()).detail(Map.of("convertToType", convertToType)));
-        return r.getUid();   // caller links the uid of the created document separately
+                r.getId(), r.getUid())
+                .detail(Map.of("convertToType", targetType, "convertedToUid", createdUid)));
+        return createdUid;
+    }
+
+    /** Builds the RFQ from the requisition's own lines and the caller-supplied suppliers (D-3). */
+    private String createRfqFromRequisition(PurchaseRequisition r, ConvertRequisitionRequest req) {
+        String companyUid = companies.findScopedById(r.getCompanyId())
+                .map(c -> c.getUid())
+                .orElseThrow(() -> new NotFoundException("Company not found."));
+
+        // FIX E: resolve EACH invited supplier up front — company-scoped, rejects unknown/
+        // foreign-company/ARCHIVED suppliers before the RFQ is created (mirrors the PO branch's
+        // resolveSupplier; the PO branch already rejected these, the RFQ branch silently let them
+        // through).
+        for (String supplierUid : req.supplierUids()) {
+            resolveSupplier(r.getCompanyId(), supplierUid);
+        }
+
+        List<CreateRfqRequest.RfqLineRequest> rfqLines = reqLines
+                .findByPurchaseRequisitionIdOrderByLineNo(r.getId())
+                .stream()
+                .map(l -> new CreateRfqRequest.RfqLineRequest(
+                        l.getProductId(), l.getUnitId(), l.getRequestedQty()))
+                .toList();
+
+        CreateRfqRequest rfqReq = new CreateRfqRequest(
+                companyUid, r.getUid(), null, r.getNotes(), req.supplierUids(), rfqLines);
+        RfqDto rfq = rfqService.create(rfqReq);
+        return rfq.uid();
     }
 
     @Override
@@ -232,6 +296,20 @@ public class PurchaseRequisitionServiceImpl implements PurchaseRequisitionServic
         return companies.findByUid(companyUid)
                 .map(c -> c.getId())
                 .orElseThrow(() -> new NotFoundException("Company not found."));
+    }
+
+    /**
+     * FIX E: company-scoped supplier resolution, rejects ARCHIVED — mirrors
+     * {@code PurchaseOrderServiceImpl#resolveSupplier}. Error messages are user-safe (no uid/
+     * internal detail — MessageHygiene).
+     */
+    private Supplier resolveSupplier(Long companyId, String supplierUid) {
+        Supplier s = suppliers.findByCompanyIdAndUid(companyId, supplierUid)
+                .orElseThrow(() -> new NotFoundException("Supplier not found."));
+        if (s.getStatus() == MasterStatus.ARCHIVED) {
+            throw new IllegalArgumentException("Supplier is archived and cannot be selected.");
+        }
+        return s;
     }
 
     private PurchaseRequisitionDto toDto(PurchaseRequisition r) {

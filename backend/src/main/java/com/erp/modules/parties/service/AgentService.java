@@ -6,6 +6,7 @@ import com.erp.modules.parties.domain.dto.CreateAgentRequest;
 import com.erp.modules.parties.domain.dto.PartyBranchDto;
 import com.erp.modules.parties.domain.dto.UpdateAgentRequest;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -25,6 +26,16 @@ public interface AgentService {
     AgentDto getByCompanyIdAndId(Long companyId, Long id);
 
     Page<AgentDto> list(Long companyId, String q, Pageable pageable);
+
+    /**
+     * D-5: resolves the ACTIVE INTERNAL agent linked to the CURRENT user (from
+     * {@code RequestContext.get().userId()}) in the given company — lets the web pre-select "my
+     * agent" on SO/SI/POS forms. Returns empty (never throws) when the caller is root or has no
+     * linked internal agent; the caller then falls back to an explicit agent picker (BR-SALES-06).
+     *
+     * @param companyUid the company to resolve the agent in (caller must be able to act in it)
+     */
+    Optional<AgentDto> myAgent(String companyUid);
 
     AgentDto updateByUid(String uid, UpdateAgentRequest request);
 

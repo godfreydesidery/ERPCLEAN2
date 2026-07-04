@@ -70,6 +70,38 @@ public class StockBatchServiceImpl implements StockBatchService {
     }
 
     // -------------------------------------------------------------------------
+    // reverseReceiptQty (D-2 — Goods Receipt void symmetry)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public StockBatchDto reverseReceiptQty(Long companyId, Long branchId, Long locationId,
+                                            Long productId, String lotNumber, BigDecimal qty,
+                                            Long actorId) {
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Batch reversal qty must be > 0; got: " + qty);
+        }
+
+        StockBatch batch = batches.findByCompanyIdAndBranchIdAndLocationIdAndProductIdAndLotNumber(
+                        companyId, branchId, locationId, productId, lotNumber)
+                .orElse(null);
+
+        if (batch == null) {
+            log.warn("StockBatch reverseReceiptQty: no batch found for lot='{}' product={} " +
+                            "location={} company={} — skipping (no create, no delete)",
+                    lotNumber, productId, locationId, companyId);
+            return null;
+        }
+
+        batch.applyDelta(qty.negate(), actorId);
+        batches.save(batch);
+
+        log.debug("StockBatch reverseReceiptQty: lot={} product={} qty=-{} → newQtyOnHand={}",
+                lotNumber, productId, qty, batch.getQtyOnHand());
+
+        return toDto(batch);
+    }
+
+    // -------------------------------------------------------------------------
     // consumeFefo
     // -------------------------------------------------------------------------
 

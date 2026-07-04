@@ -280,9 +280,32 @@ export class SalesInvoiceListComponent {
   toggleCreateForm(): void {
     this.showCreateForm.update((v) => !v);
     this.formError.set(null);
-    if (!this.showCreateForm()) {
+    if (this.showCreateForm()) {
+      this.preselectMyAgent();
+    } else {
       this.resetCreateForm();
     }
+  }
+
+  /**
+   * D-5 UX pre-fill: on opening the create form, show the caller's own agent (still fully
+   * editable) — the backend already auto-defaults the agent on save when none is sent, this
+   * just makes the route agent SEE agent = themselves up front. Fire-and-forget: never blocks
+   * the form, tolerates any error, and never clobbers a selection/search already made while the
+   * call was in flight (or a `null` "no agent linked" result, e.g. for root).
+   */
+  private preselectMyAgent(): void {
+    const companyUid = this.selectedCompanyUid();
+    if (!companyUid) return;
+    this.agentService.myAgent(companyUid).subscribe({
+      next: (agent) => {
+        if (!agent) return;
+        if (this.selectedAgent() || this.agentSearchQ()) return;
+        this.selectedAgent.set({ uid: agent.uid, label: `${agent.code} — ${agent.displayName}` });
+        this.agentSearchQ.set(`${agent.code} — ${agent.displayName}`);
+      },
+      error: () => {},
+    });
   }
 
   private resetCreateForm(): void {

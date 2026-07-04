@@ -251,12 +251,25 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         poService.recomputePoStatus(po);
 
         // 4. Emit STOCK.RECEIPT.VOIDED inside the same TX (ADR-0011 D-7; NEVER REQUIRES_NEW)
+        // D-2: lot/serial fields populated exactly like the forward buildPayloadLines() so the
+        // reversal handler can back out stock_batches/stock_serials symmetrically.
+        // D-2 FIX B: lotTracked populated from the Product so the reversal handler can target the
+        // "UNTRACKED" sentinel batch even when the line itself carries no lot/expiry data.
         List<StockReceiptVoidedPayload.LineItem> payloadLines = lineList.stream()
-                .map(l -> new StockReceiptVoidedPayload.LineItem(
-                        l.getProductId(),
-                        resolveProductUid(l.getProductId()),
-                        l.getUnitId(),
-                        l.getQtyInBase()))
+                .map(l -> {
+                    List<String> serials = grLineSerials.findByGoodsReceiptLineId(l.getId())
+                            .stream().map(s -> s.getSerialNumber()).toList();
+                    return new StockReceiptVoidedPayload.LineItem(
+                            l.getProductId(),
+                            resolveProductUid(l.getProductId()),
+                            l.getUnitId(),
+                            l.getQtyInBase(),
+                            l.getLotNumber(),
+                            l.getManufactureDate(),
+                            l.getExpiryDate(),
+                            serials,
+                            resolveLotTracked(gr.getCompanyId(), l.getProductId()));
+                })
                 .toList();
         outbox.publish(
                 DomainEventType.STOCK_RECEIPT_VOIDED,
@@ -387,6 +400,17 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         return products.findById(productId)
                 .map(Product::getUid)
                 .orElse("");
+    }
+
+    /**
+     * Resolve whether the product is lot-tracked — needed so
+     * {@link com.erp.modules.stock.events.GoodsReceiptReversalStockHandler} can target the
+     * {@code "UNTRACKED"} sentinel batch symmetrically with the forward receipt path (D-2 FIX B).
+     */
+    private boolean resolveLotTracked(Long companyId, Long productId) {
+        return products.findByCompanyIdAndId(companyId, productId)
+                .map(Product::isLotTracked)
+                .orElse(false);
     }
 
     private GoodsReceipt requireReceipt(String uid) {

@@ -3,6 +3,7 @@ package com.erp.modules.purchases.service;
 import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
 import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Supplier;
@@ -25,6 +26,8 @@ import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.GoodsReceipt;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
+import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
+import com.erp.modules.purchases.domain.entity.PurchaseRequisitionLine;
 import com.erp.modules.purchases.domain.entity.SupplierQuote;
 import com.erp.modules.purchases.domain.entity.SupplierQuoteLine;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
@@ -33,6 +36,8 @@ import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
+import com.erp.modules.purchases.repository.PurchaseRequisitionLineRepository;
+import com.erp.modules.purchases.repository.PurchaseRequisitionRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteLineRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditActions;
@@ -84,6 +89,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final SupplierQuoteLineRepository quoteLines;
     // APPROVALS-047: branch uid resolution for approval engine submit
     private final BranchRepository            branches;
+    // D-3: requisition Convert → PO (same module — direct repository access allowed)
+    private final PurchaseRequisitionRepository     requisitions;
+    private final PurchaseRequisitionLineRepository requisitionLines;
 
     private static final String ERR_PRODUCT_NOT_FOUND = "Product not found.";
     private static final String ERR_UNIT_NOT_FOUND    = "Unit not found.";
@@ -104,7 +112,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                                     PoApprovalGate approvalGate,
                                     SupplierQuoteRepository quotes,
                                     SupplierQuoteLineRepository quoteLines,
-                                    BranchRepository branches) {
+                                    BranchRepository branches,
+                                    PurchaseRequisitionRepository requisitions,
+                                    PurchaseRequisitionLineRepository requisitionLines) {
         this.orders       = orders;
         this.lines        = lines;
         this.receipts     = receipts;
@@ -122,6 +132,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         this.quotes       = quotes;
         this.quoteLines   = quoteLines;
         this.branches     = branches;
+        this.requisitions     = requisitions;
+        this.requisitionLines = requisitionLines;
     }
 
     // -------------------------------------------------------------------------
@@ -814,5 +826,86 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                         saved.getId(), saved.getUid())
                 .detail(Map.of("sourceQuoteUid", quoteUid, "currency", quote.getCurrency())));
         return toDto(saved);
+    }
+
+    // -------------------------------------------------------------------------
+    // D-3: requisition Convert → PO (mirrors createFromQuote)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public PurchaseOrderDto createFromRequisition(String requisitionUid, String supplierUid,
+                                                   String currency) {
+        RequestContext.Principal ctx = RequestContext.get();
+
+        PurchaseRequisition requisition = requisitions.findByUid(requisitionUid)
+                .orElseThrow(() -> new NotFoundException("Purchase requisition not found."));
+        scopeGuard.assertCanActIn(ctx, requisition.getCompanyId());
+
+        // Supplier is NOT on the requisition — supplied by the caller (Convert request);
+        // company-scoped resolution rejects ARCHIVED, same as the manual-create path.
+        Supplier supplier = resolveSupplier(requisition.getCompanyId(), supplierUid);
+
+        String resolvedCurrency = resolveCurrencyForConversion(requisition.getCompanyId(), currency);
+
+        PurchaseOrder po = new PurchaseOrder(
+                requisition.getCompanyId(), requisition.getBranchId(),
+                supplier.getId(), supplier.getCode(), supplier.getDisplayName(),
+                resolvedCurrency, actorId());
+        po.setSourceRequisitionUid(requisition.getUid());
+        PurchaseOrder saved = orders.save(po);
+
+        // Copy requisition lines → PO lines (requestedQty → orderedQty, estimatedUnitCost → unitCost)
+        List<PurchaseRequisitionLine> reqLines =
+                requisitionLines.findByPurchaseRequisitionIdOrderByLineNo(requisition.getId());
+        for (PurchaseRequisitionLine rl : reqLines) {
+            // SECURITY: company-scoped resolution — never a bare findById (F15/TenantScopingRulesTest).
+            Product product = products.findByCompanyIdAndId(requisition.getCompanyId(), rl.getProductId())
+                    .orElseThrow(() -> new NotFoundException(ERR_PRODUCT_NOT_FOUND));
+            UnitOfMeasure unit = units.findByCompanyIdAndId(requisition.getCompanyId(), rl.getUnitId())
+                    .orElseThrow(() -> new NotFoundException(ERR_UNIT_NOT_FOUND));
+
+            // null estimatedUnitCost → ZERO + an auto-note, satisfying assertCostValid's
+            // zero-cost-needs-note rule (the note itself is not persisted — see AddPurchaseOrderLineRequest).
+            BigDecimal unitCost = rl.getEstimatedUnitCost() != null
+                    ? rl.getEstimatedUnitCost() : BigDecimal.ZERO;
+            String costNote = rl.getEstimatedUnitCost() != null
+                    ? null
+                    : "Estimated cost not provided on the requisition line; defaulted to zero at conversion.";
+            assertCostValid(unitCost, costNote);
+
+            BigDecimal qtyInBase = computeQtyInBase(product, unit, rl.getRequestedQty());
+            BigDecimal lineTotal = unitCost.multiply(rl.getRequestedQty());
+            short lineNo = (short) (lines.findMaxLineNo(saved.getId()) + 1);
+
+            PurchaseOrderLine line = new PurchaseOrderLine(
+                    saved, lineNo,
+                    product.getId(), product.getCode(), product.getName(),
+                    unit.getId(), unit.getName(),
+                    rl.getRequestedQty(), qtyInBase,
+                    unitCost, lineTotal, actorId());
+            PurchaseOrderLine savedLine = lines.save(line);
+
+            // P2 traceability: link the requisition line to the PO line it produced.
+            rl.setConvertedToPoLineUid(savedLine.getUid());
+            rl.setUpdatedAt(Instant.now());
+            rl.setUpdatedBy(actorId());
+            requisitionLines.save(rl);
+        }
+        recomputeTotals(saved);
+
+        audit.record(AuditEvent.of(AuditActions.PURCHASE_ORDER_CREATE, "purchase_orders",
+                        saved.getId(), saved.getUid())
+                .detail(Map.of("sourceRequisitionUid", requisitionUid, "currency", resolvedCurrency)));
+        return toDto(saved);
+    }
+
+    /** Requested currency if present, else the company's base currency (D-3). */
+    private String resolveCurrencyForConversion(Long companyId, String requestedCurrency) {
+        if (requestedCurrency != null && !requestedCurrency.isBlank()) {
+            return requestedCurrency;
+        }
+        return companies.findScopedById(companyId)
+                .map(Company::getBaseCurrency)
+                .orElse("TZS");
     }
 }
