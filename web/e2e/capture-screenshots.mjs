@@ -43,6 +43,7 @@ const SHOTS = [
   { chapter: '01-administration', name: 'roles',             route: 'roles',            caption: 'Roles list' },
   { chapter: '01-administration', name: 'role-grants',       route: 'role-grants',      caption: 'Granting roles to a user' },
   { chapter: '01-administration', name: 'audit',             route: 'audit',            caption: 'The audit log' },
+  { chapter: '01-administration', name: 'sales-settings',    route: 'sales-settings',   caption: 'Sales settings — sales-order approval threshold' },
 
   // 02 — Master data
   { chapter: '02-master-data', name: 'customers',            route: 'customers',        caption: 'Customers' },
@@ -81,6 +82,7 @@ const SHOTS = [
   { chapter: '05-inventory-manufacturing', name: 'stock-counts',    route: 'stock-counts',    caption: 'Stock counts' },
   { chapter: '05-inventory-manufacturing', name: 'work-orders',     route: 'work-orders',     caption: 'Manufacturing work orders' },
   { chapter: '05-inventory-manufacturing', name: 'boms',            route: 'boms',            caption: 'Bills of materials' },
+  { chapter: '05-inventory-manufacturing', name: 'van-reconciliations', route: 'van-reconciliations', caption: 'Van-stock reconciliation (route sales day-end)' },
 
   // 06 — Fixed assets
   { chapter: '06-fixed-assets', name: 'asset-categories',   route: 'asset-categories', caption: 'Asset categories' },
@@ -100,6 +102,8 @@ const SHOTS = [
   { chapter: '08-finance', name: 'ap-supplier-bills',       route: 'ap/supplier-bills', caption: 'Supplier bills' },
   { chapter: '08-finance', name: 'cash-accounts',           route: 'cash/accounts',    caption: 'Cash & bank accounts' },
   { chapter: '08-finance', name: 'cash-reconciliations',    route: 'cash/reconciliations', caption: 'Bank reconciliation' },
+  { chapter: '08-finance', name: 'cash-counts',             route: 'cash/counts',      caption: 'End-of-day cash counts' },
+  { chapter: '08-finance', name: 'petty-cash-funds',        route: 'petty-cash/funds', caption: 'Petty cash funds' },
   { chapter: '08-finance', name: 'tax-vat-returns',         route: 'tax/vat-returns',  caption: 'VAT returns' },
   { chapter: '08-finance', name: 'fx-rates',                route: 'fx/rates',         caption: 'FX rates' },
 
