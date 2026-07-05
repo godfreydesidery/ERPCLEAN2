@@ -2,6 +2,10 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.entity.CustomerPrice;
+import com.erp.modules.products.domain.entity.PriceList;
+import com.erp.modules.products.domain.entity.PriceTier;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
@@ -9,6 +13,7 @@ import com.erp.modules.products.domain.entity.Promotion;
 import com.erp.modules.products.domain.enums.PromotionEffect;
 import com.erp.modules.products.domain.enums.PromotionTarget;
 import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -37,19 +42,22 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     private final ProductPriceRepository  productPrices;
     private final ProductBulkPackRepository bulkPacks;
     private final ProductRepository       products;
+    private final PriceListRepository     priceLists;
 
     public PriceResolutionServiceImpl(CustomerPriceRepository customerPrices,
                                       PromotionRepository promotions,
                                       PriceTierRepository priceTiers,
                                       ProductPriceRepository productPrices,
                                       ProductBulkPackRepository bulkPacks,
-                                      ProductRepository products) {
+                                      ProductRepository products,
+                                      PriceListRepository priceLists) {
         this.customerPrices = customerPrices;
         this.promotions     = promotions;
         this.priceTiers     = priceTiers;
         this.productPrices  = productPrices;
         this.bulkPacks      = bulkPacks;
         this.products       = products;
+        this.priceLists     = priceLists;
     }
 
     @Override
@@ -59,18 +67,26 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
             var cp = customerPrices.findActiveForCustomerProduct(
                     req.customerId(), req.productId(), req.businessDate());
             if (cp.isPresent()) {
-                return ResolvedPriceDto.customerPrice(cp.get().getUnitPriceAmount(),
-                        CurrencyCode.value(cp.get().getCurrency()));
+                CustomerPrice customerPrice = cp.get();
+                return ResolvedPriceDto.customerPrice(customerPrice.getUnitPriceAmount(),
+                        CurrencyCode.value(customerPrice.getCurrency()),
+                        vatInclusiveOf(req.companyId(), customerPrice.getPriceListId()));
             }
         }
 
         // 2 — Promotion (only applied when a list/tier price exists as the base)
         var listPrice = resolveListOrTier(req);
         if (listPrice != null) {
-            var promoResult = applyBestPromotion(req, listPrice.unitPriceAmount(),
-                    listPrice.currency());
+            var promoResult = applyBestPromotion(req, listPrice.unitPriceAmount(), listPrice.currency());
             if (promoResult != null) {
-                return promoResult;
+                // ADR-0056: a promotion is a modifier on top of a list price, not a new stance —
+                // inherit the underlying list price's VAT-inclusive flag. Applied here (not
+                // threaded through applyBestPromotion/applyEffect) to avoid changing those methods'
+                // signatures (ArchUnit TenantScopingRulesTest freezes violations by method
+                // descriptor, incl. the pre-existing frozen findById call inside applyBestPromotion).
+                return new ResolvedPriceDto(promoResult.unitPriceAmount(), promoResult.ruleDiscountAmount(),
+                        promoResult.ruleDiscountPercent(), promoResult.currency(), promoResult.priceSource(),
+                        listPrice.vatInclusive());
             }
         }
 
@@ -78,8 +94,10 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         if (req.priceListId() != null) {
             var tier = priceTiers.findBestTier(req.productId(), req.priceListId(), req.quantity());
             if (tier.isPresent()) {
-                return ResolvedPriceDto.tier(tier.get().getUnitPriceAmount(),
-                        CurrencyCode.value(tier.get().getCurrency()));
+                PriceTier priceTier = tier.get();
+                return ResolvedPriceDto.tier(priceTier.getUnitPriceAmount(),
+                        CurrencyCode.value(priceTier.getCurrency()),
+                        vatInclusiveOf(req.companyId(), priceTier.getPriceListId()));
             }
         }
 
@@ -93,7 +111,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     }
 
     @Override
-    public BigDecimal resolveUnitListPrice(Long companyId, Long productId, Long unitId) {
+    public UnitListPriceDto resolveUnitListPrice(Long companyId, Long productId, Long unitId) {
         // Company-scoped finder (not bare findById) — prevents a confused-deputy cross-tenant
         // read if a caller ever passes a productId that isn't actually in companyId.
         Product product = products.findByCompanyIdAndId(companyId, productId)
@@ -105,7 +123,10 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
             Optional<ProductPrice> explicit =
                     productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productId, unitId);
             if (explicit.isPresent()) {
-                return requireAmount(explicit.get());
+                ProductPrice pack = explicit.get();
+                // ADR-0056: a pack override inherits ITS OWN list's VAT stance, independent of
+                // whatever the base row's list says.
+                return new UnitListPriceDto(requireAmount(pack), pack.getPriceList().isPriceIncludesVat());
             }
         }
 
@@ -119,7 +140,8 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         BigDecimal baseAmount = requireAmount(base);
 
         // 3 — unit must be the base or a configured pack, else reject (mirrors computeQtyInBase).
-        return baseAmount.multiply(unitFactor(product, unitId));
+        BigDecimal resolvedAmount = baseAmount.multiply(unitFactor(product, unitId));
+        return new UnitListPriceDto(resolvedAmount, base.getPriceList().isPriceIncludesVat());
     }
 
     // ---- helpers ---------------------------------------------------------------
@@ -139,8 +161,10 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         var pp = productPrices.findByProductIdAndPriceListIdAndUnitIdIsNull(
                 req.productId(), req.priceListId());
         if (pp.isPresent()) {
-            var price = pp.get().getPrice();
-            return ResolvedPriceDto.listPrice(price.getAmount(), price.getCurrency().value());
+            ProductPrice productPrice = pp.get();
+            var price = productPrice.getPrice();
+            return ResolvedPriceDto.listPrice(price.getAmount(), price.getCurrency().value(),
+                    productPrice.getPriceList().isPriceIncludesVat());
         }
         return null;
     }
@@ -152,6 +176,22 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
             throw new IllegalArgumentException("Product has no price configured for this company.");
         }
         return money.getAmount();
+    }
+
+    /**
+     * VAT-inclusive stance of a soft-FK'd price list (ADR-0056) — used by the dormant
+     * customer-price/tier branches of {@link #resolve} which store {@code priceListId} as a
+     * scalar (no lazy JPA relation). {@code null} = not derived from a price list → exclusive
+     * (the historical, only-ever-supported reading). Company-scoped (not bare {@code findById})
+     * so a soft-FK'd id can never resolve a foreign company's price list (TenantScopingRulesTest).
+     */
+    private boolean vatInclusiveOf(Long companyId, Long priceListId) {
+        if (priceListId == null) {
+            return false;
+        }
+        return priceLists.findByCompanyIdAndId(companyId, priceListId)
+                .map(PriceList::isPriceIncludesVat)
+                .orElse(false);
     }
 
     /**
@@ -223,7 +263,9 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
             discountAmount  = effectValue.min(basePrice);
         }
 
+        // vatInclusive placeholder here — resolve() overwrites it with the underlying list price's
+        // flag (ADR-0056; kept out of this method's signature deliberately, see the call site).
         return new ResolvedPriceDto(finalPrice, discountAmount, discountPercent, currency,
-                com.erp.modules.products.domain.enums.PriceSource.PROMOTION);
+                com.erp.modules.products.domain.enums.PriceSource.PROMOTION, false);
     }
 }

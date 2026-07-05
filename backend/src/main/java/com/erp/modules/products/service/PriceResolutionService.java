@@ -2,7 +2,7 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
-import java.math.BigDecimal;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 
 /**
  * Deterministic single-price resolver (ADR-0029 D-6, FR-SD-12).
@@ -42,13 +42,17 @@ public interface PriceResolutionService {
      * <p>Ignores price list and customer/promo/tier — same blast radius as the live path it
      * replaces (a separate follow-up may make list selection price-list-aware).
      *
+     * <p>ADR-0056: also carries whether the resolved amount came from a VAT-inclusive price list
+     * ({@code price_lists.price_includes_vat}) — a pack override inherits its OWN list's flag,
+     * independent of the base row's list.
+     *
      * @param companyId defence-in-depth company check (the product already implies one company)
      * @param productId the product being priced
      * @param unitId    the line's selected unit
-     * @return the resolved per-line-unit price amount; never null
+     * @return the resolved per-line-unit price amount + VAT-inclusive stance; never null
      * @throws IllegalArgumentException if the product has no price configured
      * @throws IllegalStateException    if {@code unitId} is neither the base unit nor a configured
      *                                   bulk-pack unit
      */
-    BigDecimal resolveUnitListPrice(Long companyId, Long productId, Long unitId);
+    UnitListPriceDto resolveUnitListPrice(Long companyId, Long productId, Long unitId);
 }

@@ -85,6 +85,19 @@
                 </button>
               </div>
             </div>
+            <div class="form-check mt-2">
+              <input id="newPriceIncludesVat" name="newPriceIncludesVat" type="checkbox"
+                     class="form-check-input"
+                     [ngModel]="newPriceIncludesVat()" (ngModelChange)="newPriceIncludesVat.set($event)"
+                     [disabled]="saving()" />
+              <label class="form-check-label small" for="newPriceIncludesVat">
+                Prices include VAT
+              </label>
+              <p class="text-muted small mb-0">
+                The customer-facing price already includes VAT. New price lists default to this
+                on.
+              </p>
+            </div>
             @if (formError(); as msg) {
               <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
             }
@@ -126,6 +139,7 @@
                 <tr>
                   <th scope="col">Code</th>
                   <th scope="col">Name</th>
+                  <th scope="col">VAT</th>
                   <th scope="col">Status</th>
                   @if (canManage()) {
                     <th scope="col"><span class="sr-only">Actions</span></th>
@@ -168,6 +182,26 @@
                         }
                       } @else {
                         {{ pl.name }}
+                      }
+                    </td>
+                    <td>
+                      @if (editingUid() === pl.uid) {
+                        <div class="form-check">
+                          <input [id]="'editVat-' + pl.uid" name="editPriceIncludesVat" type="checkbox"
+                                 class="form-check-input"
+                                 [ngModel]="editPriceIncludesVat()"
+                                 (ngModelChange)="editPriceIncludesVat.set($event)"
+                                 [disabled]="editSaving()" />
+                          <label class="form-check-label small" [for]="'editVat-' + pl.uid">
+                            Incl. VAT
+                          </label>
+                        </div>
+                      } @else {
+                        <span class="status-tag"
+                              [class.status-tag--info]="pl.priceIncludesVat"
+                              [class.status-tag--neutral]="!pl.priceIncludesVat">
+                          {{ pl.priceIncludesVat ? 'Incl. VAT' : 'Excl. VAT' }}
+                        </span>
                       }
                     </td>
                     <td>

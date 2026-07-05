@@ -241,7 +241,14 @@
                         </td>
                         <td class="small text-muted">{{ line.unitName }}</td>
                         <td class="num">{{ line.quantity }}</td>
-                        <td class="num">{{ line.unitPriceAmount }}</td>
+                        <td class="num">
+                          {{ line.unitPriceAmount }}
+                          <span class="status-tag ms-1"
+                                [class.status-tag--info]="line.priceInclusive"
+                                [class.status-tag--neutral]="!line.priceInclusive">
+                            {{ line.priceInclusive ? 'incl. VAT' : 'excl. VAT' }}
+                          </span>
+                        </td>
                         <td class="num small">
                           @if (line.lineDiscountAmount) {
                             {{ line.lineDiscountAmount }}

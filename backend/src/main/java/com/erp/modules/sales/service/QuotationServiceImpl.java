@@ -5,6 +5,7 @@ import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -152,8 +153,11 @@ public class QuotationServiceImpl implements QuotationService {
         Product product = resolveProduct(q.getCompanyId(), req.productUid());
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(q.getCompanyId(), req.unitUid());
-        BigDecimal listPrice = priceResolutionService.resolveUnitListPrice(
+        // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
+        // line below regardless of whether the price is overridden.
+        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
                 q.getCompanyId(), product.getId(), unit.getId());
+        BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
         BigDecimal vatRate = resolveVatRate(q.getCompanyId(), product);
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
@@ -168,6 +172,7 @@ public class QuotationServiceImpl implements QuotationService {
                 listPrice, appliedPrice,
                 product.getVatStatus(), vatRate,
                 q.getCurrency().value(), actorId());
+        line.setPriceInclusive(resolvedPrice.vatInclusive());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 

@@ -18,6 +18,7 @@ import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerAddressRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
@@ -213,8 +214,11 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         Product product = resolveProduct(order.getCompanyId(), req.productUid());
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(order.getCompanyId(), req.unitUid());
-        BigDecimal listPrice = priceResolutionService.resolveUnitListPrice(
+        // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
+        // line below regardless of whether the price is overridden.
+        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
                 order.getCompanyId(), product.getId(), unit.getId());
+        BigDecimal listPrice = resolvedPrice.amount();
         // Issue #6: unitPriceOverride must not be negative (revenue leakage / silent-zero bug).
         // @PositiveOrZero on the DTO is the first-line guard; this is defence-in-depth for
         // programmatic callers that bypass bean validation.
@@ -238,6 +242,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 listPrice, appliedPrice,
                 product.getVatStatus(), vatRate,
                 order.getCurrency().value(), actorId());
+        line.setPriceInclusive(resolvedPrice.vatInclusive());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
 
@@ -524,6 +529,9 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                     ql.getCurrency().value(), actorId());
             ol.setLineDiscountAmount(ql.getLineDiscountAmount());
             ol.setLineDiscountPercent(ql.getLineDiscountPercent());
+            // Preserve the quote line's VAT-inclusive/exclusive stance, else the first DRAFT
+            // recompute would re-tax an inclusive (gross) unit price as net (ADR-0056).
+            ol.setPriceInclusive(ql.isPriceInclusive());
             ol.setNetAmount(ql.getNetAmount());
             ol.setVatAmount(ql.getVatAmount());
             ol.setGrossAmount(ql.getGrossAmount());

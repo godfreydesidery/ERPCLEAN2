@@ -146,7 +146,10 @@ class PriceListServiceImplIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void create_withoutMetadata_usesEntityDefaults() {
+    void create_withoutMetadata_keepsExclusiveEntityDefaultAndOtherEntityDefaults() {
+        // ADR-0056 D-2: the service/DB default stays EXCLUSIVE when the caller omits the flag
+        // (grandfathering + import safety). "Inclusive by default for new lists" is a UI
+        // affordance — the create form pre-checks the toggle and sends priceIncludesVat=true.
         PriceListDto dto = priceListService.create(
                 new CreatePriceListRequest(companyA.getUid(), "PLAIN", "Plain"));
 
@@ -157,6 +160,16 @@ class PriceListServiceImplIT extends PostgresIntegrationTest {
         assertThat(dto.isDefault()).isFalse();
         assertThat(dto.scope())
                 .isEqualTo(com.erp.modules.products.domain.enums.PriceListScope.GLOBAL);
+    }
+
+    @Test
+    void create_withExplicitFalseVat_keepsExclusive() {
+        // An explicit false must still be honoured (not overridden by the new default).
+        PriceListDto dto = priceListService.create(new CreatePriceListRequest(
+                companyA.getUid(), "WHOLESALE_EXCL", "Wholesale Exclusive",
+                null, null, null, false, null, null));
+
+        assertThat(dto.priceIncludesVat()).isFalse();
     }
 
     @Test

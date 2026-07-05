@@ -44,6 +44,7 @@ import com.erp.modules.sales.domain.dto.CreateSalesOrderRequest;
 import com.erp.modules.sales.domain.dto.DeliveryDto;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
 import com.erp.modules.sales.domain.dto.SalesOrderLineDto;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
@@ -481,6 +482,86 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 7 (ADR-0056 regression) — VAT-INCLUSIVE price list: SO→delivery→invoice-from-delivery
+    // must preserve the priceInclusive snapshot end to end. A STANDARD-rated product priced at a
+    // GROSS 1180 (net 1000 + 18% VAT 180) on an explicitly VAT-inclusive list must post the
+    // invoice line at net=1000/vat=180/gross=1180 — NOT re-taxed to net=1180/vat=212.40/gross=1392.40.
+    // Before the fix, DeliveryServiceImpl.createInvoiceFromDelivery dropped the SO line's
+    // priceInclusive flag (entity default false) when copying to the invoice line, so the
+    // totals recompute re-added VAT on top of the already-gross unit price.
+    // =========================================================================
+
+    @Test
+    void inclusivePriceList_deliveryToInvoice_preservesGrossNotRetaxed() {
+        // Explicit VAT-INCLUSIVE price list — ADR-0056 D-2: the service default stays EXCLUSIVE,
+        // so this is deliberately opted into via the full-arg constructor.
+        String inclusiveListUid = priceListService.create(new CreatePriceListRequest(
+                company.getUid(), "VATINC", "VAT Inclusive",
+                null, null, null, true, null, null)).uid();
+
+        // STANDARD-rated product priced GROSS 1180 on the inclusive list (net 1000 + 18% VAT 180).
+        ProductDto product = productOnList("InclSeamWidget", inclusiveListUid, "1180");
+        publishAndDispatchReceipt(product, new BigDecimal("10"), new BigDecimal("500"));
+
+        SalesOrderDto so = createAndConfirmOrder(product, BigDecimal.ONE);
+        List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
+        SalesOrderLineDto sol = soLines.get(0);
+
+        // SO line must snapshot the inclusive stance and derive net/vat/gross by stripping VAT
+        // out of the gross, not adding VAT on top.
+        assertThat(sol.priceInclusive()).isTrue();
+        assertThat(sol.unitPriceAmount()).isEqualByComparingTo(new BigDecimal("1180"));
+        assertThat(sol.netAmount())
+                .as("SO line net must be stripped from gross: 1180 / 1.18 = 1000")
+                .isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(sol.vatAmount()).isEqualByComparingTo(new BigDecimal("180"));
+        assertThat(sol.grossAmount()).isEqualByComparingTo(new BigDecimal("1180"));
+
+        // Deliver all 1
+        setCtx();
+        DeliveryDto delivery = deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(sol.uid(), BigDecimal.ONE))));
+
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+
+        // Invoice from delivery — the regression point: before the fix, the invoice line's
+        // priceInclusive reverted to the entity default (false), so the recompute inside
+        // createInvoiceFromDelivery re-taxed the gross 1180 as a NET (1180×1.18=1392.40).
+        setCtx();
+        SalesInvoiceDto draftInv = deliveryService.createInvoiceFromDelivery(delivery.uid());
+
+        setCtx();
+        List<SalesInvoiceLineDto> invLines = salesInvoiceService.listLines(draftInv.uid());
+        assertThat(invLines).hasSize(1);
+        SalesInvoiceLineDto invLine = invLines.get(0);
+        assertThat(invLine.priceInclusive())
+                .as("invoice line must inherit the SO line's VAT-inclusive snapshot")
+                .isTrue();
+        assertThat(invLine.netAmount())
+                .as("invoice net must be stripped from the gross 1180, NOT re-taxed (would be 1180)")
+                .isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(invLine.vatAmount())
+                .as("invoice VAT must be 180, NOT 212.40 from re-taxing the gross as a net")
+                .isEqualByComparingTo(new BigDecimal("180"));
+        assertThat(invLine.grossAmount())
+                .as("invoice gross must reproduce the entered inclusive price exactly: 1180")
+                .isEqualByComparingTo(new BigDecimal("1180"));
+
+        setCtx();
+        SalesInvoiceDto inv = salesInvoiceService.getByUid(draftInv.uid());
+        assertThat(inv.netTotalAmount())
+                .as("header net must NOT be 1180 (the re-taxed-bug value)")
+                .isEqualByComparingTo(new BigDecimal("1000.0000"));
+        assertThat(inv.vatTotalAmount())
+                .as("header VAT must NOT be 212.40 (the re-taxed-bug value)")
+                .isEqualByComparingTo(new BigDecimal("180.0000"));
+        assertThat(inv.grossTotalAmount())
+                .as("header gross must NOT be 1392.40 (the re-taxed-bug value)")
+                .isEqualByComparingTo(new BigDecimal("1180.0000"));
+    }
+
+    // =========================================================================
     // Private helpers
     // =========================================================================
 
@@ -490,6 +571,20 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     }
 
     private ProductDto stockableProduct(String name, String price) {
+        setCtx();
+        ProductDto p = productService.create(new CreateProductRequest(
+                company.getUid(), null, name, null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
+        productService.setPrice(p.uid(),
+                new SetProductPriceRequest(priceListUid, new MoneyDto(price, "TZS")));
+        return p;
+    }
+
+    /**
+     * Same as {@link #stockableProduct} but priced on an explicit price list (e.g. a
+     * VAT-inclusive one) rather than the shared exclusive RETAIL list — ADR-0056 regression tests.
+     */
+    private ProductDto productOnList(String name, String priceListUid, String price) {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,

@@ -50,7 +50,7 @@ const stubLine: SalesOrderLineDto = {
   qtyFulfilledBase: '0', qtyInvoicedBase: '0', qtyReservedBase: '0', openQtyBase: '10',
   listPriceAmount: null, unitPriceAmount: '100', priceOverridden: false,
   lineDiscountAmount: null, lineDiscountPercent: null, vatStatus: null, vatRate: null,
-  netAmount: '1000', vatAmount: '180', grossAmount: '1180', currency: 'TZS',
+  netAmount: '1000', vatAmount: '180', grossAmount: '1180', priceInclusive: false, currency: 'TZS',
 };
 
 function makeSessionStore(canCreate = true) {

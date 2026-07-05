@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component;
 /**
  * Totals algorithm for Quotation and SalesOrder headers + lines (ADR-0021 D-9).
  *
- * <p>Reuses the IDENTICAL algorithm as {@link InvoiceTotalsCalculator} (BR-SO-10, OQ-SO-06):
- * per-line net after line discount, doc-discount apportioned pro-rata, VAT on discounted net,
- * HALF_UP at each boundary. Ensures SO ↔ invoice agreement to the cent (NFR-SO-03).
+ * <p>Reuses the IDENTICAL algorithm as {@link InvoiceTotalsCalculator} (BR-SO-10, OQ-SO-06,
+ * VAT-inclusive branch ADR-0056 D-5): per-line raw amount after line discount, doc-discount
+ * apportioned pro-rata, then branch on the line's {@code priceInclusive} snapshot — EXCLUSIVE
+ * lines add VAT on top of net (unchanged); INCLUSIVE lines treat the raw amount as GROSS and strip
+ * VAT out (gross-preserving: {@code net + vat = gross} exactly). HALF_UP at each boundary. Ensures
+ * SO ↔ invoice agreement to the cent (NFR-SO-03).
  */
 @Component
 public class SalesOrderTotalsCalculator {
@@ -37,7 +40,8 @@ public class SalesOrderTotalsCalculator {
         List<LineData> data = lines.stream().map(l -> new LineData(
                 l.getUnitPriceAmount(), l.getQtyOrdered(),
                 l.getLineDiscountAmount(), l.getLineDiscountPercent(),
-                l.getVatRate() != null ? l.getVatRate() : BigDecimal.ZERO
+                l.getVatRate() != null ? l.getVatRate() : BigDecimal.ZERO,
+                l.isPriceInclusive()
         )).toList();
 
         Totals totals = compute(data,
@@ -70,7 +74,8 @@ public class SalesOrderTotalsCalculator {
         List<LineData> data = lines.stream().map(l -> new LineData(
                 l.getUnitPriceAmount(), l.getQuantity(),
                 l.getLineDiscountAmount(), l.getLineDiscountPercent(),
-                l.getVatRate() != null ? l.getVatRate() : BigDecimal.ZERO
+                l.getVatRate() != null ? l.getVatRate() : BigDecimal.ZERO,
+                l.isPriceInclusive()
         )).toList();
 
         Totals totals = compute(data,
@@ -94,7 +99,8 @@ public class SalesOrderTotalsCalculator {
 
     private Totals compute(List<LineData> lines,
                            BigDecimal docDiscountAmount, BigDecimal docDiscountPercent) {
-        // Step 1: raw net per line
+        // Step 1: raw amount per line (NET for an exclusive line, GROSS for an inclusive one —
+        // ADR-0056 D-5; the math is identical, only the step-3 derivation differs).
         List<BigDecimal> rawNets = new ArrayList<>(lines.size());
         for (LineData l : lines) {
             BigDecimal gross = l.unitPrice.multiply(l.qty);
@@ -125,18 +131,38 @@ public class SalesOrderTotalsCalculator {
             }
         }
 
-        // Step 3: VAT per line
+        // Step 3: derive net/vat per line, branching on the line's own priceInclusive (ADR-0056 D-5)
         BigDecimal netTotal = BigDecimal.ZERO;
         BigDecimal vatTotal = BigDecimal.ZERO;
         List<LineResult> results = new ArrayList<>(lines.size());
         for (int i = 0; i < lines.size(); i++) {
-            BigDecimal net = discountedNets.get(i);
-            BigDecimal vat = net.multiply(lines.get(i).vatRate).setScale(SCALE, MODE);
+            LineData l = lines.get(i);
+            BigDecimal discountedRaw = discountedNets.get(i);
+            BigDecimal net;
+            BigDecimal vat;
+            if (l.priceInclusive) {
+                // discountedRaw is GROSS — strip VAT out so net + vat reproduces it exactly.
+                net = stripVat(discountedRaw, l.vatRate);
+                vat = discountedRaw.subtract(net);
+            } else {
+                // Unchanged pre-ADR-0056 behaviour: discountedRaw is NET, VAT added on top.
+                net = discountedRaw;
+                vat = net.multiply(l.vatRate).setScale(SCALE, MODE);
+            }
             results.add(new LineResult(net, vat));
             netTotal = netTotal.add(net);
             vatTotal = vatTotal.add(vat);
         }
         return new Totals(results, netTotal, vatTotal);
+    }
+
+    /**
+     * ADR-0056 D-5: strips VAT out of a GROSS amount — {@code net = round(gross / (1 + rate))}.
+     * {@code rate = 0} (ZERO_RATED/EXEMPT) is the identity case: {@code net = gross}, no division
+     * anomaly. The caller derives {@code vat = gross − net} so {@code net + vat = gross} exactly.
+     */
+    private static BigDecimal stripVat(BigDecimal gross, BigDecimal vatRate) {
+        return gross.divide(BigDecimal.ONE.add(vatRate), SCALE, MODE);
     }
 
     private BigDecimal resolveLineDiscount(LineData l, BigDecimal gross) {
@@ -167,7 +193,7 @@ public class SalesOrderTotalsCalculator {
 
     private record LineData(BigDecimal unitPrice, BigDecimal qty,
                             BigDecimal discountAmount, BigDecimal discountPercent,
-                            BigDecimal vatRate) {}
+                            BigDecimal vatRate, boolean priceInclusive) {}
 
     private record LineResult(BigDecimal net, BigDecimal vat) {}
 

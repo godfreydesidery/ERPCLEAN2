@@ -63,6 +63,11 @@ export interface QuotationLineDto {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+  /**
+   * ADR-0056: snapshot of whether unitPriceAmount was sourced from a VAT-inclusive price list —
+   * true = unitPriceAmount is a gross (customer-facing) amount, false = net/exclusive.
+   */
+  priceInclusive: boolean;
   currency: string;
 }
 
@@ -121,6 +126,11 @@ export interface SalesOrderLineDto {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+  /**
+   * ADR-0056: snapshot of whether unitPriceAmount was sourced from a VAT-inclusive price list —
+   * true = unitPriceAmount is a gross (customer-facing) amount, false = net/exclusive.
+   */
+  priceInclusive: boolean;
   currency: string;
 }
 
