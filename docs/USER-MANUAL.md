@@ -18,7 +18,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [Assigning Companies to Users](#assigning-companies-to-users)
     - [Assigning Roles to Users](#assigning-roles-to-users)
     - [Assigning Branches to Users](#assigning-branches-to-users)
-    - [Sales Settings — sales-order approval threshold](#sales-settings--sales-order-approval-threshold)
+    - [Sales Settings — sales-order approval and stock control](#sales-settings--sales-order-approval-and-stock-control)
     - [Fiscal / EFD Configuration](#fiscal--efd-configuration)
     - [Audit Trail](#audit-trail)
     - [Key Concepts Reference](#key-concepts-reference)
@@ -584,6 +584,31 @@ Roles are named bundles of permissions. A user can be granted one or more roles;
 
 The list shows each role's code, name, a permission count, and its status, plus a marker on **system** roles (pre-defined and cannot be archived). The code and name cells are plain text — they are not clickable. To open a role's edit page at `/admin/roles/uid/<uid>`, click the **Edit** button in the row's actions column.
 
+### Built-in operational roles
+
+**What they are.** The system ships with **12 ready-made operational roles** — one for each common job function — so you can put staff to work without composing a permission set from scratch. They appear in the Roles list from day one, alongside `ORG_ADMIN`, ready to grant to users in the [Assigning Roles to Users](#assigning-roles-to-users) section below. Each is a **system role**: it is marked as **system** in the list, cannot be deleted or archived, and its permission set is fixed (view it on the role edit page, but you cannot change it — see [Setting a role's permissions](#setting-a-roles-permissions)).
+
+**How they differ from ORG_ADMIN.** `ORG_ADMIN` holds *every* permission in the system — it is the full administrator. The 12 operational roles are **least-privilege**: each holds only the permissions its job actually needs, so a Cashier cannot manage users, a Salesperson cannot void invoices or change pricing settings, and an Accountant cannot close the fiscal year. This is deliberate — you assign people the narrowest role that lets them do their work.
+
+**How to use them.** Grant one (or more) of these roles to a user for a company, exactly as you would any other role (see [Assigning Roles to Users](#assigning-roles-to-users)). If none of them fits a person's responsibilities exactly, use them as a starting reference and create your own **custom** role (custom roles are freely editable; the 12 shipped roles are not).
+
+| Code | Name | What it can do |
+|------|------|----------------|
+| `SALESPERSON` | Salesperson | Quotes, orders, invoices, deliveries and returns; issue fiscal receipts; onboard customers. No overrides, voids, or settings. |
+| `CASHIER` | Cashier | POS till (open, sell, close, reconcile), customer receipting, end-of-day cash count and petty cash. Front-line cash only. |
+| `FIELD_SALES_AGENT` | Field Sales Agent | Route/van selling: capture orders, invoice and deliver on a route, collect cash receipts, reconcile van stock. |
+| `STOREKEEPER` | Storekeeper | Stock control: view, adjust, count, post, transfer, locations; receive goods against a PO; supplier returns; batch/serial/expiry. |
+| `ACCOUNTANT` | Accountant | GL journals (not close), AR and AP sub-ledgers, cash & bank, VAT preparation (not filing), WHT, cost tagging and financial reports. |
+| `SALES_MANAGER` | Sales Manager | Full sales including overrides, voids, credit override and settings; pricing rules, CRM, agents and routes, and sales approvals. |
+| `BRANCH_MANAGER` | Branch Manager | Broad single-branch oversight: cross-module views, approvals and operational sign-offs (POS reconcile, cash count, stock post, PO/requisition approve). Usually assigned branch-scoped. |
+| `PROCUREMENT_OFFICER` | Procurement Officer | Requisition, RFQ, purchase order, receive and returns; landed cost and suppliers. No approve, void, or settings. |
+| `PROCUREMENT_MANAGER` | Procurement Manager | Everything the officer has, plus PO/requisition approval, PO/goods-receipt void, and purchase settings. |
+| `HR_PAYROLL_MANAGER` | HR & Payroll Manager | Employees, leave and loans; pay components; the full payroll run/approve/post/disburse/reverse cycle; statutory deductions. |
+| `FINANCE_DIRECTOR` | Finance Director | Everything the Accountant has, plus GL configuration, period/year close, VAT filing, FX revaluation, fixed assets, budgeting and approvals policy. Not user or company administration. |
+| `PRODUCTION_MANAGER` | Production Manager | Work-order lifecycle, BOMs, material movements and WIP/costing views. |
+
+> The `SALESPERSON`/`SALES_MANAGER`, `PROCUREMENT_OFFICER`/`PROCUREMENT_MANAGER`, and `ACCOUNTANT`/`FINANCE_DIRECTOR` pairs are split on purpose: the manager/director role adds the approve, void, close and settings capabilities that the day-to-day role deliberately lacks (segregation of duties). Assign the day-to-day role to front-line staff and the manager role to whoever signs off their work.
+
 ### Creating a role
 
 The create form is an inline card at the top of the Roles list.
@@ -793,9 +818,9 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 ---
 
-## Sales Settings — sales-order approval threshold
+## Sales Settings — sales-order approval and stock control
 
-**What this screen is.** Sales Settings is a per-company configuration screen that controls whether large **sales orders** must be approved before they can be confirmed, and above what value that approval kicks in. It holds one setting group per company.
+**What this screen is.** Sales Settings is a per-company configuration screen that holds one setting group per company. It controls two independent things: whether large **sales orders** must be approved before they can be confirmed (and above what value that approval kicks in), and whether sales that would take **stock negative** are blocked or allowed.
 
 **Why it exists.** Many businesses want a manager to sign off on unusually large orders — an unusually big customer order can tie up stock, extend a lot of credit, or signal an error in data entry. Rather than force approval on every order (which slows the counter down), you set a **threshold**: orders at or above it route to approval automatically, while smaller everyday orders confirm straight through. The check happens automatically at the moment an order is confirmed, so nobody has to remember to submit large orders manually.
 
@@ -821,6 +846,23 @@ Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sideba
 > **A zero or empty threshold catches everything.** If the workflow is enabled and you leave the threshold at `0`, every order (any value) requires approval. The amount must be zero or positive — a negative value is rejected with *"Threshold amount must be zero or positive."*
 
 > **The threshold is per company, not per branch.** All branches of the selected company share the same threshold. Configure each company separately.
+
+### Blocking sales that would take stock negative
+
+**What this control does.** Below the SO Approval card, the same screen carries a **Block sales that would take stock negative** switch. It decides what happens when someone tries to sell more of a product than the branch actually has on hand:
+
+- **On (Block)** — finalising an invoice or creating a delivery is **rejected** when there isn't enough stock to cover it. The user sees a friendly message naming the product, how much is available and how much was requested, and telling them to *"enable backorder in Sales Settings"* if the sale should go through anyway. Stock can never be driven below zero this way.
+- **Off (Allow / backorder)** — overselling is permitted: the sale completes even when there isn't enough on hand, and stock is allowed to go negative (a backorder). Use this when you routinely sell ahead of receiving goods.
+
+The hint beneath the switch reads *"When on, a sale is blocked if there isn't enough stock. Turn off to allow overselling (backorder)."* The check applies to ordinary stock-tracked products; services and other non-stocked items are never affected.
+
+**When it takes effect.** The switch sits on its own, independent of the SO Approval workflow above — you can use either, both, or neither. To change it:
+
+1. On the Sales Settings screen, choose the **Company** at the top.
+2. Set the **Block sales that would take stock negative** switch on or off.
+3. Click **Save Settings**. (The same `SALES.SETTINGS.MANAGE` permission governs this control.)
+
+> **Allow until configured, then block by default.** A brand-new company that has **never opened and saved** Sales Settings is *not* yet guarded — its sales are allowed to oversell until you configure the screen. The moment you save Sales Settings for the first time, the switch defaults to **Block**, so a saved company blocks negative-stock sales unless you deliberately turn the switch off.
 
 ---
 
@@ -1411,11 +1453,21 @@ Price lists group selling prices. You might have a Retail list (`RETAIL`), a Who
 1. Navigate to **Products › Price Lists** (`/admin/price-lists`).
 2. Click **New Price List**.
 3. Enter a **Code** (for example, `RETAIL`) and a **Name** (for example, `Retail Price List`). Both are required and the code must be unique within the company.
-4. Click **Create**.
+4. Decide whether the **Prices include VAT** toggle should be on or off (see *VAT-inclusive vs exclusive pricing* below). For a new list it is **pre-checked** — the help text reads *The customer-facing price already includes VAT. New price lists default to this on.* Leave it on for a retail/shelf list where the price you type is the price the customer sees; clear it for a wholesale list quoted as a net price plus VAT.
+5. Click **Create**.
+
+### VAT-inclusive vs exclusive pricing
+
+Each price list carries a single VAT stance that decides how the prices in it are read at invoicing. You set it with the **Prices include VAT** toggle on the create form and can change it later by editing the list. A **VAT** column on the list shows the current stance at a glance with an **Incl. VAT** or **Excl. VAT** badge.
+
+- **Prices include VAT (inclusive).** The price you enter is the **gross** shelf price — the amount the customer actually pays. When the sale is invoiced, the system splits the VAT back out of that figure so the net and VAT add up to exactly the price you typed, with no rounding drift. This is the natural choice for retail and counter sales where prices are displayed VAT-inclusive on the shelf. New price lists default to this stance.
+- **Prices exclude VAT (exclusive).** The price you enter is the **net** amount and VAT is added on top when the sale is invoiced, so the customer pays the price plus VAT. This suits wholesale and B2B lists that are quoted as "price + VAT". This is the long-standing behaviour; existing price lists keep it unless you turn the toggle on.
+
+The stance applies per list, so you can run a retail list (inclusive) and a wholesale list (exclusive) side by side for the same products. VAT-exempt and zero-rated products are unaffected either way — there is no VAT to add or split out.
 
 ### Edit, archive, restore
 
-Click **Edit** on a row to change the name (code is read-only after creation). Archive and restore work as on all master records.
+Click **Edit** on a row to change the name and the **Incl. VAT** setting (code is read-only after creation). Archive and restore work as on all master records.
 
 ---
 
@@ -1897,6 +1949,8 @@ Deliveries are always created from a Sales Order. The **Deliveries** list (`/adm
 
 Deliveries are created immediately in **CONFIRMED** status and cannot be undone. Each delivery is assigned a DELIVERY-#### number.
 
+**Not enough stock (negative-stock block).** Creating a delivery issues stock from the branch, so if your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), **Create Delivery** is refused when a delivered line would take that product's available stock below zero. You get a plain message naming the product with how much is available versus requested, and no delivery is created. Lower the **Deliver Qty** (which leaves the rest as a backorder — section 3.2), receive or transfer more stock in first, or have a user with `SALES.SETTINGS.MANAGE` turn the setting off to allow the shortfall. This is the same block described under section 4.4; when the setting is off (or Sales Settings has never been saved) deliveries are never blocked this way.
+
 ### 3.2 Partial delivery (backorder)
 
 Enter a quantity less than the open balance on any line to create a partial delivery. The Sales Order status moves to **PARTIALLY_FULFILLED**. Create another delivery later for the remaining quantity.
@@ -1947,6 +2001,13 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 Same process as adding lines to a quotation or order, including the product-scoped **Unit** dropdown (see section 1.2). Lines can only be added, edited, or removed while the invoice is in DRAFT.
 
+**"incl. VAT" vs "excl. VAT" on a line.** Each line shows a small tag beside its **Unit Price** reading either **incl. VAT** or **excl. VAT**. It tells you how the unit price relates to VAT, and it simply reflects the VAT stance of the price list the line's price came from (set once per list — see *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02, Master Data):
+
+- **incl. VAT** — the unit price shown is the customer-facing **gross** price, with VAT already inside it. The system splits the net and the VAT back out of that figure (shown in the line's **Net** and **VAT Amt** columns) so the customer pays exactly the price shown, to the shilling. This is the natural fit for retail/shelf pricing.
+- **excl. VAT** — the unit price shown is the **net** price, and VAT is added on top, so the customer pays the price plus VAT. This is the usual wholesale/B2B "price + VAT" convention.
+
+The tag is a read-only indicator — you never set it on the line, and it does not change which product or price you picked, only how the VAT is derived from that price. The same tag appears on quotation and sales-order lines. Zero-rated and exempt products still show a tag but attract no VAT either way.
+
 ### 4.3 Record a payment
 
 Payments can be recorded on a draft invoice before it is finalised.
@@ -1974,6 +2035,8 @@ After finalisation:
 **Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
 
 **Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
+
+**Not enough stock (negative-stock block).** If your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The refusal is a plain message naming the product with how much is available versus requested — for example *"Not enough stock of Sukari 1kg to complete this sale — 3 available, 5 requested. To allow this, enable backorder in Sales Settings."* Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). When the setting is **off**, or the company has never saved any Sales Settings, sales are never blocked this way and stock is allowed to go negative. Invoices raised from a delivery are not checked here (their stock was issued and checked at the delivery — see below), and **the same block applies when you create a Delivery** against a sales order (section 3.1).
 
 ### 4.5 Void an invoice
 
@@ -2212,6 +2275,8 @@ Navigate to **Sales › Pricing Rules** (`/admin/pricing-rules`).
 5. **No price found** — the line is rejected; the product cannot be sold without a price
 
 Once the price is resolved, the standard totals calculation (net, VAT, gross) runs unchanged — pricing rules only affect the unit price input.
+
+**VAT stance travels with the resolved price.** Whichever source wins above, the resolved price also carries the VAT-inclusive or -exclusive stance of the price list it came from. That stance is what shows as the **incl. VAT** / **excl. VAT** tag on the sales line (section 4.2): it decides whether VAT is split out of the price or added on top, but it does not change which price wins the resolution. See *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02 for how the stance is set on a list.
 
 ### 8.1 Price tiers (quantity breaks)
 

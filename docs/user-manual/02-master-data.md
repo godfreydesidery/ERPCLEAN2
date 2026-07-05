@@ -486,7 +486,7 @@ Click **Archive** to deactivate a unit. Archived units are removed from product 
 
 A **price list** is a named set of selling prices. Rather than storing a single price on each product, the system lets you maintain multiple lists — for example, a Retail list, a Wholesale list, and a Distributor list — each with different prices for the same product. When a sales document is created, the system looks up the product's price from the price list assigned to that customer or order, ensuring that different categories of buyer are automatically charged at their agreed rates.
 
-![Price lists](images/02-master-data/price-lists.png)
+![Price lists, showing the Incl./Excl. VAT badge](images/02-master-data/price-lists.png)
 
 **Why it exists.** Different customer segments — retail walk-ins, wholesale buyers, key distributors — typically receive different pricing. Without named price lists, a business would have to manually enter prices on every order line and hope for consistency. Price lists enforce pricing discipline: the price is looked up, not typed, so discrepancies and pricing errors are structurally prevented.
 
@@ -501,11 +501,21 @@ Price lists group selling prices. You might have a Retail list (`RETAIL`), a Who
 1. Navigate to **Products › Price Lists** (`/admin/price-lists`).
 2. Click **New Price List**.
 3. Enter a **Code** (for example, `RETAIL`) and a **Name** (for example, `Retail Price List`). Both are required and the code must be unique within the company.
-4. Click **Create**.
+4. Decide whether the **Prices include VAT** toggle should be on or off (see *VAT-inclusive vs exclusive pricing* below). For a new list it is **pre-checked** — the help text reads *The customer-facing price already includes VAT. New price lists default to this on.* Leave it on for a retail/shelf list where the price you type is the price the customer sees; clear it for a wholesale list quoted as a net price plus VAT.
+5. Click **Create**.
+
+### VAT-inclusive vs exclusive pricing
+
+Each price list carries a single VAT stance that decides how the prices in it are read at invoicing. You set it with the **Prices include VAT** toggle on the create form and can change it later by editing the list. A **VAT** column on the list shows the current stance at a glance with an **Incl. VAT** or **Excl. VAT** badge.
+
+- **Prices include VAT (inclusive).** The price you enter is the **gross** shelf price — the amount the customer actually pays. When the sale is invoiced, the system splits the VAT back out of that figure so the net and VAT add up to exactly the price you typed, with no rounding drift. This is the natural choice for retail and counter sales where prices are displayed VAT-inclusive on the shelf. New price lists default to this stance.
+- **Prices exclude VAT (exclusive).** The price you enter is the **net** amount and VAT is added on top when the sale is invoiced, so the customer pays the price plus VAT. This suits wholesale and B2B lists that are quoted as "price + VAT". This is the long-standing behaviour; existing price lists keep it unless you turn the toggle on.
+
+The stance applies per list, so you can run a retail list (inclusive) and a wholesale list (exclusive) side by side for the same products. VAT-exempt and zero-rated products are unaffected either way — there is no VAT to add or split out.
 
 ### Edit, archive, restore
 
-Click **Edit** on a row to change the name (code is read-only after creation). Archive and restore work as on all master records.
+Click **Edit** on a row to change the name and the **Incl. VAT** setting (code is read-only after creation). Archive and restore work as on all master records.
 
 ---
 

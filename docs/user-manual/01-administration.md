@@ -250,9 +250,34 @@ Roles are named bundles of permissions. A user can be granted one or more roles;
 
 ### The roles list
 
-![Roles list](images/01-administration/roles.png)
+![The Roles list, including the 12 built-in operational roles](images/01-administration/roles.png)
 
 The list shows each role's code, name, a permission count, and its status, plus a marker on **system** roles (pre-defined and cannot be archived). The code and name cells are plain text — they are not clickable. To open a role's edit page at `/admin/roles/uid/<uid>`, click the **Edit** button in the row's actions column.
+
+### Built-in operational roles
+
+**What they are.** The system ships with **12 ready-made operational roles** — one for each common job function — so you can put staff to work without composing a permission set from scratch. They appear in the Roles list from day one, alongside `ORG_ADMIN`, ready to grant to users in the [Assigning Roles to Users](#assigning-roles-to-users) section below. Each is a **system role**: it is marked as **system** in the list, cannot be deleted or archived, and its permission set is fixed (view it on the role edit page, but you cannot change it — see [Setting a role's permissions](#setting-a-roles-permissions)).
+
+**How they differ from ORG_ADMIN.** `ORG_ADMIN` holds *every* permission in the system — it is the full administrator. The 12 operational roles are **least-privilege**: each holds only the permissions its job actually needs, so a Cashier cannot manage users, a Salesperson cannot void invoices or change pricing settings, and an Accountant cannot close the fiscal year. This is deliberate — you assign people the narrowest role that lets them do their work.
+
+**How to use them.** Grant one (or more) of these roles to a user for a company, exactly as you would any other role (see [Assigning Roles to Users](#assigning-roles-to-users)). If none of them fits a person's responsibilities exactly, use them as a starting reference and create your own **custom** role (custom roles are freely editable; the 12 shipped roles are not).
+
+| Code | Name | What it can do |
+|------|------|----------------|
+| `SALESPERSON` | Salesperson | Quotes, orders, invoices, deliveries and returns; issue fiscal receipts; onboard customers. No overrides, voids, or settings. |
+| `CASHIER` | Cashier | POS till (open, sell, close, reconcile), customer receipting, end-of-day cash count and petty cash. Front-line cash only. |
+| `FIELD_SALES_AGENT` | Field Sales Agent | Route/van selling: capture orders, invoice and deliver on a route, collect cash receipts, reconcile van stock. |
+| `STOREKEEPER` | Storekeeper | Stock control: view, adjust, count, post, transfer, locations; receive goods against a PO; supplier returns; batch/serial/expiry. |
+| `ACCOUNTANT` | Accountant | GL journals (not close), AR and AP sub-ledgers, cash & bank, VAT preparation (not filing), WHT, cost tagging and financial reports. |
+| `SALES_MANAGER` | Sales Manager | Full sales including overrides, voids, credit override and settings; pricing rules, CRM, agents and routes, and sales approvals. |
+| `BRANCH_MANAGER` | Branch Manager | Broad single-branch oversight: cross-module views, approvals and operational sign-offs (POS reconcile, cash count, stock post, PO/requisition approve). Usually assigned branch-scoped. |
+| `PROCUREMENT_OFFICER` | Procurement Officer | Requisition, RFQ, purchase order, receive and returns; landed cost and suppliers. No approve, void, or settings. |
+| `PROCUREMENT_MANAGER` | Procurement Manager | Everything the officer has, plus PO/requisition approval, PO/goods-receipt void, and purchase settings. |
+| `HR_PAYROLL_MANAGER` | HR & Payroll Manager | Employees, leave and loans; pay components; the full payroll run/approve/post/disburse/reverse cycle; statutory deductions. |
+| `FINANCE_DIRECTOR` | Finance Director | Everything the Accountant has, plus GL configuration, period/year close, VAT filing, FX revaluation, fixed assets, budgeting and approvals policy. Not user or company administration. |
+| `PRODUCTION_MANAGER` | Production Manager | Work-order lifecycle, BOMs, material movements and WIP/costing views. |
+
+> The `SALESPERSON`/`SALES_MANAGER`, `PROCUREMENT_OFFICER`/`PROCUREMENT_MANAGER`, and `ACCOUNTANT`/`FINANCE_DIRECTOR` pairs are split on purpose: the manager/director role adds the approve, void, close and settings capabilities that the day-to-day role deliberately lacks (segregation of duties). Assign the day-to-day role to front-line staff and the manager role to whoever signs off their work.
 
 ### Creating a role
 
@@ -465,9 +490,9 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 ---
 
-## Sales Settings — sales-order approval threshold
+## Sales Settings — sales-order approval and stock control
 
-**What this screen is.** Sales Settings is a per-company configuration screen that controls whether large **sales orders** must be approved before they can be confirmed, and above what value that approval kicks in. It holds one setting group per company.
+**What this screen is.** Sales Settings is a per-company configuration screen that holds one setting group per company. It controls two independent things: whether large **sales orders** must be approved before they can be confirmed (and above what value that approval kicks in), and whether sales that would take **stock negative** are blocked or allowed.
 
 **Why it exists.** Many businesses want a manager to sign off on unusually large orders — an unusually big customer order can tie up stock, extend a lot of credit, or signal an error in data entry. Rather than force approval on every order (which slows the counter down), you set a **threshold**: orders at or above it route to approval automatically, while smaller everyday orders confirm straight through. The check happens automatically at the moment an order is confirmed, so nobody has to remember to submit large orders manually.
 
@@ -477,7 +502,7 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sidebar.
 
-![Sales settings — sales-order approval threshold](images/01-administration/sales-settings.png)
+![Sales settings — the sales-order approval threshold and the block-negative-stock control](images/01-administration/sales-settings.png)
 
 ### Setting the sales-order approval threshold
 
@@ -495,6 +520,23 @@ Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sideba
 > **A zero or empty threshold catches everything.** If the workflow is enabled and you leave the threshold at `0`, every order (any value) requires approval. The amount must be zero or positive — a negative value is rejected with *"Threshold amount must be zero or positive."*
 
 > **The threshold is per company, not per branch.** All branches of the selected company share the same threshold. Configure each company separately.
+
+### Blocking sales that would take stock negative
+
+**What this control does.** Below the SO Approval card, the same screen carries a **Block sales that would take stock negative** switch. It decides what happens when someone tries to sell more of a product than the branch actually has on hand:
+
+- **On (Block)** — finalising an invoice or creating a delivery is **rejected** when there isn't enough stock to cover it. The user sees a friendly message naming the product, how much is available and how much was requested, and telling them to *"enable backorder in Sales Settings"* if the sale should go through anyway. Stock can never be driven below zero this way.
+- **Off (Allow / backorder)** — overselling is permitted: the sale completes even when there isn't enough on hand, and stock is allowed to go negative (a backorder). Use this when you routinely sell ahead of receiving goods.
+
+The hint beneath the switch reads *"When on, a sale is blocked if there isn't enough stock. Turn off to allow overselling (backorder)."* The check applies to ordinary stock-tracked products; services and other non-stocked items are never affected.
+
+**When it takes effect.** The switch sits on its own, independent of the SO Approval workflow above — you can use either, both, or neither. To change it:
+
+1. On the Sales Settings screen, choose the **Company** at the top.
+2. Set the **Block sales that would take stock negative** switch on or off.
+3. Click **Save Settings**. (The same `SALES.SETTINGS.MANAGE` permission governs this control.)
+
+> **Allow until configured, then block by default.** A brand-new company that has **never opened and saved** Sales Settings is *not* yet guarded — its sales are allowed to oversell until you configure the screen. The moment you save Sales Settings for the first time, the switch defaults to **Block**, so a saved company blocks negative-stock sales unless you deliberately turn the switch off.
 
 ---
 
