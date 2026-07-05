@@ -10,8 +10,12 @@ class AppConfig {
   /// no `/api/v1` suffix.
   String baseHost;
 
-  /// Default for development: the local dev backend the cashier seeds against.
-  static const String defaultHost = 'http://localhost:8081';
+  /// Initial host used until the operator sets one on the Setup screen. Overridable
+  /// at build time with `--dart-define=POS_HOST=http://your-erp-host` so a shipped
+  /// build can pre-fill the right server (e.g. QA/prod); dev builds fall back to the
+  /// local backend the cashier seeds against.
+  static const String defaultHost =
+      String.fromEnvironment('POS_HOST', defaultValue: 'http://localhost:8081');
 
   static const String _kHost = 'cfg.baseHost';
 
