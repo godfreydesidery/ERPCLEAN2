@@ -4,7 +4,9 @@ md2docx.py — convert a (controlled-subset) Markdown file to a styled MS Word .
 
 Supports the subset the ERPCLEAN2 docs use: ATX headings (#..####), '- ' bullets,
 '1. ' numbered lists, GitHub pipe tables, **bold**, `inline code`, ``` fenced code,
-'---' horizontal rules, and a leading cover (first H1) + an auto Table of Contents field.
+'---' horizontal rules, and a leading cover (first H1) + a static, clickable Table of
+Contents (chapters + sections, hyperlinked to per-heading bookmarks — always visible on
+open, no field update needed).
 
 Usage:
     python docs/tools/md2docx.py <input.md> <output.docx> ["Document Title"] ["Subtitle"]
@@ -30,31 +32,53 @@ INLINE_RE = re.compile(r'(\*\*.+?\*\*|`[^`]+`)')
 IMAGE_RE = re.compile(r'^\s*!\[(.*?)\]\(([^)]+)\)\s*$')
 # Page text width on Letter with default 1-inch margins ≈ 6.5"; cap a touch under that.
 IMAGE_MAX_WIDTH_IN = 6.2
+# Table-of-contents depth: chapters (H1) + sections (H2). Kept in lock-step between the
+# TOC list and the per-heading bookmarks so their ordinal anchors line up.
+TOC_DEPTH = 2
 
 
-def add_toc(doc):
+def collect_toc(lines, max_level=3):
+    """Headings (levels 1..max_level) in document order, skipping fenced code blocks —
+    the source for the static Table of Contents (and matched 1:1 by the bookmarks the
+    body render adds to each heading, so the ordinal-based anchors line up)."""
+    entries, in_code = [], False
+    for line in lines:
+        if line.strip().startswith('```'):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        m = HEADING_RE.match(line)
+        if m and len(m.group(1)) <= max_level:
+            entries.append((len(m.group(1)), m.group(2).strip()))
+    return entries
+
+
+def add_bookmark(paragraph, name, bmid):
+    """Wrap a heading paragraph in a Word bookmark so TOC hyperlinks can jump to it."""
+    start = OxmlElement('w:bookmarkStart'); start.set(qn('w:id'), str(bmid)); start.set(qn('w:name'), name)
+    end = OxmlElement('w:bookmarkEnd'); end.set(qn('w:id'), str(bmid))
+    paragraph._p.insert(0, start)
+    paragraph._p.append(end)
+
+
+def add_toc_entry(doc, text, anchor, level):
+    """A clickable, indented TOC line that links to the heading's bookmark. Rendered
+    statically at build time so the Table of Contents is ALWAYS visible and navigable on
+    open — no 'right-click → Update Field' step (which matters for the image-rich manual
+    that is the one mostly used)."""
     p = doc.add_paragraph()
-    run = p.add_run()
-    fld = OxmlElement('w:fldSimple')
-    fld.set(qn('w:instr'), r'TOC \o "1-3" \h \z \u')
-    note = OxmlElement('w:r')
-    t = OxmlElement('w:t')
-    t.text = "Updating… (if this line persists, right-click → Update Field)."
-    note.append(t)
-    fld.append(note)
-    p._p.append(fld)
-
-
-def set_update_fields_on_open(doc):
-    """Ask Word to refresh all fields (including the TOC) when the file is opened, so the
-    Table of Contents populates automatically instead of needing a manual right-click →
-    Update Field. Word shows a one-time 'update fields?' prompt and then fills the TOC."""
-    settings = doc.settings.element
-    el = settings.find(qn('w:updateFields'))
-    if el is None:
-        el = OxmlElement('w:updateFields')
-        settings.append(el)
-    el.set(qn('w:val'), 'true')
+    p.paragraph_format.left_indent = Inches(0.28 * (level - 1))
+    p.paragraph_format.space_after = Pt(2)
+    hy = OxmlElement('w:hyperlink'); hy.set(qn('w:anchor'), anchor)
+    r = OxmlElement('w:r'); rpr = OxmlElement('w:rPr')
+    if level == 1:
+        rpr.append(OxmlElement('w:b'))
+    color = OxmlElement('w:color'); color.set(qn('w:val'), '1155CC'); rpr.append(color)
+    u = OxmlElement('w:u'); u.set(qn('w:val'), 'single'); rpr.append(u)
+    r.append(rpr)
+    t = OxmlElement('w:t'); t.set(qn('xml:space'), 'preserve'); t.text = text
+    r.append(t); hy.append(r); p._p.append(hy)
 
 
 def add_runs(paragraph, text):
@@ -141,12 +165,15 @@ def convert(md_path, docx_path, title=None, subtitle=None):
             s = doc.add_paragraph(); s.alignment = WD_ALIGN_PARAGRAPH.CENTER
             sr = s.add_run(subtitle); sr.font.size = Pt(15); sr.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
         doc.add_page_break()
-        # TOC
-        th = doc.add_heading('Contents', level=1)
-        add_toc(doc)
+        # Table of contents — static, clickable entries (H1–H3) linking to per-heading
+        # bookmarks, so it is visible and navigable the moment the document opens.
+        doc.add_heading('Contents', level=1)
+        for idx, (lvl, text) in enumerate(collect_toc(lines, max_level=TOC_DEPTH)):
+            add_toc_entry(doc, text, f'_Toc{idx:04d}', lvl)
         doc.add_page_break()
 
     i = 0
+    toc_idx = 0  # ordinal of the next H1–H3 heading — must track collect_toc()'s order
     table_buf = []
     in_code = False
     code_buf = []
@@ -182,7 +209,10 @@ def convert(md_path, docx_path, title=None, subtitle=None):
         m = HEADING_RE.match(line)
         if m:
             level = len(m.group(1))
-            doc.add_heading(m.group(2).strip(), level=min(level, 4))
+            h = doc.add_heading(m.group(2).strip(), level=min(level, 4))
+            if level <= TOC_DEPTH:  # bookmark it so the matching TOC entry can link here
+                add_bookmark(h, f'_Toc{toc_idx:04d}', toc_idx)
+                toc_idx += 1
             i += 1; continue
 
         im = IMAGE_RE.match(line)
@@ -218,8 +248,6 @@ def convert(md_path, docx_path, title=None, subtitle=None):
     if table_buf:
         flush_table(doc, table_buf)
 
-    if title:  # a cover+TOC was emitted → have Word build the TOC on open
-        set_update_fields_on_open(doc)
     doc.save(docx_path)
     print(f'Wrote {docx_path}')
 
