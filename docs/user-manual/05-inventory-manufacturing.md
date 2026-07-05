@@ -386,6 +386,8 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 Navigate to **Inventory > Van-Stock Reconciliations** (`/admin/van-reconciliations`).
 
+![Van-stock reconciliation (route sales day-end)](images/05-inventory-manufacturing/van-reconciliations.png)
+
 **What a van reconciliation is.**
 A van-stock reconciliation is the day-end route worksheet for a mobile (van) sales team. At the start of the day a van is loaded with stock (via stock transfers into the van's location); the driver-salesperson sells along the route and returns any unsold stock at the end of the day. The reconciliation is the sheet that answers, product by product, the question: *did the stock that left the van get accounted for by sales plus returns?* For each product it lays out **Loaded − Sold − Returned = Expected** on the van, then compares that Expected figure against the **Physical** count of what is actually still on the van. Any gap is the **Variance**.
 

@@ -477,6 +477,8 @@ This example walks through the complete new-staff onboarding flow for Amina Juma
 
 Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sidebar.
 
+![Sales settings — sales-order approval threshold](images/01-administration/sales-settings.png)
+
 ### Setting the sales-order approval threshold
 
 1. On the Sales Settings screen, choose the **Company** from the picker at the top. The settings below load for that company. (Each company is configured independently; switching the picker reloads its own settings.)
