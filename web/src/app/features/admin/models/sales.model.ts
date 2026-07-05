@@ -183,6 +183,11 @@ export interface SalesSettingsDto {
   soApprovalEnabled: boolean;
   soApprovalThresholdAmount: number | null;
   currency: string;
+  /**
+   * D-9: "block negative stock on sale" toggle (owner decision 2026-07-05, V87).
+   * true = overselling allowed (backorder); false (default) = sale blocked when stock is short.
+   */
+  allowNegativeStock: boolean;
 }
 
 export interface UpdateSalesSettingsRequest {
@@ -190,6 +195,7 @@ export interface UpdateSalesSettingsRequest {
   soApprovalEnabled: boolean;
   soApprovalThresholdAmount: number | null;
   currency: string;
+  allowNegativeStock: boolean;
 }
 
 // ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────

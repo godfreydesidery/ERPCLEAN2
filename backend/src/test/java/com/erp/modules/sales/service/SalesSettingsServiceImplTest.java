@@ -56,6 +56,9 @@ class SalesSettingsServiceImplTest {
         assertThat(dto.soApprovalEnabled()).isFalse();
         assertThat(dto.soApprovalThresholdAmount()).isNull();
         assertThat(dto.currency()).isEqualTo("TZS");
+        assertThat(dto.allowNegativeStock())
+                .as("default is blocking (backorder off) until a company opts in")
+                .isFalse();
         // Never persisted just by reading.
         org.mockito.Mockito.verify(settings, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
     }
@@ -69,13 +72,14 @@ class SalesSettingsServiceImplTest {
                 .thenAnswer(inv -> inv.getArgument(0));
 
         UpdateSalesSettingsRequest req = new UpdateSalesSettingsRequest(
-                COMPANY_UID, true, BigDecimal.valueOf(2_000_000), "TZS");
+                COMPANY_UID, true, BigDecimal.valueOf(2_000_000), "TZS", true);
 
         SalesSettingsDto dto = service.update(req);
 
         assertThat(dto.soApprovalEnabled()).isTrue();
         assertThat(dto.soApprovalThresholdAmount()).isEqualByComparingTo(BigDecimal.valueOf(2_000_000));
         assertThat(dto.currency()).isEqualTo("TZS");
+        assertThat(dto.allowNegativeStock()).isTrue();
         // create (default row) + final save == 2 calls to save
         verify(settings, org.mockito.Mockito.times(2)).save(org.mockito.ArgumentMatchers.any());
     }
@@ -91,16 +95,37 @@ class SalesSettingsServiceImplTest {
                 .thenAnswer(inv -> inv.getArgument(0));
 
         UpdateSalesSettingsRequest req = new UpdateSalesSettingsRequest(
-                COMPANY_UID, true, BigDecimal.valueOf(500_000), "USD");
+                COMPANY_UID, true, BigDecimal.valueOf(500_000), "USD", false);
 
         SalesSettingsDto dto = service.update(req);
 
         assertThat(dto.soApprovalEnabled()).isTrue();
         assertThat(dto.soApprovalThresholdAmount()).isEqualByComparingTo(BigDecimal.valueOf(500_000));
         assertThat(dto.currency()).isEqualTo("USD");
+        assertThat(dto.allowNegativeStock()).isFalse();
         ArgumentCaptor<SalesSettings> captor = ArgumentCaptor.forClass(SalesSettings.class);
         verify(settings, org.mockito.Mockito.times(1)).save(captor.capture());
         assertThat(captor.getValue()).isSameAs(existing);
+    }
+
+    @Test
+    void update_togglesAllowNegativeStock_onExistingRow() {
+        SalesSettings existing = new SalesSettings(COMPANY_ID, 1L);
+        existing.setAllowNegativeStock(false);
+        Company company = company(COMPANY_ID);
+        when(companies.findByUid(COMPANY_UID)).thenReturn(Optional.of(company));
+        when(settings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.of(existing));
+        when(settings.save(org.mockito.ArgumentMatchers.any(SalesSettings.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateSalesSettingsRequest req = new UpdateSalesSettingsRequest(
+                COMPANY_UID, false, null, "TZS", true);
+
+        SalesSettingsDto dto = service.update(req);
+
+        assertThat(dto.allowNegativeStock())
+                .as("company opts into backorder — negative stock no longer blocked")
+                .isTrue();
     }
 
     // -------------------------------------------------------------------------

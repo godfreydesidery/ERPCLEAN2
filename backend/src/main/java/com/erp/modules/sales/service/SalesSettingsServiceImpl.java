@@ -52,6 +52,7 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
 
         s.setSoApprovalEnabled(req.soApprovalEnabled());
         s.setSoApprovalThresholdAmount(req.soApprovalThresholdAmount());
+        s.setAllowNegativeStock(req.allowNegativeStock());
         if (req.currency() != null && !req.currency().isBlank()) {
             s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }

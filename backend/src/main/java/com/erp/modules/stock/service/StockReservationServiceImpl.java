@@ -1,5 +1,6 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.stock.domain.dto.StockAvailabilityDto;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import java.math.BigDecimal;
@@ -44,6 +45,20 @@ public class StockReservationServiceImpl implements StockReservationService {
                     companyId, productId);
             doApply(companyId, branchId, productId, delta, actorId);
         }
+    }
+
+    // Not readOnly: locationResolver.defaultLocationId() lazily seeds a branch default location on
+    // first touch (a write) — mirrors applyReservationDelta's own (non-readOnly) MANDATORY join.
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public StockAvailabilityDto getAvailability(Long companyId, Long branchId, Long productId) {
+        Long locId = locationResolver.defaultLocationId(companyId, branchId);
+        return onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, locId, productId)
+                .map(soh -> new StockAvailabilityDto(
+                        companyId, branchId, productId,
+                        soh.getQuantity(), soh.getReservedQty(), soh.availableQty()))
+                .orElseGet(() -> StockAvailabilityDto.zero(companyId, branchId, productId));
     }
 
     private void doApply(Long companyId, Long branchId, Long productId,

@@ -38,6 +38,8 @@ export class SalesSettingsComponent {
   readonly fSoApprovalEnabled = signal(false);
   readonly fThresholdAmount = signal('0');
   readonly fCurrency = signal('TZS');
+  /** Stores the raw DTO polarity (true = allow/backorder); the template renders it as an inverted "block" switch. */
+  readonly fAllowNegativeStock = signal(false);
 
   // ── Save state ─────────────────────────────────────────────────────────────
   readonly saving = signal(false);
@@ -101,6 +103,7 @@ export class SalesSettingsComponent {
     this.fSoApprovalEnabled.set(s.soApprovalEnabled);
     this.fThresholdAmount.set(String(s.soApprovalThresholdAmount ?? 0));
     this.fCurrency.set(s.currency ?? 'TZS');
+    this.fAllowNegativeStock.set(s.allowNegativeStock);
   }
 
   save(): void {
@@ -121,6 +124,7 @@ export class SalesSettingsComponent {
       soApprovalEnabled: this.fSoApprovalEnabled(),
       soApprovalThresholdAmount: Number(threshold),
       currency: this.fCurrency().trim(),
+      allowNegativeStock: this.fAllowNegativeStock(),
     };
 
     this.settingsService.update(request).subscribe({

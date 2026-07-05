@@ -26,6 +26,7 @@ const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
 const STUB_SETTINGS = {
   id: '1', uid: 'S1', companyId: '10',
   soApprovalEnabled: false, soApprovalThresholdAmount: 5000, currency: 'TZS',
+  allowNegativeStock: false,
 };
 
 function makeBed() {
@@ -114,11 +115,39 @@ describe('SalesSettingsComponent', () => {
       soApprovalEnabled: true,
       soApprovalThresholdAmount: 7500,
       currency: 'TZS',
+      allowNegativeStock: false,
     });
 
     putReq.flush({ ...STUB_SETTINGS, soApprovalEnabled: true, soApprovalThresholdAmount: 7500 });
 
     expect(comp.saving()).toBe(false);
     expect(comp.settings()?.soApprovalThresholdAmount).toBe(7500);
+  });
+
+  it('block-negative-stock switch reflects DTO polarity (checked = block = !allowNegativeStock) and saves the stored value', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    // Company ALLOWS backorder (allowNegativeStock = true) → the "Block…" switch must be OFF.
+    http.expectOne(`${BASE}/by-company/CO1`).flush({ ...STUB_SETTINGS, allowNegativeStock: true });
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.fAllowNegativeStock()).toBe(true);
+    const blockSwitch = fixture.nativeElement.querySelector('#blockNegativeStock') as HTMLInputElement;
+    expect(blockSwitch.checked).toBe(false); // block OFF because backorder is allowed
+
+    // Admin turns the block ON → the stored allowNegativeStock must flip to false.
+    comp.fAllowNegativeStock.set(false);
+    comp.save();
+
+    const putReq = http.expectOne(BASE);
+    expect(putReq.request.method).toBe('PUT');
+    expect(putReq.request.body.allowNegativeStock).toBe(false);
+
+    putReq.flush({ ...STUB_SETTINGS, allowNegativeStock: false });
+    expect(comp.settings()?.allowNegativeStock).toBe(false);
   });
 });
