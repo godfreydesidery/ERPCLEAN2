@@ -640,15 +640,29 @@ public class SalesOrderServiceImpl implements SalesOrderService {
 
     /**
      * D-4: automatic amount-threshold approval gate, run BEFORE {@link #assertApprovalClearance}.
-     * Only acts when there is NO existing engine request for this order — if one already exists
-     * (submitted manually via {@link #submitForApproval(String)}, or by a previous confirm attempt),
-     * this is a no-op and {@link #assertApprovalClearance} governs the outcome, so we never
-     * double-submit.
      *
-     * <p>When {@link SalesApprovalGate#requiresApproval} says the order is over-threshold, submits
-     * it to the engine. If the engine had no matching policy it auto-approves the request
-     * (BR-APR-09) and confirm proceeds; otherwise the request is PENDING and confirm is blocked
-     * with a friendly message directing the operator to wait for the decision.
+     * <p>When there is NO existing engine request for this order (never submitted, manually or
+     * automatically) and {@link SalesApprovalGate#requiresApproval} says it is over-threshold,
+     * submits it — in its OWN independent transaction (persona UAT I3: {@link
+     * SalesApprovalGate#submitIndependent}) so a genuinely policy-matched PENDING request survives
+     * even though this method goes on to throw and roll back the enclosing confirm transaction.
+     * Without that, an over-threshold order could never reach a human approver: the very request
+     * meant to unblock it would vanish with the rollback caused by the block itself.
+     *
+     * <p>persona UAT I2 / follow-up R1: an over-threshold order must never confirm on the strength
+     * of an approval the engine manufactured only because no {@code SALES_ORDER} policy is
+     * configured ({@code autoApproved}) — that is a misconfiguration, not a real approval, and would
+     * silently defeat the threshold control. {@link SalesApprovalGate#submitIndependent} detects
+     * that case itself and rolls back its OWN independent transaction before returning (throwing
+     * {@link ApprovalPolicyMissingException}), so the misconfiguration NEVER leaves a durable
+     * request behind — unlike the original I2/I3 fix, a later retry (once an administrator adds a
+     * matching policy) submits fresh instead of tripping over a permanently-terminal leftover.
+     *
+     * <p>A genuinely PENDING or REJECTED existing request is left untouched here — {@link
+     * #assertApprovalClearance}, called immediately after, is the single source of truth for those.
+     * Likewise, an existing APPROVED request (real or, for a legacy row created before R1 shipped, a
+     * stale auto-approved one) is left alone here too: it is no longer possible for a fresh
+     * misconfiguration to persist one, so there is nothing to re-check.
      */
     private void autoSubmitForApprovalIfOverThreshold(SalesOrder order) {
         Optional<ApprovalRequestDto> existing = approvalEngine.getApprovalState(
@@ -663,8 +677,21 @@ public class SalesOrderServiceImpl implements SalesOrderService {
             return;
         }
 
-        ApprovalRequestDto result = salesApprovalGate.submit(order, branchUid);
-        audit.record(AuditEvent.of(AuditActions.SO_SUBMIT_FOR_APPROVAL, "sales_orders",
+        // I3: submitted in its OWN transaction (see submitIndependent javadoc) so a genuinely
+        // PENDING request survives the throw below. R1: if the engine has no matching policy,
+        // submitIndependent rolls back its own transaction and throws instead of returning an
+        // auto-approved result — turn that into the same friendly misconfiguration message, but
+        // leave NO durable request behind.
+        ApprovalRequestDto result;
+        try {
+            result = salesApprovalGate.submitIndependent(order, branchUid);
+        } catch (ApprovalPolicyMissingException ex) {
+            throw new IllegalStateException(
+                    "This order exceeds the approval threshold but no approval policy is "
+                            + "configured. Ask an administrator to set one up.");
+        }
+
+        audit.recordIndependent(AuditEvent.of(AuditActions.SO_SUBMIT_FOR_APPROVAL, "sales_orders",
                 order.getId(), order.getUid())
                 .detail(Map.of("orderNumber", order.getOrderNumber(), "trigger", "auto_threshold")));
 

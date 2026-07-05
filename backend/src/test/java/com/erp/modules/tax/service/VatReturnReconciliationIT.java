@@ -54,13 +54,19 @@ import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -78,8 +84,31 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  *   <li>Return status is FILED, postedJournalUid is set, sourceType is VAT_RETURN.
  *   <li>recompute after dispatch picks up the output VAT: return.outputVat == 180.
  * </ol>
+ *
+ * <p>R3: this class opens/files a VAT return for the CURRENT month (real {@code YearMonth.now()}),
+ * so {@code VatReturnServiceImpl.file}'s period-end guard (persona UAT I4) would otherwise reject
+ * it — the current month's period has not ended yet. {@link FixedClockConfig} overrides the
+ * application's {@code Clock} bean with one fixed well after any real "now" this suite could run
+ * in, so the guard reads that period as already ended without changing any other date logic in the
+ * app (only {@code VatReturnServiceImpl} consumes the injected {@code Clock}).
  */
 class VatReturnReconciliationIT extends PostgresIntegrationTest {
+
+    /**
+     * Overrides the {@code Clock} bean (see {@code ClockConfig}) for this test class only — {@code
+     * @Primary} resolves the ambiguity against the app's real {@code systemUtc} bean. Spring Boot
+     * auto-detects a nested {@code @TestConfiguration} on a {@code @SpringBootTest}-annotated test
+     * class (mirrors {@code PostgresIntegrationTest.MailStubConfig}).
+     */
+    @TestConfiguration
+    static class FixedClockConfig {
+
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2099-12-31T00:00:00Z"), ZoneOffset.UTC);
+        }
+    }
 
     // ---- Sales prerequisites (copied from SalesPostingHandlerIT) ----
     @Autowired private SalesInvoiceService    salesInvoiceService;

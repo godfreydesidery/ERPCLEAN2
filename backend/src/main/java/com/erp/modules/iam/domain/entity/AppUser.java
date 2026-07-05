@@ -125,6 +125,14 @@ public class AppUser extends UidEntity {
 
     /** Record a failed attempt; lock for {@code lockMinutes} once {@code maxAttempts} is reached. */
     public void registerFailedLogin(int maxAttempts, int lockMinutes, Instant now) {
+        // persona UAT I8: once a prior lock window has lapsed, start a fresh count. Without this,
+        // failedLoginCount stayed pinned at (or above) maxAttempts forever — reset only happens on
+        // a SUCCESSFUL login or an explicit unlock() — so the very first failed attempt after the
+        // lock lapses immediately re-locks the account.
+        if (this.lockedUntil != null && !now.isBefore(this.lockedUntil)) {
+            this.failedLoginCount = 0;
+            this.lockedUntil = null;
+        }
         this.failedLoginCount += 1;
         if (this.failedLoginCount >= maxAttempts) {
             this.lockedUntil = now.plusSeconds(lockMinutes * 60L);
