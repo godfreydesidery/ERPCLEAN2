@@ -454,7 +454,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> postingService.postReversal(
                         reversal.uid(), LocalDate.now(), JournalSourceType.MANUAL, null, rootId))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
-                .hasMessageContaining("itself a reversal entry");
+                .hasMessageContaining("itself a reversal");
     }
 
     // =========================================================================

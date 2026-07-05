@@ -30,12 +30,10 @@ import com.erp.modules.products.service.PriceListService;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
-import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
-import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.common.money.MoneyDto;
@@ -136,7 +134,7 @@ class SalesPostingHandlerIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "GL Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "GL Agent",
@@ -269,8 +267,6 @@ class SalesPostingHandlerIT extends PostgresIntegrationTest {
         salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
                 productUid, pcsUid, new BigDecimal("1"), null, null));
         // 1 × 1000 + 18% VAT = 1180
-        salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
-                TenderType.CASH, new BigDecimal("1180"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
         return salesInvoiceService.getByUid(draft.uid());
     }
