@@ -22,6 +22,14 @@ public interface PriceListRepository extends JpaRepository<PriceList, Long> {
     /** Tenant-scoped existence check for the numeric default-price-list FK on customer records. */
     boolean existsByCompanyIdAndId(Long companyId, Long id);
 
+    /**
+     * Company-scoped numeric lookup (ADR-0056) — used instead of bare {@code findById} so a
+     * soft-FK'd {@code priceListId} (e.g. {@code CustomerPrice.priceListId} /
+     * {@code PriceTier.priceListId}) can never resolve a foreign company's price list
+     * (TenantScopingRulesTest).
+     */
+    Optional<PriceList> findByCompanyIdAndId(Long companyId, Long id);
+
     Page<PriceList> findByCompanyId(Long companyId, Pageable pageable);
 
     @Query("""

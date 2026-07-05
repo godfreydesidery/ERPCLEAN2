@@ -33,6 +33,7 @@ public record SalesInvoiceLineDto(
         BigDecimal netAmount,
         BigDecimal vatAmount,
         BigDecimal grossAmount,
+        boolean priceInclusive,
         String currency,
         String createdAt,
         Long createdBy
@@ -64,6 +65,7 @@ public record SalesInvoiceLineDto(
                 l.getNetAmount(),
                 l.getVatAmount(),
                 l.getGrossAmount(),
+                l.isPriceInclusive(),
                 l.getCurrency().value(),
                 l.getCreatedAt() != null ? l.getCreatedAt().toString() : null,
                 l.getCreatedBy()

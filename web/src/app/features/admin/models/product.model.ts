@@ -289,6 +289,12 @@ export interface PriceListDto {
   companyId: string;
   code: string;
   name: string;
+  /**
+   * ADR-0056: whether prices stored under this list already include VAT (the customer-facing
+   * gross) vs net/exclusive. New lists default to true on the backend when the create request
+   * omits it; existing lists are preserved as stored.
+   */
+  priceIncludesVat: boolean;
   isDefault: boolean;
   status: string;
   version: string | null;
@@ -302,8 +308,12 @@ export interface CreatePriceListRequest {
   companyUid: string;
   code: string;
   name: string;
+  /** ADR-0056: omitted ⇒ backend defaults to true (VAT-inclusive) for new lists. */
+  priceIncludesVat?: boolean;
 }
 
 export interface UpdatePriceListRequest {
   name: string;
+  /** ADR-0056: omitted ⇒ backend keeps the existing stored value. */
+  priceIncludesVat?: boolean;
 }

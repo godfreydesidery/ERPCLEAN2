@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -87,7 +88,7 @@ class SalesInvoiceServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000010"))
                 .thenReturn(Optional.of(baseUnit));
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
-                .thenReturn(new BigDecimal("100.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -119,7 +120,7 @@ class SalesInvoiceServiceImplTest {
                 .thenReturn(Optional.of(boxUnit));
         // Base price 100; BOX pack explicitly priced at 1150 (non-linear) — never 100 (the bug).
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
-                .thenReturn(new BigDecimal("1150.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -136,6 +137,36 @@ class SalesInvoiceServiceImplTest {
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1150.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(new BigDecimal("12"));
         verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+    }
+
+    @Test
+    void addLine_resolvedFromInclusiveList_snapshotsPriceInclusiveTrueOnLine() {
+        // ADR-0056: the line snapshots the resolver's vatInclusive flag regardless of the amount.
+        SalesInvoice inv = invoiceWithId(502L, "INVUID0000000000000000012");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+
+        UnitOfMeasure baseUnit = unitWithId(930L, "BASEUID0000000000000012", "PCS");
+        Product product = productWithId(902L, "PRODUID00000000000000012", "PROD-0003", "Shelf Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000012"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000012"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 930L))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(502L)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        AddInvoiceLineRequest req = new AddInvoiceLineRequest(
+                "PRODUID00000000000000012", "BASEUID0000000000000012", BigDecimal.ONE, null, null);
+
+        SalesInvoiceLineDto dto = service.addLine(inv.getUid(), req);
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1180.0000");
+        assertThat(dto.priceInclusive()).isTrue();
     }
 
     // -------------------------------------------------------------------------

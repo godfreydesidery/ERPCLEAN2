@@ -220,6 +220,89 @@ class SalesOrderServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 1b (ADR-0056 regression) — Quote→SO must preserve an INCLUSIVE quote line's
+    // priceInclusive snapshot, and the stance must survive a SUBSEQUENT recompute (e.g. adding
+    // another line), not just the initial totals copy. Before the fix,
+    // SalesOrderServiceImpl.createFromQuotation dropped the flag (entity default false) when
+    // copying quote lines to SO lines, so the first DRAFT recompute re-taxed the already-gross
+    // unit price (1180 → net 1180, vat 212.40, gross 1392.40 instead of 1000/180/1180).
+    // =========================================================================
+
+    @Test
+    void quoteToSo_preservesInclusiveStance_survivesSubsequentRecompute() {
+        // Explicit VAT-INCLUSIVE price list — ADR-0056 D-2: service default stays EXCLUSIVE.
+        String inclusiveListUid = priceListService.create(new CreatePriceListRequest(
+                company.getUid(), "VATINC", "VAT Inclusive",
+                null, null, null, true, null, null)).uid();
+
+        // STANDARD-rated product priced GROSS 1180 on the inclusive list (net 1000 + 18% VAT 180).
+        ProductDto product = productOnList("QuoteInclWidget", inclusiveListUid, "1180");
+
+        setCtx();
+        QuotationDto quote = quotationService.create(new CreateQuotationRequest(
+                company.getUid(), customerUid, agentUid, "TZS",
+                LocalDate.now(), LocalDate.now().plusDays(30),
+                null, null, null, null));
+        setCtx();
+        QuotationLineDto qLine = quotationService.addLine(quote.uid(),
+                new AddQuotationLineRequest(product.uid(), pcsUid, BigDecimal.ONE, null, null, null));
+
+        // Quote line itself must be inclusive and derive net/vat by stripping VAT out of gross.
+        assertThat(qLine.priceInclusive()).isTrue();
+        assertThat(qLine.netAmount()).isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(qLine.vatAmount()).isEqualByComparingTo(new BigDecimal("180"));
+        assertThat(qLine.grossAmount()).isEqualByComparingTo(new BigDecimal("1180"));
+
+        setCtx();
+        quotationService.send(quote.uid());
+        setCtx();
+        SalesOrderDto so = quotationService.accept(quote.uid());
+
+        List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
+        assertThat(soLines).hasSize(1);
+        SalesOrderLineDto sol = soLines.get(0);
+        assertThat(sol.priceInclusive())
+                .as("SO line copied from an inclusive quote line must preserve the stance")
+                .isTrue();
+        assertThat(sol.netAmount()).isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(sol.vatAmount()).isEqualByComparingTo(new BigDecimal("180"));
+        assertThat(sol.grossAmount()).isEqualByComparingTo(new BigDecimal("1180"));
+
+        // Force a SUBSEQUENT recompute by adding a second, EXCLUSIVE-priced line (default RETAIL
+        // list) — this is the regression point: before the fix, the copied line's priceInclusive
+        // reverted to the entity default (false) and this recompute re-taxed the gross as a net.
+        ProductDto second = stockableProduct("QuoteExclWidget", "500");
+        setCtx();
+        salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
+                second.uid(), pcsUid, BigDecimal.ONE, null, null, null));
+
+        List<SalesOrderLineDto> refreshedLines = salesOrderService.listLines(so.uid());
+        SalesOrderLineDto solAfterRecompute = refreshedLines.stream()
+                .filter(l -> l.productId().equals(product.id()))
+                .findFirst().orElseThrow();
+        assertThat(solAfterRecompute.priceInclusive()).isTrue();
+        assertThat(solAfterRecompute.netAmount())
+                .as("recompute must NOT re-tax the inclusive line: net stays 1000")
+                .isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(solAfterRecompute.vatAmount())
+                .as("VAT must stay 180, NOT 212.40 (would be the re-taxed-gross bug value)")
+                .isEqualByComparingTo(new BigDecimal("180"));
+        assertThat(solAfterRecompute.grossAmount()).isEqualByComparingTo(new BigDecimal("1180"));
+
+        // Header totals: inclusive line (net 1000/vat 180/gross 1180) + exclusive line
+        // (500 × 18% → net 500/vat 90/gross 590) = net 1500 / vat 270 / gross 1770.
+        SalesOrderDto refreshedSo = salesOrderService.getByUid(so.uid());
+        assertThat(refreshedSo.netTotalAmount())
+                .as("header net must NOT include the re-taxed-bug value (1180+500=1680)")
+                .isEqualByComparingTo(new BigDecimal("1500.0000"));
+        assertThat(refreshedSo.vatTotalAmount())
+                .as("header VAT must NOT include the re-taxed-bug value (212.40+90=302.40)")
+                .isEqualByComparingTo(new BigDecimal("270.0000"));
+        assertThat(refreshedSo.grossTotalAmount())
+                .isEqualByComparingTo(new BigDecimal("1770.0000"));
+    }
+
+    // =========================================================================
     // Bar 2 — Confirm reserves stock; SO status CONFIRMED
     // =========================================================================
 
@@ -370,6 +453,20 @@ class SalesOrderServiceIT extends PostgresIntegrationTest {
     }
 
     private ProductDto stockableProduct(String name, String price) {
+        setCtx();
+        ProductDto p = productService.create(new CreateProductRequest(
+                company.getUid(), null, name, null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
+        productService.setPrice(p.uid(),
+                new SetProductPriceRequest(priceListUid, new MoneyDto(price, "TZS")));
+        return p;
+    }
+
+    /**
+     * Same as {@link #stockableProduct} but priced on an explicit price list (e.g. a
+     * VAT-inclusive one) rather than the shared exclusive RETAIL list — ADR-0056 regression tests.
+     */
+    private ProductDto productOnList(String name, String priceListUid, String price) {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,

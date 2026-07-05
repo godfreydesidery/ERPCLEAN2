@@ -104,6 +104,15 @@ public class QuotationLine extends UidEntity {
     @Setter
     private Long promotionId;
 
+    /**
+     * ADR-0056: snapshot of whether {@code unitPriceAmount} was sourced from a VAT-inclusive
+     * price list at line-add time — immutable once set. {@code true} = GROSS amount, totals
+     * calculator strips VAT; {@code false} (default, V86 backfill) = NET, pre-V86 behaviour.
+     */
+    @Column(name = "price_inclusive", nullable = false)
+    @Setter
+    private boolean priceInclusive = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

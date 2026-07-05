@@ -31,6 +31,7 @@ public record SalesOrderLineDto(
         BigDecimal netAmount,
         BigDecimal vatAmount,
         BigDecimal grossAmount,
+        boolean priceInclusive,
         String currency
 ) {
     public static SalesOrderLineDto from(SalesOrderLine l) {
@@ -48,6 +49,7 @@ public record SalesOrderLineDto(
                 l.getVatStatus() != null ? l.getVatStatus().name() : null,
                 l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
+                l.isPriceInclusive(),
                 l.getCurrency().value());
     }
 }

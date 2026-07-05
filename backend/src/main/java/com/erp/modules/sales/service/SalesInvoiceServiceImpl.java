@@ -14,6 +14,7 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.parties.repository.PaymentTermsRepository;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -464,9 +465,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Resolve unit scoped to invoice company (F15)
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(), req.unitUid());
 
-        // Snapshot price from price list (BR-SALES-03)
-        BigDecimal listPrice = priceResolutionService.resolveUnitListPrice(
+        // Snapshot price from price list (BR-SALES-03) — carries the VAT-inclusive stance of the
+        // originating list (ADR-0056), threaded onto the line below.
+        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
                 inv.getCompanyId(), product.getId(), unit.getId());
+        BigDecimal listPrice = resolvedPrice.amount();
 
         // Snapshot VAT rate from tax_rates (ADR-0008 D-5b)
         BigDecimal vatRate = resolveVatRate(inv.getCompanyId(), product);
@@ -485,6 +488,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 listPrice, listPrice,   // applied = list initially
                 product.getVatStatus(), vatRate,
                 actorId());
+        line.setPriceInclusive(resolvedPrice.vatInclusive());
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());

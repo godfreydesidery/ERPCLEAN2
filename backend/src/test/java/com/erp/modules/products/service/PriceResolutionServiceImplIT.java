@@ -17,6 +17,7 @@ import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
 import com.erp.modules.products.domain.dto.PriceListDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.platform.common.money.MoneyDto;
@@ -116,7 +117,7 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
                 .doesNotThrowAnyException();
 
         BigDecimal resolved =
-                priceResolutionService.resolveUnitListPrice(companyId, product.id(), pcsId);
+                priceResolutionService.resolveUnitListPrice(companyId, product.id(), pcsId).amount();
 
         // First-wins across price lists (lowest-id row) — must be one of the two configured
         // amounts, never a thrown exception. compareTo (not isIn/.equals) because the resolved
@@ -160,7 +161,7 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
                 .doesNotThrowAnyException();
 
         BigDecimal resolved =
-                priceResolutionService.resolveUnitListPrice(companyId, product.id(), cartonId);
+                priceResolutionService.resolveUnitListPrice(companyId, product.id(), cartonId).amount();
 
         // First-wins across price lists — must be one of the two configured pack amounts, not a
         // base-times-factor computation and never a thrown exception. compareTo (not isIn/.equals)
@@ -185,10 +186,13 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
         productService.setPrice(product.uid(),
                 new SetProductPriceRequest(onlyList.uid(), new MoneyDto("500.00", "TZS")));
 
-        BigDecimal resolved =
+        UnitListPriceDto resolved =
                 priceResolutionService.resolveUnitListPrice(companyId, product.id(), pcsId);
 
-        assertThat(resolved).isEqualByComparingTo("500.00");
+        assertThat(resolved.amount()).isEqualByComparingTo("500.00");
+        // Backward-compat constructor omits priceIncludesVat -> service/DB default stays EXCLUSIVE
+        // (ADR-0056 D-2; inclusive-by-default is a UI affordance, not a service default).
+        assertThat(resolved.vatInclusive()).isFalse();
     }
 
     // -----------------------------------------------------------------------

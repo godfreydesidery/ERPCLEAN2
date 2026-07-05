@@ -50,7 +50,7 @@ const PRICES_ENTITIES: EntityDescriptor[] = [
 function makePriceList(): PriceListDto {
   return {
     id: '30', uid: 'PL1', companyId: '10', code: 'RETAIL', name: 'Retail Price',
-    isDefault: true, status: 'ACTIVE', version: null,
+    priceIncludesVat: true, isDefault: true, status: 'ACTIVE', version: null,
     createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
   };
 }

@@ -44,12 +44,15 @@ export class PriceListListComponent {
   readonly showCreateForm = signal(false);
   readonly newCode = signal('');
   readonly newName = signal('');
+  /** ADR-0056: new price lists default to VAT-inclusive, matching the backend default. */
+  readonly newPriceIncludesVat = signal(true);
   readonly saving = signal(false);
   readonly formError = signal<string | null>(null);
 
   // ── Inline edit ────────────────────────────────────────────────────────────
   readonly editingUid = signal<string | null>(null);
   readonly editName = signal('');
+  readonly editPriceIncludesVat = signal(true);
   readonly editSaving = signal(false);
   readonly editError = signal<string | null>(null);
   readonly rowBusyUid = signal<string | null>(null);
@@ -122,12 +125,18 @@ export class PriceListListComponent {
     }
     this.saving.set(true);
     this.formError.set(null);
-    const request: CreatePriceListRequest = { companyUid: company.uid, code, name };
+    const request: CreatePriceListRequest = {
+      companyUid: company.uid,
+      code,
+      name,
+      priceIncludesVat: this.newPriceIncludesVat(),
+    };
     this.productService.createPriceList(request).subscribe({
       next: (created) => {
         this.saving.set(false);
         this.newCode.set('');
         this.newName.set('');
+        this.newPriceIncludesVat.set(true);
         this.showCreateForm.set(false);
         this.alerts.success('Price list created', created.name);
         this.load();
@@ -144,6 +153,7 @@ export class PriceListListComponent {
   startEdit(pl: PriceListDto): void {
     this.editingUid.set(pl.uid);
     this.editName.set(pl.name);
+    this.editPriceIncludesVat.set(pl.priceIncludesVat);
     this.editError.set(null);
   }
 
@@ -160,7 +170,7 @@ export class PriceListListComponent {
     }
     this.editSaving.set(true);
     this.editError.set(null);
-    const request: UpdatePriceListRequest = { name };
+    const request: UpdatePriceListRequest = { name, priceIncludesVat: this.editPriceIncludesVat() };
     this.productService.updatePriceList(pl.uid, request).subscribe({
       next: (updated) => {
         this.editSaving.set(false);

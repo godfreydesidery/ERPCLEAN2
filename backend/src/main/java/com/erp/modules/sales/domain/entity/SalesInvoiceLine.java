@@ -165,6 +165,17 @@ public class SalesInvoiceLine {
     @Setter
     private PriceSource priceSource;
 
+    /**
+     * ADR-0056: snapshot of whether {@code unitPriceAmount} was sourced from a VAT-inclusive
+     * price list at line-add time — immutable once set (mirrors the other snapshot columns on
+     * this line). {@code true} = {@code unitPriceAmount} is a GROSS amount and the totals
+     * calculator strips VAT out of it; {@code false} (default, V86 backfill) = NET, unchanged
+     * from the pre-V86 behaviour.
+     */
+    @Column(name = "price_inclusive", nullable = false)
+    @Setter
+    private boolean priceInclusive = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

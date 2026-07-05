@@ -524,10 +524,17 @@
                         [class.text-danger]="+line.openQtyBase > 0 && !isDraft()">
                       {{ +line.openQtyBase | number:'1.3-3' }}
                     </td>
-                    <td class="num">{{ +line.unitPriceAmount | number:'1.2-2' }}</td>
+                    <td class="num">
+                      {{ +line.unitPriceAmount | number:'1.2-2' }}
+                      <span class="status-tag ms-1"
+                            [class.status-tag--info]="line.priceInclusive"
+                            [class.status-tag--neutral]="!line.priceInclusive">
+                        {{ line.priceInclusive ? 'incl. VAT' : 'excl. VAT' }}
+                      </span>
+                    </td>
                     <td class="num">{{ line.lineDiscountPercent ? (+line.lineDiscountPercent | number:'1.2-2') : '—' }}</td>
                     <td class="num">{{ +line.netAmount | number:'1.2-2' }}</td>
-                    <td class="num">{{ +line.grossAmount | number:'1.2-2' }}</td>
+                    <td class="num fw-semibold">{{ +line.grossAmount | number:'1.2-2' }}</td>
                     @if (canEditLines()) {
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"
