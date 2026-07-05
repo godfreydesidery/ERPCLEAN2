@@ -20,6 +20,9 @@ public interface UnitOfMeasureRepository extends JpaRepository<UnitOfMeasure, Lo
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /** Resolve a unit by its user-supplied code within a company (bulk import: base-unit lookup). */
+    Optional<UnitOfMeasure> findByCompanyIdAndCode(Long companyId, String code);
+
     Page<UnitOfMeasure> findByCompanyId(Long companyId, Pageable pageable);
 
     List<UnitOfMeasure> findByCompanyId(Long companyId);

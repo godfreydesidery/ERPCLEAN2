@@ -1,0 +1,199 @@
+<section class="admin-page" aria-label="Bulk Import">
+  <div class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-file-earmark-spreadsheet me-2" aria-hidden="true"></i>Bulk Import</h1>
+      <p class="subtitle">
+        Download a template, fill it in, then validate and commit master-data changes in bulk.
+      </p>
+    </div>
+  </div>
+
+  @switch (entitiesState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading importable entity types…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load importable entity types. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <div class="erp-empty">
+        <i class="bi bi-shield-lock"></i>
+        You don't have permission to import any master data. Contact an administrator if you need access.
+      </div>
+    }
+    @default {
+      <!-- Step 1: choose entity -->
+      <div class="erp-card mb-3">
+        <div class="erp-card__head"><h2>1. Choose what to import</h2></div>
+        <div class="erp-card__body">
+          <div class="erp-field" style="max-width:320px">
+            <label for="bulkEntity">Entity type</label>
+            <select id="bulkEntity" name="bulkEntity" class="form-select"
+                    [ngModel]="selectedKey()" (ngModelChange)="onEntityChange($event)">
+              @for (e of entities(); track e.key) {
+                <option [value]="e.key">{{ e.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      </div>
+
+      @if (selectedKey()) {
+        <!-- Step 2: download template -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>2. Download the template</h2></div>
+          <div class="erp-card__body">
+            <p class="text-muted small mb-2">
+              Download the spreadsheet, fill in one row per {{ selectedEntity()?.label }}, then upload it below.
+            </p>
+            <button type="button" class="btn btn-outline-primary" (click)="downloadTemplate()"
+                    [disabled]="downloadingTemplate()">
+              @if (downloadingTemplate()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Downloading…
+              } @else {
+                <i class="bi bi-download me-1" aria-hidden="true"></i>Download Template
+              }
+            </button>
+            @if (templateError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </div>
+        </div>
+
+        <!-- Step 3: upload & validate -->
+        <div class="erp-card mb-3">
+          <div class="erp-card__head"><h2>3. Upload &amp; validate</h2></div>
+          <div class="erp-card__body">
+            <div class="erp-field" style="max-width:420px">
+              <label for="bulkFile">Filled-in spreadsheet (.xlsx)</label>
+              <input #bulkFileInput id="bulkFile" name="bulkFile" type="file" accept=".xlsx"
+                     class="form-control"
+                     (change)="onFileSelected($event)"
+                     [disabled]="validating() || committing()" />
+            </div>
+            @if (selectedFile(); as f) {
+              <p class="text-muted small mt-2 mb-0">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>{{ f.name }}
+              </p>
+            }
+            @if (validating()) {
+              <p class="text-muted d-flex align-items-center gap-2 mt-2" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Validating file…
+              </p>
+            }
+            @if (validateError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </div>
+        </div>
+
+        <!-- Results + Step 4: commit -->
+        @if (report(); as rep) {
+          <div class="erp-card mb-3">
+            <div class="erp-card__head">
+              <h2>{{ rep.mode === 'COMMIT' ? 'Import Results' : 'Validation Results' }}</h2>
+            </div>
+            <div class="erp-card__body">
+              <div class="d-flex flex-wrap gap-2 mb-3" role="status" aria-live="polite">
+                <span class="status-tag status-tag--neutral">Total: {{ rep.total }}</span>
+                <span class="status-tag status-tag--ok">
+                  {{ rep.mode === 'COMMIT' ? 'Created' : 'Will create' }}: {{ rep.created }}
+                </span>
+                <span class="status-tag status-tag--info">
+                  {{ rep.mode === 'COMMIT' ? 'Updated' : 'Will update' }}: {{ rep.updated }}
+                </span>
+                <span class="status-tag"
+                      [class.status-tag--danger]="rep.errors > 0"
+                      [class.status-tag--neutral]="rep.errors === 0">
+                  Errors: {{ rep.errors }}
+                </span>
+              </div>
+
+              @if (rep.errors > 0 && rep.mode === 'VALIDATE') {
+                <p class="text-danger small">
+                  <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                  Fix the flagged rows below and upload the file again — Commit stays disabled until every row is clean.
+                </p>
+              }
+
+              @if (rep.rows.length > 0) {
+                <div class="erp-table-wrap">
+                  <table class="erp-table">
+                    <caption class="visually-hidden">
+                      {{ rep.mode === 'COMMIT' ? 'Import' : 'Validation' }} row outcomes
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col" class="num">Row</th>
+                        <th scope="col">Outcome</th>
+                        <th scope="col">Reference</th>
+                        <th scope="col">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of rep.rows; track row.rowNumber) {
+                        <tr>
+                          <td class="num mono">{{ row.rowNumber }}</td>
+                          <td>
+                            <span class="status-tag"
+                                  [class.status-tag--ok]="row.action === 'CREATE'"
+                                  [class.status-tag--info]="row.action === 'UPDATE'"
+                                  [class.status-tag--danger]="row.action === 'ERROR'">
+                              {{ row.action }}
+                            </span>
+                          </td>
+                          <td class="small">{{ row.reference ?? '—' }}</td>
+                          <td class="small" [class.text-danger]="row.action === 'ERROR'">
+                            {{ row.message ?? '—' }}
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              } @else {
+                <div class="erp-empty">
+                  <i class="bi bi-inbox"></i>
+                  No rows found in the uploaded file.
+                </div>
+              }
+
+              <div class="d-flex align-items-center gap-2 mt-3">
+                @if (!committed()) {
+                  <button type="button" class="btn btn-primary" (click)="commit()"
+                          [disabled]="!canCommit() || committing()">
+                    @if (committing()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Committing…
+                    } @else {
+                      <i class="bi bi-check-circle me-1" aria-hidden="true"></i>Commit Import
+                    }
+                  </button>
+                } @else {
+                  <span class="status-tag status-tag--ok">
+                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Committed
+                  </span>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="resetFileState()">
+                    Import another file
+                  </button>
+                }
+              </div>
+              @if (commitError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+            </div>
+          </div>
+        } @else if (!validating() && selectedFile() === null) {
+          <div class="erp-empty">
+            <i class="bi bi-cloud-upload"></i>
+            Choose the filled-in spreadsheet above to validate it.
+          </div>
+        }
+      }
+    }
+  }
+</section>

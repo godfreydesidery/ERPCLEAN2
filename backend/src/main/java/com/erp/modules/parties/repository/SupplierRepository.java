@@ -18,6 +18,9 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /** Resolve a supplier by its (system-generated) code within a company (bulk import upsert). */
+    Optional<Supplier> findByCompanyIdAndCode(Long companyId, String code);
+
     Page<Supplier> findByCompanyId(Long companyId, Pageable pageable);
 
     @Query("""

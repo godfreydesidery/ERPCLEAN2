@@ -9,6 +9,9 @@ public interface ProductPriceRepository extends JpaRepository<ProductPrice, Long
 
     List<ProductPrice> findByProductId(Long productId);
 
+    /** All price rows on a price list within a company (rule-based mass price change). */
+    List<ProductPrice> findByCompanyIdAndPriceListId(Long companyId, Long priceListId);
+
     /**
      * The base-unit price row for (product, price list) — unit_id IS NULL (ADR-0048 D-1).
      * Replaces the now-ambiguous {@code findByProductIdAndPriceListId} (a product can carry one

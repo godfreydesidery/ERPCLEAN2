@@ -15,6 +15,9 @@ import { NavSearchComponent, NavDestination } from './nav-search.component';
  * - `available`: false renders the item as a "soon" badge (route does not exist yet).
  * - `permission`: when set, the item is hidden from users who lack that permission (root sees all).
  *   Items without a `permission` key are always shown to authenticated users.
+ * - `anyPermission`: when set (instead of `permission`), the item is shown to a user holding ANY of
+ *   the listed codes — mirrors the route's `requireAnyPermission` guard for a screen reachable by
+ *   more than one atomic permission (e.g. the generic bulk-import wizard, gated per entity type).
  */
 interface NavItem {
   readonly label: string;
@@ -22,6 +25,7 @@ interface NavItem {
   readonly icon: string;
   readonly available: boolean;
   readonly permission?: string;
+  readonly anyPermission?: readonly string[];
 }
 
 interface NavGroup {
@@ -139,6 +143,26 @@ export class ShellComponent {
         { label: 'Products', route: '/admin/products', icon: 'bi-box-seam', available: true, permission: 'PRODUCT.VIEW' },
         { label: 'Price Lists', route: '/admin/price-lists', icon: 'bi-tags', available: true, permission: 'PRICELIST.VIEW' },
         { label: 'Units of Measure', route: '/admin/units', icon: 'bi-rulers', available: true, permission: 'UOM.VIEW' },
+      ],
+    },
+    // ── Bulk / mass data tools (Excel import wizard + rule-based price change) ─
+    {
+      label: 'Data Tools',
+      items: [
+        {
+          label: 'Bulk Import',
+          route: '/admin/bulk-import',
+          icon: 'bi-file-earmark-spreadsheet',
+          available: true,
+          anyPermission: ['PRODUCT.IMPORT', 'CUSTOMER.IMPORT', 'SUPPLIER.IMPORT'],
+        },
+        {
+          label: 'Mass Price Change',
+          route: '/admin/mass-price-change',
+          icon: 'bi-tag',
+          available: true,
+          permission: 'PRICE.MASS_UPDATE',
+        },
       ],
     },
     {
@@ -375,12 +399,17 @@ export class ShellComponent {
     this.allNav
       .map((group) => ({
         ...group,
-        items: group.items.filter(
-          (item) => !item.permission || this.session.hasPermission(item.permission),
-        ),
+        items: group.items.filter((item) => this.isNavItemVisible(item)),
       }))
       .filter((group) => group.items.length > 0),
   );
+
+  private isNavItemVisible(item: NavItem): boolean {
+    if (item.anyPermission && item.anyPermission.length > 0) {
+      return item.anyPermission.some((code) => this.session.hasPermission(code));
+    }
+    return !item.permission || this.session.hasPermission(item.permission);
+  }
 
   /**
    * Flattened, permission-filtered destinations for the command palette.
