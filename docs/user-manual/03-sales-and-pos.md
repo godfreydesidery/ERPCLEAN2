@@ -259,6 +259,8 @@ Deliveries are always created from a Sales Order. The **Deliveries** list (`/adm
 
 Deliveries are created immediately in **CONFIRMED** status and cannot be undone. Each delivery is assigned a DELIVERY-#### number.
 
+**Not enough stock (negative-stock block).** Creating a delivery issues stock from the branch, so if your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), **Create Delivery** is refused when a delivered line would take that product's available stock below zero. You get a plain message naming the product with how much is available versus requested, and no delivery is created. Lower the **Deliver Qty** (which leaves the rest as a backorder — section 3.2), receive or transfer more stock in first, or have a user with `SALES.SETTINGS.MANAGE` turn the setting off to allow the shortfall. This is the same block described under section 4.4; when the setting is off (or Sales Settings has never been saved) deliveries are never blocked this way.
+
 ### 3.2 Partial delivery (backorder)
 
 Enter a quantity less than the open balance on any line to create a partial delivery. The Sales Order status moves to **PARTIALLY_FULFILLED**. Create another delivery later for the remaining quantity.
@@ -311,6 +313,13 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 Same process as adding lines to a quotation or order, including the product-scoped **Unit** dropdown (see section 1.2). Lines can only be added, edited, or removed while the invoice is in DRAFT.
 
+**"incl. VAT" vs "excl. VAT" on a line.** Each line shows a small tag beside its **Unit Price** reading either **incl. VAT** or **excl. VAT**. It tells you how the unit price relates to VAT, and it simply reflects the VAT stance of the price list the line's price came from (set once per list — see *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02, Master Data):
+
+- **incl. VAT** — the unit price shown is the customer-facing **gross** price, with VAT already inside it. The system splits the net and the VAT back out of that figure (shown in the line's **Net** and **VAT Amt** columns) so the customer pays exactly the price shown, to the shilling. This is the natural fit for retail/shelf pricing.
+- **excl. VAT** — the unit price shown is the **net** price, and VAT is added on top, so the customer pays the price plus VAT. This is the usual wholesale/B2B "price + VAT" convention.
+
+The tag is a read-only indicator — you never set it on the line, and it does not change which product or price you picked, only how the VAT is derived from that price. The same tag appears on quotation and sales-order lines. Zero-rated and exempt products still show a tag but attract no VAT either way.
+
 ### 4.3 Record a payment
 
 Payments can be recorded on a draft invoice before it is finalised.
@@ -338,6 +347,8 @@ After finalisation:
 **Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
 
 **Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
+
+**Not enough stock (negative-stock block).** If your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The refusal is a plain message naming the product with how much is available versus requested — for example *"Not enough stock of Sukari 1kg to complete this sale — 3 available, 5 requested. To allow this, enable backorder in Sales Settings."* Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). When the setting is **off**, or the company has never saved any Sales Settings, sales are never blocked this way and stock is allowed to go negative. Invoices raised from a delivery are not checked here (their stock was issued and checked at the delivery — see below), and **the same block applies when you create a Delivery** against a sales order (section 3.1).
 
 ### 4.5 Void an invoice
 
@@ -580,6 +591,8 @@ Navigate to **Sales › Pricing Rules** (`/admin/pricing-rules`).
 5. **No price found** — the line is rejected; the product cannot be sold without a price
 
 Once the price is resolved, the standard totals calculation (net, VAT, gross) runs unchanged — pricing rules only affect the unit price input.
+
+**VAT stance travels with the resolved price.** Whichever source wins above, the resolved price also carries the VAT-inclusive or -exclusive stance of the price list it came from. That stance is what shows as the **incl. VAT** / **excl. VAT** tag on the sales line (section 4.2): it decides whether VAT is split out of the price or added on top, but it does not change which price wins the resolution. See *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02 for how the stance is set on a list.
 
 ### 8.1 Price tiers (quantity breaks)
 
