@@ -322,8 +322,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> receiptService.recordAndAllocate(overAllocReq))
                 .as("over-allocation must be rejected (BR-AR-04)")
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("total amount allocated")
-                .hasMessageContaining("exceeds the receipt amount");
+                .hasMessageContaining("exceeds invoice outstanding");
     }
 
     // =========================================================================

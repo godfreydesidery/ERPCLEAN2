@@ -114,7 +114,7 @@ class CashBankAccountServiceIT extends PostgresIntegrationTest {
                 companyUid, null, "Main Bank", CashBankAccountType.BANK,
                 null, null, null, bankGlUid, false)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("bankName");
+                .hasMessageContaining("bank name");
     }
 
     @Test

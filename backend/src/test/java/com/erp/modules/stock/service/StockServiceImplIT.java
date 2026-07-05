@@ -158,7 +158,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "STK Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         customerUid = cust.uid();
 
         AgentDto ag = agentService.create(new CreateAgentRequest(
@@ -520,7 +520,22 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     void eventDrivenSaleIssue_doesNotWriteAuditLog() {
         ProductDto product = stockableProduct("NoAuditWidget");
 
-        SalesInvoiceDto draft = makeDraftWithLine(product.uid(), BigDecimal.ONE);
+        // Deliberately a dedicated CASH_WALK_IN customer, NOT the shared (CREDIT_ACCOUNT) fixture:
+        // this test isolates the stock module's ADR-0010 D-12 invariant (event-driven SALE_ISSUE
+        // writes no audit_logs row). A credit-account sale also drives ArSalePostedHandler on the
+        // same SALE.FINALISED dispatch, which legitimately writes an AR.OPENITEM.CREATE audit row
+        // (a different module's documented behaviour) — that would confound this assertion.
+        CustomerDto cashCustomer = customerService.create(new CreateCustomerRequest(
+                companyA.getId(), PartyType.INDIVIDUAL, "STK Cash Customer",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                CustomerKind.CASH_WALK_IN, null, null, null));
+
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                companyA.getUid(), cashCustomer.uid(), agentUid, "TZS", null, null));
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, BigDecimal.ONE, null, null));
+        salesInvoiceService.addPayment(draft.uid(), // 500 x 1.18 VAT
+                new AddPaymentRequest(TenderType.CASH, new BigDecimal("590"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
         long auditAfterFinalise = auditRepository.count(); // SALES.INVOICE.FINALISE row already written
 
@@ -562,10 +577,6 @@ class StockServiceImplIT extends PostgresIntegrationTest {
                 companyA.getUid(), customerUid, agentUid, "TZS", null, null));
         salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(productUid, pcsUid, qty, null, null));
-        // 500 TZS × qty × 1.18 VAT
-        BigDecimal gross = qty.multiply(new BigDecimal("590"));
-        salesInvoiceService.addPayment(draft.uid(),
-                new AddPaymentRequest(TenderType.CASH, gross, "TZS", null));
         return draft;
     }
 

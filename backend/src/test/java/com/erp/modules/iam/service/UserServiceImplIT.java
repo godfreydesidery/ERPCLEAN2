@@ -12,11 +12,13 @@ import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.password.WeakPasswordException;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,8 +29,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * duplicate username rejection, weak-password rejection, is_root immutability, disable/enable/unlock
  * lifecycle, disabling a root user refusal, and setPasswordByUid policy + hash change.
  *
- * <p>No RequestContext setup is required here — UserServiceImpl does NOT read RequestContext (the
- * created_by field is absent; it only touches app_user directly via AppUserRepository).
+ * <p>UserServiceImpl reads RequestContext for its tenant-scope guards (getByUid, list,
+ * requireInScope) — a root principal is set here so these tests exercise the org-wide/root path
+ * rather than tripping the tenant-isolation 404 guard.
  */
 class UserServiceImplIT extends PostgresIntegrationTest {
 
@@ -42,6 +45,18 @@ class UserServiceImplIT extends PostgresIntegrationTest {
     @BeforeEach
     void setUp() {
         testData.clearAll();
+        // A real, persisted root user — the audit aspect FKs actor_user_id to app_users(id), so a
+        // synthetic id (e.g. 0L) trips fk_audit_log_actor on any audited write in these tests.
+        AppUser itRoot = new AppUser("usr_it_root", passwordEncoder.encode(VALID_PASSWORD), "IT Root");
+        itRoot.setRoot(true);
+        itRoot = users.save(itRoot);
+        RequestContext.set(new RequestContext.Principal(
+                itRoot.getId(), itRoot.getUsername(), true, null, null, null));
+    }
+
+    @AfterEach
+    void tearDown() {
+        RequestContext.clear();
     }
 
     // ---------------------------------------------------------------

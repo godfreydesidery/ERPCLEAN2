@@ -139,7 +139,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
         CustomerDto cust = customerService.create(new CreateCustomerRequest(
                 companyA.getId(), PartyType.INDIVIDUAL, "SO Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null, null));
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
         customerAUid = cust.uid();
 
         AgentDto ag = agentService.create(new CreateAgentRequest(
@@ -240,8 +240,6 @@ class SalesOutboxIT extends PostgresIntegrationTest {
         SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
         salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
                 productAUid, pcsUid, new BigDecimal("1"), null, null));
-        salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
-                TenderType.CASH, new BigDecimal("1180"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
 
         salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("IT void test"));
@@ -265,8 +263,6 @@ class SalesOutboxIT extends PostgresIntegrationTest {
         SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
         salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
                 productAUid, pcsUid, new BigDecimal("1"), null, null));
-        salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
-                TenderType.CASH, new BigDecimal("1180"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
         salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("two-events test"));
 

@@ -229,7 +229,7 @@ class DimensionServiceIT extends PostgresIntegrationTest {
                 dimensionService.updateValue(parent.uid(),
                         new UpdateDimensionValueRequest("Parent1", child.uid(), false)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("cycle");
+                .hasMessageContaining("circular hierarchy");
     }
 
     // =========================================================================
@@ -478,7 +478,7 @@ class DimensionServiceIT extends PostgresIntegrationTest {
                                         "TZS", "CR Cash")
                         ))))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("mandatory");
+                .hasMessageContaining("is required on every journal line");
     }
 
     // =========================================================================
@@ -573,7 +573,7 @@ class DimensionServiceIT extends PostgresIntegrationTest {
                                         "TZS", "CR Cash")
                         ))))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("mandatory");
+                .hasMessageContaining("is required on every journal line");
     }
 
     // =========================================================================

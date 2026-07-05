@@ -408,7 +408,7 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
                 "PURCHASE_ORDER", "po-uid-resubmit", new BigDecimal("5000000"), "TZS",
                 company.getId(), branch.getUid(), buyerUser.getId(), "Re-submitted PO")))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
-                .hasMessageContaining("already resolved")
+                .hasMessageContaining("already been resolved")
                 .hasMessageContaining("REJECTED");
     }
 

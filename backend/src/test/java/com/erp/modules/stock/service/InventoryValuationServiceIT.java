@@ -48,12 +48,10 @@ import com.erp.modules.products.service.PriceListService;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
-import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
-import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
@@ -214,7 +212,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         customerUid = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "InvVal Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CASH_WALK_IN, null, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
 
         agentUid = agentService.create(new CreateAgentRequest(
                 company.getId(), PartyType.INDIVIDUAL, "InvVal Agent",
@@ -644,7 +642,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         LocalDate today = LocalDate.now();
         assertThatThrownBy(() -> inventoryValuationService.setOpeningValue(secondRequest, today))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("already has a valuation");
+                .hasMessageContaining("already has an opening valuation");
     }
 
     // =========================================================================
@@ -1194,11 +1192,6 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
                 company.getUid(), customerUid, agentUid, "TZS", null, null));
         salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(productUid, pcsUid, qty, null, null));
-        // Re-read after line addition so the tendered amount equals the VAT-inclusive gross
-        // computed by the service (BR-SALES-07 requires tenders cover the actual invoice gross).
-        BigDecimal actualGross = salesInvoiceService.getByUid(draft.uid()).grossTotalAmount();
-        salesInvoiceService.addPayment(draft.uid(),
-                new AddPaymentRequest(TenderType.CASH, actualGross, "TZS", null));
         return draft;
     }
 

@@ -152,7 +152,7 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), branchInB.getUid())))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining(branchInB.getUid());
+                .hasMessageContaining("does not belong to the specified company");
     }
 
     // ---------------------------------------------------------------
