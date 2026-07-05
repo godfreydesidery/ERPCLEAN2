@@ -21,6 +21,7 @@ import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -47,6 +48,9 @@ public class VatReturnServiceImpl implements VatReturnService {
     private final VatReturnFilingPoster        filingPoster;
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
+    /** R3 (persona UAT I4 follow-up): seam for the period-end filing guard — a test can inject a
+     * fixed {@link Clock} instead of depending on wall-clock time. */
+    private final Clock                        clock;
 
     public VatReturnServiceImpl(VatReturnRepository returns,
                                  VatReturnBandRepository bands,
@@ -56,7 +60,8 @@ public class VatReturnServiceImpl implements VatReturnService {
                                  VatReturnComputationReader computationReader,
                                  VatReturnFilingPoster filingPoster,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 Clock clock) {
         this.returns          = returns;
         this.bands            = bands;
         this.adjustments      = adjustments;
@@ -66,6 +71,7 @@ public class VatReturnServiceImpl implements VatReturnService {
         this.filingPoster     = filingPoster;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.clock            = clock;
     }
 
     // -------------------------------------------------------------------------
@@ -157,6 +163,15 @@ public class VatReturnServiceImpl implements VatReturnService {
             // BR-VAT-11: a return can only be filed once
             throw new IllegalStateException(
                     "This VAT return has already been filed and cannot be filed again.");
+        }
+
+        // persona UAT I4 / R3: a return whose period has not yet ended cannot be filed — the
+        // figures aren't final until the period closes. Reads through the injected Clock (rather
+        // than a bare LocalDate.now()) so a test can pin "today" instead of depending on wall-clock
+        // time.
+        if (vatReturn.getPeriodEnd().isAfter(LocalDate.now(clock))) {
+            throw new ConflictException(
+                    "This VAT period has not yet ended and cannot be filed.");
         }
 
         // Prior period must be FILED first (D-4 recommended default)

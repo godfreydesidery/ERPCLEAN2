@@ -1,6 +1,7 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -143,6 +144,39 @@ class SalesApprovalGateTest {
         assertThat(captor.getValue().summary()).doesNotContain("—");
     }
 
+    @Test
+    void submitIndependent_delegatesToSubmit_persistingViaTheSameEngineCall() {
+        // persona UAT I3: submitIndependent is the REQUIRES_NEW entry point SalesOrderServiceImpl
+        // now calls; here (without a real Spring transaction manager in a plain unit test) it must
+        // still behave exactly like submit() — same engine call, same result passed through.
+        SalesOrder order = orderWithTotal(BigDecimal.valueOf(5000));
+        when(customers.findByCompanyIdAndId(COMPANY_ID, CUSTOMER_ID)).thenReturn(
+                Optional.of(customer(CUSTOMER_ID, "Acme Traders")));
+        when(approvalEngine.submitForApproval(any())).thenReturn(
+                approvalRequest(order.getUid(), ApprovalRequestStatus.PENDING));
+
+        ApprovalRequestDto result = gate.submitIndependent(order, BRANCH_UID);
+
+        assertThat(result.status()).isEqualTo(ApprovalRequestStatus.PENDING);
+        org.mockito.Mockito.verify(approvalEngine).submitForApproval(any());
+    }
+
+    @Test
+    void submitIndependent_noMatchingPolicy_throwsApprovalPolicyMissingException() {
+        // R1: the engine auto-approved because no SALES_ORDER policy matched — submitIndependent
+        // must detect this and throw INSTEAD of returning the auto-approved result, so its own
+        // REQUIRES_NEW transaction rolls back and the misconfigured "approval" is never persisted
+        // durably (see ApprovalPolicyMissingException javadoc).
+        SalesOrder order = orderWithTotal(BigDecimal.valueOf(5000));
+        when(customers.findByCompanyIdAndId(COMPANY_ID, CUSTOMER_ID)).thenReturn(
+                Optional.of(customer(CUSTOMER_ID, "Acme Traders")));
+        when(approvalEngine.submitForApproval(any())).thenReturn(
+                approvalRequest(order.getUid(), ApprovalRequestStatus.APPROVED, true));
+
+        assertThatThrownBy(() -> gate.submitIndependent(order, BRANCH_UID))
+                .isInstanceOf(ApprovalPolicyMissingException.class);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
@@ -172,10 +206,15 @@ class SalesApprovalGateTest {
     }
 
     private static ApprovalRequestDto approvalRequest(String documentUid, ApprovalRequestStatus status) {
+        return approvalRequest(documentUid, status, status == ApprovalRequestStatus.APPROVED);
+    }
+
+    private static ApprovalRequestDto approvalRequest(String documentUid, ApprovalRequestStatus status,
+                                                       boolean autoApproved) {
         return new ApprovalRequestDto(
                 1L, "APRUID00000000000000001", COMPANY_ID, 10L, null, null,
                 "APR-0001", "SALES_ORDER", documentUid, BigDecimal.TEN, "TZS",
-                status, null, status == ApprovalRequestStatus.APPROVED,
+                status, null, autoApproved,
                 null, null, "summary",
                 1L, null, java.time.Instant.now(), null, null, null, List.of());
     }

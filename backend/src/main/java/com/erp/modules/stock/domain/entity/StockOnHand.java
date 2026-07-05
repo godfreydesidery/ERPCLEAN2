@@ -162,6 +162,18 @@ public class StockOnHand {
     }
 
     /**
+     * Stamp this row as having just been physically counted (P2-M5 {@code last_counted_at}
+     * snapshot). persona UAT I6: the column existed but was never written by any code path —
+     * called from {@code StockCountServiceImpl.post} for every counted line, including a
+     * zero-variance one.
+     */
+    public void markCounted(Instant when, Long actorId) {
+        this.lastCountedAt = when;
+        this.updatedAt     = when;
+        this.updatedBy     = actorId;
+    }
+
+    /**
      * Apply a cost recompute result (ADR-0020 D-2): update the running average and on-hand value.
      * Called by InventoryValuationServiceImpl under the @Version optimistic lock.
      *

@@ -936,8 +936,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // carries no internal codes/identifiers (error-message hygiene standing rule).
         log.warn("Agent resolution failed (BR-SALES-06): no agentUid supplied and no internal agent "
                 + "for companyId={} userId={}", companyId, ctx != null ? ctx.userId() : null);
+        // persona UAT I1: this is the DIRECT-invoice creation path (create()) — the previous message
+        // ("This sales order has no agent assigned") was copy-pasted from the sales-order flow and
+        // misleads a user who created an invoice, not an order.
         throw new IllegalArgumentException(
-                "This sales order has no agent assigned. Assign an agent before invoicing.");
+                "No sales agent is assigned to this invoice. Please select an agent before saving.");
     }
 
     private void assertAgentActive(Agent agent) {
