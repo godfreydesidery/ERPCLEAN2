@@ -32,7 +32,7 @@ const CO  = { uid: 'CO1', id: '10', name: 'Main Co' };
 
 function makePriceList(uid: string, code: string): PriceListDto {
   return {
-    id: uid, uid, companyId: '10', code, name: code, isDefault: false,
+    id: uid, uid, companyId: '10', code, name: code, priceIncludesVat: true, isDefault: false,
     status: 'ACTIVE', version: null, createdAt: null, createdBy: null,
     updatedAt: null, updatedBy: null,
   };

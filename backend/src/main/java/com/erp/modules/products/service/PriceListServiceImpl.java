@@ -60,6 +60,12 @@ public class PriceListServiceImpl implements PriceListService {
         }
 
         PriceList pl = new PriceList(companyId, req.code(), req.name(), actorId());
+        // ADR-0056 D-2: the service/DB default stays EXCLUSIVE (entity default false) so existing
+        // lists, direct-API callers and bulk price imports are never silently reinterpreted as
+        // gross (grandfathering + import safety). "VAT-inclusive by default for NEW lists" is a
+        // UI affordance: the price-list create form pre-checks the toggle and sends
+        // priceIncludesVat=true explicitly. So here we simply honour whatever the request carries
+        // (null → entity default false), never forcing a default.
         applyMetadata(pl, req.currency(), req.effectiveFrom(), req.effectiveTo(),
                 req.priceIncludesVat(), req.isDefault(), req.scope());
         PriceList saved = priceLists.save(pl);

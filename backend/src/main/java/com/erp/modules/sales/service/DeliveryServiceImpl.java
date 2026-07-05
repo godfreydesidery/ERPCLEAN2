@@ -393,6 +393,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                     actorId());
             invLine.setLineDiscountAmount(sol.getLineDiscountAmount());
             invLine.setLineDiscountPercent(sol.getLineDiscountPercent());
+            // Carry the VAT-inclusive/exclusive stance snapshot from the SO line, else the
+            // totals recompute below would treat an inclusive (gross) unit price as net and
+            // re-add VAT — over-taxing the posted invoice (ADR-0056).
+            invLine.setPriceInclusive(sol.isPriceInclusive());
             createdLines.add(invoiceLines.save(invLine));
 
             // Update running counters on delivery line and SO line

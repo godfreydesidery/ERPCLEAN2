@@ -49,8 +49,8 @@ function makeUnit(uid: string, code: string): UnitOfMeasureDto {
     version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
 }
 function makePriceList(uid: string, code: string, isDefault = false): PriceListDto {
-  return { id: uid, uid, companyId: '10', code, name: code, isDefault, status: 'ACTIVE',
-    version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
+  return { id: uid, uid, companyId: '10', code, name: code, priceIncludesVat: true, isDefault,
+    status: 'ACTIVE', version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
 }
 function makeBranch(uid: string, code: string): Branch {
   return { id: uid, uid, companyId: '10', companyUid: 'CO1', code, name: code,

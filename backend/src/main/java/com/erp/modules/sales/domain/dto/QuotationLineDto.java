@@ -23,6 +23,7 @@ public record QuotationLineDto(
         BigDecimal netAmount,
         BigDecimal vatAmount,
         BigDecimal grossAmount,
+        boolean priceInclusive,
         String currency
 ) {
     public static QuotationLineDto from(QuotationLine l) {
@@ -36,6 +37,7 @@ public record QuotationLineDto(
                 l.getVatStatus() != null ? l.getVatStatus().name() : null,
                 l.getVatRate(),
                 l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
+                l.isPriceInclusive(),
                 l.getCurrency().value());
     }
 }

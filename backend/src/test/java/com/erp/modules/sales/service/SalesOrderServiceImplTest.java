@@ -20,6 +20,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -338,7 +339,7 @@ class SalesOrderServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000001"))
                 .thenReturn(Optional.of(baseUnit));
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
-                .thenReturn(new BigDecimal("100.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -376,7 +377,7 @@ class SalesOrderServiceImplTest {
         // Base price is 100; the BOX pack is explicitly priced at 1150 (non-linear override) —
         // NOT 100 (the bug) and not necessarily 1200 (100 x factor 12) either.
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
-                .thenReturn(new BigDecimal("1150.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -396,6 +397,39 @@ class SalesOrderServiceImplTest {
         // independent concerns (D-1 only changes the price, not computeQtyInBase's math).
         assertThat(dto.qtyOrderedBase()).isEqualByComparingTo(new BigDecimal("12"));
         verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+    }
+
+    @Test
+    void addLine_resolvedFromInclusiveList_snapshotsPriceInclusiveTrueOnLine() {
+        // ADR-0056: the line snapshots the resolver's vatInclusive flag regardless of the amount.
+        SalesOrder order = orderWithId(722L, "SOUID000000000000000032", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000032")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000032", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure baseUnit = unitWithId(940L, "BASEUID0000000000000003", "PCS");
+        Product product = productWithId(902L, "PRODUID00000000000000003", "PROD-0003", "Shelf Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000003"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000003"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 940L))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(orderLines.findMaxLineNo(722L)).thenReturn(0);
+        when(orderLines.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(722L)).thenReturn(List.of());
+
+        AddSalesOrderLineRequest req = new AddSalesOrderLineRequest(
+                "PRODUID00000000000000003", "BASEUID0000000000000003", BigDecimal.ONE, null, null, null);
+
+        SalesOrderLineDto dto = service.addLine("SOUID000000000000000032", req);
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1180.0000");
+        assertThat(dto.priceInclusive()).isTrue();
     }
 
     @Test

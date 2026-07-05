@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -88,7 +89,7 @@ class QuotationServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000020"))
                 .thenReturn(Optional.of(baseUnit));
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
-                .thenReturn(new BigDecimal("100.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -120,7 +121,7 @@ class QuotationServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BOXUID00000000000000021"))
                 .thenReturn(Optional.of(boxUnit));
         when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
-                .thenReturn(new BigDecimal("1150.0000"));
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
                         new BigDecimal("0.1800"), 1L)));
@@ -138,6 +139,37 @@ class QuotationServiceImplTest {
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1150.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(new BigDecimal("12"));
         verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+    }
+
+    @Test
+    void addLine_resolvedFromInclusiveList_snapshotsPriceInclusiveTrueOnLine() {
+        // ADR-0056: the line snapshots the resolver's vatInclusive flag regardless of the amount.
+        Quotation q = quotationWithId(502L, "QUOUID0000000000000000012");
+        when(quotations.findByUid(q.getUid())).thenReturn(Optional.of(q));
+
+        UnitOfMeasure baseUnit = unitWithId(950L, "BASEUID0000000000000022", "PCS");
+        Product product = productWithId(902L, "PRODUID00000000000000022", "PROD-0003", "Shelf Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000022"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000022"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 950L))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(quotationLines.findMaxLineNo(502L)).thenReturn(0);
+        when(quotationLines.save(any())).thenAnswer(a -> a.getArgument(0));
+        when(quotationLines.findByQuotationIdOrderByLineNo(502L)).thenReturn(List.of());
+
+        AddQuotationLineRequest req = new AddQuotationLineRequest(
+                "PRODUID00000000000000022", "BASEUID0000000000000022", BigDecimal.ONE, null, null, null);
+
+        QuotationLineDto dto = service.addLine(q.getUid(), req);
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1180.0000");
+        assertThat(dto.priceInclusive()).isTrue();
     }
 
     // -------------------------------------------------------------------------

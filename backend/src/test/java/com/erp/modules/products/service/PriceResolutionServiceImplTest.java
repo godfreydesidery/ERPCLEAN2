@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
+import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.PriceList;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
@@ -13,6 +14,7 @@ import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.repository.CustomerPriceRepository;
+import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.PriceTierRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
@@ -47,6 +49,7 @@ class PriceResolutionServiceImplTest {
     private ProductPriceRepository productPrices;
     private ProductBulkPackRepository bulkPacks;
     private ProductRepository products;
+    private PriceListRepository priceLists;
     private PriceResolutionServiceImpl service;
 
     private Product product;
@@ -62,9 +65,10 @@ class PriceResolutionServiceImplTest {
         productPrices = mock(ProductPriceRepository.class);
         bulkPacks = mock(ProductBulkPackRepository.class);
         products = mock(ProductRepository.class);
+        priceLists = mock(PriceListRepository.class);
 
         service = new PriceResolutionServiceImpl(
-                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products);
+                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products, priceLists);
 
         baseUnit = unitWithId(1L, "BASEUID0000000000000040", "PCS");
         boxUnit = unitWithId(2L, "BOXUID00000000000000040", "BOX");
@@ -82,9 +86,10 @@ class PriceResolutionServiceImplTest {
         when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(product.getId(), boxUnit.getId()))
                 .thenReturn(Optional.of(packRow));
 
-        BigDecimal price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), boxUnit.getId());
+        UnitListPriceDto price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), boxUnit.getId());
 
-        assertThat(price).isEqualByComparingTo("1150.0000");
+        assertThat(price.amount()).isEqualByComparingTo("1150.0000");
+        assertThat(price.vatInclusive()).isFalse();
     }
 
     @Test
@@ -94,10 +99,11 @@ class PriceResolutionServiceImplTest {
         when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
                 .thenReturn(Optional.of(priceRow(null, "100.0000")));
 
-        BigDecimal price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), boxUnit.getId());
+        UnitListPriceDto price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), boxUnit.getId());
 
         // 100 (base) x 12 (factor) — the pack-unit under-charge bug this ADR fixes.
-        assertThat(price).isEqualByComparingTo("1200.0000");
+        assertThat(price.amount()).isEqualByComparingTo("1200.0000");
+        assertThat(price.vatInclusive()).isFalse();
     }
 
     @Test
@@ -105,9 +111,41 @@ class PriceResolutionServiceImplTest {
         when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
                 .thenReturn(Optional.of(priceRow(null, "100.0000")));
 
-        BigDecimal price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), baseUnit.getId());
+        UnitListPriceDto price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), baseUnit.getId());
 
-        assertThat(price).isEqualByComparingTo("100.0000");
+        assertThat(price.amount()).isEqualByComparingTo("100.0000");
+        assertThat(price.vatInclusive()).isFalse();
+    }
+
+    // -------------------------------------------------------------------------
+    // ADR-0056 — VAT-inclusive stance threaded through resolveUnitListPrice
+    // -------------------------------------------------------------------------
+
+    @Test
+    void resolveUnitListPrice_baseRowOnInclusiveList_carriesVatInclusiveTrue() {
+        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
+                .thenReturn(Optional.of(priceRow(null, "1180.0000", true)));
+
+        UnitListPriceDto price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), baseUnit.getId());
+
+        assertThat(price.amount()).isEqualByComparingTo("1180.0000");
+        assertThat(price.vatInclusive()).isTrue();
+    }
+
+    @Test
+    void resolveUnitListPrice_packOverrideInclusive_inheritsItsOwnListFlag_notBaseRows() {
+        // Base row lives on an EXCLUSIVE list; the pack override lives on its OWN INCLUSIVE list —
+        // the pack must carry ITS OWN list's stance (ADR-0056 D-4), never the base row's.
+        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
+                .thenReturn(Optional.of(priceRow(null, "100.0000", false)));
+        ProductPrice packRow = priceRow(boxUnit, "1180.0000", true);
+        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(product.getId(), boxUnit.getId()))
+                .thenReturn(Optional.of(packRow));
+
+        UnitListPriceDto price = service.resolveUnitListPrice(COMPANY_ID, product.getId(), boxUnit.getId());
+
+        assertThat(price.amount()).isEqualByComparingTo("1180.0000");
+        assertThat(price.vatInclusive()).isTrue();
     }
 
     @Test
@@ -144,6 +182,20 @@ class PriceResolutionServiceImplTest {
                 COMPANY_ID, null, product.getId(), BigDecimal.ONE, LocalDate.now(), 500L, null));
 
         assertThat(result.unitPriceAmount()).isEqualByComparingTo("100.0000");
+        assertThat(result.vatInclusive()).isFalse();
+    }
+
+    @Test
+    void resolve_listPriceOnInclusiveList_carriesVatInclusiveTrue() {
+        // ADR-0056: even though resolve() is dead (no caller), it stays honest about the flag.
+        when(productPrices.findByProductIdAndPriceListIdAndUnitIdIsNull(product.getId(), 500L))
+                .thenReturn(Optional.of(priceRow(null, "1180.0000", true)));
+
+        var result = service.resolve(new ResolvePriceRequest(
+                COMPANY_ID, null, product.getId(), BigDecimal.ONE, LocalDate.now(), 500L, null));
+
+        assertThat(result.unitPriceAmount()).isEqualByComparingTo("1180.0000");
+        assertThat(result.vatInclusive()).isTrue();
     }
 
     // -------------------------------------------------------------------------
@@ -151,9 +203,14 @@ class PriceResolutionServiceImplTest {
     // -------------------------------------------------------------------------
 
     private ProductPrice priceRow(UnitOfMeasure unit, String amount) {
+        return priceRow(unit, amount, false);
+    }
+
+    private ProductPrice priceRow(UnitOfMeasure unit, String amount, boolean vatInclusive) {
         PriceList priceList = new PriceList(COMPANY_ID, "RETAIL", "Retail", 1L);
         ReflectionTestUtils.setField(priceList, "id", 500L);
         ReflectionTestUtils.setField(priceList, "uid", "PLUID000000000000000040");
+        priceList.setPriceIncludesVat(vatInclusive);
         return new ProductPrice(product, priceList, unit,
                 new Money(new BigDecimal(amount), "TZS"), 1L);
     }

@@ -1,5 +1,6 @@
 package com.erp.modules.products.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -82,5 +83,58 @@ class PriceListServiceImplTest {
         service.create(req);
 
         verify(priceLists).save(any(PriceList.class));
+    }
+
+    // -------------------------------------------------------------------------
+    // ADR-0056 D-2 — the service/DB default stays EXCLUSIVE (grandfathering + import safety);
+    // "inclusive by default for new lists" is a UI affordance (the create form pre-checks the
+    // toggle and sends priceIncludesVat=true explicitly). A request that OMITS the flag keeps
+    // the entity default (false), so existing lists and direct-API/import callers are never
+    // silently reinterpreted as gross.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_omittingPriceIncludesVat_keepsExclusiveEntityDefault() {
+        when(priceLists.existsByCompanyIdAndCode(COMPANY_ID, "RETAIL2")).thenReturn(false);
+        when(priceLists.save(any(PriceList.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePriceListRequest req = new CreatePriceListRequest(COMPANY_UID, "RETAIL2", "Retail 2");
+
+        PriceList saved = captureSavedPriceList(req);
+
+        assertThat(saved.isPriceIncludesVat()).isFalse();
+    }
+
+    @Test
+    void create_explicitFalsePriceIncludesVat_keepsExclusive() {
+        when(priceLists.existsByCompanyIdAndCode(COMPANY_ID, "WHOLESALE2")).thenReturn(false);
+        when(priceLists.save(any(PriceList.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePriceListRequest req = new CreatePriceListRequest(COMPANY_UID, "WHOLESALE2", "Wholesale 2",
+                null, null, null, false, null, null);
+
+        PriceList saved = captureSavedPriceList(req);
+
+        assertThat(saved.isPriceIncludesVat()).isFalse();
+    }
+
+    @Test
+    void create_explicitTruePriceIncludesVat_staysInclusive() {
+        when(priceLists.existsByCompanyIdAndCode(COMPANY_ID, "RETAIL3")).thenReturn(false);
+        when(priceLists.save(any(PriceList.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePriceListRequest req = new CreatePriceListRequest(COMPANY_UID, "RETAIL3", "Retail 3",
+                null, null, null, true, null, null);
+
+        PriceList saved = captureSavedPriceList(req);
+
+        assertThat(saved.isPriceIncludesVat()).isTrue();
+    }
+
+    private PriceList captureSavedPriceList(CreatePriceListRequest req) {
+        service.create(req);
+        org.mockito.ArgumentCaptor<PriceList> captor = org.mockito.ArgumentCaptor.forClass(PriceList.class);
+        verify(priceLists).save(captor.capture());
+        return captor.getValue();
     }
 }

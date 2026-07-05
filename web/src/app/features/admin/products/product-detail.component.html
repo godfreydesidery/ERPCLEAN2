@@ -471,6 +471,7 @@
                       <th scope="col">Price list</th>
                       <th scope="col">Unit</th>
                       <th scope="col" class="num">Price</th>
+                      <th scope="col">VAT</th>
                       @if (canManage()) {
                         <th scope="col"><span class="sr-only">Actions</span></th>
                       }
@@ -482,6 +483,13 @@
                         <td>{{ priceListLabel(pp) }}</td>
                         <td>{{ priceUnitLabel(pp) }}</td>
                         <td class="num mono">{{ pp.price.amount }} {{ pp.price.currency }}</td>
+                        <td>
+                          <span class="status-tag"
+                                [class.status-tag--info]="priceIncludesVat(pp)"
+                                [class.status-tag--neutral]="!priceIncludesVat(pp)">
+                            {{ priceIncludesVat(pp) ? 'Incl. VAT' : 'Excl. VAT' }}
+                          </span>
+                        </td>
                         @if (canManage()) {
                           <td>
                             <button type="button" class="btn btn-sm btn-outline-danger"

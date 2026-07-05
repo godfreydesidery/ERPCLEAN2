@@ -185,6 +185,15 @@ export class ProductDetailComponent {
     return pp.unitUid ? (pp.unitName ?? pp.unitCode ?? pp.unitUid) : 'Base';
   }
 
+  /**
+   * ADR-0056: the VAT-inclusive/exclusive nature is a property of the price LIST, not the
+   * product-price row itself — looked up from the loaded price lists for this company.
+   * Defaults to false (exclusive) if the owning list hasn't loaded yet.
+   */
+  priceIncludesVat(pp: ProductPriceDto): boolean {
+    return this.priceLists().find((pl) => pl.uid === pp.priceListUid)?.priceIncludesVat ?? false;
+  }
+
   constructor() {
     // Debounced component-product search (Fix 2).
     this.componentSearch$
