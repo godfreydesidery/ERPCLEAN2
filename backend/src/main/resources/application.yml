@@ -1,6 +1,13 @@
 spring:
   application:
     name: erp-api
+  servlet:
+    multipart:
+      # Bulk-import spreadsheets (ADR-0055). The row reader caps at 2000 rows, but a formatted XLSX
+      # with dropdowns/validation can exceed the 1 MB Spring default — raise the ceiling modestly.
+      # 8 MB comfortably fits a full 2000-row sheet while bounding the upload DoS surface.
+      max-file-size: 8MB
+      max-request-size: 8MB
   datasource:
     url: ${ERP_DB_URL:jdbc:postgresql://localhost:5434/erp}
     username: ${ERP_DB_USER:erp}

@@ -23,4 +23,7 @@ public interface ProductBarcodeRepository extends JpaRepository<ProductBarcode, 
      * index; single probe.
      */
     Optional<ProductBarcode> findByCompanyIdAndBarcode(Long companyId, String barcode);
+
+    /** Every product's primary barcode in a company — for the bulk product export (download). */
+    List<ProductBarcode> findByCompanyIdAndPrimaryTrue(Long companyId);
 }
