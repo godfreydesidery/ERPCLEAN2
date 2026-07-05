@@ -381,6 +381,12 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         ProductDto product = stockableProduct("DirectGuardBlockWidget", "900");
         publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
 
+        // Explicit BLOCK — a company with no Sales Settings row now defaults to allow (backorder),
+        // so the block cases must opt in to blocking (allow_negative_stock = false).
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false));
+
         setCtx();
         SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
                 company.getUid(), customerUid, agentUid, "TZS", null, null));
@@ -416,6 +422,11 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         // block, else splitting a sale across lines trivially bypasses the negative-stock block.
         ProductDto product = stockableProduct("DirectGuardAggWidget", "901");
         publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
+
+        // Explicit BLOCK (no-row now defaults to allow).
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false));
 
         setCtx();
         SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
@@ -688,8 +699,13 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
         String solUid = soLines.get(0).uid();
 
+        // Explicit BLOCK — no Sales Settings row now defaults to allow, so opt in to blocking.
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false));
+
         // Deliver the full 10 (passes BR-SO-11: 10 <= open qty 10) — but only 5 is physically on
-        // hand, and allow_negative_stock defaults to false (no settings row yet for this company).
+        // hand and the company has opted into blocking (allow_negative_stock = false).
         setCtx();
         assertThatThrownBy(() -> deliveryService.create(new CreateDeliveryRequest(
                 so.uid(), LocalDate.now(), null,

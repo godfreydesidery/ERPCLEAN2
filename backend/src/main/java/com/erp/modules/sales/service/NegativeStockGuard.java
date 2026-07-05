@@ -82,7 +82,12 @@ public class NegativeStockGuard {
 
         boolean allowNegative = settings.findByCompanyId(companyId)
                 .map(SalesSettings::isAllowNegativeStock)
-                .orElse(false); // no settings row yet for this company → block (entity default)
+                // No Sales Settings row yet → the company has not opted into stock control, so it is
+                // NOT guarded (backorder allowed). Blocking is the default the moment Sales Settings
+                // is saved: the entity/DB default and the web toggle both default to block. (Owner
+                // decision 2026-07-05 — "allow until configured": avoids blocking every sale for a
+                // freshly-created, un-configured company.)
+                .orElse(true);
         if (allowNegative) {
             return;
         }

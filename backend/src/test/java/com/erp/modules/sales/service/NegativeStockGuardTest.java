@@ -85,16 +85,17 @@ class NegativeStockGuardTest {
     }
 
     @Test
-    void defaultsToBlocking_whenNoSettingsRowYet() {
+    void allowsWhenNoSettingsRowYet_backorderUntilConfigured() {
+        // Owner decision "allow until configured": a company with no Sales Settings row is NOT
+        // guarded — the sale proceeds (backorder) and availability is never even read. Blocking
+        // begins only once a settings row exists (the toggle/entity default is block).
         when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.empty());
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
-                .thenReturn(StockAvailabilityDto.zero(COMPANY_ID, BRANCH_ID, PRODUCT_ID));
 
-        assertThatThrownBy(() -> guard.assertAvailable(
-                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
-                "Widget", new BigDecimal("1")))
-                .isInstanceOf(ConflictException.class);
+        guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("1"));
+
+        verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
     }
 
     @Test
