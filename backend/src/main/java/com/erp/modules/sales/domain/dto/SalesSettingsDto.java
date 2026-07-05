@@ -14,12 +14,15 @@ public record SalesSettingsDto(
         Long   companyId,
         boolean soApprovalEnabled,
         BigDecimal soApprovalThresholdAmount,
-        String currency
+        String currency,
+        /** Configurable "block negative stock on sale" (owner decision 2026-07-05, V87). */
+        boolean allowNegativeStock
 ) {
     public static SalesSettingsDto from(SalesSettings s) {
         return new SalesSettingsDto(
                 s.getId(), s.getUid(), s.getCompanyId(),
                 s.isSoApprovalEnabled(), s.getSoApprovalThresholdAmount(),
-                CurrencyCode.value(s.getCurrency()));
+                CurrencyCode.value(s.getCurrency()),
+                s.isAllowNegativeStock());
     }
 }

@@ -1,5 +1,6 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.stock.domain.dto.StockAvailabilityDto;
 import java.math.BigDecimal;
 
 /**
@@ -30,4 +31,15 @@ public interface StockReservationService {
      */
     void applyReservationDelta(Long companyId, Long branchId, Long productId,
                                BigDecimal delta, Long actorId);
+
+    /**
+     * Read-only available-to-promise for a (company, branch, product) at the branch default
+     * location: {@code quantity − reserved_qty}. Does not mutate anything. Missing on-hand row
+     * (product never touched at this branch) resolves to all-zero (never blocks on a technicality).
+     *
+     * <p>Used by the sales module's negative-stock guard (owner decision 2026-07-05) — the
+     * cross-module DTO-returning read that keeps the module boundary intact (no {@code StockOnHand}
+     * entity crosses into sales).
+     */
+    StockAvailabilityDto getAvailability(Long companyId, Long branchId, Long productId);
 }

@@ -47,6 +47,7 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
 import com.erp.modules.sales.domain.dto.SalesOrderLineDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.domain.enums.SalesOrderStatus;
 import com.erp.modules.sales.domain.enums.TenderType;
@@ -117,6 +118,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     @Autowired private SalesOrderService       salesOrderService;
     @Autowired private DeliveryService         deliveryService;
     @Autowired private SalesInvoiceService     salesInvoiceService;
+    @Autowired private SalesSettingsService    salesSettingsService;
 
     @Autowired private StockOnHandRepository   stockOnHandRepo;
     @Autowired private DomainEventRepository   domainEventRepo;
@@ -369,6 +371,111 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 3b (owner decision 2026-07-05, V87) — configurable "block negative stock on sale":
+    // a DIRECT invoice finalise that would take on-hand negative is rejected (setting off, the
+    // default) or allowed to go negative (setting on).
+    // =========================================================================
+
+    @Test
+    void directInvoice_overSells_blocked_whenAllowNegativeStockOff() {
+        ProductDto product = stockableProduct("DirectGuardBlockWidget", "900");
+        publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
+
+        setCtx();
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        setCtx();
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, new BigDecimal("8"), null, null));
+        setCtx();
+        BigDecimal grossAmt = salesInvoiceService.getByUid(draft.uid()).grossTotalAmount();
+        salesInvoiceService.addPayment(draft.uid(),
+                new AddPaymentRequest(TenderType.CASH, grossAmt, "TZS", null));
+
+        setCtx();
+        String invUid = draft.uid();
+        assertThatThrownBy(() -> salesInvoiceService.finalise(invUid, new FinaliseInvoiceRequest()))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Not enough stock of DirectGuardBlockWidget")
+                .hasMessageContaining("5.000000 available")
+                .hasMessageContaining("8.000000 requested")
+                .hasMessageContaining("enable backorder in Sales Settings");
+
+        // The whole finalise TX rolled back — invoice stays DRAFT, on-hand untouched.
+        setCtx();
+        assertThat(salesInvoiceService.getByUid(invUid).status()).isEqualTo(InvoiceStatus.DRAFT);
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("blocked finalise must not touch on-hand")
+                .isEqualByComparingTo(new BigDecimal("5"));
+    }
+
+    @Test
+    void directInvoice_sameProductOnTwoLines_blockedOnAggregate_whenAllowNegativeStockOff() {
+        // Regression: the guard aggregates requested qty PER PRODUCT across lines. On-hand 5; two
+        // lines of the same product at 3 each are each ≤ 5 individually but sum to 6 > 5 — must
+        // block, else splitting a sale across lines trivially bypasses the negative-stock block.
+        ProductDto product = stockableProduct("DirectGuardAggWidget", "901");
+        publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
+
+        setCtx();
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        setCtx();
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, new BigDecimal("3"), null, null));
+        setCtx();
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, new BigDecimal("3"), null, null));
+        setCtx();
+        BigDecimal grossAmt = salesInvoiceService.getByUid(draft.uid()).grossTotalAmount();
+        salesInvoiceService.addPayment(draft.uid(),
+                new AddPaymentRequest(TenderType.CASH, grossAmt, "TZS", null));
+
+        setCtx();
+        String invUid = draft.uid();
+        assertThatThrownBy(() -> salesInvoiceService.finalise(invUid, new FinaliseInvoiceRequest()))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Not enough stock of DirectGuardAggWidget")
+                .hasMessageContaining("5.000000 available")
+                .hasMessageContaining("6.000000 requested"); // 3 + 3 aggregated, not checked per-line
+
+        setCtx();
+        assertThat(salesInvoiceService.getByUid(invUid).status()).isEqualTo(InvoiceStatus.DRAFT);
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("blocked finalise must not touch on-hand")
+                .isEqualByComparingTo(new BigDecimal("5"));
+    }
+
+    @Test
+    void directInvoice_overSells_allowed_whenAllowNegativeStockOn_stockGoesNegative() {
+        ProductDto product = stockableProduct("DirectGuardAllowWidget", "900");
+        publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
+
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        setCtx();
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, new BigDecimal("8"), null, null));
+        setCtx();
+        BigDecimal grossAmt = salesInvoiceService.getByUid(draft.uid()).grossTotalAmount();
+        salesInvoiceService.addPayment(draft.uid(),
+                new AddPaymentRequest(TenderType.CASH, grossAmt, "TZS", null));
+        setCtx();
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("backorder allowed on DIRECT invoice — on-hand goes negative (5 − 8 = −3)")
+                .isEqualByComparingTo(new BigDecimal("-3"));
+    }
+
+    // =========================================================================
     // Bar 4 — Guard: cannot deliver more than open qty (BR-SO-11)
     // =========================================================================
 
@@ -559,6 +666,75 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         assertThat(inv.grossTotalAmount())
                 .as("header gross must NOT be 1392.40 (the re-taxed-bug value)")
                 .isEqualByComparingTo(new BigDecimal("1180.0000"));
+    }
+
+    // =========================================================================
+    // Bar 8 (owner decision 2026-07-05, V87) — configurable "block negative stock on sale":
+    // an over-reserved SO (BR-SO-05/OQ-SO-02 explicitly allows reserving beyond on-hand) is
+    // deliverable up to the reserved qty structurally (BR-SO-11), but the delivery-create
+    // negative-stock guard must reject it when physical on-hand can't cover it and the company
+    // has not opted into backorder — and must allow it (stock goes negative) once it has.
+    // =========================================================================
+
+    @Test
+    void overDeliverBeyondOnHand_blocked_whenAllowNegativeStockOff() {
+        // Receive only 5 — deliberately less than what will be ordered.
+        ProductDto product = stockableProduct("GuardBlockWidget", "800");
+        publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("300"));
+
+        // Order + confirm 10 — over-reservation is explicitly allowed (OQ-SO-02); this does NOT
+        // touch on-hand quantity, only reserved_qty (10), so on-hand stays 5.
+        SalesOrderDto so = createAndConfirmOrder(product, new BigDecimal("10"));
+        List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
+        String solUid = soLines.get(0).uid();
+
+        // Deliver the full 10 (passes BR-SO-11: 10 <= open qty 10) — but only 5 is physically on
+        // hand, and allow_negative_stock defaults to false (no settings row yet for this company).
+        setCtx();
+        assertThatThrownBy(() -> deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(solUid, new BigDecimal("10"))))))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Not enough stock of GuardBlockWidget")
+                .hasMessageContaining("5.000000 available")
+                .hasMessageContaining("10 requested")
+                .hasMessageContaining("enable backorder in Sales Settings");
+
+        // On-hand must be unchanged — the whole create() rolled back.
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("blocked delivery must not touch on-hand")
+                .isEqualByComparingTo(new BigDecimal("5"));
+        assertThat(requireSoh(product.id()).getReservedQty())
+                .as("blocked delivery must not release the SO's reservation either (whole TX rolled back)")
+                .isEqualByComparingTo(new BigDecimal("10"));
+    }
+
+    @Test
+    void overDeliverBeyondOnHand_allowed_whenAllowNegativeStockOn_stockGoesNegative() {
+        ProductDto product = stockableProduct("GuardAllowWidget", "800");
+        publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("300"));
+
+        SalesOrderDto so = createAndConfirmOrder(product, new BigDecimal("10"));
+        List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
+        String solUid = soLines.get(0).uid();
+
+        // Company opts into backorder.
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
+        DeliveryDto delivery = deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(solUid, new BigDecimal("10")))));
+        assertThat(delivery.deliveryNumber()).startsWith("DEL-");
+
+        // Dispatch DELIVERY.CONFIRMED — issues stock, taking on-hand negative (5 − 10 = −5).
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("backorder allowed — on-hand goes negative")
+                .isEqualByComparingTo(new BigDecimal("-5"));
     }
 
     // =========================================================================

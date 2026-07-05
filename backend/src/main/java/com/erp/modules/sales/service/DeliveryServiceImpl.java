@@ -19,6 +19,7 @@ import com.erp.modules.sales.repository.SalesInvoiceLineRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.modules.sales.repository.SalesOrderLineRepository;
 import com.erp.modules.sales.repository.SalesOrderRepository;
+import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.stock.service.StockReservationService;
 import com.erp.platform.audit.AuditActions;
@@ -79,6 +80,8 @@ public class DeliveryServiceImpl implements DeliveryService {
      * SalesOrderLine stores only productId; the handler needs productUid for recipe explosion.
      */
     private final ProductRepository          productRepository;
+    /** Owner decision 2026-07-05 (V87): synchronous "block negative stock on sale" pre-check. */
+    private final NegativeStockGuard         negativeStockGuard;
 
     public DeliveryServiceImpl(DeliveryRepository deliveries,
                                DeliveryLineRepository deliveryLines,
@@ -93,7 +96,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                                ScopeGuard scopeGuard,
                                AuditService audit,
                                OutboxPublisher outbox,
-                               ProductRepository productRepository) {
+                               ProductRepository productRepository,
+                               NegativeStockGuard negativeStockGuard) {
         this.deliveries        = deliveries;
         this.deliveryLines     = deliveryLines;
         this.salesOrders       = salesOrders;
@@ -108,6 +112,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.audit             = audit;
         this.outbox            = outbox;
         this.productRepository = productRepository;
+        this.negativeStockGuard = negativeStockGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -177,6 +182,38 @@ public class DeliveryServiceImpl implements DeliveryService {
                                 + "quantity available to deliver (" + openQty + ") for this order line.");
             }
 
+            // Release the corresponding reservation (delta = negative) BEFORE the negative-stock
+            // guard below, so the guard's availability read reflects this line's own release rather
+            // than double-counting a reservation this very delivery is about to consume — otherwise
+            // every normal fully-reserved SO delivery would false-block (e.g. DeliveryServiceIT
+            // partialDelivery_postsCogs_releasesReservation_backorderRemains: on-hand 10, reserved
+            // 10 from confirm, deliver 4 — available-before-release would read 0, not the true 4).
+            BigDecimal releaseAmt = qtyDeliveredBase.min(sol.getQtyReservedBase());
+            if (releaseAmt.compareTo(BigDecimal.ZERO) > 0) {
+                reservationService.applyReservationDelta(
+                        order.getCompanyId(), order.getBranchId(),
+                        sol.getProductId(), releaseAmt.negate(), actorId());
+                sol.setQtyReservedBase(sol.getQtyReservedBase().subtract(releaseAmt));
+            }
+
+            // Resolve the product once — needed for both the negative-stock guard below and the
+            // DELIVERY.CONFIRMED payload uid (ADR-0021 D-6 fix; SalesOrderLine stores only productId).
+            // Kept as the pre-existing by-id lookup (already an audited/frozen TenantScopingRulesTest
+            // exception at this call site — sol.getProductId() is not caller-supplied, it was already
+            // resolved+scoped when the SO line was added) — not re-scoped here to avoid churn
+            // unrelated to this feature.
+            Product product = productRepository.findById(sol.getProductId())
+                    .orElseThrow(() -> new NotFoundException("Product not found."));
+
+            // Owner decision 2026-07-05 (V87, sales_settings.allow_negative_stock): synchronous
+            // negative-stock pre-check at the delivery-create issue path — see NegativeStockGuard
+            // javadoc (this IS the enforcement point; DeliveryIssueStockHandler runs later, async,
+            // and does not re-check).
+            negativeStockGuard.assertAvailable(
+                    order.getCompanyId(), order.getBranchId(),
+                    product.getId(), product.getUid(), product.isStockable(),
+                    sol.getProductName(), qtyDeliveredBase);
+
             DeliveryLine dl = new DeliveryLine(
                     saved.getId(), sol.getId(), sol.getUid(),
                     saved.getCompanyId(), saved.getBranchId(), lineNo++,
@@ -186,27 +223,13 @@ public class DeliveryServiceImpl implements DeliveryService {
                     sol.getCurrency().value(), actorId());
             savedLines.add(deliveryLines.save(dl));
 
-            // Release the corresponding reservation (delta = negative)
-            BigDecimal releaseAmt = qtyDeliveredBase.min(sol.getQtyReservedBase());
-            if (releaseAmt.compareTo(BigDecimal.ZERO) > 0) {
-                reservationService.applyReservationDelta(
-                        order.getCompanyId(), order.getBranchId(),
-                        sol.getProductId(), releaseAmt.negate(), actorId());
-                sol.setQtyReservedBase(sol.getQtyReservedBase().subtract(releaseAmt));
-            }
-
             // Update fulfilled qty on SO line
             sol.setQtyFulfilledBase(sol.getQtyFulfilledBase().add(qtyDeliveredBase));
             sol.setUpdatedAt(Instant.now());
             sol.setUpdatedBy(actorId());
 
-            // Resolve product uid — SalesOrderLine stores only productId; the DELIVERY.CONFIRMED
-            // handler needs the uid for productService.getByUid() / recipe explosion (ADR-0021 D-6).
-            String productUid = productRepository.findById(sol.getProductId())
-                    .map(p -> p.getUid())
-                    .orElseThrow(() -> new NotFoundException("Product not found."));
             payloadLines.add(new DeliveryConfirmedPayload.LineItem(
-                    sol.getProductId(), productUid,
+                    sol.getProductId(), product.getUid(),
                     sol.getUnitId(), qtyDeliveredBase,
                     dl.getId()));
         }

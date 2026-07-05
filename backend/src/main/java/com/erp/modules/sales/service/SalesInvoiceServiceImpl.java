@@ -66,6 +66,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -115,6 +116,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final PaymentTermsRepository paymentTermsRepo;
     /** Cross-module read: resolves the posted SALES journal entry uid for the "View Journal" link. */
     private final JournalEntryRepository journalEntries;
+    /** Owner decision 2026-07-05 (V87): synchronous "block negative stock on sale" pre-check. */
+    private final NegativeStockGuard negativeStockGuard;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -138,7 +141,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    PermissionResolver permissionResolver,
                                    FxDocumentConverter fxConverter,
                                    PaymentTermsRepository paymentTermsRepo,
-                                   JournalEntryRepository journalEntries) {
+                                   JournalEntryRepository journalEntries,
+                                   NegativeStockGuard negativeStockGuard) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -162,6 +166,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.fxConverter = fxConverter;
         this.paymentTermsRepo = paymentTermsRepo;
         this.journalEntries = journalEntries;
+        this.negativeStockGuard = negativeStockGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -242,6 +247,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         List<SalesInvoiceLine> lineList = lines.findByInvoiceIdOrderByLineNo(inv.getId());
         if (lineList.isEmpty()) {
             throw new IllegalStateException("Cannot finalise an invoice with no lines.");
+        }
+
+        // ADR-0021 D-6: DIRECT and POS invoices issue stock on finalise (issuesStock=true).
+        // POS is a DIRECT-class invoice (ADR-0029 D-5, DocumentOrigin javadoc) — it has no
+        // delivery step, so stock must be issued at finalise just like a walk-in invoice.
+        // SO-sourced invoices post revenue only — delivery already issued stock (issuesStock=false).
+        boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT
+                || inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.POS);
+
+        // Owner decision 2026-07-05 (V87, sales_settings.allow_negative_stock): synchronous
+        // negative-stock pre-check — THE enforcement point (see NegativeStockGuard javadoc). Stock
+        // for this invoice is deducted later, asynchronously, by SaleIssueStockHandler; the check
+        // MUST run here, before this transaction commits, or a blocked sale would already be
+        // irreversibly on the outbox. SO-sourced invoices never issue stock at finalise, so they
+        // are exempt (the delivery that fed them was already guarded at DeliveryServiceImpl.create).
+        if (issuesStock) {
+            // Aggregate the requested base qty PER PRODUCT across all lines before checking, so two
+            // lines of the same product are guarded against availability cumulatively — otherwise
+            // each line would pass independently and the sum could still oversell (a trivial bypass).
+            Map<Long, BigDecimal> requestedByProduct = new LinkedHashMap<>();
+            for (SalesInvoiceLine line : lineList) {
+                BigDecimal q = line.getQtyInBase() == null ? BigDecimal.ZERO : line.getQtyInBase();
+                requestedByProduct.merge(line.getProductId(), q, BigDecimal::add);
+            }
+            for (Map.Entry<Long, BigDecimal> perProduct : requestedByProduct.entrySet()) {
+                Product product = products.findByCompanyIdAndId(inv.getCompanyId(), perProduct.getKey())
+                        .orElseThrow(() -> new NotFoundException("Product not found."));
+                negativeStockGuard.assertAvailable(
+                        inv.getCompanyId(), inv.getBranchId(),
+                        product.getId(), product.getUid(), product.isStockable(),
+                        product.getName(), perProduct.getValue());
+            }
         }
 
         // Recompute totals one final time and freeze
@@ -358,13 +395,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         l.getQtyInBase()))
                 .toList();
 
-        // ADR-0021 D-6: DIRECT and POS invoices issue stock on finalise (issuesStock=true).
-        // POS is a DIRECT-class invoice (ADR-0029 D-5, DocumentOrigin javadoc) — it has no
-        // delivery step, so stock must be issued at finalise just like a walk-in invoice.
-        // SO-sourced invoices post revenue only — delivery already issued stock (issuesStock=false).
-        boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT
-                || inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.POS);
-
+        // issuesStock was resolved earlier (before the negative-stock guard, above) — reused here.
         outbox.publish(
                 DomainEventType.SALE_FINALISED,
                 DomainEventType.AGG_SALES_INVOICE,
