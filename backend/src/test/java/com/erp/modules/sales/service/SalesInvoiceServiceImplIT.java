@@ -83,6 +83,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
     @Autowired private SalesInvoiceService salesInvoiceService;
+    @Autowired private SalesSettingsService salesSettingsService;
     @Autowired private TaxRateSeeder taxRateSeeder;
     @Autowired private CustomerService customerService;
     @Autowired private AgentService agentService;
@@ -130,6 +131,16 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         // Seed tax rates for companyA (BootstrapRunner does this for the bootstrap company;
         // tests create companies directly via the repository so must seed explicitly).
         taxRateSeeder.seedDefaults(companyA.getId());
+
+        // This suite is about numbering/VAT/payment/void behaviour, not stock — its products are
+        // never received (owner decision 2026-07-05, V87: a DIRECT finalise now blocks a sale that
+        // would take on-hand negative by default). Opt this company into backorder so every
+        // pre-existing test here keeps finalising exactly as before; the guard itself is covered by
+        // its own tests (NegativeStockGuardTest, DeliveryServiceIT Bar 3b/8).
+        com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest allowBackorder =
+                new com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest(
+                        companyA.getUid(), false, null, "TZS", true);
+        salesSettingsService.update(allowBackorder);
 
         // Seed a unit for companyA
         UnitOfMeasureDto pcs = unitService.create(
@@ -253,6 +264,9 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
         // Seed tax rates for companyB (bypassed because company created directly via repository).
         taxRateSeeder.seedDefaults(companyB.getId());
+        // Same backorder opt-in as companyA (see setUp) — companyB's product is never received either.
+        salesSettingsService.update(new com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest(
+                companyB.getUid(), false, null, "TZS", true));
 
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));

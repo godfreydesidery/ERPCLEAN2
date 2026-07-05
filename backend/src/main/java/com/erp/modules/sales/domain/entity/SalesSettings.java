@@ -32,6 +32,16 @@ public class SalesSettings extends UidEntity {
     @Setter
     private boolean soApprovalEnabled = false;
 
+    /**
+     * Configurable "block negative stock on sale" (owner decision 2026-07-05, V87). {@code false}
+     * (the default) = a sale that would drive on-hand negative is BLOCKED; {@code true} = backorder
+     * is allowed. Enforced synchronously by {@code NegativeStockGuard} at every sale-issue path
+     * (DIRECT/POS invoice finalise, SO delivery create) — NOT by the async stock-module consumers.
+     */
+    @Column(name = "allow_negative_stock", nullable = false)
+    @Setter
+    private boolean allowNegativeStock = false;
+
     @Column(name = "currency", nullable = false, length = 3)
     @Setter
     private CurrencyCode currency = CurrencyCode.of("TZS");

@@ -44,6 +44,7 @@ describe('SalesSettingsService', () => {
       soApprovalEnabled: true,
       soApprovalThresholdAmount: 7500,
       currency: 'TZS',
+      allowNegativeStock: false,
     };
     let result: unknown;
     service.update(body).subscribe((r) => (result = r));

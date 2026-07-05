@@ -97,6 +97,30 @@
                     </div>
                   }
 
+                  <div class="mb-3">
+                    <div class="form-check form-switch">
+                      <!--
+                        Stored field is `allowNegativeStock` (true = allow/backorder). This switch is
+                        presented as "Block…", so the binding is inverted: checked = block =
+                        (allowNegativeStock === false). Toggling it flips the stored signal to the
+                        opposite of the checkbox's own new value.
+                      -->
+                      <input class="form-check-input" type="checkbox" role="switch"
+                             id="blockNegativeStock"
+                             [ngModel]="!fAllowNegativeStock()"
+                             (ngModelChange)="fAllowNegativeStock.set(!$event)"
+                             name="blockNegativeStock"
+                             [disabled]="saving() || !canEdit()" />
+                      <label class="form-check-label" for="blockNegativeStock">
+                        Block sales that would take stock negative
+                      </label>
+                    </div>
+                    <span class="hint">
+                      When on, a sale is blocked if there isn't enough stock. Turn off to allow
+                      overselling (backorder).
+                    </span>
+                  </div>
+
                   @if (saveError(); as msg) {
                     <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
                   }

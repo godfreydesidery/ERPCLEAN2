@@ -149,7 +149,7 @@ class SalesOrderApprovalGateTransactionIT extends PostgresIntegrationTest {
         // SO amount-threshold gate enabled, threshold 1000 — every order built below is above the
         // threshold so the D-4 gate always fires.
         salesSettingsService.update(new UpdateSalesSettingsRequest(
-                company.getUid(), true, new BigDecimal("1000"), "TZS"));
+                company.getUid(), true, new BigDecimal("1000"), "TZS", false));
     }
 
     @AfterEach

@@ -62,6 +62,7 @@ class SalesInvoiceServiceImplTest {
     @Mock com.erp.platform.common.money.FxDocumentConverter fxConverter;
     @Mock com.erp.modules.parties.repository.PaymentTermsRepository paymentTermsRepo;
     @Mock com.erp.modules.gl.repository.JournalEntryRepository journalEntries;
+    @Mock NegativeStockGuard negativeStockGuard;
 
     @InjectMocks SalesInvoiceServiceImpl service;
 
