@@ -16,6 +16,9 @@ public interface PriceListRepository extends JpaRepository<PriceList, Long> {
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /** Resolve a price list by its user-supplied code within a company (bulk price import). */
+    Optional<PriceList> findByCompanyIdAndCode(Long companyId, String code);
+
     /** Tenant-scoped existence check for the numeric default-price-list FK on customer records. */
     boolean existsByCompanyIdAndId(Long companyId, Long id);
 

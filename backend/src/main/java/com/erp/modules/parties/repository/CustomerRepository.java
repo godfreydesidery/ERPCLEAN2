@@ -23,6 +23,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /** Resolve a customer by its (system-generated) code within a company (bulk import upsert). */
+    Optional<Customer> findByCompanyIdAndCode(Long companyId, String code);
+
     Page<Customer> findByCompanyId(Long companyId, Pageable pageable);
 
     /**

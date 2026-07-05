@@ -86,6 +86,8 @@ public final class AuditActions {
     public static final String PRODUCT_BARCODE_SETPRIMARY = "PRODUCT.BARCODE.SETPRIMARY";
     public static final String PRODUCT_PRICE_SET        = "PRODUCT.PRICE.SET";
     public static final String PRODUCT_PRICE_REMOVE     = "PRODUCT.PRICE.REMOVE";
+    /** Rule-based mass price change over a whole price list (bulk data operations). */
+    public static final String PRICE_MASS_CHANGE        = "PRICE.MASS_CHANGE";
     public static final String PRODUCT_COMPONENT_ADD    = "PRODUCT.COMPONENT.ADD";
     public static final String PRODUCT_COMPONENT_REMOVE = "PRODUCT.COMPONENT.REMOVE";
 
