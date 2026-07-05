@@ -515,19 +515,26 @@ class SalesOrderServiceImplTest {
         when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
                 .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
         when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(true);
-        when(salesApprovalGate.submit(order, "BRUID0000000000000000001"))
+        when(salesApprovalGate.submitIndependent(order, "BRUID0000000000000000001"))
                 .thenReturn(approvalRequest("SOUID000000000000000030", ApprovalRequestStatus.PENDING));
 
         assertThatThrownBy(() -> service.confirm("SOUID000000000000000030"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("exceeds the approval threshold");
 
-        verify(salesApprovalGate).submit(order, "BRUID0000000000000000001");
+        // I3: the submission goes through the INDEPENDENT (REQUIRES_NEW) gate method — not the
+        // plain submit() — so the just-written ApprovalRequest survives this method's block-throw.
+        verify(salesApprovalGate).submitIndependent(order, "BRUID0000000000000000001");
         assertThat(order.getStatus()).isEqualTo(SalesOrderStatus.DRAFT);
     }
 
     @Test
-    void confirm_overThreshold_noPriorRequest_engineAutoApproves_confirmProceeds() {
+    void confirm_overThreshold_noPriorRequest_engineHasNoPolicy_blocksAsMisconfiguration() {
+        // I2/R1: the engine had no SALES_ORDER policy to match, so submitIndependent detects the
+        // auto-approved-by-default result itself, rolls back its own transaction, and throws
+        // ApprovalPolicyMissingException instead of returning it — the caller turns that into the
+        // friendly misconfiguration block. For an over-threshold order that is a misconfiguration,
+        // not a real approval, and must never let the confirm silently proceed.
         SalesOrder order = orderWithId(801L, "SOUID000000000000000031", CUSTOMER_ID, AGENT_ID);
         when(orders.findByUid("SOUID000000000000000031")).thenReturn(Optional.of(order));
         when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000031", COMPANY_ID))
@@ -535,25 +542,72 @@ class SalesOrderServiceImplTest {
         when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
                 .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
         when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(true);
-        when(salesApprovalGate.submit(order, "BRUID0000000000000000001"))
-                .thenReturn(approvalRequest("SOUID000000000000000031", ApprovalRequestStatus.APPROVED));
-        SalesOrderLine line = new SalesOrderLine(801L, COMPANY_ID, BRANCH_ID, (short) 1,
+        when(salesApprovalGate.submitIndependent(order, "BRUID0000000000000000001"))
+                .thenThrow(new ApprovalPolicyMissingException());
+
+        assertThatThrownBy(() -> service.confirm("SOUID000000000000000031"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no approval policy is configured");
+
+        verify(salesApprovalGate).submitIndependent(order, "BRUID0000000000000000001");
+        assertThat(order.getStatus()).isEqualTo(SalesOrderStatus.DRAFT);
+    }
+
+    @Test
+    void confirm_afterAdminAddsPolicy_noLeftoverFromEarlierMisconfig_reSubmitsAndRoutesToApprovalPending() {
+        // R1 remediation: an EARLIER confirm attempt hit the no-policy misconfiguration and was
+        // blocked, but — unlike the old buggy behaviour — left NO durable request behind, so the
+        // engine state here is still empty (existing = Optional.empty()). Once an administrator
+        // adds a matching SALES_ORDER policy, a fresh confirm re-submits and routes to a genuine
+        // PENDING approval instead of looping the same misconfiguration error forever.
+        SalesOrder order = orderWithId(806L, "SOUID000000000000000036", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000036")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000036", COMPANY_ID))
+                .thenReturn(Optional.empty());
+        when(branches.findByIdAndCompany_Id(BRANCH_ID, COMPANY_ID))
+                .thenReturn(Optional.of(branchWithUid("BRUID0000000000000000001", "BR-01", "Head Office")));
+        when(salesApprovalGate.requiresApproval(order, "BRUID0000000000000000001")).thenReturn(true);
+        when(salesApprovalGate.submitIndependent(order, "BRUID0000000000000000001"))
+                .thenReturn(approvalRequest("SOUID000000000000000036", ApprovalRequestStatus.PENDING));
+
+        assertThatThrownBy(() -> service.confirm("SOUID000000000000000036"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("submitted for approval");
+
+        verify(salesApprovalGate).submitIndependent(order, "BRUID0000000000000000001");
+        assertThat(order.getStatus()).isEqualTo(SalesOrderStatus.DRAFT);
+    }
+
+    @Test
+    void confirm_existingApprovedRequest_regardlessOfHowItWasApproved_gateSkipped_confirmProceeds() {
+        // R1: once ANY approval request already exists for this order (PENDING/REJECTED handled by
+        // assertApprovalClearance; APPROVED handled here), the D-4 gate does nothing further — no
+        // branch lookup, no requiresApproval/submitIndependent call. This also covers a legacy
+        // stale auto-approved row from before R1 shipped: it no longer perpetually blocks confirm,
+        // because assertApprovalClearance treats APPROVED as clear regardless of how it got there.
+        SalesOrder order = orderWithId(805L, "SOUID000000000000000035", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000035")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000035", COMPANY_ID))
+                .thenReturn(Optional.of(
+                        approvalRequest("SOUID000000000000000035", ApprovalRequestStatus.APPROVED, true)));
+        SalesOrderLine line = new SalesOrderLine(805L, COMPANY_ID, BRANCH_ID, (short) 1,
                 400L, "PRD-01", "Widget",
                 500L, "EA",
                 BigDecimal.TEN, BigDecimal.TEN,
                 BigDecimal.ONE, BigDecimal.ONE,
                 VatStatus.STANDARD, BigDecimal.ZERO,
                 "TZS", 1L);
-        when(orderLines.findBySalesOrderIdOrderByLineNo(801L)).thenReturn(List.of(line));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(805L)).thenReturn(List.of(line));
         when(customers.findById(CUSTOMER_ID)).thenReturn(Optional.of(
                 customer(CUSTOMER_ID, "CUST-0001", "Acme Traders")));
         when(agents.findById(AGENT_ID)).thenReturn(Optional.of(
                 agent(AGENT_ID, "AGT-0001", "Jane Agent")));
 
-        SalesOrderDto dto = service.confirm("SOUID000000000000000031");
+        SalesOrderDto dto = service.confirm("SOUID000000000000000035");
 
         assertThat(dto.status()).isEqualTo("CONFIRMED");
-        verify(salesApprovalGate).submit(order, "BRUID0000000000000000001");
+        verify(salesApprovalGate, never()).requiresApproval(any(), any());
+        verify(salesApprovalGate, never()).submitIndependent(any(), any());
     }
 
     @Test
@@ -581,13 +635,15 @@ class SalesOrderServiceImplTest {
         SalesOrderDto dto = service.confirm("SOUID000000000000000032");
 
         assertThat(dto.status()).isEqualTo("CONFIRMED");
-        verify(salesApprovalGate, never()).submit(any(), any());
+        verify(salesApprovalGate, never()).submitIndependent(any(), any());
     }
 
     @Test
     void confirm_manuallyApprovedOrder_gateSkipped_stillConfirms() {
-        // A prior manual submitForApproval (#189) already produced an APPROVED request — the D-4
-        // gate must not double-submit; assertApprovalClearance lets APPROVED through unchanged.
+        // A prior manual submitForApproval (#189) already produced a genuinely-decided APPROVED
+        // request (autoApproved=false — a real policy/manual approval, NOT the I2 no-policy
+        // default) — the D-4 gate must not double-submit; assertApprovalClearance lets APPROVED
+        // through unchanged.
         SalesOrder order = orderWithId(803L, "SOUID000000000000000033", CUSTOMER_ID, AGENT_ID);
         when(orders.findByUid("SOUID000000000000000033")).thenReturn(Optional.of(order));
         when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000033", COMPANY_ID))
@@ -610,7 +666,7 @@ class SalesOrderServiceImplTest {
 
         assertThat(dto.status()).isEqualTo("CONFIRMED");
         verify(salesApprovalGate, never()).requiresApproval(any(), any());
-        verify(salesApprovalGate, never()).submit(any(), any());
+        verify(salesApprovalGate, never()).submitIndependent(any(), any());
     }
 
     // -------------------------------------------------------------------------
@@ -644,12 +700,22 @@ class SalesOrderServiceImplTest {
         return product;
     }
 
-    /** Minimal ApprovalRequestDto stub — only status (and documentUid) matter to these tests. */
+    /**
+     * Minimal ApprovalRequestDto stub — only status (and documentUid) matter to most tests.
+     * {@code autoApproved} defaults to {@code false}: an APPROVED status here represents a
+     * genuinely policy-matched (or later manually-decided) approval, NOT the engine's no-policy
+     * default (persona UAT I2 — use the 3-arg overload to model that specific scenario).
+     */
     private static ApprovalRequestDto approvalRequest(String documentUid, ApprovalRequestStatus status) {
+        return approvalRequest(documentUid, status, false);
+    }
+
+    private static ApprovalRequestDto approvalRequest(String documentUid, ApprovalRequestStatus status,
+                                                       boolean autoApproved) {
         return new ApprovalRequestDto(
                 1L, "APRUID00000000000000001", COMPANY_ID, BRANCH_ID, null, null,
                 "APR-0001", DOC_TYPE, documentUid, BigDecimal.TEN, "TZS",
-                status, null, status == ApprovalRequestStatus.APPROVED,
+                status, null, autoApproved,
                 null, null, "summary",
                 1L, null, java.time.Instant.now(), null, null, null, List.of());
     }

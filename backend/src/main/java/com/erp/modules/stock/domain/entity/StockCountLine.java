@@ -127,9 +127,21 @@ public class StockCountLine extends UidEntity {
     // Domain behaviour
     // -------------------------------------------------------------------------
 
-    /** Record the counted quantity for this line during COUNTING. */
-    public void enterCount(BigDecimal countedQty, Long actorId) {
+    /**
+     * Record the counted quantity for this line during COUNTING.
+     *
+     * @param countedQty the counted quantity
+     * @param reasonCode the count-team's reason for a variance (FR-INVD-16), or {@code null}/blank
+     *                   if none was entered. persona UAT I5: a blank value leaves any existing
+     *                   reasonCode untouched so a re-enter (e.g. correcting a typo'd quantity)
+     *                   cannot silently clobber a reason already recorded.
+     * @param actorId    the acting user
+     */
+    public void enterCount(BigDecimal countedQty, String reasonCode, Long actorId) {
         this.countedQty = countedQty;
+        if (reasonCode != null && !reasonCode.isBlank()) {
+            this.reasonCode = reasonCode;
+        }
         this.updatedAt  = Instant.now();
         this.updatedBy  = actorId;
     }

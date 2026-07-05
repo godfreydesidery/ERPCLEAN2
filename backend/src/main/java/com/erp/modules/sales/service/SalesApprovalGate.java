@@ -120,4 +120,44 @@ public class SalesApprovalGate {
     public Optional<ApprovalRequestDto> queryState(String orderUid, Long companyId) {
         return approvalEngine.getApprovalState(DOC_TYPE, orderUid, companyId);
     }
+
+    /**
+     * Submits the order to the approval engine in an INDEPENDENT transaction ({@code
+     * REQUIRES_NEW}) — the written {@code ApprovalRequest} commits on its own, regardless of what
+     * the caller's transaction does afterwards.
+     *
+     * <p>Fixes a stuck-forever bug (persona UAT I3): {@code SalesOrderServiceImpl.doConfirm} runs
+     * as one transaction and, for an over-threshold order, submits for approval and then
+     * deliberately throws to BLOCK the confirm until a human decides. Before this method existed,
+     * that throw rolled back the WHOLE transaction — including the just-written pending approval
+     * request — so the order could never reach an approver and stayed in DRAFT forever. Delegates
+     * to {@link #submit} but on its own physical transaction (mirrors the established {@code
+     * AuditService#recordIndependent} pattern for the same class of problem).
+     *
+     * <p>Persona UAT follow-up R1: if the engine found no matching {@code SALES_ORDER} policy, it
+     * auto-approves by default ({@code result.autoApproved() == true}) — for an over-threshold
+     * order that is a misconfiguration, not a real approval. Leaving that auto-approved (terminal)
+     * request durable would poison every future confirm attempt, even after an administrator adds a
+     * matching policy (the request is already terminal, so it cannot be re-submitted). So in that
+     * case this method throws {@link ApprovalPolicyMissingException} INSTEAD of returning — which,
+     * thrown from inside this {@code REQUIRES_NEW} boundary, rolls back only this independent
+     * transaction and leaves NO durable request behind. The genuine policy-matched case (result not
+     * auto-approved) still returns normally and commits independently, exactly as before.
+     *
+     * @param order     the order being confirmed
+     * @param branchUid uid of the branch for the engine's summary/policy lookup
+     * @return the submitted (or, on a concurrent race, the already-existing) request dto — never
+     *         an auto-approved-by-default one (see above)
+     * @throws ApprovalPolicyMissingException when the engine had no matching policy and would only
+     *         have auto-approved by default; this transaction is rolled back before the exception
+     *         propagates
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ApprovalRequestDto submitIndependent(SalesOrder order, String branchUid) {
+        ApprovalRequestDto result = submit(order, branchUid);
+        if (result.autoApproved()) {
+            throw new ApprovalPolicyMissingException();
+        }
+        return result;
+    }
 }

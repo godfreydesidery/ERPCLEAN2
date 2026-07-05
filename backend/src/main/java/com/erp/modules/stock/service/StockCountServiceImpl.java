@@ -179,7 +179,7 @@ public class StockCountServiceImpl implements StockCountService {
                 throw new IllegalArgumentException(
                         "One or more count lines do not belong to the specified stock count.");
             }
-            line.enterCount(entry.countedQty(), principal.userId());
+            line.enterCount(entry.countedQty(), entry.reasonCode(), principal.userId());
             countLines.save(line);
         }
 
@@ -242,6 +242,8 @@ public class StockCountServiceImpl implements StockCountService {
                 line.applyPost(varianceQty, avgCost, BigDecimal.ZERO,
                         reasonCode, null, principal.userId());
                 countLines.save(line);
+                // I6: stamp last_counted_at even when there is nothing to post (no variance).
+                sohOpt.ifPresent(soh -> soh.markCounted(Instant.now(), principal.userId()));
                 continue;
             }
 
@@ -269,6 +271,8 @@ public class StockCountServiceImpl implements StockCountService {
                 // FOLLOW-001: pass productCode + reasonCode so per-line GL memo avoids raw ULID.
                 valuation.revalueAdjustment(movementUid, freshSoh, varianceQty, postingDate,
                         null, null, line.getProductCode(), reasonCode);
+                // I6: stamp last_counted_at on the authoritative (post-posting) row.
+                freshSoh.markCounted(Instant.now(), principal.userId());
             }
 
             netVarianceValue = netVarianceValue.add(varianceSignedVal);

@@ -131,7 +131,11 @@ class ApiException implements Exception {
       case 400:
         return serverMsg ?? 'The request was rejected. Please check the entry.';
       case 401:
-        return 'Your session has expired. Please sign in again.';
+        // On the login path the server explains the real reason (account
+        // locked / invalid credentials) in errors[]; surface it. A bodyless
+        // 401 (an expired token mid-session) has no serverMsg and still reads
+        // as a session-expiry prompt.
+        return serverMsg ?? 'Your session has expired. Please sign in again.';
       case 403:
         return 'You do not have permission for this action.';
       case 404:
