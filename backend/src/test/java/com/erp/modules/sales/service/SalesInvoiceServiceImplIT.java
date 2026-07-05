@@ -471,7 +471,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Mobile money payments cannot be over-tendered");
+                .hasMessageContaining("no cash payment to give change against");
     }
 
     @Test
@@ -905,7 +905,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(unpricedProd.uid(), pcsUid, new BigDecimal("1"), null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("BR-SALES-03");
+                .hasMessageContaining("no price configured");
     }
 
     // -----------------------------------------------------------------------
@@ -949,7 +949,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(productAUid, kgUnit.uid(), new BigDecimal("1"), null, null)))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("is not a valid unit for");
+                .hasMessageContaining("not valid for this product");
     }
 
     @Test

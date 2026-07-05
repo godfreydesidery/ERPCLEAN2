@@ -242,7 +242,7 @@ class BomServiceIT extends PostgresIntegrationTest {
                 bomComponentService.add(bom.uid(),
                         new AddBomComponentRequest(parentUid, BigDecimal.ONE, null, BigDecimal.ZERO, null))
         ).isInstanceOf(IllegalArgumentException.class)
-         .hasMessageContaining("cycle");
+         .hasMessageContaining("component of itself");
     }
 
     @Test
