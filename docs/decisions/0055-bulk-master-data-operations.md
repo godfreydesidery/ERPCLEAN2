@@ -59,14 +59,24 @@ required columns are asterisked. The active **company is never a column** — it
 `RequestContext`. All other FKs are referenced by their business code (base unit code, price-list
 code, product code) and resolved server-side, reporting a friendly row error on a typo.
 
-### D-3 — Validate → Commit (dry-run then commit); synchronous; bounded; no schema
+### D-3 — Validate → Commit with true parity (validate = execute + roll back)
 
-Upload runs in two modes. `POST /bulk/{key}/validate` parses and validates every row and returns a
-per-row **preview** writing nothing; the operator fixes and re-uploads, then `POST /bulk/{key}/commit`
-performs the writes and returns the per-row result. Both return an `ImportReport`
-(`total/created/updated/errors` + `RowOutcome[]`). Processing is **synchronous** and capped at 2000
-data rows per file (`XlsxRowReader.MAX_ROWS`) — which covers real master-data volumes and avoids an
-`import_job` table (a schema change, and the durable-DB rule). Larger loads split into files.
+Upload runs in two modes. `POST /bulk/{key}/validate` returns a per-row **preview** writing nothing;
+the operator fixes and re-uploads, then `POST /bulk/{key}/commit` performs the writes. Both return an
+`ImportReport` (`total/created/updated/skipped/errors` + `RowOutcome[]`).
+
+**Validate must be trustworthy** — a "0 errors" preview has to mean the commit will succeed. An early
+version made validate *structural only* (FK/enum/format), which let deep business rules
+(BR-PARTY-04 "a business needs a TIN", SERVICE-not-stockable, unique constraints) pass validate and
+then fail commit — a persona flagged this as a "can't-trust-it" defect (Sabina, 2026-07-05). So both
+modes now execute the **same** handler code (the real module create/update, so every rule runs); the
+only difference is the transaction outcome. `BulkImportService` runs each **validate** row inside a
+transaction it **always rolls back** (via a sentinel exception that carries the outcome out), so the
+full business logic runs but nothing persists. A **commit** row runs in the handler's own transaction
+and commits. Verified: a successful validate reports the intended create but leaves no row behind.
+
+Processing is **synchronous** and capped at 2000 data rows per file (`XlsxRowReader.MAX_ROWS`) — covers
+real master-data volumes and avoids an `import_job` table (a schema change, and the durable-DB rule).
 
 ### D-4 — Upsert by natural code; partial-merge on update; per-row transaction
 
@@ -108,8 +118,31 @@ uses `@bulkAccess.canImportAny()`. The rule-based price endpoint uses the static
 
 No new tables or columns. The only persistence-layer additions are **company-scoped derived finders**
 (`findByCompanyIdAndCode` on Customer/Supplier/PriceList/UnitOfMeasure, `findByCompanyIdAndPriceListId`
-on ProductPrice) — the tenant-safe finder pattern, not confused-deputy `findById`. Permission codes go
-in the repeatable seed. The frozen versioned schema (ADR-0043) is untouched.
+and `findByCompanyIdAndPrimaryTrue` on ProductPrice/ProductBarcode) — the tenant-safe finder pattern,
+not confused-deputy `findById`. Permission codes go in the repeatable seed. The frozen versioned schema
+(ADR-0043) is untouched.
+
+### D-8 — Product barcode column, uniqueness validated at the validate step
+
+The product template carries an optional `Barcode` column (owner decision: **column-only** — a filled
+value becomes the product's primary barcode; a blank one invents nothing). Because `product_barcodes`
+is unique per company, a bad import could otherwise fail deep in commit with a raw constraint error. So
+the handler validates the barcode **up-front, in both modes**: it rejects a value already used by a
+*different* product in the company, and — via the per-run `ImportContext` — a value that appears on
+more than one row of the *same file*. Both surface as friendly per-row errors before anything is
+written. On update, a barcode the product already has is a no-op (idempotent).
+
+### D-9 — Download → edit → re-upload (export round-trip); blank price = SKIP
+
+`GET /bulk/{key}/export` fills the template with the entity's **current rows** (same columns), so the
+"download everything, edit, re-upload to update" workflow the owner asked for works for every entity —
+including bulk price maintenance. The `prices` export is product-centric and price-list-scoped
+(`?priceList=<code>`, one row per product with its current price or blank); with no param it falls back
+to the company default list. To make partial edits ergonomic, a **blank `Amount` on re-upload is a
+`SKIP`** (the price is left unchanged, reported as a no-op, not an error) — so a user can export all
+products, price only the ones they want, and upload the whole sheet. `RowAction` gains `SKIP` and
+`ImportReport` a `skipped` count. (For master entities, a blank optional cell already keeps the current
+value via the D-4 partial merge.)
 
 ## Consequences
 
@@ -123,14 +156,18 @@ in the repeatable seed. The frozen versioned schema (ADR-0043) is untouched.
 - **Bounded:** 2000 rows/file, synchronous — simple, no job table, no async infra; the cap is
   reported, not silent.
 - **Contract additions:** `com.erp.platform.bulk.*`; `BulkImportController`
-  (`/bulk/entities`, `/bulk/{key}/template|validate|commit`); `PriceMassChangeController`
+  (`/bulk/entities`, `/bulk/{key}/template|export|validate|commit`); `PriceMassChangeController`
   (`/prices/mass-change`); handlers in products/parties; web Bulk-Import and Mass-Price-Change screens.
 - **Scope of v1 (deferred):** child collections (contacts, addresses, supplier bank accounts, extra
-  barcodes) are not in the templates; async jobs for very large files; export-current-rows round-trip;
-  effective-dated price versioning.
+  barcodes) are not in the templates; a default sales-agent / default price-list column on the customer
+  template (persona-requested, ADR follow-up); async jobs for very large files; effective-dated price
+  versioning; friendlier messages for raw DB-constraint violations (currently a safe generic message).
 
 ## Alternatives considered
 
+- **Structural-only validate (cheaper dry-run)** — rejected after a persona hit it: it let deep business
+  rules pass validate and fail commit, so "0 errors" could not be trusted. Executing the real service in
+  a rolled-back transaction is heavier per row but makes validate authoritative (D-3).
 - **Bulk-insert past the services (batch SQL / direct repository saves)** — rejected: it would skip
   validation, tenant scope, code generation, audit and outbox. The per-row-through-the-service design
   is slower but correct; master-data volumes make the cost irrelevant.

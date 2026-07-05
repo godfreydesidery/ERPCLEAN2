@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
@@ -32,6 +32,19 @@ export class BulkImportService {
   downloadTemplate(key: string): Observable<Blob> {
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http.get(`${this.base}/${key}/template`, { responseType: 'blob', context });
+  }
+
+  /**
+   * Downloads the entity's CURRENT rows pre-filled into the same template — the download → edit →
+   * re-upload round-trip (re-uploading the edited file to commit() applies the changes as updates).
+   * `priceListCode` is only meaningful for the `prices` entity (an optional `?priceList=<code>`
+   * query param); other entities need no extra params.
+   */
+  exportCurrent(key: string, priceListCode?: string): Observable<Blob> {
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    let params = new HttpParams();
+    if (priceListCode) params = params.set('priceList', priceListCode);
+    return this.http.get(`${this.base}/${key}/export`, { responseType: 'blob', context, params });
   }
 
   /** Dry-run validation — nothing is written; returns the same report shape as commit(). */

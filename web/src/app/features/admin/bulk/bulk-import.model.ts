@@ -10,7 +10,8 @@ export interface EntityDescriptor {
   readonly permissionCode: string;
 }
 
-export type RowAction = 'CREATE' | 'UPDATE' | 'ERROR';
+/** SKIP is a deliberate no-op (e.g. a blank price row means "leave unchanged") — not an error. */
+export type RowAction = 'CREATE' | 'UPDATE' | 'SKIP' | 'ERROR';
 
 export interface RowOutcome {
   readonly rowNumber: number;
@@ -27,6 +28,7 @@ export interface ImportReport {
   readonly total: number;
   readonly created: number;
   readonly updated: number;
+  readonly skipped: number;
   readonly errors: number;
   readonly rows: readonly RowOutcome[];
 }

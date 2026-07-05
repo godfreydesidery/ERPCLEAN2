@@ -12,6 +12,12 @@
  *  8. commit() is guarded against firing without a validated, error-free file.
  *  9. commit() calls the service and flips `committed` on success.
  *  10. onEntityChange() resets the file/report state.
+ *  11. exportCurrent(): non-prices entity exports with no priceList param.
+ *  12. exportCurrent(): prices entity requires a price-list selection first.
+ *  13. exportCurrent(): prices entity passes the selected price-list code through.
+ *  14. Selecting the `prices` entity loads companies + price lists (lazily, once).
+ *  15. commit() with errors>0 shows an error toast (not success) stating the failure count.
+ *  16. commit() with errors===0 keeps the green success toast.
  */
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideHttpClient } from '@angular/common/http';
@@ -20,9 +26,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { ProductService } from '../products/product.service';
 import { BulkImportService } from './bulk-import.service';
 import { BulkImportComponent } from './bulk-import.component';
 import type { EntityDescriptor, ImportReport } from './bulk-import.model';
+import type { PriceListDto } from '../models/product.model';
 
 vi.useFakeTimers();
 
@@ -33,6 +43,18 @@ const ENTITIES: EntityDescriptor[] = [
   { key: 'CUSTOMER', label: 'Customers', permissionCode: 'CUSTOMER.IMPORT' },
 ];
 
+const PRICES_ENTITIES: EntityDescriptor[] = [
+  { key: 'prices', label: 'Prices', permissionCode: 'PRICE.MASS_UPDATE' },
+];
+
+function makePriceList(): PriceListDto {
+  return {
+    id: '30', uid: 'PL1', companyId: '10', code: 'RETAIL', name: 'Retail Price',
+    isDefault: true, status: 'ACTIVE', version: null,
+    createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+  };
+}
+
 function makeReport(overrides: Partial<ImportReport> = {}): ImportReport {
   return {
     entityKey: 'PRODUCT',
@@ -40,6 +62,7 @@ function makeReport(overrides: Partial<ImportReport> = {}): ImportReport {
     total: 2,
     created: 1,
     updated: 1,
+    skipped: 0,
     errors: 0,
     rows: [
       { rowNumber: 2, action: 'CREATE', reference: 'SKU-1', message: null },
@@ -79,9 +102,22 @@ function makeBed(opts: {
         useValue: {
           listEntities: vi.fn(listEntitiesImpl),
           downloadTemplate: vi.fn(() => of(new Blob(['xlsx-bytes']))),
+          exportCurrent: vi.fn(() => of(new Blob(['xlsx-bytes']))),
           validate: vi.fn(validateImpl),
           commit: vi.fn(commitImpl),
         },
+      },
+      {
+        provide: ProductService,
+        useValue: { listPriceLists: vi.fn(() => of([makePriceList()])) },
+      },
+      {
+        provide: OrganisationService,
+        useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) },
+      },
+      {
+        provide: CompanyService,
+        useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
       },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
     ],
@@ -236,6 +272,29 @@ describe('BulkImportComponent — commit', () => {
     expect(comp.committed()).toBe(true);
     expect(comp.report()?.mode).toBe('COMMIT');
     expect(alerts.success).toHaveBeenCalledOnce();
+    expect(alerts.error).not.toHaveBeenCalled();
+  });
+
+  it('shows an error toast (not success) when the commit report has failed rows', async () => {
+    makeBed({ commitImpl: () => of(makeReport({ mode: 'COMMIT', created: 1, updated: 1, errors: 2 })) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const alerts = TestBed.inject(AlertService) as any;
+    await vi.runAllTimersAsync();
+
+    // A clean pre-commit validate (errors:0) is required to unlock canCommit(); the commit()
+    // response itself is what carries the failures — mirrors a partially-failed commit.
+    comp.onFileSelected(fileChangeEvent(makeXlsxFile()));
+    await vi.runAllTimersAsync();
+    comp.commit();
+    await vi.runAllTimersAsync();
+
+    expect(comp.committed()).toBe(true);
+    expect(comp.report()?.errors).toBe(2);
+    expect(alerts.success).not.toHaveBeenCalled();
+    expect(alerts.error).toHaveBeenCalledOnce();
+    const [title, message] = alerts.error.mock.calls[0];
+    expect(title).toMatch(/errors/i);
+    expect(message).toContain('2 failed');
   });
 
   it('is guarded against a second commit while one is in flight', async () => {
@@ -271,5 +330,63 @@ describe('BulkImportComponent — onEntityChange', () => {
     expect(comp.selectedKey()).toBe('CUSTOMER');
     expect(comp.report()).toBeNull();
     expect(comp.selectedFile()).toBeNull();
+  });
+});
+
+// ── Export current data ───────────────────────────────────────────────────────
+
+describe('BulkImportComponent — exportCurrent (non-prices entity)', () => {
+  it('exports with no priceList param', async () => {
+    makeBed();
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.exportCurrent();
+    await vi.runAllTimersAsync();
+
+    expect(svc.exportCurrent).toHaveBeenCalledWith('PRODUCT', undefined);
+    expect(comp.exportingCurrent()).toBe(false);
+    expect(comp.exportError()).toBeNull();
+  });
+});
+
+describe('BulkImportComponent — prices entity export', () => {
+  it('selecting the prices entity lazily loads companies and its active price lists', async () => {
+    makeBed({ listEntitiesImpl: () => of(PRICES_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const productSvc = TestBed.inject(ProductService) as any;
+    await vi.runAllTimersAsync();
+
+    expect(comp.isPricesEntity()).toBe(true);
+    expect(comp.companies().length).toBe(1);
+    expect(productSvc.listPriceLists).toHaveBeenCalledWith('10');
+    expect(comp.priceLists().length).toBe(1);
+    expect(comp.priceLists()[0].code).toBe('RETAIL');
+  });
+
+  it('requires a price-list selection before exporting', async () => {
+    makeBed({ listEntitiesImpl: () => of(PRICES_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.exportCurrent();
+
+    expect(svc.exportCurrent).not.toHaveBeenCalled();
+    expect(comp.exportError()).toBeTruthy();
+  });
+
+  it('passes the selected price-list code through to the export call', async () => {
+    makeBed({ listEntitiesImpl: () => of(PRICES_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.onPriceListCodeChange('RETAIL');
+    comp.exportCurrent();
+    await vi.runAllTimersAsync();
+
+    expect(svc.exportCurrent).toHaveBeenCalledWith('prices', 'RETAIL');
   });
 });

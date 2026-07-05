@@ -44,22 +44,71 @@
       </div>
 
       @if (selectedKey()) {
-        <!-- Step 2: download template -->
+        <!-- Step 2: download a blank template, or export current data pre-filled -->
         <div class="erp-card mb-3">
-          <div class="erp-card__head"><h2>2. Download the template</h2></div>
+          <div class="erp-card__head"><h2>2. Download a spreadsheet</h2></div>
           <div class="erp-card__body">
             <p class="text-muted small mb-2">
-              Download the spreadsheet, fill in one row per {{ selectedEntity()?.label }}, then upload it below.
+              Download a blank template, or export {{ selectedEntity()?.label }}'s current data
+              pre-filled — edit either and upload it below (a filled export bulk-updates the rows it contains).
             </p>
-            <button type="button" class="btn btn-outline-primary" (click)="downloadTemplate()"
-                    [disabled]="downloadingTemplate()">
-              @if (downloadingTemplate()) {
-                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Downloading…
-              } @else {
-                <i class="bi bi-download me-1" aria-hidden="true"></i>Download Template
+
+            @if (isPricesEntity()) {
+              @if (companies().length > 1) {
+                <div class="erp-field mb-2" style="max-width:320px">
+                  <label for="bulkExportCompany">Company</label>
+                  <select id="bulkExportCompany" name="bulkExportCompany" class="form-select form-select-sm"
+                          [ngModel]="selectedCompanyId()" (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
               }
-            </button>
+              <div class="erp-field mb-2" style="max-width:320px">
+                <label for="bulkPriceList">
+                  Price list to export <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="bulkPriceList" name="bulkPriceList" class="form-select form-select-sm"
+                        [ngModel]="selectedPriceListCode()" (ngModelChange)="onPriceListCodeChange($event)"
+                        [disabled]="priceListsState() === 'loading'">
+                  <option value="">— select a price list —</option>
+                  @for (pl of priceLists(); track pl.uid) {
+                    <option [value]="pl.code">{{ pl.code }} — {{ pl.name }}</option>
+                  }
+                </select>
+                @if (priceListsState() === 'loading') {
+                  <small class="text-muted d-block mt-1" aria-live="polite">Loading price lists…</small>
+                }
+                <small class="hint d-block mt-1">
+                  Exporting without picking a list defaults to the company's default list, which is
+                  often empty — pick the one you actually price from.
+                </small>
+              </div>
+            }
+
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-outline-primary" (click)="downloadTemplate()"
+                      [disabled]="downloadingTemplate()">
+                @if (downloadingTemplate()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Downloading…
+                } @else {
+                  <i class="bi bi-download me-1" aria-hidden="true"></i>Download Template
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="exportCurrent()"
+                      [disabled]="exportingCurrent() || (isPricesEntity() && !selectedPriceListCode())">
+                @if (exportingCurrent()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exporting…
+                } @else {
+                  <i class="bi bi-file-earmark-arrow-down me-1" aria-hidden="true"></i>Export current data
+                }
+              </button>
+            </div>
             @if (templateError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+            @if (exportError(); as msg) {
               <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
             }
           </div>
@@ -107,6 +156,7 @@
                 <span class="status-tag status-tag--info">
                   {{ rep.mode === 'COMMIT' ? 'Updated' : 'Will update' }}: {{ rep.updated }}
                 </span>
+                <span class="status-tag status-tag--neutral">Skipped: {{ rep.skipped }}</span>
                 <span class="status-tag"
                       [class.status-tag--danger]="rep.errors > 0"
                       [class.status-tag--neutral]="rep.errors === 0">
@@ -143,6 +193,7 @@
                             <span class="status-tag"
                                   [class.status-tag--ok]="row.action === 'CREATE'"
                                   [class.status-tag--info]="row.action === 'UPDATE'"
+                                  [class.status-tag--neutral]="row.action === 'SKIP'"
                                   [class.status-tag--danger]="row.action === 'ERROR'">
                               {{ row.action }}
                             </span>
@@ -174,9 +225,15 @@
                     }
                   </button>
                 } @else {
-                  <span class="status-tag status-tag--ok">
-                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Committed
-                  </span>
+                  @if (rep.errors > 0) {
+                    <span class="status-tag status-tag--danger">
+                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Committed with errors
+                    </span>
+                  } @else {
+                    <span class="status-tag status-tag--ok">
+                      <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Committed
+                    </span>
+                  }
                   <button type="button" class="btn btn-outline-secondary btn-sm" (click)="resetFileState()">
                     Import another file
                   </button>

@@ -3,10 +3,19 @@ import { Component, ElementRef, computed, inject, signal, viewChild } from '@ang
 import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { blobErrorMessage } from '../../../core/api/blob-error';
+import { Company } from '../models/company.model';
+import { PriceListDto } from '../models/product.model';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
+import { ProductService } from '../products/product.service';
 import { EntityDescriptor, ImportReport } from './bulk-import.model';
 import { BulkImportService } from './bulk-import.service';
 
 type EntitiesState = 'loading' | 'idle' | 'error' | 'forbidden';
+
+/** The entity key whose export needs a price-list picker (the export defaults to the company's
+ * default list otherwise, which is frequently empty — see BulkImportService.exportCurrent()). */
+const PRICES_ENTITY_KEY = 'prices';
 
 /**
  * Generic bulk-import wizard: pick an entity type → download its XLSX template → upload a filled
@@ -26,6 +35,9 @@ type EntitiesState = 'loading' | 'idle' | 'error' | 'forbidden';
 })
 export class BulkImportComponent {
   private readonly bulkService = inject(BulkImportService);
+  private readonly productService = inject(ProductService);
+  private readonly companyService = inject(CompanyService);
+  private readonly organisationService = inject(OrganisationService);
   private readonly alerts = inject(AlertService);
 
   /** Template ref to the native file input — cleared programmatically on reset/entity change so a
@@ -39,10 +51,21 @@ export class BulkImportComponent {
   readonly selectedEntity = computed<EntityDescriptor | null>(
     () => this.entities().find((e) => e.key === this.selectedKey()) ?? null,
   );
+  readonly isPricesEntity = computed(() => this.selectedKey() === PRICES_ENTITY_KEY);
 
-  // ── Template download ────────────────────────────────────────────────────────
+  // ── Company + price-list context (prices export only) ─────────────────────────
+  readonly companies = signal<Company[]>([]);
+  readonly selectedCompanyId = signal('');
+  readonly companyState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly priceLists = signal<PriceListDto[]>([]);
+  readonly priceListsState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly selectedPriceListCode = signal('');
+
+  // ── Template download / current-data export ───────────────────────────────────
   readonly downloadingTemplate = signal(false);
   readonly templateError = signal<string | null>(null);
+  readonly exportingCurrent = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   // ── Upload & validate ────────────────────────────────────────────────────────
   readonly selectedFile = signal<File | null>(null);
@@ -76,6 +99,7 @@ export class BulkImportComponent {
         this.entitiesState.set(list.length > 0 ? 'idle' : 'forbidden');
         if (list.length > 0) {
           this.selectedKey.set(list[0].key);
+          if (list[0].key === PRICES_ENTITY_KEY) this.ensurePriceListsLoaded();
         }
       },
       error: (err) =>
@@ -86,7 +110,66 @@ export class BulkImportComponent {
   onEntityChange(key: string): void {
     this.selectedKey.set(key);
     this.templateError.set(null);
+    this.exportError.set(null);
+    this.selectedPriceListCode.set('');
     this.resetFileState();
+    if (key === PRICES_ENTITY_KEY) this.ensurePriceListsLoaded();
+  }
+
+  // ── Company + price-list context (prices export only) ─────────────────────────
+
+  /** Lazily loads companies (once) then the active company's price lists — only needed while the
+   * `prices` entity is selected, so other entity types never pay for this extra round-trip. */
+  private ensurePriceListsLoaded(): void {
+    if (this.companies().length > 0) {
+      if (this.priceLists().length === 0 && this.priceListsState() !== 'loading') {
+        this.loadPriceLists(this.selectedCompanyId());
+      }
+      return;
+    }
+    this.companyState.set('loading');
+    this.organisationService.current().subscribe({
+      next: (org) => {
+        this.companyService.list(org.uid).subscribe({
+          next: (list) => {
+            this.companies.set(list);
+            this.companyState.set('idle');
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadPriceLists(list[0].id);
+            }
+          },
+          error: () => this.companyState.set('error'),
+        });
+      },
+      error: () => this.companyState.set('error'),
+    });
+  }
+
+  private loadPriceLists(companyId: string): void {
+    this.priceListsState.set('loading');
+    this.productService.listPriceLists(companyId).subscribe({
+      next: (rows) => {
+        this.priceLists.set(rows.filter((pl) => pl.status === 'ACTIVE'));
+        this.priceListsState.set('idle');
+      },
+      error: () => {
+        this.priceLists.set([]);
+        this.priceListsState.set('error');
+      },
+    });
+  }
+
+  onCompanyChange(id: string): void {
+    this.selectedCompanyId.set(id);
+    this.selectedPriceListCode.set('');
+    this.priceLists.set([]);
+    if (id) this.loadPriceLists(id);
+  }
+
+  onPriceListCodeChange(code: string): void {
+    this.selectedPriceListCode.set(code);
+    this.exportError.set(null);
   }
 
   // ── Template download ────────────────────────────────────────────────────────
@@ -104,6 +187,30 @@ export class BulkImportComponent {
       error: (err) => {
         this.downloadingTemplate.set(false);
         void blobErrorMessage(err, 'Could not download the template.').then((m) => this.templateError.set(m));
+      },
+    });
+  }
+
+  // ── Export current data (download → edit → re-upload round-trip) ─────────────
+
+  exportCurrent(): void {
+    const key = this.selectedKey();
+    if (!key || this.exportingCurrent()) return;
+    if (this.isPricesEntity() && !this.selectedPriceListCode()) {
+      this.exportError.set('Select a price list to export.');
+      return;
+    }
+    this.exportingCurrent.set(true);
+    this.exportError.set(null);
+    const priceListCode = this.isPricesEntity() ? this.selectedPriceListCode() : undefined;
+    this.bulkService.exportCurrent(key, priceListCode).subscribe({
+      next: (blob) => {
+        this.exportingCurrent.set(false);
+        triggerBlobDownload(blob, `${key}-export.xlsx`);
+      },
+      error: (err) => {
+        this.exportingCurrent.set(false);
+        void blobErrorMessage(err, 'Could not export the current data.').then((m) => this.exportError.set(m));
       },
     });
   }
@@ -156,7 +263,18 @@ export class BulkImportComponent {
         this.report.set(rep);
         this.committing.set(false);
         this.committed.set(true);
-        this.alerts.success('Import completed', `Created ${rep.created}, updated ${rep.updated}.`);
+        // Honesty over a nagging-vs-reassuring choice: a commit with failed rows must NOT read as an
+        // unqualified success (persona-reported "can't trust it") — only an error-free commit gets
+        // the green success toast; any errors surface as an acknowledged error toast stating the
+        // failure count, even though the clean rows above it did commit.
+        if (rep.errors > 0) {
+          this.alerts.error(
+            'Import completed with errors',
+            `Imported ${rep.created + rep.updated}, ${rep.errors} failed — see the table.`,
+          );
+        } else {
+          this.alerts.success('Import completed', `Created ${rep.created}, updated ${rep.updated}.`);
+        }
       },
       error: (err) => {
         this.committing.set(false);
