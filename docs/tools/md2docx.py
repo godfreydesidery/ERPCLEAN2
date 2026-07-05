@@ -39,10 +39,22 @@ def add_toc(doc):
     fld.set(qn('w:instr'), r'TOC \o "1-3" \h \z \u')
     note = OxmlElement('w:r')
     t = OxmlElement('w:t')
-    t.text = "Right-click and 'Update Field' to build the table of contents."
+    t.text = "Updating… (if this line persists, right-click → Update Field)."
     note.append(t)
     fld.append(note)
     p._p.append(fld)
+
+
+def set_update_fields_on_open(doc):
+    """Ask Word to refresh all fields (including the TOC) when the file is opened, so the
+    Table of Contents populates automatically instead of needing a manual right-click →
+    Update Field. Word shows a one-time 'update fields?' prompt and then fills the TOC."""
+    settings = doc.settings.element
+    el = settings.find(qn('w:updateFields'))
+    if el is None:
+        el = OxmlElement('w:updateFields')
+        settings.append(el)
+    el.set(qn('w:val'), 'true')
 
 
 def add_runs(paragraph, text):
@@ -206,6 +218,8 @@ def convert(md_path, docx_path, title=None, subtitle=None):
     if table_buf:
         flush_table(doc, table_buf)
 
+    if title:  # a cover+TOC was emitted → have Word build the TOC on open
+        set_update_fields_on_open(doc)
     doc.save(docx_path)
     print(f'Wrote {docx_path}')
 
