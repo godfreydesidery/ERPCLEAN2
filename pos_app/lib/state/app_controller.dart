@@ -49,16 +49,24 @@ class AppData {
   final Map<String, Unit> unitsByUid;
   final String currency;
 
-  /// VAT rates by `vatStatus` (fraction, e.g. 0.18) — empty when TAXRATE.VIEW is
-  /// not granted, in which case the preview shows net prices.
+  /// VAT rates by `vatStatus`, as a **fraction** (e.g. 0.18 = 18%) — this is the
+  /// backend's canonical form (TaxRate.rate is stored 0 ≤ rate < 1). Empty when
+  /// TAXRATE.VIEW is not granted, in which case the preview shows net prices.
   final Map<String, double> vatRates;
 
   bool can(String code) => me?.can(code) ?? false;
 
-  /// VAT-inclusive unit price for a product's vatStatus (preview aid). Falls back
-  /// to the net price when the rate is unknown.
-  double grossUnitPrice(double net, String vatStatus) =>
-      net * (1 + (vatRates[vatStatus] ?? 0));
+  /// VAT fraction for a `vatStatus` (e.g. 0.18); 0 when unknown. Values are
+  /// already fractions (see [vatRates]) — no percentage/fraction conversion.
+  double vatFractionFor(String vatStatus) => vatRates[vatStatus] ?? 0;
+
+  /// Gross (VAT-inclusive) unit price for the preview total. When the source
+  /// price list is VAT-inclusive the stored [amount] is ALREADY gross, so VAT is
+  /// not re-applied; otherwise VAT is added exactly once. Falls back to [amount]
+  /// when the rate is unknown (net preview).
+  double grossUnitPrice(double amount, String vatStatus,
+          {bool vatInclusive = false}) =>
+      vatInclusive ? amount : amount * (1 + vatFractionFor(vatStatus));
 
   AppData copyWith({
     AppPhase? phase,

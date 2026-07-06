@@ -77,9 +77,12 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     cart.addProduct(p, unit);
     final id = ref.read(cartProvider).selectedId;
     if (id != null) {
-      _cache.previewPrice(p.uid, _currency).then((net) {
-        if (net != null && mounted) {
-          cart.setLinePrice(id, app.grossUnitPrice(net, p.vatStatus));
+      _cache.previewPrice(p.uid, _currency).then((pp) {
+        if (pp != null && mounted) {
+          cart.setLinePrice(
+              id,
+              app.grossUnitPrice(pp.amount, p.vatStatus,
+                  vatInclusive: pp.vatInclusive));
         }
       });
     }
@@ -330,8 +333,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                                 ],
                               ),
                             ),
-                            Text(formatAmount(l.previewGross),
-                                style: numStyle(weight: FontWeight.w800)),
+                            SizedBox(
+                              width: 104,
+                              child: NumText(formatAmount(l.previewGross),
+                                  style: numStyle(weight: FontWeight.w800)),
+                            ),
                             IconButton(
                                 onPressed: () => ctrl.removeLine(l.localId),
                                 icon: const Icon(Icons.close,
@@ -369,8 +375,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     Text('Total (${cart.currency})',
                         style: const TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 18)),
-                    Text(formatAmount(cart.previewSubtotal),
-                        style: numStyle(size: 20, weight: FontWeight.w800)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: NumText(formatAmount(cart.previewSubtotal),
+                          style: numStyle(size: 20, weight: FontWeight.w800)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),

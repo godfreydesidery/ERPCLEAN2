@@ -88,9 +88,12 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     cart.addProduct(p, unit, fixedQuantity: fixedQty, overridePrice: overridePrice);
     final id = ref.read(cartProvider).selectedId;
     if (overridePrice == null && id != null) {
-      _cache.previewPrice(p.uid, _currency).then((net) {
-        if (net != null && mounted) {
-          cart.setLinePrice(id, app.grossUnitPrice(net, p.vatStatus));
+      _cache.previewPrice(p.uid, _currency).then((pp) {
+        if (pp != null && mounted) {
+          cart.setLinePrice(
+              id,
+              app.grossUnitPrice(pp.amount, p.vatStatus,
+                  vatInclusive: pp.vatInclusive));
         }
       });
     }
@@ -360,9 +363,8 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                 ),
                 _qtyStepper(l, ctrl),
                 SizedBox(
-                  width: 96,
-                  child: Text(formatAmount(l.previewGross),
-                      textAlign: TextAlign.right,
+                  width: 108,
+                  child: NumText(formatAmount(l.previewGross),
                       style: numStyle(weight: FontWeight.w700)),
                 ),
                 IconButton(
@@ -431,8 +433,11 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                     Text('Total (${cart.currency})',
                         style: const TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 18)),
-                    Text(formatAmount(cart.previewSubtotal),
-                        style: numStyle(size: 20, weight: FontWeight.w800)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: NumText(formatAmount(cart.previewSubtotal),
+                          style: numStyle(size: 20, weight: FontWeight.w800)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),

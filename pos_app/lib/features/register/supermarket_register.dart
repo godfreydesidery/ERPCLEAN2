@@ -96,9 +96,12 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         overridePrice: overridePrice);
     final lineId = ref.read(cartProvider).selectedId;
     if (overridePrice == null && lineId != null) {
-      _cache.previewPrice(p.uid, _currency).then((net) {
-        if (net != null && mounted) {
-          cart.setLinePrice(lineId, app.grossUnitPrice(net, p.vatStatus));
+      _cache.previewPrice(p.uid, _currency).then((pp) {
+        if (pp != null && mounted) {
+          cart.setLinePrice(
+              lineId,
+              app.grossUnitPrice(pp.amount, p.vatStatus,
+                  vatInclusive: pp.vatInclusive));
         }
       });
     }
@@ -495,9 +498,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   static const _wCode = 64.0;
   static const _wUnit = 52.0;
   static const _wQty = 72.0;
-  static const _wPrice = 84.0;
+  static const _wPrice = 96.0;
   static const _wDisc = 70.0;
-  static const _wTotal = 92.0;
+  static const _wTotal = 108.0;
   static const _wAct = 30.0;
 
   Widget _gridHeader() {
@@ -650,14 +653,16 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               _wUnit,
               align: Alignment.center),
           cell(
-              Text(formatAmount(line.quantity, decimals: line.unit.fractional ? 3 : 0),
+              NumText(
+                  formatAmount(line.quantity,
+                      decimals: line.unit.fractional ? 3 : 0),
                   style: numStyle(size: 13.5, color: muted)),
               _wQty,
               align: Alignment.centerRight,
               bg: qtyHi ? AppColors.brandSoft : null,
               onTap: selectQty),
           cell(
-              Text(
+              NumText(
                   line.unitPricePreview == null
                       ? '—'
                       : formatAmount(line.unitPricePreview!),
@@ -667,9 +672,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
-              Text(line.lineDiscountAmount == 0
-                  ? '·'
-                  : formatAmount(line.lineDiscountAmount),
+              NumText(
+                  line.lineDiscountAmount == 0
+                      ? '·'
+                      : formatAmount(line.lineDiscountAmount),
                   style: numStyle(
                       size: 13.5,
                       color: line.lineDiscountAmount == 0
@@ -680,7 +686,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               bg: discHi ? AppColors.brandSoft : null,
               onTap: selectDisc),
           cell(
-              Text(formatAmount(line.previewGross),
+              NumText(formatAmount(line.previewGross),
                   style: numStyle(
                       size: 13.5, weight: FontWeight.w700, color: muted)),
               _wTotal,
@@ -833,7 +839,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   fontWeight: FontWeight.w700,
                   letterSpacing: .6)),
           const SizedBox(height: 2),
-          Text(formatAmount(cart.previewSubtotal),
+          NumText(formatAmount(cart.previewSubtotal),
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 30,
