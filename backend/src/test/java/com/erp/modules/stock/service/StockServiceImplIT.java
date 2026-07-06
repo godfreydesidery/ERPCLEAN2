@@ -108,6 +108,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     @Autowired private PriceListService        priceListService;
     @Autowired private UnitOfMeasureService    unitService;
     @Autowired private StockOnHandRepository   stockOnHandRepo;
+    @Autowired private com.erp.modules.stock.repository.StockLocationRepository stockLocationRepo;
     @Autowired private StockMovementRepository stockMovementRepo;
     @Autowired private DomainEventRepository   domainEventRepo;
     @Autowired private DomainEventDispatcher   dispatcher;
@@ -496,6 +497,56 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         // Term matching nothing → empty page
         Page<StockOnHandDto> none = stockService.listOnHand("zzzzz-no-match", Pageable.unpaged());
         assertThat(none.getContent()).isEmpty();
+    }
+
+    // =========================================================================
+    // 11c. Busy-day-sim FIX 1: a product stocked at 2 locations returns distinguishable rows
+    // =========================================================================
+
+    @Test
+    void listOnHand_productAtTwoLocations_returnsDistinctLocationRows() {
+        ProductDto product = stockableProduct("MultiLocWidget");
+        // Opening balance posts at the branch's default location (LOC1, seeded lazily as "Main Store").
+        stockService.openingBalance(
+                new OpeningBalanceRequest(product.uid(), BigDecimal.TEN, null));
+
+        // Seed a second location + a directly-written on-hand row at that location (ADR-0028 D-4
+        // pattern — mirrors InventoryValuationServiceIT's multi-location seeding).
+        com.erp.modules.stock.domain.entity.StockLocation loc2 = stockLocationRepo.save(
+                new com.erp.modules.stock.domain.entity.StockLocation(
+                        companyA.getId(), branchA.getId(),
+                        "LOC2-" + branchA.getId(), "Warehouse B",
+                        com.erp.modules.stock.domain.enums.LocationType.WAREHOUSE, false, null));
+        txTemplate.execute(s -> {
+            com.erp.modules.stock.domain.entity.StockOnHand loc2Soh =
+                    new com.erp.modules.stock.domain.entity.StockOnHand(
+                            companyA.getId(), branchA.getId(), loc2.getId(), product.id());
+            com.erp.modules.stock.domain.entity.StockOnHand saved = stockOnHandRepo.save(loc2Soh);
+            saved.applyDelta(new BigDecimal("5"), null);
+            stockOnHandRepo.save(saved);
+            return null;
+        });
+
+        // No-search-term path (enrichPage).
+        List<StockOnHandDto> rowsNoTerm = stockService.listOnHand(null, Pageable.unpaged())
+                .getContent().stream()
+                .filter(r -> r.productId().equals(product.id()))
+                .toList();
+        assertThat(rowsNoTerm).hasSize(2);
+        assertThat(rowsNoTerm).extracting(StockOnHandDto::locationId).doesNotContainNull();
+        assertThat(rowsNoTerm).extracting(StockOnHandDto::locationId).doesNotHaveDuplicates();
+        assertThat(rowsNoTerm).extracting(StockOnHandDto::locationName)
+                .containsExactlyInAnyOrder("Main Store", "Warehouse B");
+
+        // Search-term path — same guarantee.
+        List<StockOnHandDto> rowsWithTerm = stockService
+                .listOnHand("MultiLocWidget", Pageable.unpaged())
+                .getContent();
+        assertThat(rowsWithTerm).hasSize(2);
+        assertThat(rowsWithTerm).extracting(StockOnHandDto::locationId).doesNotHaveDuplicates();
+        assertThat(rowsWithTerm).extracting(StockOnHandDto::locationUid).doesNotContainNull();
+        assertThat(rowsWithTerm).extracting(StockOnHandDto::locationName)
+                .containsExactlyInAnyOrder("Main Store", "Warehouse B");
     }
 
     // =========================================================================

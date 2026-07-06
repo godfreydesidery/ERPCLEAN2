@@ -105,7 +105,7 @@ public class NegativeStockGuard {
                     "Not enough stock of " + productName + " to complete this sale — "
                             + availableText + ", "
                             + formatQty(qtyRequestedBase) + " requested. "
-                            + "To allow this, enable backorder in Sales Settings.");
+                            + "Ask a supervisor to enable backorder if this should be allowed.");
         }
     }
 

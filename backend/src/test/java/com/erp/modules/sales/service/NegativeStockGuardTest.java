@@ -55,7 +55,7 @@ class NegativeStockGuardTest {
                 .hasMessageContaining("Not enough stock of Widget")
                 .hasMessageContaining("5")
                 .hasMessageContaining("8")
-                .hasMessageContaining("enable backorder in Sales Settings");
+                .hasMessageContaining("Ask a supervisor to enable backorder");
     }
 
     // -------------------------------------------------------------------------
