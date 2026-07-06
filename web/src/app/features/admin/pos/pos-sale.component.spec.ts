@@ -356,14 +356,15 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
   };
   const stdRate = {
-    id: '1', uid: 'TR1', companyId: '10', vatStatus: 'STANDARD', rate: '18',
+    // TaxRate.rate is a fraction per the backend contract (DB CHECK: 0 ≤ rate < 1).
+    id: '1', uid: 'TR1', companyId: '10', vatStatus: 'STANDARD', rate: '0.18',
     version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
   } as any;
 
   beforeEach(() => { vi.useFakeTimers(); makeBed(); });
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
-  it('auto-fetches the list price (and normalises the VAT rate) on product select', async () => {
+  it('auto-fetches the list price (and applies the VAT fraction) on product select', async () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     const prodSvc = TestBed.inject(ProductService) as any;
     prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
@@ -374,7 +375,7 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     await vi.runAllTimersAsync();
 
     comp.products.set([stubProduct]);
-    comp.taxRates.set([stdRate]); // percentage form (18) must normalise to 0.18
+    comp.taxRates.set([stdRate]); // fraction form (0.18) per the backend contract
     comp.addLine();
     const lineId = comp.lines()[0].id;
     comp.onLineProductChange(lineId, 'P1');
