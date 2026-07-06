@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
 import com.erp.modules.cashbank.service.CashBankAccountService;
+import com.erp.modules.gl.domain.entity.JournalEntry;
+import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
+import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -46,17 +49,28 @@ import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.modules.stock.domain.dto.StockReceivedPayload;
+import com.erp.modules.stock.domain.entity.StockOnHand;
+import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.common.money.MoneyDto;
+import com.erp.platform.events.DomainEvent;
+import com.erp.platform.events.DomainEventDispatcher;
+import com.erp.platform.events.DomainEventRepository;
+import com.erp.platform.events.DomainEventStatus;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Basic end-to-end integration test for the core POS sale path
@@ -98,6 +112,12 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
     @Autowired private PosSessionService       sessionService;
     @Autowired private PosSaleService          saleService;
     @Autowired private SalesInvoiceRepository  invoiceRepo;
+    @Autowired private StockOnHandRepository   stockOnHandRepo;
+    @Autowired private JournalEntryRepository  journalEntryRepo;
+    @Autowired private DomainEventRepository   domainEventRepo;
+    @Autowired private DomainEventDispatcher   dispatcher;
+    @Autowired private OutboxPublisher         outboxPublisher;
+    @Autowired private TransactionTemplate     txTemplate;
 
     private Company company;
     private Branch  branch;
@@ -227,7 +247,95 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
                 .isEqualTo(1L);
     }
 
+    // =========================================================================
+    // FIX 2 (busy-day sim, CRITICAL): POS reverse/void on an OPEN session must succeed
+    // (previously always 409 via the AR-oriented settled-tender guard) — invoice VOIDED,
+    // SALE.VOIDED emitted, and stock/GL reversed once dispatched.
+    // =========================================================================
+
+    @Test
+    void reverseSale_posCashSale_openSession_voidsInvoiceAndReversesStockAndGl_noConflict() {
+        setRootCtx();
+        ProductDto product = productService.create(new CreateProductRequest(
+                company.getUid(), null, "Reversible Widget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD,
+                null, null, null, null, null, null, null, null, null));
+        productService.setPrice(product.uid(),
+                new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
+        receiveStock(product, new BigDecimal("50"), new BigDecimal("500"));
+        BigDecimal qtyBeforeSale = requireSoh(product.id()).getQuantity();
+
+        setCashierCtx();
+        SalesInvoiceDto sale = saleService.processSale(null, cashSaleRequest(product.id()));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED, sale.uid()));
+
+        // Sanity: the sale actually moved stock and posted GL before we reverse it.
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("stock must be issued by the original sale before we test the reversal")
+                .isLessThan(qtyBeforeSale);
+        JournalEntry salesEntry = journalEntryRepo
+                .findByCompanyIdAndSourceTypeAndSourceRef(company.getId(), JournalSourceType.SALES, sale.uid())
+                .orElseThrow(() -> new AssertionError("No SALES journal entry posted for the sale"));
+
+        // Act — this must NOT throw (the busy-day-sim defect: always 409 via
+        // FLOW-ORDER-TO-CASH-027's settled-tender guard, making POS void unsatisfiable).
+        setCashierCtx();
+        saleService.reverseSale(sale.uid(), "cashier rang the wrong item");
+
+        SalesInvoice voided = invoiceRepo.findByUid(sale.uid()).orElseThrow();
+        assertThat(voided.getStatus())
+                .as("the POS invoice must be VOIDED, not left FINALISED behind a 409")
+                .isEqualTo(InvoiceStatus.VOID);
+
+        DomainEvent voidedEvent = domainEventRepo.findAll().stream()
+                .filter(e -> DomainEventType.SALE_VOIDED.equals(e.getEventType()))
+                .filter(e -> sale.uid().equals(e.getAggregateUid()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No SALE.VOIDED event emitted for the reversal"));
+        assertThat(voidedEvent.getStatus()).isEqualTo(DomainEventStatus.PENDING);
+
+        dispatcher.dispatchOne(voidedEvent.getId());
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("reversing the sale must restore stock to its pre-sale level")
+                .isEqualByComparingTo(qtyBeforeSale);
+        assertThat(journalEntryRepo.existsByReversalOfId(salesEntry.getId()))
+                .as("a SALES_REVERSAL journal entry must offset the original SALES posting")
+                .isTrue();
+    }
+
     // ------------------------------------------------------------------------- helpers
+
+    /** Publishes+dispatches a STOCK.RECEIVED event so the product has on-hand before a sale. */
+    private void receiveStock(ProductDto product, BigDecimal qty, BigDecimal cost) {
+        StockReceivedPayload payload = new StockReceivedPayload(
+                product.uid(), company.getId(), branch.getId(), Instant.now(),
+                List.of(new StockReceivedPayload.LineItem(
+                        product.id(), product.uid(), null, qty, cost)));
+        txTemplate.execute(s -> {
+            outboxPublisher.publish(DomainEventType.STOCK_RECEIVED,
+                    DomainEventType.AGG_GOODS_RECEIPT, product.id(), product.uid(),
+                    company.getId(), branch.getId(), payload);
+            return null;
+        });
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.STOCK_RECEIVED, product.uid()));
+    }
+
+    private Long pendingEvent(String eventType, String aggregateUid) {
+        return domainEventRepo.findAll().stream()
+                .filter(e -> eventType.equals(e.getEventType()))
+                .filter(e -> aggregateUid.equals(e.getAggregateUid()))
+                .filter(e -> DomainEventStatus.PENDING == e.getStatus())
+                .reduce((a, b) -> b)
+                .map(DomainEvent::getId)
+                .orElseThrow(() -> new AssertionError("No PENDING event of type: " + eventType));
+    }
+
+    private StockOnHand requireSoh(Long productId) {
+        return stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(company.getId(), branch.getId(), productId)
+                .orElseThrow(() -> new AssertionError("No on-hand row for productId=" + productId));
+    }
 
     /** Creates a non-restricted GOODS product (restrictedKind defaults to NONE) with a retail price. */
     private String pricedProduct(String name, String price) {

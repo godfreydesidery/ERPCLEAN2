@@ -42,8 +42,11 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     Optional<SalesInvoice> findByUidAndCompanyId(String uid, Long companyId);
 
     /**
-     * Gross total of all FINALISED POS invoices for a session — used by PosSessionServiceImpl
-     * to compute expected cash at session close (ADR-0029 D-5).
+     * Gross turnover of all FINALISED POS invoices for a session, across every tender type
+     * (ADR-0029 D-5). Reporting/turnover figure only — do NOT use this for the expected-cash
+     * drawer arithmetic (card/mobile-money/cheque tenders never enter the till). Use
+     * {@link com.erp.modules.sales.repository.SalesInvoicePaymentRepository#sumCashTenderByPosSession}
+     * for that.
      */
     @Query("""
             SELECT COALESCE(SUM(i.grossTotalAmount), 0)

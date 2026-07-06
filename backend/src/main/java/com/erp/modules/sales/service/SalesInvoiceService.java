@@ -34,6 +34,16 @@ public interface SalesInvoiceService {
 
     void voidInvoice(String uid, VoidInvoiceRequest req);
 
+    /**
+     * POS-specific reversal path (busy-day-simulation fix). Unlike {@link #voidInvoice}, this does
+     * NOT block on the FLOW-ORDER-TO-CASH-027 direct-payment guard — every POS sale is paid at the
+     * till, so that guard would make {@code POS.SALE.VOID} permanently unsatisfiable. The
+     * AR-allocation guard still applies. Callers must restrict use to a POS-origin invoice on an
+     * OPEN session (see {@code PosSaleServiceImpl#reverseSale}) — this method does not re-check
+     * origin/session state itself.
+     */
+    void voidPosInvoice(String uid, VoidInvoiceRequest req);
+
     // --- Lines ---
     SalesInvoiceLineDto addLine(String invoiceUid, AddInvoiceLineRequest req);
 

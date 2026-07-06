@@ -12,6 +12,7 @@ import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PosPayoutRequest;
 import com.erp.modules.sales.domain.dto.PosSessionDto;
 import com.erp.modules.sales.domain.dto.ReconcileSessionRequest;
+import com.erp.modules.sales.domain.dto.TenderSubtotalDto;
 import com.erp.modules.sales.domain.dto.XReadDto;
 import com.erp.modules.sales.domain.dto.ZReadDto;
 import com.erp.modules.sales.domain.entity.PosSession;
@@ -20,6 +21,7 @@ import com.erp.modules.sales.domain.enums.PosSessionStatus;
 import com.erp.modules.sales.repository.PosSessionPayoutRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PosTillRepository;
+import com.erp.modules.sales.repository.SalesInvoicePaymentRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -47,6 +49,7 @@ public class PosSessionServiceImpl implements PosSessionService {
     private final PosTillRepository          tills;
     private final PosSessionPayoutRepository payouts;
     private final SalesInvoiceRepository     invoices;
+    private final SalesInvoicePaymentRepository tenderPayments;
     private final GLPostingSafeInvoker       glInvoker;
     private final GLConfigResolver           glConfig;
     private final CompanyRepository          companies;
@@ -58,22 +61,24 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   PosTillRepository tills,
                                   PosSessionPayoutRepository payouts,
                                   SalesInvoiceRepository invoices,
+                                  SalesInvoicePaymentRepository tenderPayments,
                                   GLPostingSafeInvoker glInvoker,
                                   GLConfigResolver glConfig,
                                   CompanyRepository companies,
                                   ScopeGuard scopeGuard,
                                   AuditService audit,
                                   SalesDepthNumberGenerator numberGen) {
-        this.sessions   = sessions;
-        this.tills      = tills;
-        this.payouts    = payouts;
-        this.invoices   = invoices;
-        this.glInvoker  = glInvoker;
-        this.glConfig   = glConfig;
-        this.companies  = companies;
-        this.scopeGuard = scopeGuard;
-        this.audit      = audit;
-        this.numberGen  = numberGen;
+        this.sessions       = sessions;
+        this.tills          = tills;
+        this.payouts        = payouts;
+        this.invoices       = invoices;
+        this.tenderPayments = tenderPayments;
+        this.glInvoker      = glInvoker;
+        this.glConfig       = glConfig;
+        this.companies      = companies;
+        this.scopeGuard     = scopeGuard;
+        this.audit          = audit;
+        this.numberGen      = numberGen;
     }
 
     @Override
@@ -145,12 +150,15 @@ public class PosSessionServiceImpl implements PosSessionService {
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
         requireOpen(session);
 
-        // Compute expected cash: opening + cash-sales total − cash payouts (ADR-0029 D-3)
+        // Compute expected cash: opening + cash-TENDER total − cash payouts (ADR-0029 D-3).
+        // Only CASH tenders enter the physical drawer — card/mobile-money/cheque never do — so
+        // the expected-cash formula must use the net CASH tender total, not invoice gross (busy-day
+        // simulation bugfix: previously all tenders inflated "expected cash").
         // All payouts (REFUND, PAID_OUT) are outflows — subtract the total from expected.
-        BigDecimal cashSalesTotal = computeCashSalesTotal(session);
-        BigDecimal totalPayouts   = payouts.totalPayoutsForSession(session.getId());
-        BigDecimal expected       = session.getOpeningFloatAmount()
-                .add(cashSalesTotal).subtract(totalPayouts);
+        BigDecimal cashTenderTotal = computeCashTenderTotal(session);
+        BigDecimal totalPayouts    = payouts.totalPayoutsForSession(session.getId());
+        BigDecimal expected        = session.getOpeningFloatAmount()
+                .add(cashTenderTotal).subtract(totalPayouts);
 
         session.setCountedCashAmount(req.countedCashAmount());
         session.setExpectedCashAmount(expected);
@@ -174,15 +182,17 @@ public class PosSessionServiceImpl implements PosSessionService {
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
         requireOpen(session);
 
-        BigDecimal cashSalesTotal = computeCashSalesTotal(session);
-        BigDecimal totalPayouts   = payouts.totalPayoutsForSession(session.getId());
-        BigDecimal expected       = session.getOpeningFloatAmount()
-                .add(cashSalesTotal).subtract(totalPayouts);
-        long invoiceCount         = countPosInvoices(session);
+        BigDecimal cashTenderTotal  = computeCashTenderTotal(session);
+        BigDecimal grossTurnover    = computeGrossTurnoverTotal(session);
+        BigDecimal totalPayouts     = payouts.totalPayoutsForSession(session.getId());
+        BigDecimal expected         = session.getOpeningFloatAmount()
+                .add(cashTenderTotal).subtract(totalPayouts);
+        long invoiceCount           = countPosInvoices(session);
 
         return new XReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
                 session.getOpenedAt().toString(), session.getOpeningFloatAmount(),
-                cashSalesTotal, totalPayouts, expected, invoiceCount);
+                grossTurnover, cashTenderTotal, totalPayouts, expected, invoiceCount,
+                computeTenderSubtotals(session));
     }
 
     @Override
@@ -222,13 +232,15 @@ public class PosSessionServiceImpl implements PosSessionService {
                 session.getClosedAt() == null ? null : session.getClosedAt().toString(),
                 session.getReconciledAt().toString(),
                 session.getOpeningFloatAmount(),
-                computeCashSalesTotal(session),
+                computeGrossTurnoverTotal(session),
+                computeCashTenderTotal(session),
                 payouts.totalPayoutsForSession(session.getId()),
                 session.getExpectedCashAmount(),
                 session.getCountedCashAmount(),
                 variance,
                 journalId,
-                invoiceCount);
+                invoiceCount,
+                computeTenderSubtotals(session));
     }
 
     // ---- helpers ---------------------------------------------------------------
@@ -277,8 +289,21 @@ public class PosSessionServiceImpl implements PosSessionService {
         return glInvoker.postInNewTx(draft);
     }
 
-    private BigDecimal computeCashSalesTotal(PosSession session) {
+    /**
+     * Net CASH tender retained in the till drawer — the ONLY figure that belongs in the
+     * expected-cash arithmetic. See {@link SalesInvoicePaymentRepository#sumCashTenderByPosSession}.
+     */
+    private BigDecimal computeCashTenderTotal(PosSession session) {
+        return tenderPayments.sumCashTenderByPosSession(session.getId());
+    }
+
+    /** Gross turnover across every tender type — reporting/display figure only. */
+    private BigDecimal computeGrossTurnoverTotal(PosSession session) {
         return invoices.sumGrossByPosSession(session.getId());
+    }
+
+    private List<TenderSubtotalDto> computeTenderSubtotals(PosSession session) {
+        return tenderPayments.sumByPosSessionGroupedByTender(session.getId());
     }
 
     private long countPosInvoices(PosSession session) {

@@ -229,7 +229,10 @@ public class PosSaleServiceImpl implements PosSaleService {
                     "POS session is not OPEN; reverse a settled session's sale via back-office void.");
         }
 
-        invoiceService.voidInvoice(invoiceUid, new VoidInvoiceRequest(reason));
+        // POS-specific path (busy-day-simulation fix): skips the AR-oriented settled-tender guard
+        // that made this feature unsatisfiable (every POS sale is paid at the till). The AR
+        // allocation guard still applies inside voidPosInvoice.
+        invoiceService.voidPosInvoice(invoiceUid, new VoidInvoiceRequest(reason));
 
         audit.record(AuditEvent.of(AuditActions.POS_SALE_REVERSE, "sales_invoices",
                         inv.getId(), invoiceUid)

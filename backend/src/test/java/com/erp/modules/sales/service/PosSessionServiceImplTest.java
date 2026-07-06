@@ -20,11 +20,14 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.ReconcileSessionRequest;
+import com.erp.modules.sales.domain.dto.TenderSubtotalDto;
 import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.enums.PosSessionStatus;
+import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.repository.PosSessionPayoutRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PosTillRepository;
+import com.erp.modules.sales.repository.SalesInvoicePaymentRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
@@ -33,6 +36,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,6 +58,7 @@ class PosSessionServiceImplTest {
     private PosTillRepository          tills;
     private PosSessionPayoutRepository payouts;
     private SalesInvoiceRepository     invoices;
+    private SalesInvoicePaymentRepository tenderPayments;
     private GLPostingSafeInvoker       glInvoker;
     private GLConfigResolver           glConfig;
     private CompanyRepository          companies;
@@ -68,6 +73,7 @@ class PosSessionServiceImplTest {
         tills      = mock(PosTillRepository.class);
         payouts    = mock(PosSessionPayoutRepository.class);
         invoices   = mock(SalesInvoiceRepository.class);
+        tenderPayments = mock(SalesInvoicePaymentRepository.class);
         glInvoker  = mock(GLPostingSafeInvoker.class);
         glConfig   = mock(GLConfigResolver.class);
         companies  = mock(CompanyRepository.class);
@@ -75,7 +81,7 @@ class PosSessionServiceImplTest {
         audit      = mock(AuditService.class);
         numberGen  = mock(SalesDepthNumberGenerator.class);
         when(numberGen.nextPosSession(anyLong())).thenReturn("POS-0001");
-        service = new PosSessionServiceImpl(sessions, tills, payouts, invoices,
+        service = new PosSessionServiceImpl(sessions, tills, payouts, invoices, tenderPayments,
                 glInvoker, glConfig, companies, scopeGuard, audit, numberGen);
 
         // default: no request context
@@ -101,7 +107,7 @@ class PosSessionServiceImplTest {
         session.setStatus(PosSessionStatus.OPEN);
 
         when(sessions.findByUid("S1")).thenReturn(Optional.of(session));
-        when(invoices.sumGrossByPosSession(session.getId())).thenReturn(new BigDecimal("500.00"));
+        when(tenderPayments.sumCashTenderByPosSession(session.getId())).thenReturn(new BigDecimal("500.00"));
         when(payouts.totalPayoutsForSession(session.getId())).thenReturn(new BigDecimal("200.00"));
         when(sessions.save(any())).thenReturn(session);
 
@@ -124,7 +130,7 @@ class PosSessionServiceImplTest {
         PosSession session = openSession(1L, new BigDecimal("500.00"));
 
         when(sessions.findByUid("S2")).thenReturn(Optional.of(session));
-        when(invoices.sumGrossByPosSession(session.getId())).thenReturn(new BigDecimal("800.00"));
+        when(tenderPayments.sumCashTenderByPosSession(session.getId())).thenReturn(new BigDecimal("800.00"));
         when(payouts.totalPayoutsForSession(session.getId())).thenReturn(BigDecimal.ZERO);
         when(sessions.save(any())).thenReturn(session);
 
@@ -133,6 +139,65 @@ class PosSessionServiceImplTest {
         assertThat(session.getExpectedCashAmount())
                 .isEqualByComparingTo(new BigDecimal("1300.00"));
         assertThat(session.getVarianceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // -------------------------------------------------------------------------
+    // Busy-day-sim FIX 1 (CRITICAL): mixed CASH + MOBILE_MONEY tenders — only the CASH leg
+    // belongs in the expected-cash arithmetic. Before the fix, expected cash was computed from
+    // invoice GROSS (all tenders), inflating expected cash by the non-cash leg and producing a
+    // phantom shortage on an honest count.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void closeSession_mixedTenders_expectedCashExcludesMobileMoneyLeg_varianceZeroOnHonestCount() {
+        // Session turnover 800 = 500 CASH + 300 MOBILE_MONEY. Only the 500 CASH ever entered the
+        // drawer, so expected cash = opening(1000) + 500 = 1500, NOT opening + 800(gross) = 1800.
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+
+        when(sessions.findByUid("S8")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(session.getId())).thenReturn(new BigDecimal("800.00"));
+        when(tenderPayments.sumCashTenderByPosSession(session.getId())).thenReturn(new BigDecimal("500.00"));
+        when(payouts.totalPayoutsForSession(session.getId())).thenReturn(BigDecimal.ZERO);
+        when(sessions.save(any())).thenReturn(session);
+
+        // Cashier counts the drawer honestly: exactly opening + CASH tenders = 1500.
+        service.closeSession("S8", new CloseSessionRequest(new BigDecimal("1500.00"), null));
+
+        assertThat(session.getExpectedCashAmount())
+                .as("expected cash must exclude the MOBILE_MONEY leg — only CASH enters the drawer")
+                .isEqualByComparingTo(new BigDecimal("1500.00"));
+        assertThat(session.getVarianceAmount())
+                .as("an honest count against the correct expected figure must show zero variance, "
+                        + "not a phantom shortage from folding in the MOBILE_MONEY leg")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void xRead_mixedTenders_reportsGrossTurnoverSeparatelyFromCashTender() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+
+        when(sessions.findByUid("S9")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(session.getId())).thenReturn(new BigDecimal("800.00"));
+        when(tenderPayments.sumCashTenderByPosSession(session.getId())).thenReturn(new BigDecimal("500.00"));
+        when(payouts.totalPayoutsForSession(session.getId())).thenReturn(BigDecimal.ZERO);
+        when(invoices.countByPosSession(session.getId())).thenReturn(2L);
+        when(tenderPayments.sumByPosSessionGroupedByTender(session.getId()))
+                .thenReturn(List.of(
+                        new TenderSubtotalDto(TenderType.CASH, new BigDecimal("500.00")),
+                        new TenderSubtotalDto(TenderType.MOBILE_MONEY, new BigDecimal("300.00"))));
+
+        var xRead = service.xRead("S9");
+
+        assertThat(xRead.totalSalesAmount())
+                .as("totalSalesAmount is gross turnover across all tenders — reporting only")
+                .isEqualByComparingTo(new BigDecimal("800.00"));
+        assertThat(xRead.cashTenderAmount())
+                .as("cashTenderAmount is the CASH-only figure that feeds expected cash")
+                .isEqualByComparingTo(new BigDecimal("500.00"));
+        assertThat(xRead.expectedCashAmount())
+                .as("expected cash = opening + CASH tender only, never the gross turnover")
+                .isEqualByComparingTo(new BigDecimal("1500.00"));
+        assertThat(xRead.tenderSubtotals()).hasSize(2);
     }
 
     // -------------------------------------------------------------------------
@@ -235,6 +300,7 @@ class PosSessionServiceImplTest {
         when(sessions.findByUid("S6")).thenReturn(Optional.of(session));
         when(sessions.save(any())).thenReturn(session);
         when(invoices.sumGrossByPosSession(any())).thenReturn(BigDecimal.ZERO);
+        when(tenderPayments.sumCashTenderByPosSession(any())).thenReturn(BigDecimal.ZERO);
         when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
 
         service.reconcileSession("S6", new ReconcileSessionRequest(null));
