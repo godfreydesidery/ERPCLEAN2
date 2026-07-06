@@ -57,12 +57,14 @@ public class XlsxTemplateWriter {
                                 List<? extends Map<String, String>> dataRows) {
         Sheet sheet = wb.createSheet("Data");
         CellStyle headerStyle = headerStyle(wb);
+        CellStyle refHeaderStyle = referenceHeaderStyle(wb);
+        CellStyle refDataStyle = referenceDataStyle(wb);
         Row header = sheet.createRow(0);
         for (int c = 0; c < columns.size(); c++) {
             ColumnSpec col = columns.get(c);
             Cell cell = header.createCell(c);
             cell.setCellValue(col.required() ? "* " + col.header() : col.header());
-            cell.setCellStyle(headerStyle);
+            cell.setCellStyle(col.reference() ? refHeaderStyle : headerStyle);
             sheet.setColumnWidth(c, 22 * 256);
             if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
                 addDropdown(sheet, c, col.allowedValues());
@@ -74,8 +76,15 @@ public class XlsxTemplateWriter {
         for (Map<String, String> data : dataRows) {
             Row row = sheet.createRow(r++);
             for (int c = 0; c < columns.size(); c++) {
-                String value = data.get(columns.get(c).header());
-                row.createCell(c).setCellValue(value == null ? "" : value);
+                ColumnSpec col = columns.get(c);
+                String value = data.get(col.header());
+                Cell cell = row.createCell(c);
+                cell.setCellValue(value == null ? "" : value);
+                // Reference columns are read-only context — tint them so the editor sees at a
+                // glance which cells to change (white) and which are just information (blue).
+                if (col.reference()) {
+                    cell.setCellStyle(refDataStyle);
+                }
             }
         }
     }
@@ -107,7 +116,8 @@ public class XlsxTemplateWriter {
         sheet.createRow(r++).createCell(0).setCellValue(
                 "Fill in the 'Data' sheet, one record per row, then upload. Columns marked * are "
               + "required. On an update (a row whose code matches an existing record), a blank "
-              + "optional cell keeps the current value.");
+              + "optional cell keeps the current value. Blue 'Reference' columns are read-only "
+              + "context (e.g. the product name) — edit the white cells; reference values are ignored.");
         r++; // blank
 
         Row colHead = sheet.createRow(r++);
@@ -118,14 +128,30 @@ public class XlsxTemplateWriter {
         for (ColumnSpec col : columns) {
             Row row = sheet.createRow(r++);
             row.createCell(0).setCellValue(col.header());
-            row.createCell(1).setCellValue(col.required() ? "Yes" : "No");
-            String note = col.help() == null ? "" : col.help();
-            if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
-                note = note.isBlank() ? "" : note + " ";
-                note += "Allowed: " + String.join(", ", col.allowedValues()) + ".";
-            }
-            row.createCell(2).setCellValue(note);
+            row.createCell(1).setCellValue(requiredLabel(col));
+            row.createCell(2).setCellValue(columnNote(col));
         }
+    }
+
+    /** "Reference" for a read-only column, else "Yes"/"No" for the required flag. */
+    private static String requiredLabel(ColumnSpec col) {
+        if (col.reference()) {
+            return "Reference";
+        }
+        return col.required() ? "Yes" : "No";
+    }
+
+    /** The Instructions note: read-only prefix (reference), the help text, and any allowed values. */
+    private static String columnNote(ColumnSpec col) {
+        String note = col.help() == null ? "" : col.help();
+        if (col.reference()) {
+            note = ("Read-only — shown for context; not imported. " + note).trim();
+        }
+        if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
+            note = note.isBlank() ? "" : note + " ";
+            note += "Allowed: " + String.join(", ", col.allowedValues()) + ".";
+        }
+        return note;
     }
 
     private static void writeBold(Row row, int col, String value, CellStyle style) {
@@ -140,6 +166,26 @@ public class XlsxTemplateWriter {
         f.setBold(true);
         s.setFont(f);
         s.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return s;
+    }
+
+    /** Header style for a read-only reference column — bold italic on a light-blue fill. */
+    private CellStyle referenceHeaderStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont();
+        f.setBold(true);
+        f.setItalic(true);
+        s.setFont(f);
+        s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return s;
+    }
+
+    /** Light-blue fill for reference (read-only) data cells, so they read as "information, not input". */
+    private CellStyle referenceDataStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
         s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         return s;
     }

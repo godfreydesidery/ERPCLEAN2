@@ -18,7 +18,6 @@ import com.erp.platform.bulk.RowOutcome;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,10 +47,12 @@ public class PriceImportHandler implements BulkImportHandler {
     private static final int EXPORT_MAX = 2000;
 
     private static final String COL_PRODUCT = "Product Code";
+    private static final String COL_NAME = "Product Name";
     private static final String COL_PRICE_LIST = "Price List";
     private static final String COL_UNIT = "Unit";
     private static final String COL_AMOUNT = "Amount";
     private static final String COL_CURRENCY = "Currency";
+    private static final String COL_COST = "Cost";
 
     private final ProductService productService;
     private final ProductRepository products;
@@ -98,13 +99,15 @@ public class PriceImportHandler implements BulkImportHandler {
                 : ColumnSpec.choice(COL_PRICE_LIST, true, "Existing price-list code.", priceListCodes);
         return List.of(
                 ColumnSpec.of(COL_PRODUCT, true, "Existing product code."),
+                ColumnSpec.reference(COL_NAME, "The product's name — to identify the row you're pricing."),
                 priceList,
                 ColumnSpec.of(COL_UNIT, false,
                         "Blank = base-unit price. A unit code sets that pack's price (the pack must "
                       + "already be configured on the product)."),
                 ColumnSpec.of(COL_AMOUNT, false,
                         "The price on this list. Leave blank to LEAVE THE PRICE UNCHANGED (the row is skipped)."),
-                ColumnSpec.of(COL_CURRENCY, false, "3-letter code, e.g. TZS. Required when Amount is set."));
+                ColumnSpec.of(COL_CURRENCY, false, "3-letter code, e.g. TZS. Required when Amount is set."),
+                ColumnSpec.reference(COL_COST, "The product's current cost — for margin reference."));
     }
 
     @Override
@@ -149,27 +152,34 @@ public class PriceImportHandler implements BulkImportHandler {
             }
         }
 
-        List<LinkedHashMap<String, String>> rows = new ArrayList<>();
-        for (Product p : products.findByCompanyId(companyId, Pageable.unpaged()).getContent()) {
-            if (p.getStatus() != MasterStatus.ACTIVE) {
-                continue;
-            }
-            ProductPrice pp = baseByProduct.get(p.getId());
-            String amount = pp != null && pp.getPrice() != null ? pp.getPrice().getAmount().toPlainString() : "";
-            String currency = pp != null && pp.getPrice() != null
-                    ? pp.getPrice().getCurrency().value() : listCurrency;
-            LinkedHashMap<String, String> r = new LinkedHashMap<>();
-            r.put(COL_PRODUCT, p.getCode());
-            r.put(COL_PRICE_LIST, priceList.getCode());
-            r.put(COL_UNIT, "");
-            r.put(COL_AMOUNT, amount);
-            r.put(COL_CURRENCY, currency);
-            rows.add(r);
-            if (rows.size() >= EXPORT_MAX) {
-                break;
-            }
-        }
-        return rows;
+        return products.findByCompanyId(companyId, Pageable.unpaged()).getContent().stream()
+                .filter(p -> p.getStatus() == MasterStatus.ACTIVE)
+                .limit(EXPORT_MAX)
+                .map(p -> exportRow(p, priceList, baseByProduct.get(p.getId()), listCurrency))
+                .toList();
+    }
+
+    /** One export row: the editable price fields plus the Name/Cost reference context. */
+    private static LinkedHashMap<String, String> exportRow(Product p, PriceList priceList,
+                                                           ProductPrice pp, String listCurrency) {
+        boolean priced = pp != null && pp.getPrice() != null;
+        String amount = priced ? pp.getPrice().getAmount().toPlainString() : "";
+        String currency = priced ? pp.getPrice().getCurrency().value() : listCurrency;
+        LinkedHashMap<String, String> r = new LinkedHashMap<>();
+        r.put(COL_PRODUCT, p.getCode());
+        r.put(COL_NAME, p.getName());
+        r.put(COL_PRICE_LIST, priceList.getCode());
+        r.put(COL_UNIT, "");
+        r.put(COL_AMOUNT, amount);
+        r.put(COL_CURRENCY, currency);
+        r.put(COL_COST, costOf(p));
+        return r;
+    }
+
+    /** The product's current cost amount as plain text, or blank when unset. */
+    private static String costOf(Product p) {
+        return p.getCost() != null && p.getCost().getAmount() != null
+                ? p.getCost().getAmount().toPlainString() : "";
     }
 
     /** The price list to export prices for: the {@code priceList} param code, else the default, else the first. */
