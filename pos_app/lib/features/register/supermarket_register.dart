@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/barcode.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
+import '../../state/stock_cache.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
 import 'pickers.dart';
@@ -42,8 +44,17 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   _NumTarget _target = _NumTarget.qty;
 
   CatalogCache get _cache => ref.read(catalogCacheProvider);
+  StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
+
+  /// Refresh on-hand for the current query so search rows show remaining stock
+  /// before the cashier rings (best-effort; repaints when it lands).
+  void _refreshStock(String q) {
+    _stock.refreshFor(q).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void initState() {
@@ -105,31 +116,36 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _resetSearch();
         return;
       }
-      // 2) barcode lookup (exact or embedded weight/price)
-      try {
-        final bc =
-            await ref.read(catalogServiceProvider).lookupBarcode(_companyId, value);
-        if (!context.mounted) return;
-        final product = _cache.byId(bc.productId);
-        if (product != null) {
-          // Embedded-PRICE labels carry an absolute amount the server cannot
-          // honour (POS pricing is server-authoritative; unitPrice is ignored),
-          // so adding the line would post at the catalogue price — a wrong
-          // charge. Refuse it instead. Embedded-WEIGHT is fine (qty is linear).
-          if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
-            showToast(context,
-                "Price-embedded labels aren't supported yet — enter ${product.name} manually.");
+      // 2) barcode lookup (exact or embedded weight/price) — only when the input
+      // actually looks like a scanned barcode. A typed name ("oil", "cement")
+      // always 404s here, so skip straight to the search below.
+      if (looksLikeBarcode(value)) {
+        try {
+          final bc = await ref
+              .read(catalogServiceProvider)
+              .lookupBarcode(_companyId, value);
+          if (!mounted) return;
+          final product = _cache.byId(bc.productId);
+          if (product != null) {
+            // Embedded-PRICE labels carry an absolute amount the server cannot
+            // honour (POS pricing is server-authoritative; unitPrice is ignored),
+            // so adding the line would post at the catalogue price — a wrong
+            // charge. Refuse it instead. Embedded-WEIGHT is fine (qty is linear).
+            if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+              showToast(context,
+                  "Price-embedded labels aren't supported yet — enter ${product.name} manually.");
+              _resetSearch();
+              return;
+            }
+            _addProduct(product, fixedQuantity: bc.derivedQuantity);
             _resetSearch();
             return;
           }
-          _addProduct(product, fixedQuantity: bc.derivedQuantity);
-          _resetSearch();
-          return;
+        } on ApiException catch (e) {
+          if (!e.isNotFound) rethrow;
         }
-      } on ApiException catch (e) {
-        if (!e.isNotFound) rethrow;
+        if (!mounted) return;
       }
-      if (!context.mounted) return;
       // 3) server search → single hit auto-adds, else show the dropdown
       List<Product> hits;
       try {
@@ -139,7 +155,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       } catch (_) {
         hits = _cache.search(value);
       }
-      if (!context.mounted) return;
+      if (!mounted) return;
       if (hits.length == 1) {
         _addProduct(hits.first);
         _resetSearch();
@@ -147,6 +163,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         showToast(context, 'No match for "$value".');
       } else {
         _setResults(hits);
+        _refreshStock(value);
       }
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.message);
@@ -165,6 +182,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     // Show instant local matches if the cache is warm, then refine from the
     // server (so search works even before the full catalogue finishes loading).
     _setResults(_cache.search(q));
+    _refreshStock(q);
     _debounce = Timer(const Duration(milliseconds: 250), () => _serverSearch(q));
   }
 
@@ -173,7 +191,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       final hits = await ref
           .read(catalogServiceProvider)
           .searchProducts(_companyId, q: q, size: 60);
-      if (mounted) _setResults(hits);
+      if (mounted) {
+        _setResults(hits);
+        _refreshStock(q);
+      }
     } catch (_) {
       if (mounted) _setResults(_cache.search(q));
     }
@@ -429,6 +450,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       Expanded(
                           child: Text(p.name,
                               maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      _stockTag(p.id),
                       if (p.restrictedKind.isRestricted)
                         Padding(
                           padding: const EdgeInsets.only(left: 8),
@@ -615,6 +637,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       const SizedBox(width: 6),
                       _agePill(line.product.restrictedKind.ageLabel),
                     ],
+                    if (!voided) _shortStockTag(line),
                   ],
                 ),
               ),
@@ -691,6 +714,56 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Text('Scan or search to add items',
               style: TextStyle(color: AppColors.ink3)),
         ],
+      ),
+    );
+  }
+
+  /// Compact on-hand hint for a product row: muted "N in stock", or a red
+  /// "Out of stock" when the branch holds none. Renders nothing while the
+  /// quantity is unknown (not fetched, or the cashier lacks STOCK.VIEW).
+  Widget _stockTag(String productId) {
+    final oh = _stock.onHand(productId);
+    if (oh == null) return const SizedBox.shrink();
+    final out = oh <= 0;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Text(
+        out
+            ? 'Out of stock'
+            : '${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} in stock',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: out ? AppColors.danger : AppColors.ink3,
+        ),
+      ),
+    );
+  }
+
+  /// Cart-line short-stock warning: a small red tag when the branch on-hand is
+  /// known and is below the quantity being rung (so the cashier sees it before
+  /// hitting Pay, not as a checkout-time rejection). Silent when stock is
+  /// unknown or sufficient.
+  Widget _shortStockTag(CartLine line) {
+    final oh = _stock.onHand(line.product.id);
+    if (oh == null || oh >= line.quantity) return const SizedBox.shrink();
+    final label = oh <= 0
+        ? 'out of stock'
+        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} left';
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppColors.dangerSoft,
+          borderRadius: AppRadii.brPill,
+          border: Border.all(color: const Color(0xFFFCA5A5)),
+        ),
+        child: Text(label,
+            style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.danger)),
       ),
     );
   }

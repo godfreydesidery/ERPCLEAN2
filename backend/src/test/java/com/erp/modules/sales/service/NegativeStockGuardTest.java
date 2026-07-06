@@ -55,7 +55,51 @@ class NegativeStockGuardTest {
                 .hasMessageContaining("Not enough stock of Widget")
                 .hasMessageContaining("5")
                 .hasMessageContaining("8")
-                .hasMessageContaining("enable backorder in Sales Settings");
+                .hasMessageContaining("Ask a supervisor to enable backorder");
+    }
+
+    // -------------------------------------------------------------------------
+    // Busy-day-sim FIX 5 (nit): message hygiene on the block — no raw 6dp negative,
+    // "out of stock" phrasing for non-positive on-hand, trimmed precision otherwise.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void blocksWithNegativeOnHand_phrasesAsOutOfStock_noRawNegativeNumber() {
+        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(settingsRow(false)));
+        // Legacy overselling from before this guard existed — on-hand already negative.
+        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("-2240.000000"), BigDecimal.ZERO, new BigDecimal("-2240.000000")));
+
+        assertThatThrownBy(() -> guard.assertAvailable(
+                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("10")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("out of stock")
+                .hasMessageContaining("10")
+                .hasMessageNotContaining("-2240")
+                .hasMessageNotContaining("2240.000000");
+    }
+
+    @Test
+    void blocksWithFractionalAvailable_trimsTrailingZeros() {
+        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(settingsRow(false)));
+        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("2.500000"), BigDecimal.ZERO, new BigDecimal("2.500000")));
+
+        assertThatThrownBy(() -> guard.assertAvailable(
+                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("8.000000")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("2.5 available")
+                .hasMessageContaining("8 requested")
+                .hasMessageNotContaining("2.500000")
+                .hasMessageNotContaining("8.000000");
     }
 
     @Test

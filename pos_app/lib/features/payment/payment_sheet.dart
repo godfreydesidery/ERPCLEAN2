@@ -144,7 +144,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     var ageVerified = false;
     if (cart.hasRestricted) {
       ageVerified = await _confirmAge();
-      if (!context.mounted) return;
+      if (!mounted) return;
       if (!ageVerified && !app.can(Perms.saleAgeOverride)) {
         showToast(context, 'Sale stopped: age not verified.');
         return;
@@ -200,7 +200,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             clientTxnId: _txnId,
             tenderedAmount: tendered);
       }
-      if (!context.mounted) return;
+      if (!mounted) return;
       Navigator.of(context).pop(receipt);
     } on ApiException catch (e) {
       setState(() {

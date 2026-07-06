@@ -212,11 +212,13 @@ class _SessionDrawer extends ConsumerWidget {
         builder: (_) => _ReportDialog(
           title: 'X-read',
           rows: [
+            ('Sales (all tenders)', x.totalSalesAmount),
             ('Opening float', x.openingFloatAmount),
-            ('Sales', x.totalSalesAmount),
+            ('Cash sales', x.cashTenderAmount),
             ('Payouts', -x.totalPayoutsNetAmount),
             ('Expected cash', x.expectedCashAmount),
           ],
+          breakdown: x.tenderSubtotals,
           currency: app.currency,
           footer: '${x.invoiceCount} invoices',
         ),
@@ -286,10 +288,12 @@ class _ReportDialog extends StatelessWidget {
       {required this.title,
       required this.rows,
       required this.currency,
+      this.breakdown,
       this.footer});
   final String title;
   final List<(String, double)> rows;
   final String currency;
+  final List<TenderSubtotal>? breakdown;
   final String? footer;
 
   @override
@@ -299,6 +303,7 @@ class _ReportDialog extends StatelessWidget {
       title: Text(title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final r in rows)
             Padding(
@@ -312,6 +317,8 @@ class _ReportDialog extends StatelessWidget {
                 ],
               ),
             ),
+          if (breakdown != null && breakdown!.isNotEmpty)
+            _TenderBreakdown(subtotals: breakdown!),
           if (footer != null) ...[
             const Divider(),
             Text(footer!, style: const TextStyle(color: AppColors.ink3)),
@@ -321,6 +328,34 @@ class _ReportDialog extends StatelessWidget {
       actions: [
         OrbixButton(label: 'Close', onPressed: () => Navigator.pop(context)),
       ],
+    );
+  }
+}
+
+/// Per-tender turnover breakdown (e.g. `Cash 32,020.00 · Mobile 14,000.00`),
+/// shown so the cashier sees where non-cash takings went and why gross sales
+/// legitimately exceed the cash retained in the drawer.
+class _TenderBreakdown extends StatelessWidget {
+  const _TenderBreakdown({required this.subtotals});
+  final List<TenderSubtotal> subtotals;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = subtotals
+        .map((s) => '${s.tenderType.label} ${formatAmount(s.amount)}')
+        .join('   ·   ');
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(),
+          const Text('By tender',
+              style: TextStyle(fontSize: 11, color: AppColors.ink3)),
+          const SizedBox(height: 4),
+          Text(text, style: numStyle(weight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 }
@@ -715,6 +750,13 @@ class _CloseDialogState extends ConsumerState<_CloseDialog> {
       children: [
         _vrow('Expected', s.expectedCashAmount ?? 0),
         _vrow('Counted', s.countedCashAmount ?? 0),
+        const Padding(
+          padding: EdgeInsets.only(top: 2, bottom: 2),
+          child: Text(
+              'Expected = float + cash sales − payouts (cash tenders only; '
+              'card & mobile money settle separately).',
+              style: TextStyle(fontSize: 11, color: AppColors.ink3)),
+        ),
         Container(
           margin: const EdgeInsets.only(top: 10),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -807,13 +849,16 @@ class _ReconcileDialogState extends ConsumerState<_ReconcileDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _zrow('Sales (all tenders)', z.totalSalesAmount),
                 _zrow('Opening float', z.openingFloatAmount),
-                _zrow('Sales', z.totalSalesAmount),
+                _zrow('Cash sales', z.cashTenderAmount),
                 _zrow('Payouts', -z.totalPayoutsNetAmount),
                 _zrow('Expected', z.expectedCashAmount),
                 _zrow('Counted', z.countedCashAmount),
                 const Divider(),
                 _zrow('Variance', z.varianceAmount, danger: z.varianceAmount < 0),
+                if (z.tenderSubtotals.isNotEmpty)
+                  _TenderBreakdown(subtotals: z.tenderSubtotals),
                 const SizedBox(height: 6),
                 Text('${z.invoiceCount} invoices',
                     style: const TextStyle(color: AppColors.ink3)),

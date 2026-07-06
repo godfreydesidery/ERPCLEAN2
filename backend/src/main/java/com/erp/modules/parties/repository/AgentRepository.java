@@ -51,9 +51,17 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
      * company (FR-SALES-15, ADR-0008 D-6). Returns empty if the user has no ACTIVE INTERNAL agent
      * record here — so an archived internal agent is not silently auto-attached (BR-PARTY-10); the
      * caller then falls back to requiring an explicit agentUid (BR-SALES-06).
+     *
+     * <p>Uses {@code MIN(a.id)} (an aggregate) deliberately: there is no DB uniqueness constraint on
+     * {@code app_user_id}, so if a user was accidentally linked to two ACTIVE internal agents a plain
+     * single-result query raised {@code NonUniqueResultException} → an unhandled 500 on every sale.
+     * The aggregate always returns exactly one row (the earliest-created agent's id, or {@code NULL}
+     * → {@link Optional#empty()} when there is none), so resolution is deterministic and never blows
+     * up. The {@link AgentServiceImpl} create/update/restore guard prevents the duplicate arising in
+     * the first place; this is defence-in-depth for rows that predate the guard.
      */
     @Query("""
-            SELECT a.id FROM Agent a
+            SELECT MIN(a.id) FROM Agent a
             WHERE a.companyId = :companyId
               AND a.agentKind = com.erp.modules.parties.domain.enums.AgentKind.INTERNAL
               AND a.appUserId = :appUserId
@@ -61,6 +69,22 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
             """)
     Optional<Long> findInternalAgentIdByCompanyAndUser(@Param("companyId") Long companyId,
                                                        @Param("appUserId") Long appUserId);
+
+    /**
+     * Guard support (create): a user may back at most ONE ACTIVE internal agent. Lets
+     * {@code AgentServiceImpl} reject a duplicate with a friendly 409 at create time instead of
+     * letting the sale-time auto-default resolve ambiguously. Service-level only — no DB unique
+     * constraint (the table may already contain historical duplicates).
+     */
+    boolean existsByCompanyIdAndAppUserIdAndAgentKindAndStatus(
+            Long companyId, Long appUserId, AgentKind agentKind, MasterStatus status);
+
+    /**
+     * Guard support (update/restore): same as above but excludes the row being changed, so an agent
+     * can be re-saved without colliding with itself.
+     */
+    boolean existsByCompanyIdAndAppUserIdAndAgentKindAndStatusAndIdNot(
+            Long companyId, Long appUserId, AgentKind agentKind, MasterStatus status, Long id);
 
     /**
      * D-5: resolves the ACTIVE internal-agent ENTITY (vs {@link #findInternalAgentIdByCompanyAndUser}

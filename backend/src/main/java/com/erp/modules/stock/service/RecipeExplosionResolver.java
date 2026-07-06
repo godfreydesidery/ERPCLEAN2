@@ -90,6 +90,30 @@ public class RecipeExplosionResolver {
                 || !productService.listComponents(productUid).isEmpty();
     }
 
+    /** True if the product has a point-of-sale kit recipe ({@code product_components}, ADR-0010 D-8). */
+    public boolean hasProductComponents(String productUid) {
+        return !productService.listComponents(productUid).isEmpty();
+    }
+
+    /**
+     * Should this product's line be EXPLODED into its components at issue time (sale / delivery),
+     * rather than issuing the product itself?
+     *
+     * <p><strong>ADR-0058.</strong> Yes when the product has a point-of-sale kit recipe
+     * ({@code product_components}, ADR-0010 D-8) — stockable or not — OR when it is a
+     * <em>non-stockable</em> phantom assembled via a manufacturing BOM (ADR-0026 D-7). <strong>No</strong>
+     * for a <em>stockable</em> finished good whose only recipe is a manufacturing BOM: that is
+     * make-to-stock and is issued as itself. Its BOM is a <em>production</em> recipe, already consumed
+     * by the work order that received the finished good into stock; re-exploding it at sale
+     * double-consumes the components and never relieves the finished good (the reported defect).
+     */
+    public boolean shouldExplodeAtIssue(String productUid, boolean productStockable) {
+        if (hasProductComponents(productUid)) {
+            return true;
+        }
+        return !productStockable && bomExplosionService.hasActiveBom(productUid);
+    }
+
     // -------------------------------------------------------------------------
     // BOM-aware path (D-7)
     // -------------------------------------------------------------------------

@@ -46,13 +46,24 @@ class ContextService {
     if (branches.isEmpty) {
       throw StateError('No branches found for ${company.name}.');
     }
+    // Resolution order (unchanged): the caller's active branch → the company
+    // default → the first branch. When the active branch can't be matched we
+    // still fall back, but flag it so the operator can be warned they may be
+    // ringing sales against the wrong branch.
+    final requestedUid = me.activeBranchUid;
+    final wantsSpecific = requestedUid != null && requestedUid.isNotEmpty;
     final branch = branches.firstWhere(
-      (b) => b.uid == me.activeBranchUid,
+      (b) => wantsSpecific && b.uid == requestedUid,
       orElse: () =>
           branches.firstWhere((b) => b.isDefault, orElse: () => branches.first),
     );
+    final branchFallback = wantsSpecific && branch.uid != requestedUid;
 
     return PosContext(
-        organisationUid: org.uid, company: company, branch: branch);
+      organisationUid: org.uid,
+      company: company,
+      branch: branch,
+      branchFallback: branchFallback,
+    );
   }
 }

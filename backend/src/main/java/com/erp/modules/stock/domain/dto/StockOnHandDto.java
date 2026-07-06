@@ -14,12 +14,26 @@ import java.math.BigDecimal;
  * <p>{@code productCode} and {@code productName} are enriched by the service layer from the
  * products module (cross-module boundary: service calls ProductService, not a repository join).
  * They may be {@code null} only when the entity-only factory overload is used (e.g. tests).
+ *
+ * <p>{@code locationUid}/{@code locationName} are enriched by the service layer from
+ * {@code StockLocationRepository} — an intra-module (stock-owns-stock) lookup, not a cross-module
+ * call. Added so a product stocked at more than one location within a branch produces
+ * distinguishable rows (busy-day-sim finding: {@code listOnHand} previously returned raw
+ * per-location rows with no way to tell them apart or know which location each belonged to).
+ * {@code locationId} is always populated (a scalar column on the entity itself); the uid/name may
+ * be {@code null} only when the entity-only factory overload is used (e.g. tests).
  */
 public record StockOnHandDto(
         Long id,
         String uid,
         Long companyId,
         Long branchId,
+        /** Scalar FK to stock_locations.id — the physical location within the branch (ADR-0028 D-4). */
+        Long locationId,
+        /** Location's external uid — enriched by the service layer for display/addressing. */
+        String locationUid,
+        /** Location's display name — enriched by the service layer for display. */
+        String locationName,
         Long productId,
         /** Product code — denormalised from the products module for display; never null in API responses. */
         String productCode,
@@ -45,23 +59,38 @@ public record StockOnHandDto(
 ) {
 
     /**
-     * Entity-only factory — {@code productCode} and {@code productName} will be {@code null}.
-     * Use only in contexts where the product label is not needed (e.g. internal tests that
-     * assert quantity/flags only). API responses should use
-     * {@link #from(StockOnHand, String, String)}.
+     * Entity-only factory — {@code productCode}/{@code productName} and
+     * {@code locationUid}/{@code locationName} will be {@code null}. {@code locationId} is still
+     * populated (it lives on the entity itself). Use only in contexts where the display labels are
+     * not needed (e.g. internal tests that assert quantity/flags only). API responses should use
+     * {@link #from(StockOnHand, String, String, String, String)}.
      */
     public static StockOnHandDto from(StockOnHand s) {
-        return from(s, null, null);
+        return from(s, null, null, null, null);
     }
 
     /**
-     * Enriched factory — carries product code + name alongside the on-hand figures.
-     * This is the factory used by all API response paths.
+     * Enriched factory — carries product code + name, but no location display fields.
+     * Retained for the existing {@code setReorderLevel} response path.
      *
      * @param productCode  the product's short code (from {@code ProductService.getById})
      * @param productName  the product's display name (from {@code ProductService.getById})
      */
     public static StockOnHandDto from(StockOnHand s, String productCode, String productName) {
+        return from(s, productCode, productName, null, null);
+    }
+
+    /**
+     * Fully-enriched factory — carries product code/name and location uid/name alongside the
+     * on-hand figures. This is the factory used by the on-hand list API response path.
+     *
+     * @param productCode   the product's short code (from {@code ProductService.getById})
+     * @param productName   the product's display name (from {@code ProductService.getById})
+     * @param locationUid   the row's location uid (from {@code StockLocationRepository})
+     * @param locationName  the row's location display name (from {@code StockLocationRepository})
+     */
+    public static StockOnHandDto from(StockOnHand s, String productCode, String productName,
+                                       String locationUid, String locationName) {
         boolean neg = s.getQuantity().compareTo(BigDecimal.ZERO) < 0;
         boolean low = s.getReorderLevel() != null
                 && s.getQuantity().compareTo(s.getReorderLevel()) <= 0;
@@ -70,6 +99,9 @@ public record StockOnHandDto(
                 s.getUid(),
                 s.getCompanyId(),
                 s.getBranchId(),
+                s.getLocationId(),
+                locationUid,
+                locationName,
                 s.getProductId(),
                 productCode,
                 productName,

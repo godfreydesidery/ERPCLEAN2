@@ -12,7 +12,7 @@ End-to-end scenarios an integrator/admin must complete **before any selling can 
 
 | ID | Title | Actor |
 |---|---|---|
-| [UC-A1](#uc-a1-provision-a-pos-operator) | Provision a POS operator (user + role + grant + branch) | Integrator/admin |
+| [UC-A1](#uc-a1-provision-a-pos-operator) | Provision a POS operator (user + company membership + role + grant + branch + sales agent) | Integrator/admin |
 | [UC-A2](#uc-a2-resolve-the-operating-context) | Resolve the operating context (org → company → branch) | Integrator/admin |
 | [UC-A3](#uc-a3-create-a-till-register) | Create a till (register) | Integrator/admin |
 | [UC-A4](#uc-a4-listselect-an-existing-till) | List / select an existing till | Integrator/admin |
@@ -26,30 +26,36 @@ End-to-end scenarios an integrator/admin must complete **before any selling can 
 - **Goal:** Create a cashier user who can log in with the right `POS.*` permissions and land in a transactable branch scope.
 - **Preconditions:**
   - Admin is authenticated and holds `Authorization: Bearer <ADMIN_TOKEN>` ([§01 §3](../01-authentication-and-permissions.md)).
-  - Admin holds `USER.MANAGE`, `ROLE.MANAGE`, and `BRANCH.ASSIGN` (scoped to the target branch's company). Root bypasses all of these.
+  - Admin holds `USER.MANAGE`, `USER.COMPANY.MANAGE`, `ROLE.MANAGE`, `BRANCH.ASSIGN`, and `AGENT.MANAGE` (scoped to the target branch's company). Root bypasses all of these.
   - The target **company** and a usable **branch** already exist (on a fresh DB the bootstrap creates an org + company + default branch + the root admin — see [§01 §10](../01-authentication-and-permissions.md)).
   - There is **no self-registration** — provisioning is entirely admin-driven.
+  - **Two easily-missed prerequisites** for a *selling* cashier (steps 2 and 7 below): the user must be a **member of the company** before any role/branch can be granted, and must have an **internal sales Agent** linked to them before any sale will post. Following only the user→role→grant→branch path leaves the cashier unable to sell.
 
 - **Main flow:**
-  1. **Create the operator user** — `POST /api/v1/users` ([§01 §10.1](../01-authentication-and-permissions.md)), permission `USER.MANAGE`. Body `CreateUserRequest{ username, displayName, password, email?, phone? }`. `username` must match `^[A-Za-z0-9._-]+$` (≤80); `password` must satisfy the policy (min length 8). Returns `201` with `UserDto` — **capture `uid`** for the next steps. (`is_root` cannot be set via the API.)
-  2. **Create a POS role** (if not already seeded) — `POST /api/v1/roles` ([§01 §10.2](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `CreateRoleRequest{ code, name, description? }` (e.g. `code: "POS_CASHIER"`). Returns `RoleDto` — **capture `uid`**. Optionally discover the available permission codes via `GET /api/v1/roles/permissions` (permission `PERMISSION.VIEW`).
-  3. **Assign the `POS.*` permissions to the role** — `PUT /api/v1/roles/uid/{uid}/permissions` ([§01 §10.3](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `SetRolePermissionsRequest{ permissionCodes }` — this **replaces** the role's whole set. The recommended cashier set ([§01 §9](../01-authentication-and-permissions.md)):
+  1. **Create the operator user** — `POST /api/v1/users` ([§01 §10.1](../01-authentication-and-permissions.md)), permission `USER.MANAGE`. Body `CreateUserRequest{ username, displayName, password, email?, phone? }`. `username` must match `^[A-Za-z0-9._-]+$` (≤80); `password` must satisfy the policy (min length 8). Returns `201` with `UserDto` — **capture `uid`** (and the numeric `id` for step 7). (`is_root` cannot be set via the API.)
+  2. **Assign the user to the company (membership)** — `POST /api/v1/user-companies`, permission `USER.COMPANY.MANAGE`. Body `{ userUid, companyUid }`. **This is a hard prerequisite** (ADR-0045/0046): granting a role (step 5) or assigning a branch (step 6) to a user who is *not* a member of the company is rejected **`409`** (`Assign this user to the company before granting/assigning…`). Following the table verbatim without this step leaves you stuck at step 5.
+  3. **Create a POS role** (if not already seeded) — `POST /api/v1/roles` ([§01 §10.2](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `CreateRoleRequest{ code, name, description? }` (e.g. `code: "POS_CASHIER"`). Returns `RoleDto` — **capture `uid`**. Optionally discover the available permission codes via `GET /api/v1/roles/permissions` (permission `PERMISSION.VIEW`). *(The product ships a seeded `CASHIER` bundle — you can grant that instead of hand-building a role.)*
+  4. **Assign the `POS.*` permissions to the role** — `PUT /api/v1/roles/uid/{uid}/permissions` ([§01 §10.3](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `SetRolePermissionsRequest{ permissionCodes }` — this **replaces** the role's whole set. The recommended cashier set ([§01 §9](../01-authentication-and-permissions.md)):
      ```json
      { "permissionCodes": ["POS.SALE.CREATE","POS.SESSION.OPEN","POS.SESSION.CLOSE","POS.SESSION.VIEW","POS.TILL.VIEW"] }
      ```
-     Withhold `POS.TILL.MANAGE` (create/retire tills) and `POS.SESSION.RECONCILE` (Z-read variance to GL) from a plain cashier — those are supervisor/back-office permissions.
-  4. **Grant the role to the user (scoped to a company)** — `POST /api/v1/user-roles` ([§01 §10.4](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `GrantRoleRequest{ userUid, roleUid, companyUid, branchUid? }`. Use `branchUid: null` for a company-wide grant; if you supply `branchUid`, its company must match `companyUid`.
-  5. **Assign the user to a branch and make it the default** — `POST /api/v1/user-branches` ([§01 §10.5](../01-authentication-and-permissions.md)), permission `BRANCH.ASSIGN` (scoped to the branch's company). Body `AssignBranchRequest{ userUid, branchUid, makeDefault }`. **Set `makeDefault: true`** so the operator's login session lands in a transactable scope (`hasBranch=true`).
-  6. **Verify** — have the operator log in (`POST /api/v1/auth/login`, [§01 §2](../01-authentication-and-permissions.md)) and call `GET /api/v1/auth/me` ([§01 §6](../01-authentication-and-permissions.md)). Confirm `hasBranch=true` / `activeBranchUid` non-null in the login `AuthUser`, and that `me.permissions` contains the expected `POS.*` codes.
+     Withhold `POS.TILL.MANAGE` (create/retire tills) and `POS.SESSION.RECONCILE` (Z-read variance to GL) from a plain cashier — those are supervisor/back-office permissions (a supervisor or manager reconciles). The seeded `CASHIER` bundle deliberately excludes `POS.SESSION.RECONCILE` for the same segregation-of-duties reason.
+  5. **Grant the role to the user (scoped to a company)** — `POST /api/v1/user-roles` ([§01 §10.4](../01-authentication-and-permissions.md)), permission `ROLE.MANAGE`. Body `GrantRoleRequest{ userUid, roleUid, companyUid, branchUid? }`. Use `branchUid: null` for a company-wide grant; if you supply `branchUid`, its company must match `companyUid`. *(Requires the step-2 membership.)*
+  6. **Assign the user to a branch and make it the default** — `POST /api/v1/user-branches` ([§01 §10.5](../01-authentication-and-permissions.md)), permission `BRANCH.ASSIGN` (scoped to the branch's company). Body `AssignBranchRequest{ userUid, branchUid, makeDefault }`. **Set `makeDefault: true`** so the operator's login session lands in a transactable scope (`hasBranch=true`). *(Requires the step-2 membership.)*
+  7. **Link an internal sales Agent to the user** — `POST /api/v1/agents`, permission `AGENT.MANAGE`. Body `CreateAgentRequest{ companyId, partyType: "INDIVIDUAL", displayName, agentKind: "INTERNAL", appUserId }`, where `appUserId` is the operator's **numeric** user id (from step 1). **Required for selling:** every POS sale is attributed to the cashier's internal agent, resolved automatically from their login. Without this record the *first* sale fails **`400`** (`No sales agent could be determined for this sale. Select a sales agent, or ask an administrator to link an internal sales agent to your user account…`) — and the fix lives in this different module, so it is easy to miss. A user may have **at most one ACTIVE internal agent**; a duplicate is rejected **`409`** (`This user is already linked to an active internal sales agent.`).
+  8. **Verify** — have the operator log in (`POST /api/v1/auth/login`, [§01 §2](../01-authentication-and-permissions.md)) and call `GET /api/v1/auth/me` ([§01 §6](../01-authentication-and-permissions.md)). Confirm `hasBranch=true` / `activeBranchUid` non-null in the login `AuthUser`, and that `me.permissions` contains the expected `POS.*` codes. Optionally confirm the agent link via `GET /api/v1/agents/my?companyUid=<uid>` (returns the caller's internal agent) — a non-empty result means selling will resolve an agent.
 
 - **Alternate / exception flows:**
   - Username already taken → **`409`** (unique constraint) at step 1.
   - Weak password → **`400`** / `WeakPasswordException` at step 1.
-  - Unknown permission code in `permissionCodes` → **`409`** at step 3 (validated against the seeded catalogue).
-  - `branchUid` whose company ≠ `companyUid` on the grant → rejected by the service (BR-5) at step 4.
+  - **Skip step 2 (company membership)** → the role grant (step 5) and branch assignment (step 6) both return **`409`** (`Assign this user to the company before granting/assigning…`). This is the most common "I followed the steps and it 409s" trap.
+  - Unknown permission code in `permissionCodes` → **`409`** at step 4 (validated against the seeded catalogue).
+  - `branchUid` whose company ≠ `companyUid` on the grant → rejected by the service (BR-5) at step 5.
+  - **Skip step 7 (internal agent)** → the operator logs in and opens a session fine, but the **first sale fails `400`** (`No sales agent could be determined for this sale…`). Create the agent, then retry — no other change needed.
+  - **A second internal agent for the same user** → **`409`** at step 7 (`This user is already linked to an active internal sales agent.`). A user backs exactly one ACTIVE internal agent; archive the old one first if you must re-link.
   - Admin missing the required permission for any step → **`403`** (generic `You do not have permission to perform this action.` — never names the missing code).
-  - `companyUid`/`branchUid`/`userUid`/`roleUid` does not resolve → **`404`**.
-  - Skip step 5 (or leave `makeDefault: false` with no other default) → the operator logs in with `hasBranch=false`, `activeCompanyUid`/`activeBranchUid` null, and **cannot transact** (read-only landing).
+  - `companyUid`/`branchUid`/`userUid`/`roleUid`/`appUserId` does not resolve → **`404`** (or **`400`** if the user is inactive/root/not a company member for the agent link).
+  - Skip step 6 (or leave `makeDefault: false` with no other default) → the operator logs in with `hasBranch=false`, `activeCompanyUid`/`activeBranchUid` null, and **cannot transact** (read-only landing).
 
 - **Outcome:** A non-root `ACTIVE` user exists who, on login, receives a JWT scoped to a usable default branch and holds the `POS.*` permissions for that company scope. They are now session-ready (proceed to UC-A2/UC-A3 and then the selling loop). No async stock/GL/AR effects — this is pure IAM setup.
 

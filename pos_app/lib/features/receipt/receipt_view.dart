@@ -4,13 +4,16 @@ import 'package:intl/intl.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/config/app_config.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/sale.dart';
+import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
+import 'receipt_text.dart';
 
 /// Shows a printed-style receipt built from the finalised invoice (the receipt
 /// of record, AS-8). Reprint/gift never re-post (G-8); reverse is gated.
@@ -32,6 +35,7 @@ class _ReceiptDialog extends ConsumerStatefulWidget {
 class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
   bool _gift = false;
   bool _reversed = false;
+  bool _printing = false;
 
   Receipt get r => widget.receipt;
 
@@ -87,8 +91,8 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                             label: 'Print',
                             icon: Icons.print_outlined,
                             kind: BtnKind.ghost,
-                            onPressed: () => showToast(context,
-                                'Sent to printer (peripheral stub).', ok: true)),
+                            busy: _printing,
+                            onPressed: _print),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -231,6 +235,43 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
         ],
       ),
     );
+  }
+
+  /// Builds the receipt bytes (respecting configured width/mode/gift flag) and
+  /// sends them to the configured Windows printer. Falls back to a nudge toward
+  /// Setup when no printer is configured; toasts any spooler error friendly.
+  Future<void> _print() async {
+    final cfg = await AppConfig.load();
+    final printer = cfg.receiptPrinterName;
+    if (printer == null || printer.isEmpty) {
+      if (mounted) {
+        showToast(context, 'No receipt printer set — configure one in Setup.');
+      }
+      return;
+    }
+    final app = ref.read(appControllerProvider);
+    final bytes = buildReceiptBytes(
+      receipt: r,
+      companyName: app.context?.company.name ?? 'OrbixPOS',
+      branchName: app.context?.branch.name ?? '',
+      cashierName: app.me?.displayName ?? '',
+      width: cfg.receiptWidthCols,
+      mode: cfg.printMode,
+      gift: _gift,
+      reversed: _reversed || r.invoice.status.isVoid,
+      kickDrawer: cfg.kickDrawer,
+    );
+    setState(() => _printing = true);
+    try {
+      await const ReceiptPrinter().printRaw(printer, bytes);
+      if (mounted) showToast(context, 'Printed.', ok: true);
+    } on ReceiptPrinterException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } catch (_) {
+      if (mounted) showToast(context, 'Could not print the receipt.');
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
   }
 
   Future<void> _reverse() async {

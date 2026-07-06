@@ -403,9 +403,9 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.finalise(invUid, new FinaliseInvoiceRequest()))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
                 .hasMessageContaining("Not enough stock of DirectGuardBlockWidget")
-                .hasMessageContaining("5.000000 available")
-                .hasMessageContaining("8.000000 requested")
-                .hasMessageContaining("enable backorder in Sales Settings");
+                .hasMessageContaining("5 available")
+                .hasMessageContaining("8 requested")
+                .hasMessageContaining("Ask a supervisor to enable backorder");
 
         // The whole finalise TX rolled back — invoice stays DRAFT, on-hand untouched.
         setCtx();
@@ -447,8 +447,8 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.finalise(invUid, new FinaliseInvoiceRequest()))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
                 .hasMessageContaining("Not enough stock of DirectGuardAggWidget")
-                .hasMessageContaining("5.000000 available")
-                .hasMessageContaining("6.000000 requested"); // 3 + 3 aggregated, not checked per-line
+                .hasMessageContaining("5 available")
+                .hasMessageContaining("6 requested"); // 3 + 3 aggregated, not checked per-line
 
         setCtx();
         assertThat(salesInvoiceService.getByUid(invUid).status()).isEqualTo(InvoiceStatus.DRAFT);
@@ -712,9 +712,9 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
                 List.of(new CreateDeliveryRequest.DeliveryLineRequest(solUid, new BigDecimal("10"))))))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
                 .hasMessageContaining("Not enough stock of GuardBlockWidget")
-                .hasMessageContaining("5.000000 available")
+                .hasMessageContaining("5 available")
                 .hasMessageContaining("10 requested")
-                .hasMessageContaining("enable backorder in Sales Settings");
+                .hasMessageContaining("Ask a supervisor to enable backorder");
 
         // On-hand must be unchanged — the whole create() rolled back.
         assertThat(requireSoh(product.id()).getQuantity())

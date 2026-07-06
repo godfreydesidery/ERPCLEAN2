@@ -41,6 +41,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         child: Column(
           children: [
             const _TopBar(),
+            const _BranchFallbackStrip(),
             Expanded(
               child: switch (mode) {
                 BusinessMode.supermarket => const SupermarketRegister(),
@@ -51,6 +52,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A non-blocking warning strip surfaced when the shift's branch was resolved by
+/// fallback (the operator's intended branch couldn't be confirmed). Shown here so
+/// a resumed session — which skips the open-shift screen — still warns the cashier.
+class _BranchFallbackStrip extends ConsumerWidget {
+  const _BranchFallbackStrip();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ctx = ref.watch(appControllerProvider.select((s) => s.context));
+    if (ctx == null || !ctx.branchFallback) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: BranchFallbackBanner(ctx.branch.name),
     );
   }
 }

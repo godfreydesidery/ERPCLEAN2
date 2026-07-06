@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/barcode.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
+import '../../state/stock_cache.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
 import 'pickers.dart';
@@ -29,8 +31,17 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   bool _loading = true;
 
   CatalogCache get _cache => ref.read(catalogCacheProvider);
+  StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
+
+  /// Best-effort branch on-hand refresh so a dispensed line can warn when the
+  /// drug is short before checkout (repaints when it lands).
+  void _refreshStock(String q) {
+    _stock.refreshFor(q).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void initState() {
@@ -88,33 +99,37 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   Future<void> _onSearch(String raw) async {
     final v = raw.trim();
     if (v.isEmpty) return;
+    _refreshStock(v);
     final byCode = _cache.byExactCode(v);
     if (byCode != null) {
       _add(byCode);
       _reset();
       return;
     }
-    try {
-      final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
-      if (!context.mounted) return;
-      final p = _cache.byId(bc.productId);
-      if (p != null) {
-        // Embedded-PRICE labels carry an amount the server cannot honour — adding
-        // the line would charge the catalogue price. Refuse it (weight is fine).
-        if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
-          showToast(context,
-              "Price-embedded labels aren't supported yet — enter ${p.name} manually.");
+    // Barcode lookup only for actual scans; a typed drug name always 404s here.
+    if (looksLikeBarcode(v)) {
+      try {
+        final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
+        if (!mounted) return;
+        final p = _cache.byId(bc.productId);
+        if (p != null) {
+          // Embedded-PRICE labels carry an amount the server cannot honour — adding
+          // the line would charge the catalogue price. Refuse it (weight is fine).
+          if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+            showToast(context,
+                "Price-embedded labels aren't supported yet — enter ${p.name} manually.");
+            _reset();
+            return;
+          }
+          _add(p, fixedQty: bc.derivedQuantity);
           _reset();
           return;
         }
-        _add(p, fixedQty: bc.derivedQuantity);
-        _reset();
-        return;
+      } on ApiException catch (e) {
+        if (!e.isNotFound && mounted) showToast(context, e.message);
       }
-    } on ApiException catch (e) {
-      if (!e.isNotFound && mounted) showToast(context, e.message);
+      if (!mounted) return;
     }
-    if (!mounted) return;
     // Server search so it works regardless of the local-cache load state.
     List<Product> hits;
     try {
@@ -124,7 +139,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     } catch (_) {
       hits = _cache.search(v);
     }
-    if (!context.mounted) return;
+    if (!mounted) return;
     if (hits.isNotEmpty) {
       _add(hits.first);
       _reset();
@@ -136,6 +151,33 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   void _reset() {
     _search.clear();
     _searchFocus.requestFocus();
+  }
+
+  /// Small red tag on a dispensed line when the branch on-hand is known and
+  /// below the quantity being dispensed — a heads-up before checkout rather than
+  /// a rejection at Pay. Silent when stock is unknown or sufficient.
+  Widget _shortStockTag(CartLine line) {
+    final oh = _stock.onHand(line.product.id);
+    if (oh == null || oh >= line.quantity) return const SizedBox.shrink();
+    final label = oh <= 0
+        ? 'out of stock'
+        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} left';
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppColors.dangerSoft,
+          borderRadius: AppRadii.brPill,
+          border: Border.all(color: const Color(0xFFFCA5A5)),
+        ),
+        child: Text(label,
+            style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.danger)),
+      ),
+    );
   }
 
   Future<void> _pay() async {
@@ -305,6 +347,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                             const Icon(Icons.warning_amber,
                                 size: 14, color: AppColors.warn),
                           ],
+                          if (!l.voided) _shortStockTag(l),
                         ],
                       ),
                       Text(

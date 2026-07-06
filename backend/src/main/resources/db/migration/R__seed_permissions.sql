@@ -332,12 +332,15 @@ SELECT r.id, p.id FROM (VALUES
   ('SALESPERSON','NOTIFICATION.PREFERENCE.MANAGE'),
   ('SALESPERSON','DOCUMENT.RENDER'),
   ('SALESPERSON','BRANCH.VIEW'),
-  -- CASHIER (28 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- CASHIER (30 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- NOTE: POS.SESSION.RECONCILE (Z-read variance → GL) is intentionally NOT granted —
+  -- it is a supervisor/back-office step (segregation of duties). Existing DBs that were
+  -- seeded before this change keep the grant (additive floor never revokes); revoke it
+  -- there manually if the SoD split is required on already-provisioned tenants.
   ('CASHIER','POS.SALE.CREATE'),
   ('CASHIER','POS.SALE.VOID'),
   ('CASHIER','POS.SESSION.OPEN'),
   ('CASHIER','POS.SESSION.CLOSE'),
-  ('CASHIER','POS.SESSION.RECONCILE'),
   ('CASHIER','POS.SESSION.VIEW'),
   ('CASHIER','POS.TILL.VIEW'),
   ('CASHIER','SALES.INVOICE.SETTLE'),
@@ -356,6 +359,11 @@ SELECT r.id, p.id FROM (VALUES
   ('CASHIER','PRODUCT.VIEW'),
   ('CASHIER','UOM.VIEW'),
   ('CASHIER','CURRENCY.VIEW'),
+  -- Busy-day-sim fix (2026-07-05): the register needs price/tax/stock reads so the till can show
+  -- the VAT-inclusive amount due, vet sellability, and see on-hand before ringing (all read-only).
+  ('CASHIER','TAXRATE.VIEW'),
+  ('CASHIER','PRICELIST.VIEW'),
+  ('CASHIER','STOCK.VIEW'),
   ('CASHIER','DOCUMENT.VIEW'),
   ('CASHIER','NOTIFICATION.VIEW'),
   ('CASHIER','NOTIFICATION.PREFERENCE.MANAGE'),

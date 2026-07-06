@@ -136,7 +136,10 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                              DeliveryConfirmedPayload.LineItem line, List<CogsLeg> cogsLegs) {
         ProductDto product = productService.getByUid(line.productUid());
 
-        if (explosion.isComposed(line.productUid())) {
+        // ADR-0058: explode only a point-of-sale kit recipe (product_components) or a non-stockable
+        // BOM phantom. A stockable finished good whose only recipe is a manufacturing BOM is
+        // make-to-stock and is issued as itself (its BOM was consumed at production, not delivery).
+        if (explosion.shouldExplodeAtIssue(line.productUid(), product.stockable())) {
             List<RecipeExplosionResolver.ExplosionLine> components =
                     explosion.explode(line.productUid(), line.qtyInBase());
             if (components.isEmpty()) {

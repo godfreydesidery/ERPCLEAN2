@@ -94,11 +94,23 @@ public class NegativeStockGuard {
 
         StockAvailabilityDto avail = stock.getAvailability(companyId, branchId, productId);
         if (qtyRequestedBase.compareTo(avail.availableQty()) > 0) {
+            // Busy-day-sim bugfix: a non-positive on-hand (common once a company has been
+            // overselling from before this guard existed) used to print a raw 6dp negative like
+            // "-2240.000000 available" — phrase it as plain "out of stock" instead. A positive
+            // available figure is trimmed to its sensible precision (no trailing zeros).
+            String availableText = avail.availableQty().compareTo(BigDecimal.ZERO) <= 0
+                    ? "out of stock"
+                    : formatQty(avail.availableQty()) + " available";
             throw new ConflictException(
                     "Not enough stock of " + productName + " to complete this sale — "
-                            + avail.availableQty().toPlainString() + " available, "
-                            + qtyRequestedBase.toPlainString() + " requested. "
-                            + "To allow this, enable backorder in Sales Settings.");
+                            + availableText + ", "
+                            + formatQty(qtyRequestedBase) + " requested. "
+                            + "Ask a supervisor to enable backorder if this should be allowed.");
         }
+    }
+
+    /** Trims a quantity to its sensible precision — whole units print without a decimal point. */
+    private static String formatQty(BigDecimal qty) {
+        return qty.stripTrailingZeros().toPlainString();
     }
 }

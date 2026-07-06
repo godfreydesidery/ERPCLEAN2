@@ -73,6 +73,10 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _head(app),
+                  if (app.context?.branchFallback ?? false) ...[
+                    const SizedBox(height: 14),
+                    BranchFallbackBanner(app.context!.branch.name),
+                  ],
                   const SizedBox(height: 24),
                   const SectionLabel('Business mode'),
                   _modeCards(app),
@@ -218,40 +222,52 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
           itemCount: tills.length,
           itemBuilder: (context, i) {
             final t = tills[i];
+            final occupied = t.hasOpenSession;
             final active = _tillUid == t.uid;
-            return InkWell(
-              borderRadius: AppRadii.brSm,
-              onTap: () => setState(() => _tillUid = t.uid),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: active ? AppColors.brandSoft : AppColors.panel,
-                  borderRadius: AppRadii.brSm,
-                  border: Border.all(
-                      color: active ? AppColors.brand : AppColors.line2,
-                      width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(t.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                        const Icon(Icons.circle, size: 9, color: AppColors.ok),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(t.code,
-                        style: const TextStyle(
-                            color: AppColors.ink2, fontSize: 12)),
-                  ],
+            // An occupied till can't host a second session (backend 409s); grey
+            // it, flag it "In use", and skip selection so the cashier knows up
+            // front instead of after entering a float.
+            return Opacity(
+              opacity: occupied ? .55 : 1,
+              child: InkWell(
+                borderRadius: AppRadii.brSm,
+                onTap: occupied ? null : () => setState(() => _tillUid = t.uid),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: active ? AppColors.brandSoft : AppColors.panel,
+                    borderRadius: AppRadii.brSm,
+                    border: Border.all(
+                        color: active ? AppColors.brand : AppColors.line2,
+                        width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(t.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                          Icon(Icons.circle,
+                              size: 9,
+                              color:
+                                  occupied ? AppColors.danger : AppColors.ok),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(occupied ? '${t.code} · In use' : t.code,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppColors.ink2, fontSize: 12)),
+                    ],
+                  ),
                 ),
               ),
             );
