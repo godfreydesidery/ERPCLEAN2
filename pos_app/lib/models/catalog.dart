@@ -57,6 +57,7 @@ class ProductBarcode {
   ProductBarcode({
     required this.uid,
     required this.productId,
+    required this.productUid,
     required this.barcode,
     required this.barcodeType,
     required this.uomId,
@@ -68,6 +69,9 @@ class ProductBarcode {
 
   final String uid;
   final String productId;
+
+  /// The scanned product's external uid — used to fetch the full product fresh.
+  final String productUid;
   final String barcode;
   final String barcodeType;
   final String? uomId;
@@ -87,6 +91,7 @@ class ProductBarcode {
   factory ProductBarcode.fromJson(Map<String, dynamic> j) => ProductBarcode(
         uid: asStrOr(j['uid']),
         productId: asStrOr(j['productId']),
+        productUid: asStrOr(j['productUid']),
         barcode: asStrOr(j['barcode']),
         barcodeType: asStrOr(j['barcodeType']),
         uomId: asStr(j['uomId']),

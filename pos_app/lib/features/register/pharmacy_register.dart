@@ -28,9 +28,8 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   final _searchFocus = FocusNode();
   final _prescriber = TextEditingController();
   final _rxNo = TextEditingController();
-  bool _loading = true;
 
-  CatalogCache get _cache => ref.read(catalogCacheProvider);
+  Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
@@ -49,11 +48,9 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     _load();
   }
 
-  Future<void> _load() async {
-    try {
-      await _cache.ensureLoaded(_companyId);
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+  void _load() {
+    // No catalogue preload — products/prices are fetched fresh per action so the
+    // till never shows stale data.
     _searchFocus.requestFocus();
   }
 
@@ -103,18 +100,14 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     final v = raw.trim();
     if (v.isEmpty) return;
     _refreshStock(v);
-    final byCode = _cache.byExactCode(v);
-    if (byCode != null) {
-      _add(byCode);
-      _reset();
-      return;
-    }
     // Barcode lookup only for actual scans; a typed drug name always 404s here.
+    // The product is fetched fresh by uid (no local catalogue).
     if (looksLikeBarcode(v)) {
       try {
         final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
         if (!mounted) return;
-        final p = _cache.byId(bc.productId);
+        final p = await _cache.productByUid(bc.productUid);
+        if (!mounted) return;
         if (p != null) {
           // Embedded-PRICE labels carry an amount the server cannot honour — adding
           // the line would charge the catalogue price. Refuse it (weight is fine).
@@ -133,18 +126,26 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       }
       if (!mounted) return;
     }
-    // Server search so it works regardless of the local-cache load state.
+    // Fresh server search — an exact product-code match wins, else the first hit.
     List<Product> hits;
     try {
       hits = await ref
           .read(catalogServiceProvider)
           .searchProducts(_companyId, q: v, size: 10);
     } catch (_) {
-      hits = _cache.search(v);
+      hits = const [];
     }
     if (!mounted) return;
-    if (hits.isNotEmpty) {
-      _add(hits.first);
+    Product? exact;
+    for (final p in hits) {
+      if (p.code.toLowerCase() == v.toLowerCase()) {
+        exact = p;
+        break;
+      }
+    }
+    final pick = exact ?? (hits.isNotEmpty ? hits.first : null);
+    if (pick != null) {
+      _add(pick);
       _reset();
     } else {
       showToast(context, 'No match for "$v".');
@@ -243,9 +244,6 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
               ],
             ),
           ),
-          if (_loading) const Padding(
-              padding: EdgeInsets.only(top: 10),
-              child: LinearProgressIndicator(minHeight: 2)),
           const SizedBox(height: 12),
           Expanded(child: _lineTable()),
         ],

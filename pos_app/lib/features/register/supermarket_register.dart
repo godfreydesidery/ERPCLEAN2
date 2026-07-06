@@ -36,14 +36,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   final _resultsScroll = ScrollController();
   List<Product> _results = const [];
   int _resultIndex = -1; // highlighted row in the results dropdown (-1 = none)
-  bool _loadingCatalogue = true;
   bool _busyScan = false;
   Timer? _debounce;
 
   String _numpad = '';
   _NumTarget _target = _NumTarget.qty;
 
-  CatalogCache get _cache => ref.read(catalogCacheProvider);
+  Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
@@ -62,11 +61,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _load();
   }
 
-  Future<void> _load() async {
-    try {
-      await _cache.ensureLoaded(_companyId);
-    } catch (_) {/* search will fall back to server */}
-    if (mounted) setState(() => _loadingCatalogue = false);
+  void _load() {
+    // No catalogue preload — products and prices are fetched fresh per action so
+    // the till never shows stale data (a backend price/catalogue change is live).
     _searchFocus.requestFocus();
   }
 
@@ -112,23 +109,18 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     if (value.isEmpty) return;
     setState(() => _busyScan = true);
     try {
-      // 1) exact product code
-      final byCode = _cache.byExactCode(value);
-      if (byCode != null) {
-        _addProduct(byCode);
-        _resetSearch();
-        return;
-      }
-      // 2) barcode lookup (exact or embedded weight/price) — only when the input
+      // 1) barcode lookup (exact or embedded weight/price) — only when the input
       // actually looks like a scanned barcode. A typed name ("oil", "cement")
-      // always 404s here, so skip straight to the search below.
+      // always 404s here, so skip straight to the search below. The product is
+      // then fetched FRESH by uid (no local catalogue).
       if (looksLikeBarcode(value)) {
         try {
           final bc = await ref
               .read(catalogServiceProvider)
               .lookupBarcode(_companyId, value);
           if (!mounted) return;
-          final product = _cache.byId(bc.productId);
+          final product = await _cache.productByUid(bc.productUid);
+          if (!mounted) return;
           if (product != null) {
             // Embedded-PRICE labels carry an absolute amount the server cannot
             // honour (POS pricing is server-authoritative; unitPrice is ignored),
@@ -149,17 +141,28 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         }
         if (!mounted) return;
       }
-      // 3) server search → single hit auto-adds, else show the dropdown
+      // 2) fresh server search. An exact product-code match wins (a keyed code);
+      // otherwise a single hit auto-adds and multiple hits open the dropdown.
       List<Product> hits;
       try {
         hits = await ref
             .read(catalogServiceProvider)
             .searchProducts(_companyId, q: value, size: 40);
       } catch (_) {
-        hits = _cache.search(value);
+        hits = const [];
       }
       if (!mounted) return;
-      if (hits.length == 1) {
+      Product? exact;
+      for (final p in hits) {
+        if (p.code.toLowerCase() == value.toLowerCase()) {
+          exact = p;
+          break;
+        }
+      }
+      if (exact != null) {
+        _addProduct(exact);
+        _resetSearch();
+      } else if (hits.length == 1) {
         _addProduct(hits.first);
         _resetSearch();
       } else if (hits.isEmpty) {
@@ -182,9 +185,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       _setResults(const []);
       return;
     }
-    // Show instant local matches if the cache is warm, then refine from the
-    // server (so search works even before the full catalogue finishes loading).
-    _setResults(_cache.search(q));
+    // Debounced fresh server search (no local cache — results are always live).
     _refreshStock(q);
     _debounce = Timer(const Duration(milliseconds: 250), () => _serverSearch(q));
   }
@@ -199,7 +200,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _refreshStock(q);
       }
     } catch (_) {
-      if (mounted) _setResults(_cache.search(q));
+      if (mounted) _setResults(const []);
     }
   }
 
@@ -327,11 +328,6 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
-              if (_loadingCatalogue)
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: LinearProgressIndicator(minHeight: 2),
-                ),
               const SizedBox(height: 12),
               Expanded(child: _grid()),
             ],

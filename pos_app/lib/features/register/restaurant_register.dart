@@ -30,7 +30,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   bool _sent = false;
   Timer? _debounce;
 
-  CatalogCache get _cache => ref.read(catalogCacheProvider);
+  Catalogue get _cache => ref.read(catalogProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
 
@@ -43,8 +43,6 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   Future<void> _load() async {
     await _browse();
     if (mounted) setState(() => _loading = false);
-    // Warm the cache in the background for barcode resolution.
-    unawaited(_cache.ensureLoaded(_companyId).catchError((_) {}));
   }
 
   /// Loads an initial menu page from the server (independent of the full cache).
@@ -55,7 +53,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           .searchProducts(_companyId, size: 120);
       if (mounted) setState(() => _menu = hits);
     } catch (_) {
-      if (mounted) setState(() => _menu = _cache.search('', limit: 120));
+      if (mounted) setState(() => _menu = const []);
     }
   }
 
@@ -96,7 +94,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       _browse();
       return;
     }
-    setState(() => _menu = _cache.search(s, limit: 120)); // instant local
+    // Debounced fresh server search (no local cache).
     _debounce = Timer(const Duration(milliseconds: 250), () async {
       try {
         final hits = await ref
