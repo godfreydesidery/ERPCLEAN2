@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/barcode.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
@@ -94,27 +95,30 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       _reset();
       return;
     }
-    try {
-      final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
-      if (!context.mounted) return;
-      final p = _cache.byId(bc.productId);
-      if (p != null) {
-        // Embedded-PRICE labels carry an amount the server cannot honour — adding
-        // the line would charge the catalogue price. Refuse it (weight is fine).
-        if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
-          showToast(context,
-              "Price-embedded labels aren't supported yet — enter ${p.name} manually.");
+    // Barcode lookup only for actual scans; a typed drug name always 404s here.
+    if (looksLikeBarcode(v)) {
+      try {
+        final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
+        if (!mounted) return;
+        final p = _cache.byId(bc.productId);
+        if (p != null) {
+          // Embedded-PRICE labels carry an amount the server cannot honour — adding
+          // the line would charge the catalogue price. Refuse it (weight is fine).
+          if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+            showToast(context,
+                "Price-embedded labels aren't supported yet — enter ${p.name} manually.");
+            _reset();
+            return;
+          }
+          _add(p, fixedQty: bc.derivedQuantity);
           _reset();
           return;
         }
-        _add(p, fixedQty: bc.derivedQuantity);
-        _reset();
-        return;
+      } on ApiException catch (e) {
+        if (!e.isNotFound && mounted) showToast(context, e.message);
       }
-    } on ApiException catch (e) {
-      if (!e.isNotFound && mounted) showToast(context, e.message);
+      if (!mounted) return;
     }
-    if (!mounted) return;
     // Server search so it works regardless of the local-cache load state.
     List<Product> hits;
     try {
@@ -124,7 +128,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     } catch (_) {
       hits = _cache.search(v);
     }
-    if (!context.mounted) return;
+    if (!mounted) return;
     if (hits.isNotEmpty) {
       _add(hits.first);
       _reset();

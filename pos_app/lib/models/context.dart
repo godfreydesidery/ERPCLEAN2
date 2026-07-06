@@ -76,11 +76,18 @@ class PosContext {
     required this.organisationUid,
     required this.company,
     required this.branch,
+    this.branchFallback = false,
   });
 
   final String organisationUid;
   final Company company;
   final Branch branch;
+
+  /// True when [branch] is NOT the caller's requested/active branch — i.e. the
+  /// intended branch couldn't be confirmed and resolution fell back to the
+  /// company default (or the first branch). Surfaced to the operator as a
+  /// non-blocking warning so a cashier notices they may be on the wrong branch.
+  final bool branchFallback;
 
   String get companyId => company.id;
   String get companyUid => company.uid;
