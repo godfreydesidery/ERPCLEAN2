@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+# Packaged Windows distributables (produced by the build/package step)
+/dist/
 
 # Symbolication related
 app.*.symbols

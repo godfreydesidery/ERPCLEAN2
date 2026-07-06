@@ -57,6 +57,14 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
                     "Unit code '" + req.code() + "' already exists for this company.");
         }
 
+        // Unit name is unique per company (case-insensitive, trimmed, all statuses); the DB index
+        // uq_unit_company_name_ci is the backstop — fail fast with a friendly message.
+        String nm = req.name() == null ? "" : req.name().trim();
+        if (!nm.isEmpty() && units.existsByCompanyIdAndNormalizedName(companyId, nm)) {
+            throw new ConflictException(
+                    "A unit with this name already exists for this company: " + nm);
+        }
+
         UnitOfMeasure u = new UnitOfMeasure(companyId, req.code(), req.name(), actorId());
         applyMetadata(u, req.symbol(), req.dimensionType(), req.decimalPlaces(), req.fractional());
         UnitOfMeasure saved = units.save(u);
@@ -88,6 +96,12 @@ public class UnitOfMeasureServiceImpl implements UnitOfMeasureService {
     public UnitOfMeasureDto updateByUid(String uid, UpdateUnitOfMeasureRequest req) {
         UnitOfMeasure u = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), u.getCompanyId());
+        String nm = req.name() == null ? "" : req.name().trim();
+        if (!nm.isEmpty()
+                && units.existsByCompanyIdAndNormalizedNameExcludingId(u.getCompanyId(), nm, u.getId())) {
+            throw new ConflictException(
+                    "A unit with this name already exists for this company: " + nm);
+        }
         u.setName(req.name());
         applyMetadata(u, req.symbol(), req.dimensionType(), req.decimalPlaces(), req.fractional());
         u.setUpdatedAt(Instant.now());

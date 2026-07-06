@@ -36,14 +36,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   final _resultsScroll = ScrollController();
   List<Product> _results = const [];
   int _resultIndex = -1; // highlighted row in the results dropdown (-1 = none)
-  bool _loadingCatalogue = true;
   bool _busyScan = false;
   Timer? _debounce;
 
   String _numpad = '';
   _NumTarget _target = _NumTarget.qty;
 
-  CatalogCache get _cache => ref.read(catalogCacheProvider);
+  Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
@@ -62,11 +61,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _load();
   }
 
-  Future<void> _load() async {
-    try {
-      await _cache.ensureLoaded(_companyId);
-    } catch (_) {/* search will fall back to server */}
-    if (mounted) setState(() => _loadingCatalogue = false);
+  void _load() {
+    // No catalogue preload — products and prices are fetched fresh per action so
+    // the till never shows stale data (a backend price/catalogue change is live).
     _searchFocus.requestFocus();
   }
 
@@ -112,23 +109,18 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     if (value.isEmpty) return;
     setState(() => _busyScan = true);
     try {
-      // 1) exact product code
-      final byCode = _cache.byExactCode(value);
-      if (byCode != null) {
-        _addProduct(byCode);
-        _resetSearch();
-        return;
-      }
-      // 2) barcode lookup (exact or embedded weight/price) — only when the input
+      // 1) barcode lookup (exact or embedded weight/price) — only when the input
       // actually looks like a scanned barcode. A typed name ("oil", "cement")
-      // always 404s here, so skip straight to the search below.
+      // always 404s here, so skip straight to the search below. The product is
+      // then fetched FRESH by uid (no local catalogue).
       if (looksLikeBarcode(value)) {
         try {
           final bc = await ref
               .read(catalogServiceProvider)
               .lookupBarcode(_companyId, value);
           if (!mounted) return;
-          final product = _cache.byId(bc.productId);
+          final product = await _cache.productByUid(bc.productUid);
+          if (!mounted) return;
           if (product != null) {
             // Embedded-PRICE labels carry an absolute amount the server cannot
             // honour (POS pricing is server-authoritative; unitPrice is ignored),
@@ -149,17 +141,28 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         }
         if (!mounted) return;
       }
-      // 3) server search → single hit auto-adds, else show the dropdown
+      // 2) fresh server search. An exact product-code match wins (a keyed code);
+      // otherwise a single hit auto-adds and multiple hits open the dropdown.
       List<Product> hits;
       try {
         hits = await ref
             .read(catalogServiceProvider)
             .searchProducts(_companyId, q: value, size: 40);
       } catch (_) {
-        hits = _cache.search(value);
+        hits = const [];
       }
       if (!mounted) return;
-      if (hits.length == 1) {
+      Product? exact;
+      for (final p in hits) {
+        if (p.code.toLowerCase() == value.toLowerCase()) {
+          exact = p;
+          break;
+        }
+      }
+      if (exact != null) {
+        _addProduct(exact);
+        _resetSearch();
+      } else if (hits.length == 1) {
         _addProduct(hits.first);
         _resetSearch();
       } else if (hits.isEmpty) {
@@ -182,9 +185,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       _setResults(const []);
       return;
     }
-    // Show instant local matches if the cache is warm, then refine from the
-    // server (so search works even before the full catalogue finishes loading).
-    _setResults(_cache.search(q));
+    // Debounced fresh server search (no local cache — results are always live).
     _refreshStock(q);
     _debounce = Timer(const Duration(milliseconds: 250), () => _serverSearch(q));
   }
@@ -199,7 +200,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _refreshStock(q);
       }
     } catch (_) {
-      if (mounted) _setResults(_cache.search(q));
+      if (mounted) _setResults(const []);
     }
   }
 
@@ -327,11 +328,6 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
-              if (_loadingCatalogue)
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: LinearProgressIndicator(minHeight: 2),
-                ),
               const SizedBox(height: 12),
               Expanded(child: _grid()),
             ],
@@ -494,30 +490,40 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     );
   }
 
-  static const _wIdx = 34.0;
-  static const _wCode = 64.0;
-  static const _wUnit = 52.0;
-  static const _wQty = 72.0;
-  static const _wPrice = 96.0;
-  static const _wDisc = 70.0;
-  static const _wTotal = 108.0;
+  // Code + numeric columns carry generous FIXED widths sized to their content, so
+  // figures stay aligned and readable on any screen (a flexible numeric column
+  // drifts too wide on large monitors). Only ITEM flexes — the name column fills
+  // the remaining width. Widened vs the originals per the column-width request.
+  static const _wIdx = 36.0;
+  static const _wCode = 116.0;
+  static const _wUnit = 54.0;
+  static const _wQty = 88.0;
+  static const _wPrice = 128.0;
+  static const _wDisc = 82.0;
+  static const _wTotal = 136.0;
   static const _wAct = 30.0;
 
   Widget _gridHeader() {
-    TextStyle h = const TextStyle(
+    const h = TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
         color: Color(0xFF374151),
         letterSpacing: .4);
-    Widget cell(String t, double w, {bool right = false, bool center = false}) =>
-        Container(
-          width: w,
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-          alignment: right
-              ? Alignment.centerRight
-              : (center ? Alignment.center : Alignment.centerLeft),
-          child: Text(t.toUpperCase(), style: h),
-        );
+    Widget cell(String t,
+        {double? width, int? flex, bool right = false, bool center = false}) {
+      final content = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        alignment: right
+            ? Alignment.centerRight
+            : (center ? Alignment.center : Alignment.centerLeft),
+        child: Text(t.toUpperCase(),
+            style: h, maxLines: 1, overflow: TextOverflow.ellipsis),
+      );
+      return flex != null
+          ? Expanded(flex: flex, child: content)
+          : SizedBox(width: width, child: content);
+    }
+
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.xlHead,
@@ -525,24 +531,16 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       ),
       child: Row(
         children: [
-          cell('#', _wIdx, center: true),
-          cell('Code', _wCode),
-          const Expanded(
-              child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-                  child: Text('ITEM',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF374151),
-                          letterSpacing: .4)))),
-          cell('Unit', _wUnit, center: true),
-          cell('Qty', _wQty, right: true),
-          cell('Price', _wPrice, right: true),
-          cell('Disc', _wDisc, right: true),
-          cell('Total', _wTotal, right: true),
-          cell('', _wAct, center: true),
-          cell('V', _wAct, center: true),
+          cell('#', width: _wIdx, center: true),
+          cell('Code', width: _wCode),
+          cell('Item', flex: 1),
+          cell('Unit', width: _wUnit, center: true),
+          cell('Qty', width: _wQty, right: true),
+          cell('Price', width: _wPrice, right: true),
+          cell('Disc', width: _wDisc, right: true),
+          cell('Total', width: _wTotal, right: true),
+          cell('', width: _wAct, center: true),
+          cell('V', width: _wAct, center: true),
         ],
       ),
     );
@@ -555,26 +553,31 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     final muted = voided ? AppColors.ink3 : AppColors.xlInk;
     final strike = voided ? TextDecoration.lineThrough : null;
 
-    Widget cell(Widget child, double w,
-            {Alignment align = Alignment.centerLeft,
-            VoidCallback? onTap,
-            Color? bg}) =>
-        InkWell(
-          onTap: onTap,
-          child: Container(
-            width: w,
-            height: 30,
-            alignment: align,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(
-              color: bg,
-              border: const Border(
-                  right: BorderSide(color: AppColors.xlLine),
-                  bottom: BorderSide(color: AppColors.xlLine)),
-            ),
-            child: child,
+    Widget cell(Widget child,
+        {double? width,
+        int? flex,
+        Alignment align = Alignment.centerLeft,
+        VoidCallback? onTap,
+        Color? bg}) {
+      final content = InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 30,
+          alignment: align,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: bg,
+            border: const Border(
+                right: BorderSide(color: AppColors.xlLine),
+                bottom: BorderSide(color: AppColors.xlLine)),
           ),
-        );
+          child: child,
+        ),
+      );
+      return flex != null
+          ? Expanded(flex: flex, child: content)
+          : SizedBox(width: width, child: content);
+    }
 
     void selectQty() {
       ctrl.select(line.localId);
@@ -597,7 +600,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               Text('$idx',
                   style: const TextStyle(
                       fontSize: 12, color: Color(0xFF9AA0A6))),
-              _wIdx,
+              width: _wIdx,
               align: Alignment.center,
               bg: AppColors.xlHead,
               onTap: () => ctrl.select(line.localId)),
@@ -610,54 +613,42 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       fontSize: 12,
                       color: const Color(0xFF5F6368),
                       decoration: strike)),
-              _wCode,
+              width: _wCode,
               onTap: () => ctrl.select(line.localId)),
-          Expanded(
-            child: InkWell(
-              onTap: () => ctrl.select(line.localId),
-              child: Container(
-                height: 30,
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 9),
-                decoration: const BoxDecoration(
-                  border: Border(
-                      right: BorderSide(color: AppColors.xlLine),
-                      bottom: BorderSide(color: AppColors.xlLine)),
-                ),
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(line.product.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: muted,
-                              decoration: strike)),
-                    ),
-                    if (line.product.restrictedKind.isRestricted) ...[
-                      const SizedBox(width: 6),
-                      _agePill(line.product.restrictedKind.ageLabel),
-                    ],
-                    if (!voided) _shortStockTag(line),
+          cell(
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(line.product.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
+                            decoration: strike)),
+                  ),
+                  if (line.product.restrictedKind.isRestricted) ...[
+                    const SizedBox(width: 6),
+                    _agePill(line.product.restrictedKind.ageLabel),
                   ],
-                ),
+                  if (!voided) _shortStockTag(line),
+                ],
               ),
-            ),
-          ),
+              flex: 1,
+              onTap: () => ctrl.select(line.localId)),
           cell(
               Text(line.unit.code,
-                  style: TextStyle(
-                      fontSize: 12, color: const Color(0xFF5F6368))),
-              _wUnit,
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFF5F6368))),
+              width: _wUnit,
               align: Alignment.center),
           cell(
               NumText(
                   formatAmount(line.quantity,
                       decimals: line.unit.fractional ? 3 : 0),
                   style: numStyle(size: 13.5, color: muted)),
-              _wQty,
+              width: _wQty,
               align: Alignment.centerRight,
               bg: qtyHi ? AppColors.brandSoft : null,
               onTap: selectQty),
@@ -668,7 +659,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       : formatAmount(line.unitPricePreview!),
                   style: numStyle(
                       size: 13.5, weight: FontWeight.w400, color: const Color(0xFF5F6368))),
-              _wPrice,
+              width: _wPrice,
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
@@ -681,7 +672,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       color: line.lineDiscountAmount == 0
                           ? AppColors.ink3
                           : AppColors.brand)),
-              _wDisc,
+              width: _wDisc,
               align: Alignment.centerRight,
               bg: discHi ? AppColors.brandSoft : null,
               onTap: selectDisc),
@@ -689,20 +680,20 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               NumText(formatAmount(line.previewGross),
                   style: numStyle(
                       size: 13.5, weight: FontWeight.w700, color: muted)),
-              _wTotal,
+              width: _wTotal,
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
               Icon(Icons.close,
                   size: 14,
                   color: voided ? AppColors.ink3 : const Color(0xFFC4C9CF)),
-              _wAct,
+              width: _wAct,
               align: Alignment.center,
               onTap: () => ctrl.removeLine(line.localId)),
           cell(
               Icon(voided ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 15, color: voided ? AppColors.warn : AppColors.ink3),
-              _wAct,
+              width: _wAct,
               align: Alignment.center,
               onTap: () => ctrl.toggleVoid(line.localId)),
         ],

@@ -21,6 +21,23 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
+    /**
+     * Case-insensitive, whitespace-trimmed NAME uniqueness within a company, across ALL statuses —
+     * mirrors the DB index {@code uq_product_company_name_ci}. Used to fail fast with a friendly
+     * message before the DB constraint fires.
+     */
+    @Query("SELECT COUNT(p) > 0 FROM Product p WHERE p.companyId = :companyId "
+            + "AND LOWER(TRIM(p.name)) = LOWER(TRIM(:name))")
+    boolean existsByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                               @Param("name") String name);
+
+    /** As above, excluding the row being updated. */
+    @Query("SELECT COUNT(p) > 0 FROM Product p WHERE p.companyId = :companyId "
+            + "AND LOWER(TRIM(p.name)) = LOWER(TRIM(:name)) AND p.id <> :excludeId")
+    boolean existsByCompanyIdAndNormalizedNameExcludingId(@Param("companyId") Long companyId,
+                                                          @Param("name") String name,
+                                                          @Param("excludeId") Long excludeId);
+
     Page<Product> findByCompanyId(Long companyId, Pageable pageable);
 
     /**
