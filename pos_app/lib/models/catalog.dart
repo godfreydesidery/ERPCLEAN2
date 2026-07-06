@@ -135,15 +135,21 @@ class ProductPrice {
     required this.priceListUid,
     required this.priceListCode,
     required this.price,
+    this.priceIncludesVat = false,
   });
 
   final String priceListUid;
   final String priceListCode;
   final Money price;
 
+  /// Whether [price] already includes VAT (the source price list's stance,
+  /// ADR-0056). When true the POS preview must NOT add VAT on top.
+  final bool priceIncludesVat;
+
   factory ProductPrice.fromJson(Map<String, dynamic> j) => ProductPrice(
         priceListUid: asStrOr(j['priceListUid']),
         priceListCode: asStrOr(j['priceListCode']),
         price: Money.fromJson(asMap(j['price'])),
+        priceIncludesVat: asBool(j['priceIncludesVat']),
       );
 }

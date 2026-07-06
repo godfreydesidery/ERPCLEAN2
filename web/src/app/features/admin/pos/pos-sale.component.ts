@@ -412,13 +412,15 @@ export class PosSaleComponent {
 
   /**
    * Resolve the VAT fraction for a product's VAT status from the company tax rates.
-   * Rates may be stored as a percentage (18) or a fraction (0.18) — both normalise to a fraction.
+   * The backend stores TaxRate.rate as a FRACTION with a DB CHECK (0 ≤ rate < 1) —
+   * e.g. 0.18 = 18% — so it is used verbatim. A value outside [0, 1) is an invalid
+   * row and is treated as no VAT (0).
    */
   private vatRateFor(vatStatus: VatStatus): number {
     const tr = this.taxRates().find((t) => t.vatStatus === vatStatus);
     if (!tr) return 0;
     const raw = +tr.rate || 0;
-    return raw > 1 ? raw / 100 : raw;
+    return raw >= 0 && raw < 1 ? raw : 0;
   }
 
   /** Net amount for a line: qty × unit price − discount. */

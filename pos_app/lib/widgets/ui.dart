@@ -163,24 +163,27 @@ class PayButton extends StatelessWidget {
               children: [
                 Icon(icon, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: const TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                            height: 1.1)),
-                    Text(amount,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            height: 1.1,
-                            fontFeatures: kTabular)),
-                  ],
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: const TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              height: 1.1)),
+                      NumText(amount,
+                          alignment: Alignment.centerLeft,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              height: 1.1,
+                              fontFeatures: kTabular)),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -452,3 +455,23 @@ TextStyle numStyle(
         fontWeight: weight,
         color: color,
         fontFeatures: kTabular);
+
+/// A numeric value that never wraps or clips: renders [text] on a single line
+/// and scales it DOWN to fit its (bounded) parent, so a large money amount
+/// shrinks gracefully instead of overflowing/clipping a fixed-width grid cell.
+/// Common (small) values render at their natural size. Give it a bounded width
+/// (a fixed cell, or a [Flexible]/[Expanded] parent).
+class NumText extends StatelessWidget {
+  const NumText(this.text,
+      {super.key, this.style, this.alignment = Alignment.centerRight});
+  final String text;
+  final TextStyle? style;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: alignment,
+        child: Text(text, maxLines: 1, softWrap: false, style: style),
+      );
+}

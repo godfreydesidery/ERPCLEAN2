@@ -293,7 +293,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: AppColors.brandD)),
-                Text(formatAmount(_gross),
+                NumText(formatAmount(_gross),
+                    alignment: Alignment.center,
                     style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
@@ -389,8 +390,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               Text(t.tenderType.label,
                   style: const TextStyle(
                       color: AppColors.ink2, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              Text(formatAmount(t.amount), style: numStyle(weight: FontWeight.w700)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: NumText(formatAmount(t.amount),
+                    style: numStyle(weight: FontWeight.w700)),
+              ),
               const SizedBox(width: 10),
               InkWell(
                 onTap: () => _removeTender(i),
@@ -415,11 +419,14 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   color: accent ? AppColors.payD : AppColors.ink2,
                   fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
                   fontSize: bold ? 18 : 14)),
-          Text(formatAmount(value),
-              style: numStyle(
-                  size: bold ? 18 : 14,
-                  weight: bold ? FontWeight.w800 : FontWeight.w700,
-                  color: accent ? AppColors.payD : AppColors.ink)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: NumText(formatAmount(value),
+                style: numStyle(
+                    size: bold ? 18 : 14,
+                    weight: bold ? FontWeight.w800 : FontWeight.w700,
+                    color: accent ? AppColors.payD : AppColors.ink)),
+          ),
         ],
       ),
     );

@@ -16,7 +16,7 @@ class CatalogCache {
 
   final List<Product> _products = [];
   final Map<String, Product> _byId = {};
-  final Map<String, double?> _priceByUid = {};
+  final Map<String, PreviewPrice?> _priceByUid = {};
   bool _loaded = false;
 
   bool get loaded => _loaded;
@@ -66,19 +66,23 @@ class CatalogCache {
   }
 
   /// Memoised preview unit price for a product in [currency]; null if no price
-  /// list row (the line still posts — the server prices it).
-  Future<double?> previewPrice(String productUid, String currency) async {
+  /// list row (the line still posts — the server prices it). Carries the source
+  /// price list's VAT-inclusive flag so the register knows whether to add VAT.
+  Future<PreviewPrice?> previewPrice(String productUid, String currency) async {
     if (_priceByUid.containsKey(productUid)) return _priceByUid[productUid];
     try {
       final prices = await _svc.listPrices(productUid);
-      double? value;
+      ProductPrice? match;
       for (final p in prices) {
         if (p.price.currency == currency) {
-          value = p.price.amount;
+          match = p;
           break;
         }
       }
-      value ??= prices.isNotEmpty ? prices.first.price.amount : null;
+      match ??= prices.isNotEmpty ? prices.first : null;
+      final value = match == null
+          ? null
+          : PreviewPrice(match.price.amount, match.priceIncludesVat);
       _priceByUid[productUid] = value;
       return value;
     } catch (_) {
@@ -86,6 +90,15 @@ class CatalogCache {
       return null;
     }
   }
+}
+
+/// A product's preview unit price plus whether that amount already includes VAT
+/// (its source price list's stance). [amount] is the NET price when
+/// [vatInclusive] is false, and the gross price when true.
+class PreviewPrice {
+  const PreviewPrice(this.amount, this.vatInclusive);
+  final double amount;
+  final bool vatInclusive;
 }
 
 final catalogCacheProvider =

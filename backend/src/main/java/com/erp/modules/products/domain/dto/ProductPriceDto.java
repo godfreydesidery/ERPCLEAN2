@@ -21,6 +21,9 @@ public record ProductPriceDto(
         String unitCode,
         String unitName,
         MoneyDto price,
+        // Whether {@code price} already includes VAT (the source price list's stance,
+        // ADR-0056). A VAT-inclusive amount must NOT have VAT re-applied by clients (e.g. POS).
+        boolean priceIncludesVat,
         LocalDate effectiveFrom,
         LocalDate effectiveTo
 ) {
@@ -39,6 +42,7 @@ public record ProductPriceDto(
                 unit != null ? unit.getCode() : null,
                 unit != null ? unit.getName() : null,
                 MoneyDto.from(pp.getPrice()),
+                pp.getPriceList().isPriceIncludesVat(),
                 pp.getEffectiveFrom(),
                 pp.getEffectiveTo()
         );
