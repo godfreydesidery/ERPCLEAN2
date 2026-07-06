@@ -19,6 +19,7 @@ import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.AgentBranchRepository;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -136,6 +137,7 @@ class AgentServiceImplTest {
         private AgentRepository agents;
         private CompanyRepository companies;
         private ScopeGuard scopeGuard;
+        private UserLookupService userLookup;
         private AgentServiceImpl service;
 
         @BeforeEach
@@ -146,7 +148,7 @@ class AgentServiceImplTest {
             PartyBranchGuard branchGuard = mock(PartyBranchGuard.class);
             scopeGuard = mock(ScopeGuard.class);
             AuditService audit = mock(AuditService.class);
-            UserLookupService userLookup = mock(UserLookupService.class);
+            userLookup = mock(UserLookupService.class);
             companies = mock(CompanyRepository.class);
 
             service = new AgentServiceImpl(
@@ -211,6 +213,34 @@ class AgentServiceImplTest {
             verify(agents, never()).findFirstByCompanyIdAndAppUserIdAndAgentKindAndStatusOrderByIdAsc(
                     org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
                     org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }
+
+        // ---------------------------------------------------------------------
+        // Guard: at most one ACTIVE internal agent per user (the duplicate-agent
+        // 500 fix — a second one made sale-time resolution ambiguous).
+        // ---------------------------------------------------------------------
+
+        private CreateAgentRequest internalAgentRequest() {
+            return new CreateAgentRequest(COMPANY_ID, PartyType.INDIVIDUAL, "Cashier Agent",
+                    null, null, null, null, null, null, null, null, null, null, null, null,
+                    AgentKind.INTERNAL, USER_ID);
+        }
+
+        @Test
+        void create_secondActiveInternalAgentForSameUser_conflicts() {
+            RequestContext.set(new RequestContext.Principal(
+                    USER_ID, "user@test.com", false, COMPANY_ID, 20L, null));
+            when(userLookup.isActiveUserInCompany(USER_ID, COMPANY_ID)).thenReturn(true);
+            when(agents.existsByCompanyIdAndAppUserIdAndAgentKindAndStatus(
+                    COMPANY_ID, USER_ID, AgentKind.INTERNAL, MasterStatus.ACTIVE)).thenReturn(true);
+
+            CreateAgentRequest req = internalAgentRequest();
+            assertThatThrownBy(() -> service.create(req))
+                    .isInstanceOf(ConflictException.class)
+                    .hasMessageContaining("only one internal sales agent");
+
+            // Never persisted — the guard fires before code generation / save.
+            verify(agents, never()).save(org.mockito.ArgumentMatchers.any());
         }
     }
 }
