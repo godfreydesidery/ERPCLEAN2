@@ -10,9 +10,11 @@ import com.erp.modules.stock.domain.dto.OpeningBalanceRequest;
 import com.erp.modules.stock.domain.dto.SetReorderLevelRequest;
 import com.erp.modules.stock.domain.dto.StockMovementDto;
 import com.erp.modules.stock.domain.dto.StockOnHandDto;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockMovement;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditActions;
@@ -59,6 +61,7 @@ public class StockServiceImpl implements StockService {
     private final InventoryValuationService valuation;
     private final DimensionResolver         dimensionResolver;
     private final LocationResolver          locationResolver;
+    private final StockLocationRepository   locations;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
 
@@ -69,6 +72,7 @@ public class StockServiceImpl implements StockService {
                             InventoryValuationService valuation,
                             DimensionResolver dimensionResolver,
                             LocationResolver locationResolver,
+                            StockLocationRepository locations,
                             ScopeGuard scopeGuard,
                             AuditService audit) {
         this.onHands           = onHands;
@@ -78,6 +82,7 @@ public class StockServiceImpl implements StockService {
         this.valuation         = valuation;
         this.dimensionResolver = dimensionResolver;
         this.locationResolver  = locationResolver;
+        this.locations         = locations;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
     }
@@ -229,7 +234,12 @@ public class StockServiceImpl implements StockService {
                 )));
 
         ProductDto product = productService.getById(soh.getProductId());
-        return StockOnHandDto.from(soh, product.code(), product.name());
+        StockLocation location = locations
+                .findByCompanyIdAndId(soh.getCompanyId(), soh.getLocationId())
+                .orElse(null);
+        return StockOnHandDto.from(soh, product.code(), product.name(),
+                location != null ? location.getUid()  : null,
+                location != null ? location.getName() : null);
     }
 
     // -------------------------------------------------------------------------
@@ -248,7 +258,7 @@ public class StockServiceImpl implements StockService {
         if (q == null || q.isBlank()) {
             Page<StockOnHand> page = onHands.findByCompanyIdAndBranchId(
                     principal.companyId(), principal.branchId(), pageable);
-            return enrichPage(page);
+            return enrichPage(page, principal.companyId());
         }
 
         // Resolve the product ids matching the search term WITHIN company scope via the products
@@ -265,11 +275,15 @@ public class StockServiceImpl implements StockService {
 
         Page<StockOnHand> page = onHands.findByCompanyIdAndBranchIdAndProductIdIn(
                 principal.companyId(), principal.branchId(), productIds, pageable);
+        Map<Long, StockLocation> locationById = locationMap(principal.companyId(), page.getContent());
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
+            StockLocation loc = locationById.get(s.getLocationId());
             return StockOnHandDto.from(s,
                     p != null ? p.code() : null,
-                    p != null ? p.name() : null);
+                    p != null ? p.name() : null,
+                    loc != null ? loc.getUid()  : null,
+                    loc != null ? loc.getName() : null);
         });
     }
 
@@ -290,11 +304,13 @@ public class StockServiceImpl implements StockService {
     // -------------------------------------------------------------------------
 
     /**
-     * Batch-enrich a page of {@link StockOnHand} rows with product code + name.
-     * Fetches each product by id via {@link ProductService#getById} — one call per distinct
-     * product on the page (typically ≤ page-size, usually 20–50). No cross-module entity join.
+     * Batch-enrich a page of {@link StockOnHand} rows with product code + name and location
+     * uid + name. Fetches each product by id via {@link ProductService#getById} — one call per
+     * distinct product on the page (typically ≤ page-size, usually 20–50). No cross-module entity
+     * join. Location resolution is an intra-module lookup (both stock-owned) — see
+     * {@link #locationMap}.
      */
-    private Page<StockOnHandDto> enrichPage(Page<StockOnHand> page) {
+    private Page<StockOnHandDto> enrichPage(Page<StockOnHand> page, Long companyId) {
         // Collect distinct product ids on this page, then bulk-resolve via ProductService.
         Map<Long, ProductDto> productById = page.getContent().stream()
                 .map(StockOnHand::getProductId)
@@ -311,12 +327,36 @@ public class StockServiceImpl implements StockService {
                             }
                         }
                 ));
+        Map<Long, StockLocation> locationById = locationMap(companyId, page.getContent());
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
+            StockLocation loc = locationById.get(s.getLocationId());
             return StockOnHandDto.from(s,
                     p != null ? p.code() : null,
-                    p != null ? p.name() : null);
+                    p != null ? p.name() : null,
+                    loc != null ? loc.getUid()  : null,
+                    loc != null ? loc.getName() : null);
         });
+    }
+
+    /**
+     * Batch-resolve the distinct {@code location_id}s on a set of on-hand rows to their
+     * {@link StockLocation} (uid + name), scoped to the caller's company (TenantScopingRulesTest —
+     * uses {@code findByCompanyIdAndIdIn}, never a bare {@code findById}).
+     */
+    private Map<Long, StockLocation> locationMap(Long companyId, List<StockOnHand> rows) {
+        List<Long> locationIds = rows.stream()
+                .map(StockOnHand::getLocationId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (locationIds.isEmpty()) {
+            return Map.of();
+        }
+        return locations.findByCompanyIdAndIdIn(companyId, locationIds).stream()
+                .collect(Collectors.toMap(
+                        StockLocation::getId,
+                        Function.identity()));
     }
 
     /**

@@ -23,6 +23,13 @@ public interface StockLocationRepository extends JpaRepository<StockLocation, Lo
      */
     Optional<StockLocation> findByCompanyIdAndId(Long companyId, Long id);
 
+    /**
+     * Company-scoped batch lookup (TenantScopingRulesTest) — for enrichment callers that need to
+     * label a page of rows carrying several distinct location ids in one query (on-hand list
+     * enrichment, busy-day-sim finding: {@code listOnHand} needs locationUid/locationName per row).
+     */
+    List<StockLocation> findByCompanyIdAndIdIn(Long companyId, List<Long> ids);
+
     /** Duplicate-guard for create: real unique key is (company_id, code) — uq_stock_location_company_code. */
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
