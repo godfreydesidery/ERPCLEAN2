@@ -12,6 +12,7 @@ class PosTill {
     required this.name,
     required this.cashBankAccountId,
     required this.status,
+    this.hasOpenSession = false,
   });
 
   final String id;
@@ -22,6 +23,11 @@ class PosTill {
   final String name;
   final String? cashBankAccountId;
   final String status; // MasterStatus
+
+  /// `true` when a POS session in status OPEN already exists for this till, so
+  /// the picker can show it as occupied BEFORE the cashier tries to open one
+  /// (the backend still enforces this with a 409 as a backstop).
+  final bool hasOpenSession;
 
   bool get isActive => status == 'ACTIVE';
 
@@ -34,6 +40,7 @@ class PosTill {
         name: asStrOr(j['name']),
         cashBankAccountId: asStr(j['cashBankAccountId']),
         status: asStrOr(j['status'], 'ACTIVE'),
+        hasOpenSession: asBool(j['hasOpenSession']),
       );
 }
 
@@ -89,34 +96,61 @@ class PosSession {
       );
 }
 
+/// One tender-type subtotal within an X/Z-read breakdown (`TenderSubtotalDto`).
+///
+/// [amount] nets CASH over-tender change (BR-SALES-07), so the CASH entry equals
+/// the drawer-affecting `cashTenderAmount`; non-CASH entries are unaffected.
+class TenderSubtotal {
+  TenderSubtotal({required this.tenderType, required this.amount});
+
+  final TenderType tenderType;
+  final double amount;
+
+  factory TenderSubtotal.fromJson(Map<String, dynamic> j) => TenderSubtotal(
+        tenderType: TenderType.fromWire(asStr(j['tenderType'])),
+        amount: asNumOr(j['amount']),
+      );
+}
+
 /// `GET /pos/sessions/uid/{uid}/x-read` — mid-shift snapshot.
+///
+/// [totalSalesAmount] is gross turnover across ALL tenders (a reporting figure);
+/// [cashTenderAmount] is the net CASH retained in the drawer — this, not gross
+/// sales, is what [expectedCashAmount] reconciles to. [tenderSubtotals] explains
+/// the difference by breaking turnover down per tender type.
 class XRead {
   XRead({
     required this.sessionUid,
     required this.openedAt,
     required this.openingFloatAmount,
     required this.totalSalesAmount,
+    required this.cashTenderAmount,
     required this.totalPayoutsNetAmount,
     required this.expectedCashAmount,
     required this.invoiceCount,
+    required this.tenderSubtotals,
   });
 
   final String sessionUid;
   final DateTime? openedAt;
   final double openingFloatAmount;
   final double totalSalesAmount;
+  final double cashTenderAmount;
   final double totalPayoutsNetAmount;
   final double expectedCashAmount;
   final int invoiceCount;
+  final List<TenderSubtotal> tenderSubtotals;
 
   factory XRead.fromJson(Map<String, dynamic> j) => XRead(
         sessionUid: asStrOr(j['sessionUid']),
         openedAt: asDate(j['openedAt']),
         openingFloatAmount: asNumOr(j['openingFloatAmount']),
         totalSalesAmount: asNumOr(j['totalSalesAmount']),
+        cashTenderAmount: asNumOr(j['cashTenderAmount']),
         totalPayoutsNetAmount: asNumOr(j['totalPayoutsNetAmount']),
         expectedCashAmount: asNumOr(j['expectedCashAmount']),
         invoiceCount: asIntOr(j['invoiceCount']),
+        tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
       );
 }
 
@@ -129,11 +163,13 @@ class ZRead {
     required this.reconciledAt,
     required this.openingFloatAmount,
     required this.totalSalesAmount,
+    required this.cashTenderAmount,
     required this.totalPayoutsNetAmount,
     required this.expectedCashAmount,
     required this.countedCashAmount,
     required this.varianceAmount,
     required this.invoiceCount,
+    required this.tenderSubtotals,
   });
 
   final String sessionUid;
@@ -142,11 +178,13 @@ class ZRead {
   final DateTime? reconciledAt;
   final double openingFloatAmount;
   final double totalSalesAmount;
+  final double cashTenderAmount;
   final double totalPayoutsNetAmount;
   final double expectedCashAmount;
   final double countedCashAmount;
   final double varianceAmount;
   final int invoiceCount;
+  final List<TenderSubtotal> tenderSubtotals;
 
   factory ZRead.fromJson(Map<String, dynamic> j) => ZRead(
         sessionUid: asStrOr(j['sessionUid']),
@@ -155,10 +193,12 @@ class ZRead {
         reconciledAt: asDate(j['reconciledAt']),
         openingFloatAmount: asNumOr(j['openingFloatAmount']),
         totalSalesAmount: asNumOr(j['totalSalesAmount']),
+        cashTenderAmount: asNumOr(j['cashTenderAmount']),
         totalPayoutsNetAmount: asNumOr(j['totalPayoutsNetAmount']),
         expectedCashAmount: asNumOr(j['expectedCashAmount']),
         countedCashAmount: asNumOr(j['countedCashAmount']),
         varianceAmount: asNumOr(j['varianceAmount']),
         invoiceCount: asIntOr(j['invoiceCount']),
+        tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
       );
 }
