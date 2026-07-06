@@ -405,6 +405,43 @@ void showToast(BuildContext context, String message, {bool ok = false}) {
   ));
 }
 
+/// A non-blocking amber warning strip shown when the POS resolved a branch that
+/// was NOT the operator's intended/active branch (see `PosContext.branchFallback`).
+/// The cashier can still work — this just makes the fallback visible.
+class BranchFallbackBanner extends StatelessWidget {
+  const BranchFallbackBanner(this.branchName, {super.key});
+  final String branchName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.warnSoft,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: AppColors.warn),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Using branch $branchName — we couldn't confirm your usual "
+              'branch. Check this is correct before selling.',
+              style: const TextStyle(
+                  color: AppColors.warn,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Tabular number style helper.
 TextStyle numStyle(
         {double size = 14,

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/barcode.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
@@ -105,31 +106,36 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _resetSearch();
         return;
       }
-      // 2) barcode lookup (exact or embedded weight/price)
-      try {
-        final bc =
-            await ref.read(catalogServiceProvider).lookupBarcode(_companyId, value);
-        if (!context.mounted) return;
-        final product = _cache.byId(bc.productId);
-        if (product != null) {
-          // Embedded-PRICE labels carry an absolute amount the server cannot
-          // honour (POS pricing is server-authoritative; unitPrice is ignored),
-          // so adding the line would post at the catalogue price — a wrong
-          // charge. Refuse it instead. Embedded-WEIGHT is fine (qty is linear).
-          if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
-            showToast(context,
-                "Price-embedded labels aren't supported yet — enter ${product.name} manually.");
+      // 2) barcode lookup (exact or embedded weight/price) — only when the input
+      // actually looks like a scanned barcode. A typed name ("oil", "cement")
+      // always 404s here, so skip straight to the search below.
+      if (looksLikeBarcode(value)) {
+        try {
+          final bc = await ref
+              .read(catalogServiceProvider)
+              .lookupBarcode(_companyId, value);
+          if (!mounted) return;
+          final product = _cache.byId(bc.productId);
+          if (product != null) {
+            // Embedded-PRICE labels carry an absolute amount the server cannot
+            // honour (POS pricing is server-authoritative; unitPrice is ignored),
+            // so adding the line would post at the catalogue price — a wrong
+            // charge. Refuse it instead. Embedded-WEIGHT is fine (qty is linear).
+            if (bc.valueKind == 'PRICE' || bc.derivedAmount != null) {
+              showToast(context,
+                  "Price-embedded labels aren't supported yet — enter ${product.name} manually.");
+              _resetSearch();
+              return;
+            }
+            _addProduct(product, fixedQuantity: bc.derivedQuantity);
             _resetSearch();
             return;
           }
-          _addProduct(product, fixedQuantity: bc.derivedQuantity);
-          _resetSearch();
-          return;
+        } on ApiException catch (e) {
+          if (!e.isNotFound) rethrow;
         }
-      } on ApiException catch (e) {
-        if (!e.isNotFound) rethrow;
+        if (!mounted) return;
       }
-      if (!context.mounted) return;
       // 3) server search → single hit auto-adds, else show the dropdown
       List<Product> hits;
       try {
@@ -139,7 +145,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       } catch (_) {
         hits = _cache.search(value);
       }
-      if (!context.mounted) return;
+      if (!mounted) return;
       if (hits.length == 1) {
         _addProduct(hits.first);
         _resetSearch();

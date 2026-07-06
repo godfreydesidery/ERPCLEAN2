@@ -73,6 +73,10 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _head(app),
+                  if (app.context?.branchFallback ?? false) ...[
+                    const SizedBox(height: 14),
+                    BranchFallbackBanner(app.context!.branch.name),
+                  ],
                   const SizedBox(height: 24),
                   const SectionLabel('Business mode'),
                   _modeCards(app),
