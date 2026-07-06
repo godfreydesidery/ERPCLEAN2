@@ -422,6 +422,31 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     @Override
     public void voidInvoice(String uid, VoidInvoiceRequest req) {
+        doVoidInvoice(uid, req, false);
+    }
+
+    @Override
+    public void voidPosInvoice(String uid, VoidInvoiceRequest req) {
+        doVoidInvoice(uid, req, true);
+    }
+
+    /**
+     * Shared void implementation.
+     *
+     * <p>{@code posReversal=true} (till "reverse sale") skips the FLOW-ORDER-TO-CASH-027
+     * direct-payment guard below: every POS sale is paid at the till, so that guard would make
+     * the POS.SALE.VOID feature permanently unsatisfiable — a cashier could never reverse a
+     * just-rung mistake. {@link PosSaleServiceImpl#reverseSale} is the only caller and already
+     * restricts this path to a POS-origin invoice on an OPEN session (the till absorbs the cash
+     * back); a settled/closed-session POS invoice still goes through the standard credit-note
+     * flow. The AR-allocation guard always applies — a POS invoice with AR receipts allocated
+     * against it (e.g. later settled on account) is not the till-reversal case.
+     *
+     * <p>No separate "reverse the payment leg" bookkeeping is needed: excluding VOID invoices is
+     * already built into every cash-tender read (finalised-only), so a voided POS sale simply
+     * stops contributing to the session's expected-cash math the next time it's computed.
+     */
+    private void doVoidInvoice(String uid, VoidInvoiceRequest req, boolean posReversal) {
         SalesInvoice inv = requireInvoice(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), inv.getCompanyId());
         if (inv.getStatus() != InvoiceStatus.FINALISED) {
@@ -430,27 +455,31 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
         // FLOW-ORDER-TO-CASH-027 (AR path): block void when AR receipts/allocations have been
         // posted against this invoice (settled or partially settled). A void on a settled invoice
-        // would leave orphaned AR allocations and an unbalanced sub-ledger.
+        // would leave orphaned AR allocations and an unbalanced sub-ledger. Applies to POS
+        // reversal too — a POS invoice later settled via AR receipt is not a till reversal.
         if (arBalanceService.hasAllocations(inv.getCompanyId(), inv.getUid())) {
             // FLOW-ORDER-TO-CASH-027: block void when AR receipts/allocations have been posted
             throw new com.erp.platform.common.api.ConflictException(
                     "This invoice cannot be voided because payments have already been received and "
                             + "allocated against it. Please raise a credit note to reverse it.");
         }
-        // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
-        // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
-        // a non-zero settled total means cash has changed hands and the invoice must be reversed
-        // via a credit note, not silently voided.
-        BigDecimal settled = payments.findByInvoiceId(inv.getId()).stream()
-                .map(p -> p.getChangeAmount() != null
-                        ? p.getAmount().subtract(p.getChangeAmount())
-                        : p.getAmount())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (settled.compareTo(BigDecimal.ZERO) > 0) {
-            // FLOW-ORDER-TO-CASH-027: block void when direct tenders have been applied
-            throw new com.erp.platform.common.api.ConflictException(
-                    "This invoice cannot be voided because direct payments have been applied to it. "
-                            + "Please raise a credit note to reverse it.");
+        if (!posReversal) {
+            // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
+            // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
+            // a non-zero settled total means cash has changed hands and the invoice must be reversed
+            // via a credit note, not silently voided. Skipped for a POS reversal (see method
+            // Javadoc) — every POS sale is paid at the till by design.
+            BigDecimal settled = payments.findByInvoiceId(inv.getId()).stream()
+                    .map(p -> p.getChangeAmount() != null
+                            ? p.getAmount().subtract(p.getChangeAmount())
+                            : p.getAmount())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (settled.compareTo(BigDecimal.ZERO) > 0) {
+                // FLOW-ORDER-TO-CASH-027: block void when direct tenders have been applied
+                throw new com.erp.platform.common.api.ConflictException(
+                        "This invoice cannot be voided because direct payments have been applied to it. "
+                                + "Please raise a credit note to reverse it.");
+            }
         }
         inv.setStatus(InvoiceStatus.VOID);
         inv.setVoidedAt(Instant.now());

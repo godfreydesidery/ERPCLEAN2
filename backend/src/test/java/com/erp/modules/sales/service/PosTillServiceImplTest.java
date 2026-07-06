@@ -2,6 +2,7 @@ package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,7 +13,10 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.PosTillDto;
+import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.entity.PosTill;
+import com.erp.modules.sales.domain.enums.PosSessionStatus;
+import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PosTillRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.domain.MasterStatus;
@@ -39,8 +43,10 @@ class PosTillServiceImplTest {
     private PosTillRepository          tills;
     private CompanyRepository          companies;
     private CashBankAccountRepository  cashAccounts;
+    private PosSessionRepository       sessions;
     private ScopeGuard                 scopeGuard;
     private AuditService               audit;
+    private SalesDepthNumberGenerator  numberGen;
     private PosTillServiceImpl         service;
 
     @BeforeEach
@@ -48,9 +54,12 @@ class PosTillServiceImplTest {
         tills        = mock(PosTillRepository.class);
         companies    = mock(CompanyRepository.class);
         cashAccounts = mock(CashBankAccountRepository.class);
+        sessions     = mock(PosSessionRepository.class);
         scopeGuard   = mock(ScopeGuard.class);
         audit        = mock(AuditService.class);
-        service      = new PosTillServiceImpl(tills, companies, cashAccounts, scopeGuard, audit);
+        numberGen    = mock(SalesDepthNumberGenerator.class);
+        when(numberGen.nextPosTill(anyLong())).thenReturn("TILL-0001");
+        service      = new PosTillServiceImpl(tills, companies, cashAccounts, sessions, scopeGuard, audit, numberGen);
 
         RequestContext.set(new RequestContext.Principal(1L, "operator", false, 10L, 20L, null));
     }
@@ -133,6 +142,69 @@ class PosTillServiceImplTest {
         assertThat(dto.name()).isEqualTo("Till 2");
 
         verify(tills).save(any(PosTill.class));
+    }
+
+    // -------------------------------------------------------------------------
+    // FIX 3 (busy-day sim, minor): pos_tills.code must never be left null.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createTill_generatesNonNullCode_fromSalesDepthNumberGenerator() {
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(10L);
+        when(companies.findByUid("CMP-001")).thenReturn(Optional.of(company));
+
+        CashBankAccount defaultAccount = mock(CashBankAccount.class);
+        when(defaultAccount.getId()).thenReturn(55L);
+        when(cashAccounts.findByCompanyIdAndIsDefaultTrue(10L))
+                .thenReturn(Optional.of(defaultAccount));
+
+        // Echo back whatever the service passed to save() so we can inspect the code it set.
+        when(tills.save(any(PosTill.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePosTillRequest req = new CreatePosTillRequest("CMP-001", 20L, "Till 3", null);
+
+        PosTillDto dto = service.createTill(req);
+
+        assertThat(dto.code())
+                .as("pos_tills.code must be generated, never left null (busy-day-sim bugfix)")
+                .isEqualTo("TILL-0001");
+        verify(numberGen).nextPosTill(10L);
+    }
+
+    // -------------------------------------------------------------------------
+    // FIX 4 (busy-day sim, minor): the till list must expose whether a till is occupied.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void getTillByUid_openSessionExists_hasOpenSessionTrue() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 42L, "01HXYZ0000000000000000TEST");
+        when(tills.findByUid("01HXYZ0000000000000000TEST")).thenReturn(Optional.of(till));
+
+        PosSession openSession = mock(PosSession.class);
+        when(sessions.findByPosTillIdAndStatus(42L, PosSessionStatus.OPEN))
+                .thenReturn(Optional.of(openSession));
+
+        PosTillDto dto = service.getTillByUid("01HXYZ0000000000000000TEST");
+
+        assertThat(dto.hasOpenSession())
+                .as("a till with an OPEN session must report hasOpenSession=true")
+                .isTrue();
+    }
+
+    @Test
+    void getTillByUid_noOpenSession_hasOpenSessionFalse() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 44L, "01HXYZ0000000000000000FREE");
+        when(tills.findByUid("01HXYZ0000000000000000FREE")).thenReturn(Optional.of(till));
+        // sessions.findByPosTillIdAndStatus is unstubbed → Mockito default Optional.empty()
+
+        PosTillDto dto = service.getTillByUid("01HXYZ0000000000000000FREE");
+
+        assertThat(dto.hasOpenSession())
+                .as("a free till must report hasOpenSession=false")
+                .isFalse();
     }
 
     // -------------------------------------------------------------------------

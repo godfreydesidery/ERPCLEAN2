@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.entity.Company;
@@ -19,7 +21,10 @@ import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.sales.domain.dto.PosSaleRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.entity.PosSession;
+import com.erp.modules.sales.domain.entity.SalesInvoice;
+import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.PosSessionStatus;
 import com.erp.modules.sales.repository.PosSaleIdempotencyRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
@@ -213,6 +218,31 @@ class PosSaleServiceImplTest {
         assertThatCode(() -> service.processSale(null, req))
                 .as("NONE (unrestricted) product must never be gated")
                 .doesNotThrowAnyException();
+    }
+
+    // =========================================================================
+    // FIX 2 (busy-day sim, CRITICAL): POS reverse/void must not route through the AR-oriented
+    // settled-tender guard — every POS sale is paid at the till, so that guard made
+    // POS.SALE.VOID permanently unsatisfiable (always 409).
+    // =========================================================================
+
+    @Test
+    void reverseSale_posOriginOpenSession_callsVoidPosInvoice_notVoidInvoice() {
+        SalesInvoice inv = mock(SalesInvoice.class);
+        when(inv.getCompanyId()).thenReturn(COMPANY_ID);
+        when(inv.getOrigin()).thenReturn(DocumentOrigin.POS);
+        when(inv.getPosSessionId()).thenReturn(99L);
+        when(inv.getId()).thenReturn(500L);
+        when(inv.getUid()).thenReturn("INV-999");
+        when(invoiceRepo.findByUid("INV-999")).thenReturn(Optional.of(inv));
+        // buildSession() (setUp's stubbed OPEN session) has id=99L — matches inv.getPosSessionId()
+        PosSession openSession = buildSession();
+        when(posSessionRepo.findById(99L)).thenReturn(Optional.of(openSession));
+
+        service.reverseSale("INV-999", "cashier rang the wrong item");
+
+        verify(invoiceService).voidPosInvoice(eq("INV-999"), any(VoidInvoiceRequest.class));
+        verify(invoiceService, never()).voidInvoice(any(), any());
     }
 
     // =========================================================================

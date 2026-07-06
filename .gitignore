@@ -68,3 +68,6 @@ backend/src/main/resources/static/
 docs/user-manual/images/
 docs/USER-MANUAL.with-images.md
 docs/USER-MANUAL.with-images.docx
+
+# POS app screenshots — local only, not tracked (for usability review)
+pos_app/screenshots/
