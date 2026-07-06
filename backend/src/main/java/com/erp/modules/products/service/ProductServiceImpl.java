@@ -132,6 +132,14 @@ public class ProductServiceImpl implements ProductService {
         // Resolve baseUnitUid scoped to this company (cross-tenant safe — brief §F15 pattern)
         UnitOfMeasure baseUnit = resolveUnit(companyId, req.baseUnitUid());
 
+        // Product name is unique per company (case-insensitive, trimmed, all statuses); the DB
+        // index uq_product_company_name_ci is the backstop — fail fast with a friendly message.
+        String nm = req.name() == null ? "" : req.name().trim();
+        if (!nm.isEmpty() && products.existsByCompanyIdAndNormalizedName(companyId, nm)) {
+            throw new ConflictException(
+                    "A product with this name already exists in this company: " + nm);
+        }
+
         // Code: optional user override (hybrid). Blank → auto-assign PROD-#### (FR-PROD-23);
         // a supplied value is trimmed/uppercased and must be unique per company (BR-PROD-08).
         // uq_product_company_code is the DB backstop against a concurrent duplicate.
@@ -194,6 +202,13 @@ public class ProductServiceImpl implements ProductService {
 
         // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
         UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());
+
+        String nm = req.name() == null ? "" : req.name().trim();
+        if (!nm.isEmpty()
+                && products.existsByCompanyIdAndNormalizedNameExcludingId(p.getCompanyId(), nm, p.getId())) {
+            throw new ConflictException(
+                    "A product with this name already exists in this company: " + nm);
+        }
 
         p.setName(req.name());
         p.setDescription(req.description());

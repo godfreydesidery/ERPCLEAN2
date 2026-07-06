@@ -23,6 +23,22 @@ public interface UnitOfMeasureRepository extends JpaRepository<UnitOfMeasure, Lo
     /** Resolve a unit by its user-supplied code within a company (bulk import: base-unit lookup). */
     Optional<UnitOfMeasure> findByCompanyIdAndCode(Long companyId, String code);
 
+    /**
+     * Case-insensitive, whitespace-trimmed NAME uniqueness within a company, across ALL statuses —
+     * mirrors the DB index {@code uq_unit_company_name_ci}.
+     */
+    @Query("SELECT COUNT(u) > 0 FROM UnitOfMeasure u WHERE u.companyId = :companyId "
+            + "AND LOWER(TRIM(u.name)) = LOWER(TRIM(:name))")
+    boolean existsByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                               @Param("name") String name);
+
+    /** As above, excluding the row being updated. */
+    @Query("SELECT COUNT(u) > 0 FROM UnitOfMeasure u WHERE u.companyId = :companyId "
+            + "AND LOWER(TRIM(u.name)) = LOWER(TRIM(:name)) AND u.id <> :excludeId")
+    boolean existsByCompanyIdAndNormalizedNameExcludingId(@Param("companyId") Long companyId,
+                                                          @Param("name") String name,
+                                                          @Param("excludeId") Long excludeId);
+
     Page<UnitOfMeasure> findByCompanyId(Long companyId, Pageable pageable);
 
     List<UnitOfMeasure> findByCompanyId(Long companyId);

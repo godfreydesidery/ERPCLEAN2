@@ -670,6 +670,59 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Name uniqueness per company (case-insensitive, trimmed, all statuses)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void create_withDuplicateName_caseInsensitiveAndTrimmed_throwsConflict() {
+        productService.create(goodsRequest(companyA.getUid(), "iPhone 14 Pro"));
+
+        assertThatThrownBy(() -> productService.create(new CreateProductRequest(
+                companyA.getUid(), null, "  IPHONE 14 PRO  ", null,
+                ProductType.GOODS, true, true, pcsUid, null, null, null, null, null, null, null, null, null, null, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+    }
+
+    @Test
+    void create_nameMatchingArchivedProduct_throwsConflict() {
+        ProductDto p = productService.create(goodsRequest(companyA.getUid(), "Archived Name"));
+        productService.archiveByUid(p.uid());
+
+        // All-statuses uniqueness: an ARCHIVED product's name still blocks a new one.
+        assertThatThrownBy(() -> productService.create(goodsRequest(companyA.getUid(), "archived name")))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+    }
+
+    @Test
+    void create_sameName_inDifferentCompanies_isAllowed() {
+        productService.create(goodsRequest(companyA.getUid(), "Shared Name"));
+
+        Company companyB = companies.save(new Company(org, "PRCZ", "Product Co Z"));
+        Branch branchB = branches.save(new Branch(companyB, "PR-Z1", "Prod Branch Z1"));
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+        UnitOfMeasureDto pcsB = unitService.create(
+                new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
+
+        ProductDto b = productService.create(new CreateProductRequest(
+                companyB.getUid(), null, "Shared Name", null, ProductType.GOODS, true, true, pcsB.uid(),
+                null, null, null, null, null, null, null, null, null, null, null));
+        assertThat(b.name()).isEqualTo("Shared Name");
+    }
+
+    @Test
+    void updateByUid_toExistingSiblingName_throwsConflict() {
+        productService.create(goodsRequest(companyA.getUid(), "Alpha"));
+        ProductDto beta = productService.create(goodsRequest(companyA.getUid(), "Beta"));
+
+        var req = new com.erp.modules.products.domain.dto.UpdateProductRequest(
+                "ALPHA", null, ProductType.GOODS, true, true, pcsUid,
+                null, null, null, null, null, null, null, null, null, null, null);
+        assertThatThrownBy(() -> productService.updateByUid(beta.uid(), req))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+    }
+
+    // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
 
