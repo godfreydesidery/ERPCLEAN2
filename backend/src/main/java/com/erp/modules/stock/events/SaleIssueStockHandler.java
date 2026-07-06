@@ -145,7 +145,13 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                               SaleFinalisedPayload.LineItem line, List<CogsLeg> cogsLegs) {
         ProductDto product = productService.getByUid(line.productUid());
 
-        if (explosion.isComposed(line.productUid())) {
+        // ADR-0058: explode into components ONLY for a point-of-sale kit recipe (product_components,
+        // ADR-0010 D-8) or a NON-stockable phantom assembled via a manufacturing BOM (ADR-0026 D-7).
+        // A STOCKABLE finished good whose only recipe is a manufacturing BOM is make-to-stock and is
+        // issued as itself: its BOM is a PRODUCTION recipe, already consumed by the work order that
+        // received it into stock. Re-exploding it at sale decremented the components a second time and
+        // left the finished good's own on-hand untouched (the reported defect).
+        if (explosion.shouldExplodeAtIssue(line.productUid(), product.stockable())) {
             List<RecipeExplosionResolver.ExplosionLine> components =
                     explosion.explode(line.productUid(), line.qtyInBase());
             if (components.isEmpty()) {

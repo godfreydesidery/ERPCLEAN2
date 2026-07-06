@@ -75,6 +75,12 @@ public class AgentServiceImpl implements AgentService {
         scopeGuard.assertCanActIn(RequestContext.get(), req.companyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered());
         validateAgentKind(req.agentKind(), req.appUserId(), req.companyId());
+        // At most one ACTIVE internal agent per user: a second one makes sale-time agent resolution
+        // ambiguous (previously surfaced as a bare 500 on every sale). A newly created agent is
+        // ACTIVE, so guard against an existing active twin. Service-level only — no DB constraint.
+        if (req.agentKind() == AgentKind.INTERNAL) {
+            assertNoOtherActiveInternalAgent(req.companyId(), req.appUserId(), null);
+        }
 
         String code = codeGen.next(req.companyId(), "AGENT");
         Agent a = new Agent(req.companyId(), code, req.partyType(), req.displayName(),
@@ -157,6 +163,11 @@ public class AgentServiceImpl implements AgentService {
         scopeGuard.assertCanActIn(RequestContext.get(), a.getCompanyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered());
         validateAgentKind(req.agentKind(), req.appUserId(), a.getCompanyId());
+        // Re-linking to INTERNAL must not create a second ACTIVE internal agent for the user
+        // (see create). Only matters while this row is itself ACTIVE; exclude self.
+        if (req.agentKind() == AgentKind.INTERNAL && a.getStatus() == MasterStatus.ACTIVE) {
+            assertNoOtherActiveInternalAgent(a.getCompanyId(), req.appUserId(), a.getId());
+        }
 
         applyCommon(a, req.partyType(), req.displayName(), req.legalName(), req.tin(),
                 req.vatRegistered(), req.vrn(), req.businessRegNo(), req.mobileMoneyNo(),
@@ -188,6 +199,11 @@ public class AgentServiceImpl implements AgentService {
     public void restoreByUid(String uid) {
         Agent a = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), a.getCompanyId());
+        // Restoring an INTERNAL agent to ACTIVE must not collide with another active internal agent
+        // that took over this user while it was archived (see create). Exclude self.
+        if (a.getAgentKind() == AgentKind.INTERNAL && a.getAppUserId() != null) {
+            assertNoOtherActiveInternalAgent(a.getCompanyId(), a.getAppUserId(), a.getId());
+        }
         MasterStatus prev = a.getStatus();
         a.setStatus(MasterStatus.ACTIVE);
         a.setUpdatedAt(Instant.now());
@@ -275,6 +291,30 @@ public class AgentServiceImpl implements AgentService {
                 throw new IllegalArgumentException(
                         "An external agent cannot be linked to a user account.");
             }
+        }
+    }
+
+    /**
+     * A user may back at most one ACTIVE internal agent. A duplicate previously slipped through
+     * (no DB uniqueness on {@code app_user_id}) and made sale-time agent resolution ambiguous —
+     * surfacing as an unhandled 500 on every sale. Guard at write time with a friendly 409.
+     *
+     * @param selfId the row being changed (update/restore), excluded from the check; {@code null}
+     *               on create.
+     */
+    private void assertNoOtherActiveInternalAgent(Long companyId, Long appUserId, Long selfId) {
+        if (appUserId == null) {
+            return;
+        }
+        boolean duplicate = selfId == null
+                ? agents.existsByCompanyIdAndAppUserIdAndAgentKindAndStatus(
+                        companyId, appUserId, AgentKind.INTERNAL, MasterStatus.ACTIVE)
+                : agents.existsByCompanyIdAndAppUserIdAndAgentKindAndStatusAndIdNot(
+                        companyId, appUserId, AgentKind.INTERNAL, MasterStatus.ACTIVE, selfId);
+        if (duplicate) {
+            throw new ConflictException(
+                    "This user is already linked to an active internal sales agent. "
+                    + "A user can have only one internal sales agent.");
         }
     }
 

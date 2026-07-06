@@ -35,6 +35,33 @@ class CatalogService {
     return ProductBarcode.fromJson(asMap(data));
   }
 
+  /// On-hand quantity per product at the caller's **active branch**, summed
+  /// across that branch's stock locations and keyed by product id. Optional [q]
+  /// filters by product code/name (the same filter the catalogue search uses),
+  /// so a register can refresh just the products it is showing. Requires
+  /// `STOCK.VIEW`; returns an empty map on any error (including a 403 for a
+  /// cashier without the permission) so the till simply shows no stock hint.
+  Future<Map<String, double>> onHandByProduct({String? q, int page = 0, int size = 200}) async {
+    final data = await _api.get('/stock/on-hand', query: {
+      'q': q,
+      'page': page,
+      'size': size,
+    });
+    final out = <String, double>{};
+    if (data is List) {
+      for (final row in data) {
+        if (row is Map) {
+          final pid = asStr(row['productId']);
+          final qty = asNum(row['quantity']);
+          if (pid != null && qty != null) {
+            out[pid] = (out[pid] ?? 0) + qty;
+          }
+        }
+      }
+    }
+    return out;
+  }
+
   Future<List<Unit>> listUnits(String companyId, {int size = 200}) async {
     final data = await _api
         .get('/units', query: {'companyId': companyId, 'size': size});

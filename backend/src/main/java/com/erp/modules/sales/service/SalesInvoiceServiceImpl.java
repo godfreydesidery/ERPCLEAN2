@@ -1004,7 +1004,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // ("This sales order has no agent assigned") was copy-pasted from the sales-order flow and
         // misleads a user who created an invoice, not an order.
         throw new IllegalArgumentException(
-                "No sales agent is assigned to this invoice. Please select an agent before saving.");
+                "No sales agent could be determined for this sale. Select a sales agent, or ask an "
+                + "administrator to link an internal sales agent to your user account before ringing sales.");
     }
 
     private void assertAgentActive(Agent agent) {
