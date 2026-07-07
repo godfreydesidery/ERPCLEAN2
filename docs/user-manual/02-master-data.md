@@ -745,3 +745,57 @@ Scenario: Operations manager creates the Arusha / Moshi distribution route befor
 6. **Agents panel:** type `Baraka`, select `AGNT-0004 — Baraka Hamisi` (External). Tick **Primary**. Click **Assign**.
 
 The Northern Route is now ready. The delivery team can filter orders and customers by route, and the agent Baraka Hamisi appears as the primary contact on route-based reports.
+
+## Bulk Import — mass create & update from Excel
+
+When you have many products, customers, suppliers or prices to enter or change at once, the **Bulk Import** tool loads them from a spreadsheet instead of one form at a time. It is a guided four-step wizard: pick what to import, download a spreadsheet, fill it in, then upload it to validate and commit.
+
+![Bulk import — the download / validate / commit wizard](images/02-master-data/bulk-import.png)
+
+**Where:** Master Data › **Bulk Import** (`/admin/bulk-import`).
+
+**Who can use it:** the menu item and screen appear only for users whose role grants an import permission — `PRODUCT.IMPORT` (products), `CUSTOMER.IMPORT` (customers), `SUPPLIER.IMPORT` (suppliers) or `PRICE.MASS_UPDATE` (prices). You only see the entity types you are allowed to import.
+
+**What you can import:**
+
+| Entity type | Creates / updates |
+|---|---|
+| **Products** | The product catalogue — code, name, type, sellable/stockable, base unit, unit cost, VAT status, reorder levels, barcode … |
+| **Customers** | Customer master — name, TIN, VAT registration, contacts, credit limit, payment terms, segment … |
+| **Suppliers** | Supplier master — name, TIN, contacts, payment terms, lead time, minimum order value … |
+| **Product prices & cost** | The selling price on a chosen price list **and** the unit cost, in one sheet |
+
+### The four steps
+
+1. **Choose what to import.** Pick the entity type. The screen then shows the download and upload panels for that type.
+
+2. **Download a spreadsheet.** Two buttons:
+   - **Download Template** — a blank sheet with just the column headers, for entering brand-new records.
+   - **Export current data** — the same sheet **pre-filled** with the records already in the system, so you can edit what is there and upload it back. (For **Product prices & cost**, first pick the **company** and the **price list** to export — exporting without choosing a list falls back to the company default, which is often empty.)
+
+3. **Fill it in (in Excel).** The sheet is self-describing:
+   - **Required** columns are marked with `*` in the header; a blank required cell is rejected.
+   - Columns with a fixed set of values (e.g. *Party Type*, *VAT Status*, *Yes/No*) show a **drop-down** so you pick a valid value.
+   - **Number** columns — Cost Amount, Selling Price, Credit Limit, quantities, terms/lead-time days — are written as **real numeric cells**, so you can use `SUM`, formulas and arithmetic directly (no "number stored as text"). A separate **Instructions** sheet lists every column with a note and its allowed values.
+   - **Blue "reference" columns** (for example the product name beside a price) are **read-only context** — shown to help you find the right row, but never imported. Edit the white cells; the blue ones are ignored.
+   - On an **update** (a row whose code matches an existing record), a **blank optional cell keeps the current value** — you only fill the cells you want to change.
+
+4. **Upload & validate, then commit.** Choose the filled-in `.xlsx` file. The system checks every row and shows a results table with one row per spreadsheet line and an outcome tag:
+   - **Create** — a new record will be added.
+   - **Update** — an existing record (matched by code) will be changed.
+   - **Skip** — nothing to do (e.g. an all-blank optional row).
+   - **Error** — the row has a problem; the **Message** column explains it in plain language.
+
+   **Commit Import** stays disabled until *every* row is clean, so a bad row can never post a half-import. Fix the flagged rows in the spreadsheet, upload again, and when the error count is `0`, click **Commit Import**. The bulk import runs through exactly the same validation, scope, code-generation and audit as manual entry — nothing bypasses the rules.
+
+> **Round-trip editing.** *Export current data → edit in Excel → upload* is the fastest way to change many records at once: the upload bulk-**updates** the rows the sheet contains (matched by their code) and leaves everything else untouched.
+
+> **Cost on the price sheet.** Changing the **Cost Amount** on the *Product prices & cost* sheet needs product-management permission (`PRODUCT.MANAGE` or `PRODUCT.IMPORT`); it is only applied when the cost actually differs from the current value, so a price-only user can safely re-upload a pre-filled sheet without being blocked on the cost column.
+
+**Example — raise every RETAIL price and correct two costs**
+
+1. Go to **Master Data › Bulk Import**, choose **Product prices & cost**.
+2. Under *Download a spreadsheet*, pick the **RETAIL** price list and click **Export current data**.
+3. In Excel, edit the **Selling Price** column (the figures are real numbers, so a quick formula works), and correct the **Cost Amount** on the two products whose cost changed. Leave every other cell as exported.
+4. Save, return to the wizard, and choose the file under **Upload & validate**. Review the results — each edited row shows **Update**; untouched rows show **Skip**.
+5. When **Errors: 0**, click **Commit Import**. The new prices and costs are live immediately.

@@ -55,6 +55,7 @@ const SHOTS = [
   { chapter: '02-master-data', name: 'routes',             route: 'routes',           caption: 'Delivery routes' },
   { chapter: '02-master-data', name: 'tax-rates',           route: 'tax-rates',        caption: 'Tax rates' },
   { chapter: '02-master-data', name: 'pricing-rules',       route: 'pricing-rules',    caption: 'Pricing rules' },
+  { chapter: '02-master-data', name: 'bulk-import',         route: 'bulk-import',      caption: 'Bulk import — mass create & update master data from Excel' },
 
   // 03 — Sales & POS
   { chapter: '03-sales-and-pos', name: 'quotations',        route: 'quotations',       caption: 'Sales quotations' },
