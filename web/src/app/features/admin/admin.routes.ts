@@ -150,11 +150,14 @@ export const ADMIN_ROUTES: Routes = [
   // ── Bulk / Mass Data Operations ──────────────────────────────────────────
   {
     // Generic Excel bulk-import wizard (template → validate → commit), driven off
-    // GET /bulk/entities. Admitted by ANY of the four import codes — the endpoint itself 403s
-    // when the caller can import nothing, which the component renders as its own calm
-    // "no permission" state rather than a hard route bounce for a role holding only one of them.
+    // GET /bulk/entities. Admitted by ANY of the four import codes — including PRICE.MASS_UPDATE for
+    // the "Product prices & cost" import that lives in this wizard, so a price-only role can reach it.
+    // The endpoint itself 403s when the caller can import nothing, which the component renders as its
+    // own calm "no permission" state rather than a hard route bounce for a role holding only one code.
     path: 'bulk-import',
-    canActivate: [requireAnyPermission('PRODUCT.IMPORT', 'CUSTOMER.IMPORT', 'SUPPLIER.IMPORT')],
+    canActivate: [
+      requireAnyPermission('PRODUCT.IMPORT', 'CUSTOMER.IMPORT', 'SUPPLIER.IMPORT', 'PRICE.MASS_UPDATE'),
+    ],
     loadComponent: () =>
       import('./bulk/bulk-import.component').then((m) => m.BulkImportComponent),
   },
