@@ -174,6 +174,8 @@ export class PosSaleComponent {
 
   // ── Permission ─────────────────────────────────────────────────────────────
   readonly canSell = computed(() => this.session.hasPermission('POS.SALE.CREATE'));
+  /** The agent picker needs AGENT.VIEW; without it, skip the fetch (it would 403) and show the hint. */
+  readonly canViewAgents = computed(() => this.session.hasPermission('AGENT.VIEW'));
 
   // ── Debounced search subjects ──────────────────────────────────────────────
   private readonly customerSearch$ = new Subject<string>();
@@ -254,9 +256,16 @@ export class PosSaleComponent {
       error: () => this.sessionsLoaded.set(true),
     });
     // Seed customer/agent/product options with empty query
-    this.agentsLoaded.set(false);
     this.customerSearch$.next('');
-    this.agentSearch$.next('');
+    if (this.canViewAgents()) {
+      this.agentsLoaded.set(false);
+      this.agentSearch$.next('');
+    } else {
+      // No AGENT.VIEW: skip the agents fetch (it would 403 and leave a raw error) — leave the picker
+      // empty; the "no agent available" hint explains the blocker calmly, like a company with none.
+      this.agents.set([]);
+      this.agentsLoaded.set(true);
+    }
     this.productSearch$.next('');
     // Units are loaded per-product when a product is selected on a line (listProductUnits).
     // Load tax rates for the VAT-inclusive preview (best-effort — needs TAXRATE.VIEW).
@@ -307,7 +316,7 @@ export class PosSaleComponent {
 
   onProductSearch(q: string): void { this.productSearch$.next(q); }
   onCustomerSearch(q: string): void { this.customerSearch$.next(q); }
-  onAgentSearch(q: string): void { this.agentSearch$.next(q); }
+  onAgentSearch(q: string): void { if (this.canViewAgents()) this.agentSearch$.next(q); }
 
   // ── Line management ────────────────────────────────────────────────────────
 
