@@ -97,11 +97,11 @@ public class SupplierImportHandler implements BulkImportHandler {
                 ColumnSpec.of(COL_DISTRICT, false, "District."),
                 ColumnSpec.choice(COL_KIND, true, "What the supplier provides.",
                         List.of(SupplierKind.GOODS.name(), SupplierKind.SERVICE.name())),
-                ColumnSpec.of(COL_TERMS_DAYS, false, "Payment terms in days."),
+                ColumnSpec.number(COL_TERMS_DAYS, false, "Payment terms in days."),
                 ColumnSpec.of(COL_COUNTRY, false, "2-letter ISO country code, e.g. TZ."),
                 ColumnSpec.of(COL_CURRENCY, false, "Default currency (3-letter code)."),
-                ColumnSpec.of(COL_LEAD_TIME, false, "Typical supply lead time in days."),
-                ColumnSpec.of(COL_MIN_ORDER, false, "Minimum order value."));
+                ColumnSpec.number(COL_LEAD_TIME, false, "Typical supply lead time in days."),
+                ColumnSpec.number(COL_MIN_ORDER, false, "Minimum order value."));
     }
 
     @Override
