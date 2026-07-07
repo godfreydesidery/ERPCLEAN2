@@ -121,7 +121,7 @@ public class PriceImportHandler implements BulkImportHandler {
         return List.of(
                 ColumnSpec.of(COL_PRODUCT, true, "Existing product code."),
                 ColumnSpec.reference(COL_NAME, "The product's name — to identify the row."),
-                ColumnSpec.of(COL_COST, false,
+                ColumnSpec.number(COL_COST, false,
                         "Unit COST. Fill to update it (needs product-management permission). Blank or "
                       + "unchanged = left as-is."),
                 ColumnSpec.of(COL_COST_CCY, false,
@@ -130,7 +130,7 @@ public class PriceImportHandler implements BulkImportHandler {
                 ColumnSpec.of(COL_UNIT, false,
                         "Blank = base-unit price. A unit code sets that pack's price (the pack must "
                       + "already be configured on the product)."),
-                ColumnSpec.of(COL_SELLING, false,
+                ColumnSpec.number(COL_SELLING, false,
                         "The SELLING price on the price list above. Blank = LEAVE UNCHANGED."),
                 ColumnSpec.of(COL_SELLING_CCY, false,
                         "Selling currency (3-letter, e.g. TZS). Required when Selling Price is set."));

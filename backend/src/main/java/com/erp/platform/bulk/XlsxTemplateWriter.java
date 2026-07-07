@@ -56,36 +56,127 @@ public class XlsxTemplateWriter {
     private void writeDataSheet(Workbook wb, List<ColumnSpec> columns,
                                 List<? extends Map<String, String>> dataRows) {
         Sheet sheet = wb.createSheet("Data");
-        CellStyle headerStyle = headerStyle(wb);
-        CellStyle refHeaderStyle = referenceHeaderStyle(wb);
-        CellStyle refDataStyle = referenceDataStyle(wb);
+        Styles styles = new Styles(wb);
+        writeHeaderRow(sheet, columns, styles);
+        sheet.createFreezePane(0, 1);
+        int r = 1;
+        for (Map<String, String> data : dataRows) {
+            writeDataRow(sheet.createRow(r++), columns, data, styles);
+        }
+    }
+
+    private void writeHeaderRow(Sheet sheet, List<ColumnSpec> columns, Styles styles) {
         Row header = sheet.createRow(0);
         for (int c = 0; c < columns.size(); c++) {
             ColumnSpec col = columns.get(c);
             Cell cell = header.createCell(c);
             cell.setCellValue(col.required() ? "* " + col.header() : col.header());
-            cell.setCellStyle(col.reference() ? refHeaderStyle : headerStyle);
+            cell.setCellStyle(col.reference() ? styles.refHeader : styles.header);
             sheet.setColumnWidth(c, 22 * 256);
+            // Number columns get a whole-column numeric format so even blank rows the user fills in
+            // are treated as numbers (not text) by Excel.
+            if (col.numeric()) {
+                sheet.setDefaultColumnStyle(c, col.reference() ? styles.refNumeric : styles.numeric);
+            }
             if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
                 addDropdown(sheet, c, col.allowedValues());
             }
         }
-        sheet.createFreezePane(0, 1);
+    }
 
-        int r = 1;
-        for (Map<String, String> data : dataRows) {
-            Row row = sheet.createRow(r++);
-            for (int c = 0; c < columns.size(); c++) {
-                ColumnSpec col = columns.get(c);
-                String value = data.get(col.header());
-                Cell cell = row.createCell(c);
+    private static void writeDataRow(Row row, List<ColumnSpec> columns,
+                                     Map<String, String> data, Styles styles) {
+        for (int c = 0; c < columns.size(); c++) {
+            ColumnSpec col = columns.get(c);
+            String value = data.get(col.header());
+            Cell cell = row.createCell(c);
+            Double number = col.numeric() ? parseNumber(value) : null;
+            if (number != null) {
+                // Real numeric cell → Excel allows arithmetic/formulas (not "stored as text").
+                cell.setCellValue(number);
+                cell.setCellStyle(col.reference() ? styles.refNumeric : styles.numeric);
+            } else {
                 cell.setCellValue(value == null ? "" : value);
-                // Reference columns are read-only context — tint them so the editor sees at a
-                // glance which cells to change (white) and which are just information (blue).
+                // Reference columns are read-only context — tint them (blue) so the editor sees which
+                // cells to change (white) vs. which are just information.
                 if (col.reference()) {
-                    cell.setCellStyle(refDataStyle);
+                    cell.setCellStyle(styles.refData);
                 }
             }
+        }
+    }
+
+    /** The Data-sheet cell styles, built once per workbook. */
+    private static final class Styles {
+        private final CellStyle header;
+        private final CellStyle refHeader;
+        private final CellStyle refData;
+        private final CellStyle numeric;
+        private final CellStyle refNumeric;
+
+        Styles(Workbook wb) {
+            this.header = headerStyle(wb);
+            this.refHeader = referenceHeaderStyle(wb);
+            this.refData = referenceDataStyle(wb);
+            this.numeric = numericStyle(wb, false);
+            this.refNumeric = numericStyle(wb, true);
+        }
+
+        private static CellStyle headerStyle(Workbook wb) {
+            CellStyle s = wb.createCellStyle();
+            Font f = wb.createFont();
+            f.setBold(true);
+            s.setFont(f);
+            s.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            return s;
+        }
+
+        /** Header style for a read-only reference column — bold italic on a light-blue fill. */
+        private static CellStyle referenceHeaderStyle(Workbook wb) {
+            CellStyle s = wb.createCellStyle();
+            Font f = wb.createFont();
+            f.setBold(true);
+            f.setItalic(true);
+            s.setFont(f);
+            s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            return s;
+        }
+
+        /** Light-blue fill for reference (read-only) data cells, so they read as "information, not input". */
+        private static CellStyle referenceDataStyle(Workbook wb) {
+            CellStyle s = wb.createCellStyle();
+            s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+            s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            return s;
+        }
+
+        /** A numeric cell style (thousands separator, up to 4 dp); {@code reference} adds the read-only tint. */
+        private static CellStyle numericStyle(Workbook wb, boolean reference) {
+            CellStyle s = wb.createCellStyle();
+            s.setDataFormat(wb.createDataFormat().getFormat("#,##0.####"));
+            if (reference) {
+                s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+                s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            }
+            return s;
+        }
+    }
+
+    /** Parse a value as a number (stripping thousands separators); null if blank or non-numeric. */
+    private static Double parseNumber(String value) {
+        if (value == null) {
+            return null;
+        }
+        String v = value.replace(",", "").trim();
+        if (v.isEmpty()) {
+            return null;
+        }
+        try {
+            return Double.valueOf(v);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
@@ -158,36 +249,6 @@ public class XlsxTemplateWriter {
         Cell c = row.createCell(col);
         c.setCellValue(value);
         c.setCellStyle(style);
-    }
-
-    private CellStyle headerStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setBold(true);
-        s.setFont(f);
-        s.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return s;
-    }
-
-    /** Header style for a read-only reference column — bold italic on a light-blue fill. */
-    private CellStyle referenceHeaderStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        Font f = wb.createFont();
-        f.setBold(true);
-        f.setItalic(true);
-        s.setFont(f);
-        s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return s;
-    }
-
-    /** Light-blue fill for reference (read-only) data cells, so they read as "information, not input". */
-    private CellStyle referenceDataStyle(Workbook wb) {
-        CellStyle s = wb.createCellStyle();
-        s.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
-        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return s;
     }
 
     private CellStyle boldStyle(Workbook wb) {
