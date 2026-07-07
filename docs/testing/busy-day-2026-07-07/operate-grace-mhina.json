@@ -1,0 +1,382 @@
+{
+  "persona": "Grace Mhina",
+  "username": "gmhina",
+  "role": "FINANCE_DIRECTOR",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {
+    "create an asset category": 1,
+    "register a fixed asset": 1,
+    "create a budget": 1
+  },
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "FX": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Cost Centres": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Fixed Assets — Asset Categories": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Fixed Assets — Register Asset": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Budgeting": {
+      "visited": 2,
+      "actioned": 1
+    }
+  },
+  "problemCount": 10,
+  "uprs": [
+    "UPR-grace-mhina-01",
+    "UPR-grace-mhina-02",
+    "UPR-grace-mhina-03",
+    "UPR-grace-mhina-04",
+    "UPR-grace-mhina-05",
+    "UPR-grace-mhina-06",
+    "UPR-grace-mhina-07",
+    "UPR-grace-mhina-08"
+  ],
+  "problems": [
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Sales orders",
+      "screen": "/admin/sales-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Purchase orders",
+      "screen": "/admin/purchase-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Goods receipt",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Stock on-hand",
+      "screen": "/admin/stock",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "workflow": "add an exchange rate",
+      "screen": "/admin/fx/rates",
+      "detail": "\"add an exchange rate\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"An exchange rate for USD→TZS on 2026-07-01 alr",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/fx/rates",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"An exchange rate for USD→TZS on 2026-07-01 already exists.\"],\"meta\":null}"
+          }
+        ]
+      }
+    },
+    {
+      "persona": "Grace Mhina",
+      "designation": "Finance Director (CFO)",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "workflow": "create a dimension value",
+      "screen": "/admin/cost-centre/values",
+      "detail": "\"create a dimension value\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"Cost Centre value CC001 already exists.\"],\"met",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/dimension-values",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"Cost Centre value CC001 already exists.\"],\"meta\":null}"
+          }
+        ]
+      }
+    }
+  ]
+}

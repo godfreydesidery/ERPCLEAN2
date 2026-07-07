@@ -1,0 +1,293 @@
+{
+  "persona": "Sabina Aloyce",
+  "username": "saloyce",
+  "role": "SALES_OFFICER",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {
+    "raise a quotation": 1,
+    "create a delivery note": 1,
+    "create a sales return": 1,
+    "create a blanket order": 1,
+    "create a standing order": 1
+  },
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales / Quotations": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Deliveries": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Sales Returns": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Blanket Orders": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Standing Orders": {
+      "visited": 2,
+      "actioned": 1
+    }
+  },
+  "problemCount": 5,
+  "uprs": [
+    "UPR-sabina-aloyce-01",
+    "UPR-sabina-aloyce-02",
+    "UPR-sabina-aloyce-03",
+    "UPR-sabina-aloyce-04",
+    "UPR-sabina-aloyce-05"
+  ],
+  "problems": [
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open Goods receipt",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "designation": "Salesperson",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    }
+  ]
+}

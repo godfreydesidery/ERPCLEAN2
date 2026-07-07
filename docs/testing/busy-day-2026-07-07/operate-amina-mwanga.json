@@ -1,0 +1,366 @@
+{
+  "persona": "Amina Mwanga",
+  "username": "amwanga",
+  "role": "ACCOUNTANT",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {},
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Tax": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "GL / Chart of Accounts": {
+      "visited": 1,
+      "actioned": 0
+    }
+  },
+  "problemCount": 10,
+  "uprs": [
+    "UPR-amina-mwanga-01",
+    "UPR-amina-mwanga-02",
+    "UPR-amina-mwanga-03",
+    "UPR-amina-mwanga-04",
+    "UPR-amina-mwanga-05",
+    "UPR-amina-mwanga-06",
+    "UPR-amina-mwanga-07",
+    "UPR-amina-mwanga-08"
+  ],
+  "problems": [
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Sales orders",
+      "screen": "/admin/sales-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Purchase orders",
+      "screen": "/admin/purchase-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Goods receipt",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Stock on-hand",
+      "screen": "/admin/stock",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "workflow": "create a VAT return",
+      "screen": "/admin/tax/vat-returns",
+      "detail": "\"create a VAT return\" rejected (409): {\"data\":null,\"errors\":[\"A VAT return for this period already exists. O",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/vat/returns",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"A VAT return for this period already exists. Only one return can be open per period — please use the existing one.\"],\"meta\":null}"
+          }
+        ]
+      }
+    },
+    {
+      "persona": "Amina Mwanga",
+      "designation": "Accountant",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "workflow": "create a GL account",
+      "screen": "/admin/gl/accounts",
+      "detail": "\"create a GL account\" rejected (409): {\"data\":null,\"errors\":[\"Account code 1100 already exists in this compa",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 409 (Conflict)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/gl/accounts",
+            "status": 409,
+            "method": "POST",
+            "body": "{\"data\":null,\"errors\":[\"Account code 1100 already exists in this company.\"],\"meta\":null}"
+          }
+        ]
+      }
+    }
+  ]
+}

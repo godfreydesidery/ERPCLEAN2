@@ -164,8 +164,17 @@ export class StockLocationListComponent {
     });
   }
 
-  /** Agents are company-scoped (ADR-0051 D-8.4) — reloaded whenever the company selection changes. */
+  /**
+   * Agents drive the VAN-location picker only (ADR-0051 D-8.4) and are company-scoped — reloaded
+   * whenever the company selection changes. Skipped when the operator can't view agents (e.g. a
+   * storekeeper without AGENT.VIEW): the list requires AGENT.VIEW, so fetching it would 403 and —
+   * though handled here — leave a confusing background error; a non-VAN location doesn't need it.
+   */
   private loadAgents(companyId: string): void {
+    if (!this.session.hasPermission('AGENT.VIEW')) {
+      this.agents.set([]);
+      return;
+    }
     this.agentService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.agents.set(rows.filter((a) => a.status !== 'ARCHIVED')),
       error: () => this.agents.set([]),
