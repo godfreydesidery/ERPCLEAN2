@@ -968,7 +968,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
             Expanded(
                 child: OrbixButton(
                     label: 'Clear',
-                    kind: BtnKind.ghost,
+                    kind: BtnKind.clear,
                     onPressed: () => _numKey('C'))),
             const SizedBox(width: 8),
             Expanded(
@@ -983,7 +983,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   Widget _key(String k) {
     return Material(
-      color: AppColors.panel,
+      color: AppColors.key,
       borderRadius: AppRadii.brSm,
       child: InkWell(
         borderRadius: AppRadii.brSm,
@@ -992,7 +992,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: AppRadii.brSm,
-            border: Border.all(color: AppColors.line2),
+            border: Border.all(color: AppColors.keyLine),
           ),
           child: k == '<'
               ? const Icon(Icons.backspace_outlined, size: 18)
