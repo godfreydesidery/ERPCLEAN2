@@ -1,6 +1,9 @@
 package com.erp.modules.products.service;
 
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.domain.entity.PriceList;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductPrice;
@@ -17,7 +20,9 @@ import com.erp.platform.bulk.ImportRow;
 import com.erp.platform.bulk.RowOutcome;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
+import com.erp.platform.security.PermissionChecks;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,15 +32,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Bulk price upload / price-change (a mass "price change" operation). Each row sets one product's
- * price on a named price list, upserting through {@link ProductService#setPrice} — same validation,
- * scope and audit as the single-price screen. Address products and price lists by their human codes;
- * an optional Unit column targets a pack price (blank = the base-unit price).
+ * Bulk PRICE update — one sheet that updates a product's <b>cost</b> (on the product) and/or its
+ * <b>selling price</b> on a named price list. Each field routes through the existing service call
+ * ({@link ProductService#updateByUid} for cost, {@link ProductService#setPrice} for the selling
+ * price) so every change gets the same validation, scope check and audit as the single screens.
+ * Products, price lists and units are addressed by their human codes.
  *
  * <p><b>Download → edit → re-upload:</b> {@link #exportRows} emits one row per product for a chosen
- * price list (the current price, or blank if none). On re-upload a <b>blank Amount is SKIPPED</b>
- * (the price is left unchanged) — so you can download every product, edit only the ones you want,
- * and upload the whole sheet.
+ * price list, pre-filled with the current cost and selling price. A <b>blank Cost / Selling Price is
+ * left unchanged</b>, and a cost that equals the current value is a no-op — so you can download every
+ * product, edit only the cells you want, and upload the whole sheet.
+ *
+ * <p><b>Cost is permission-gated:</b> the sheet endpoint requires {@code PRICE.MASS_UPDATE}, but
+ * actually <i>changing</i> a cost additionally requires {@code PRODUCT.MANAGE}/{@code PRODUCT.IMPORT}
+ * — a price-only user can update selling prices but not costs. The gate only trips when a cost value
+ * differs from the current one, so re-uploading a pre-filled sheet never falsely blocks a price edit.
  *
  * <p>For an across-the-board change (e.g. "raise RETAIL by 5%") use the rule-based mass price change
  * instead — this handler is for arbitrary per-product edits.
@@ -45,31 +56,39 @@ import org.springframework.transaction.annotation.Transactional;
 public class PriceImportHandler implements BulkImportHandler {
 
     private static final int EXPORT_MAX = 2000;
+    private static final String DEFAULT_CURRENCY = "TZS";
 
     private static final String COL_PRODUCT = "Product Code";
     private static final String COL_NAME = "Product Name";
+    private static final String COL_COST = "Cost Amount";
+    private static final String COL_COST_CCY = "Cost Currency";
     private static final String COL_PRICE_LIST = "Price List";
     private static final String COL_UNIT = "Unit";
-    private static final String COL_AMOUNT = "Amount";
-    private static final String COL_CURRENCY = "Currency";
-    private static final String COL_COST = "Cost";
+    private static final String COL_SELLING = "Selling Price";
+    private static final String COL_SELLING_CCY = "Selling Currency";
 
     private final ProductService productService;
     private final ProductRepository products;
     private final PriceListRepository priceLists;
     private final ProductPriceRepository prices;
     private final UnitOfMeasureRepository units;
+    private final CompanyRepository companies;
+    private final PermissionChecks perm;
 
     public PriceImportHandler(ProductService productService,
                               ProductRepository products,
                               PriceListRepository priceLists,
                               ProductPriceRepository prices,
-                              UnitOfMeasureRepository units) {
+                              UnitOfMeasureRepository units,
+                              CompanyRepository companies,
+                              PermissionChecks perm) {
         this.productService = productService;
         this.products = products;
         this.priceLists = priceLists;
         this.prices = prices;
         this.units = units;
+        this.companies = companies;
+        this.perm = perm;
     }
 
     @Override
@@ -79,7 +98,7 @@ public class PriceImportHandler implements BulkImportHandler {
 
     @Override
     public String displayName() {
-        return "Product prices";
+        return "Product prices & cost";
     }
 
     @Override
@@ -95,45 +114,112 @@ public class PriceImportHandler implements BulkImportHandler {
                 .sorted()
                 .toList();
         ColumnSpec priceList = priceListCodes.isEmpty()
-                ? ColumnSpec.of(COL_PRICE_LIST, true, "Existing price-list code, e.g. RETAIL.")
-                : ColumnSpec.choice(COL_PRICE_LIST, true, "Existing price-list code.", priceListCodes);
+                ? ColumnSpec.of(COL_PRICE_LIST, false,
+                        "Existing price-list code, e.g. RETAIL. Required when Selling Price is set.")
+                : ColumnSpec.choice(COL_PRICE_LIST, false,
+                        "Existing price-list code. Required when Selling Price is set.", priceListCodes);
         return List.of(
                 ColumnSpec.of(COL_PRODUCT, true, "Existing product code."),
-                ColumnSpec.reference(COL_NAME, "The product's name — to identify the row you're pricing."),
+                ColumnSpec.reference(COL_NAME, "The product's name — to identify the row."),
+                ColumnSpec.of(COL_COST, false,
+                        "Unit COST. Fill to update it (needs product-management permission). Blank or "
+                      + "unchanged = left as-is."),
+                ColumnSpec.of(COL_COST_CCY, false,
+                        "Cost currency (3-letter, e.g. TZS). Blank = the company base currency."),
                 priceList,
                 ColumnSpec.of(COL_UNIT, false,
                         "Blank = base-unit price. A unit code sets that pack's price (the pack must "
                       + "already be configured on the product)."),
-                ColumnSpec.of(COL_AMOUNT, false,
-                        "The price on this list. Leave blank to LEAVE THE PRICE UNCHANGED (the row is skipped)."),
-                ColumnSpec.of(COL_CURRENCY, false, "3-letter code, e.g. TZS. Required when Amount is set."),
-                ColumnSpec.reference(COL_COST, "The product's current cost — for margin reference."));
+                ColumnSpec.of(COL_SELLING, false,
+                        "The SELLING price on the price list above. Blank = LEAVE UNCHANGED."),
+                ColumnSpec.of(COL_SELLING_CCY, false,
+                        "Selling currency (3-letter, e.g. TZS). Required when Selling Price is set."));
     }
 
     @Override
     public RowOutcome process(Long companyId, ImportRow row, ImportMode mode, ImportContext ctx) {
-        // Blank price = intentional no-op, so a full export can be edited row-by-row and re-uploaded.
-        if (!row.has(COL_AMOUNT)) {
-            return RowOutcome.skip(row.rowNumber(), row.get(COL_PRODUCT), "No price entered — left unchanged.");
+        BigDecimal costAmount = ImportParsers.parseDecimal(row, COL_COST);
+        BigDecimal sellingAmount = ImportParsers.parseDecimal(row, COL_SELLING);
+        if (costAmount == null && sellingAmount == null) {
+            return RowOutcome.skip(row.rowNumber(), row.get(COL_PRODUCT),
+                    "No Cost or Selling Price entered — left unchanged.");
         }
 
-        String productCode = ImportParsers.requireText(row, COL_PRODUCT);
-        Product product = products.findByCompanyIdAndCode(companyId, productCode.trim().toUpperCase())
+        String productCode = ImportParsers.requireText(row, COL_PRODUCT).trim().toUpperCase();
+        Product product = products.findByCompanyIdAndCode(companyId, productCode)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "'" + COL_PRODUCT + "' '" + productCode + "' was not found."));
 
-        String priceListCode = ImportParsers.requireText(row, COL_PRICE_LIST);
-        PriceList priceList = findPriceList(companyId, priceListCode);
+        List<String> changes = new ArrayList<>(2);
+        applyCost(companyId, row, product, costAmount, changes);
+        applySellingPrice(companyId, row, product, sellingAmount, changes);
 
-        BigDecimal amount = ImportParsers.parseDecimal(row, COL_AMOUNT);
-        String currency = ImportParsers.requireText(row, COL_CURRENCY).toUpperCase();
+        if (changes.isEmpty()) {
+            return RowOutcome.skip(row.rowNumber(), productCode,
+                    "No change — the values match the current record.");
+        }
+        return RowOutcome.update(row.rowNumber(), productCode + " (" + String.join(", ", changes) + ")");
+    }
+
+    /** Update the product's cost, but only when it actually differs — and only with product permission. */
+    private void applyCost(Long companyId, ImportRow row, Product product,
+                           BigDecimal costAmount, List<String> changes) {
+        if (costAmount == null) {
+            return;
+        }
+        String costCcy = row.has(COL_COST_CCY)
+                ? row.get(COL_COST_CCY).trim().toUpperCase()
+                : baseCurrency(companyId);
+        if (!costChanged(product, costAmount, costCcy)) {
+            return; // same as current — leave as-is, no permission needed
+        }
+        if (!perm.has("PRODUCT.MANAGE") && !perm.has("PRODUCT.IMPORT")) {
+            throw new IllegalArgumentException(
+                    "Changing '" + COL_COST + "' needs product-management permission, which you do not "
+                  + "have. Clear the Cost column to update only the selling price.");
+        }
+        ProductDto cur = ProductDto.from(product);
+        productService.updateByUid(product.getUid(), new UpdateProductRequest(
+                cur.name(), cur.description(), cur.type(), cur.sellable(), cur.stockable(),
+                cur.baseUnitUid(), new MoneyDto(costAmount.toPlainString(), costCcy), cur.vatStatus(),
+                cur.reorderLevel(), cur.reorderQty(), cur.safetyStock(), cur.minStock(), cur.maxStock(),
+                cur.leadTimeDays(), cur.purchasable(), cur.preferredSupplierId(), cur.restrictedKind()));
+        changes.add("cost");
+    }
+
+    /** Update the product's selling price on the named price list (a blank Selling Price is skipped). */
+    private void applySellingPrice(Long companyId, ImportRow row, Product product,
+                                   BigDecimal sellingAmount, List<String> changes) {
+        if (sellingAmount == null) {
+            return;
+        }
+        String plCode = row.get(COL_PRICE_LIST).trim();
+        if (plCode.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "'" + COL_PRICE_LIST + "' is required when '" + COL_SELLING + "' is set.");
+        }
+        PriceList priceList = findPriceList(companyId, plCode);
+        String sellingCcy = row.get(COL_SELLING_CCY).trim().toUpperCase();
+        if (sellingCcy.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "'" + COL_SELLING_CCY + "' is required when '" + COL_SELLING + "' is set.");
+        }
         String unitUid = row.has(COL_UNIT) ? resolveUnitUid(companyId, row.get(COL_UNIT)) : null;
-
         productService.setPrice(product.getUid(), new SetProductPriceRequest(
-                priceList.getUid(), new MoneyDto(amount.toPlainString(), currency), unitUid));
+                priceList.getUid(), new MoneyDto(sellingAmount.toPlainString(), sellingCcy), unitUid));
+        changes.add("price @ " + priceList.getCode());
+    }
 
-        return RowOutcome.update(row.rowNumber(),
-                productCode.trim().toUpperCase() + " @ " + priceList.getCode());
+    /** True when the supplied cost differs from the product's current cost (amount or currency). */
+    private static boolean costChanged(Product p, BigDecimal newAmount, String newCcy) {
+        var cost = p.getCost();
+        if (cost == null || cost.getAmount() == null) {
+            return true;
+        }
+        boolean sameAmount = cost.getAmount().compareTo(newAmount) == 0;
+        boolean sameCcy = cost.getCurrency() != null
+                && cost.getCurrency().value().equalsIgnoreCase(newCcy);
+        return !(sameAmount && sameCcy);
     }
 
     @Override
@@ -143,6 +229,7 @@ public class PriceImportHandler implements BulkImportHandler {
             return List.of();
         }
         String listCurrency = priceList.getCurrency() != null ? priceList.getCurrency().value() : "";
+        String baseCcy = baseCurrency(companyId);
 
         // Current base-unit prices on this list, keyed by product id (one query, no N+1).
         Map<Long, ProductPrice> baseByProduct = new HashMap<>();
@@ -155,31 +242,47 @@ public class PriceImportHandler implements BulkImportHandler {
         return products.findByCompanyId(companyId, Pageable.unpaged()).getContent().stream()
                 .filter(p -> p.getStatus() == MasterStatus.ACTIVE)
                 .limit(EXPORT_MAX)
-                .map(p -> exportRow(p, priceList, baseByProduct.get(p.getId()), listCurrency))
+                .map(p -> exportRow(p, priceList, baseByProduct.get(p.getId()), listCurrency, baseCcy))
                 .toList();
     }
 
-    /** One export row: the editable price fields plus the Name/Cost reference context. */
+    /** One export row: the current cost and selling price, plus the Name reference. */
     private static LinkedHashMap<String, String> exportRow(Product p, PriceList priceList,
-                                                           ProductPrice pp, String listCurrency) {
+                                                           ProductPrice pp, String listCurrency,
+                                                           String baseCcy) {
         boolean priced = pp != null && pp.getPrice() != null;
-        String amount = priced ? pp.getPrice().getAmount().toPlainString() : "";
-        String currency = priced ? pp.getPrice().getCurrency().value() : listCurrency;
         LinkedHashMap<String, String> r = new LinkedHashMap<>();
         r.put(COL_PRODUCT, p.getCode());
         r.put(COL_NAME, p.getName());
+        r.put(COL_COST, costAmountOf(p));
+        r.put(COL_COST_CCY, costCurrencyOf(p, baseCcy));
         r.put(COL_PRICE_LIST, priceList.getCode());
         r.put(COL_UNIT, "");
-        r.put(COL_AMOUNT, amount);
-        r.put(COL_CURRENCY, currency);
-        r.put(COL_COST, costOf(p));
+        r.put(COL_SELLING, priced ? pp.getPrice().getAmount().toPlainString() : "");
+        r.put(COL_SELLING_CCY, priced ? pp.getPrice().getCurrency().value() : listCurrency);
         return r;
     }
 
-    /** The product's current cost amount as plain text, or blank when unset. */
-    private static String costOf(Product p) {
+    private static String costAmountOf(Product p) {
         return p.getCost() != null && p.getCost().getAmount() != null
                 ? p.getCost().getAmount().toPlainString() : "";
+    }
+
+    private static String costCurrencyOf(Product p, String baseCcy) {
+        if (p.getCost() != null && p.getCost().getCurrency() != null) {
+            return p.getCost().getCurrency().value();
+        }
+        return baseCcy;
+    }
+
+    /** The company base currency (for the Cost Currency default); falls back to TZS. */
+    private String baseCurrency(Long companyId) {
+        return companies.findScopedById(companyId)
+                // Lambda (not Company::getBaseCurrency) so we never import the iam Company entity —
+                // that would cross the module boundary (ModuleBoundaryTest). Mirrors ProductImportHandler.
+                .map(c -> c.getBaseCurrency())
+                .filter(s -> s != null && !s.isBlank())
+                .orElse(DEFAULT_CURRENCY);
     }
 
     /** The price list to export prices for: the {@code priceList} param code, else the default, else the first. */
