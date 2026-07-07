@@ -1,0 +1,355 @@
+{
+  "persona": "Saidi Karume",
+  "username": "skarume",
+  "role": "STOREKEEPER",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {},
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock / Locations": {
+      "visited": 1,
+      "actioned": 0
+    }
+  },
+  "problemCount": 10,
+  "uprs": [
+    "UPR-saidi-karume-01",
+    "UPR-saidi-karume-02",
+    "UPR-saidi-karume-03",
+    "UPR-saidi-karume-04",
+    "UPR-saidi-karume-05",
+    "UPR-saidi-karume-06",
+    "UPR-saidi-karume-07",
+    "UPR-saidi-karume-08",
+    "UPR-saidi-karume-09",
+    "UPR-saidi-karume-10"
+  ],
+  "problems": [
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Dashboard",
+      "screen": "/admin/dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Sales orders",
+      "screen": "/admin/sales-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Customers",
+      "screen": "/admin/customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Suppliers",
+      "screen": "/admin/suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Record payment",
+      "screen": "/admin/ap/payments/record",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Post journal",
+      "screen": "/admin/gl/journals/post",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Saidi Karume",
+      "designation": "Storekeeper / Stock Controller",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "workflow": "create a stock location",
+      "screen": "/admin/stock/locations",
+      "detail": "not allowed to open Stock / Locations",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/agents?companyId=3&page=0&size=200",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      }
+    }
+  ]
+}

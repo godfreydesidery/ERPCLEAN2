@@ -1,13 +1,22 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { SessionStore } from './session.store';
+import { ToastService } from '../feedback/toast.service';
+
+/**
+ * Shown when a permission guard blocks navigation. A calm, non-alarming toast (not the red
+ * "Something went wrong" modal) so the user understands WHY they landed back on the home screen
+ * instead of being silently bounced with no feedback.
+ */
+export const NO_ACCESS_MESSAGE =
+  "You don't have access to that screen — it isn't part of your role. Ask your administrator if you need it.";
 
 /**
  * Route guard factory: allows the route only if the user holds {@code code} (root always passes,
- * via {@link SessionStore.hasPermission}). A user who lacks it is redirected to the neutral admin
- * home rather than landing on a screen they can't use — so a permission gap is a redirect, never a
- * 403 error pop-up. Pair with the nav, which already hides items the user can't see; this guard is
- * the backstop for direct navigation / the default redirect.
+ * via {@link SessionStore.hasPermission}). A user who lacks it is sent to the neutral admin home
+ * — but with a brief toast explaining why, so the redirect is never silent/confusing. Pair with the
+ * nav, which already hides items the user can't see; this guard is the backstop for direct
+ * navigation (typed URL, stale bookmark, a quick-launch tile) and the default redirect.
  *
  * Usage: {@code canActivate: [requirePermission('COMPANY.VIEW')]}.
  */
@@ -15,7 +24,10 @@ export function requirePermission(code: string): CanActivateFn {
   return () => {
     const session = inject(SessionStore);
     const router = inject(Router);
-    return session.hasPermission(code) ? true : router.createUrlTree(['/admin/home']);
+    const toasts = inject(ToastService);
+    if (session.hasPermission(code)) return true;
+    toasts.info(NO_ACCESS_MESSAGE);
+    return router.createUrlTree(['/admin/home']);
   };
 }
 
@@ -28,6 +40,9 @@ export function requireAnyPermission(...codes: string[]): CanActivateFn {
   return () => {
     const session = inject(SessionStore);
     const router = inject(Router);
-    return codes.some((c) => session.hasPermission(c)) ? true : router.createUrlTree(['/admin/home']);
+    const toasts = inject(ToastService);
+    if (codes.some((c) => session.hasPermission(c))) return true;
+    toasts.info(NO_ACCESS_MESSAGE);
+    return router.createUrlTree(['/admin/home']);
   };
 }

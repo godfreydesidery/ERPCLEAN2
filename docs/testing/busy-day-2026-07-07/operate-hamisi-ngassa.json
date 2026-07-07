@@ -1,0 +1,312 @@
+{
+  "persona": "Hamisi Ngassa",
+  "username": "hngassa",
+  "role": "FIELD_SALES_AGENT",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {},
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 0
+    }
+  },
+  "problemCount": 8,
+  "uprs": [
+    "UPR-hamisi-ngassa-01",
+    "UPR-hamisi-ngassa-02",
+    "UPR-hamisi-ngassa-03",
+    "UPR-hamisi-ngassa-04",
+    "UPR-hamisi-ngassa-05",
+    "UPR-hamisi-ngassa-06",
+    "UPR-hamisi-ngassa-07",
+    "UPR-hamisi-ngassa-08"
+  ],
+  "problems": [
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Dashboard",
+      "screen": "/admin/dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Goods receipt",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Suppliers",
+      "screen": "/admin/suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Post journal",
+      "screen": "/admin/gl/journals/post",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "designation": "Field / Route Sales Agent",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    }
+  ]
+}

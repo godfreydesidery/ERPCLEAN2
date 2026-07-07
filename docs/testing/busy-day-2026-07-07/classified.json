@@ -1,0 +1,3377 @@
+{
+  "summary": {
+    "totals": {
+      "all": 142,
+      "REAL": 2,
+      "WAD": 140,
+      "REVIEW": 0
+    },
+    "realByArea": {
+      "sales": 1,
+      "stock": 1
+    },
+    "realBySeverity": {
+      "BLOCKED": 2
+    },
+    "realByPersona": {
+      "John Komba": 1,
+      "Saidi Karume": 1
+    },
+    "wadByPersona": {
+      "Amina Mwanga": 10,
+      "Bakari Mbaga": 4,
+      "Daudi Kessy": 5,
+      "Editha Mhagama": 11,
+      "Editrude Mwakalukwa": 11,
+      "Emanuel Mushi": 5,
+      "Frank Materu": 10,
+      "Grace Mhina": 10,
+      "Halima Juma": 5,
+      "Hamisi Ngassa": 8,
+      "John Komba": 10,
+      "Neema Kileo": 16,
+      "Rehema Salum": 3,
+      "Sabina Aloyce": 5,
+      "Saidi Karume": 9,
+      "Yusuf Mbwana": 3,
+      "Zawadi Lyimo": 15
+    }
+  },
+  "real": [
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "I'm told I don't have permission to open POS sell, but it's part of my job (CASHIER)",
+      "klass": "REAL",
+      "reason": "server rejection (non-duplicate 4xx)",
+      "apiStatuses": [
+        403
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock/locations",
+      "workflow": "create a stock location",
+      "detail": "not allowed to open Stock / Locations",
+      "klass": "REAL",
+      "reason": "server rejection (non-duplicate 4xx)",
+      "apiStatuses": [
+        403
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+    }
+  ],
+  "wad": [
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock",
+      "workflow": "open Stock on-hand",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/stock",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: ACCOUNTANT is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "area": "tax",
+      "screen": "/admin/tax/vat-returns",
+      "workflow": "create a VAT return",
+      "detail": "\"create a VAT return\" rejected (409): {\"data\":null,\"errors\":[\"A VAT return for this period already exists. O",
+      "klass": "WAD",
+      "reason": "re-run duplicate (data already exists from a prior run)",
+      "apiStatuses": [
+        409
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"A VAT return for this period already exists. Only one return can be open per period — please use the existing one.\"],\"meta\":null}"
+    },
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "username": "amwanga",
+      "severity": "SLOW",
+      "area": "gl",
+      "screen": "/admin/gl/accounts",
+      "workflow": "create a GL account",
+      "detail": "\"create a GL account\" rejected (409): {\"data\":null,\"errors\":[\"Account code 1100 already exists in this compa",
+      "klass": "WAD",
+      "reason": "re-run duplicate (data already exists from a prior run)",
+      "apiStatuses": [
+        409
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"Account code 1100 already exists in this company.\"],\"meta\":null}"
+    },
+    {
+      "persona": "Bakari Mbaga",
+      "role": "GROUP_GM",
+      "username": "bmbaga",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: GROUP_GM is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Bakari Mbaga",
+      "role": "GROUP_GM",
+      "username": "bmbaga",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: GROUP_GM is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Bakari Mbaga",
+      "role": "GROUP_GM",
+      "username": "bmbaga",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: GROUP_GM is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Bakari Mbaga",
+      "role": "GROUP_GM",
+      "username": "bmbaga",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: GROUP_GM is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "username": "dkessy",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "username": "dkessy",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "username": "dkessy",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "username": "dkessy",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "username": "dkessy",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emhagama",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "username": "emwakalukwa",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PRODUCTION_OFFICER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "username": "fmateru",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STORES_SUPERVISOR is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock",
+      "workflow": "open Stock on-hand",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/stock",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FINANCE_DIRECTOR is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "area": "fx",
+      "screen": "/admin/fx/rates",
+      "workflow": "add an exchange rate",
+      "detail": "\"add an exchange rate\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"An exchange rate for USD→TZS on 2026-07-01 alr",
+      "klass": "WAD",
+      "reason": "re-run duplicate (data already exists from a prior run)",
+      "apiStatuses": [
+        409
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"An exchange rate for USD→TZS on 2026-07-01 already exists.\"],\"meta\":null}"
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "username": "gmhina",
+      "severity": "SLOW",
+      "area": "costing",
+      "screen": "/admin/cost-centre/values",
+      "workflow": "create a dimension value",
+      "detail": "\"create a dimension value\" rejected (409) [NEEDS_PREREQ]: {\"data\":null,\"errors\":[\"Cost Centre value CC001 already exists.\"],\"met",
+      "klass": "WAD",
+      "reason": "re-run duplicate (data already exists from a prior run)",
+      "apiStatuses": [
+        409
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"Cost Centre value CC001 already exists.\"],\"meta\":null}"
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "username": "hjuma",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "username": "hjuma",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "username": "hjuma",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "username": "hjuma",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "username": "hjuma",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: BRANCH_MANAGER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "username": "hngassa",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: FIELD_SALES_AGENT is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: CASHIER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock",
+      "workflow": "open Stock on-hand",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/stock",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: HR_PAYROLL_OFFICER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "username": "nkileo",
+      "severity": "SLOW",
+      "area": "hr",
+      "screen": "/admin/hr/departments",
+      "workflow": "create a department",
+      "detail": "\"create a department\" rejected (409): {\"data\":null,\"errors\":[\"Department code already exists: OPS\"],\"meta\":n",
+      "klass": "WAD",
+      "reason": "re-run duplicate (data already exists from a prior run)",
+      "apiStatuses": [
+        409
+      ],
+      "apiBody": "{\"data\":null,\"errors\":[\"Department code already exists: OPS\"],\"meta\":null}"
+    },
+    {
+      "persona": "Rehema Salum",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "rsalum",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Rehema Salum",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "rsalum",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Rehema Salum",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "rsalum",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: SALES_OFFICER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: SALES_OFFICER is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: SALES_OFFICER is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: SALES_OFFICER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "username": "saloyce",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: SALES_OFFICER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "username": "skarume",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: STOREKEEPER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "ymbwana",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "ymbwana",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "role": "PROCUREMENT_OFFICER",
+      "username": "ymbwana",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROCUREMENT_OFFICER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "reporting",
+      "screen": "/admin/dashboard",
+      "workflow": "open Dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/dashboard",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/sales-orders",
+      "workflow": "open Sales orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/sales-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/pos/sell",
+      "workflow": "open POS sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/pos/sell",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "sales",
+      "screen": "/admin/customers",
+      "workflow": "open Customers",
+      "detail": "silently bounced to the home screen — I still could not reach Customers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/customers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/purchase-orders",
+      "workflow": "open Purchase orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/purchase-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/goods-receipts/create",
+      "workflow": "open Goods receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/goods-receipts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "purchasing",
+      "screen": "/admin/suppliers",
+      "workflow": "open Suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/suppliers",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock",
+      "workflow": "open Stock on-hand",
+      "detail": "silently bounced to the home screen — I still could not reach Stock on-hand even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/stock",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-counts/create",
+      "workflow": "open Stock count",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/stock-counts/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "stock",
+      "screen": "/admin/stock-transfers/create",
+      "workflow": "open Stock transfer",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/stock-transfers/create",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "ar",
+      "screen": "/admin/ar/receipts/record",
+      "workflow": "open Record receipt",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/ar/receipts/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/payments/record",
+      "workflow": "open Record payment",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/ap/payments/record",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "ap",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "workflow": "open Enter supplier bill",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/ap/supplier-bills/enter",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "gl",
+      "screen": "/admin/gl/journals/post",
+      "workflow": "open Post journal",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/gl/journals/post",
+      "apiStatuses": [],
+      "apiBody": ""
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "username": "zlyimo",
+      "severity": "BLOCKED",
+      "area": "manufacturing",
+      "screen": "/admin/work-orders",
+      "workflow": "open Work orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "klass": "WAD",
+      "reason": "role-scoping: PROJECT_MANAGER is not meant to reach /admin/work-orders",
+      "apiStatuses": [],
+      "apiBody": ""
+    }
+  ],
+  "review": [],
+  "coverage": {
+    "Dashboard": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Sales orders": {
+      "visited": 17,
+      "actioned": 8
+    },
+    "POS sell": {
+      "visited": 17,
+      "actioned": 2
+    },
+    "Customers": {
+      "visited": 17,
+      "actioned": 11
+    },
+    "Purchase orders": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Goods receipt": {
+      "visited": 17,
+      "actioned": 8
+    },
+    "Suppliers": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Stock on-hand": {
+      "visited": 17,
+      "actioned": 13
+    },
+    "Stock count": {
+      "visited": 17,
+      "actioned": 10
+    },
+    "Stock transfer": {
+      "visited": 17,
+      "actioned": 10
+    },
+    "Record receipt": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Record payment": {
+      "visited": 17,
+      "actioned": 7
+    },
+    "Enter supplier bill": {
+      "visited": 17,
+      "actioned": 4
+    },
+    "Post journal": {
+      "visited": 17,
+      "actioned": 4
+    },
+    "Work orders": {
+      "visited": 17,
+      "actioned": 6
+    },
+    "Purchase order detail": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Sales order detail": {
+      "visited": 17,
+      "actioned": 8
+    },
+    "Customer detail": {
+      "visited": 17,
+      "actioned": 11
+    },
+    "Supplier detail": {
+      "visited": 17,
+      "actioned": 9
+    },
+    "Product detail": {
+      "visited": 17,
+      "actioned": 11
+    },
+    "Goods receipt detail": {
+      "visited": 17,
+      "actioned": 11
+    },
+    "Sales invoice detail": {
+      "visited": 17,
+      "actioned": 8
+    },
+    "Employee detail": {
+      "visited": 17,
+      "actioned": 5
+    },
+    "Work order detail": {
+      "visited": 17,
+      "actioned": 6
+    },
+    "Supplier bill detail": {
+      "visited": 17,
+      "actioned": 8
+    },
+    "Tax": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "GL / Chart of Accounts": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "CRM – Leads": {
+      "visited": 6,
+      "actioned": 3
+    },
+    "CRM – Activities": {
+      "visited": 3,
+      "actioned": 0
+    },
+    "FX": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Cost Centres": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Fixed Assets — Asset Categories": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Fixed Assets — Register Asset": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Budgeting": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Cash & Bank": {
+      "visited": 6,
+      "actioned": 3
+    },
+    "HR / Departments": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "HR / Pay Components": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "HR / Leave Requests": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "HR / Staff Loans": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "HR / Payroll Runs": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Purchase Requisition": {
+      "visited": 4,
+      "actioned": 2
+    },
+    "RFQ": {
+      "visited": 4,
+      "actioned": 2
+    },
+    "Purchase Return": {
+      "visited": 4,
+      "actioned": 2
+    },
+    "Landed Cost": {
+      "visited": 4,
+      "actioned": 2
+    },
+    "Sales / Quotations": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Deliveries": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Sales Returns": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Blanket Orders": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Sales / Standing Orders": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "Stock / Locations": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Projects": {
+      "visited": 2,
+      "actioned": 1
+    }
+  },
+  "accessMatrix": [
+    {
+      "persona": "Amina Mwanga",
+      "role": "ACCOUNTANT",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Bakari Mbaga",
+      "role": "GROUP_GM",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Daudi Kessy",
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Editha Mhagama",
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Editrude Mwakalukwa",
+      "role": "PRODUCTION_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Frank Materu",
+      "role": "STORES_SUPERVISOR",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Grace Mhina",
+      "role": "FINANCE_DIRECTOR",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Halima Juma",
+      "role": "BRANCH_MANAGER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "OK"
+        }
+      ]
+    },
+    {
+      "persona": "Hamisi Ngassa",
+      "role": "FIELD_SALES_AGENT",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "OK"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "John Komba",
+      "role": "CASHIER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "FORBIDDEN"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Neema Kileo",
+      "role": "HR_PAYROLL_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Rehema Salum",
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Sabina Aloyce",
+      "role": "SALES_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "OK"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "OK"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Saidi Karume",
+      "role": "STOREKEEPER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Yusuf Mbwana",
+      "role": "PROCUREMENT_OFFICER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "OK"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "OK"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "OK"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "OK"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "OK"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "OK"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    },
+    {
+      "persona": "Zawadi Lyimo",
+      "role": "PROJECT_MANAGER",
+      "access": [
+        {
+          "label": "Dashboard",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Sales orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "POS sell",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Customers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Purchase orders",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Goods receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Suppliers",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock on-hand",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock count",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Stock transfer",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record receipt",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Record payment",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Enter supplier bill",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Post journal",
+          "outcome": "REDIRECTED_HOME"
+        },
+        {
+          "label": "Work orders",
+          "outcome": "REDIRECTED_HOME"
+        }
+      ]
+    }
+  ]
+}
