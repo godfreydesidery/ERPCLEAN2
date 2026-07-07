@@ -1,0 +1,374 @@
+{
+  "persona": "John Komba",
+  "username": "jkomba",
+  "role": "CASHIER",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "FORBIDDEN"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "REDIRECTED_HOME"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {
+    "record a cash entry": 1,
+    "register a cheque": 1,
+    "record a cash transfer": 1
+  },
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Cash & Bank": {
+      "visited": 6,
+      "actioned": 3
+    }
+  },
+  "problemCount": 11,
+  "uprs": [
+    "UPR-john-komba-01",
+    "UPR-john-komba-02",
+    "UPR-john-komba-03",
+    "UPR-john-komba-04",
+    "UPR-john-komba-05",
+    "UPR-john-komba-06",
+    "UPR-john-komba-07",
+    "UPR-john-komba-08",
+    "UPR-john-komba-09",
+    "UPR-john-komba-10",
+    "UPR-john-komba-11"
+  ],
+  "problems": [
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Dashboard",
+      "screen": "/admin/dashboard",
+      "detail": "silently bounced to the home screen — I still could not reach Dashboard even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Sales orders",
+      "screen": "/admin/sales-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Sales orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "I'm told I don't have permission to open POS sell, but it's part of my job (CASHIER)",
+      "evidence": {
+        "console": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ],
+        "page": [],
+        "api": [
+          {
+            "url": "/api/v1/agents?companyId=3&page=0&size=50",
+            "status": 403,
+            "method": "GET",
+            "body": "{\"data\":null,\"errors\":[\"You do not have permission to perform this action.\"],\"meta\":null}"
+          }
+        ]
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Purchase orders",
+      "screen": "/admin/purchase-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Purchase orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Goods receipt",
+      "screen": "/admin/goods-receipts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Goods receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Suppliers",
+      "screen": "/admin/suppliers",
+      "detail": "silently bounced to the home screen — I still could not reach Suppliers even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Stock count",
+      "screen": "/admin/stock-counts/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock count even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Stock transfer",
+      "screen": "/admin/stock-transfers/create",
+      "detail": "silently bounced to the home screen — I still could not reach Stock transfer even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Post journal",
+      "screen": "/admin/gl/journals/post",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "John Komba",
+      "designation": "Cashier / Cash & Bank Officer",
+      "username": "jkomba",
+      "severity": "BLOCKED",
+      "workflow": "open Work orders",
+      "screen": "/admin/work-orders",
+      "detail": "silently bounced to the home screen — I still could not reach Work orders even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    }
+  ]
+}

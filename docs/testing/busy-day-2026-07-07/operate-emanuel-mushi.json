@@ -1,0 +1,277 @@
+{
+  "persona": "Emanuel Mushi",
+  "username": "emushi",
+  "role": "BRANCH_MANAGER",
+  "access": [
+    {
+      "path": "/admin/dashboard",
+      "label": "Dashboard",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/sales-orders",
+      "label": "Sales orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/pos/sell",
+      "label": "POS sell",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/customers",
+      "label": "Customers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/purchase-orders",
+      "label": "Purchase orders",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/goods-receipts/create",
+      "label": "Goods receipt",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/suppliers",
+      "label": "Suppliers",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock",
+      "label": "Stock on-hand",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-counts/create",
+      "label": "Stock count",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/stock-transfers/create",
+      "label": "Stock transfer",
+      "outcome": "OK"
+    },
+    {
+      "path": "/admin/ar/receipts/record",
+      "label": "Record receipt",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ap/payments/record",
+      "label": "Record payment",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/ap/supplier-bills/enter",
+      "label": "Enter supplier bill",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/gl/journals/post",
+      "label": "Post journal",
+      "outcome": "REDIRECTED_HOME"
+    },
+    {
+      "path": "/admin/work-orders",
+      "label": "Work orders",
+      "outcome": "OK"
+    }
+  ],
+  "axe": [],
+  "loggedIn": true,
+  "created": {
+    "register a lead": 1
+  },
+  "usage": {
+    "Dashboard": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "POS sell": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Customers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Suppliers": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock on-hand": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock count": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Stock transfer": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Record receipt": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Record payment": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Enter supplier bill": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Post journal": {
+      "visited": 1,
+      "actioned": 0
+    },
+    "Work orders": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Purchase order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Customer detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Product detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Goods receipt detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Sales invoice detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Employee detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Work order detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "Supplier bill detail": {
+      "visited": 1,
+      "actioned": 1
+    },
+    "CRM – Leads": {
+      "visited": 2,
+      "actioned": 1
+    },
+    "CRM – Activities": {
+      "visited": 1,
+      "actioned": 0
+    }
+  },
+  "problemCount": 5,
+  "uprs": [
+    "UPR-emanuel-mushi-01",
+    "UPR-emanuel-mushi-02",
+    "UPR-emanuel-mushi-03",
+    "UPR-emanuel-mushi-04",
+    "UPR-emanuel-mushi-05"
+  ],
+  "problems": [
+    {
+      "persona": "Emanuel Mushi",
+      "designation": "Branch Manager — Arusha",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "workflow": "open POS sell",
+      "screen": "/admin/pos/sell",
+      "detail": "silently bounced to the home screen — I still could not reach POS sell even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "designation": "Branch Manager — Arusha",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "workflow": "open Record receipt",
+      "screen": "/admin/ar/receipts/record",
+      "detail": "silently bounced to the home screen — I still could not reach Record receipt even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "designation": "Branch Manager — Arusha",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "workflow": "open Record payment",
+      "screen": "/admin/ap/payments/record",
+      "detail": "silently bounced to the home screen — I still could not reach Record payment even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "designation": "Branch Manager — Arusha",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "workflow": "open Enter supplier bill",
+      "screen": "/admin/ap/supplier-bills/enter",
+      "detail": "silently bounced to the home screen — I still could not reach Enter supplier bill even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    },
+    {
+      "persona": "Emanuel Mushi",
+      "designation": "Branch Manager — Arusha",
+      "username": "emushi",
+      "severity": "BLOCKED",
+      "workflow": "open Post journal",
+      "screen": "/admin/gl/journals/post",
+      "detail": "silently bounced to the home screen — I still could not reach Post journal even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)",
+      "evidence": {
+        "console": [],
+        "page": [],
+        "api": []
+      }
+    }
+  ]
+}
