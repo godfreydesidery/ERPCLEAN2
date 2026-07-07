@@ -700,7 +700,17 @@ async function runDeep(page, buf, rec) {
       let outcome = 'OK';
       if (o === 'KICKED_TO_LOGIN') { outcome = 'KICKED_TO_LOGIN'; rec.problem('BLOCKED', `open ${label}`, path, 'I was thrown back to the login screen trying to open my own screen', buf.snapshot()); }
       else if (o === 'FORBIDDEN') { outcome = 'FORBIDDEN'; rec.problem('BLOCKED', `open ${label}`, path, `I'm told I don't have permission to open ${label}, but it's part of my job (${persona.role})`, buf.snapshot()); }
-      else if (o === 'REDIRECTED_HOME') { outcome = 'REDIRECTED_HOME'; rec.problem('BLOCKED', `open ${label}`, path, `silently bounced to the home screen — I still could not reach ${label} even after it settled (a real permission gap the guard hides as a home-redirect, with no message telling me why)`, buf.snapshot()); }
+      else if (o === 'REDIRECTED_HOME') {
+        outcome = 'REDIRECTED_HOME';
+        // The guard (#251) now shows a calm access message on a role-scoped redirect. When that
+        // message is present this is correctly-signalled role-scoping, NOT the old silent bounce —
+        // record the access outcome but do NOT file it as a problem. A redirect with NO message is
+        // still the real defect and IS filed.
+        const messaged = await page.getByText(/don.?t have access/i).first().count().catch(() => 0);
+        if (!messaged) {
+          rec.problem('BLOCKED', `open ${label}`, path, `silently bounced to the home screen with no message telling me why I could not reach ${label}`, buf.snapshot());
+        }
+      }
       else {
         const snap = buf.snapshot();
         const realCon = snap.console.filter(e => !/favicon|ResizeObserver|net::ERR_/.test(e));
