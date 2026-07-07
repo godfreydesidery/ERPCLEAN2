@@ -156,7 +156,8 @@ class _Aside extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF4F46E5), Color(0xFF7C3AED), Color(0xFF9333EA)],
+          // Blue → navy, echoing the register's Enter-blue and PAY-navy accents.
+          colors: [Color(0xFF1B6FD1), Color(0xFF14508F), Color(0xFF00296B)],
           stops: [0, .6, 1],
         ),
       ),
@@ -194,7 +195,7 @@ class _Aside extends StatelessWidget {
                       Expanded(
                           child: Text(t,
                               style: const TextStyle(
-                                  color: Color(0xFFE9E7FF), fontSize: 15.5))),
+                                  color: Color(0xFFD6E6FA), fontSize: 15.5))),
                     ],
                   ),
                 )),
