@@ -20,14 +20,22 @@ class AppColors {
   static const line = Color(0xFFE2E8F0);
   static const line2 = Color(0xFFCBD5E1);
 
-  // brand (indigo)
-  static const brand = Color(0xFF4F46E5);
-  static const brandD = Color(0xFF4338CA);
-  static const brandSoft = Color(0xFFEEF2FF);
+  // brand (blue) — primary actions and the "Enter" accent, per the reference till
+  static const brand = Color(0xFF1B6FD1);
+  static const brandD = Color(0xFF155BAC);
+  static const brandSoft = Color(0xFFE8F1FB);
 
-  // pay (green)
-  static const pay = Color(0xFF16A34A);
-  static const payD = Color(0xFF15803D);
+  // pay (navy) — the big PAY call-to-action, per the reference till
+  static const pay = Color(0xFF00296B);
+  static const payD = Color(0xFF001E52);
+
+  // keypad number keys — light "hardware" grey (reference till)
+  static const key = Color(0xFFE7EAEE);
+  static const keyLine = Color(0xFFC4CBD4);
+
+  // clear / CE — solid maroon, the destructive keypad action (reference till)
+  static const clear = Color(0xFF9E1B1B);
+  static const clearD = Color(0xFF7E1414);
 
   // status
   static const danger = Color(0xFFDC2626);

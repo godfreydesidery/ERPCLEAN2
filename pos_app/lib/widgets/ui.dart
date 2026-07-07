@@ -43,7 +43,7 @@ class Brand extends StatelessWidget {
   }
 }
 
-enum BtnKind { primary, ghost, danger }
+enum BtnKind { primary, ghost, danger, clear }
 
 /// A flat button matching the prototype `.btn` variants.
 class OrbixButton extends StatelessWidget {
@@ -85,6 +85,11 @@ class OrbixButton extends StatelessWidget {
         bg = AppColors.dangerSoft;
         fg = AppColors.danger;
         border = const Color(0xFFFECACA);
+        break;
+      case BtnKind.clear:
+        bg = AppColors.clear;
+        fg = Colors.white;
+        border = Colors.transparent;
         break;
     }
     final child = Row(
