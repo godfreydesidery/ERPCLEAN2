@@ -23,6 +23,7 @@ import {
   ProductPriceDto,
   ProductType,
   SetProductPriceRequest,
+  SetProductWeighingRequest,
   UnitOfMeasureDto,
   UpdateProductRequest,
   VatStatus,
@@ -81,6 +82,14 @@ export class ProductDetailComponent {
   readonly stockableDisabled = computed(() => this.fType() === 'SERVICE');
   readonly canManage = computed(() => this.session.hasPermission('PRODUCT.MANAGE'));
   readonly canAssign = computed(() => this.session.hasPermission('PRODUCT.BRANCH.ASSIGN'));
+
+  // ── Weighed goods (ADR-0044 D-1b) ───────────────────────────────────────────
+  readonly fWeighed = signal(false);
+  readonly fTareWeight = signal('');
+  readonly fScaleStep = signal('');
+  readonly fMaxSaleWeight = signal('');
+  readonly savingWeighing = signal(false);
+  readonly weighingError = signal<string | null>(null);
 
   // ── Barcodes ──────────────────────────────────────────────────────────────
   readonly barcodes = signal<ProductBarcodeDto[]>([]);
@@ -275,6 +284,19 @@ export class ProductDetailComponent {
     this.fCostAmount.set(p.cost?.amount ?? '');
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
     this.fVatStatus.set(p.vatStatus ?? 'STANDARD');
+    this.patchWeighingForm(p);
+  }
+
+  /**
+   * tareWeight/scaleStep/maxSaleWeight are BigDecimal on the wire (JSON numbers), same as
+   * reorderLevel/weight elsewhere on ProductDto — coerce with String() before handing to a
+   * text-input signal so a later .trim() never runs on a number (wire-number-vs-string gotcha).
+   */
+  private patchWeighingForm(p: ProductModel): void {
+    this.fWeighed.set(p.weighed ?? false);
+    this.fTareWeight.set(p.tareWeight != null ? String(p.tareWeight) : '');
+    this.fScaleStep.set(p.scaleStep != null ? String(p.scaleStep) : '');
+    this.fMaxSaleWeight.set(p.maxSaleWeight != null ? String(p.maxSaleWeight) : '');
   }
 
   onTypeChange(type: ProductType): void {
@@ -671,6 +693,45 @@ export class ProductDetailComponent {
       error: (err) => {
         this.saveError.set(this.messageFrom(err, 'Could not save the product.'));
         this.saving.set(false);
+      },
+    });
+  }
+
+  // ── Weighed goods (ADR-0044 D-1b) ───────────────────────────────────────────
+
+  onWeighedToggle(on: boolean): void {
+    this.fWeighed.set(on);
+  }
+
+  /**
+   * POSTs the weighing profile as a separate action from the main product save (mirrors
+   * setPrice/addBarcode/addBulkPack). Sends null for tare/scaleStep/maxSaleWeight when the
+   * toggle is off — the server also clears them itself, this just keeps the form consistent
+   * with what will come back on the next load.
+   */
+  saveWeighing(): void {
+    if (this.savingWeighing()) return;
+    this.savingWeighing.set(true);
+    this.weighingError.set(null);
+
+    const weighed = this.fWeighed();
+    const request: SetProductWeighingRequest = {
+      weighed,
+      tareWeight: weighed ? this.fTareWeight().trim() || null : null,
+      scaleStep: weighed ? this.fScaleStep().trim() || null : null,
+      maxSaleWeight: weighed ? this.fMaxSaleWeight().trim() || null : null,
+    };
+
+    this.productService.setWeighing(this.uid(), request).subscribe({
+      next: (updated) => {
+        this.product.set(updated);
+        this.patchWeighingForm(updated);
+        this.savingWeighing.set(false);
+        this.alerts.success('Weighing profile saved');
+      },
+      error: (err) => {
+        this.weighingError.set(this.messageFrom(err, 'Could not save the weighing profile.'));
+        this.savingWeighing.set(false);
       },
     });
   }

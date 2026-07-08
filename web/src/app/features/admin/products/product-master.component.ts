@@ -29,6 +29,7 @@ import {
   ProductPriceDto,
   ProductType,
   SetProductPriceRequest,
+  SetProductWeighingRequest,
   UnitOfMeasureDto,
   UpdateProductRequest,
   VatStatus,
@@ -213,6 +214,14 @@ export class ProductMasterComponent implements OnInit {
   readonly bulkPackRows = signal<BulkPackRow[]>([]);
   readonly newBulkPackUnitUid = signal('');
   readonly newBulkPackFactor = signal('');
+
+  // Weighed goods (ADR-0044 D-1b) — set via a post-create sub-resource call (setWeighing),
+  // like the other sub-resources below; needs the product uid, so it can't be part of the
+  // create/update anchor request.
+  readonly fWeighed = signal(false);
+  readonly fTareWeight = signal('');
+  readonly fScaleStep = signal('');
+  readonly fMaxSaleWeight = signal('');
 
   // Supplier search
   readonly supplierSearchQ = signal('');
@@ -485,6 +494,13 @@ export class ProductMasterComponent implements OnInit {
     if (p.preferredSupplierId) {
       this.fPreferredSupplierId.set(p.preferredSupplierId);
     }
+    // ADR-0044 D-1b: tare/scaleStep/maxSaleWeight are BigDecimal on the wire (JSON numbers), same
+    // as reorderLevel/weight — String()-coerce so a later .trim() on the signal never throws
+    // (wire-number-vs-string gotcha).
+    this.fWeighed.set(p.weighed ?? false);
+    this.fTareWeight.set(p.tareWeight != null ? String(p.tareWeight) : '');
+    this.fScaleStep.set(p.scaleStep != null ? String(p.scaleStep) : '');
+    this.fMaxSaleWeight.set(p.maxSaleWeight != null ? String(p.maxSaleWeight) : '');
   }
 
   // ── Company change ────────────────────────────────────────────────────────
@@ -701,6 +717,7 @@ export class ProductMasterComponent implements OnInit {
       { label: 'Pack units', status: 'pending', error: null },
       { label: 'Branch availability', status: 'pending', error: null },
       { label: 'Opening stock', status: 'pending', error: null },
+      { label: 'Weighed goods', status: 'pending', error: null },
     ];
     this.sectionResults.set(sections);
 
@@ -814,6 +831,7 @@ export class ProductMasterComponent implements OnInit {
       .then(() => this.runBulkPacks(productUid))
       .then(() => this.runBranches(productUid))
       .then(() => this.runOpeningStock(productUid))
+      .then(() => this.runWeighing(productUid))
       .finally(() => {
         this.saving.set(false);
         this.saveComplete.set(true);
@@ -1000,6 +1018,42 @@ export class ProductMasterComponent implements OnInit {
     });
   }
 
+  // ── Sub-step: weighed goods (ADR-0044 D-1b) ──────────────────────────────────
+
+  /**
+   * Chained after the product exists (needs its uid). Only calls setWeighing when "Sold by
+   * weight" is on — skipped (section 'done', no request) otherwise so a plain product isn't
+   * touched by a weighing call at all. A rejection here (e.g. base unit isn't a weight unit)
+   * only fails this section — the product itself is already saved, so the result panel shows
+   * "Product saved. Some details need attention." rather than implying nothing was saved.
+   */
+  private runWeighing(productUid: string): Promise<void> {
+    if (!this.fWeighed()) {
+      this.setSection(6, 'done');
+      return Promise.resolve();
+    }
+    this.setSection(6, 'saving');
+    const req: SetProductWeighingRequest = {
+      weighed: true,
+      tareWeight: this.fTareWeight().trim() || null,
+      scaleStep: this.fScaleStep().trim() || null,
+      maxSaleWeight: this.fMaxSaleWeight().trim() || null,
+    };
+    return new Promise((resolve) => {
+      this.productService.setWeighing(productUid, req).subscribe({
+        next: (updated) => {
+          this.product.set(updated);
+          this.setSection(6, 'done');
+          resolve();
+        },
+        error: (err) => {
+          this.setSection(6, 'failed', this.messageFrom(err, 'Could not save the weighed-goods profile.'));
+          resolve();
+        },
+      });
+    });
+  }
+
   // ── Retry a failed section ─────────────────────────────────────────────────
 
   retrySection(idx: number): void {
@@ -1013,6 +1067,7 @@ export class ProductMasterComponent implements OnInit {
       () => this.runBulkPacks(productUid),
       () => this.runBranches(productUid),
       () => this.runOpeningStock(productUid),
+      () => this.runWeighing(productUid),
     ];
     retriers[idx]?.();
   }

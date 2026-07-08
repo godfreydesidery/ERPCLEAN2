@@ -18,6 +18,7 @@ import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.DimensionType;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
@@ -62,6 +63,7 @@ import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -525,6 +527,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Resolve unit scoped to invoice company (F15)
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(), req.unitUid());
 
+        // Weighed goods (ADR-0044 D-1b): require a WEIGHT unit and normalise to the scale division.
+        // Runs before price resolution so a weighed product rung on a by-count unit gets the clear
+        // "sold by weight" message rather than the generic "unit not valid for this product".
+        BigDecimal quantity = applyWeighedGoodsRules(product, unit, req.quantity());
+
         // Snapshot price from price list (BR-SALES-03) — carries the VAT-inclusive stance of the
         // originating list (ADR-0056), threaded onto the line below.
         UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
@@ -535,7 +542,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         BigDecimal vatRate = resolveVatRate(inv.getCompanyId(), product);
 
         // Compute qty_in_base: qty × factor_to_base if bulk pack unit, else qty (base unit)
-        BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
+        BigDecimal qtyInBase = computeQtyInBase(product, unit, quantity);
 
         // Next line number
         short nextLineNo = (short) (lines.findMaxLineNo(inv.getId()) + 1);
@@ -544,11 +551,13 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 inv, nextLineNo,
                 product.getId(), product.getCode(), product.getName(),
                 unit.getId(), unit.getName(),
-                req.quantity(), qtyInBase,
+                quantity, qtyInBase,
                 listPrice, listPrice,   // applied = list initially
                 product.getVatStatus(), vatRate,
                 actorId());
         line.setPriceInclusive(resolvedPrice.vatInclusive());
+        // Record what the caller entered so weighed-goods scale-step rounding is visible (D-1b).
+        line.setRequestedQuantity(req.quantity());
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
@@ -562,7 +571,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         inv.getId(), inv.getUid())
                 .detail(Map.of(
                         "productUid", req.productUid(),
-                        "quantity", req.quantity().toPlainString(),
+                        "quantity", quantity.toPlainString(),
                         "unitPrice", listPrice.toPlainString())));
 
         return SalesInvoiceLineDto.from(saved);
@@ -587,11 +596,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 products.findById(line.getProductId())
                         .map(p -> p.getUid())
                         .orElseThrow(() -> new NotFoundException("Product not found.")));
-        BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());
+        // Weighed goods (ADR-0044 D-1b): require a WEIGHT unit and normalise to the scale division.
+        BigDecimal quantity = applyWeighedGoodsRules(product, unit, req.quantity());
+        BigDecimal qtyInBase = computeQtyInBase(product, unit, quantity);
 
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
-        line.setQuantity(req.quantity());
+        line.setQuantity(quantity);
         line.setQtyInBase(qtyInBase);
+        line.setRequestedQuantity(req.quantity());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
         line.setUpdatedAt(Instant.now());
@@ -905,19 +917,21 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
             if (inv.getTaxSummary() != null && !inv.getTaxSummary().isBlank()) {
                 try {
+                    // tax_summary is a JSON ARRAY produced by InvoiceTotalsCalculator.buildTaxSummary:
+                    // [{"status":"STANDARD","rate":"0.1800","net":"...","vat":"..."}, ...].
+                    // (Historic bug: this loop parsed it as an object keyed by band with taxableBase/
+                    // vatAmount keys, so the band breakdown was always empty — Amina #4.)
                     com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(inv.getTaxSummary());
-                    root.fields().forEachRemaining(entry -> {
-                        String band = entry.getKey();
-                        com.fasterxml.jackson.databind.JsonNode node = entry.getValue();
-                        BigDecimal base = node.has("taxableBase")
-                                ? new BigDecimal(node.get("taxableBase").asText("0"))
-                                : BigDecimal.ZERO;
-                        BigDecimal vat = node.has("vatAmount")
-                                ? new BigDecimal(node.get("vatAmount").asText("0"))
-                                : BigDecimal.ZERO;
+                    for (com.fasterxml.jackson.databind.JsonNode node : root) {
+                        String band = node.path("status").asText(null);
+                        if (band == null) {
+                            continue;
+                        }
+                        BigDecimal base = new BigDecimal(node.path("net").asText("0"));
+                        BigDecimal vat  = new BigDecimal(node.path("vat").asText("0"));
                         bandTaxableBase.merge(band, base, BigDecimal::add);
                         bandOutputVat.merge(band, vat, BigDecimal::add);
-                    });
+                    }
                 } catch (Exception ignored) {
                     // malformed tax_summary — treat as zero-band, vat_total_amount already counted
                 }
@@ -1069,6 +1083,47 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         throw new IllegalStateException(
                 unit.getName() + " is not a valid unit for " + product.getName()
                         + ". Use the product's base unit or a configured pack unit.");
+    }
+
+    /**
+     * Weighed-goods rules (ADR-0044 D-1b). For a sell-by-weight product the sale unit must be a
+     * WEIGHT unit (kilograms etc.) — rejecting it stops an API-only client silently ringing "1 unit"
+     * instead of a weight. When the product declares a scale division, the weighed quantity is
+     * rounded to the nearest multiple (HALF_UP). Returns the effective sale quantity; a no-op (the
+     * caller's quantity, unchanged) for a normal by-count product.
+     */
+    private BigDecimal applyWeighedGoodsRules(Product product, UnitOfMeasure unit, BigDecimal qty) {
+        if (!product.isWeighed()) {
+            return qty;
+        }
+        if (unit.getDimensionType() != DimensionType.WEIGHT) {
+            throw new IllegalStateException(
+                    product.getName() + " is sold by weight — choose a weight unit such as kilograms, not "
+                            + unit.getName() + ".");
+        }
+        BigDecimal effective = qty;
+        BigDecimal step = product.getScaleStep();
+        if (step != null && step.signum() > 0) {
+            // Round the net weight to the nearest whole number of scale divisions.
+            effective = qty.divide(step, 0, RoundingMode.HALF_UP).multiply(step);
+            // A weight that rounds down to zero would otherwise hit the raw quantity>0 DB check with
+            // an opaque message — reject it in plain language instead.
+            if (effective.signum() <= 0) {
+                throw new IllegalStateException(
+                        product.getName() + ": that weight is too small to sell. The smallest amount is "
+                                + step.stripTrailingZeros().toPlainString() + " " + unit.getName() + ".");
+            }
+        }
+        // Safety ceiling: reject an implausible weight (e.g. a kg/gram fat-finger, 813 → 813 kg).
+        BigDecimal max = product.getMaxSaleWeight();
+        if (max != null && effective.compareTo(max) > 0) {
+            throw new IllegalStateException(
+                    product.getName() + ": " + effective.stripTrailingZeros().toPlainString() + " "
+                            + unit.getName() + " is above the maximum sale weight of "
+                            + max.stripTrailingZeros().toPlainString() + " " + unit.getName()
+                            + ". Please check the weight.");
+        }
+        return effective;
     }
 
     private void assertDraft(SalesInvoice inv, String operation) {

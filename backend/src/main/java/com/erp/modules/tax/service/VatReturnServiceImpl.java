@@ -258,6 +258,16 @@ public class VatReturnServiceImpl implements VatReturnService {
         vatReturn.setOutputVat(comp.totalOutput());
         vatReturn.setInputVat(comp.totalInput());
 
+        // Sales-turnover breakdown from the output bands (Amina #4): the return form reports the
+        // taxable value of supplies by band, not just the net-payable figure. Turnover here is the
+        // taxable (ex-VAT) base. purchases_turnover is input-side (supplier bills) and left as-is.
+        BigDecimal salesTurnover = comp.byBand().values().stream()
+                .map(VatReturnComputationDto.BandTotalsDto::taxableBase)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        vatReturn.setSalesTurnover(salesTurnover);
+        vatReturn.setZeroRatedSales(bandBase(comp, "ZERO_RATED"));
+        vatReturn.setExemptSales(bandBase(comp, "EXEMPT"));
+
         // Re-sum adjustments (signed)
         BigDecimal adjTotal = adjustments.findByVatReturnId(vatReturn.getId()).stream()
                 .map(a -> a.signedAmount())
@@ -278,6 +288,12 @@ public class VatReturnServiceImpl implements VatReturnService {
         vatReturn.setUpdatedAt(Instant.now());
         vatReturn.setUpdatedBy(actorId);
         return returns.save(vatReturn);
+    }
+
+    /** Taxable base for a single output band, or zero when the period has no supplies in that band. */
+    private static BigDecimal bandBase(VatReturnComputationDto comp, String band) {
+        VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(band);
+        return b != null ? b.taxableBase() : BigDecimal.ZERO;
     }
 
     // -------------------------------------------------------------------------

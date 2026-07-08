@@ -92,6 +92,15 @@ public class SalesInvoiceLine {
     @Setter
     private BigDecimal qtyInBase;
 
+    /**
+     * Quantity the caller originally entered, before any weighed-goods scale-step rounding
+     * (ADR-0044 D-1b). Equals {@link #quantity} unless rounding moved it; nullable for lines that
+     * predate this column. Lets the receipt show "entered 0.813 kg → billed 0.815 kg".
+     */
+    @Column(name = "requested_quantity", precision = 19, scale = 6)
+    @Setter
+    private BigDecimal requestedQuantity;
+
     /** Snapshot of the applicable price-list net unit price (list price, FR-SALES-07). */
     @Column(name = "list_price_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal listPriceAmount;

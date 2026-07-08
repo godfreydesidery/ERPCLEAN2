@@ -240,14 +240,68 @@
                           <span class="text-muted small">{{ line.productName }}</span>
                         </td>
                         <td class="small text-muted">{{ line.unitName }}</td>
-                        <td class="num">{{ line.quantity }}</td>
                         <td class="num">
-                          {{ line.unitPriceAmount }}
-                          <span class="status-tag ms-1"
-                                [class.status-tag--info]="line.priceInclusive"
-                                [class.status-tag--neutral]="!line.priceInclusive">
-                            {{ line.priceInclusive ? 'incl. VAT' : 'excl. VAT' }}
-                          </span>
+                          {{ line.quantity }}
+                          @if (quantityWasRounded(line)) {
+                            <span class="d-block text-muted small">
+                              entered {{ line.requestedQuantity }} → billed {{ line.quantity }}
+                            </span>
+                          }
+                        </td>
+                        <td class="num">
+                          @if (overridingLineUid() === line.uid) {
+                            <form class="d-flex gap-1 align-items-center justify-content-end flex-wrap"
+                                  (ngSubmit)="saveOverridePrice(line)" aria-label="Override unit price">
+                              <label class="sr-only" [for]="'overridePrice-' + line.uid">
+                                Unit price for {{ line.productName }}
+                              </label>
+                              <input [id]="'overridePrice-' + line.uid" name="overridePrice" type="text"
+                                     class="form-control form-control-sm"
+                                     [ngModel]="overridePriceInput()" (ngModelChange)="overridePriceInput.set($event)"
+                                     [disabled]="overridePriceSaving()" style="max-width:100px"
+                                     autocomplete="off" />
+                              <button type="submit" class="btn btn-sm btn-primary"
+                                      [disabled]="overridePriceSaving()"
+                                      [attr.aria-label]="'Save overridden price for ' + line.productName">
+                                @if (overridePriceSaving()) {
+                                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                } @else {
+                                  <i class="bi bi-check-lg" aria-hidden="true"></i>
+                                }
+                                <span class="sr-only">Save</span>
+                              </button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      (click)="cancelOverridePrice()"
+                                      [attr.aria-label]="'Cancel overriding price for ' + line.productName">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                <span class="sr-only">Cancel</span>
+                              </button>
+                            </form>
+                            @if (overridePriceError(); as msg) {
+                              <p class="text-danger small mt-1 mb-0 text-end" role="alert">{{ msg }}</p>
+                            }
+                          } @else {
+                            {{ line.unitPriceAmount }}
+                            <span class="status-tag ms-1"
+                                  [class.status-tag--info]="line.priceInclusive"
+                                  [class.status-tag--neutral]="!line.priceInclusive">
+                              {{ line.priceInclusive ? 'incl. VAT' : 'excl. VAT' }}
+                            </span>
+                            @if (line.priceOverridden) {
+                              <span class="status-tag status-tag--warn ms-1"
+                                    title="This line's price was manually overridden">
+                                Overridden
+                              </span>
+                            }
+                            @if (isDraft() && canOverridePrice()) {
+                              <button type="button" class="btn btn-sm btn-link p-0 ms-1 align-baseline"
+                                      (click)="startOverridePrice(line)"
+                                      [attr.aria-label]="'Override price for ' + line.productName">
+                                <i class="bi bi-pencil" aria-hidden="true"></i>
+                                <span class="sr-only">Override price</span>
+                              </button>
+                            }
+                          }
                         </td>
                         <td class="num small">
                           @if (line.lineDiscountAmount) {
@@ -268,7 +322,7 @@
                         @if (isDraft() && canCreate()) {
                           <td>
                             <button type="button" class="btn btn-sm btn-outline-danger"
-                                    [disabled]="rowBusyLineUid() !== null"
+                                    [disabled]="rowBusyLineUid() !== null || overridingLineUid() !== null"
                                     (click)="removeLine(line)"
                                     [attr.aria-label]="'Remove line for ' + line.productName">
                               @if (rowBusyLineUid() === line.uid) {

@@ -16,7 +16,10 @@
  *  8. Opening stock: skipped when qty is blank / non-positive / type=SERVICE.
  *  9. Barcode primary enforcement: first row auto-primary; setPrimaryBarcode transfers flag.
  * 10. Form validation: name required; base unit required.
- * 11. Full happy-path: all 6 sections done.
+ * 11. Full happy-path: all sections done.
+ * 12. Weighed goods (ADR-0044 D-1b): setWeighing is skipped when the toggle is off; called with
+ *     the newly-created uid when it's on; a weighing-only failure doesn't undo/hide the already-
+ *     saved product (fails only that section).
  */
 
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
@@ -99,6 +102,7 @@ function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
     addBarcode:     vi.fn(() => of({})),
     addBulkPack:    vi.fn(() => of({})),
     assignBranch:   vi.fn(() => of({})),
+    setWeighing:    vi.fn(() => of(CREATED_PRODUCT)),
     ...overrides,
   };
 }
@@ -652,5 +656,120 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['addBarcode']).toHaveBeenCalledOnce();
     expect(svc['addBulkPack']).toHaveBeenCalledOnce();
     expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
+  });
+});
+
+// ── 11. Weighed goods (ADR-0044 D-1b) ─────────────────────────────────────────
+
+describe('ProductMasterComponent — weighed goods sub-step', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('create-without-weighing: does not call setWeighing when "Sold by weight" is left off', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    // fWeighed left at its default (false).
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['setWeighing']).not.toHaveBeenCalled();
+    expect(comp.sectionResults().find((s) => s.label === 'Weighed goods')?.status).toBe('done');
+    expect(comp.sectionResults().every((s) => s.status === 'done')).toBe(true);
+  });
+
+  it('create-with-weighing: chains setWeighing with the newly-created uid after the product is saved', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1');
+    comp.fWeighed.set(true);
+    comp.fTareWeight.set(' 0.050 ');
+    comp.fScaleStep.set(' 0.005 ');
+    comp.fMaxSaleWeight.set(' 25 ');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['create']).toHaveBeenCalledOnce();
+    // Chained after create — called with the uid the create() call returned, not a blank/pending one.
+    expect(svc['setWeighing']).toHaveBeenCalledWith('PUID1', {
+      weighed: true,
+      tareWeight: '0.050',
+      scaleStep: '0.005',
+      maxSaleWeight: '25',
+    });
+    expect(comp.sectionResults().find((s) => s.label === 'Weighed goods')?.status).toBe('done');
+  });
+
+  it('sends nulls for tare/scaleStep/maxSaleWeight when the fields are left blank', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1');
+    comp.fWeighed.set(true);
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['setWeighing']).toHaveBeenCalledWith('PUID1', {
+      weighed: true,
+      tareWeight: null,
+      scaleStep: null,
+      maxSaleWeight: null,
+    });
+  });
+});
+
+// ── 12. Weighed goods sub-step failure ────────────────────────────────────────
+
+describe('ProductMasterComponent — weighed goods sub-step failure', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({
+      productServiceOverrides: {
+        setWeighing: vi.fn(() => throwError(() => new HttpErrorResponse({
+          status: 422,
+          error: { errors: ['A weighed product must use a weight base unit such as kilograms.'] },
+        }))),
+      },
+    });
+  });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('fails only the Weighed goods section — the already-created product is not hidden as unsaved', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1'); // PCS in the test fixture, not a weight unit — server would reject
+    comp.fWeighed.set(true);
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    // The anchor (product) succeeded — savedUid is set and its section is 'done' — so the
+    // failure must not read as "the product wasn't saved".
+    expect(comp.savedUid()).toBe('PUID1');
+    expect(comp.sectionResults()[0].status).toBe('done');
+    expect(comp.anchorFailed()).toBe(false);
+
+    const weighingSection = comp.sectionResults().find((s) => s.label === 'Weighed goods');
+    expect(weighingSection?.status).toBe('failed');
+    expect(weighingSection?.error).toBe('A weighed product must use a weight base unit such as kilograms.');
+    expect(comp.hasAnyFailure()).toBe(true);
+
+    fixture.detectChanges();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('Product saved. Some details need attention.');
+    expect(html).toContain('Open product');
   });
 });

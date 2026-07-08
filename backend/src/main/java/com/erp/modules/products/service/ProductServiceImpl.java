@@ -16,6 +16,7 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBarcode;
@@ -24,6 +25,7 @@ import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductComponent;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.DimensionType;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
@@ -203,6 +205,15 @@ public class ProductServiceImpl implements ProductService {
         // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
         UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());
 
+        // ADR-0044 D-1b: a weighed product must keep a WEIGHT base unit. The /weighing endpoint
+        // enforces this, but a plain product edit must not be able to drop a weighed product onto a
+        // non-weight unit through the back door (leaving e.g. weighed=true on a PCS base).
+        if (p.isWeighed() && baseUnit.getDimensionType() != DimensionType.WEIGHT) {
+            throw new IllegalArgumentException(
+                    "This product is sold by weight, so its base unit must be a weight unit such as "
+                            + "kilograms. Unmark it as weighed before changing it to " + baseUnit.getName() + ".");
+        }
+
         String nm = req.name() == null ? "" : req.name().trim();
         if (!nm.isEmpty()
                 && products.existsByCompanyIdAndNormalizedNameExcludingId(p.getCompanyId(), nm, p.getId())) {
@@ -305,6 +316,19 @@ public class ProductServiceImpl implements ProductService {
         // Resolve unitUid scoped to the product's company (cross-tenant safe — brief addBulkPack_crossCompanyUnit)
         UnitOfMeasure unit = resolveUnit(p.getCompanyId(), req.unitUid());
 
+        // A pack unit must be dimensionally sensible for the product: a discrete COUNT package
+        // (Box/Bag/Carton) or the SAME physical dimension as the base unit (e.g. a KG pack of a
+        // GRAM-based product). Reject a cross-dimension unit (e.g. a Litre pack of a weight product).
+        DimensionType packDim = unit.getDimensionType();
+        DimensionType baseDim = p.getBaseUnit().getDimensionType();
+        if (packDim != DimensionType.COUNT && packDim != baseDim) {
+            throw new IllegalArgumentException(
+                    unit.getName() + " can't be a pack size for " + p.getName()
+                            + ", which is measured by " + baseDim.name().toLowerCase()
+                            + ". Use a count unit such as Box or Bag, or a "
+                            + baseDim.name().toLowerCase() + " unit.");
+        }
+
         ProductBulkPack bp = bulkPacks.save(new ProductBulkPack(p, unit, req.factorToBase(), actorId()));
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
                 .detail(Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid())));
@@ -366,11 +390,37 @@ public class ProductServiceImpl implements ProductService {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         // company_id denormalised at ProductBarcode construction — invariant enforced there
-        ProductBarcode barcode = barcodes.save(new ProductBarcode(p, req.barcode(), req.primary(), actorId()));
+        ProductBarcode barcode = new ProductBarcode(p, req.barcode(), req.primary(), actorId());
+        // Optionally bind the barcode to a specific sellable unit (base or a configured pack) so a
+        // scan resolves to that pack size (ADR-0048 per-pack pricing) — persona finding: scanning a
+        // 1kg-bag vs 2kg-bag barcode was previously indistinguishable.
+        if (req.unitUid() != null && !req.unitUid().isBlank()) {
+            UnitOfMeasure unit = resolveUnit(p.getCompanyId(), req.unitUid());
+            assertSellableUnitForProduct(p, unit);
+            barcode.setUomId(unit.getId());
+        }
+        barcode = barcodes.save(barcode);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BARCODE_ADD, "product_barcodes",
                         p.getId(), p.getUid())
-                .detail(Map.of("barcode", req.barcode(), "isPrimary", String.valueOf(req.primary()))));
+                .detail(Map.of("barcode", req.barcode(), "isPrimary", String.valueOf(req.primary()),
+                        "unitUid", String.valueOf(req.unitUid()))));
         return ProductBarcodeDto.from(barcode);
+    }
+
+    /**
+     * Asserts {@code unit} is a valid transaction unit for {@code product}: its base unit or a
+     * configured bulk-pack unit. Mirrors the sale-line rule so a barcode can only bind to a unit the
+     * product can actually be sold in.
+     */
+    private void assertSellableUnitForProduct(Product product, UnitOfMeasure unit) {
+        boolean isBase = unit.getId().equals(product.getBaseUnit().getId());
+        boolean isPack = bulkPacks.findByProductId(product.getId()).stream()
+                .anyMatch(bp -> bp.getUnit().getId().equals(unit.getId()));
+        if (!isBase && !isPack) {
+            throw new IllegalArgumentException(
+                    unit.getName() + " is not a valid unit for " + product.getName()
+                            + ". A barcode can only address the base unit or a configured pack unit.");
+        }
     }
 
     @Override
@@ -518,6 +568,54 @@ public class ProductServiceImpl implements ProductService {
         return prices.findByProductId(p.getId()).stream()
                 .map(ProductPriceDto::from)
                 .toList();
+    }
+
+    // -------------------------------------------------------------------------
+    // Weighed goods (ADR-0044 D-1b)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public ProductDto setWeighing(String uid, SetProductWeighingRequest req) {
+        Product p = require(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+
+        // Range checks with friendly, field-name-free messages (error-hygiene rule).
+        if (req.tareWeight() != null && req.tareWeight().signum() < 0) {
+            throw new IllegalArgumentException("Tare weight cannot be negative.");
+        }
+        if (req.scaleStep() != null && req.scaleStep().signum() <= 0) {
+            throw new IllegalArgumentException("Scale step must be greater than zero.");
+        }
+        if (req.maxSaleWeight() != null && req.maxSaleWeight().signum() <= 0) {
+            throw new IllegalArgumentException("Maximum sale weight must be greater than zero.");
+        }
+
+        // A weighed product must be priced per weight-unit, so its base unit must be a WEIGHT unit
+        // (e.g. kilograms). Validating here means the sale path can trust the flag; misconfiguration
+        // is rejected at set-up time with a friendly, actionable message.
+        if (req.weighed()
+                && (p.getBaseUnit() == null || p.getBaseUnit().getDimensionType() != DimensionType.WEIGHT)) {
+            throw new IllegalArgumentException(
+                    "A weighed product must use a weight base unit such as kilograms. "
+                            + "Set the product's base unit to a weight unit first, then mark it weighed.");
+        }
+
+        p.setWeighed(req.weighed());
+        // Tare / scale-step / max-weight are only meaningful for a weighed product; clear them when
+        // unmarking so a later re-mark starts clean and non-weighed rows never carry stray config.
+        p.setTareWeight(req.weighed() ? req.tareWeight() : null);
+        p.setScaleStep(req.weighed() ? req.scaleStep() : null);
+        p.setMaxSaleWeight(req.weighed() ? req.maxSaleWeight() : null);
+        p.setUpdatedAt(Instant.now());
+        p.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
+                .detail(Map.of(
+                        "weighed", String.valueOf(req.weighed()),
+                        "tareWeight", String.valueOf(p.getTareWeight()),
+                        "scaleStep", String.valueOf(p.getScaleStep()),
+                        "maxSaleWeight", String.valueOf(p.getMaxSaleWeight()))));
+        return ProductDto.from(p);
     }
 
     // -------------------------------------------------------------------------
