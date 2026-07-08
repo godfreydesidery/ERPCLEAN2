@@ -22,6 +22,7 @@ export class PurchaseSettingsService {
   }
 
   update(request: UpdatePurchaseSettingsRequest): Observable<PurchaseSettingsDto> {
+    // request already carries receiptTolerancePct (number | null) — see UpdatePurchaseSettingsRequest.
     return this.http.put<PurchaseSettingsDto>(this.base, request);
   }
 }

@@ -16,5 +16,7 @@ public record UpdatePurchaseSettingsRequest(
         @PositiveOrZero BigDecimal matchToleranceAbs,
         Boolean    autoCloseEnabled,
         Boolean    requisitionApprovalEnabled,
-        @PositiveOrZero BigDecimal requisitionApprovalThresholdAmount
+        @PositiveOrZero BigDecimal requisitionApprovalThresholdAmount,
+        // Saidi #4 — goods-receipt over-receipt tolerance percent (null clears / strict)
+        @PositiveOrZero BigDecimal receiptTolerancePct
 ) {}

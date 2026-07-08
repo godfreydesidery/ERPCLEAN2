@@ -5,6 +5,9 @@
  *  1. fThresholdAmount set as a NUMBER (via ngModelChange) is stored as a string.
  *  2. save() does not throw when fThresholdAmount was set as a number.
  *  3. save() posts the stringified threshold value.
+ *  4. receiptTolerancePct: loaded from a numeric DTO value into the string form field.
+ *  5. receiptTolerancePct: blank form field sends null (strict receiving).
+ *  6. receiptTolerancePct: populated form field sends a number, not a string.
  */
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -21,6 +24,7 @@ const STUB_COMPANY = { uid: 'CO1', id: '10', name: 'Main Co' };
 const STUB_SETTINGS = {
   id: '1', uid: 'S1', companyId: '10', companyUid: 'CO1',
   poApprovalEnabled: true, poApprovalThresholdAmount: '5000', currency: 'TZS',
+  receiptTolerancePct: null,
 };
 
 function makeBed(updateSpy = vi.fn(() => of(STUB_SETTINGS))) {
@@ -102,5 +106,58 @@ describe('PurchaseSettingsComponent — number-input coercion', () => {
     expect(updateSpy).toHaveBeenCalledOnce();
     const req = (updateSpy.mock.calls as any[][])[0][0];
     expect(req.poApprovalThresholdAmount).toBe('7500');
+  });
+
+  // ── 4-6. receiptTolerancePct round-trip ────────────────────────────────────
+
+  it('loads a numeric receiptTolerancePct from the DTO into the string form field', async () => {
+    makeBed();
+    // Real backend wire shape: BigDecimal serialises as a JSON number, not a string.
+    const settingsWithTolerance = { ...STUB_SETTINGS, receiptTolerancePct: 12.5 };
+    TestBed.overrideProvider(PurchaseSettingsService, {
+      useValue: {
+        getByCompany: vi.fn(() => of(settingsWithTolerance)),
+        update: vi.fn(() => of(settingsWithTolerance)),
+      },
+    });
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.fReceiptTolerancePct()).toBe('12.5');
+  });
+
+  it('save() sends null for receiptTolerancePct when the field is left blank', async () => {
+    const { updateSpy } = makeBed();
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fPoApprovalEnabled.set(true);
+    comp.fThresholdAmount.set(String(3000));
+    comp.fReceiptTolerancePct.set('');
+
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    expect(updateSpy).toHaveBeenCalledOnce();
+    const req = (updateSpy.mock.calls as any[][])[0][0];
+    expect(req.receiptTolerancePct).toBeNull();
+  });
+
+  it('save() sends receiptTolerancePct as a number when populated', async () => {
+    const { updateSpy } = makeBed();
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fPoApprovalEnabled.set(true);
+    comp.fThresholdAmount.set(String(3000));
+    comp.fReceiptTolerancePct.set('7.5');
+
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    expect(updateSpy).toHaveBeenCalledOnce();
+    const req = (updateSpy.mock.calls as any[][])[0][0];
+    expect(req.receiptTolerancePct).toBe(7.5);
+    expect(typeof req.receiptTolerancePct).toBe('number');
   });
 });

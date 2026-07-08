@@ -97,6 +97,25 @@
                     </div>
                   }
 
+                  <div class="erp-form-grid mb-3">
+                    <div class="erp-field">
+                      <label class="form-label small text-muted mb-1" for="receiptTolerancePct">
+                        Goods-receipt over-receipt tolerance (%)
+                      </label>
+                      <input id="receiptTolerancePct" name="receiptTolerancePct" type="number"
+                             class="form-control"
+                             placeholder="0.00"
+                             [ngModel]="fReceiptTolerancePct()"
+                             (ngModelChange)="fReceiptTolerancePct.set(String($event ?? ''))"
+                             min="0" step="any"
+                             [disabled]="saving() || !canEdit()" />
+                      <span class="hint">
+                        Allow goods receipts to exceed the ordered quantity by up to this percent.
+                        Leave blank for strict receiving (no over-receipt).
+                      </span>
+                    </div>
+                  </div>
+
                   @if (saveError(); as msg) {
                     <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
                   }
