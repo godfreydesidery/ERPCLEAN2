@@ -16,6 +16,8 @@
  *  6. Weighed goods (ADR-0044 D-1b): toggle reveals/hides tare/scaleStep/maxSaleWeight inputs,
  *     saveWeighing() threads the request correctly (including the clear-on-off path), the
  *     read-back coerces wire numbers to strings, and a server validation error surfaces inline.
+ *  7. Weighed goods client-side gate: toggle disabled + hint for a non-WEIGHT base unit,
+ *     enabled for a WEIGHT base unit, and reset-on-base-unit-change.
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -30,7 +32,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { ProductService } from './product.service';
 import { ProductDetailComponent } from './product-detail.component';
-import type { ProductBulkPackDto, ProductPriceDto } from '../models/product.model';
+import type { ProductBulkPackDto, ProductPriceDto, UnitOfMeasureDto } from '../models/product.model';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,17 @@ const PRODUCT = {
   baseUnitUid: 'U1', baseUnitCode: 'PCS', baseUnitName: 'Pieces',
   cost: null, vatStatus: 'STANDARD' as const, status: 'ACTIVE' as const,
   version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+};
+
+// PRODUCT's base unit (U1, PCS) is a COUNT unit; U3 (KG) is the WEIGHT unit used to enable
+// the "Sold by weight" toggle in the client-side gating specs.
+const UNIT_PCS: UnitOfMeasureDto = {
+  id: '1', uid: 'U1', companyId: '10', code: 'PCS', name: 'Pieces', status: 'ACTIVE',
+  dimensionType: 'COUNT', version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
+};
+const UNIT_KG: UnitOfMeasureDto = {
+  id: '3', uid: 'U3', companyId: '10', code: 'KG', name: 'Kilograms', status: 'ACTIVE',
+  dimensionType: 'WEIGHT', version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null,
 };
 
 const BULK_PACK_CARTON: ProductBulkPackDto = {
@@ -85,7 +98,7 @@ function makeSessionStore() {
 function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
   return {
     getByUid: vi.fn(() => of(PRODUCT)),
-    listUnits: vi.fn(() => of({ rows: [], meta: { page: 0, size: 200, totalElements: 0, totalPages: 1, hasNext: false } })),
+    listUnits: vi.fn(() => of({ rows: [UNIT_PCS, UNIT_KG], meta: { page: 0, size: 200, totalElements: 2, totalPages: 1, hasNext: false } })),
     listBarcodes: vi.fn(() => of([])),
     listBulkPacks: vi.fn(() => of([BULK_PACK_CARTON])),
     listPrices: vi.fn(() => of([BASE_PRICE_ROW, PACK_PRICE_ROW])),
@@ -253,6 +266,8 @@ describe('ProductDetailComponent — removePrice() unitUid threading', () => {
 });
 
 // ── Weighed goods (ADR-0044 D-1b) ───────────────────────────────────────────────
+// PRODUCT's base unit (U1) is PCS/COUNT, so the toggle is disabled by default in this fixture —
+// tests that need it "on" first call onBaseUnitChange('U3') to select the KG/WEIGHT unit.
 
 describe('ProductDetailComponent — Weighed goods', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -262,6 +277,8 @@ describe('ProductDetailComponent — Weighed goods', () => {
     makeBed();
     const fixture = await createDetail();
     const comp = fixture.componentInstance;
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT — enables the toggle
+    fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('#fWeighed')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('#fTareWeight')).toBeNull();
@@ -287,6 +304,7 @@ describe('ProductDetailComponent — Weighed goods', () => {
     const comp = fixture.componentInstance;
     const svc = asMock(TestBed.inject(ProductService));
 
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
     comp.onWeighedToggle(true);
     comp.fTareWeight.set(' 0.050 ');
     comp.fScaleStep.set(' 0.005 ');
@@ -327,6 +345,7 @@ describe('ProductDetailComponent — Weighed goods', () => {
     // must String()-coerce them or a later .trim() on the signal would throw (wire-number-vs-string).
     const updated = {
       ...PRODUCT,
+      baseUnitUid: 'U3', baseUnitCode: 'KG', baseUnitName: 'Kilograms',
       weighed: true,
       tareWeight: 0.05 as unknown as string,
       scaleStep: 0.005 as unknown as string,
@@ -336,6 +355,7 @@ describe('ProductDetailComponent — Weighed goods', () => {
     const fixture = await createDetail();
     const comp = fixture.componentInstance;
 
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
     comp.onWeighedToggle(true);
     comp.saveWeighing();
     await vi.runAllTimersAsync();
@@ -358,6 +378,7 @@ describe('ProductDetailComponent — Weighed goods', () => {
     const fixture = await createDetail();
     const comp = fixture.componentInstance;
 
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT — otherwise onWeighedToggle(true) would no-op
     comp.onWeighedToggle(true);
     comp.saveWeighing();
     await vi.runAllTimersAsync();
@@ -367,5 +388,60 @@ describe('ProductDetailComponent — Weighed goods', () => {
     expect(comp.savingWeighing()).toBe(false);
     const alertEl = fixture.nativeElement.querySelector('form[aria-label="Configure weighed goods"] [role="alert"]');
     expect(alertEl?.textContent).toContain('A weighed product must use a weight base unit');
+  });
+});
+
+// ── Weighed goods: client-side base-unit gate ───────────────────────────────────
+
+describe('ProductDetailComponent — Weighed goods base-unit gate', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('disables the toggle and shows a hint for the product\'s default (COUNT) base unit', async () => {
+    makeBed();
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    expect(comp.baseUnitIsWeight()).toBe(false);
+    const toggle: HTMLInputElement | null = fixture.nativeElement.querySelector('#fWeighed');
+    expect(toggle?.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Choose a weight base unit');
+  });
+
+  it('enables the toggle once a WEIGHT base unit is selected', async () => {
+    makeBed();
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    fixture.detectChanges();
+
+    // baseUnitIsWeight is what drives the toggle's [disabled]; assert the gate signal + that the hint
+    // is gone. (The rendered `disabled` on the [ngModel] control also folds in forms/CD timing, so it
+    // isn't a clean synchronous read of the gate.)
+    expect(comp.baseUnitIsWeight()).toBe(true);
+    expect(fixture.nativeElement.textContent).not.toContain('Choose a weight base unit');
+  });
+
+  it('ignores onWeighedToggle(true) while the base unit is not a WEIGHT unit (backstop)', async () => {
+    makeBed();
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.onWeighedToggle(true); // base unit is still U1/PCS/COUNT
+    expect(comp.fWeighed()).toBe(false);
+  });
+
+  it('resets "Sold by weight" off when the base unit changes away from WEIGHT', async () => {
+    makeBed();
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(true);
+
+    comp.onBaseUnitChange('U1'); // back to PCS/COUNT
+    expect(comp.fWeighed()).toBe(false);
   });
 });

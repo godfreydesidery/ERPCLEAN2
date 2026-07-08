@@ -11,6 +11,12 @@ export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type UomStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 /** VAT classification for a product. Mirrors VatStatus on the backend. */
 export type VatStatus = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT';
+/**
+ * Physical dimension family of a unit (P2 D5, ADR-0041 D5). Groups units for conversion
+ * semantics — e.g. weighed goods (ADR-0044 D-1b) require the product's base unit to be WEIGHT.
+ * Defaults to COUNT server-side.
+ */
+export type DimensionType = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH' | 'TIME';
 
 // ── UnitOfMeasureDto ──────────────────────────────────────────────────────────
 
@@ -21,6 +27,12 @@ export interface UnitOfMeasureDto {
   code: string;
   name: string;
   status: UomStatus;
+  /** Groups this unit for conversion semantics — e.g. gates whether a product using it may be sold by weight. */
+  dimensionType?: DimensionType;
+  /** Decimal places used to round quantities transacted in this unit. */
+  decimalPlaces?: number;
+  /** Whether fractional quantities are allowed in this unit. */
+  fractional?: boolean;
   version: string | null;
   createdAt: string | null;
   createdBy: string | null;

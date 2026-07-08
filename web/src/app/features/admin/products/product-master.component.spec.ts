@@ -47,8 +47,8 @@ type MockSvc = Record<string, ReturnType<typeof vi.fn>>;
 const ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
 const CO  = { uid: 'CO1', id: '10', name: 'Main Co' };
 
-function makeUnit(uid: string, code: string): UnitOfMeasureDto {
-  return { id: uid, uid, companyId: '10', code, name: code, status: 'ACTIVE',
+function makeUnit(uid: string, code: string, dimensionType: UnitOfMeasureDto['dimensionType'] = 'COUNT'): UnitOfMeasureDto {
+  return { id: uid, uid, companyId: '10', code, name: code, status: 'ACTIVE', dimensionType,
     version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
 }
 function makePriceList(uid: string, code: string, isDefault = false): PriceListDto {
@@ -60,8 +60,9 @@ function makeBranch(uid: string, code: string): Branch {
     timeZone: 'Africa/Dar_es_Salaam', isDefault: false, status: 'ACTIVE' };
 }
 
-const UNIT_PCS          = makeUnit('U1', 'PCS');
+const UNIT_PCS          = makeUnit('U1', 'PCS');           // COUNT — the default create-mode base unit
 const UNIT_CTN          = makeUnit('U2', 'CTN');
+const UNIT_KG           = makeUnit('U3', 'KG', 'WEIGHT');   // WEIGHT — enables "Sold by weight"
 const PRICE_LIST_DEFAULT = makePriceList('PL1', 'DEFAULT', false);
 const PRICE_LIST_RETAIL  = makePriceList('PL2', 'RETAIL', false);
 const PRICE_LIST_ONLY    = makePriceList('PL3', 'STANDARD', false);
@@ -91,8 +92,8 @@ function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
     create:         vi.fn(() => of(CREATED_PRODUCT)),
     update:         vi.fn(() => of(CREATED_PRODUCT)),
     getByUid:       vi.fn(() => of(CREATED_PRODUCT)),
-    listUnits:      vi.fn(() => of({ rows: [UNIT_PCS, UNIT_CTN],
-      meta: { page: 0, size: 200, totalElements: 2, totalPages: 1, hasNext: false } })),
+    listUnits:      vi.fn(() => of({ rows: [UNIT_PCS, UNIT_CTN, UNIT_KG],
+      meta: { page: 0, size: 200, totalElements: 3, totalPages: 1, hasNext: false } })),
     listPriceLists: vi.fn(() => of([PRICE_LIST_DEFAULT, PRICE_LIST_RETAIL])),
     listBarcodes:   vi.fn(() => of([])),
     listBulkPacks:  vi.fn(() => of([])),
@@ -771,5 +772,77 @@ describe('ProductMasterComponent — weighed goods sub-step failure', () => {
     const html = (fixture.nativeElement as HTMLElement).innerHTML;
     expect(html).toContain('Product saved. Some details need attention.');
     expect(html).toContain('Open product');
+  });
+});
+
+// ── 13. Weighed goods: client-side base-unit gate ─────────────────────────────
+
+describe('ProductMasterComponent — weighed goods base-unit gate', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('disables the toggle and shows a hint for a COUNT base unit (U1/PCS)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U1'); // PCS/COUNT
+    fixture.detectChanges();
+
+    expect(comp.baseUnitIsWeight()).toBe(false);
+    const toggle: HTMLInputElement | null = fixture.nativeElement.querySelector('#masterWeighed');
+    expect(toggle?.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Choose a weight base unit');
+  });
+
+  it('enables the toggle for a WEIGHT base unit (U3/KG)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    fixture.detectChanges();
+
+    // baseUnitIsWeight drives the toggle's [disabled]; assert the gate signal + that the hint is gone.
+    // (The rendered `disabled` on the [ngModel] control folds in forms/CD timing, not a clean read.)
+    expect(comp.baseUnitIsWeight()).toBe(true);
+    expect(fixture.nativeElement.textContent).not.toContain('Choose a weight base unit');
+  });
+
+  it('ignores onWeighedToggle(true) while the base unit is not a WEIGHT unit (backstop)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U1'); // PCS/COUNT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(false);
+  });
+
+  it('resets "Sold by weight" off when the base unit changes away from WEIGHT', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(true);
+
+    comp.onBaseUnitChange('U1'); // back to PCS/COUNT
+    expect(comp.fWeighed()).toBe(false);
+  });
+
+  it('resets "Sold by weight" off when the company changes (base unit picker is cleared)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(true);
+
+    comp.onCompanyChange('10');
+    expect(comp.fBaseUnitUid()).toBe('');
+    expect(comp.fWeighed()).toBe(false);
   });
 });

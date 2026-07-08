@@ -124,7 +124,7 @@
                 <p class="text-danger small mb-0" role="alert">Could not load units.</p>
               } @else {
                 <select id="fBaseUnit" name="fBaseUnit" class="form-select"
-                        [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                        [ngModel]="fBaseUnitUid()" (ngModelChange)="onBaseUnitChange($event)"
                         required [disabled]="saving() || !canManage()">
                   <option value="">— select unit —</option>
                   @for (u of companyUnits(); track u.uid) {
@@ -223,12 +223,14 @@
                        id="fWeighed" name="fWeighed"
                        [attr.aria-checked]="fWeighed()"
                        [ngModel]="fWeighed()" (ngModelChange)="onWeighedToggle($event)"
-                       [disabled]="savingWeighing() || !canManage()" />
+                       [disabled]="savingWeighing() || !canManage() || !baseUnitIsWeight()" />
                 <label class="form-check-label" for="fWeighed">Sold by weight</label>
               </div>
-              <p class="form-text small text-muted mb-0">
-                Base unit must be a weight unit (e.g. kg).
-              </p>
+              @if (!baseUnitIsWeight()) {
+                <p class="form-text small text-muted mb-0">
+                  Choose a weight base unit (e.g. kg) to sell this by weight.
+                </p>
+              }
             </div>
 
             @if (fWeighed()) {

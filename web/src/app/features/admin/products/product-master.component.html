@@ -415,7 +415,7 @@
               } @else {
                 <select id="masterBaseUnit" name="masterBaseUnit" class="form-select"
                         required
-                        [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                        [ngModel]="fBaseUnitUid()" (ngModelChange)="onBaseUnitChange($event)"
                         [disabled]="saving()">
                   <option value="">— select unit —</option>
                   @for (u of companyUnits(); track u.uid) {
@@ -492,14 +492,19 @@
             <div class="form-check form-switch">
               <input id="masterWeighed" name="masterWeighed" type="checkbox" class="form-check-input" role="switch"
                      [attr.aria-checked]="fWeighed()"
-                     [ngModel]="fWeighed()" (ngModelChange)="fWeighed.set($event)"
-                     [disabled]="saving()" />
+                     [ngModel]="fWeighed()" (ngModelChange)="onWeighedToggle($event)"
+                     [disabled]="saving() || !baseUnitIsWeight()" />
               <label class="form-check-label" for="masterWeighed">Sold by weight</label>
             </div>
-            <p class="form-text small text-muted mb-2">
-              Base unit must be a weight unit (e.g. kg). Saved after the product is created —
-              if the base unit isn't a weight unit the product still saves; only this section fails.
-            </p>
+            @if (baseUnitIsWeight()) {
+              <p class="form-text small text-muted mb-2">
+                Saved after the product is created — a rejection here only fails this section.
+              </p>
+            } @else {
+              <p class="form-text small text-muted mb-2">
+                Choose a weight base unit (e.g. kg) to sell this by weight.
+              </p>
+            }
 
             @if (fWeighed()) {
               <div class="row g-3">

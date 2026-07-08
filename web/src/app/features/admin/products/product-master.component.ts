@@ -222,6 +222,15 @@ export class ProductMasterComponent implements OnInit {
   readonly fTareWeight = signal('');
   readonly fScaleStep = signal('');
   readonly fMaxSaleWeight = signal('');
+  /**
+   * Client-side pre-gate: the server requires a WEIGHT base unit to mark a product weighed
+   * (still enforced as a backstop by setWeighing's own error handling), but disabling the
+   * toggle up-front is friendlier than a round-trip rejection after the product is created.
+   */
+  readonly selectedBaseUnit = computed(() =>
+    this.companyUnits().find((u) => u.uid === this.fBaseUnitUid()),
+  );
+  readonly baseUnitIsWeight = computed(() => this.selectedBaseUnit()?.dimensionType === 'WEIGHT');
 
   // Supplier search
   readonly supplierSearchQ = signal('');
@@ -512,8 +521,25 @@ export class ProductMasterComponent implements OnInit {
       this.loadDependencies(id, co.uid);
     }
     this.fBaseUnitUid.set('');
+    // The base unit picker is being reset — a stale "weighed" can't be validated against it.
+    this.fWeighed.set(false);
     this.priceRows.set([]);
     this.branchRows.set([]);
+  }
+
+  // ── Base unit change ─────────────────────────────────────────────────────────
+
+  /** Moving off a weight base unit while "Sold by weight" is on must never leave an invalid combination. */
+  onBaseUnitChange(unitUid: string): void {
+    this.fBaseUnitUid.set(unitUid);
+    if (this.fWeighed() && !this.baseUnitIsWeight()) {
+      this.fWeighed.set(false);
+    }
+  }
+
+  /** Backstop against the (disabled) toggle being flipped on for a non-weight base unit. */
+  onWeighedToggle(on: boolean): void {
+    this.fWeighed.set(on && this.baseUnitIsWeight());
   }
 
   // ── Type change ───────────────────────────────────────────────────────────

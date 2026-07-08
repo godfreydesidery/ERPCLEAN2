@@ -90,6 +90,15 @@ export class ProductDetailComponent {
   readonly fMaxSaleWeight = signal('');
   readonly savingWeighing = signal(false);
   readonly weighingError = signal<string | null>(null);
+  /**
+   * Client-side pre-gate: the server requires a WEIGHT base unit to mark a product weighed
+   * (surfaced inline as a backstop if the user still manages to submit an invalid combination),
+   * but disabling the toggle up-front is friendlier than a round-trip rejection.
+   */
+  readonly selectedBaseUnit = computed(() =>
+    this.companyUnits().find((u) => u.uid === this.fBaseUnitUid()),
+  );
+  readonly baseUnitIsWeight = computed(() => this.selectedBaseUnit()?.dimensionType === 'WEIGHT');
 
   // ── Barcodes ──────────────────────────────────────────────────────────────
   readonly barcodes = signal<ProductBarcodeDto[]>([]);
@@ -304,6 +313,14 @@ export class ProductDetailComponent {
     // BR-PROD-01: SERVICE cannot be stockable.
     if (type === 'SERVICE') {
       this.fStockable.set(false);
+    }
+  }
+
+  /** Moving off a weight base unit while "Sold by weight" is on must never leave an invalid combination. */
+  onBaseUnitChange(unitUid: string): void {
+    this.fBaseUnitUid.set(unitUid);
+    if (this.fWeighed() && !this.baseUnitIsWeight()) {
+      this.fWeighed.set(false);
     }
   }
 
@@ -699,8 +716,9 @@ export class ProductDetailComponent {
 
   // ── Weighed goods (ADR-0044 D-1b) ───────────────────────────────────────────
 
+  /** Backstop against the (disabled) toggle being flipped on for a non-weight base unit. */
   onWeighedToggle(on: boolean): void {
-    this.fWeighed.set(on);
+    this.fWeighed.set(on && this.baseUnitIsWeight());
   }
 
   /**
