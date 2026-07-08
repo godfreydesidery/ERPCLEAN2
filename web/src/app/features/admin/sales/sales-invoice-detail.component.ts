@@ -29,8 +29,10 @@ type LoadState = 'loading' | 'idle' | 'error';
  * Sales invoice detail + actions screen. Route: /admin/sales-invoices/uid/:uid.
  * Header shows status + number + customer/agent + totals.
  * Lines panel: add/remove lines (DRAFT only, SALES.INVOICE.CREATE); override a line's unit
- * price (DRAFT only, SALES.INVOICE.OVERRIDE, FR-SALES-08/BR-SALES-09); shows a rounding note
- * when requestedQuantity differs from the billed quantity (weighed-goods scale-step rounding).
+ * price (DRAFT only, SALES.INVOICE.OVERRIDE, FR-SALES-08/BR-SALES-09) — a price >10x or <0.1x
+ * the line's list price asks for a window.confirm before applying (soft fat-finger guard, never
+ * a hard block: any positive price is allowed once confirmed); shows a rounding note when
+ * requestedQuantity differs from the billed quantity (weighed-goods scale-step rounding).
  * Payments panel: add/remove payments (DRAFT only, SALES.INVOICE.SETTLE).
  * Finalize button: DRAFT + lines exist (SALES.INVOICE.CREATE).
  * Void button: any non-void status (SALES.INVOICE.VOID).
@@ -348,6 +350,12 @@ export class SalesInvoiceDetailComponent {
       this.overridePriceError.set('Enter a valid unit price greater than zero.');
       return;
     }
+
+    // Soft fat-finger guard (persona re-test, Sabina): never blocks a manager override — any
+    // positive price is allowed — but a price wildly off the list price needs a confirm click.
+    // Cancelling leaves the editor open with the entered value untouched.
+    if (!this.confirmIfFarFromListPrice(line, price)) return;
+
     if (this.overridePriceSaving()) return;
     this.overridePriceSaving.set(true);
     this.overridePriceError.set(null);
@@ -365,6 +373,23 @@ export class SalesInvoiceDetailComponent {
         this.overridePriceSaving.set(false);
       },
     });
+  }
+
+  /**
+   * True when no confirmation is needed (list price unknown/zero, or the entered price is within
+   * ~0.1x–10x of it) or the user confirmed a wildly-off price; false when they cancelled — the
+   * caller must not proceed. Uses window.confirm (existing app precedent: mass-price-change /
+   * company restore-defaults) rather than a bespoke dialog.
+   */
+  private confirmIfFarFromListPrice(line: SalesInvoiceLineDto, price: number): boolean {
+    const listPrice = Number(line.listPriceAmount);
+    if (!(listPrice > 0)) return true;
+    const ratio = price / listPrice;
+    if (ratio <= 10 && ratio >= 0.1) return true;
+    const multiple = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 100) / 100;
+    return window.confirm(
+      `This is about ${multiple}× the list price (${line.listPriceAmount}). Apply anyway?`,
+    );
   }
 
   /**

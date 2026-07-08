@@ -586,7 +586,7 @@ describe('SalesInvoiceDetailComponent — Fiscal receipt panel', () => {
 
 describe('SalesInvoiceDetailComponent — line price override', () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); TestBed.resetTestingModule(); });
 
   it('shows the Override price button on a DRAFT line with SALES.INVOICE.OVERRIDE', async () => {
     makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [STUB_LINE] });
@@ -724,6 +724,96 @@ describe('SalesInvoiceDetailComponent — line price override', () => {
 
     expect(comp.overridingLineUid()).toBe('LN-UID-1');
     expect(comp.overridePriceError()).toBe('This invoice is no longer a draft.');
+    expect(comp.overridePriceSaving()).toBe(false);
+  });
+
+  // ── Fat-finger soft guard (persona re-test, Sabina) — never blocks, only confirms ──────────
+  // STUB_LINE.listPriceAmount is '100': >10x is >1000, <0.1x is <10.
+
+  it('prompts via window.confirm for a wildly-high price (>10x list) and proceeds when confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '2000', priceOverridden: true })),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('2000'); // 20x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('20× the list price (100)'));
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 2000);
+    expect(comp.overridingLineUid()).toBeNull();
+  });
+
+  it('prompts via window.confirm for a wildly-low price (<0.1x list) and proceeds when confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('5'); // 0.05x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 5);
+  });
+
+  it('does NOT prompt for a normal override within ~0.1x–10x of the list price', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '90', priceOverridden: true })),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('90'); // 0.9x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 90);
+  });
+
+  it('does nothing and keeps the editor open when the user cancels the confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('2000'); // 20x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(overrideLinePriceSpy).not.toHaveBeenCalled();
+    expect(comp.overridingLineUid()).toBe('LN-UID-1');
+    expect(comp.overridePriceInput()).toBe('2000');
     expect(comp.overridePriceSaving()).toBe(false);
   });
 });
