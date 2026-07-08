@@ -365,14 +365,21 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
                 new OpenVatReturnRequest(companyUid, now.getYear(), now.getMonthValue()));
         VatReturnDto recomputed = vatReturnService.recompute(opened.uid());
 
+        // Amina UPR-2: the schedule reads as a fixed STANDARD/ZERO_RATED/EXEMPT layout — all three
+        // bands present even though this period has only a standard-rated sale (the other two are 0).
         assertThat(recomputed.bands())
-                .as("the output-VAT band breakdown must populate, not stay empty")
-                .isNotEmpty();
+                .extracting(VatReturnBandDto::taxBand)
+                .containsExactlyInAnyOrder("STANDARD", "ZERO_RATED", "EXEMPT");
         VatReturnBandDto standard = recomputed.bands().stream()
                 .filter(b -> "STANDARD".equals(b.taxBand()))
                 .findFirst().orElseThrow();
         assertThat(standard.taxableBase()).isEqualByComparingTo(new BigDecimal("1000"));
         assertThat(standard.outputVat()).isEqualByComparingTo(VAT_180);
+        VatReturnBandDto zeroRated = recomputed.bands().stream()
+                .filter(b -> "ZERO_RATED".equals(b.taxBand()))
+                .findFirst().orElseThrow();
+        assertThat(zeroRated.taxableBase()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(zeroRated.outputVat()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(recomputed.salesTurnover())
                 .as("sales turnover = sum of taxable bases across bands")
                 .isEqualByComparingTo(new BigDecimal("1000"));

@@ -8,6 +8,7 @@ import com.erp.modules.tax.domain.dto.VatReturnDto;
 import com.erp.modules.tax.domain.entity.VatReturn;
 import com.erp.modules.tax.domain.entity.VatReturnBand;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.tax.repository.VatAdjustmentRepository;
 import com.erp.modules.tax.repository.VatReturnBandRepository;
 import com.erp.modules.tax.repository.VatReturnRepository;
@@ -247,11 +248,19 @@ public class VatReturnServiceImpl implements VatReturnService {
         bands.flush();
 
         Long actorId = actorId();
-        for (Map.Entry<String, VatReturnComputationDto.BandTotalsDto> entry
-                : comp.byBand().entrySet()) {
-            VatReturnComputationDto.BandTotalsDto b = entry.getValue();
-            bands.save(new VatReturnBand(vatReturn.getId(), companyId,
-                    entry.getKey(), b.taxableBase(), b.outputVat(), actorId));
+        // Always emit the three standard sales bands (Amina UPR-2) so the schedule reads as a fixed
+        // STANDARD / ZERO_RATED / EXEMPT layout, with zero where the period had no activity in a band —
+        // plus any other band key the summary produced (defensive; nothing is dropped).
+        java.util.LinkedHashSet<String> bandKeys = new java.util.LinkedHashSet<>();
+        bandKeys.add(VatStatus.STANDARD.name());
+        bandKeys.add(VatStatus.ZERO_RATED.name());
+        bandKeys.add(VatStatus.EXEMPT.name());
+        bandKeys.addAll(comp.byBand().keySet());
+        for (String bandKey : bandKeys) {
+            VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(bandKey);
+            BigDecimal base = b != null ? b.taxableBase() : BigDecimal.ZERO;
+            BigDecimal vat  = b != null ? b.outputVat()   : BigDecimal.ZERO;
+            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey, base, vat, actorId));
         }
 
         // Refresh totals
