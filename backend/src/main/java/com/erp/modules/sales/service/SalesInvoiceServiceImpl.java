@@ -527,6 +527,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Resolve unit scoped to invoice company (F15)
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(), req.unitUid());
 
+        // Reject a non-positive quantity in plain language (a @Positive annotation would leak the
+        // raw field name — the weighed-goods guards below all speak plainly, so this should too).
+        if (req.quantity() == null || req.quantity().signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero.");
+        }
+
         // Weighed goods (ADR-0044 D-1b): require a WEIGHT unit and normalise to the scale division.
         // Runs before price resolution so a weighed product rung on a by-count unit gets the clear
         // "sold by weight" message rather than the generic "unit not valid for this product".
@@ -586,6 +592,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         // Resolve line scoped to parent invoice (F16)
         SalesInvoiceLine line = requireLine(lineUid, inv.getId());
+
+        if (req.quantity() == null || req.quantity().signum() <= 0) {
+            throw new IllegalArgumentException("Quantity must be greater than zero.");
+        }
 
         // Recompute qty_in_base for new quantity
         UnitOfMeasure unit = resolveUnit(inv.getCompanyId(),
@@ -654,6 +664,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         SalesInvoiceLine line = requireLine(lineUid, inv.getId());
         BigDecimal before = line.getListPriceAmount();
         BigDecimal after  = req.unitPriceAmount();
+        // A price override may move up or down, but a zero/negative price is never valid — it would
+        // give the goods away (or, negative, silently floor the line total to zero). Reject it plainly.
+        if (after == null || after.signum() <= 0) {
+            throw new IllegalArgumentException("The override price must be greater than zero.");
+        }
 
         line.setUnitPriceAmount(after);
         line.setPriceOverridden(true);

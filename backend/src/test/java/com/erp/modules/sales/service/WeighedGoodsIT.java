@@ -39,6 +39,7 @@ import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
+import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.platform.common.money.MoneyDto;
@@ -393,5 +394,34 @@ class WeighedGoodsIT extends PostgresIntegrationTest {
         SalesInvoiceLineDto line = salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
                 riceUid, kgUid, new BigDecimal("2.5"), null, null));
         assertThat(line.quantity()).isEqualByComparingTo("2.5");
+    }
+
+    // =========================================================================
+    // Bar 11: friendly guards from persona re-test (quantity + override price)
+    // =========================================================================
+
+    @Test
+    void addLine_zeroQuantity_friendlyMessage() {
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
+                widgetUid, pcsUid, new BigDecimal("0"), null, null)))
+                .as("zero quantity is rejected in plain language, not a raw field-name message")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Quantity must be greater than zero.");
+    }
+
+    @Test
+    void overrideLinePrice_nonPositive_rejected() {
+        SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        SalesInvoiceLineDto line = salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
+                widgetUid, pcsUid, new BigDecimal("2"), null, null));
+
+        assertThatThrownBy(() -> salesInvoiceService.overrideLinePrice(draft.uid(), line.uid(),
+                new OverrideLinePriceRequest(new BigDecimal("-500"))))
+                .as("a negative/zero override price is rejected (would zero the line total silently)")
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("greater than zero");
     }
 }
