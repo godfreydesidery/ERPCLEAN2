@@ -297,7 +297,12 @@ public class DocumentModelBuilder {
 
     private String nonNull(String s) { return s != null ? s : ""; }
 
-    /** Parse the taxSummary JSONB (array of {bandLabel, base, rate, vat} objects). */
+    /**
+     * Parse the tax_summary JSONB into printable rows. The array is written by
+     * InvoiceTotalsCalculator.buildTaxSummary as {status, rate, net, vat} — the band label is
+     * {@code status} and the taxable base is {@code net} (reading "bandLabel"/"base" left the
+     * printed invoice's Band + Base columns blank).
+     */
     @SuppressWarnings("unchecked")
     private List<TaxRow> parseTaxSummary(String taxSummaryJson) {
         if (taxSummaryJson == null || taxSummaryJson.isBlank()) return List.of();
@@ -307,8 +312,8 @@ public class DocumentModelBuilder {
             List<TaxRow> rows = new ArrayList<>();
             for (Map<String, Object> band : bands) {
                 rows.add(new TaxRow(
-                        str(band.get("bandLabel")),
-                        decimal(band.get("base")),
+                        str(band.get("status")),
+                        decimal(band.get("net")),
                         decimal(band.get("rate")),
                         decimal(band.get("vat"))));
             }
