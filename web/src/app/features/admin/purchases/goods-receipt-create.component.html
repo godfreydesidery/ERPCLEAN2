@@ -99,6 +99,17 @@
       </div>
     </div>
 
+    <!-- Over-receipt tolerance hint (company purchase setting; hidden when strict/null/0) -->
+    @if (hasTolerance()) {
+      <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="note">
+        <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
+        <span>
+          Over-receipt tolerance: {{ receiptTolerancePct() }}% — each line may be received up to
+          {{ receiptTolerancePct() }}% over its outstanding quantity.
+        </span>
+      </div>
+    }
+
     <!-- Lines to receive -->
     @switch (linesState()) {
       @case ('loading') {
@@ -180,9 +191,15 @@
                                  [class.is-invalid]="lineErrors()[entry.line.uid]"
                                  [ngModel]="entry.receivedQty"
                                  (ngModelChange)="updateLineQty(i, $event)"
-                                 [disabled]="!entry.include || submitting()" />
+                                 [disabled]="!entry.include || submitting()"
+                                 [attr.aria-describedby]="lineMaxQty(entry) ? 'qtyHelp-' + entry.line.uid : null" />
                           @if (lineErrors()[entry.line.uid]; as lineErr) {
                             <div class="invalid-feedback">{{ lineErr }}</div>
+                          }
+                          @if (lineMaxQty(entry); as maxQty) {
+                            <p [id]="'qtyHelp-' + entry.line.uid" class="form-text small text-muted mb-0">
+                              max {{ maxQty }}
+                            </p>
                           }
                         </div>
                       </td>

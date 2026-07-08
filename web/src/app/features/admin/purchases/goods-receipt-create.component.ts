@@ -16,6 +16,7 @@ import {
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
+import { PurchaseSettingsService } from './settings/purchase-settings.service';
 
 interface ReceiveLineEntry {
   line: PurchaseOrderLineDto;
@@ -56,6 +57,7 @@ interface ReceiveLineEntry {
 })
 export class GoodsReceiptCreateComponent {
   private readonly purchasesService = inject(PurchasesService);
+  private readonly settingsService = inject(PurchaseSettingsService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly route = inject(ActivatedRoute);
@@ -77,6 +79,10 @@ export class GoodsReceiptCreateComponent {
   // ── PO load state ─────────────────────────────────────────────────────────
   readonly po = signal<PurchaseOrderDto | null>(null);
   readonly poState = signal<'idle' | 'loading' | 'error'>('idle');
+
+  // ── Over-receipt tolerance (company purchase setting; hint only, backend still enforces it) ──
+  readonly receiptTolerancePct = signal<number | null>(null);
+  readonly hasTolerance = computed(() => (this.receiptTolerancePct() ?? 0) > 0);
 
   // ── Lines ──────────────────────────────────────────────────────────────────
   /** Receive entries — only non-fully-received lines. */
@@ -122,6 +128,7 @@ export class GoodsReceiptCreateComponent {
       });
 
     this.loadCompanies();
+    this.loadTolerance();
   }
 
   private loadCompanies(): void {
@@ -164,6 +171,28 @@ export class GoodsReceiptCreateComponent {
       },
       error: () => this.poState.set('error'),
     });
+  }
+
+  /** Fetches the active company's over-receipt tolerance so the screen can hint at it; failure is
+   *  silent (no hint) — this is informational only and must never block receiving. Mirrors
+   *  PurchaseOrderDetailComponent.loadSettings(). */
+  private loadTolerance(): void {
+    const companyUid = this.session.user()?.activeCompanyUid;
+    if (!companyUid) return;
+    this.settingsService.getByCompany(companyUid).subscribe({
+      next: (s) => this.receiptTolerancePct.set(s.receiptTolerancePct),
+      error: () => undefined,
+    });
+  }
+
+  /** Outstanding × (1 + tolerance/100) — a hint shown per line; null when no tolerance is set.
+   *  The backend is the source of truth for what it actually accepts. */
+  lineMaxQty(entry: ReceiveLineEntry): string | null {
+    const pct = this.receiptTolerancePct();
+    if (!pct || pct <= 0) return null;
+    const outstanding = Number(entry.line.outstandingQtyInBase);
+    if (!Number.isFinite(outstanding)) return null;
+    return Number((outstanding * (1 + pct / 100)).toFixed(3)).toString();
   }
 
   private loadLines(poUid: string): void {
