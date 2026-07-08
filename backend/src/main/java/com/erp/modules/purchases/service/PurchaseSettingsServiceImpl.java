@@ -76,6 +76,10 @@ public class PurchaseSettingsServiceImpl implements PurchaseSettingsService {
             s.setRequisitionApprovalThresholdAmount(req.requisitionApprovalThresholdAmount());
         }
         // Owned by the settings form (always sent) — set unconditionally so blank clears them.
+        // Range-checked here (not via annotation) so the message stays field-name-free.
+        if (req.receiptTolerancePct() != null && req.receiptTolerancePct().signum() < 0) {
+            throw new IllegalArgumentException("Over-receipt tolerance cannot be negative.");
+        }
         s.setReceiptTolerancePct(req.receiptTolerancePct());
         if (req.autoCloseEnabled() != null) {
             s.setAutoCloseEnabled(req.autoCloseEnabled());

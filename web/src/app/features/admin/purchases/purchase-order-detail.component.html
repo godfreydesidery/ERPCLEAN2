@@ -426,7 +426,7 @@
                     <td class="num">{{ line.receivedQtyInBase }}</td>
                     <td class="num"
                         [class.text-danger]="!line.fullyReceived && !isDraft()">
-                      {{ line.outstandingQtyInBase }}
+                      {{ outstandingLabel(line) }}
                     </td>
                     <td class="num">{{ line.unitCostAmount }}</td>
                     <td class="num">{{ line.lineTotalAmount }}</td>

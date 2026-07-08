@@ -17,6 +17,7 @@ public record UpdatePurchaseSettingsRequest(
         Boolean    autoCloseEnabled,
         Boolean    requisitionApprovalEnabled,
         @PositiveOrZero BigDecimal requisitionApprovalThresholdAmount,
-        // Saidi #4 — goods-receipt over-receipt tolerance percent (null clears / strict)
-        @PositiveOrZero BigDecimal receiptTolerancePct
+        // Goods-receipt over-receipt tolerance percent (null clears / strict). Range-checked in the
+        // service with a friendly message (a bean-validation annotation would leak the raw field name).
+        BigDecimal receiptTolerancePct
 ) {}

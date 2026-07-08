@@ -421,6 +421,16 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                 .isEqualByComparingTo("5");
     }
 
+    // Persona re-test: a negative tolerance is rejected with a plain, field-name-free message.
+    @Test
+    void setReceiptTolerance_negative_friendlyMessage() {
+        assertThatThrownBy(() -> purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), false, null, "TZS",
+                null, null, null, null, null, null, null, new BigDecimal("-5"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Over-receipt tolerance cannot be negative.");
+    }
+
     // =========================================================================
     // 5. GR void → STOCK.RECEIPT.VOIDED → dispatch → stock reversed, PO restored
     // =========================================================================

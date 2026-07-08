@@ -301,11 +301,10 @@ export class GoodsReceiptCreateComponent {
       },
       error: (err) => {
         this.submitting.set(false);
-        if (err instanceof HttpErrorResponse && err.status === 409) {
-          this.formError.set('Over-receipt: one or more quantities exceed the outstanding amount. Reduce the quantities and try again.');
-        } else {
-          this.formError.set(this.messageFrom(err, 'Could not create goods receipt.'));
-        }
+        // Surface the server's actual (user-safe) reason — it distinguishes over-receipt from an
+        // already-received/closed PO etc. A blanket "over-receipt" string mislead the storekeeper
+        // ("reduce the quantity") when the PO was simply already fully received.
+        this.formError.set(this.messageFrom(err, 'Could not create goods receipt.'));
       },
     });
   }
