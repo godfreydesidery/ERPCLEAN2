@@ -12,6 +12,7 @@ import com.erp.modules.iam.repository.PermissionRepository;
 import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.PermissionResolver;
 import java.util.Optional;
 import java.util.Set;
@@ -38,7 +39,8 @@ class RoleServiceImplTest {
         service  = new RoleServiceImpl(
                 roleRepo,
                 mock(PermissionRepository.class),
-                mock(PermissionResolver.class));
+                mock(PermissionResolver.class),
+                mock(AuthorityCeiling.class));
     }
 
     // -----------------------------------------------------------------------

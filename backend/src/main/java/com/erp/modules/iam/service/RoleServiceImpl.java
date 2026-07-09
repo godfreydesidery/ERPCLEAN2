@@ -12,7 +12,9 @@ import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.PermissionResolver;
+import com.erp.platform.security.RequestContext;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,13 +29,16 @@ public class RoleServiceImpl implements RoleService {
     private final RoleRepository roles;
     private final PermissionRepository permissions;
     private final PermissionResolver permissionResolver;
+    private final AuthorityCeiling authorityCeiling;
 
     public RoleServiceImpl(RoleRepository roles,
                            PermissionRepository permissions,
-                           PermissionResolver permissionResolver) {
+                           PermissionResolver permissionResolver,
+                           AuthorityCeiling authorityCeiling) {
         this.roles = roles;
         this.permissions = permissions;
         this.permissionResolver = permissionResolver;
+        this.authorityCeiling = authorityCeiling;
     }
 
     @Override
@@ -98,6 +103,12 @@ public class RoleServiceImpl implements RoleService {
                     .toList();
             throw new ConflictException("Unknown permission codes: " + unknown);
         }
+
+        // ADR-0059 authority-containment: a non-root author may only set permissions that are a subset
+        // of their own (and may not attach a reserved "power-to-delegate" code unless they are
+        // org-admin-tier). Closes the build-your-own-superrole path — minting/widening a role to hold
+        // permissions the author does not possess. Root is exempt.
+        authorityCeiling.assertCanConfer(RequestContext.get(), requestedCodes);
 
         role.setPermissions(new LinkedHashSet<>(found));
         permissionResolver.invalidate();

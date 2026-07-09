@@ -36,6 +36,26 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     List<UserRole> findByUserIdAndRevokedAtIsNull(Long userId);
 
     /**
+     * Branch-agnostic effective permission codes for a user across a whole company — every active
+     * grant in the company regardless of branch. Used by the {@code AuthorityCeiling} target-authority
+     * check on {@code setPasswordByUid} (ADR-0059): an account takeover lands in the victim's default
+     * branch, so the ceiling must consider the target's authority in ANY branch of the company, not a
+     * single active scope.
+     */
+    @Query("""
+            SELECT DISTINCT p.code
+            FROM UserRole ur
+            JOIN ur.role r
+            JOIN r.permissions p
+            WHERE ur.userId = :userId
+              AND ur.revokedAt IS NULL
+              AND r.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+              AND ur.companyId = :companyId
+            """)
+    List<String> resolvePermissionCodesAnyBranch(@Param("userId") Long userId,
+                                                 @Param("companyId") Long companyId);
+
+    /**
      * {@code true} iff the user holds any active (non-revoked) role grant in the company. Used by the
      * ADR-0046 company-removal guard (block while access remains).
      */
