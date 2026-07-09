@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Role } from '../models/role.model';
@@ -36,8 +36,49 @@ export class RoleListComponent {
   /** True when the caller may create, edit, or archive roles (ROLE.ADMIN). */
   readonly canAdmin = computed(() => this.session.hasPermission('ROLE.ADMIN'));
 
+  /**
+   * The role whose permissions are shown in the read-only popup, or null when closed.
+   * ROLE.VIEW is enough — the permission codes already ride along on each list row, so no extra
+   * fetch (and no PERMISSION.VIEW) is needed to inspect what a role grants.
+   */
+  readonly permissionsRole = signal<Role | null>(null);
+
+  /** The selected role's permission codes grouped by module (the code's first dot-segment). */
+  readonly permissionGroups = computed<{ module: string; codes: string[] }[]>(() => {
+    const role = this.permissionsRole();
+    if (!role) {
+      return [];
+    }
+    const groups = new Map<string, string[]>();
+    for (const code of [...role.permissionCodes].sort((a, b) => a.localeCompare(b))) {
+      const module = code.split('.')[0] || 'OTHER';
+      const list = groups.get(module) ?? [];
+      list.push(code);
+      groups.set(module, list);
+    }
+    return [...groups.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([module, codes]) => ({ module, codes }));
+  });
+
   constructor() {
     this.load();
+  }
+
+  openPermissions(role: Role): void {
+    this.permissionsRole.set(role);
+  }
+
+  closePermissions(): void {
+    this.permissionsRole.set(null);
+  }
+
+  /** Dismiss the permissions popup on Escape (reliable regardless of where focus sits). */
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.permissionsRole()) {
+      this.closePermissions();
+    }
   }
 
   load(): void {
