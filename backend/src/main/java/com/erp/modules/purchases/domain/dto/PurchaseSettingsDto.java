@@ -18,7 +18,8 @@ public record PurchaseSettingsDto(
         BigDecimal matchToleranceAbs,
         boolean    autoCloseEnabled,
         boolean    requisitionApprovalEnabled,
-        BigDecimal requisitionApprovalThresholdAmount
+        BigDecimal requisitionApprovalThresholdAmount,
+        BigDecimal receiptTolerancePct
 ) {
     public static PurchaseSettingsDto from(PurchaseSettings s) {
         return new PurchaseSettingsDto(
@@ -27,6 +28,7 @@ public record PurchaseSettingsDto(
                 s.getDefaultPaymentTermsId(), s.getDefaultLocationId(),
                 s.getMatchTolerancePct(), s.getMatchToleranceAbs(),
                 s.isAutoCloseEnabled(), s.isRequisitionApprovalEnabled(),
-                s.getRequisitionApprovalThresholdAmount());
+                s.getRequisitionApprovalThresholdAmount(),
+                s.getReceiptTolerancePct());
     }
 }

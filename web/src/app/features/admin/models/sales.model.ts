@@ -68,6 +68,16 @@ export interface SalesInvoiceLineDto {
   unitName: string;
   quantity: string;
   qtyInBase: string;
+  /**
+   * FR-SALES-08 / weighed-goods scale-step rounding: what the caller entered before the scale
+   * stepped the quantity to a billable increment. Set on every add/update-line call, so it is
+   * usually equal to `quantity` — only differs when scale-step rounding actually moved it; null
+   * only for lines predating this field.
+   * Wire contract: BigDecimal → JSON number — unlike the sibling `quantity`/`qtyInBase` above
+   * (legacy-typed `string`), this field is typed to the real wire shape (same precedent as
+   * SalesSettingsDto.soApprovalThresholdAmount below).
+   */
+  requestedQuantity: number | null;
   listPriceAmount: string;
   unitPriceAmount: string;
   priceOverridden: boolean;
@@ -149,6 +159,14 @@ export interface AddInvoiceLineRequest {
   quantity: string;
   lineDiscountAmount?: string;
   lineDiscountPercent?: string;
+}
+
+/**
+ * Override a DRAFT line's unit price (FR-SALES-08, BR-SALES-09). Requires SALES.INVOICE.OVERRIDE.
+ * Wire contract: BigDecimal → JSON number (see requestedQuantity above for the same precedent).
+ */
+export interface OverrideLinePriceRequest {
+  unitPriceAmount: number;
 }
 
 export interface AddPaymentRequest {

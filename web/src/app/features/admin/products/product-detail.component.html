@@ -124,7 +124,7 @@
                 <p class="text-danger small mb-0" role="alert">Could not load units.</p>
               } @else {
                 <select id="fBaseUnit" name="fBaseUnit" class="form-select"
-                        [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                        [ngModel]="fBaseUnitUid()" (ngModelChange)="onBaseUnitChange($event)"
                         required [disabled]="saving() || !canManage()">
                   <option value="">— select unit —</option>
                   @for (u of companyUnits(); track u.uid) {
@@ -201,6 +201,89 @@
                   Saving…
                 } @else {
                   Save changes
+                }
+              </button>
+            </div>
+          }
+        </form>
+      </div>
+    </div>
+
+    <!-- ── Weighed Goods ─────────────────────────────────────────────────── -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Weighed Goods</h2>
+      </div>
+      <div class="erp-card__body">
+        <form (ngSubmit)="saveWeighing()" aria-label="Configure weighed goods">
+          <div class="row g-3 align-items-start">
+            <div class="col-sm-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="fWeighed" name="fWeighed"
+                       [attr.aria-checked]="fWeighed()"
+                       [ngModel]="fWeighed()" (ngModelChange)="onWeighedToggle($event)"
+                       [disabled]="savingWeighing() || !canManage() || !baseUnitIsWeight()" />
+                <label class="form-check-label" for="fWeighed">Sold by weight</label>
+              </div>
+              @if (!baseUnitIsWeight()) {
+                <p class="form-text small text-muted mb-0">
+                  Choose a weight base unit (e.g. kg) to sell this by weight.
+                </p>
+              }
+            </div>
+
+            @if (fWeighed()) {
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fTareWeight">Tare weight</label>
+                <input id="fTareWeight" name="fTareWeight" type="text" class="form-control"
+                       placeholder="e.g. 0.050"
+                       [ngModel]="fTareWeight()" (ngModelChange)="fTareWeight.set($event)"
+                       [disabled]="savingWeighing() || !canManage()"
+                       aria-describedby="fTareWeightHelp" autocomplete="off" />
+                <p id="fTareWeightHelp" class="form-text small text-muted mb-0">
+                  Container weight, in the base unit. For the weighing client's config — not auto-deducted.
+                </p>
+              </div>
+
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fScaleStep">Scale step</label>
+                <input id="fScaleStep" name="fScaleStep" type="text" class="form-control"
+                       placeholder="e.g. 0.005"
+                       [ngModel]="fScaleStep()" (ngModelChange)="fScaleStep.set($event)"
+                       [disabled]="savingWeighing() || !canManage()"
+                       aria-describedby="fScaleStepHelp" autocomplete="off" />
+                <p id="fScaleStepHelp" class="form-text small text-muted mb-0">
+                  Scale division the sold weight is rounded to.
+                </p>
+              </div>
+
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="fMaxSaleWeight">Max sale weight</label>
+                <input id="fMaxSaleWeight" name="fMaxSaleWeight" type="text" class="form-control"
+                       placeholder="e.g. 25"
+                       [ngModel]="fMaxSaleWeight()" (ngModelChange)="fMaxSaleWeight.set($event)"
+                       [disabled]="savingWeighing() || !canManage()"
+                       aria-describedby="fMaxSaleWeightHelp" autocomplete="off" />
+                <p id="fMaxSaleWeightHelp" class="form-text small text-muted mb-0">
+                  Safety ceiling — a weighed line above this is rejected.
+                </p>
+              </div>
+            }
+          </div>
+
+          @if (weighingError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+
+          @if (canManage()) {
+            <div class="mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="savingWeighing()">
+                @if (savingWeighing()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Saving…
+                } @else {
+                  Save weighing profile
                 }
               </button>
             </div>

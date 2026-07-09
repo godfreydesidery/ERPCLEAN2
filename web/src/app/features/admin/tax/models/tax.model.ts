@@ -75,6 +75,14 @@ export interface VatReturnDto {
   filedAt: string | null;
   /** Wire: number | null */
   filedBy: string | null;
+  /** Wire: number | null — sum of taxable bases (ex-VAT) across bands. Coerce with +v. */
+  salesTurnover: number | string | null;
+  /** Wire: number | null — input-side turnover; out of scope for now, render "—" if null. */
+  purchasesTurnover: number | string | null;
+  /** Wire: number | null — zero-rated portion of salesTurnover. Coerce with +v. */
+  zeroRatedSales: number | string | null;
+  /** Wire: number | null — exempt portion of salesTurnover. Coerce with +v. */
+  exemptSales: number | string | null;
   bands: VatReturnBandDto[];
 }
 

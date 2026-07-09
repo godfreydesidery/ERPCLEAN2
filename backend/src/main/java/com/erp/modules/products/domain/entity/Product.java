@@ -130,6 +130,45 @@ public class Product extends UidEntity {
     @Setter
     private RestrictedKind restrictedKind = RestrictedKind.NONE;
 
+    // -------------------------------------------------------------------------
+    // ADR-0044 D-1b — weighed goods (sell-by-weight). All additive-safe.
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sold by weight (rice, produce, deli): price is per weight-unit and the sale line quantity is
+     * the actual weighed amount. When true the sale unit must be a WEIGHT unit (enforced in the
+     * sale path). Default false — every existing product is a normal by-count item.
+     */
+    @Column(name = "is_weighed", nullable = false)
+    @Setter
+    private boolean weighed = false;
+
+    /**
+     * Optional container/tare weight in the base weight unit. Stored as configuration for the
+     * weighing client to deduct before submitting the NET weight (weighing is client-orchestrated,
+     * ADR-0044 D-7); the server does not auto-deduct it. Nullable.
+     */
+    @Column(name = "tare_weight", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal tareWeight;
+
+    /**
+     * Optional scale division (e.g. 0.005 kg). When set, the sale path rounds the weighed line
+     * quantity to the nearest multiple (HALF_UP). Null = no rounding. Must be &gt; 0 (DB CHECK).
+     */
+    @Column(name = "scale_step", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal scaleStep;
+
+    /**
+     * Optional safety ceiling for a weighed sale line, in the base weight unit (ADR-0044 D-1b). When
+     * set, a weighed line above this weight is rejected — catches a kg/gram fat-finger (813 → 813 kg).
+     * Null = no ceiling. Must be &gt; 0 (DB CHECK).
+     */
+    @Column(name = "max_sale_weight", precision = 19, scale = 6)
+    @Setter
+    private java.math.BigDecimal maxSaleWeight;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     @Setter

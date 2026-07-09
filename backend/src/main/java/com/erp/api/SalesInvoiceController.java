@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
+import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
@@ -113,6 +114,14 @@ public class SalesInvoiceController {
     @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.CREATE')")
     public void removeLine(@PathVariable String uid, @PathVariable String lineUid) {
         salesInvoiceService.removeLine(uid, lineUid);
+    }
+
+    /** Override a draft line's unit price (FR-SALES-08, BR-SALES-09) — requires SALES.INVOICE.OVERRIDE. */
+    @PostMapping("/uid/{uid}/lines/uid/{lineUid}/override-price")
+    @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.OVERRIDE')")
+    public SalesInvoiceLineDto overrideLinePrice(@PathVariable String uid, @PathVariable String lineUid,
+                                                 @Valid @RequestBody OverrideLinePriceRequest request) {
+        return salesInvoiceService.overrideLinePrice(uid, lineUid, request);
     }
 
     // -------------------------------------------------------------------------

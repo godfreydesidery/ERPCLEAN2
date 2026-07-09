@@ -415,7 +415,7 @@
               } @else {
                 <select id="masterBaseUnit" name="masterBaseUnit" class="form-select"
                         required
-                        [ngModel]="fBaseUnitUid()" (ngModelChange)="fBaseUnitUid.set($event)"
+                        [ngModel]="fBaseUnitUid()" (ngModelChange)="onBaseUnitChange($event)"
                         [disabled]="saving()">
                   <option value="">— select unit —</option>
                   @for (u of companyUnits(); track u.uid) {
@@ -486,6 +486,61 @@
               </table>
             </div>
           }
+
+          <!-- Weighed goods (ADR-0044 D-1b) -->
+          <div class="mb-4">
+            <div class="form-check form-switch">
+              <input id="masterWeighed" name="masterWeighed" type="checkbox" class="form-check-input" role="switch"
+                     [attr.aria-checked]="fWeighed()"
+                     [ngModel]="fWeighed()" (ngModelChange)="onWeighedToggle($event)"
+                     [disabled]="saving() || !baseUnitIsWeight()" />
+              <label class="form-check-label" for="masterWeighed">Sold by weight</label>
+            </div>
+            @if (baseUnitIsWeight()) {
+              <p class="form-text small text-muted mb-2">
+                Saved after the product is created — a rejection here only fails this section.
+              </p>
+            } @else {
+              <p class="form-text small text-muted mb-2">
+                Choose a weight base unit (e.g. kg) to sell this by weight.
+              </p>
+            }
+
+            @if (fWeighed()) {
+              <div class="row g-3">
+                <div class="col-sm-3">
+                  <label class="form-label small" for="masterTareWeight">Tare weight</label>
+                  <input id="masterTareWeight" name="masterTareWeight" type="text" class="form-control form-control-sm"
+                         placeholder="e.g. 0.050"
+                         [ngModel]="fTareWeight()" (ngModelChange)="fTareWeight.set($event)"
+                         [disabled]="saving()" aria-describedby="masterTareWeightHelp" autocomplete="off" />
+                  <p id="masterTareWeightHelp" class="form-text small text-muted mb-0">
+                    Container weight — the weighing client's config; not auto-deducted.
+                  </p>
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small" for="masterScaleStep">Scale step</label>
+                  <input id="masterScaleStep" name="masterScaleStep" type="text" class="form-control form-control-sm"
+                         placeholder="e.g. 0.005"
+                         [ngModel]="fScaleStep()" (ngModelChange)="fScaleStep.set($event)"
+                         [disabled]="saving()" aria-describedby="masterScaleStepHelp" autocomplete="off" />
+                  <p id="masterScaleStepHelp" class="form-text small text-muted mb-0">
+                    Scale division the sold weight is rounded to.
+                  </p>
+                </div>
+                <div class="col-sm-3">
+                  <label class="form-label small" for="masterMaxSaleWeight">Max sale weight</label>
+                  <input id="masterMaxSaleWeight" name="masterMaxSaleWeight" type="text" class="form-control form-control-sm"
+                         placeholder="e.g. 25"
+                         [ngModel]="fMaxSaleWeight()" (ngModelChange)="fMaxSaleWeight.set($event)"
+                         [disabled]="saving()" aria-describedby="masterMaxSaleWeightHelp" autocomplete="off" />
+                  <p id="masterMaxSaleWeightHelp" class="form-text small text-muted mb-0">
+                    Safety ceiling — a weighed line above this is rejected.
+                  </p>
+                </div>
+              </div>
+            }
+          </div>
 
           <!-- Preferred supplier -->
           <div class="mb-4">

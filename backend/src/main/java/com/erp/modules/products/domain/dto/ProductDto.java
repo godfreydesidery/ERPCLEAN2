@@ -57,7 +57,12 @@ public record ProductDto(
         boolean purchasable,
         Long preferredSupplierId,
         // ADR-0044 D-3a age-restriction gate
-        RestrictedKind restrictedKind
+        RestrictedKind restrictedKind,
+        // ADR-0044 D-1b weighed goods (sell-by-weight)
+        boolean weighed,
+        BigDecimal tareWeight,
+        BigDecimal scaleStep,
+        BigDecimal maxSaleWeight
 ) {
 
     public static ProductDto from(Product p) {
@@ -101,7 +106,12 @@ public record ProductDto(
                 p.getLeadTimeDays(),
                 p.isPurchasable(),
                 p.getPreferredSupplierId(),
-                p.getRestrictedKind()
+                p.getRestrictedKind(),
+                // ADR-0044 D-1b
+                p.isWeighed(),
+                p.getTareWeight(),
+                p.getScaleStep(),
+                p.getMaxSaleWeight()
         );
     }
 }

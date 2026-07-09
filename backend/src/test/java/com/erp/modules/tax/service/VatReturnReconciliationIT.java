@@ -43,6 +43,7 @@ import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
+import com.erp.modules.tax.domain.dto.VatReturnBandDto;
 import com.erp.modules.tax.domain.dto.VatReturnDto;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
 import com.erp.platform.common.money.MoneyDto;
@@ -347,6 +348,41 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
         assertThat(recomputed.closingCredit())
                 .as("net > 0 → closing credit = 0")
                 .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // Amina #4: the by-band breakdown + sales-turnover figures must populate (were always empty due
+    // to a tax_summary reader/writer JSON mismatch).
+    @Test
+    void recompute_afterSalesFinalised_populatesBandBreakdownAndTurnover() {
+        SalesInvoiceDto invoice = createAndFinaliseInvoice();
+        dispatcher.dispatchOne(getPendingFinalisedEvent(invoice.uid()).getId());
+
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "vatrc_root", true, company.getId(), branch.getId(), null));
+
+        YearMonth now = YearMonth.now();
+        VatReturnDto opened = vatReturnService.open(
+                new OpenVatReturnRequest(companyUid, now.getYear(), now.getMonthValue()));
+        VatReturnDto recomputed = vatReturnService.recompute(opened.uid());
+
+        // Amina UPR-2: the schedule reads as a fixed STANDARD/ZERO_RATED/EXEMPT layout — all three
+        // bands present even though this period has only a standard-rated sale (the other two are 0).
+        assertThat(recomputed.bands())
+                .extracting(VatReturnBandDto::taxBand)
+                .containsExactlyInAnyOrder("STANDARD", "ZERO_RATED", "EXEMPT");
+        VatReturnBandDto standard = recomputed.bands().stream()
+                .filter(b -> "STANDARD".equals(b.taxBand()))
+                .findFirst().orElseThrow();
+        assertThat(standard.taxableBase()).isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(standard.outputVat()).isEqualByComparingTo(VAT_180);
+        VatReturnBandDto zeroRated = recomputed.bands().stream()
+                .filter(b -> "ZERO_RATED".equals(b.taxBand()))
+                .findFirst().orElseThrow();
+        assertThat(zeroRated.taxableBase()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(zeroRated.outputVat()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(recomputed.salesTurnover())
+                .as("sales turnover = sum of taxable bases across bands")
+                .isEqualByComparingTo(new BigDecimal("1000"));
     }
 
     // =========================================================================

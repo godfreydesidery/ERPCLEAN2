@@ -53,6 +53,7 @@ const MOCK_RETURN: VatReturnDto = {
   closingCredit: 0,
   priorReturnId: null, filingReference: null, filingDate: null,
   postedJournalUid: null, filedAt: null, filedBy: null,
+  salesTurnover: 150000, purchasesTurnover: null, zeroRatedSales: 0, exemptSales: 0,
   bands: [],
 };
 

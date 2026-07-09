@@ -55,13 +55,32 @@ public class PurchaseSettingsServiceImpl implements PurchaseSettingsService {
         if (req.currency() != null && !req.currency().isBlank()) {
             s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }
-        // P2 D7 — procurement policy defaults (null = leave unchanged for nullable refs/amounts;
-        // booleans are explicit tri-state via Boolean wrapper).
-        s.setDefaultPaymentTermsId(req.defaultPaymentTermsId());
-        s.setDefaultLocationId(req.defaultLocationId());
-        s.setMatchTolerancePct(req.matchTolerancePct());
-        s.setMatchToleranceAbs(req.matchToleranceAbs());
-        s.setRequisitionApprovalThresholdAmount(req.requisitionApprovalThresholdAmount());
+        // P2 D7 — procurement policy defaults. These are NOT surfaced by any current UI, so a partial
+        // update (e.g. the settings form, which only sends the approval + receipt-tolerance fields)
+        // must LEAVE THEM UNCHANGED rather than wipe them to null — null = leave unchanged (matches the
+        // Boolean tri-state handling below). Fields the settings form DOES own (poApprovalThreshold,
+        // receiptTolerancePct) are set unconditionally above/below so a blank there still clears them.
+        if (req.defaultPaymentTermsId() != null) {
+            s.setDefaultPaymentTermsId(req.defaultPaymentTermsId());
+        }
+        if (req.defaultLocationId() != null) {
+            s.setDefaultLocationId(req.defaultLocationId());
+        }
+        if (req.matchTolerancePct() != null) {
+            s.setMatchTolerancePct(req.matchTolerancePct());
+        }
+        if (req.matchToleranceAbs() != null) {
+            s.setMatchToleranceAbs(req.matchToleranceAbs());
+        }
+        if (req.requisitionApprovalThresholdAmount() != null) {
+            s.setRequisitionApprovalThresholdAmount(req.requisitionApprovalThresholdAmount());
+        }
+        // Owned by the settings form (always sent) — set unconditionally so blank clears them.
+        // Range-checked here (not via annotation) so the message stays field-name-free.
+        if (req.receiptTolerancePct() != null && req.receiptTolerancePct().signum() < 0) {
+            throw new IllegalArgumentException("Over-receipt tolerance cannot be negative.");
+        }
+        s.setReceiptTolerancePct(req.receiptTolerancePct());
         if (req.autoCloseEnabled() != null) {
             s.setAutoCloseEnabled(req.autoCloseEnabled());
         }

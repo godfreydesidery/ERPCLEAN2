@@ -1,6 +1,7 @@
 package com.erp.modules.purchases.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.iam.domain.entity.AppUser;
@@ -28,6 +29,8 @@ import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
+import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
@@ -103,6 +106,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     @Autowired private SupplierService         supplierService;
     @Autowired private ProductService          productService;
     @Autowired private UnitOfMeasureService    unitService;
+    @Autowired private PurchaseSettingsService purchaseSettingsService;
     @Autowired private PurchaseOrderRepository   poRepo;
     @Autowired private PurchaseOrderLineRepository poLineRepo;
     @Autowired private GoodsReceiptRepository    grRepo;
@@ -353,6 +357,78 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                         List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("4"))))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Over-receipt rejected");
+    }
+
+    // Saidi #4: with a per-company over-receipt tolerance, a receipt may exceed the ordered amount.
+    @Test
+    void overReceipt_withinCompanyTolerance_allowed() {
+        setReceiptTolerance(new BigDecimal("5"));   // 5%
+        ProductDto product = stockableProduct("TolRcpt-Rice");
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("100"), new BigDecimal("200"));
+        PurchaseOrderLineDto poLine = placed.lines().get(0);
+
+        // Receive 105 — exactly 5% over the 100 ordered — allowed.
+        assertThatCode(() ->
+                grService.createAndReceive(new CreateGoodsReceiptRequest(
+                        placed.uid(), null,
+                        List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("105"))))))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void overReceipt_beyondCompanyTolerance_rejected() {
+        setReceiptTolerance(new BigDecimal("5"));   // 5%
+        ProductDto product = stockableProduct("TolRcpt2-Rice");
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("100"), new BigDecimal("200"));
+        PurchaseOrderLineDto poLine = placed.lines().get(0);
+
+        // Receive 106 — beyond the 5% tolerance (ceiling 105) — still rejected.
+        assertThatThrownBy(() ->
+                grService.createAndReceive(new CreateGoodsReceiptRequest(
+                        placed.uid(), null,
+                        List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("106"))))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Over-receipt rejected");
+    }
+
+    private void setReceiptTolerance(BigDecimal pct) {
+        purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), false, null, "TZS",
+                null, null, null, null, null, null, null, pct));
+    }
+
+    // Regression: a partial update (the settings form only sends approval + receipt-tolerance) must
+    // NOT wipe fields it doesn't surface (matchTolerancePct etc.) back to null.
+    @Test
+    void purchaseSettings_partialUpdate_preservesUnsurfacedFields() {
+        // First, set a match-tolerance (a field no UI currently surfaces).
+        purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), false, null, "TZS",
+                null, null, new BigDecimal("2.5"), null, null, null, null, null));
+
+        // Then a settings-form-shaped partial update: approval + receiptTolerance only, matchTolerance omitted.
+        PurchaseSettingsDto after = purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), false, null, "TZS",
+                null, null, null, null, null, null, null, new BigDecimal("5")));
+
+        assertThat(after.matchTolerancePct())
+                .as("a field the form doesn't send must be preserved, not wiped to null")
+                .isEqualByComparingTo("2.5");
+        assertThat(after.receiptTolerancePct())
+                .as("a field the form owns is still set (and clearable) as sent")
+                .isEqualByComparingTo("5");
+    }
+
+    // Persona re-test: a negative tolerance is rejected with a plain, field-name-free message.
+    @Test
+    void setReceiptTolerance_negative_friendlyMessage() {
+        assertThatThrownBy(() -> purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), false, null, "TZS",
+                null, null, null, null, null, null, null, new BigDecimal("-5"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Over-receipt tolerance cannot be negative.");
     }
 
     // =========================================================================

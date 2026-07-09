@@ -288,6 +288,11 @@ export interface PurchaseSettingsDto {
   poApprovalEnabled: boolean;
   poApprovalThresholdAmount: string;
   currency: string;
+  /**
+   * Goods-receipt over-receipt tolerance percent. BigDecimal on the backend — arrives as a
+   * JSON number (not stringified; only Long ids are). Null = strict receiving (no over-receipt).
+   */
+  receiptTolerancePct: number | null;
 }
 
 export interface UpdatePurchaseSettingsRequest {
@@ -295,4 +300,6 @@ export interface UpdatePurchaseSettingsRequest {
   poApprovalEnabled: boolean;
   poApprovalThresholdAmount: string;
   currency: string;
+  /** Null clears the tolerance (strict receiving) — not "leave unchanged". */
+  receiptTolerancePct: number | null;
 }

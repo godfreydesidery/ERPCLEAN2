@@ -16,7 +16,10 @@
  *  8. Opening stock: skipped when qty is blank / non-positive / type=SERVICE.
  *  9. Barcode primary enforcement: first row auto-primary; setPrimaryBarcode transfers flag.
  * 10. Form validation: name required; base unit required.
- * 11. Full happy-path: all 6 sections done.
+ * 11. Full happy-path: all sections done.
+ * 12. Weighed goods (ADR-0044 D-1b): setWeighing is skipped when the toggle is off; called with
+ *     the newly-created uid when it's on; a weighing-only failure doesn't undo/hide the already-
+ *     saved product (fails only that section).
  */
 
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
@@ -44,8 +47,8 @@ type MockSvc = Record<string, ReturnType<typeof vi.fn>>;
 const ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
 const CO  = { uid: 'CO1', id: '10', name: 'Main Co' };
 
-function makeUnit(uid: string, code: string): UnitOfMeasureDto {
-  return { id: uid, uid, companyId: '10', code, name: code, status: 'ACTIVE',
+function makeUnit(uid: string, code: string, dimensionType: UnitOfMeasureDto['dimensionType'] = 'COUNT'): UnitOfMeasureDto {
+  return { id: uid, uid, companyId: '10', code, name: code, status: 'ACTIVE', dimensionType,
     version: null, createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };
 }
 function makePriceList(uid: string, code: string, isDefault = false): PriceListDto {
@@ -57,8 +60,9 @@ function makeBranch(uid: string, code: string): Branch {
     timeZone: 'Africa/Dar_es_Salaam', isDefault: false, status: 'ACTIVE' };
 }
 
-const UNIT_PCS          = makeUnit('U1', 'PCS');
+const UNIT_PCS          = makeUnit('U1', 'PCS');           // COUNT — the default create-mode base unit
 const UNIT_CTN          = makeUnit('U2', 'CTN');
+const UNIT_KG           = makeUnit('U3', 'KG', 'WEIGHT');   // WEIGHT — enables "Sold by weight"
 const PRICE_LIST_DEFAULT = makePriceList('PL1', 'DEFAULT', false);
 const PRICE_LIST_RETAIL  = makePriceList('PL2', 'RETAIL', false);
 const PRICE_LIST_ONLY    = makePriceList('PL3', 'STANDARD', false);
@@ -88,8 +92,8 @@ function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
     create:         vi.fn(() => of(CREATED_PRODUCT)),
     update:         vi.fn(() => of(CREATED_PRODUCT)),
     getByUid:       vi.fn(() => of(CREATED_PRODUCT)),
-    listUnits:      vi.fn(() => of({ rows: [UNIT_PCS, UNIT_CTN],
-      meta: { page: 0, size: 200, totalElements: 2, totalPages: 1, hasNext: false } })),
+    listUnits:      vi.fn(() => of({ rows: [UNIT_PCS, UNIT_CTN, UNIT_KG],
+      meta: { page: 0, size: 200, totalElements: 3, totalPages: 1, hasNext: false } })),
     listPriceLists: vi.fn(() => of([PRICE_LIST_DEFAULT, PRICE_LIST_RETAIL])),
     listBarcodes:   vi.fn(() => of([])),
     listBulkPacks:  vi.fn(() => of([])),
@@ -99,6 +103,7 @@ function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
     addBarcode:     vi.fn(() => of({})),
     addBulkPack:    vi.fn(() => of({})),
     assignBranch:   vi.fn(() => of({})),
+    setWeighing:    vi.fn(() => of(CREATED_PRODUCT)),
     ...overrides,
   };
 }
@@ -652,5 +657,192 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['addBarcode']).toHaveBeenCalledOnce();
     expect(svc['addBulkPack']).toHaveBeenCalledOnce();
     expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
+  });
+});
+
+// ── 11. Weighed goods (ADR-0044 D-1b) ─────────────────────────────────────────
+
+describe('ProductMasterComponent — weighed goods sub-step', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('create-without-weighing: does not call setWeighing when "Sold by weight" is left off', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    // fWeighed left at its default (false).
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['setWeighing']).not.toHaveBeenCalled();
+    expect(comp.sectionResults().find((s) => s.label === 'Weighed goods')?.status).toBe('done');
+    expect(comp.sectionResults().every((s) => s.status === 'done')).toBe(true);
+  });
+
+  it('create-with-weighing: chains setWeighing with the newly-created uid after the product is saved', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1');
+    comp.fWeighed.set(true);
+    comp.fTareWeight.set(' 0.050 ');
+    comp.fScaleStep.set(' 0.005 ');
+    comp.fMaxSaleWeight.set(' 25 ');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['create']).toHaveBeenCalledOnce();
+    // Chained after create — called with the uid the create() call returned, not a blank/pending one.
+    expect(svc['setWeighing']).toHaveBeenCalledWith('PUID1', {
+      weighed: true,
+      tareWeight: '0.050',
+      scaleStep: '0.005',
+      maxSaleWeight: '25',
+    });
+    expect(comp.sectionResults().find((s) => s.label === 'Weighed goods')?.status).toBe('done');
+  });
+
+  it('sends nulls for tare/scaleStep/maxSaleWeight when the fields are left blank', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1');
+    comp.fWeighed.set(true);
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['setWeighing']).toHaveBeenCalledWith('PUID1', {
+      weighed: true,
+      tareWeight: null,
+      scaleStep: null,
+      maxSaleWeight: null,
+    });
+  });
+});
+
+// ── 12. Weighed goods sub-step failure ────────────────────────────────────────
+
+describe('ProductMasterComponent — weighed goods sub-step failure', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({
+      productServiceOverrides: {
+        setWeighing: vi.fn(() => throwError(() => new HttpErrorResponse({
+          status: 422,
+          error: { errors: ['A weighed product must use a weight base unit such as kilograms.'] },
+        }))),
+      },
+    });
+  });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('fails only the Weighed goods section — the already-created product is not hidden as unsaved', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Weighed Cheese');
+    comp.fBaseUnitUid.set('U1'); // PCS in the test fixture, not a weight unit — server would reject
+    comp.fWeighed.set(true);
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    // The anchor (product) succeeded — savedUid is set and its section is 'done' — so the
+    // failure must not read as "the product wasn't saved".
+    expect(comp.savedUid()).toBe('PUID1');
+    expect(comp.sectionResults()[0].status).toBe('done');
+    expect(comp.anchorFailed()).toBe(false);
+
+    const weighingSection = comp.sectionResults().find((s) => s.label === 'Weighed goods');
+    expect(weighingSection?.status).toBe('failed');
+    expect(weighingSection?.error).toBe('A weighed product must use a weight base unit such as kilograms.');
+    expect(comp.hasAnyFailure()).toBe(true);
+
+    fixture.detectChanges();
+    const html = (fixture.nativeElement as HTMLElement).innerHTML;
+    expect(html).toContain('Product saved. Some details need attention.');
+    expect(html).toContain('Open product');
+  });
+});
+
+// ── 13. Weighed goods: client-side base-unit gate ─────────────────────────────
+
+describe('ProductMasterComponent — weighed goods base-unit gate', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('disables the toggle and shows a hint for a COUNT base unit (U1/PCS)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U1'); // PCS/COUNT
+    fixture.detectChanges();
+
+    expect(comp.baseUnitIsWeight()).toBe(false);
+    const toggle: HTMLInputElement | null = fixture.nativeElement.querySelector('#masterWeighed');
+    expect(toggle?.disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Choose a weight base unit');
+  });
+
+  it('enables the toggle for a WEIGHT base unit (U3/KG)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    fixture.detectChanges();
+
+    // baseUnitIsWeight drives the toggle's [disabled]; assert the gate signal + that the hint is gone.
+    // (The rendered `disabled` on the [ngModel] control folds in forms/CD timing, not a clean read.)
+    expect(comp.baseUnitIsWeight()).toBe(true);
+    expect(fixture.nativeElement.textContent).not.toContain('Choose a weight base unit');
+  });
+
+  it('ignores onWeighedToggle(true) while the base unit is not a WEIGHT unit (backstop)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U1'); // PCS/COUNT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(false);
+  });
+
+  it('resets "Sold by weight" off when the base unit changes away from WEIGHT', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(true);
+
+    comp.onBaseUnitChange('U1'); // back to PCS/COUNT
+    expect(comp.fWeighed()).toBe(false);
+  });
+
+  it('resets "Sold by weight" off when the company changes (base unit picker is cleared)', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onBaseUnitChange('U3'); // KG/WEIGHT
+    comp.onWeighedToggle(true);
+    expect(comp.fWeighed()).toBe(true);
+
+    comp.onCompanyChange('10');
+    expect(comp.fBaseUnitUid()).toBe('');
+    expect(comp.fWeighed()).toBe(false);
   });
 });

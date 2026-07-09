@@ -74,6 +74,7 @@ const SHOTS = [
   { chapter: '04-procurement', name: 'goods-receipts',      route: 'goods-receipts',   caption: 'Goods receipts' },
   { chapter: '04-procurement', name: 'purchase-returns',    route: 'purchase-returns', caption: 'Purchase returns' },
   { chapter: '04-procurement', name: 'landed-costs',        route: 'landed-costs',     caption: 'Landed costs' },
+  { chapter: '04-procurement', name: 'purchase-settings',   route: 'purchase-settings', caption: 'Purchase settings — PO approval threshold and goods-receipt over-receipt tolerance' },
 
   // 05 — Inventory & manufacturing
   { chapter: '05-inventory-manufacturing', name: 'stock',           route: 'stock',           caption: 'Stock on hand' },

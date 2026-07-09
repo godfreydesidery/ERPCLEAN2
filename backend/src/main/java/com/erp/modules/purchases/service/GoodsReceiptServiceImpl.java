@@ -13,6 +13,7 @@ import com.erp.modules.purchases.domain.entity.GoodsReceipt;
 import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
 import com.erp.modules.purchases.domain.entity.GoodsReceiptLineSerial;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
+import com.erp.modules.purchases.domain.entity.PurchaseSettings;
 import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
@@ -20,6 +21,7 @@ import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptLineSerialRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
+import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -69,6 +71,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final PurchaseOrderRepository          orders;
     private final PurchaseOrderLineRepository      poLines;
     private final ProductRepository                products;
+    private final PurchaseSettingsRepository       purchaseSettings;
     private final PurchaseNumberGenerator          numberGen;
     private final OutstandingTracker               tracker;
     private final PurchaseOrderServiceImpl         poService;  // for recomputePoStatus
@@ -82,6 +85,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    PurchaseOrderRepository orders,
                                    PurchaseOrderLineRepository poLines,
                                    ProductRepository products,
+                                   PurchaseSettingsRepository purchaseSettings,
                                    PurchaseNumberGenerator numberGen,
                                    OutstandingTracker tracker,
                                    PurchaseOrderServiceImpl poService,
@@ -94,6 +98,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.orders        = orders;
         this.poLines       = poLines;
         this.products      = products;
+        this.purchaseSettings = purchaseSettings;
         this.numberGen     = numberGen;
         this.tracker       = tracker;
         this.poService     = poService;
@@ -325,10 +330,24 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         // The user-facing message stays free of internal detail (ULID, base-unit values, rule/ADR
         // codes) — those go to the log only, so the error shown to the user is safe and readable.
         BigDecimal outstanding = poLine.getOrderedQtyInBase().subtract(poLine.getReceivedQtyInBase());
-        if (qtyInBase.compareTo(outstanding) > 0) {
+        // Over-receipt is an opt-in per-company policy (Saidi #4): commodities delivered by weight
+        // (rice, produce) rarely match the PO exactly. When purchase_settings.receipt_tolerance_pct is
+        // set, allow the cumulative received to exceed the ordered amount by up to that percent — the
+        // service is authoritative here (the DB CHECK is only a >= 0 sanity guard since V92).
+        BigDecimal ceiling = outstanding;
+        BigDecimal tolerancePct = purchaseSettings.findByCompanyId(po.getCompanyId())
+                .map(PurchaseSettings::getReceiptTolerancePct).orElse(null);
+        if (tolerancePct != null && tolerancePct.signum() > 0) {
+            // ceiling = ordered × (1 + tol%) − alreadyReceived  (headroom against the ordered total)
+            BigDecimal allowedTotal = poLine.getOrderedQtyInBase()
+                    .multiply(BigDecimal.ONE.add(tolerancePct.movePointLeft(2)));
+            ceiling = allowedTotal.subtract(poLine.getReceivedQtyInBase())
+                    .setScale(6, java.math.RoundingMode.HALF_UP);
+        }
+        if (qtyInBase.compareTo(ceiling) > 0) {
             log.warn("Over-receipt rejected (BR-PURCH-10, ADR-0011 D-3) on PO line id={} uid={}: "
-                            + "outstanding={}, requestedQtyInBase={}",
-                    poLine.getId(), poLine.getUid(), outstanding, qtyInBase);
+                            + "outstanding={}, tolerancePct={}, ceiling={}, requestedQtyInBase={}",
+                    poLine.getId(), poLine.getUid(), outstanding, tolerancePct, ceiling, qtyInBase);
             throw new IllegalStateException(
                     "Over-receipt rejected for " + poLine.getProductName()
                             + ": the quantity received exceeds the outstanding amount on this line. "
