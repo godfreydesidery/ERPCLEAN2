@@ -118,6 +118,9 @@
 
   <!-- ── View-permissions popup (read-only; ROLE.VIEW is enough) ─────────────── -->
   @if (permissionsRole(); as role) {
+    <!-- Backdrop is a SIBLING before the modal (not nested), so the modal (z-index 1055)
+         paints above the backdrop (1050); a nested backdrop covers the dialog. -->
+    <div class="modal-backdrop show" (click)="closePermissions()" aria-hidden="true"></div>
     <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
          [attr.aria-labelledby]="'rolePermsTitle'">
       <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -160,7 +163,6 @@
           </div>
         </div>
       </div>
-      <div class="modal-backdrop show" (click)="closePermissions()" aria-hidden="true"></div>
     </div>
   }
 </section>
