@@ -132,6 +132,25 @@ class DefaultRoleBundlesSeededTest {
                 .as("Default roles missing a signature capability (would break the persona's core "
                         + "job). Role → missing anchor: %s", missingAnchors)
                 .isEmpty();
+
+        // 5) ADR-0059 seed fence: no operational bundle may carry a reserved "power-to-delegate"
+        // permission. A reserved code in a least-privilege bundle would silently arm vertical
+        // privilege escalation for every holder (they could self-elevate to ORG_ADMIN). Only
+        // ORG_ADMIN (absorbing the whole catalogue via CROSS JOIN) legitimately holds these.
+        Set<String> reserved = Set.of(
+                "USER.MANAGE", "USER.COMPANY.MANAGE", "ROLE.MANAGE", "ROLE.ADMIN", "BRANCH.ASSIGN");
+        Map<String, Set<String>> leaked = new LinkedHashMap<>();
+        for (var e : grantsByRole.entrySet()) {
+            Set<String> bad = new TreeSet<>(e.getValue());
+            bad.retainAll(reserved);
+            if (!bad.isEmpty()) {
+                leaked.put(e.getKey(), bad);
+            }
+        }
+        assertThat(leaked)
+                .as("Operational bundles must not carry reserved escalation permissions (ADR-0059). "
+                        + "Role → reserved codes: %s", leaked)
+                .isEmpty();
     }
 
     private static Set<String> codesIn(String text) {

@@ -10,6 +10,7 @@ import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -17,6 +18,7 @@ import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.time.Instant;
@@ -43,23 +45,29 @@ public class UserServiceImpl implements UserService {
 
     private final AppUserRepository users;
     private final UserCompanyRepository userCompanies;
+    private final UserRoleRepository userRoles;
     private final CompanyRepository companies;
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
+    private final AuthorityCeiling authorityCeiling;
 
     public UserServiceImpl(AppUserRepository users,
                            UserCompanyRepository userCompanies,
+                           UserRoleRepository userRoles,
                            CompanyRepository companies,
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
-                           AuditService audit) {
+                           AuditService audit,
+                           AuthorityCeiling authorityCeiling) {
         this.users = users;
         this.userCompanies = userCompanies;
+        this.userRoles = userRoles;
         this.companies = companies;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicy = passwordPolicy;
         this.audit = audit;
+        this.authorityCeiling = authorityCeiling;
     }
 
     @Override
@@ -223,6 +231,22 @@ public class UserServiceImpl implements UserService {
     @Override
     public void setPasswordByUid(String uid, SetPasswordRequest request) {
         AppUser user = requireInScope(uid);
+
+        // ADR-0059 authority-containment: you may not reset the password of a user who OUTRANKS you.
+        // Resolve the target's effective permissions across the caller's active company (branch-
+        // agnostic — a takeover lands in the victim's default branch) and require them to be a subset
+        // of the caller's. Closes the same-company peer/admin account-takeover path. Root is exempt;
+        // requireInScope already 404s a root target for a non-root caller. Applied to setPassword ONLY
+        // — update/disable/enable/unlock confer no authority.
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && !principal.root()) {
+            Long companyId = principal.companyId();
+            List<String> targetCodes = (companyId == null)
+                    ? List.of()
+                    : userRoles.resolvePermissionCodesAnyBranch(user.getId(), companyId);
+            authorityCeiling.assertCanConfer(principal, targetCodes);
+        }
+
         passwordPolicy.validate(request.password());
         user.changePassword(passwordEncoder.encode(request.password()), Instant.now());
 

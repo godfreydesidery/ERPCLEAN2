@@ -5,6 +5,7 @@ import com.erp.modules.iam.domain.dto.UserRoleDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.Permission;
 import com.erp.modules.iam.domain.entity.Role;
 import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.AppUserRepository;
@@ -17,6 +18,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -24,6 +26,8 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +41,7 @@ public class UserRoleServiceImpl implements UserRoleService {
     private final CompanyRepository companies;
     private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
+    private final AuthorityCeiling authorityCeiling;
     private final PermissionResolver permissionResolver;
     private final AuditService audit;
     private final UserCompanyService userCompanyService;
@@ -47,6 +52,7 @@ public class UserRoleServiceImpl implements UserRoleService {
                                CompanyRepository companies,
                                BranchRepository branches,
                                ScopeGuard scopeGuard,
+                               AuthorityCeiling authorityCeiling,
                                PermissionResolver permissionResolver,
                                AuditService audit,
                                UserCompanyService userCompanyService) {
@@ -56,6 +62,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         this.companies = companies;
         this.branches = branches;
         this.scopeGuard = scopeGuard;
+        this.authorityCeiling = authorityCeiling;
         this.permissionResolver = permissionResolver;
         this.audit = audit;
         this.userCompanyService = userCompanyService;
@@ -64,7 +71,10 @@ public class UserRoleServiceImpl implements UserRoleService {
     @Override
     public UserRoleDto grant(GrantRoleRequest request) {
         AppUser user = Lookups.orNotFound(users.findByUid(request.userUid()), "AppUser", request.userUid());
-        Role role = Lookups.orNotFound(roles.findByUid(request.roleUid()), "Role", request.roleUid());
+        // findWithPermissionsByUid (not findByUid): the authority-ceiling check below needs the role's
+        // permission closure loaded inside this transaction (ADR-0059).
+        Role role = Lookups.orNotFound(
+                roles.findWithPermissionsByUid(request.roleUid()), "Role", request.roleUid());
         Company company = Lookups.orNotFound(companies.findByUid(request.companyUid()), "Company", request.companyUid());
 
         // ADR-0002 D-3: scope the grant to the caller's active company.
@@ -92,6 +102,16 @@ public class UserRoleServiceImpl implements UserRoleService {
             throw new ConflictException("Active grant already exists for this user/role/company/branch combination.");
         }
 
+        // ADR-0059 authority-containment: a non-root caller may only grant a role whose permission set
+        // is a subset of their own (and may not grant a system role, nor a reserved-carrying role
+        // unless they are org-admin-tier). Closes vertical privilege escalation — self-grant of a
+        // superior role, and (transitively) the puppet-admin chain — since a granted role can never
+        // exceed the granter's own authority. Root is exempt.
+        Set<String> roleCodes = role.getPermissions().stream()
+                .map(Permission::getCode)
+                .collect(Collectors.toSet());
+        authorityCeiling.assertCanConferRole(RequestContext.get(), role.isSystem(), roleCodes);
+
         Long grantedBy = RequestContext.get().userId();
         UserRole ur = new UserRole(user.getId(), role, company.getId(), branchId, grantedBy);
         userRoles.save(ur);
@@ -110,6 +130,13 @@ public class UserRoleServiceImpl implements UserRoleService {
         }
         audit.record(AuditEvent.of(AuditActions.ROLE_GRANT, "user_role", ur.getId(), ur.getUid())
                 .detail(detail));
+
+        // ADR-0059: a privileged (reserved-carrying) grant is a distinct, high-signal security event
+        // — only a root / org-admin-tier caller can produce one (the ceiling above enforces that).
+        if (AuthorityCeiling.isPrivileged(roleCodes)) {
+            audit.record(AuditEvent.of(AuditActions.ROLE_GRANT_PRIVILEGED, "user_role", ur.getId(), ur.getUid())
+                    .detail(detail));
+        }
 
         return toDto(ur, user.getUid(), role.getCode(), company.getUid(), branchUid);
     }
