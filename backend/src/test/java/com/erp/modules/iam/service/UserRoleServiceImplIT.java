@@ -129,8 +129,13 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void grant_nonRootGrantorInOwnCompany_succeeds() {
-        // nonRootUser is active in companyA; grants in companyA — should succeed
+    void grant_nonRootGrantorInOwnCompany_holdingTheRolesPermission_succeeds() {
+        // ADR-0059: a non-root grantor may grant a role only if its permissions are a subset of their
+        // own. Give nonRootUser the role first (as root, default ctx), then it may pass the role on.
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
+        userRoleService.grant(new GrantRoleRequest(
+                nonRootUser.getUid(), testRole.getUid(), companyA.getUid(), null));
+
         testData.seedMembership(targetUser.getUid(), companyA.getUid());
         RequestContext.set(new RequestContext.Principal(
                 nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
@@ -138,6 +143,62 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
         UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
                 targetUser.getUid(), testRole.getUid(), companyA.getUid(), null));
         assertThat(dto.companyUid()).isEqualTo(companyA.getUid());
+    }
+
+    // ---------------------------------------------------------------
+    // ADR-0059 authority ceiling: a non-root caller may not grant a role
+    // above their own effective permissions (subset), grant a system role,
+    // or self-elevate.
+    // ---------------------------------------------------------------
+
+    @Test
+    void grant_nonRootWithoutTheRolesPermission_throwsForbidden() {
+        // nonRootUser holds NO permissions; testRole confers COMPANY.MANAGE -> not a subset.
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
+        RequestContext.set(new RequestContext.Principal(
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
+
+        assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
+                targetUser.getUid(), testRole.getUid(), companyA.getUid(), null)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void grant_nonRootCannotGrantSystemRole_throwsForbidden() {
+        // ORG_ADMIN is a seeded is_system role — a non-root caller may never grant it.
+        Role orgAdmin = roleRepo.findByCode("ORG_ADMIN")
+                .orElseThrow(() -> new IllegalStateException("ORG_ADMIN must be seeded"));
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
+        RequestContext.set(new RequestContext.Principal(
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
+
+        assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
+                targetUser.getUid(), orgAdmin.getUid(), companyA.getUid(), null)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void grant_nonRootSelfGrantOfSuperiorRole_throwsForbidden() {
+        // The self-elevation path: nonRootUser (no perms) grants itself a role it does not cover.
+        testData.seedMembership(nonRootUser.getUid(), companyA.getUid());
+        RequestContext.set(new RequestContext.Principal(
+                nonRootUser.getId(), "nonroot", false, companyA.getId(), branchInA.getId(), null));
+
+        assertThatThrownBy(() -> userRoleService.grant(new GrantRoleRequest(
+                nonRootUser.getUid(), testRole.getUid(), companyA.getUid(), null)))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void grant_rootMayGrantSystemRole_succeeds() {
+        // Root is exempt from the ceiling and may grant ORG_ADMIN (default ctx is root in companyA).
+        Role orgAdmin = roleRepo.findByCode("ORG_ADMIN")
+                .orElseThrow(() -> new IllegalStateException("ORG_ADMIN must be seeded"));
+        testData.seedMembership(targetUser.getUid(), companyA.getUid());
+
+        UserRoleDto dto = userRoleService.grant(new GrantRoleRequest(
+                targetUser.getUid(), orgAdmin.getUid(), companyA.getUid(), null));
+        assertThat(dto.roleCode()).isEqualTo("ORG_ADMIN");
     }
 
     // ---------------------------------------------------------------

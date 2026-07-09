@@ -24,6 +24,12 @@ public final class AuditActions {
     public static final String ROLE_REVOKE          = "ROLE.REVOKE";
     public static final String ROLE_CREATE          = "ROLE.CREATE";
     public static final String ROLE_PERMISSIONS_SET = "ROLE.PERMISSIONS_SET";
+    /**
+     * A privileged role assignment — the granted role carries a reserved "power-to-delegate"
+     * permission (ADR-0059). Emitted alongside {@link #ROLE_GRANT} so privileged conferrals are a
+     * distinct, high-signal audit line (only root/org-admin-tier callers can produce one).
+     */
+    public static final String ROLE_GRANT_PRIVILEGED = "ROLE.GRANT.PRIVILEGED";
 
     // -- Branch assignment ----------------------------------------------------
     public static final String BRANCH_ASSIGN      = "BRANCH.ASSIGN";

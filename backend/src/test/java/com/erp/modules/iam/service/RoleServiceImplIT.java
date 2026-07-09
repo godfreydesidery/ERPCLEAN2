@@ -10,11 +10,14 @@ import com.erp.modules.iam.domain.dto.SetRolePermissionsRequest;
 import com.erp.modules.iam.domain.dto.UpdateRoleRequest;
 import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +38,14 @@ class RoleServiceImplIT extends PostgresIntegrationTest {
     void setUp() {
         testData.clearAll();
         // ORG_ADMIN (is_system=true) was seeded by V1 migration and is preserved by clearAll().
+        // A root principal so the role-mechanics tests are exempt from the ADR-0059 authority ceiling
+        // (only admins edit roles); individual authorization tests override this with a non-root one.
+        RequestContext.set(new RequestContext.Principal(0L, "root", true, null, null, null));
+    }
+
+    @AfterEach
+    void tearDown() {
+        RequestContext.clear();
     }
 
     // ---------------------------------------------------------------
@@ -55,18 +66,20 @@ class RoleServiceImplIT extends PostgresIntegrationTest {
 
     @Test
     void create_thenGetByUid_roundTrips() {
-        RoleDto created = roleService.create(new CreateRoleRequest("CASHIER", "Cashier", "Handles cash"));
+        // Use a non-seeded code: CASHIER is now a shipped is_system bundle (ADR-0057) that survives
+        // clearAll() (which deletes only is_system=false roles), so it would collide on create.
+        RoleDto created = roleService.create(new CreateRoleRequest("RT_ROLE", "Round Trip", "Handles cash"));
 
         assertThat(created.uid()).isNotBlank();
-        assertThat(created.code()).isEqualTo("CASHIER");
-        assertThat(created.name()).isEqualTo("Cashier");
+        assertThat(created.code()).isEqualTo("RT_ROLE");
+        assertThat(created.name()).isEqualTo("Round Trip");
         assertThat(created.description()).isEqualTo("Handles cash");
         assertThat(created.system()).isFalse();
         assertThat(created.status()).isEqualTo("ACTIVE");
 
         RoleDto fetched = roleService.getByUid(created.uid());
         assertThat(fetched.uid()).isEqualTo(created.uid());
-        assertThat(fetched.code()).isEqualTo("CASHIER");
+        assertThat(fetched.code()).isEqualTo("RT_ROLE");
     }
 
     @Test
@@ -157,6 +170,23 @@ class RoleServiceImplIT extends PostgresIntegrationTest {
 
         RoleDto cleared = roleService.setPermissions(role.uid(), new SetRolePermissionsRequest(List.of()));
         assertThat(cleared.permissionCodes()).isEmpty();
+    }
+
+    // ---------------------------------------------------------------
+    // ADR-0059 authority ceiling: a non-root author may only set permissions
+    // that are a subset of their own — build-your-own-superrole is refused.
+    // ---------------------------------------------------------------
+
+    @Test
+    void setPermissions_nonRootWithoutThePermission_throwsForbidden() {
+        RoleDto role = roleService.create(new CreateRoleRequest("LIMITED", "Limited", null));
+        // A non-root caller with no resolved permissions (empty effective set) cannot attach USER.VIEW.
+        String roleUid = role.uid();
+        SetRolePermissionsRequest req = new SetRolePermissionsRequest(List.of("USER.VIEW"));
+        RequestContext.set(new RequestContext.Principal(999L, "limited", false, 888L, null, null));
+
+        assertThatThrownBy(() -> roleService.setPermissions(roleUid, req))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     // ---------------------------------------------------------------

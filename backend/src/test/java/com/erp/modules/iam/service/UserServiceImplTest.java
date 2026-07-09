@@ -17,9 +17,11 @@ import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.List;
@@ -67,10 +69,12 @@ class UserServiceImplTest {
         service  = new UserServiceImpl(
                 userRepo,
                 userCompanyRepo,
+                mock(UserRoleRepository.class),
                 companyRepo,
                 passwordEncoder,
                 passwordPolicy,
-                mock(AuditService.class));
+                mock(AuditService.class),
+                mock(AuthorityCeiling.class));
     }
 
     @AfterEach

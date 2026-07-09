@@ -14,6 +14,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.security.AuthorityCeiling;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -68,6 +69,7 @@ class UserRoleServiceImplTest {
                 companyRepo,
                 branchRepo,
                 mock(ScopeGuard.class),
+                mock(AuthorityCeiling.class),
                 mock(PermissionResolver.class),
                 mock(AuditService.class),
                 mock(UserCompanyService.class));
