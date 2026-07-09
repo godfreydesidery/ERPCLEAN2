@@ -10,6 +10,8 @@
  *  6. Excluding all lines → formError.
  *  7. Batch/serial fields included in payload when provided.
  *  8. Empty batch/serial fields are omitted from the payload.
+ *  9. Over-receipt tolerance banner shows when the company setting has a tolerance configured.
+ * 10. Over-receipt tolerance banner is absent when the setting is null/0 (strict).
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -22,6 +24,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
+import { PurchaseSettingsService } from './settings/purchase-settings.service';
 import { GoodsReceiptCreateComponent } from './goods-receipt-create.component';
 
 @Component({ template: '', standalone: true })
@@ -63,16 +66,29 @@ const STUB_GR = {
   notes: null, createdAt: null, lines: null,
 };
 
+const STUB_SETTINGS_NO_TOLERANCE = {
+  id: '1', uid: 'PS-1', companyId: '10',
+  poApprovalEnabled: false, poApprovalThresholdAmount: '0', currency: 'TZS',
+  receiptTolerancePct: null as number | null,
+};
+
+const STUB_SETTINGS_WITH_TOLERANCE = {
+  ...STUB_SETTINGS_NO_TOLERANCE,
+  receiptTolerancePct: 5,
+};
+
 function makeBed(overrides: {
   poUid?: string;
   getOrderByUidSpy?: ReturnType<typeof vi.fn>;
   listOrderLinesSpy?: ReturnType<typeof vi.fn>;
   createReceiptSpy?: ReturnType<typeof vi.fn>;
+  settingsResponse?: object;
 } = {}) {
   const poUid = overrides.poUid ?? 'PO-UID-1';
   const getOrderByUidSpy = overrides.getOrderByUidSpy ?? vi.fn(() => of(STUB_PO));
   const listOrderLinesSpy = overrides.listOrderLinesSpy ?? vi.fn(() => of([STUB_LINE]));
   const createReceiptSpy = overrides.createReceiptSpy ?? vi.fn(() => of(STUB_GR));
+  const settingsSpy = vi.fn(() => of(overrides.settingsResponse ?? STUB_SETTINGS_NO_TOLERANCE));
 
   TestBed.configureTestingModule({
     imports: [GoodsReceiptCreateComponent],
@@ -107,13 +123,17 @@ function makeBed(overrides: {
         provide: CompanyService,
         useValue: { list: vi.fn(() => of([STUB_COMPANY])) },
       },
+      {
+        provide: PurchaseSettingsService,
+        useValue: { getByCompany: settingsSpy },
+      },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       {
         provide: SessionStore,
         useValue: {
           hasPermission: vi.fn(() => true),
           isAuthenticated: signal(true),
-          user: signal(null),
+          user: signal({ activeCompanyUid: STUB_COMPANY.uid, isRoot: false }),
           permissions: signal([]),
           activeBranchUid: signal(null),
         },
@@ -121,7 +141,7 @@ function makeBed(overrides: {
     ],
   });
 
-  return { getOrderByUidSpy, listOrderLinesSpy, createReceiptSpy };
+  return { getOrderByUidSpy, listOrderLinesSpy, createReceiptSpy, settingsSpy };
 }
 
 // ── Specs ─────────────────────────────────────────────────────────────────────
@@ -202,9 +222,13 @@ describe('GoodsReceiptCreateComponent', () => {
 
   // ── 4. 409 over-receipt surfaces in formError ──────────────────────────────
 
-  it('sets formError with over-receipt message on 409', async () => {
+  it('surfaces the server 409 message (not a canned string) as formError', async () => {
+    // The screen now shows the server's actual reason, which distinguishes over-receipt from an
+    // already-received/closed PO — rather than always saying "reduce the quantities".
+    const serverMsg =
+      'Over-receipt rejected for Widget: the quantity received exceeds the outstanding amount on this line. Reduce it and try again.';
     const createReceiptSpy = vi.fn(() =>
-      throwError(() => new HttpErrorResponse({ status: 409, error: { errors: ['Over-receipt'] } })),
+      throwError(() => new HttpErrorResponse({ status: 409, error: { errors: [serverMsg] } })),
     );
     makeBed({ createReceiptSpy });
     const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
@@ -214,8 +238,7 @@ describe('GoodsReceiptCreateComponent', () => {
     comp.submit();
     await vi.runAllTimersAsync();
 
-    expect(comp.formError()).toContain('Over-receipt');
-    expect(comp.formError()).toContain('outstanding');
+    expect(comp.formError()).toBe(serverMsg);
   });
 
   // ── 5. Zero qty validation ─────────────────────────────────────────────────
@@ -293,5 +316,44 @@ describe('GoodsReceiptCreateComponent', () => {
     expect(line.expiryDate).toBeUndefined();
     expect(line.manufactureDate).toBeUndefined();
     expect(line.serialNumbers).toBeUndefined();
+  });
+
+  // ── 9. Tolerance banner shows when configured ─────────────────────────────
+
+  it('shows the over-receipt tolerance banner when the company setting has a tolerance', async () => {
+    const { settingsSpy } = makeBed({ settingsResponse: STUB_SETTINGS_WITH_TOLERANCE });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(settingsSpy).toHaveBeenCalledWith(STUB_COMPANY.uid);
+    expect(comp.hasTolerance()).toBe(true);
+    const banner = fixture.nativeElement.querySelector('.alert-info');
+    expect(banner?.textContent).toContain('5%');
+  });
+
+  // ── 10. Tolerance banner absent when null/0 (strict) ──────────────────────
+
+  it('does not show the tolerance banner when the company setting is null (strict)', async () => {
+    makeBed({ settingsResponse: STUB_SETTINGS_NO_TOLERANCE });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.hasTolerance()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.alert-info')).toBeNull();
+  });
+
+  it('does not show the tolerance banner when the company setting is 0 (strict)', async () => {
+    makeBed({ settingsResponse: { ...STUB_SETTINGS_NO_TOLERANCE, receiptTolerancePct: 0 } });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.hasTolerance()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.alert-info')).toBeNull();
   });
 });

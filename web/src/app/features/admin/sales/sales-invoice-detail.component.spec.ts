@@ -52,6 +52,22 @@ const STUB_PRODUCT = {
   status: 'ACTIVE', companyId: '10',
 };
 
+// ── Line stub (FR-SALES-08 price override + weighed-goods requestedQuantity) ───
+
+const STUB_LINE = {
+  id: '1', uid: 'LN-UID-1', invoiceId: '1', companyId: '10', branchId: '1',
+  productId: '7', productCode: 'P002', productName: 'Beverage',
+  unitId: '1', unitName: 'Each',
+  quantity: '10', qtyInBase: '10', requestedQuantity: 10 as number | null,
+  listPriceAmount: '100', unitPriceAmount: '100',
+  priceOverridden: false, overriddenBy: null,
+  lineDiscountAmount: null, lineDiscountPercent: null,
+  vatStatus: 'STANDARD', vatRate: '18',
+  netAmount: '1000', vatAmount: '180', grossAmount: '1180',
+  priceInclusive: false, currency: 'TZS',
+  createdAt: null, createdBy: null,
+};
+
 // ── Fiscal receipt stubs (D-6: EFD, ADR-0049) ───────────────────────────────────
 
 const STUB_FISCAL_ISSUED = {
@@ -81,18 +97,23 @@ const STUB_FISCAL_FAILED = {
 function makeBed(overrides: {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
   invoice?: typeof STUB_INVOICE;
+  lines?: (typeof STUB_LINE)[];
   renderBlobSpy?: ReturnType<typeof vi.fn>;
   hasPermission?: ReturnType<typeof vi.fn>;
   getFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
   issueFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
+  overrideLinePriceSpy?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
   const invoice = overrides.invoice ?? STUB_INVOICE;
+  const lines = overrides.lines ?? [];
   const renderBlobSpy = overrides.renderBlobSpy ?? vi.fn(() => of(new Blob(['%PDF'])));
   const hasPermission = overrides.hasPermission ?? vi.fn(() => true);
   const getFiscalReceiptSpy = overrides.getFiscalReceiptSpy ?? vi.fn(() => of(null));
   const issueFiscalReceiptSpy = overrides.issueFiscalReceiptSpy ?? vi.fn(() => of(STUB_FISCAL_ISSUED));
+  const overrideLinePriceSpy =
+    overrides.overrideLinePriceSpy ?? vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '90', priceOverridden: true }));
   const alertsSpy = { success: vi.fn(), error: vi.fn() };
 
   TestBed.configureTestingModule({
@@ -105,7 +126,7 @@ function makeBed(overrides: {
         provide: SalesService,
         useValue: {
           getByUid: vi.fn(() => of(invoice)),
-          listLines: vi.fn(() => of([])),
+          listLines: vi.fn(() => of(lines)),
           listPayments: vi.fn(() => of([])),
           addLine: vi.fn(() => of({})),
           removeLine: vi.fn(() => of(undefined)),
@@ -115,6 +136,7 @@ function makeBed(overrides: {
           void: vi.fn(() => of(STUB_INVOICE)),
           getFiscalReceipt: getFiscalReceiptSpy,
           issueFiscalReceipt: issueFiscalReceiptSpy,
+          overrideLinePrice: overrideLinePriceSpy,
         },
       },
       {
@@ -145,7 +167,10 @@ function makeBed(overrides: {
     ],
   });
 
-  return { listProductUnitsSpy, renderBlobSpy, getFiscalReceiptSpy, issueFiscalReceiptSpy, alertsSpy };
+  return {
+    listProductUnitsSpy, renderBlobSpy, getFiscalReceiptSpy, issueFiscalReceiptSpy,
+    overrideLinePriceSpy, alertsSpy,
+  };
 }
 
 // ── Specs ──────────────────────────────────────────────────────────────────────
@@ -554,5 +579,292 @@ describe('SalesInvoiceDetailComponent — Fiscal receipt panel', () => {
       'Could not issue the fiscal receipt.',
       'Could not reach the invoice.',
     );
+  });
+});
+
+// ── Line price override (FR-SALES-08, BR-SALES-09, SALES.INVOICE.OVERRIDE) ─────
+
+describe('SalesInvoiceDetailComponent — line price override', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); TestBed.resetTestingModule(); });
+
+  it('shows the Override price button on a DRAFT line with SALES.INVOICE.OVERRIDE', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [STUB_LINE] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.getAttribute('aria-label') === 'Override price for Beverage')).toBe(true);
+  });
+
+  it('hides the Override price button without SALES.INVOICE.OVERRIDE', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      hasPermission: vi.fn((code: string) => code !== 'SALES.INVOICE.OVERRIDE'),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.getAttribute('aria-label') === 'Override price for Beverage')).toBe(false);
+  });
+
+  it('hides the Override price button on a non-DRAFT invoice (FINALISED)', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'FINALISED' }, lines: [STUB_LINE] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('button'));
+    expect(buttons.some((b) => b.getAttribute('aria-label') === 'Override price for Beverage')).toBe(false);
+  });
+
+  it('shows an "Overridden" indicator when priceOverridden is true', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [{ ...STUB_LINE, priceOverridden: true }],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Overridden');
+  });
+
+  it('does not show the "Overridden" indicator when priceOverridden is false', async () => {
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [{ ...STUB_LINE, priceOverridden: false }],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Overridden');
+  });
+
+  it('startOverridePrice() opens the inline form prefilled with the current unit price', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [STUB_LINE] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+
+    expect(comp.overridingLineUid()).toBe('LN-UID-1');
+    expect(comp.overridePriceInput()).toBe('100');
+  });
+
+  it('rejects a non-numeric or non-positive entered price without calling the service', async () => {
+    const { overrideLinePriceSpy } = makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [STUB_LINE] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('0');
+    comp.saveOverridePrice(STUB_LINE as any);
+
+    expect(overrideLinePriceSpy).not.toHaveBeenCalled();
+    expect(comp.overridePriceError()).toBe('Enter a valid unit price greater than zero.');
+  });
+
+  it('saveOverridePrice() calls the service with the invoice/line uid + entered price, updates the row, and toasts success', async () => {
+    const updatedLine = { ...STUB_LINE, unitPriceAmount: '90', priceOverridden: true };
+    const { overrideLinePriceSpy, alertsSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => of(updatedLine)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('90');
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 90);
+    expect(comp.overridingLineUid()).toBeNull();
+    expect(comp.lines().find((l) => l.uid === 'LN-UID-1')?.unitPriceAmount).toBe('90');
+    expect(alertsSpy.success).toHaveBeenCalled();
+  });
+
+  it('surfaces a friendly server error and keeps the form open on failure', async () => {
+    const errResponse = new HttpErrorResponse({
+      error: { errors: ['This invoice is no longer a draft.'] },
+      status: 409,
+    });
+    makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => throwError(() => errResponse)),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('90');
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(comp.overridingLineUid()).toBe('LN-UID-1');
+    expect(comp.overridePriceError()).toBe('This invoice is no longer a draft.');
+    expect(comp.overridePriceSaving()).toBe(false);
+  });
+
+  // ── Fat-finger soft guard (persona re-test, Sabina) — never blocks, only confirms ──────────
+  // STUB_LINE.listPriceAmount is '100': >10x is >1000, <0.1x is <10.
+
+  it('prompts via window.confirm for a wildly-high price (>10x list) and proceeds when confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '2000', priceOverridden: true })),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('2000'); // 20x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('20× the list price (100)'));
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 2000);
+    expect(comp.overridingLineUid()).toBeNull();
+  });
+
+  it('prompts via window.confirm for a wildly-low price (<0.1x list) and proceeds when confirmed', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('5'); // 0.05x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 5);
+  });
+
+  it('does NOT prompt for a normal override within ~0.1x–10x of the list price', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+      overrideLinePriceSpy: vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '90', priceOverridden: true })),
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('90'); // 0.9x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(overrideLinePriceSpy).toHaveBeenCalledWith('INV-UID-1', 'LN-UID-1', 90);
+  });
+
+  it('does nothing and keeps the editor open when the user cancels the confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const { overrideLinePriceSpy } = makeBed({
+      invoice: { ...STUB_INVOICE, status: 'DRAFT' },
+      lines: [STUB_LINE],
+    });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.startOverridePrice(STUB_LINE as any);
+    comp.overridePriceInput.set('2000'); // 20x the '100' list price
+    comp.saveOverridePrice(STUB_LINE as any);
+    await vi.runAllTimersAsync();
+
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(overrideLinePriceSpy).not.toHaveBeenCalled();
+    expect(comp.overridingLineUid()).toBe('LN-UID-1');
+    expect(comp.overridePriceInput()).toBe('2000');
+    expect(comp.overridePriceSaving()).toBe(false);
+  });
+});
+
+// ── Weighed-goods scale-step rounding note (requestedQuantity) ─────────────────
+
+describe('SalesInvoiceDetailComponent — weighed-goods rounding note', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('shows the "entered → billed" note when requestedQuantity differs from quantity', async () => {
+    const roundedLine = { ...STUB_LINE, quantity: '0.815', requestedQuantity: 0.813 };
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [roundedLine] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.quantityWasRounded(roundedLine as any)).toBe(true);
+  });
+
+  it('does not flag rounding when requestedQuantity equals quantity', async () => {
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [STUB_LINE] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.quantityWasRounded(STUB_LINE as any)).toBe(false);
+  });
+
+  it('does not flag rounding when requestedQuantity is null', async () => {
+    const legacyLine = { ...STUB_LINE, requestedQuantity: null };
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [legacyLine] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.quantityWasRounded(legacyLine as any)).toBe(false);
+  });
+
+  it('renders the rounding note text in the DOM for a rounded line', async () => {
+    const roundedLine = { ...STUB_LINE, quantity: '0.815', requestedQuantity: 0.813 };
+    makeBed({ invoice: { ...STUB_INVOICE, status: 'DRAFT' }, lines: [roundedLine] });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('entered 0.813');
+    expect(fixture.nativeElement.textContent).toContain('billed 0.815');
   });
 });

@@ -28,7 +28,11 @@ type LoadState = 'loading' | 'idle' | 'error';
 /**
  * Sales invoice detail + actions screen. Route: /admin/sales-invoices/uid/:uid.
  * Header shows status + number + customer/agent + totals.
- * Lines panel: add/remove lines (DRAFT only, SALES.INVOICE.CREATE).
+ * Lines panel: add/remove lines (DRAFT only, SALES.INVOICE.CREATE); override a line's unit
+ * price (DRAFT only, SALES.INVOICE.OVERRIDE, FR-SALES-08/BR-SALES-09) — a price >10x or <0.1x
+ * the line's list price asks for a window.confirm before applying (soft fat-finger guard, never
+ * a hard block: any positive price is allowed once confirmed); shows a rounding note when
+ * requestedQuantity differs from the billed quantity (weighed-goods scale-step rounding).
  * Payments panel: add/remove payments (DRAFT only, SALES.INVOICE.SETTLE).
  * Finalize button: DRAFT + lines exist (SALES.INVOICE.CREATE).
  * Void button: any non-void status (SALES.INVOICE.VOID).
@@ -60,6 +64,12 @@ export class SalesInvoiceDetailComponent {
   readonly lines = signal<SalesInvoiceLineDto[]>([]);
   readonly linesState = signal<LoadState>('loading');
   readonly rowBusyLineUid = signal<string | null>(null);
+
+  // ── Line price override (FR-SALES-08, BR-SALES-09 — DRAFT only, SALES.INVOICE.OVERRIDE) ────
+  readonly overridingLineUid = signal<string | null>(null);
+  readonly overridePriceInput = signal('');
+  readonly overridePriceSaving = signal(false);
+  readonly overridePriceError = signal<string | null>(null);
 
   // ── Add-line form ──────────────────────────────────────────────────────────
   /** Free-text search query for the product picker. */
@@ -118,6 +128,7 @@ export class SalesInvoiceDetailComponent {
   readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
   readonly canViewFiscal = computed(() => this.session.hasPermission('FISCAL.VIEW'));
   readonly canManageFiscal = computed(() => this.session.hasPermission('FISCAL.MANAGE'));
+  readonly canOverridePrice = computed(() => this.session.hasPermission('SALES.INVOICE.OVERRIDE'));
 
   // ── Derived state ──────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.invoice()?.status === 'DRAFT');
@@ -317,6 +328,77 @@ export class SalesInvoiceDetailComponent {
       },
       error: () => this.rowBusyLineUid.set(null),
     });
+  }
+
+  // ── Line price override (FR-SALES-08, BR-SALES-09) ──────────────────────────
+
+  startOverridePrice(line: SalesInvoiceLineDto): void {
+    this.overridingLineUid.set(line.uid);
+    this.overridePriceInput.set(line.unitPriceAmount);
+    this.overridePriceError.set(null);
+  }
+
+  cancelOverridePrice(): void {
+    this.overridingLineUid.set(null);
+    this.overridePriceError.set(null);
+  }
+
+  saveOverridePrice(line: SalesInvoiceLineDto): void {
+    const entered = this.overridePriceInput().trim();
+    const price = Number(entered);
+    if (!entered || Number.isNaN(price) || price <= 0) {
+      this.overridePriceError.set('Enter a valid unit price greater than zero.');
+      return;
+    }
+
+    // Soft fat-finger guard (persona re-test, Sabina): never blocks a manager override — any
+    // positive price is allowed — but a price wildly off the list price needs a confirm click.
+    // Cancelling leaves the editor open with the entered value untouched.
+    if (!this.confirmIfFarFromListPrice(line, price)) return;
+
+    if (this.overridePriceSaving()) return;
+    this.overridePriceSaving.set(true);
+    this.overridePriceError.set(null);
+
+    this.salesService.overrideLinePrice(this.uid(), line.uid, price).subscribe({
+      next: (updated) => {
+        this.overridePriceSaving.set(false);
+        this.overridingLineUid.set(null);
+        this.lines.update((rows) => rows.map((r) => (r.uid === updated.uid ? updated : r)));
+        this.alerts.success('Line price overridden');
+        this.refetchInvoice();
+      },
+      error: (err) => {
+        this.overridePriceError.set(this.messageFrom(err, 'Could not override the price.'));
+        this.overridePriceSaving.set(false);
+      },
+    });
+  }
+
+  /**
+   * True when no confirmation is needed (list price unknown/zero, or the entered price is within
+   * ~0.1x–10x of it) or the user confirmed a wildly-off price; false when they cancelled — the
+   * caller must not proceed. Uses window.confirm (existing app precedent: mass-price-change /
+   * company restore-defaults) rather than a bespoke dialog.
+   */
+  private confirmIfFarFromListPrice(line: SalesInvoiceLineDto, price: number): boolean {
+    const listPrice = Number(line.listPriceAmount);
+    if (!(listPrice > 0)) return true;
+    const ratio = price / listPrice;
+    if (ratio <= 10 && ratio >= 0.1) return true;
+    const multiple = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 100) / 100;
+    return window.confirm(
+      `This is about ${multiple}× the list price (${line.listPriceAmount}). Apply anyway?`,
+    );
+  }
+
+  /**
+   * True when the caller entered a different quantity than what was billed — a weighed-goods
+   * scale-step rounding event (FR-SALES-08). requestedQuantity is set on every add/update-line
+   * call, so compare numerically (it may be null only for lines predating the field).
+   */
+  quantityWasRounded(line: SalesInvoiceLineDto): boolean {
+    return line.requestedQuantity != null && Number(line.requestedQuantity) !== Number(line.quantity);
   }
 
   // ── Payments ───────────────────────────────────────────────────────────────

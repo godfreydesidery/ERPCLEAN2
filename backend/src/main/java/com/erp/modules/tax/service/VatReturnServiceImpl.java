@@ -8,6 +8,7 @@ import com.erp.modules.tax.domain.dto.VatReturnDto;
 import com.erp.modules.tax.domain.entity.VatReturn;
 import com.erp.modules.tax.domain.entity.VatReturnBand;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
+import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.tax.repository.VatAdjustmentRepository;
 import com.erp.modules.tax.repository.VatReturnBandRepository;
 import com.erp.modules.tax.repository.VatReturnRepository;
@@ -247,16 +248,34 @@ public class VatReturnServiceImpl implements VatReturnService {
         bands.flush();
 
         Long actorId = actorId();
-        for (Map.Entry<String, VatReturnComputationDto.BandTotalsDto> entry
-                : comp.byBand().entrySet()) {
-            VatReturnComputationDto.BandTotalsDto b = entry.getValue();
-            bands.save(new VatReturnBand(vatReturn.getId(), companyId,
-                    entry.getKey(), b.taxableBase(), b.outputVat(), actorId));
+        // Always emit the three standard sales bands (Amina UPR-2) so the schedule reads as a fixed
+        // STANDARD / ZERO_RATED / EXEMPT layout, with zero where the period had no activity in a band —
+        // plus any other band key the summary produced (defensive; nothing is dropped).
+        java.util.LinkedHashSet<String> bandKeys = new java.util.LinkedHashSet<>();
+        bandKeys.add(VatStatus.STANDARD.name());
+        bandKeys.add(VatStatus.ZERO_RATED.name());
+        bandKeys.add(VatStatus.EXEMPT.name());
+        bandKeys.addAll(comp.byBand().keySet());
+        for (String bandKey : bandKeys) {
+            VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(bandKey);
+            BigDecimal base = b != null ? b.taxableBase() : BigDecimal.ZERO;
+            BigDecimal vat  = b != null ? b.outputVat()   : BigDecimal.ZERO;
+            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey, base, vat, actorId));
         }
 
         // Refresh totals
         vatReturn.setOutputVat(comp.totalOutput());
         vatReturn.setInputVat(comp.totalInput());
+
+        // Sales-turnover breakdown from the output bands (Amina #4): the return form reports the
+        // taxable value of supplies by band, not just the net-payable figure. Turnover here is the
+        // taxable (ex-VAT) base. purchases_turnover is input-side (supplier bills) and left as-is.
+        BigDecimal salesTurnover = comp.byBand().values().stream()
+                .map(VatReturnComputationDto.BandTotalsDto::taxableBase)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        vatReturn.setSalesTurnover(salesTurnover);
+        vatReturn.setZeroRatedSales(bandBase(comp, "ZERO_RATED"));
+        vatReturn.setExemptSales(bandBase(comp, "EXEMPT"));
 
         // Re-sum adjustments (signed)
         BigDecimal adjTotal = adjustments.findByVatReturnId(vatReturn.getId()).stream()
@@ -278,6 +297,12 @@ public class VatReturnServiceImpl implements VatReturnService {
         vatReturn.setUpdatedAt(Instant.now());
         vatReturn.setUpdatedBy(actorId);
         return returns.save(vatReturn);
+    }
+
+    /** Taxable base for a single output band, or zero when the period has no supplies in that band. */
+    private static BigDecimal bandBase(VatReturnComputationDto comp, String band) {
+        VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(band);
+        return b != null ? b.taxableBase() : BigDecimal.ZERO;
     }
 
     // -------------------------------------------------------------------------

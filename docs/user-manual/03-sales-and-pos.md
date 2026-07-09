@@ -320,6 +320,30 @@ Same process as adding lines to a quotation or order, including the product-scop
 
 The tag is a read-only indicator — you never set it on the line, and it does not change which product or price you picked, only how the VAT is derived from that price. The same tag appears on quotation and sales-order lines. Zero-rated and exempt products still show a tag but attract no VAT either way.
 
+#### Weighed-goods lines (sell by weight)
+
+When a product is configured as **sold by weight** (loose rice, sugar, produce — see *Master Data › Products › Weighed goods*), the line behaves the same as any other, with three differences you will notice:
+
+- **You must use a weight unit.** The **Unit** dropdown for a weighed product offers only its weight units (kilograms, grams). If a by-count unit is somehow submitted, the line is refused with *"<Product> is sold by weight — choose a weight unit such as kilograms, not Pieces."* Enter the weighed amount as the **Quantity** — for example `0.813` for 813 grams on a per-kg product. (In these messages the trailing unit is the unit's full **name** — `Pieces`, `Kilogram` — not its short code; the exact by-count name shown is whichever unit was attempted.)
+- **The weight is rounded to the scale step.** If the product declares a scale division (say 0.005 kg), the quantity you enter is rounded to the nearest division when the line is saved. Entering `0.813` kg records a **billed** quantity of `0.815` kg. The line shows both so the rounding is transparent: under the quantity it reads **entered 0.813 → billed 0.815**. The amount is always computed from the billed (rounded) weight × the per-unit price.
+- **Guards catch scale mistakes.** A weight so small it would round down to nothing is refused (*"that weight is too small to sell. The smallest amount is 0.005 Kilogram"*), and a weight above the product's **max sale weight** — the classic kg/gram fat-finger, keying `813` instead of `0.813` — is refused with *"813 Kilogram is above the maximum sale weight of 50 Kilogram. Please check the weight."* Nothing is saved; correct the quantity and re-add the line.
+
+Everything else — VAT, discounts, the incl./excl. VAT tag, price snapshots — works exactly as for a by-count line.
+
+![A weighed sale line showing the entered → billed rounding note](images/03-sales-and-pos/sales-invoice-weighed-line.png)
+
+#### Override a line's unit price
+
+Sometimes the price the system resolved from the price list is not the price you want to bill — a one-off negotiated rate, a price-match, or a correction. On a **DRAFT** invoice you can override any line's unit price in place (this needs the `SALES.INVOICE.OVERRIDE` permission — users without it do not see the control):
+
+1. In the **Lines** table, click the **pencil** (Override price) icon next to the line's unit price. A small input replaces the price.
+2. Type the new unit price and click the **save** (check) button. Click the **✕** to cancel and keep the original price.
+
+The override is applied to that line only, and the line's net, VAT, and gross recalculate immediately. Two rules apply:
+
+- **The price must be greater than zero.** A zero or negative override is refused with *"Enter a valid unit price greater than zero."* — you cannot give the goods away or drive the line total negative through this field. (The server enforces the same rule with its own message, *"The override price must be greater than zero."*, for direct API callers.)
+- **A wildly-off price asks for confirmation (soft guard).** If the price you enter is more than about **10×** or less than about **0.1×** the line's list price, a confirmation pops up — *"This is about 12× the list price (2,000). Apply anyway?"* — before it is applied. This is a fat-finger guard, **not** a hard block: any positive price is allowed once you confirm. Confirm to apply, or cancel to keep editing. When the list price is unknown or the entered price is within the normal range, no confirmation appears.
+
 ### 4.3 Record a payment
 
 Payments can be recorded on a draft invoice before it is finalised.

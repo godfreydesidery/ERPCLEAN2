@@ -14,6 +14,7 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.service.BomService;
 import com.erp.modules.products.service.ProductService;
@@ -225,6 +226,17 @@ public class ProductController {
     public void removePrice(@PathVariable String uid, @PathVariable String priceListUid,
                             @RequestParam(required = false) String unitUid) {
         productService.removePrice(uid, priceListUid, unitUid);
+    }
+
+    // -------------------------------------------------------------------------
+    // Weighed goods (ADR-0044 D-1b)
+    // -------------------------------------------------------------------------
+
+    @PostMapping("/uid/{uid}/weighing")
+    @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.MANAGE')")
+    public ProductDto setWeighing(@PathVariable String uid,
+                                  @Valid @RequestBody SetProductWeighingRequest request) {
+        return productService.setWeighing(uid, request);
     }
 
     // -------------------------------------------------------------------------

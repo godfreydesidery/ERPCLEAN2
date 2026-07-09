@@ -22,6 +22,8 @@ public record SalesInvoiceLineDto(
         String unitName,
         BigDecimal quantity,
         BigDecimal qtyInBase,
+        /** What the caller entered before weighed-goods scale-step rounding; null if never rounded. */
+        BigDecimal requestedQuantity,
         BigDecimal listPriceAmount,
         BigDecimal unitPriceAmount,
         boolean priceOverridden,
@@ -54,6 +56,7 @@ public record SalesInvoiceLineDto(
                 l.getUnitName(),
                 l.getQuantity(),
                 l.getQtyInBase(),
+                l.getRequestedQuantity(),
                 l.getListPriceAmount(),
                 l.getUnitPriceAmount(),
                 l.isPriceOverridden(),

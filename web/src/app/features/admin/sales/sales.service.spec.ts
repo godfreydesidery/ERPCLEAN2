@@ -85,3 +85,59 @@ describe('SalesService — fiscal receipt', () => {
     expect(result).toEqual(STUB_FISCAL_RECEIPT);
   });
 });
+
+// ── Line price override (FR-SALES-08, BR-SALES-09, SALES.INVOICE.OVERRIDE) ─────
+
+describe('SalesService — override line price', () => {
+  let service: SalesService;
+  let http: HttpTestingController;
+
+  const STUB_LINE = {
+    id: '1', uid: 'LN-UID-1', invoiceId: '1', companyId: '10', branchId: '1',
+    productId: '7', productCode: 'P002', productName: 'Beverage',
+    unitId: '1', unitName: 'Each',
+    quantity: '10', qtyInBase: '10', requestedQuantity: 10,
+    listPriceAmount: '100', unitPriceAmount: '90',
+    priceOverridden: true, overriddenBy: '3',
+    lineDiscountAmount: null, lineDiscountPercent: null,
+    vatStatus: 'STANDARD', vatRate: '18',
+    netAmount: '900', vatAmount: '162', grossAmount: '1062',
+    priceInclusive: false, currency: 'TZS',
+    createdAt: null, createdBy: null,
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting(), SalesService],
+    });
+    service = TestBed.inject(SalesService);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => { http.verify(); TestBed.resetTestingModule(); });
+
+  it('POSTs to .../uid/{uid}/lines/uid/{lineUid}/override-price with the new unitPriceAmount', () => {
+    let result: unknown;
+    service.overrideLinePrice('INV-UID-1', 'LN-UID-1', 90).subscribe((r) => (result = r));
+
+    const req = http.expectOne(`${BASE}/uid/INV-UID-1/lines/uid/LN-UID-1/override-price`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ unitPriceAmount: 90 });
+    req.flush(STUB_LINE);
+
+    expect(result).toEqual(STUB_LINE);
+  });
+
+  it('propagates a server error (e.g. 409 on a non-DRAFT invoice) to the caller', () => {
+    let error: unknown;
+    service.overrideLinePrice('INV-UID-1', 'LN-UID-1', 90).subscribe({
+      next: () => undefined,
+      error: (err) => (error = err),
+    });
+
+    const req = http.expectOne(`${BASE}/uid/INV-UID-1/lines/uid/LN-UID-1/override-price`);
+    req.flush({ errors: ['This invoice is no longer a draft.'] }, { status: 409, statusText: 'Conflict' });
+
+    expect(error).toBeTruthy();
+  });
+});

@@ -38,6 +38,7 @@ export class PurchaseSettingsComponent {
   readonly fPoApprovalEnabled = signal(false);
   readonly fThresholdAmount = signal('0');
   readonly fCurrency = signal('TZS');
+  readonly fReceiptTolerancePct = signal('');
 
   // ── Save state ─────────────────────────────────────────────────────────────
   readonly saving = signal(false);
@@ -101,6 +102,7 @@ export class PurchaseSettingsComponent {
     this.fPoApprovalEnabled.set(s.poApprovalEnabled);
     this.fThresholdAmount.set(s.poApprovalThresholdAmount ?? '0');
     this.fCurrency.set(s.currency ?? 'TZS');
+    this.fReceiptTolerancePct.set(s.receiptTolerancePct != null ? String(s.receiptTolerancePct) : '');
   }
 
   save(): void {
@@ -113,6 +115,17 @@ export class PurchaseSettingsComponent {
       return;
     }
 
+    const receiptToleranceRaw = this.fReceiptTolerancePct().trim();
+    let receiptTolerancePct: number | null = null;
+    if (receiptToleranceRaw) {
+      const parsed = Number(receiptToleranceRaw);
+      if (isNaN(parsed) || parsed < 0) {
+        this.saveError.set('Over-receipt tolerance must be zero or positive.');
+        return;
+      }
+      receiptTolerancePct = parsed;
+    }
+
     this.saving.set(true);
     this.saveError.set(null);
 
@@ -121,6 +134,7 @@ export class PurchaseSettingsComponent {
       poApprovalEnabled: this.fPoApprovalEnabled(),
       poApprovalThresholdAmount: threshold,
       currency: this.fCurrency().trim(),
+      receiptTolerancePct,
     };
 
     this.settingsService.update(request).subscribe({

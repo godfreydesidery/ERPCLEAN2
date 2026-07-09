@@ -470,7 +470,8 @@ class VanReconciliationServiceImplTest {
                 true, true, false, false, false, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, false, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);   // D-1b weighed/tare/scaleStep + maxSaleWeight
     }
 
     private static void setId(Object entity, Long id) {

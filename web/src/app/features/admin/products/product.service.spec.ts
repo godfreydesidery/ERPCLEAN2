@@ -67,3 +67,56 @@ describe('ProductService — prices', () => {
     req.flush(null);
   });
 });
+
+// ── Weighed goods (ADR-0044 D-1b) ─────────────────────────────────────────────
+
+describe('ProductService — weighing', () => {
+  let service: ProductService;
+  let httpMock: HttpTestingController;
+  const base = `${environment.apiBaseUrl}/products`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    service = TestBed.inject(ProductService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('setWeighing POSTs to /uid/{uid}/weighing with the request body as-is', () => {
+    service
+      .setWeighing('PUID1', { weighed: true, tareWeight: '0.050', scaleStep: '0.005', maxSaleWeight: '25' })
+      .subscribe();
+    const req = httpMock.expectOne(`${base}/uid/PUID1/weighing`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      weighed: true,
+      tareWeight: '0.050',
+      scaleStep: '0.005',
+      maxSaleWeight: '25',
+    });
+    // Real wire shape: BigDecimal fields come back as JSON numbers, not strings.
+    req.flush({
+      uid: 'PUID1',
+      weighed: true,
+      tareWeight: 0.05,
+      scaleStep: 0.005,
+      maxSaleWeight: 25,
+    });
+  });
+
+  it('setWeighing sends nulls for tare/scaleStep/maxSaleWeight when unmarking as weighed', () => {
+    service.setWeighing('PUID1', { weighed: false, tareWeight: null, scaleStep: null, maxSaleWeight: null }).subscribe();
+    const req = httpMock.expectOne(`${base}/uid/PUID1/weighing`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      weighed: false,
+      tareWeight: null,
+      scaleStep: null,
+      maxSaleWeight: null,
+    });
+    req.flush({ uid: 'PUID1', weighed: false, tareWeight: null, scaleStep: null, maxSaleWeight: null });
+  });
+});

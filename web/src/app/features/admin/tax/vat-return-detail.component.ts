@@ -252,6 +252,11 @@ export class VatReturnDetailComponent implements OnInit {
   /** Coerce + format money with thousand separators (shared util). */
   readonly fmtMoney = formatMoney;
 
+  /** Same as fmtMoney but renders an em-dash for null/undefined (e.g. purchasesTurnover — out of scope). */
+  fmtOrDash(v: number | string | null | undefined): string {
+    return v === null || v === undefined ? '—' : formatMoney(v);
+  }
+
   adjReasonLabel(reason: VatAdjustmentReason): string {
     return this.adjReasons.find((r) => r.value === reason)?.label ?? reason;
   }

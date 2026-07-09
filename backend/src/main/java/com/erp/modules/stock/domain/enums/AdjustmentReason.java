@@ -25,6 +25,12 @@ public enum AdjustmentReason {
     /** Manual fix to a mis-received quantity (alternative to a Goods Receipt reversal). */
     RECEIPT_CORRECTION,
 
+    /**
+     * Entering initial on-hand stock for a product whose opening-balance window has closed (its
+     * first movement already posted) — the honest reason when Opening Balance is no longer allowed.
+     */
+    OPENING_STOCK,
+
     /** Any other reason — the free-text {@code note} should accompany this choice. */
     OTHER;
 }

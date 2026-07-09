@@ -11,6 +11,7 @@ import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
@@ -73,6 +74,12 @@ public interface ProductService {
     void removePrice(String productUid, String priceListUid, String unitUid);
 
     List<ProductPriceDto> listPrices(String uid);
+
+    /**
+     * Configures the product's weighed-goods (sell-by-weight) profile (ADR-0044 D-1b). When
+     * {@code weighed=true} the product's base unit must be a WEIGHT unit, else the call is rejected.
+     */
+    ProductDto setWeighing(String uid, SetProductWeighingRequest req);
 
     // --- Valid transaction units ---
 

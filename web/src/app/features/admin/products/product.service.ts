@@ -20,6 +20,7 @@ import {
   ProductModel,
   ProductPriceDto,
   SetProductPriceRequest,
+  SetProductWeighingRequest,
   UnitOfMeasureDto,
   UpdatePriceListRequest,
   UpdateProductRequest,
@@ -131,6 +132,17 @@ export class ProductService {
   removePrice(uid: string, priceListUid: string, unitUid?: string): Observable<void> {
     const params = unitUid ? new HttpParams().set('unitUid', unitUid) : undefined;
     return this.http.delete<void>(`${this.base}/uid/${uid}/prices/${priceListUid}`, { params });
+  }
+
+  // ── Weighed Goods (ADR-0044 D-1b) ─────────────────────────────────────────
+
+  /**
+   * Configures the sell-by-weight profile. weighed=false clears tare/scaleStep/maxSaleWeight
+   * server-side. Kept as a dedicated sub-resource call (like setPrice/addBarcode) rather than
+   * folded into the main product update.
+   */
+  setWeighing(uid: string, request: SetProductWeighingRequest): Observable<ProductModel> {
+    return this.http.post<ProductModel>(`${this.base}/uid/${uid}/weighing`, request);
   }
 
   // ── Components / Recipe ───────────────────────────────────────────────────

@@ -934,12 +934,15 @@ The list shows all VAT returns for the company with their return number, period,
 
 **VAT return detail:** click a return row to open its detail. The detail screen shows:
 
-- **Output VAT** — VAT collected on sales, broken down by tax band (Standard 18%, Zero-rated, Exempt).
+- **Turnover by rate band** — a table with one row per VAT band showing the **Taxable Base** (the net sales value in that band) and the **Output VAT** on it. All three bands are always listed — **Standard** (18%), **Zero-Rated**, and **Exempt** — with zero shown where a band had no sales in the period, so the breakdown is complete and reconciles to the total every month rather than dropping bands that happened to be empty. A **Total** row sums the taxable base to the **Sales Turnover** and the VAT to the **Output VAT**.
+- **Sales Turnover** — the period's total net sales, with **of which Zero-Rated Sales** and **of which Exempt Sales** shown beneath it so the non-standard-rated portion of turnover is visible at a glance (both are subsets of Sales Turnover, not additional amounts). **Purchases Turnover** is shown alongside.
 - **Input VAT** — VAT paid on purchases.
 - **Manual Adjustments** — optional signed adjustment lines (see below).
 - **Opening Credit b/f** — carry-forward from the prior FILED return.
 - **Net VAT** — output VAT − input VAT + adjustments − opening credit.
 - The net label shows **"Payable to TRA"** (net > 0), **"Credit carried forward"** (net < 0), or **"Nil"** (net = 0).
+
+> Zero-rated and exempt sales carry **no** output VAT (their VAT column is nil) but they **do** count toward turnover — which is why they appear as their own bands and as the "of which" lines. This matters for the return: turnover is reported in full even though only the standard band contributes VAT.
 
 **Recomputing a DRAFT return (requires `VAT.RETURN.PREPARE`):**
 

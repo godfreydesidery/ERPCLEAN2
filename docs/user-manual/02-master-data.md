@@ -282,6 +282,29 @@ A product can carry an **age-restriction classification** that marks it as somet
 
 The classification is purely a label on the product record; on its own it does not block anything. Its effect is felt at the point of sale: when a cashier rings up a product marked **18+** or **21+**, the till prompts the cashier to confirm the buyer's age before the sale can complete (see **Point of Sale** for how this works at the till). Setting a product back to **None** removes the prompt for that item.
 
+### Weighed goods (sell by weight)
+
+Some products are not sold by the piece but **by weight** — loose rice, sugar, produce, or deli goods scooped and weighed on a counter scale. For these, the price is quoted per weight unit (for example, TZS 2,000 per kg) and the sale line carries the **actual weighed amount** (0.813 kg), not a whole-number count. Marking a product as *sold by weight* makes that intent explicit so it is billed as a weight, never rung up as "1 unit".
+
+![The Weighed Goods card on the product detail page](images/02-master-data/product-weighing.png)
+
+**The prerequisite: a weight base unit.** A weighed product's **base unit must be a weight unit** — kilograms or grams — because the whole point is to price and record a weight. The seeded units of measure `KG` and `GRAM` are weight units; `EA`/`PCS` and volume units (litre, millilitre) are not. If the product's base unit is not a weight unit, the **Sold by weight** switch is disabled and a hint reads *"Choose a weight base unit (e.g. kg) to sell this by weight."* Pick a weight base unit when you create the product (or change it before turning weighing on).
+
+**Where you set it.** On the product detail page (`/admin/products/uid/<uid>`) there is a **Weighed Goods** card; the same controls also appear on the **Product Master** one-screen form. It has one switch and three optional fields:
+
+| Field | What it does |
+|---|---|
+| **Sold by weight** | Turns weighing on for the product. When on, the sale path requires a weight unit on every line for this product and rejects a by-count unit with a clear *"…is sold by weight — choose a weight unit such as kilograms"* message. |
+| **Tare weight** | The container/packaging weight, in the base unit (e.g. `0.050` kg for a tub). This is **configuration for the weighing client** to deduct before it submits the net weight — the server does **not** auto-deduct it, so a net scale label is never double-tared. Optional. |
+| **Scale step** | The scale's division — the smallest weight increment it reports, e.g. `0.005` kg. When set, the sold weight is **rounded to the nearest multiple** of this step (see *How rounding shows on the sale* below). Leave blank for no rounding. |
+| **Max sale weight** | A safety ceiling, in the base unit (e.g. `25` kg). A weighed line above this weight is **rejected** — it catches a kg/gram fat-finger such as keying `813` (meaning 813 g) against a per-kg product and ringing 813 kg. Optional. |
+
+Fill in the fields you want and click **Save weighing profile**. All three numeric fields are optional — turning **Sold by weight** on with all three blank simply enforces the weight-unit rule with no rounding and no ceiling.
+
+**How rounding shows on the sale.** When a scale step is set, entering a weight that is not an exact multiple rounds it to the nearest division — 0.813 kg at a 0.005 kg step bills as 0.815 kg. So the customer can see the adjustment was deliberate, the sale line records both figures and displays *"entered 0.813 → billed 0.815"* (see **Sales and Point of Sale** for the seller's view). A weight so small it would round down to zero is rejected with *"that weight is too small to sell. The smallest amount is 0.005 Kilogram."* (the unit shown in these messages is the product's unit **name** — `Kilogram` for the seeded `KG` unit — not its short code).
+
+**Example — set up loose rice sold by the kilogram.** A shop sells rice scooped from a sack, priced at TZS 2,000/kg, on a scale that reads to 5 g. Create the product `Loose Rice`, Type `Goods`, Base unit `KG — Kilogram`, Sellable + Stockable, and set a `RETAIL` price of 2,000. Open its detail page, and in the **Weighed Goods** card turn on **Sold by weight**, set Scale step `0.005`, Max sale weight `50`, and (if the scoop tub weighs 10 g) Tare weight `0.010`. Click **Save weighing profile**. From now on a sales line for this product must use kg, its weight rounds to the nearest 5 g, and any line above 50 kg is refused.
+
 ### How to create a product
 
 1. Navigate to **Products › Products** (`/admin/products`).
@@ -460,6 +483,8 @@ A **unit of measure (UoM)** is the label attached to a quantity: it defines what
 **When it is used.** A master-data manager creates units before creating products, because every product requires a base unit. Units are also referenced when defining bulk packs (the larger packaging unit) and on order lines where a specific packaging unit is selected.
 
 **How it works.** Each unit has a short **Code** (used as the label on documents) and a **Name** (the display name). Units can be archived to remove them from selection dropdowns; archived units are excluded from product creation but remain on existing records for historical accuracy.
+
+Behind the scenes each unit also carries a **physical dimension** — *count* (each, piece, carton), *weight* (kilogram, gram), or *volume* (litre, millilitre). The seeded default units are already classified correctly, so you do not set this on screen. The dimension is what lets the system tell a weight unit from a count unit: a product marked *sold by weight* (see *Products › Weighed goods*) must use a **weight** base unit such as `KG`, and the sale path uses the dimension to keep weighed products off by-count units.
 
 Units of measure (UoM) are the quantity labels used on products, bulk packs, and order lines — for example, `EA` (Each), `KG` (Kilogram), `CTN` (Carton).
 

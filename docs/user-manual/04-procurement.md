@@ -336,7 +336,7 @@ The storekeeper picks the PO and the system shows all outstanding (unreceived) l
 1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Receipt**, or go directly to `/admin/goods-receipts/create`.
 2. Pick the **Purchase Order** by its PO number.
 3. The form lists all open (unreceived) lines, each with a tick box (included by default) and the outstanding quantity pre-filled in the **Receive Qty** field.
-4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. The quantity cannot exceed the outstanding balance on each line.
+4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. By default the quantity cannot exceed the outstanding balance on each line — unless your company has set an **over-receipt tolerance** (see below), in which case each line may go up to that percent over, and the field shows a **max** hint of the amount allowed.
 5. For any line — typically a lot-tracked or serialised product — click **Batch** to expand its batch/serial details, and optionally enter the **Lot / Batch number**, **Manufacture date**, **Expiry date**, and **Serial / IMEI numbers** (one per line). The **Batch** toggle appears on every receipt line regardless of the product's tracking settings; all of these fields are optional at receipt time.
 6. Optionally add **Notes**.
 7. Click **Record Receipt**.
@@ -345,6 +345,14 @@ The goods receipt is created with status **RECEIVED** and assigned a GRN-#### nu
 
 - Partial receipt → PO status **PARTIALLY_RECEIVED**
 - Full receipt → PO status **RECEIVED**
+
+**Over-receipt tolerance (receiving slightly more than ordered).** By default the system is strict: you cannot receive more than a line's outstanding quantity, and a line entered above it is rejected. But commodities delivered by weight — rice, produce, cement — rarely match the order to the exact bag or kilogram, and a delivery can legitimately arrive a little over. A company can therefore set an **over-receipt tolerance** (a percent) in Purchase Settings (section 8) so a receipt may exceed the outstanding quantity by up to that margin. When it is set:
+
+- An information banner at the top of the receipt form reads *"Over-receipt tolerance: 5% — each line may be received up to 5% over its outstanding quantity."*
+- Each **Receive Qty** field shows a **max** hint of the ceiling for that line (outstanding × (1 + tolerance), for example `max 105` on a line of 100 outstanding at 5%).
+- Entering more than the ceiling is refused with a plain message naming the line (product) and stating that the quantity received exceeds what is outstanding — reduce it and try again; nothing is posted. (The allowed maximum is shown up front as the **max** hint on the field, not repeated in the rejection message.)
+
+When no tolerance is configured (the default), receiving stays strict and the banner does not appear. See section 8.2 for how to set it.
 
 ### 4.2 Partial receipts (multiple deliveries)
 
@@ -615,12 +623,14 @@ The purchasing manager reviews and clicks **Confirm Return** — status → CONF
 Navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`).
 
 **What purchase settings are.**
-Purchase settings are the company-level configuration controls that govern how the procurement workflow operates — specifically, whether Purchase Orders above a certain value require a second-level approval before they can be placed.
+Purchase settings are the company-level configuration controls that govern how the procurement workflow operates — specifically, whether Purchase Orders above a certain value require a second-level approval before they can be placed, and how much over the ordered quantity a goods receipt may accept.
 
 **Why a PO approval threshold exists.**
 For low-value purchases, requiring a manager to approve every PO would create unnecessary bottlenecks. For high-value purchases, however, committing the business without a second review is a financial control risk. The approval threshold is the balance: below the threshold, POs flow through automatically; above it, they pause for authorisation. This is a common internal control required by auditors and risk frameworks.
 
-Purchase settings control the PO approval workflow.
+Purchase settings control the PO approval workflow and the goods-receipt over-receipt tolerance.
+
+![Purchase Settings — PO approval and over-receipt tolerance](images/04-procurement/purchase-settings.png)
 
 ### 8.1 PO approval threshold
 
@@ -634,11 +644,25 @@ To change these settings, navigate to **Purchasing › Purchase Settings** (`/ad
 
 When PO approval is enabled, an order that exceeds the threshold is submitted from its detail screen (section 3.3) and decided by an approver in the Approvals inbox (requires `APPROVALS.DECIDE`; see chapter 11, Approvals). `PURCHASE.ORDER.APPROVE` gates a separate, administrative approve/reject action on the order itself, available only via the API — see the Known limitation note in section 3.3.
 
+### 8.2 Over-receipt tolerance
+
+| Setting | Description |
+|---|---|
+| Goods-receipt over-receipt tolerance (%) | How much over a purchase-order line's outstanding quantity a goods receipt may accept, as a percent (e.g. `5` = 5%). A receipt line may be received up to outstanding × (1 + tolerance ÷ 100). Leave **blank** (or `0`) for strict receiving — no over-receipt, the default. |
+
+This governs the goods-receipt behaviour described in section 4.1. It exists because goods delivered by weight or in bulk (rice, produce, cement) seldom match the order exactly, and a delivery a fraction over the ordered amount is normal in trade — blocking it outright would force artificial short-receipts and re-orders. Setting a small tolerance (commonly 2–5%) lets the storekeeper book the actual delivered quantity in one receipt, while the ceiling still stops a grossly wrong quantity being received against the wrong PO.
+
+To set it, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, enter the percent in **Goods-receipt over-receipt tolerance (%)**, and click **Save Settings**. The permission required is `PURCHASE.SETTINGS.MANAGE`.
+
 ---
 
 **Example — Enabling PO approval:**
 
 The CFO wants all purchase orders above TZS 5,000,000 to require a second-level approval. She opens **Purchasing › Purchase Settings** (`/admin/purchase-settings`), turns on **Enable PO Approval Workflow**, sets **Approval Threshold Amount** to **5,000,000**, selects **Currency** **TZS** from the Currency Picker, and clicks **Save Settings**. From now on any DRAFT PO with a total above TZS 5,000,000 must be approved before it can be placed; the system refuses to place such a PO until an authorised approver has approved it.
+
+**Example — Allowing a 5% over-receipt on commodities:**
+
+The procurement manager knows rice deliveries never match the order to the exact kilogram. She opens **Purchasing › Purchase Settings** (`/admin/purchase-settings`), enters **Goods-receipt over-receipt tolerance (%)** = **5**, and clicks **Save Settings**. Now when the storekeeper receives against a PO line of 100 bags outstanding, the receipt form shows a **max 105** hint and accepts up to 105 bags in a single GRN; a keyed 120 is still refused.
 
 ---
 

@@ -11,6 +11,12 @@ export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type UomStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 /** VAT classification for a product. Mirrors VatStatus on the backend. */
 export type VatStatus = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT';
+/**
+ * Physical dimension family of a unit (P2 D5, ADR-0041 D5). Groups units for conversion
+ * semantics — e.g. weighed goods (ADR-0044 D-1b) require the product's base unit to be WEIGHT.
+ * Defaults to COUNT server-side.
+ */
+export type DimensionType = 'COUNT' | 'WEIGHT' | 'VOLUME' | 'LENGTH' | 'TIME';
 
 // ── UnitOfMeasureDto ──────────────────────────────────────────────────────────
 
@@ -21,6 +27,12 @@ export interface UnitOfMeasureDto {
   code: string;
   name: string;
   status: UomStatus;
+  /** Groups this unit for conversion semantics — e.g. gates whether a product using it may be sold by weight. */
+  dimensionType?: DimensionType;
+  /** Decimal places used to round quantities transacted in this unit. */
+  decimalPlaces?: number;
+  /** Whether fractional quantities are allowed in this unit. */
+  fractional?: boolean;
   version: string | null;
   createdAt: string | null;
   createdBy: string | null;
@@ -82,6 +94,18 @@ export interface ProductModel {
   safetyStock?: string | null;
   minStock?: string | null;
   maxStock?: string | null;
+  /**
+   * ADR-0044 D-1b: sell-by-weight configuration. `weighed` requires the product's base unit to
+   * be a WEIGHT unit (e.g. kg) — enforced server-side. tare/scaleStep/maxSaleWeight are cleared
+   * by the server whenever weighed is set false.
+   */
+  weighed?: boolean;
+  /** Container/tare weight in the base weight unit. Configuration only — the server does not auto-deduct it. */
+  tareWeight?: string | null;
+  /** Scale division (e.g. 0.005 kg) the sold weight is rounded to. Null = no rounding. */
+  scaleStep?: string | null;
+  /** Safety ceiling in the base weight unit — a weighed line above this is rejected. Null = no ceiling. */
+  maxSaleWeight?: string | null;
   version: string | null;
   createdAt: string | null;
   createdBy: string | null;
@@ -170,6 +194,21 @@ export interface UpdateProductRequest {
   safetyStock?: string;
   minStock?: string;
   maxStock?: string;
+}
+
+// ── SetProductWeighingRequest (ADR-0044 D-1b) ─────────────────────────────────
+// POST /api/v1/products/uid/{uid}/weighing — dedicated sub-resource mutation,
+// mirrors setPrice/addBarcode/addBulkPack rather than widening create/update.
+
+export interface SetProductWeighingRequest {
+  /** When true, the server requires the product's base unit to already be a WEIGHT unit. */
+  weighed: boolean;
+  /** Optional; must be >= 0. Ignored (cleared) server-side when weighed is false. */
+  tareWeight?: string | null;
+  /** Optional; must be > 0. Ignored (cleared) server-side when weighed is false. */
+  scaleStep?: string | null;
+  /** Optional; must be > 0. Ignored (cleared) server-side when weighed is false. */
+  maxSaleWeight?: string | null;
 }
 
 // ── ProductBarcodeDto ─────────────────────────────────────────────────────────

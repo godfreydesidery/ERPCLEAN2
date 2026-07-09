@@ -11,6 +11,7 @@ import {
   CreateTaxRateRequest,
   FinaliseInvoiceRequest,
   FiscalReceiptDto,
+  OverrideLinePriceRequest,
   SalesInvoiceDto,
   SalesInvoiceLineDto,
   SalesInvoicePaymentDto,
@@ -92,6 +93,15 @@ export class SalesService {
 
   removeLine(uid: string, lineUid: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/uid/${uid}/lines/${lineUid}`);
+  }
+
+  /** Override a DRAFT line's unit price (FR-SALES-08, BR-SALES-09). Requires SALES.INVOICE.OVERRIDE. */
+  overrideLinePrice(uid: string, lineUid: string, unitPriceAmount: number): Observable<SalesInvoiceLineDto> {
+    const request: OverrideLinePriceRequest = { unitPriceAmount };
+    return this.http.post<SalesInvoiceLineDto>(
+      `${this.base}/uid/${uid}/lines/uid/${lineUid}/override-price`,
+      request,
+    );
   }
 
   // ── Payments ──────────────────────────────────────────────────────────────

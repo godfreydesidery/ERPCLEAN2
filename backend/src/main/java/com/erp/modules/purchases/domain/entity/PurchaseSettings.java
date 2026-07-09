@@ -59,6 +59,14 @@ public class PurchaseSettings extends UidEntity {
     @Setter
     private BigDecimal matchToleranceAbs;
 
+    /**
+     * Goods-receipt over-receipt tolerance percent (e.g. 5.0000 = 5%). A goods receipt may exceed the
+     * outstanding PO quantity by up to this much (Saidi #4). NULL / 0 = strict (no over-receipt).
+     */
+    @Column(name = "receipt_tolerance_pct", precision = 9, scale = 4)
+    @Setter
+    private BigDecimal receiptTolerancePct;
+
     /** Auto-close fully-received/billed POs. */
     @Column(name = "auto_close_enabled", nullable = false)
     @Setter

@@ -196,6 +196,17 @@ export class PurchaseOrderDetailComponent {
     return this.effectiveApprovalStatus() === 'APPROVED';
   });
 
+  /**
+   * Display-only: an in-tolerance over-receipt leaves the server's outstanding negative (e.g. -5).
+   * Show that as "0 (5 over)" so a storekeeper reads "delivered 5 over, within tolerance" rather
+   * than a bare minus sign that looks like a broken subtraction. Formatting only — no computation.
+   */
+  outstandingLabel(line: PurchaseOrderLineDto): string {
+    const o = Number(line.outstandingQtyInBase);
+    if (Number.isFinite(o) && o < 0) return `0 (${-o} over)`;
+    return String(line.outstandingQtyInBase ?? '');
+  }
+
   constructor() {
     this.productSearch$
       .pipe(
