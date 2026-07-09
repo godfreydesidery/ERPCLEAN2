@@ -96,6 +96,10 @@
                     </span>
                   </td>
                   <td>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                            (click)="openPermissions(r)">
+                      <i class="bi bi-eye me-1" aria-hidden="true"></i>View permissions
+                    </button>
                     @if (canAdmin()) {
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/roles/uid', r.uid]">
@@ -110,5 +114,53 @@
         </div>
       }
     }
+  }
+
+  <!-- ── View-permissions popup (read-only; ROLE.VIEW is enough) ─────────────── -->
+  @if (permissionsRole(); as role) {
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         [attr.aria-labelledby]="'rolePermsTitle'">
+      <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 class="modal-title h6" id="rolePermsTitle">
+              <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+              Permissions — {{ role.name }}
+            </h2>
+            <button type="button" class="btn-close" (click)="closePermissions()"
+                    aria-label="Close permissions dialog"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small mb-3">
+              <span class="status-tag status-tag--neutral">{{ role.permissionCodes.length }}</span>
+              permission(s) in <span class="mono">{{ role.code }}</span>.
+            </p>
+            @if (role.permissionCodes.length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-shield-slash" aria-hidden="true"></i>
+                This role has no permissions.
+              </div>
+            } @else {
+              @for (group of permissionGroups(); track group.module) {
+                <div class="mb-3">
+                  <h3 class="small text-uppercase text-muted mb-2">{{ group.module }}</h3>
+                  <ul class="list-unstyled d-flex flex-wrap gap-1 mb-0">
+                    @for (code of group.codes; track code) {
+                      <li><span class="status-tag status-tag--neutral mono">{{ code }}</span></li>
+                    }
+                  </ul>
+                </div>
+              }
+            }
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" (click)="closePermissions()">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-backdrop show" (click)="closePermissions()" aria-hidden="true"></div>
+    </div>
   }
 </section>
