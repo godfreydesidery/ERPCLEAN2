@@ -17,15 +17,21 @@ type EntitiesState = 'loading' | 'idle' | 'error' | 'forbidden';
  * default list otherwise, which is frequently empty — see BulkImportService.exportCurrent()). */
 const PRICES_ENTITY_KEY = 'prices';
 
+/** The entity key whose import/export is scoped to the active branch (stock is branch-specific),
+ * so the wizard shows a "which branch?" note — the branch comes from the global switcher, not a
+ * column. */
+const STOCK_ENTITY_KEY = 'stock';
+
 /**
  * Generic bulk-import wizard: pick an entity type → download its XLSX template → upload a filled
  * file for a validate dry-run → commit. Drives entirely off `GET /bulk/entities`, so it grows with
  * the backend's importable entity registry with no client-side entity list to maintain.
  *
- * Route: /admin/bulk-import. The route guard admits ANY of the four import permission codes
- * (PRODUCT.IMPORT / CUSTOMER.IMPORT / SUPPLIER.IMPORT — a mass-price-change 4th code belongs to the
- * sibling screen, not this one); the entities endpoint itself 403s when the caller can import
- * nothing, which this component renders as a calm "no permission" state rather than a hard failure.
+ * Route: /admin/bulk-import. The route guard admits ANY of the import permission codes
+ * (PRODUCT.IMPORT / CUSTOMER.IMPORT / SUPPLIER.IMPORT / PRICE.MASS_UPDATE / STOCK.IMPORT — the
+ * "Product prices & cost" and "Stock on-hand levels" imports both render in THIS wizard); the
+ * entities endpoint itself 403s when the caller can import nothing, which this component renders as
+ * a calm "no permission" state rather than a hard failure.
  */
 @Component({
   selector: 'app-bulk-import',
@@ -52,6 +58,7 @@ export class BulkImportComponent {
     () => this.entities().find((e) => e.key === this.selectedKey()) ?? null,
   );
   readonly isPricesEntity = computed(() => this.selectedKey() === PRICES_ENTITY_KEY);
+  readonly isStockEntity = computed(() => this.selectedKey() === STOCK_ENTITY_KEY);
 
   // ── Company + price-list context (prices export only) ─────────────────────────
   readonly companies = signal<Company[]>([]);

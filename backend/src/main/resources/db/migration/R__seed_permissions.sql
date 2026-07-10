@@ -223,6 +223,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('STOCK.COUNT.CREATE', 'stock', 'Create a stock count, freeze the snapshot, and enter counted quantities'),
     ('STOCK.COUNT.POST', 'stock', 'Post a stock count variance to the books (variance-posting authority)'),
     ('STOCK.COUNT.VIEW', 'stock', 'View stock counts and variance reports'),
+    ('STOCK.IMPORT', 'stock', 'Bulk-update on-hand stock levels from a spreadsheet (mass adjustment to a counted level)'),
     ('STOCK.LOCATION.MANAGE', 'stock', 'Create, edit, deactivate locations and set the branch default'),
     ('STOCK.LOCATION.VIEW', 'stock', 'View stock locations within a branch'),
     ('STOCK.OPENING', 'stock', 'Seed an opening-balance on-hand for a never-tracked product at a branch'),
@@ -410,10 +411,11 @@ SELECT r.id, p.id FROM (VALUES
   ('FIELD_SALES_AGENT','NOTIFICATION.PREFERENCE.MANAGE'),
   ('FIELD_SALES_AGENT','DOCUMENT.RENDER'),
   ('FIELD_SALES_AGENT','BRANCH.VIEW'),
-  -- STOREKEEPER (26 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- STOREKEEPER (27 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('STOREKEEPER','STOCK.VIEW'),
   ('STOREKEEPER','STOCK.ADJUST'),
   ('STOREKEEPER','STOCK.OPENING'),
+  ('STOREKEEPER','STOCK.IMPORT'),
   ('STOREKEEPER','STOCK.COUNT.CREATE'),
   ('STOREKEEPER','STOCK.COUNT.VIEW'),
   ('STOREKEEPER','STOCK.COUNT.POST'),
@@ -588,6 +590,7 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','CASH.VIEW'),
   ('BRANCH_MANAGER','STOCK.VIEW'),
   ('BRANCH_MANAGER','STOCK.ADJUST'),
+  ('BRANCH_MANAGER','STOCK.IMPORT'),
   ('BRANCH_MANAGER','STOCK.COUNT.VIEW'),
   ('BRANCH_MANAGER','STOCK.COUNT.POST'),
   ('BRANCH_MANAGER','STOCK.TRANSFER.VIEW'),
