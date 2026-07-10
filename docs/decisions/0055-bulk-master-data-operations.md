@@ -1,6 +1,6 @@
 # ADR-0055: Bulk master-data operations (Excel import + mass price change)
 
-- **Status:** Accepted (2026-07-04) — implemented on `feat/bulk-data-operations` (code + repeatable-seed only, **no schema change**).
+- **Status:** Accepted (2026-07-04) — implemented on `feat/bulk-data-operations` (code + repeatable-seed only, **no schema change**). **Addendum 2026-07-10 (D-10):** added a bulk **stock on-hand** import (`feat/bulk-stock-import`, code + repeatable-seed only).
 - **Deciders:** Owner + Solutions Architect
 - **Effort:** M. **Migration:** none — new company-scoped derived repository finders + four permission codes added to the repeatable `R__seed_permissions.sql` (convergent reference data); the frozen versioned schema is untouched (ADR-0043).
 - **Related:** ADR-0006 (parties — Customer/Supplier masters + code generation), ADR-0007 (products — Product/PriceList/UnitOfMeasure, `product_prices`), ADR-0048 (per-unit prices), ADR-0018 D-9 (Apache POI already a dependency, for XLSX export), ADR-0002 (RBAC — permission-gated endpoints, deny-by-default coverage), ADR-0004 (audit-by-aspect), ADR-0022/outbox (cross-module side effects), the error-message-hygiene standing rule.
@@ -143,6 +143,44 @@ to the company default list. To make partial edits ergonomic, a **blank `Amount`
 products, price only the ones they want, and upload the whole sheet. `RowAction` gains `SKIP` and
 `ImportReport` a `skipped` count. (For master entities, a blank optional cell already keeps the current
 value via the D-4 partial merge.)
+
+### D-10 — Bulk stock on-hand: set-to-counted-level (addendum, 2026-07-10)
+
+A `StockImportHandler` (module `stock`, key `stock`, label *"Stock on-hand levels"*) plugs into the
+same SPI, so the wizard picks it up with no framework change. Stock differs from the other entities
+in two ways the design accounts for:
+
+- **It is a ledger, not a settable value.** A spreadsheet cell can't "set" on-hand — the schema is an
+  append-only movement ledger (ADR-0010). The sheet therefore carries an **absolute target** (`New
+  On-Hand Qty`, mirroring the price upload where you type the new value, not a delta); the handler
+  reads the **live** current level (summed across the branch's locations via
+  `findAllByCompanyIdAndBranchIdAndProductId` — never the stale sheet value), computes
+  `delta = target − current`, and posts it through the **existing** `StockService.adjust` — so the
+  negative-stock guard, moving-average valuation (ADR-0020), GL posting, audit-by-aspect
+  and outbox all fire exactly as on the single Adjust screen. A blank `New On-Hand Qty` is a `SKIP`
+  (D-9 pattern); a target equal to the current level is a no-op `SKIP`; a negative target is a
+  friendly row error. Reason defaults to `COUNT_CORRECTION` (the honest stocktake reason) with an
+  optional `Reason`/`Note` per row. A never-tracked product is seeded from zero (an ADJUSTMENT from
+  0, not an OPENING_BALANCE — the two share the null-cost edge and the adjustment path keeps one code
+  path; the operator can still use the dedicated opening-balance/valuation screens where cost matters).
+  A product **stocked across multiple locations** in the branch is reported as a `SKIP` (the
+  underlying `adjust` posts to a single location and reads a single on-hand row — the whole-branch
+  total can't be set here) with a pointer to the per-location screens, so one such product never
+  blocks the rest of the sheet. (Review 2026-07-10 caught this: single-location ITs were green but a
+  multi-location product would otherwise fail the whole commit with an undiagnosable error.)
+
+- **It is branch-scoped**, not company-wide like prices. The import always targets the caller's
+  **active branch** (the `X-Branch-Uid` switch), never a column — matching the single Adjust screen.
+  The export reference column `Current On-Hand` and the wizard's inline note both make the active
+  branch explicit; the editable `New On-Hand Qty` is left blank on export so a re-upload only touches
+  the rows the operator actually counted.
+
+Gate: a new `STOCK.IMPORT` code (repeatable seed, granted to ORG_ADMIN via the cross-join and to
+STOREKEEPER + BRANCH_MANAGER) — a distinct, higher-privilege capability than single-record
+`STOCK.ADJUST`, consistent with the D-5 per-entity import codes. The web route guard admits it
+alongside the other import codes. Verified end-to-end (`StockImportHandlerIT`, 9 cases on Postgres):
+commit posts the difference, unchanged/blank are no-ops, negative and unknown-code are rejected, a
+custom reason flows onto the movement, and the export → edit → re-upload round-trip updates.
 
 ## Consequences
 
