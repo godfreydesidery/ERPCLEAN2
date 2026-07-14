@@ -313,6 +313,78 @@ describe('BulkImportComponent — commit', () => {
   });
 });
 
+// ── Mis-picked entity ─────────────────────────────────────────────────────────
+
+/**
+ * The picker defaults to the first entity and resets on reload, so exporting one entity and
+ * uploading it under another is easy to do by accident — and every row then fails on a column the
+ * file doesn't have (the QA report that started this: 391 × "'Party Type' is required." from a stock
+ * sheet uploaded as Customers). Files this wizard produces are named after their entity, so catch it
+ * before the upload and offer the one-click fix.
+ */
+describe('BulkImportComponent — file belongs to another entity', () => {
+  const REAL_ENTITIES: EntityDescriptor[] = [
+    { key: 'customers', label: 'Customers', permissionCode: 'CUSTOMER.IMPORT' },
+    { key: 'stock', label: 'Stock on-hand levels', permissionCode: 'STOCK.IMPORT' },
+  ];
+
+  it('does not upload a stock export while Customers is selected — it flags the mismatch', async () => {
+    makeBed({ listEntitiesImpl: () => of(REAL_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+    expect(comp.selectedKey()).toBe('customers'); // the default that causes the mistake
+
+    comp.onFileSelected(fileChangeEvent(makeXlsxFile('stock-export.xlsx')));
+    await vi.runAllTimersAsync();
+
+    expect(svc.validate).not.toHaveBeenCalled();
+    expect(comp.wrongEntityFile()?.key).toBe('stock');
+  });
+
+  it('useFileEntity() switches to the file\'s entity and validates it', async () => {
+    makeBed({ listEntitiesImpl: () => of(REAL_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.onFileSelected(fileChangeEvent(makeXlsxFile('stock-export.xlsx')));
+    await vi.runAllTimersAsync();
+    comp.useFileEntity();
+    await vi.runAllTimersAsync();
+
+    expect(comp.selectedKey()).toBe('stock');
+    expect(comp.wrongEntityFile()).toBeNull();
+    expect(svc.validate).toHaveBeenCalledWith('stock', expect.any(File));
+  });
+
+  it('uploads normally when the file matches the selected entity', async () => {
+    makeBed({ listEntitiesImpl: () => of(REAL_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.onFileSelected(fileChangeEvent(makeXlsxFile('customers-import-template.xlsx')));
+    await vi.runAllTimersAsync();
+
+    expect(comp.wrongEntityFile()).toBeNull();
+    expect(svc.validate).toHaveBeenCalledWith('customers', expect.any(File));
+  });
+
+  it('does not second-guess a file it did not name (backend checks the real headers)', async () => {
+    makeBed({ listEntitiesImpl: () => of(REAL_ENTITIES) });
+    const comp = TestBed.createComponent(BulkImportComponent).componentInstance;
+    const svc = TestBed.inject(BulkImportService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.onFileSelected(fileChangeEvent(makeXlsxFile('october count.xlsx')));
+    await vi.runAllTimersAsync();
+
+    expect(comp.wrongEntityFile()).toBeNull();
+    expect(svc.validate).toHaveBeenCalledWith('customers', expect.any(File));
+  });
+});
+
 // ── Entity change ─────────────────────────────────────────────────────────────
 
 describe('BulkImportComponent — onEntityChange', () => {

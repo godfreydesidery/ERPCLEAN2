@@ -100,12 +100,27 @@ public class StockServiceImpl implements StockService {
             throw new IllegalArgumentException("Adjustment quantity must be non-zero.");
         }
 
+        // An adjustment corrects the stock WHERE IT ALREADY SITS. On-hand is keyed per location, so
+        // read every on-hand row for the product in this branch rather than assuming a single one:
+        //  - exactly one row  → adjust THAT location (which may not be the branch default).
+        //  - no row yet       → first touch; fall through to the branch default location below.
+        //  - more than one    → ambiguous (which location did the count correct?). Say so plainly.
+        // Resolving the location from the branch default unconditionally (as this did) posted the
+        // correction to the default location while the stock lived in another — splitting the product
+        // across two on-hand rows, and then failing on the single-row re-read below.
+        List<StockOnHand> onHandRows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
+                product.companyId(), principal.branchId(), product.id());
+        if (onHandRows.size() > 1) {
+            throw new IllegalArgumentException(
+                    "This product is held at more than one location in this branch. Adjust it from "
+                  + "the location's stock screen so the correction lands on the right one.");
+        }
+        StockOnHand sohBefore = onHandRows.isEmpty() ? null : onHandRows.get(0);
+
         // FIX C (adversarial review): resolve avg_cost BEFORE posting so the movement row
         // carries unit_cost_amount + value_amount immediately (columns are immutable/updatable=false
         // on the entity — they cannot be patched after the fact). If avg_cost is null (no cost
         // established yet) pass null cost and skip the value — consistent with the D-2 null-cost edge.
-        StockOnHand sohBefore = onHands.findByCompanyIdAndBranchIdAndProductId(
-                product.companyId(), principal.branchId(), product.id()).orElse(null);
         BigDecimal avgCostNow = sohBefore != null ? sohBefore.getAvgCost() : null;
         BigDecimal movementValue = null;
         if (avgCostNow != null) {
@@ -127,8 +142,11 @@ public class StockServiceImpl implements StockService {
                         request.departmentValueUid(),
                         null, null));
 
-        // ADR-0028 D-3: resolve the branch's default location for location-unaware callers.
-        Long locationId = locationResolver.defaultLocationId(product.companyId(), principal.branchId());
+        // Post where the stock already is; ADR-0028 D-3's branch default only applies on first touch
+        // (no on-hand row yet) — which is what a location-unaware caller means by "the branch".
+        Long locationId = sohBefore != null && sohBefore.getLocationId() != null
+                ? sohBefore.getLocationId()
+                : locationResolver.defaultLocationId(product.companyId(), principal.branchId());
 
         String movementUid = posting.post(
                 product.companyId(),
@@ -157,9 +175,11 @@ public class StockServiceImpl implements StockService {
                 )));
 
         // Revalue on_hand_value + post GL DR STOCK_ADJUSTMENT / CR INVENTORY (ADR-0020 D-7).
-        // Re-read the on-hand row (posting.post may have upserted it if it was absent).
-        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndProductId(
-                product.companyId(), principal.branchId(), product.id()).orElse(null);
+        // Re-read the on-hand row (posting.post may have upserted it if it was absent) — by LOCATION,
+        // the key on-hand is actually stored under. The branch-wide finder would throw here the moment
+        // a product were held at a second location.
+        StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                product.companyId(), principal.branchId(), locationId, product.id()).orElse(null);
         if (soh != null) {
             // FOLLOW-001: pass productCode + reasonCode so memo text avoids raw ULID.
             valuation.revalueAdjustment(movementUid, soh, request.quantity(), LocalDate.now(),
