@@ -28,7 +28,20 @@ public class XlsxRowReader {
 
     private final DataFormatter formatter = new DataFormatter();
 
+    /**
+     * A parsed upload: the header row as written in the file (required-marker stripped) plus the
+     * data rows. The headers are what lets the caller tell a mis-picked entity ("this is a stock
+     * sheet, but you chose Customers") apart from a genuinely incomplete row.
+     */
+    public record ParsedSheet(List<String> headers, List<ImportRow> rows) {
+    }
+
+    /** The data rows only — for callers that don't need to inspect the header row. */
     public List<ImportRow> read(InputStream in) {
+        return readSheet(in).rows();
+    }
+
+    public ParsedSheet readSheet(InputStream in) {
         try (Workbook wb = WorkbookFactory.create(in)) {
             if (wb.getNumberOfSheets() == 0) {
                 throw new IllegalArgumentException("The uploaded file has no sheets.");
@@ -73,7 +86,7 @@ public class XlsxRowReader {
             if (rows.isEmpty()) {
                 throw new IllegalArgumentException("The file has no data rows to import.");
             }
-            return rows;
+            return new ParsedSheet(headers, rows);
         } catch (IOException e) {
             throw new IllegalArgumentException("The file could not be read as a spreadsheet.");
         }

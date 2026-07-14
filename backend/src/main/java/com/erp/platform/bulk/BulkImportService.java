@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -86,13 +89,78 @@ public class BulkImportService {
     public ImportReport run(String key, MultipartFile file, ImportMode mode) {
         BulkImportHandler h = handler(key);
         Long companyId = activeCompanyId();
-        List<ImportRow> rows = parse(file);
+        XlsxRowReader.ParsedSheet sheet = parse(file);
+        assertSheetMatchesEntity(h, companyId, sheet.headers());
+        List<ImportRow> rows = sheet.rows();
         ImportContext ctx = new ImportContext();
         List<RowOutcome> outcomes = new ArrayList<>(rows.size());
         for (ImportRow row : rows) {
             outcomes.add(safeProcess(h, companyId, row, mode, ctx));
         }
         return ImportReport.from(key, mode, outcomes);
+    }
+
+    /**
+     * Reject a file whose columns don't belong to the picked entity, ONCE and up front — before any
+     * row runs.
+     *
+     * <p>Without this, a sheet for the wrong entity isn't recognised as such: a missing column reads
+     * back as an empty cell ({@link ImportRow#get}), so every row fails its first required field and
+     * the operator gets N identical "'Party Type' is required." errors with no hint that the real
+     * mistake was leaving the entity picker on its default. The wizard defaults to the first entity
+     * alphabetically, so uploading an export straight after a page reload lands exactly here.
+     *
+     * <p>When the headers match a DIFFERENT registered entity, the message names it — the operator's
+     * next click is then obvious.
+     */
+    private void assertSheetMatchesEntity(BulkImportHandler h, Long companyId, List<String> headers) {
+        Set<String> present = headers.stream()
+                .filter(s -> !s.isBlank())
+                .map(BulkImportService::normalise)
+                .collect(Collectors.toSet());
+
+        List<String> missing = requiredHeaders(h, companyId).stream()
+                .filter(header -> !present.contains(normalise(header)))
+                .toList();
+        if (missing.isEmpty()) {
+            return;
+        }
+
+        String looksLike = handlers.values().stream()
+                .filter(other -> !other.key().equals(h.key()))
+                .filter(other -> {
+                    List<String> req = requiredHeaders(other, companyId);
+                    return !req.isEmpty()
+                            && req.stream().allMatch(header -> present.contains(normalise(header)));
+                })
+                .map(BulkImportHandler::displayName)
+                .findFirst()
+                .orElse(null);
+
+        String lead = "This file doesn't match \"" + h.displayName() + "\" — it has no "
+                + quotedList(missing) + " column" + (missing.size() > 1 ? "s" : "") + ".";
+        throw new IllegalArgumentException(looksLike != null
+                ? lead + " It looks like a \"" + looksLike + "\" file — choose that in step 1 and "
+                       + "upload it again."
+                : lead + " Download the \"" + h.displayName() + "\" template in step 2 and fill "
+                       + "that in.");
+    }
+
+    /** The headers a handler cannot import without. Reference columns are read-only, never required. */
+    private static List<String> requiredHeaders(BulkImportHandler h, Long companyId) {
+        return h.columns(companyId).stream()
+                .filter(ColumnSpec::required)
+                .map(ColumnSpec::header)
+                .toList();
+    }
+
+    /** Header matching ignores case and surrounding space — Excel round-trips are not that careful. */
+    private static String normalise(String header) {
+        return header.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String quotedList(List<String> headers) {
+        return headers.stream().map(s -> "\"" + s + "\"").collect(Collectors.joining(", "));
     }
 
     private RowOutcome safeProcess(BulkImportHandler h, Long companyId, ImportRow row,
@@ -120,12 +188,12 @@ public class BulkImportService {
         throw new ValidationComplete(outcome);
     }
 
-    private List<ImportRow> parse(MultipartFile file) {
+    private XlsxRowReader.ParsedSheet parse(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("No file was uploaded.");
         }
         try (InputStream in = file.getInputStream()) {
-            return rowReader.read(in);
+            return rowReader.readSheet(in);
         } catch (IOException e) {
             throw new IllegalArgumentException("The file could not be read.");
         }

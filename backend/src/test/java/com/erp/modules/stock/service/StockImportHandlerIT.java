@@ -227,6 +227,40 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
         assertThat(movements.count()).isEqualTo(movesBefore);            // nothing posted
     }
 
+    /**
+     * A count corrects the stock WHERE IT SITS. When a product's only on-hand row is at a
+     * non-default location, the adjustment must land on THAT location — not on the branch default,
+     * which would split the product across two on-hand rows (and then blow up on the single-row
+     * re-read inside adjust()).
+     */
+    @Test
+    void commit_productHeldOnlyAtANonDefaultLocation_correctsThatLocation() {
+        ProductDto product = stockableProduct("OffSite");
+        StockLocation loc2 = locations.save(new StockLocation(
+                companyA.getId(), branchA.getId(), "LOC2-" + branchA.getId(), "Warehouse B",
+                LocationType.WAREHOUSE, false, null));
+        txTemplate.execute(s -> {
+            StockOnHand soh = onHands.save(new StockOnHand(
+                    companyA.getId(), branchA.getId(), loc2.getId(), product.id()));
+            soh.applyDelta(new BigDecimal("30"), null);
+            return onHands.save(soh);
+        });
+
+        RowOutcome o = handler.process(companyA.getId(),
+                row("Product Code", product.code(), "New On-Hand Qty", "42"),
+                ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.UPDATE);
+        assertThat(onHands.findAllByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id()))
+                .singleElement()   // corrected in place — NOT a second row at the branch default
+                .satisfies(soh -> {
+                    assertThat(soh.getLocationId()).isEqualTo(loc2.getId());
+                    assertThat(soh.getQuantity()).isEqualByComparingTo("42");
+                });
+        assertThat(lastMovement(product.id()).getLocationId()).isEqualTo(loc2.getId());
+    }
+
     @Test
     void export_prefillsCurrentOnHand_andLeavesNewBlank() {
         ProductDto product = stockableProduct("Exported");

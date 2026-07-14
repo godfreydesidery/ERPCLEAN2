@@ -31,7 +31,7 @@ class BulkImportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BulkImportService(List.of(new FakeHandler()),
+        service = new BulkImportService(List.of(new FakeHandler(), new OtherHandler()),
                 new XlsxTemplateWriter(), new XlsxRowReader(), new NoopTxManager());
         RequestContext.set(new RequestContext.Principal(1L, "tester", false, 10L, 20L, "127.0.0.1"));
     }
@@ -71,7 +71,53 @@ class BulkImportServiceTest {
         assertThat(service.template("test")).isNotEmpty();
     }
 
-    // --- a self-contained fake handler --------------------------------------------------------------
+    /**
+     * A file for the WRONG entity is rejected once, up front — not turned into one identical
+     * "'Name' is required." error per row (a missing column reads back as an empty cell, so without
+     * this check that is exactly what a 400-row mis-picked upload produces). The message names the
+     * entity the file actually belongs to, because that is the operator's next click.
+     */
+    @Test
+    void run_fileForAnotherEntity_rejectedUpFront_namingTheEntityItBelongsTo() {
+        byte[] xlsx = sheet(List.of("* Product Code", "Qty"),
+                List.of(List.of("SKU-1", "5"), List.of("SKU-2", "7")));
+        MockMultipartFile file = new MockMultipartFile("file", "other-export.xlsx", null, xlsx);
+
+        assertThatThrownBy(() -> service.run("test", file, ImportMode.VALIDATE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("doesn't match \"Test\"")
+                .hasMessageContaining("\"Name\"")
+                .hasMessageContaining("It looks like a \"Other\" file");
+    }
+
+    /** Headers matching no registered entity: still one clear rejection, pointing at the template. */
+    @Test
+    void run_fileMatchingNoEntity_rejectedUpFront_pointingAtTheTemplate() {
+        byte[] xlsx = sheet(List.of("Wibble"), List.of(List.of("x")));
+        MockMultipartFile file = new MockMultipartFile("file", "x.xlsx", null, xlsx);
+
+        assertThatThrownBy(() -> service.run("test", file, ImportMode.VALIDATE))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Download the \"Test\" template");
+    }
+
+    /**
+     * Excel round-trips are careless with case/space — the header check must not be, AND the cell
+     * lookup must agree with it: accepting the file and then failing every row on the same column
+     * would be worse than rejecting it.
+     */
+    @Test
+    void run_headerCaseAndSpacingDiffer_fileAcceptedAndRowsRead() {
+        byte[] xlsx = sheet(List.of("  name  "), List.of(List.of("Alpha")));
+        MockMultipartFile file = new MockMultipartFile("file", "x.xlsx", null, xlsx);
+
+        ImportReport report = service.run("test", file, ImportMode.VALIDATE);
+
+        assertThat(report.created()).isEqualTo(1);
+        assertThat(report.errors()).isZero();
+    }
+
+    // --- self-contained fake handlers ---------------------------------------------------------------
 
     private static final class FakeHandler implements BulkImportHandler {
         @Override public String key() {
@@ -99,6 +145,30 @@ class BulkImportServiceTest {
                 return RowOutcome.skip(row.rowNumber(), name, "nothing to do");
             }
             return RowOutcome.create(row.rowNumber(), name);
+        }
+    }
+
+    /** A second registered entity — so a file can belong to one entity while another is picked. */
+    private static final class OtherHandler implements BulkImportHandler {
+        @Override public String key() {
+            return "other";
+        }
+
+        @Override public String displayName() {
+            return "Other";
+        }
+
+        @Override public String permissionCode() {
+            return "OTHER.IMPORT";
+        }
+
+        @Override public List<ColumnSpec> columns(Long companyId) {
+            return List.of(ColumnSpec.of("Product Code", true, "the product"),
+                    ColumnSpec.number("Qty", false, "how many"));
+        }
+
+        @Override public RowOutcome process(Long companyId, ImportRow row, ImportMode mode, ImportContext ctx) {
+            return RowOutcome.create(row.rowNumber(), ImportParsers.requireText(row, "Product Code"));
         }
     }
 

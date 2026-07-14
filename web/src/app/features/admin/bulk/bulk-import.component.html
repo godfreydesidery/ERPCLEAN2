@@ -137,10 +137,27 @@
                      (change)="onFileSelected($event)"
                      [disabled]="validating() || committing()" />
             </div>
+            <small class="hint d-block mt-1">
+              This file will be imported as <strong>{{ selectedEntity()?.label }}</strong> — change the
+              entity type in step 1 if that's not what the file holds.
+            </small>
             @if (selectedFile(); as f) {
               <p class="text-muted small mt-2 mb-0">
                 <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>{{ f.name }}
               </p>
+            }
+            @if (wrongEntityFile(); as wrong) {
+              <div class="alert alert-warning py-2 px-3 small mt-2 mb-0" role="alert">
+                <p class="mb-2">
+                  <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                  This looks like a <strong>{{ wrong.label }}</strong> file, but
+                  <strong>{{ selectedEntity()?.label }}</strong> is selected — importing it as
+                  {{ selectedEntity()?.label }} would fail every row.
+                </p>
+                <button type="button" class="btn btn-warning btn-sm" (click)="useFileEntity()">
+                  Import it as {{ wrong.label }}
+                </button>
+              </div>
             }
             @if (validating()) {
               <p class="text-muted d-flex align-items-center gap-2 mt-2" aria-live="polite">
@@ -157,7 +174,10 @@
         @if (report(); as rep) {
           <div class="erp-card mb-3">
             <div class="erp-card__head">
-              <h2>{{ rep.mode === 'COMMIT' ? 'Import Results' : 'Validation Results' }}</h2>
+              <h2>
+                {{ rep.mode === 'COMMIT' ? 'Import Results' : 'Validation Results' }}
+                <span class="text-muted fw-normal">— {{ selectedEntity()?.label }}</span>
+              </h2>
             </div>
             <div class="erp-card__body">
               <div class="d-flex flex-wrap gap-2 mb-3" role="status" aria-live="polite">
