@@ -4,6 +4,7 @@ import '../../models/auth.dart';
 import '../json.dart';
 import '../storage/secure_store.dart';
 import 'api_response.dart';
+import 'insecure_tls.dart';
 
 /// Owns the live token bundle and the **transparent refresh** discipline (AS-6,
 /// G-4). Uses a bare Dio (no interceptors) for `/auth/refresh` so refreshing
@@ -17,7 +18,9 @@ class TokenManager {
           contentType: 'application/json',
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 20),
-        ));
+        )) {
+    applyInsecureTlsIfEnabled(_bare);
+  }
 
   final SecureStore _store;
   final Dio _bare;
