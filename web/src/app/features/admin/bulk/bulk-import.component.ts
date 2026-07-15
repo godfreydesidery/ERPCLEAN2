@@ -78,6 +78,10 @@ export class BulkImportComponent {
   readonly selectedFile = signal<File | null>(null);
   readonly validating = signal(false);
   readonly validateError = signal<string | null>(null);
+  /** The entity the picked file's NAME belongs to, when that isn't the selected one (see
+   * `entityKeyFromFilename`). Set instead of uploading, so the operator fixes the picker rather than
+   * reading a wall of identical row errors. */
+  readonly wrongEntityFile = signal<EntityDescriptor | null>(null);
 
   // ── Commit ───────────────────────────────────────────────────────────────────
   readonly committing = signal(false);
@@ -236,8 +240,40 @@ export class BulkImportComponent {
     this.report.set(null);
     this.commitError.set(null);
     this.committed.set(false);
+    this.wrongEntityFile.set(null);
     this.selectedFile.set(file);
+
+    // The entity picker defaults to the first entity and resets on reload, so it is easy to export
+    // one entity, edit it, and upload it under another — every row then fails on a column the file
+    // doesn't have. Our own downloads are named after their entity, so catch that here and offer the
+    // one-click fix. (The backend re-checks the real headers, which also covers renamed files.)
+    const fileEntity = this.entityFromFilename(file.name);
+    if (fileEntity && fileEntity.key !== this.selectedKey()) {
+      this.wrongEntityFile.set(fileEntity);
+      return;
+    }
     this.validateFile(file);
+  }
+
+  /** Switches the picker to the file's entity and validates — the fix for a mis-picked entity. */
+  useFileEntity(): void {
+    const target = this.wrongEntityFile();
+    const file = this.selectedFile();
+    if (!target || !file) return;
+    this.selectedKey.set(target.key);
+    this.wrongEntityFile.set(null);
+    if (target.key === PRICES_ENTITY_KEY) this.ensurePriceListsLoaded();
+    this.validateFile(file);
+  }
+
+  /** The entity a file downloaded from THIS wizard belongs to: `<key>-export.xlsx` /
+   * `<key>-import-template.xlsx` (see `downloadTemplate`/`exportCurrent`). Null for any other name —
+   * a renamed or hand-built file is not second-guessed here; the backend validates its headers. */
+  private entityFromFilename(name: string): EntityDescriptor | null {
+    const match = /^(.+?)-(?:export|import-template)(?:\s*\(\d+\))?\.xlsx$/i.exec(name.trim());
+    if (!match) return null;
+    const key = match[1].toLowerCase();
+    return this.entities().find((e) => e.key.toLowerCase() === key) ?? null;
   }
 
   private validateFile(file: File): void {
@@ -298,6 +334,7 @@ export class BulkImportComponent {
     this.validateError.set(null);
     this.commitError.set(null);
     this.committed.set(false);
+    this.wrongEntityFile.set(null);
     const input = this.fileInputEl()?.nativeElement;
     if (input) input.value = '';
   }

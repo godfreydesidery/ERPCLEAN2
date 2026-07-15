@@ -182,6 +182,25 @@ alongside the other import codes. Verified end-to-end (`StockImportHandlerIT`, 9
 commit posts the difference, unchanged/blank are no-ops, negative and unknown-code are rejected, a
 custom reason flows onto the movement, and the export → edit → re-upload round-trip updates.
 
+### D-11 — A file for the wrong entity is rejected up front, not row-by-row (addendum, 2026-07-14)
+
+A missing column reads back as an empty cell (`ImportRow.get` → `""`), so a sheet uploaded under the
+wrong entity does not look like the wrong sheet — it looks like N rows each missing their first
+required field. A QA operator uploaded a stock export while the picker sat on its default (Customers)
+and got 391 × `'Party Type' is required.`; nothing on screen said which entity had been validated, so
+the stock import "not working" was actually the stock handler never running.
+
+`BulkImportService` therefore checks the uploaded header row against the picked handler's **required**
+columns *before* any row executes, and rejects the file **once** with a message that names the entity
+whose required columns the file *does* satisfy ("It looks like a *Stock on-hand levels* file — choose
+that in step 1"). Header matching is case/space-insensitive, and `ImportRow` normalises lookups the
+same way, so the framework never accepts a file whose columns the handler cannot then read.
+
+Belt and braces on the web side: the wizard names the entity on the upload step and in the results
+heading, and — since every file it hands out is named `<key>-export.xlsx` / `<key>-import-template.xlsx`
+— it spots a mis-picked entity *before* the upload and offers a one-click "Import it as <entity>".
+A renamed or hand-built file is not second-guessed there; the backend header check covers it.
+
 ## Consequences
 
 - **Positive:** operators can mass-load products/customers/suppliers and mass-change prices from Excel,
