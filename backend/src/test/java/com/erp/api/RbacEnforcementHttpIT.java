@@ -327,7 +327,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
         grantRoleAsRoot(nonRootUser, manageRole, companyA);
 
         UpdateCompanyRequest body = new UpdateCompanyRequest(
-                "Beta Updated", null, null, null, null);
+                "Beta Updated", null, null, null, null, null, null, null, null, null, null, null, null);
 
         mockMvc.perform(put("/api/v1/companies/uid/{uid}", companyB.getUid())
                         .header("Authorization", "Bearer " + nonRootToken)
@@ -339,7 +339,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
     @Test
     void rootToken_updateCompanyB_returns200() throws Exception {
         UpdateCompanyRequest body = new UpdateCompanyRequest(
-                "Beta Root Updated", null, null, null, null);
+                "Beta Root Updated", null, null, null, null, null, null, null, null, null, null, null, null);
 
         mockMvc.perform(put("/api/v1/companies/uid/{uid}", companyB.getUid())
                         .header("Authorization", "Bearer " + rootToken)

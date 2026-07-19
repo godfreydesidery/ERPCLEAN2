@@ -19,7 +19,14 @@ public record CompanyDto(
         Short fiscalYearStartMonth,
         String timeZone,
         String baseCurrency,
-        String status) {
+        String status,
+        String contactPhone,
+        String contactEmail,
+        String addressLine1,
+        String addressLine2,
+        String city,
+        String region,
+        String country) {
 
     public static CompanyDto from(Company c) {
         return new CompanyDto(
@@ -35,6 +42,13 @@ public record CompanyDto(
                 c.getFiscalYearStartMonth(),
                 c.getTimeZone(),
                 c.getBaseCurrency(),
-                c.getStatus().name());
+                c.getStatus().name(),
+                c.getContactPhone(),
+                c.getContactEmail(),
+                c.getAddressLine1(),
+                c.getAddressLine2(),
+                c.getCity(),
+                c.getRegion(),
+                c.getCountry());
     }
 }

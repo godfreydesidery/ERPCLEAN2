@@ -76,11 +76,22 @@ export class StockListComponent {
   readonly searchQ = signal('');
 
   // ── Adjust form ───────────────────────────────────────────────────────────────
+  // Two entry points share this same form state: (1) the per-row "Adjust" button
+  // (adjustingUid = the row's uid), and (2) the toolbar "Adjust Stock" button (showAdjustForm),
+  // which adds its own product search so a product can be adjusted without scrolling to its row.
+  // Only one of the two is ever open at a time (each open* method closes the other).
   readonly adjustingUid = signal<string | null>(null);
+  readonly showAdjustForm = signal(false);
   readonly adjustProductQ = signal('');
   readonly adjustProductResults = signal<ProductModel[]>([]);
   readonly adjustSelectedProduct = signal<{ uid: string; label: string } | null>(null);
+  /** 'delta' = signed +/- adjustment (existing behaviour); 'absolute' = "set to counted qty". */
+  readonly adjustMode = signal<'delta' | 'absolute'>('delta');
   readonly adjustQty = signal('');
+  /** Read-only display of the row's current on-hand quantity, used by absolute mode to compute the delta. */
+  readonly adjustCurrentQty = signal('0');
+  /** The user-entered NEW counted quantity in absolute mode. */
+  readonly adjustNewQty = signal('');
   readonly adjustReason = signal<AdjustmentReason>('COUNT_CORRECTION');
   readonly adjustNote = signal('');
   readonly adjusting = signal(false);
@@ -259,7 +270,11 @@ export class StockListComponent {
 
   openAdjustForm(row: StockOnHandDto): void {
     const label = rowProductLabel(row);
+    this.showAdjustForm.set(false); // mutual exclusion with the toolbar-triggered form
     this.adjustingUid.set(row.uid);
+    this.adjustMode.set('delta');
+    this.adjustCurrentQty.set(row.quantity);
+    this.adjustNewQty.set('');
     this.adjustQty.set('');
     this.adjustReason.set('COUNT_CORRECTION');
     this.adjustNote.set('');
@@ -269,6 +284,40 @@ export class StockListComponent {
     this.adjustSelectedProduct.set({ uid: '', label });
     // Resolve the product uid via a targeted code search (not a 200-cap full-fetch).
     this.resolveProductUidForRow(row.productCode, label);
+  }
+
+  /** Toolbar "Adjust Stock" entry point — same form, no pre-selected row; product picked via search. */
+  toggleAdjustForm(): void {
+    if (this.showAdjustForm()) {
+      this.closeAdjustFormStandalone();
+    } else {
+      this.openAdjustFormStandalone();
+    }
+  }
+
+  private openAdjustFormStandalone(): void {
+    this.adjustingUid.set(null); // mutual exclusion with any per-row form
+    this.showAdjustForm.set(true);
+    this.adjustMode.set('delta');
+    this.adjustCurrentQty.set('0');
+    this.adjustNewQty.set('');
+    this.adjustQty.set('');
+    this.adjustReason.set('COUNT_CORRECTION');
+    this.adjustNote.set('');
+    this.adjustError.set(null);
+    this.adjustProductQ.set('');
+    this.adjustSelectedProduct.set(null);
+    this.adjustProductResults.set([]);
+  }
+
+  private closeAdjustFormStandalone(): void {
+    this.showAdjustForm.set(false);
+    this.adjustError.set(null);
+  }
+
+  setAdjustMode(mode: 'delta' | 'absolute'): void {
+    this.adjustMode.set(mode);
+    this.adjustError.set(null);
   }
 
   private resolveProductUidForRow(productCode: string, label: string): void {
@@ -300,21 +349,54 @@ export class StockListComponent {
     this.adjustSelectedProduct.set({ uid: p.uid, label: `${p.code} — ${p.name}` });
     this.adjustProductResults.set([]);
     this.adjustProductQ.set(`${p.code} — ${p.name}`);
+    // Absolute mode needs the CURRENT on-hand qty to compute the delta — refresh it for whichever
+    // product was just picked (the per-row entry point already knows it from the row; the toolbar
+    // entry point does not, so this covers both).
+    this.refreshAdjustCurrentQty(p.code);
+  }
+
+  private refreshAdjustCurrentQty(productCode: string): void {
+    this.stockService.listOnHand(productCode, 0, 10).subscribe({
+      next: ({ rows }) => {
+        const found = rows.find((r) => r.productCode === productCode);
+        this.adjustCurrentQty.set(found?.quantity ?? '0');
+      },
+      error: () => this.adjustCurrentQty.set('0'),
+    });
   }
 
   submitAdjust(): void {
     const selected = this.adjustSelectedProduct();
-    const qty = this.asStr(this.adjustQty());
     if (!selected?.uid) { this.adjustError.set('Select a product.'); return; }
-    if (!qty || isNaN(Number(qty)) || Number(qty) === 0) {
-      this.adjustError.set('Enter a non-zero quantity (positive or negative).');
-      return;
+
+    let deltaStr: string;
+    if (this.adjustMode() === 'absolute') {
+      const newQty = this.asStr(this.adjustNewQty());
+      if (!newQty || isNaN(Number(newQty)) || Number(newQty) < 0) {
+        this.adjustError.set('Enter the counted quantity (zero or positive).');
+        return;
+      }
+      const current = Number(this.adjustCurrentQty()) || 0;
+      const delta = Number(newQty) - current;
+      if (delta === 0) {
+        this.adjustError.set('No change — the counted quantity matches the current on-hand quantity.');
+        return;
+      }
+      deltaStr = String(delta);
+    } else {
+      const qty = this.asStr(this.adjustQty());
+      if (!qty || isNaN(Number(qty)) || Number(qty) === 0) {
+        this.adjustError.set('Enter a non-zero quantity (positive or negative).');
+        return;
+      }
+      deltaStr = qty;
     }
+
     this.adjusting.set(true);
     this.adjustError.set(null);
     const request: AdjustStockRequest = {
       productUid: selected.uid,
-      quantity: qty,
+      quantity: deltaStr,
       reasonCode: this.adjustReason(),
       note: this.adjustNote().trim() || undefined,
     };
@@ -322,6 +404,7 @@ export class StockListComponent {
       next: () => {
         this.adjusting.set(false);
         this.adjustingUid.set(null);
+        this.showAdjustForm.set(false);
         this.alerts.success('Stock adjusted');
         this.load(this.currentPage());
       },

@@ -15,5 +15,14 @@ public record UpdateCompanyRequest(
          * {@code journal_entries} row exists for the company (post-GL-transaction guard).
          * Null / blank = leave unchanged.
          */
-        @Size(min = 3, max = 3) String baseCurrency) {
+        @Size(min = 3, max = 3) String baseCurrency,
+        /** P2 D7 contact/address block — all optional, nullable = leave unchanged. */
+        @Size(max = 40) String vrn,
+        @Size(max = 40) String contactPhone,
+        @Size(max = 160) String contactEmail,
+        @Size(max = 160) String addressLine1,
+        @Size(max = 160) String addressLine2,
+        @Size(max = 80) String city,
+        @Size(max = 80) String region,
+        @Size(max = 80) String country) {
 }

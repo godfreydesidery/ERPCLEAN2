@@ -584,6 +584,21 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/account-ledger.component').then((m) => m.AccountLedgerComponent),
   },
+  // ── Operational Reports (SAM Electronix go-live) — distinct from the P&L/BS/CF
+  // financial-statement group above (`reporting/...`); these are print-style operational
+  // reports gated on the module's own VIEW permission, not a REPORT.* code.
+  {
+    path: 'reports/sales',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./reporting/sales-report.component').then((m) => m.SalesReportComponent),
+  },
+  {
+    path: 'reports/stock',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-report.component').then((m) => m.StockReportComponent),
+  },
   // ── Approvals ─────────────────────────────────────────────────────────────
   {
     path: 'approvals/inbox',

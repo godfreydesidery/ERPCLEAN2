@@ -7,6 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/config/app_config.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
+import '../../models/context.dart';
 import '../../models/sale.dart';
 import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
@@ -23,6 +24,31 @@ Future<void> showReceiptSheet(
     context: context,
     builder: (_) => _ReceiptDialog(receipt: receipt),
   );
+}
+
+/// Builds the fiscal-header detail lines (address, Tel, Email, TIN, VRN) for
+/// [company], in printed-receipt order. Omits any field that is null/empty so
+/// the header stays clean for companies that haven't backfilled these yet.
+List<String> companyReceiptLines(Company company) {
+  final lines = <String>[];
+  void addIfPresent(String? value, [String prefix = '']) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return;
+    lines.add('$prefix$v');
+  }
+
+  addIfPresent(company.addressLine1);
+  addIfPresent(company.addressLine2);
+  final cityRegion = [company.city, company.region]
+      .where((s) => (s ?? '').trim().isNotEmpty)
+      .join(', ');
+  addIfPresent(cityRegion.isEmpty ? null : cityRegion);
+  addIfPresent(company.country);
+  addIfPresent(company.contactPhone, 'Tel: ');
+  addIfPresent(company.contactEmail, 'Email: ');
+  addIfPresent(company.taxId, 'TIN: ');
+  addIfPresent(company.vrn, 'VRN: ');
+  return lines;
 }
 
 class _ReceiptDialog extends ConsumerStatefulWidget {
@@ -172,6 +198,11 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
             child: Text(ctx?.company.name ?? 'OrbixPOS',
                 style: mono.copyWith(fontSize: 15, fontWeight: FontWeight.w800)),
           ),
+          if (ctx != null)
+            for (final detail in companyReceiptLines(ctx.company))
+              Center(
+                  child: Text(detail,
+                      style: mono.copyWith(color: const Color(0xFF64748B)))),
           Center(child: Text(ctx?.branch.name ?? '', style: mono)),
           const SizedBox(height: 8),
           line('Invoice', inv.invoiceNumber, bold: true),
@@ -250,9 +281,10 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       return;
     }
     final app = ref.read(appControllerProvider);
+    final company = app.context?.company;
     final bytes = buildReceiptBytes(
       receipt: r,
-      companyName: app.context?.company.name ?? 'OrbixPOS',
+      companyName: company?.name ?? 'OrbixPOS',
       branchName: app.context?.branch.name ?? '',
       cashierName: app.me?.displayName ?? '',
       width: cfg.receiptWidthCols,
@@ -260,6 +292,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       gift: _gift,
       reversed: _reversed || r.invoice.status.isVoid,
       kickDrawer: cfg.kickDrawer,
+      companyDetailLines: company == null ? const [] : companyReceiptLines(company),
     );
     setState(() => _printing = true);
     try {

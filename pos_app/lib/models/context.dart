@@ -19,17 +19,47 @@ class Company {
     required this.uid,
     required this.name,
     this.baseCurrency,
+    this.taxId,
+    this.vrn,
+    this.contactPhone,
+    this.contactEmail,
+    this.addressLine1,
+    this.addressLine2,
+    this.city,
+    this.region,
+    this.country,
   });
   final String id;
   final String uid;
   final String name;
   final String? baseCurrency;
 
+  // Fiscal-receipt header fields (all optional — older/unmigrated companies
+  // may not have them populated yet).
+  final String? taxId;
+  final String? vrn;
+  final String? contactPhone;
+  final String? contactEmail;
+  final String? addressLine1;
+  final String? addressLine2;
+  final String? city;
+  final String? region;
+  final String? country;
+
   factory Company.fromJson(Map<String, dynamic> j) => Company(
         id: asStrOr(j['id']),
         uid: asStrOr(j['uid']),
         name: asStrOr(j['name']),
         baseCurrency: asStr(j['baseCurrency']),
+        taxId: asStr(j['taxId']),
+        vrn: asStr(j['vrn']),
+        contactPhone: asStr(j['contactPhone']),
+        contactEmail: asStr(j['contactEmail']),
+        addressLine1: asStr(j['addressLine1']),
+        addressLine2: asStr(j['addressLine2']),
+        city: asStr(j['city']),
+        region: asStr(j['region']),
+        country: asStr(j['country']),
       );
 }
 

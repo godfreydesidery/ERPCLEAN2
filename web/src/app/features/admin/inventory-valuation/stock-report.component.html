@@ -1,0 +1,148 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-clipboard-data me-2" aria-hidden="true"></i>Stock Report
+      </h1>
+      <p class="subtitle">
+        Current on-hand quantity, buying price, selling price and value — for printing and export.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Stock Report.
+    </p>
+  } @else {
+
+    <!-- Toolbar -->
+    <div class="erp-toolbar">
+      <button type="button" class="btn btn-primary btn-sm"
+              (click)="load()"
+              [disabled]="state() === 'loading'">
+        @if (state() === 'loading') {
+          <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Loading…
+        } @else {
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+        }
+      </button>
+
+      @if (report() && canExport()) {
+        <span class="erp-toolbar__spacer"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('PDF')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('XLSX')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('CSV')" [disabled]="exporting()">
+          <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+        </button>
+      }
+    </div>
+
+    <!-- Load states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building stock report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Stock Report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted d-flex align-items-center gap-2">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-clipboard-data" aria-hidden="true"></i>
+            Click Refresh to load the current stock report.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          <!-- Company header block (only non-empty fields render) -->
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (r.company.legalName) {
+                <p class="small text-muted mb-1">{{ r.company.legalName }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Stock Report</h2>
+          <p class="text-muted small mb-3">
+            Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Stock Report — quantity and value per product</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" class="num">Qty On Hand</th>
+                  <th scope="col" class="num">Buying Price</th>
+                  <th scope="col" class="num">Selling Price</th>
+                  <th scope="col" class="num">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                      No stock on hand.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track row.productCode) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="num mono">{{ fmtQty(row.quantityOnHand) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.buyingPrice) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.sellingPrice) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.value) }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="5" class="text-end">Total Value</td>
+                  <td class="num mono">{{ fmtMoney(r.totalValue) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>
