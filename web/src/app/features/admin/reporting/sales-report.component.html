@@ -1,0 +1,211 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1><i class="bi bi-receipt-cutoff me-2" aria-hidden="true"></i>Sales Report</h1>
+    <p class="subtitle">
+      Sales by product for a selected period — optionally filtered by agent, route, or supplier.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Sales Report.
+    </div>
+  } @else {
+
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-from">
+              From date <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="sr-from" name="sr-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-to">
+              To date <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="sr-to" name="sr-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-agent">
+              Agent <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sr-agent" name="sr-agent"
+                            [(ngModel)]="agentUid"
+                            [options]="agentOptions()"
+                            placeholder="All agents" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-route">
+              Route <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sr-route" name="sr-route"
+                            [(ngModel)]="routeUid"
+                            [options]="routeOptions()"
+                            placeholder="All routes" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-supplier">
+              Supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sr-supplier" name="sr-supplier"
+                            [(ngModel)]="supplierUid"
+                            [options]="supplierOptions()"
+                            placeholder="All suppliers" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()"
+                    [disabled]="state() === 'loading' || !fromDate() || !toDate()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building Sales Report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Sales Report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-receipt-cutoff" aria-hidden="true"></i>
+            Choose a period, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Company header block (only non-empty fields render) -->
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (r.company.legalName) {
+                <p class="small text-muted mb-1">{{ r.company.legalName }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Sales Report</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }}
+            @if (r.agentName) { · Agent: {{ r.agentName }} }
+            @if (r.routeName) { · Route: {{ r.routeName }} }
+            @if (r.supplierName) { · Supplier: {{ r.supplierName }} }
+            · Currency: {{ r.currency }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Sales Report — per-product sales for the selected period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" class="num">Stock</th>
+                  <th scope="col" class="num">Qty</th>
+                  <th scope="col" class="num">Disc</th>
+                  <th scope="col" class="num">VAT</th>
+                  <th scope="col" class="num">Margin</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                      No sales recorded for this period.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track row.productCode) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="num mono">{{ fmtQty(row.currentStock) }}</td>
+                    <td class="num mono">{{ fmtQty(row.qtySold) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.discount) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.vat) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.margin) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.amount) }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="3" class="text-end">Totals</td>
+                  <td class="num mono">{{ fmtQty(r.totals.qtySold) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.discount) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.vat) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.margin) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.amount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

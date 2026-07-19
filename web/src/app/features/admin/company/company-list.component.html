@@ -98,9 +98,6 @@
                         <input type="text" class="form-control form-control-sm"
                                [(ngModel)]="editName" [ngModelOptions]="{ standalone: true }"
                                [disabled]="savingEdit()" aria-label="Company name" />
-                        @if (editError(); as msg) {
-                          <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
-                        }
                       } @else {
                         {{ c.name }}
                       }
@@ -147,6 +144,93 @@
                       </td>
                     }
                   </tr>
+
+                  <!-- Extended edit fields (VRN / address / contact — SAM Electronix go-live).
+                       These appear on POS receipts and the printed Sales/Stock reports. -->
+                  @if (editingUid() === c.uid) {
+                    <tr>
+                      <td [attr.colspan]="canManage() ? 5 : 4">
+                        <div class="erp-card mb-0" [attr.aria-label]="'Edit details for ' + c.name">
+                          <div class="erp-card__body">
+                            <div class="row g-2">
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editLegalName-' + c.uid">Legal name</label>
+                                <input [id]="'editLegalName-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editLegalName" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editTaxId-' + c.uid">Tax ID (TIN)</label>
+                                <input [id]="'editTaxId-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editTaxId" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editVrn-' + c.uid">VRN</label>
+                                <input [id]="'editVrn-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editVrn" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editPhone-' + c.uid">Contact phone</label>
+                                <input [id]="'editPhone-' + c.uid" type="tel" class="form-control form-control-sm"
+                                       [(ngModel)]="editContactPhone" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editEmail-' + c.uid">Contact email</label>
+                                <input [id]="'editEmail-' + c.uid" type="email" class="form-control form-control-sm"
+                                       [(ngModel)]="editContactEmail" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editTimeZone-' + c.uid">Time zone</label>
+                                <input [id]="'editTimeZone-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editTimeZone" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-6">
+                                <label class="form-label small text-muted mb-1" [for]="'editAddr1-' + c.uid">Address line 1</label>
+                                <input [id]="'editAddr1-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editAddressLine1" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-6">
+                                <label class="form-label small text-muted mb-1" [for]="'editAddr2-' + c.uid">Address line 2</label>
+                                <input [id]="'editAddr2-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editAddressLine2" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editCity-' + c.uid">City</label>
+                                <input [id]="'editCity-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editCity" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editRegion-' + c.uid">Region</label>
+                                <input [id]="'editRegion-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editRegion" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                              <div class="col-sm-4">
+                                <label class="form-label small text-muted mb-1" [for]="'editCountry-' + c.uid">Country</label>
+                                <input [id]="'editCountry-' + c.uid" type="text" class="form-control form-control-sm"
+                                       [(ngModel)]="editCountry" [ngModelOptions]="{ standalone: true }"
+                                       [disabled]="savingEdit()" />
+                              </div>
+                            </div>
+                            <p class="small text-muted mt-2 mb-0">
+                              VRN, address and contact details appear on POS receipts and printed reports.
+                            </p>
+                            @if (editError(); as msg) {
+                              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+                            }
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  }
                 }
               </tbody>
             </table>

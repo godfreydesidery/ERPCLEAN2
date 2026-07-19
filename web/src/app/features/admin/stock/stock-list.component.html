@@ -67,6 +67,18 @@
 
       <span class="erp-toolbar__spacer"></span>
 
+      @if (canAdjust()) {
+        <div class="align-self-end">
+          <button type="button" class="btn btn-outline-primary"
+                  (click)="toggleAdjustForm()"
+                  [attr.aria-expanded]="showAdjustForm()"
+                  aria-controls="adjustStockForm">
+            <i class="bi bi-plus-slash-minus me-1" aria-hidden="true"></i>
+            Adjust Stock
+          </button>
+        </div>
+      }
+
       @if (canOpening()) {
         <div class="align-self-end">
           <button type="button" class="btn btn-outline-primary"
@@ -179,6 +191,134 @@
             </div>
           </div>
           @if (openingError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </div>
+      </form>
+    }
+
+    <!-- Adjust Stock form (toolbar entry point — product search, not tied to a specific row) -->
+    @if (showAdjustForm()) {
+      <form id="adjustStockForm" class="erp-card mb-3"
+            (ngSubmit)="submitAdjust()" aria-label="Adjust stock">
+        <div class="erp-card__head">
+          <h2 class="h6 mb-0">Adjust Stock</h2>
+        </div>
+        <div class="erp-card__body">
+          <div class="row g-2 align-items-start mb-2">
+            <!-- Mode toggle -->
+            <div class="col-12 mb-1">
+              <div class="btn-group btn-group-sm" role="group" aria-label="Adjustment mode">
+                <input type="radio" class="btn-check" id="adjModeDeltaToolbar" name="adjModeToolbar"
+                       [checked]="adjustMode() === 'delta'" (change)="setAdjustMode('delta')"
+                       [disabled]="adjusting()" />
+                <label class="btn btn-outline-secondary" for="adjModeDeltaToolbar">Adjust by (±)</label>
+                <input type="radio" class="btn-check" id="adjModeAbsToolbar" name="adjModeToolbar"
+                       [checked]="adjustMode() === 'absolute'" (change)="setAdjustMode('absolute')"
+                       [disabled]="adjusting()" />
+                <label class="btn btn-outline-secondary" for="adjModeAbsToolbar">Set to counted quantity</label>
+              </div>
+            </div>
+
+            <!-- Product picker -->
+            <div class="col-sm-4 position-relative">
+              <label class="form-label small text-muted mb-1" for="adjustProductToolbar">
+                Product <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="adjustProductToolbar" name="adjustProductToolbar" type="search"
+                     class="form-control form-control-sm"
+                     placeholder="Search by name or code…"
+                     [ngModel]="adjustProductQ()"
+                     (ngModelChange)="onAdjustProductSearchChange($event)"
+                     [disabled]="adjusting()"
+                     autocomplete="off"
+                     aria-autocomplete="list"
+                     [attr.aria-expanded]="adjustProductResults().length > 0" />
+              @if (adjustSelectedProduct()?.uid) {
+                <div class="d-flex align-items-center gap-1 mt-1">
+                  <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                  <span class="small text-muted">{{ adjustSelectedProduct()!.label }}</span>
+                </div>
+              }
+              @if (adjustProductResults().length > 0) {
+                <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                    aria-label="Product suggestions" style="z-index:1050;max-height:180px;overflow-y:auto;">
+                  @for (p of adjustProductResults(); track p.uid) {
+                    <li class="list-group-item list-group-item-action small py-1"
+                        role="option" style="cursor:pointer"
+                        (click)="selectAdjustProduct(p)"
+                        (keydown.enter)="selectAdjustProduct(p)"
+                        tabindex="0">
+                      <strong>{{ p.code }}</strong> — {{ p.name }}
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+
+            @if (adjustMode() === 'absolute') {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="adjCurrentQtyToolbar">Current qty</label>
+                <input id="adjCurrentQtyToolbar" type="text" class="form-control form-control-sm"
+                       [value]="adjustCurrentQty()" disabled readonly />
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="adjNewQtyToolbar">
+                  New counted qty <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="adjNewQtyToolbar" type="number" min="0" step="any"
+                       class="form-control form-control-sm"
+                       [ngModel]="adjustNewQty()" (ngModelChange)="adjustNewQty.set($event)"
+                       [disabled]="adjusting()" />
+              </div>
+            } @else {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="adjustQtyToolbar">
+                  Qty (±) <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="adjustQtyToolbar" type="number" step="any"
+                       class="form-control form-control-sm"
+                       [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
+                       [disabled]="adjusting()" />
+              </div>
+            }
+
+            <!-- Reason -->
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="adjustReasonToolbar">
+                Reason <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <select id="adjustReasonToolbar" name="adjustReasonToolbar" class="form-select form-select-sm"
+                      [ngModel]="adjustReason()"
+                      (ngModelChange)="adjustReason.set($event)"
+                      [disabled]="adjusting()">
+                @for (r of adjustmentReasons; track r) {
+                  <option [value]="r">{{ r }}</option>
+                }
+              </select>
+            </div>
+            <!-- Note -->
+            <div class="col-sm-2">
+              <label class="form-label small text-muted mb-1" for="adjustNoteToolbar">Note</label>
+              <input id="adjustNoteToolbar" name="adjustNoteToolbar" type="text"
+                     class="form-control form-control-sm"
+                     [ngModel]="adjustNote()" (ngModelChange)="adjustNote.set($event)"
+                     [disabled]="adjusting()" autocomplete="off" />
+            </div>
+            <div class="col-sm-2 d-flex align-items-end gap-1">
+              <button type="submit" class="btn btn-sm btn-primary" [disabled]="adjusting()">
+                @if (adjusting()) {
+                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                }
+                Save
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="toggleAdjustForm()" [disabled]="adjusting()">
+                Cancel
+              </button>
+            </div>
+          </div>
+          @if (adjustError(); as msg) {
             <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
           }
         </div>
@@ -312,6 +452,20 @@
                           </div>
                           <div class="erp-card__body">
                             <div class="row g-2 align-items-start">
+                              <!-- Mode toggle -->
+                              <div class="col-12 mb-1">
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Adjustment mode">
+                                  <input type="radio" class="btn-check" [id]="'adjModeDelta-' + row.uid" name="adjMode"
+                                         [checked]="adjustMode() === 'delta'" (change)="setAdjustMode('delta')"
+                                         [disabled]="adjusting()" />
+                                  <label class="btn btn-outline-secondary" [for]="'adjModeDelta-' + row.uid">Adjust by (±)</label>
+                                  <input type="radio" class="btn-check" [id]="'adjModeAbs-' + row.uid" name="adjMode"
+                                         [checked]="adjustMode() === 'absolute'" (change)="setAdjustMode('absolute')"
+                                         [disabled]="adjusting()" />
+                                  <label class="btn btn-outline-secondary" [for]="'adjModeAbs-' + row.uid">Set to counted quantity</label>
+                                </div>
+                              </div>
+
                               <!-- Product picker -->
                               <div class="col-sm-4 position-relative">
                                 <label class="form-label small text-muted mb-1" for="adjustProduct">Product</label>
@@ -338,16 +492,34 @@
                                   </ul>
                                 }
                               </div>
-                              <!-- Qty (signed) -->
-                              <div class="col-sm-2">
-                                <label class="form-label small text-muted mb-1" for="adjustQty">
-                                  Qty (±) <span class="text-danger" aria-hidden="true">*</span>
-                                </label>
-                                <input id="adjustQty" name="adjustQty" type="number" step="any"
-                                       class="form-control form-control-sm"
-                                       [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
-                                       [disabled]="adjusting()" />
-                              </div>
+                              @if (adjustMode() === 'absolute') {
+                                <!-- Absolute mode: show current on-hand (read-only) + the new counted qty -->
+                                <div class="col-sm-2">
+                                  <label class="form-label small text-muted mb-1" for="adjCurrentQty">Current qty</label>
+                                  <input id="adjCurrentQty" type="text" class="form-control form-control-sm"
+                                         [value]="adjustCurrentQty()" disabled readonly />
+                                </div>
+                                <div class="col-sm-2">
+                                  <label class="form-label small text-muted mb-1" for="adjNewQty">
+                                    New counted qty <span class="text-danger" aria-hidden="true">*</span>
+                                  </label>
+                                  <input id="adjNewQty" type="number" min="0" step="any"
+                                         class="form-control form-control-sm"
+                                         [ngModel]="adjustNewQty()" (ngModelChange)="adjustNewQty.set($event)"
+                                         [disabled]="adjusting()" />
+                                </div>
+                              } @else {
+                                <!-- Qty (signed) -->
+                                <div class="col-sm-2">
+                                  <label class="form-label small text-muted mb-1" for="adjustQty">
+                                    Qty (±) <span class="text-danger" aria-hidden="true">*</span>
+                                  </label>
+                                  <input id="adjustQty" name="adjustQty" type="number" step="any"
+                                         class="form-control form-control-sm"
+                                         [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
+                                         [disabled]="adjusting()" />
+                                </div>
+                              }
                               <!-- Reason -->
                               <div class="col-sm-2">
                                 <label class="form-label small text-muted mb-1" for="adjustReason">

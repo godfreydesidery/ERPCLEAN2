@@ -117,14 +117,22 @@ String buildReceiptText({
   required bool gift,
   bool reversed = false,
   DateTime? now,
+  List<String> companyDetailLines = const [],
 }) {
   final inv = receipt.invoice;
   final lines = <String>[];
   final df = DateFormat('yyyy-MM-dd HH:mm');
   final when = (inv.finalisedAt ?? now ?? DateTime.now()).toLocal();
 
-  // Header
+  // Header: company name, then the fiscal detail block (address/contacts/
+  // TIN/VRN, each centred and wrapped to width), then the branch name.
   lines.add(centered(companyName.isEmpty ? 'OrbixPOS' : companyName, width));
+  for (final detail in companyDetailLines) {
+    if (detail.isEmpty) continue;
+    for (final wrapped in wrapText(detail, width)) {
+      lines.add(centered(wrapped, width));
+    }
+  }
   if (branchName.isNotEmpty) lines.add(centered(branchName, width));
   lines.add('');
 
@@ -268,6 +276,7 @@ List<int> buildReceiptBytes({
   bool reversed = false,
   bool kickDrawer = false,
   DateTime? now,
+  List<String> companyDetailLines = const [],
 }) {
   final text = buildReceiptText(
     receipt: receipt,
@@ -278,6 +287,7 @@ List<int> buildReceiptBytes({
     gift: gift,
     reversed: reversed,
     now: now,
+    companyDetailLines: companyDetailLines,
   );
   return mode == 'plain'
       ? encodePlainText(text)

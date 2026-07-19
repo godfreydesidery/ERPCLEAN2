@@ -70,6 +70,7 @@ String _text({
   bool gift = false,
   bool reversed = false,
   bool withDiscount = false,
+  List<String> companyDetailLines = const [],
 }) =>
     buildReceiptText(
       receipt: _receipt(withDiscount: withDiscount),
@@ -79,6 +80,7 @@ String _text({
       width: width,
       gift: gift,
       reversed: reversed,
+      companyDetailLines: companyDetailLines,
     );
 
 void main() {
@@ -157,6 +159,65 @@ void main() {
     });
     test('shows a line discount when present', () {
       expect(_text(width: 32, withDiscount: true), contains('less disc'));
+    });
+  });
+
+  group('buildReceiptText — fiscal header (company detail lines)', () {
+    test('renders nothing extra when no detail lines are given (backward compatible)', () {
+      final t = _text(width: 32);
+      final lines = t.split('\n');
+      // Company name immediately followed by the branch name, then a blank line.
+      final nameIdx = lines.indexOf(centered('Tembo Group', 32));
+      expect(nameIdx, isNonNegative);
+      expect(lines[nameIdx + 1], centered('Dar HQ', 32));
+    });
+
+    test('renders address/contact/TIN/VRN lines centred, in order, between name and branch', () {
+      final t = _text(width: 32, companyDetailLines: const [
+        'Plot 12 Nyerere Road',
+        'Dar es Salaam',
+        'Tel: +255 22 123 4567',
+        'Email: info@sam.co.tz',
+        'TIN: 123-456-789',
+        'VRN: 40-123456-A',
+      ]);
+      final lines = t.split('\n');
+      expect(t, contains('Plot 12 Nyerere Road'));
+      expect(t, contains('Dar es Salaam'));
+      expect(t, contains('Tel: +255 22 123 4567'));
+      expect(t, contains('Email: info@sam.co.tz'));
+      expect(t, contains('TIN: 123-456-789'));
+      expect(t, contains('VRN: 40-123456-A'));
+
+      final nameIdx = lines.indexWhere((l) => l.contains('Tembo Group'));
+      final branchIdx = lines.indexWhere((l) => l.contains('Dar HQ'));
+      final tinIdx = lines.indexWhere((l) => l.contains('TIN: 123-456-789'));
+      final vrnIdx = lines.indexWhere((l) => l.contains('VRN: 40-123456-A'));
+      expect(nameIdx, lessThan(tinIdx));
+      expect(tinIdx, lessThan(vrnIdx));
+      expect(vrnIdx, lessThan(branchIdx));
+    });
+
+    test('omits empty/blank detail lines instead of rendering blank rows', () {
+      final t = _text(width: 32, companyDetailLines: const [
+        '',
+        'Tel: +255 22 123 4567',
+        '',
+      ]);
+      final lines = t.split('\n');
+      // No stray blank line between the company name and the Tel line.
+      final nameIdx = lines.indexOf(centered('Tembo Group', 32));
+      expect(lines[nameIdx + 1], contains('Tel: +255 22 123 4567'));
+    });
+
+    test('wraps a long address line without exceeding width', () {
+      final t = _text(width: 32, companyDetailLines: const [
+        'Plot 12, Nyerere Road, Industrial Area, Dar es Salaam',
+      ]);
+      for (final line in t.split('\n')) {
+        expect(line.length, lessThanOrEqualTo(32));
+      }
+      expect(t, contains('Plot 12,'));
     });
   });
 

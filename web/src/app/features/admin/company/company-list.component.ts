@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Company } from '../models/company.model';
+import { Company, UpdateCompanyRequest } from '../models/company.model';
 import { Organisation } from '../models/organisation.model';
 import { CompanyService } from './company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -47,15 +47,39 @@ export class CompanyListComponent {
   // Provision defaults: tracks which row's button is spinning (at most one at a time).
   readonly provisioningUid = signal<string | null>(null);
 
-  // Inline rename: at most one row is editable at a time (keyed by uid).
+  // Inline edit: at most one row is editable at a time (keyed by uid). Extended (SAM Electronix
+  // go-live) to the full company-header field set that appears on POS receipts and printed
+  // reports (Sales Report / Stock Report company header block) — VRN, address, contact.
   readonly editingUid = signal<string | null>(null);
   readonly editName = signal('');
+  readonly editLegalName = signal('');
+  readonly editTaxId = signal('');
+  readonly editTimeZone = signal('');
+  readonly editVrn = signal('');
+  readonly editContactPhone = signal('');
+  readonly editContactEmail = signal('');
+  readonly editAddressLine1 = signal('');
+  readonly editAddressLine2 = signal('');
+  readonly editCity = signal('');
+  readonly editRegion = signal('');
+  readonly editCountry = signal('');
   readonly savingEdit = signal(false);
   readonly editError = signal<string | null>(null);
 
   startEdit(c: Company): void {
     this.editError.set(null);
     this.editName.set(c.name);
+    this.editLegalName.set(c.legalName ?? '');
+    this.editTaxId.set(c.taxId ?? '');
+    this.editTimeZone.set(c.timeZone ?? '');
+    this.editVrn.set(c.vrn ?? '');
+    this.editContactPhone.set(c.contactPhone ?? '');
+    this.editContactEmail.set(c.contactEmail ?? '');
+    this.editAddressLine1.set(c.addressLine1 ?? '');
+    this.editAddressLine2.set(c.addressLine2 ?? '');
+    this.editCity.set(c.city ?? '');
+    this.editRegion.set(c.region ?? '');
+    this.editCountry.set(c.country ?? '');
     this.editingUid.set(c.uid);
   }
 
@@ -90,21 +114,46 @@ export class CompanyListComponent {
       this.editError.set('Name is required.');
       return;
     }
-    if (name === c.name) {
+
+    const request: UpdateCompanyRequest = {
+      name,
+      legalName: this.editLegalName().trim() || undefined,
+      taxId: this.editTaxId().trim() || undefined,
+      timeZone: this.editTimeZone().trim() || c.timeZone,
+      vrn: this.editVrn().trim() || undefined,
+      contactPhone: this.editContactPhone().trim() || undefined,
+      contactEmail: this.editContactEmail().trim() || undefined,
+      addressLine1: this.editAddressLine1().trim() || undefined,
+      addressLine2: this.editAddressLine2().trim() || undefined,
+      city: this.editCity().trim() || undefined,
+      region: this.editRegion().trim() || undefined,
+      country: this.editCountry().trim() || undefined,
+    };
+
+    // Skip the network call when NOTHING changed (extends the old name-only shortcut to the
+    // full field set now editable).
+    const unchanged =
+      name === c.name &&
+      (request.legalName ?? null) === c.legalName &&
+      (request.taxId ?? null) === c.taxId &&
+      (request.timeZone ?? c.timeZone) === c.timeZone &&
+      (request.vrn ?? null) === c.vrn &&
+      (request.contactPhone ?? null) === c.contactPhone &&
+      (request.contactEmail ?? null) === c.contactEmail &&
+      (request.addressLine1 ?? null) === c.addressLine1 &&
+      (request.addressLine2 ?? null) === c.addressLine2 &&
+      (request.city ?? null) === c.city &&
+      (request.region ?? null) === c.region &&
+      (request.country ?? null) === c.country;
+    if (unchanged) {
       this.cancelEdit();
       return;
     }
+
     this.savingEdit.set(true);
     this.editError.set(null);
-    // updateByUid overwrites legalName/taxId from the request, so echo the current values back —
-    // a name-only edit must not blank them. timeZone is preserved server-side if blank; sent for clarity.
     this.companyService
-      .update(c.uid, {
-        name,
-        legalName: c.legalName ?? undefined,
-        taxId: c.taxId ?? undefined,
-        timeZone: c.timeZone,
-      })
+      .update(c.uid, request)
       .subscribe({
         next: (updated) => {
           this.companies.update((list) => list.map((x) => (x.uid === updated.uid ? updated : x)));

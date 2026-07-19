@@ -56,7 +56,8 @@ class CompanyServiceImplIT extends PostgresIntegrationTest {
         CompanyDto c = companyService.create(
                 new CreateCompanyRequest(orgUid, "C1", "Old", null, null, null));
         CompanyDto updated = companyService.updateByUid(
-                c.uid(), new UpdateCompanyRequest("New Name", "New Legal", "TIN-9", "Africa/Nairobi", null));
+                c.uid(), new UpdateCompanyRequest("New Name", "New Legal", "TIN-9", "Africa/Nairobi", null,
+                        null, null, null, null, null, null, null, null));
         assertThat(updated.name()).isEqualTo("New Name");
         assertThat(updated.timeZone()).isEqualTo("Africa/Nairobi");
     }

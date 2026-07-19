@@ -29,6 +29,14 @@ describe('CompanyListComponent — provision defaults', () => {
     taxId: 'TIN-123',
     timeZone: 'Africa/Dar_es_Salaam',
     status: 'ACTIVE',
+    vrn: null,
+    contactPhone: null,
+    contactEmail: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    region: null,
+    country: null,
   };
 
   function setup(perms: string[]): void {
@@ -125,6 +133,14 @@ describe('CompanyListComponent — inline rename', () => {
     taxId: 'TIN-123',
     timeZone: 'Africa/Dar_es_Salaam',
     status: 'ACTIVE',
+    vrn: null,
+    contactPhone: null,
+    contactEmail: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    region: null,
+    country: null,
   };
 
   function setup(perms: string[]): void {
@@ -165,11 +181,62 @@ describe('CompanyListComponent — inline rename', () => {
       legalName: 'QA Company Ltd',
       taxId: 'TIN-123',
       timeZone: 'Africa/Dar_es_Salaam',
+      vrn: undefined,
+      contactPhone: undefined,
+      contactEmail: undefined,
+      addressLine1: undefined,
+      addressLine2: undefined,
+      city: undefined,
+      region: undefined,
+      country: undefined,
     });
     req.flush({ ...company, name: 'Acme Tanzania Ltd' });
 
     expect(c.editingUid()).toBeNull();
     expect(c.companies()[0].name).toBe('Acme Tanzania Ltd');
+  });
+
+  it('saves the extended VRN/address/contact fields (SAM Electronix go-live)', () => {
+    setup(['COMPANY.MANAGE']);
+    const c = fixture.componentInstance;
+
+    c.startEdit(company);
+    c.editVrn.set('VRN-777');
+    c.editContactPhone.set('+255700000000');
+    c.editContactEmail.set('info@qa.co.tz');
+    c.editAddressLine1.set('Plot 12');
+    c.editAddressLine2.set('Nyerere Road');
+    c.editCity.set('Dar es Salaam');
+    c.editRegion.set('Dar');
+    c.editCountry.set('Tanzania');
+    c.saveEdit(company);
+
+    const req = httpMock.expectOne(`${apiBase}/companies/uid/C1`);
+    expect(req.request.body).toEqual(
+      expect.objectContaining({
+        vrn: 'VRN-777',
+        contactPhone: '+255700000000',
+        contactEmail: 'info@qa.co.tz',
+        addressLine1: 'Plot 12',
+        addressLine2: 'Nyerere Road',
+        city: 'Dar es Salaam',
+        region: 'Dar',
+        country: 'Tanzania',
+      }),
+    );
+    req.flush({
+      ...company,
+      vrn: 'VRN-777',
+      contactPhone: '+255700000000',
+      contactEmail: 'info@qa.co.tz',
+      addressLine1: 'Plot 12',
+      addressLine2: 'Nyerere Road',
+      city: 'Dar es Salaam',
+      region: 'Dar',
+      country: 'Tanzania',
+    });
+
+    expect(c.editingUid()).toBeNull();
   });
 
   it('hides the rename control when the user lacks COMPANY.MANAGE', () => {
