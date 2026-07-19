@@ -900,7 +900,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   const Text('Customer',
                       style:
                           TextStyle(fontSize: 11, color: AppColors.ink3)),
-                  Text(cart.customer?.displayName ?? 'Walk-in',
+                  Text(cart.customer?.displayName ?? 'Select customer',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
