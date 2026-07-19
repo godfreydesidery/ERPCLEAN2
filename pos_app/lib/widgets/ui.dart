@@ -3,6 +3,16 @@ import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
 
+/// Allows only a non-negative decimal (digits with at most one dot). Shared by the
+/// POS numeric fields (tender / quantity / discount) so a hardware keyboard types
+/// clean numbers into the same box the on-screen keypad drives.
+final TextInputFormatter decimalInputFormatter =
+    TextInputFormatter.withFunction((oldValue, newValue) {
+  final text = newValue.text;
+  if (text.isEmpty) return newValue;
+  return RegExp(r'^\d*\.?\d*$').hasMatch(text) ? newValue : oldValue;
+});
+
 /// The OrbixPOS wordmark: ◆ Orbix**POS** (prototype `.brand`).
 class Brand extends StatelessWidget {
   const Brand({super.key, this.large = false, this.onDark = false});

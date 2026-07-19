@@ -39,7 +39,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   bool _busyScan = false;
   Timer? _debounce;
 
-  String _numpad = '';
+  // The numpad box is a real editable field: the hardware keyboard types into it
+  // (once a Qty/Disc cell is tapped) AND the on-screen keys drive the same
+  // controller. Enter applies it to the selected line.
+  final _numCtrl = TextEditingController();
+  final _numFocus = FocusNode();
   _NumTarget _target = _NumTarget.qty;
 
   Catalogue get _cache => ref.read(catalogProvider);
@@ -73,6 +77,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _search.dispose();
     _searchFocus.dispose();
     _resultsScroll.dispose();
+    _numCtrl.dispose();
+    _numFocus.dispose();
     super.dispose();
   }
 
@@ -267,23 +273,28 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   // --------------------------------------------------------------- numpad
 
   void _numKey(String k) {
-    setState(() {
-      if (k == 'C') {
-        _numpad = '';
-      } else if (k == '<') {
-        if (_numpad.isNotEmpty) _numpad = _numpad.substring(0, _numpad.length - 1);
-      } else if (k == '.') {
-        if (!_numpad.contains('.')) _numpad += _numpad.isEmpty ? '0.' : '.';
-      } else {
-        _numpad += k;
-      }
-    });
+    final t = _numCtrl.text;
+    final String next;
+    if (k == 'C') {
+      next = '';
+    } else if (k == '<') {
+      next = t.isNotEmpty ? t.substring(0, t.length - 1) : t;
+    } else if (k == '.') {
+      next = t.contains('.') ? t : (t.isEmpty ? '0.' : '$t.');
+    } else {
+      next = '$t$k';
+    }
+    _numCtrl.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+    _numFocus.requestFocus();
   }
 
   void _applyNumpad() {
     final cart = ref.read(cartProvider);
     final id = cart.selectedId;
-    final val = double.tryParse(_numpad);
+    final val = double.tryParse(_numCtrl.text);
     if (id == null) {
       showToast(context, 'Select a line first.');
       return;
@@ -295,7 +306,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     } else {
       ctrl.setDiscount(id, val);
     }
-    setState(() => _numpad = '');
+    _numCtrl.clear();
+    // Scanner-first: hand focus back to the search box so the next scan lands
+    // there, not in the numpad.
+    _searchFocus.requestFocus();
   }
 
   Future<void> _pay() async {
@@ -582,11 +596,14 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     void selectQty() {
       ctrl.select(line.localId);
       setState(() => _target = _NumTarget.qty);
+      // Focus the numpad so the hardware keyboard edits this line immediately.
+      _numFocus.requestFocus();
     }
 
     void selectDisc() {
       ctrl.select(line.localId);
       setState(() => _target = _NumTarget.disc);
+      _numFocus.requestFocus();
     }
 
     final qtyHi = selected && _target == _NumTarget.qty;
@@ -904,7 +921,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       return Expanded(
         child: InkWell(
           borderRadius: AppRadii.brSm,
-          onTap: () => setState(() => _target = t),
+          onTap: () {
+            setState(() => _target = t);
+            _numFocus.requestFocus();
+          },
           child: Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(vertical: 9),
@@ -936,15 +956,29 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   Widget _numDisplay() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       decoration: BoxDecoration(
         color: AppColors.panel2,
         borderRadius: AppRadii.brSm,
         border: Border.all(color: AppColors.line2),
       ),
-      child: Text(_numpad.isEmpty ? '0' : _numpad,
-          textAlign: TextAlign.right,
-          style: numStyle(size: 26, weight: FontWeight.w800)),
+      child: TextField(
+        controller: _numCtrl,
+        focusNode: _numFocus,
+        textAlign: TextAlign.right,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [decimalInputFormatter],
+        onSubmitted: (_) => _applyNumpad(),
+        style: numStyle(size: 26, weight: FontWeight.w800),
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 6),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          hintText: '0',
+        ),
+      ),
     );
   }
 
