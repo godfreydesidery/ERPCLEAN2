@@ -116,17 +116,46 @@ class ApiException implements Exception {
   static List<ApiError> _extractErrors(dynamic data) {
     if (data is Map && data['errors'] is List) {
       return (data['errors'] as List)
-          .whereType<Map>()
-          .map((m) => ApiError.fromJson(m.cast<String, dynamic>()))
+          .map(_toApiError)
+          .whereType<ApiError>()
           .toList();
     }
     return const [];
   }
 
+  /// Maps one entry of the envelope's `errors` array to an [ApiError].
+  ///
+  /// The ERP `ApiResponse<T>` envelope emits `errors` as a **`List<String>`** of
+  /// user-safe messages, so a plain string is the real, common case and must be
+  /// carried as the message. A `{code, message}` object is also accepted
+  /// defensively (alternate shapes); anything else is ignored. (Previously only
+  /// the object shape was accepted, so every real string error was silently
+  /// dropped and the UI always fell back to a generic per-status message — e.g.
+  /// a 400 "Product has no price configured…" surfaced as "The request was
+  /// rejected. Please check the entry.")
+  static ApiError? _toApiError(dynamic e) {
+    if (e is String) return ApiError('', e);
+    if (e is Map) return ApiError.fromJson(e.cast<String, dynamic>());
+    return null;
+  }
+
+  /// The server's user-safe error text as a single string, or null when there is
+  /// none. Multiple messages (e.g. several field-validation errors on one 400)
+  /// are joined so the cashier sees every reason, not just the first. A
+  /// blank/whitespace-only message is treated as absent.
+  static String? _serverMessage(List<ApiError> errors) {
+    final msgs = errors
+        .map((e) => e.message.trim())
+        .where((m) => m.isNotEmpty)
+        .toList();
+    return msgs.isEmpty ? null : msgs.join('; ');
+  }
+
   static String _messageFor(int? status, List<ApiError> errors) {
-    // Prefer the server's first message when it's a client-actionable 4xx, but
-    // selection is still driven by status, not by the text itself.
-    final serverMsg = errors.isNotEmpty ? errors.first.message : null;
+    // Prefer the server's user-safe message(s) when present, but selection is
+    // still driven by status, not by the text itself. A blank message is treated
+    // as absent so the per-status fallback still applies.
+    final serverMsg = _serverMessage(errors);
     switch (status) {
       case 400:
         return serverMsg ?? 'The request was rejected. Please check the entry.';

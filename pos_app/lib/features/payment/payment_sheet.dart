@@ -45,15 +45,36 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
   final List<PosTender> _tenders = [];
   TenderType _type = TenderType.cash;
-  String _amount = '';
+  // The amount box is a real editable field: the hardware keyboard types into it
+  // AND the on-screen keypad / quick-cash presets drive the same controller.
+  final TextEditingController _amountCtrl = TextEditingController();
+  final FocusNode _amountFocus = FocusNode();
   bool _busy = false;
   bool _ambiguous = false;
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _amountFocus.dispose();
+    super.dispose();
+  }
 
   double get _gross => ref.read(cartProvider).previewSubtotal;
   double get _paid => _tenders.fold(0, (s, t) => s + t.amount);
   double get _remaining => (_gross - _paid).clamp(0, double.infinity);
 
-  double get _typed => double.tryParse(_amount) ?? 0;
+  double get _typed => double.tryParse(_amountCtrl.text) ?? 0;
+
+  /// Sets the amount box (quick-cash presets) and keeps focus so the hardware
+  /// keyboard can keep editing.
+  void _setAmount(String s) {
+    _amountCtrl.value = TextEditingValue(
+      text: s,
+      selection: TextSelection.collapsed(offset: s.length),
+    );
+    _amountFocus.requestFocus();
+    setState(() {});
+  }
 
   // ---------------------------------------------------------------- tender ops
 
@@ -62,25 +83,34 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     if (amt <= 0) return;
     setState(() {
       _tenders.add(PosTender(tenderType: _type, amount: amt));
-      _amount = '';
+      _amountCtrl.clear();
     });
+    _amountFocus.requestFocus();
   }
 
   void _removeTender(int i) => setState(() => _tenders.removeAt(i));
 
-  void _key(String k) => setState(() {
-        if (k == 'C') {
-          _amount = '';
-        } else if (k == '<') {
-          if (_amount.isNotEmpty) {
-            _amount = _amount.substring(0, _amount.length - 1);
-          }
-        } else if (k == '.') {
-          if (!_amount.contains('.')) _amount += _amount.isEmpty ? '0.' : '.';
-        } else {
-          _amount += k;
-        }
-      });
+  /// On-screen keypad — edits the same controller the hardware keyboard types
+  /// into, so both input methods stay in sync.
+  void _key(String k) {
+    final t = _amountCtrl.text;
+    final String next;
+    if (k == 'C') {
+      next = '';
+    } else if (k == '<') {
+      next = t.isNotEmpty ? t.substring(0, t.length - 1) : t;
+    } else if (k == '.') {
+      next = t.contains('.') ? t : (t.isEmpty ? '0.' : '$t.');
+    } else {
+      next = '$t$k';
+    }
+    _amountCtrl.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+    _amountFocus.requestFocus();
+    setState(() {});
+  }
 
   // ---------------------------------------------------------------- complete
 
@@ -461,13 +491,32 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
                 color: AppColors.ink, borderRadius: AppRadii.brSm),
-            child: Text(_amount.isEmpty ? '0' : _amount,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: kTabular)),
+            child: TextField(
+              controller: _amountCtrl,
+              focusNode: _amountFocus,
+              autofocus: true,
+              textAlign: TextAlign.right,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [decimalInputFormatter],
+              cursorColor: Colors.white,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _busy ? null : _complete(),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: kTabular),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                hintText: '0',
+                hintStyle: TextStyle(color: Color(0x66FFFFFF)),
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           _quickCash(),
@@ -506,7 +555,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       children: [
         for (final p in presets)
           _quickBtn(p == _gross ? 'Exact' : formatAmount(p, decimals: 0),
-              () => setState(() => _amount = p.toStringAsFixed(2))),
+              () => _setAmount(p.toStringAsFixed(2))),
       ],
     );
   }
