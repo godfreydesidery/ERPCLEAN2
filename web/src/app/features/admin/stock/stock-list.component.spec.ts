@@ -282,6 +282,81 @@ describe('StockListComponent', () => {
     expect(comp.state()).toBe('forbidden');
   });
 
+  // ── Absolute-mode adjustment ("Set to counted quantity") ────────────────────
+
+  it('absolute mode computes the signed delta from the counted quantity and posts it', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW); // row.quantity = '100'
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.setAdjustMode('absolute');
+    comp.adjustNewQty.set('120');
+    comp.adjustReason.set('COUNT_CORRECTION');
+
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+
+    expect(adjustSpy).toHaveBeenCalledOnce();
+    const req = adjustSpy.mock.calls[0][0];
+    expect(req.productUid).toBe('PROD-UID-1');
+    expect(req.quantity).toBe('20'); // 120 - 100
+  });
+
+  it('absolute mode computes a negative delta when the counted quantity is lower', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW); // row.quantity = '100'
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.setAdjustMode('absolute');
+    comp.adjustNewQty.set('70');
+
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+
+    const req = adjustSpy.mock.calls[0][0];
+    expect(req.quantity).toBe('-30'); // 70 - 100
+  });
+
+  it('absolute mode blocks a no-op submit (counted qty == current qty) with a friendly message', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW); // row.quantity = '100'
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.setAdjustMode('absolute');
+    comp.adjustNewQty.set('100'); // same as current
+
+    comp.submitAdjust();
+
+    expect(comp.adjustError()).toBeTruthy();
+    expect(adjustSpy).not.toHaveBeenCalled();
+  });
+
+  it('the toolbar Adjust Stock button opens the standalone form and closes any per-row form', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW);
+    expect(comp.adjustingUid()).toBe(STUB_ON_HAND_ROW.uid);
+
+    comp.toggleAdjustForm();
+    expect(comp.showAdjustForm()).toBe(true);
+    expect(comp.adjustingUid()).toBeNull(); // mutual exclusion
+
+    comp.toggleAdjustForm();
+    expect(comp.showAdjustForm()).toBe(false);
+  });
+
   // ── 7. Reorder level edit ─────────────────────────────────────────────────
 
   it('calls setReorderLevel with correct payload', async () => {

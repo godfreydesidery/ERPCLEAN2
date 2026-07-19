@@ -192,6 +192,7 @@ export class ShellComponent {
         { label: 'Serial Numbers', route: '/admin/stock/serials', icon: 'bi-upc-scan', available: true, permission: 'STOCK.VIEW' },
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
+        { label: 'Stock Report', route: '/admin/reports/stock', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],
@@ -245,6 +246,7 @@ export class ShellComponent {
         { label: 'Balance Sheet', route: '/admin/reporting/balance-sheet', icon: 'bi-building-check', available: true, permission: 'REPORT.BS.VIEW' },
         { label: 'Cash-Flow Statement', route: '/admin/reporting/cash-flow', icon: 'bi-cash-stack', available: true, permission: 'REPORT.CASHFLOW.VIEW' },
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
+        { label: 'Sales Report', route: '/admin/reports/sales', icon: 'bi-receipt-cutoff', available: true, permission: 'SALES.INVOICE.VIEW' },
       ],
     },
     // ── Approvals ─────────────────────────────────────────────────────────────

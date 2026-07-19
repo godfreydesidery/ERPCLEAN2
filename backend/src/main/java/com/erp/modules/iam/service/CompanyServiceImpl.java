@@ -181,6 +181,33 @@ public class CompanyServiceImpl implements CompanyService {
         }
         // baseCurrency field is intentionally NOT updated here — use changeBaseCurrency() instead
         // (ADR-0039 D-9 / OQ-CCY-08: guarded by GL-transaction check + COMPANY.CURRENCY.CHANGE perm).
+
+        // P2 D7 contact/address block — nullable request fields leave the stored value unchanged
+        // (lenient partial-update: a caller only sends the fields it wants to change).
+        if (request.vrn() != null) {
+            company.setVrn(request.vrn());
+        }
+        if (request.contactPhone() != null) {
+            company.setContactPhone(request.contactPhone());
+        }
+        if (request.contactEmail() != null) {
+            company.setContactEmail(request.contactEmail());
+        }
+        if (request.addressLine1() != null) {
+            company.setAddressLine1(request.addressLine1());
+        }
+        if (request.addressLine2() != null) {
+            company.setAddressLine2(request.addressLine2());
+        }
+        if (request.city() != null) {
+            company.setCity(request.city());
+        }
+        if (request.region() != null) {
+            company.setRegion(request.region());
+        }
+        if (request.country() != null) {
+            company.setCountry(request.country());
+        }
         return CompanyDto.from(company); // dirty-checked within the TX
     }
 
