@@ -14,10 +14,21 @@ import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../receipt/receipt_view.dart';
+import '../register/pickers.dart';
 
 /// Opens the payment modal. On a completed sale it clears the basket lines and
 /// shows the receipt.
 Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
+  // A sale needs a customer (AS-3). The cart normally defaults to the company's
+  // walk-in customer; if none is set — no walk-in / no customer registered for
+  // this company, or CUSTOMER.VIEW not granted — posting would fail server-side
+  // with a raw "customerId: must not be null". Prompt for one here with a
+  // friendly, actionable message instead.
+  if (ref.read(cartProvider).customer == null) {
+    showToast(context, 'Select a customer before completing the sale.');
+    await showCustomerPicker(context, ref);
+    if (!context.mounted || ref.read(cartProvider).customer == null) return;
+  }
   final receipt = await showDialog<Receipt>(
     context: context,
     barrierDismissible: false,
