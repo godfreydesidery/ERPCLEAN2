@@ -39,6 +39,7 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
@@ -94,6 +95,7 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
     @Autowired private SalesInvoiceService    salesInvoiceService;
     @Autowired private SalesInvoiceRepository salesInvoiceRepo;
     @Autowired private TaxRateSeeder          taxRateSeeder;
+    @Autowired private SalesSettingsService   salesSettingsService;
 
     // ---- Parties + Products ----
     @Autowired private CustomerService        customerService;
@@ -144,6 +146,12 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
 
         // Sales prerequisites
         taxRateSeeder.seedDefaults(company.getId());
+
+        // This suite is about FX stamping and GL posting, not stock — its products are
+        // never received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
 
         pcsUid = unitService.create(
                 new CreateUnitOfMeasureRequest(company.getUid(), "PCS", "Pieces")).uid();

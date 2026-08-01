@@ -4,8 +4,9 @@ import java.util.List;
 
 /**
  * Idempotent per-company defaults provisioner. Runs the full seeder chain (units of measure, tax
- * rates, chart of accounts, fiscal calendar, GL configs, AR/AP/Cash/Inventory/FA/HR/Manufacturing GL
- * seeders, costing dimensions, CRM stages, notifications, currency enablement) for a single company.
+ * rates, sales settings, chart of accounts, fiscal calendar, GL configs,
+ * AR/AP/Cash/Inventory/FA/HR/Manufacturing GL seeders, costing dimensions, CRM stages,
+ * notifications, currency enablement) for a single company.
  *
  * <p>Every seeder is individually idempotent — a re-run for an already-provisioned company is a
  * no-op. This makes the endpoint safe to call on existing companies to heal any partial-provisioning

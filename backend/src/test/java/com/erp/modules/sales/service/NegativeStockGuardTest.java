@@ -3,6 +3,7 @@ package com.erp.modules.sales.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,7 +24,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * Unit tests for {@link NegativeStockGuard} — the synchronous "block negative stock on sale"
- * pre-check (owner decision 2026-07-05, {@code sales_settings.allow_negative_stock}, V87).
+ * pre-check ({@code sales_settings.allow_negative_stock}, V87).
+ *
+ * <p>See {@link NegativeStockSettingCrossLayerContractTest} for the companion test that pins this
+ * guard's answer to the one the Sales Settings API reports for the same company state — the two
+ * used to disagree for a company with no settings row, and this suite alone could not see it.
  */
 @ExtendWith(MockitoExtension.class)
 class NegativeStockGuardTest {
@@ -41,7 +46,7 @@ class NegativeStockGuardTest {
 
     @Test
     void blocksWhenRequestedExceedsAvailable_andSettingIsOff() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
@@ -65,7 +70,7 @@ class NegativeStockGuardTest {
 
     @Test
     void blocksWithNegativeOnHand_phrasesAsOutOfStock_noRawNegativeNumber() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         // Legacy overselling from before this guard existed — on-hand already negative.
@@ -85,7 +90,7 @@ class NegativeStockGuardTest {
 
     @Test
     void blocksWithFractionalAvailable_trimsTrailingZeros() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
@@ -104,7 +109,7 @@ class NegativeStockGuardTest {
 
     @Test
     void allowsWhenRequestedWithinAvailable_settingOff() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
@@ -117,7 +122,7 @@ class NegativeStockGuardTest {
 
     @Test
     void allowsOverdraftWhenSettingIsOn() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(true)));
 
@@ -129,17 +134,26 @@ class NegativeStockGuardTest {
     }
 
     @Test
-    void allowsWhenNoSettingsRowYet_backorderUntilConfigured() {
-        // Owner decision "allow until configured": a company with no Sales Settings row is NOT
-        // guarded — the sale proceeds (backorder) and availability is never even read. Blocking
-        // begins only once a settings row exists (the toggle/entity default is block).
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+    void blocksWhenNoSettingsRowYet() {
+        // Fail-safe: a company with no Sales Settings row IS guarded. A row is provisioned on
+        // company creation (SalesSettingsSeeder), so this state should not occur — and when it does,
+        // the guard must enforce what the Sales Settings screen reports for the same missing row
+        // (block), not the opposite. The earlier "allow until configured" fallback is what let a
+        // company that had never opened the screen oversell while being told it was protected.
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.empty());
+        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
 
-        guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
-                "Widget", new BigDecimal("1"));
+        assertThatThrownBy(() -> guard.assertAvailable(
+                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("1")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Not enough stock of Widget");
 
-        verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
+        // Availability IS read — the guard no longer short-circuits on a missing row.
+        verify(stock).getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID);
     }
 
     @Test
@@ -151,9 +165,17 @@ class NegativeStockGuardTest {
         verify(settings, never()).findByCompanyId(any());
     }
 
+    // -------------------------------------------------------------------------
+    // ADR-0058: the guard must branch on exactly the predicate the deducting handler uses
+    // (SaleIssueStockHandler.processLine → shouldExplodeAtIssue), or the two disagree about which
+    // product's stock the sale touches — and the setting silently stops protecting that product.
+    // -------------------------------------------------------------------------
+
     @Test
-    void skipsComposedProducts_neverChecksAvailability() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(true);
+    void skipsProductsThatExplodeAtIssue_neverChecksAvailability() {
+        // A point-of-sale kit: it is issued as its COMPONENTS, so it has no on-hand row of its own
+        // and checking the parent would false-positive block every kit sale. Still skipped.
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(true);
 
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
                 "Bundle Kit", new BigDecimal("1000"));
@@ -163,8 +185,37 @@ class NegativeStockGuardTest {
     }
 
     @Test
+    void checksStockableFinishedGoodWithBomButNoComponents_becauseItIsIssuedAsItself() {
+        // Make-to-stock finished good: an ACTIVE manufacturing BOM but no product_components, so
+        // shouldExplodeAtIssue is FALSE and the handler issues the product ITSELF. The guard used to
+        // branch on the broader isComposed(), skip it, and let its own on-hand go straight negative
+        // even with the setting on — the reported overselling shape.
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
+        // isComposed() is TRUE for this shape (an ACTIVE BOM makes it composed) and is what the
+        // pre-fix guard branched on. Stubbing it keeps this test honest: against the old predicate
+        // the guard would early-return here and never throw, so this test fails without the fix.
+        // lenient() because the fixed guard no longer calls isComposed at all.
+        lenient().when(explosion.isComposed(PRODUCT_UID)).thenReturn(true);
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(settingsRow(false)));
+        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("2"), BigDecimal.ZERO, new BigDecimal("2")));
+
+        assertThatThrownBy(() -> guard.assertAvailable(
+                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Assembled Cabinet", new BigDecimal("6")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Not enough stock of Assembled Cabinet")
+                .hasMessageContaining("2 available")
+                .hasMessageContaining("6 requested");
+
+        verify(stock).getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID);
+    }
+
+    @Test
     void skipsZeroOrNegativeQuantity() {
-        when(explosion.isComposed(PRODUCT_UID)).thenReturn(false);
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
 
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
                 "Widget", BigDecimal.ZERO);

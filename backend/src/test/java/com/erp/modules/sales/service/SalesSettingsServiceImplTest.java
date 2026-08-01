@@ -27,6 +27,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * Unit tests for {@link SalesSettingsServiceImpl} (deferred item D-4 settings CRUD). Mirrors the
  * intent of a PurchaseSettingsServiceImpl test: upsert creates the single per-company row on first
  * write, then updates that same row on a subsequent write.
+ *
+ * <p>Note on {@code allowNegativeStock}: what this suite asserts the API <em>reports</em> for a
+ * company with no row must equal what {@code NegativeStockGuard} <em>enforces</em> for that same
+ * company. That agreement is pinned by {@link NegativeStockSettingCrossLayerContractTest} — the two
+ * once disagreed while both suites were green.
  */
 @ExtendWith(MockitoExtension.class)
 class SalesSettingsServiceImplTest {
