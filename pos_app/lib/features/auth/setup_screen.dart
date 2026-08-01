@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
-import '../../core/api/insecure_tls.dart';
+import '../../core/api/erp_tls.dart';
 import '../../core/config/app_config.dart';
 import '../../services/receipt_printer.dart';
 import '../receipt/receipt_text.dart';
@@ -78,7 +78,7 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
       final dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 8),
           receiveTimeout: const Duration(seconds: 8)));
-      applyInsecureTlsIfEnabled(dio);
+      applyErpTls(dio);
       final res = await dio.get('$base/health');
       final up = (res.data is Map) &&
           ((res.data['data']?['status'] ?? res.data['status']) == 'UP');

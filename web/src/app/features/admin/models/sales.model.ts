@@ -194,6 +194,16 @@ export interface CreateTaxRateRequest {
 // *number* (per the wire contract — only Long ids are stringified). Type it
 // `number` to match the real wire shape.
 
+/**
+ * Per-company policy for a sale line priced at or below its average cost
+ * (owner decision 2026-08-01, V93). Serialised as the enum NAME by Jackson.
+ *  - OFF     — no check (the default, and the pre-V93 behaviour)
+ *  - WARN    — allow the sale, record that it went out at or below cost
+ *  - APPROVE — needs a supervisor who holds SALES.BELOW_COST.OVERRIDE
+ *  - BLOCK   — always rejected
+ */
+export type BelowCostAction = 'OFF' | 'WARN' | 'APPROVE' | 'BLOCK';
+
 export interface SalesSettingsDto {
   id: string;
   uid: string;
@@ -206,6 +216,8 @@ export interface SalesSettingsDto {
    * true = overselling allowed (backorder); false (default) = sale blocked when stock is short.
    */
   allowNegativeStock: boolean;
+  /** "Sale at or below cost" policy (owner decision 2026-08-01, V93). */
+  belowCostAction: BelowCostAction;
 }
 
 export interface UpdateSalesSettingsRequest {
@@ -214,6 +226,7 @@ export interface UpdateSalesSettingsRequest {
   soApprovalThresholdAmount: number | null;
   currency: string;
   allowNegativeStock: boolean;
+  belowCostAction: BelowCostAction;
 }
 
 // ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────

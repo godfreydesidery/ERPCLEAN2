@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import 'api_exception.dart';
 import 'api_response.dart';
-import 'insecure_tls.dart';
+import 'erp_tls.dart';
 import 'token_manager.dart';
 
 const _uuid = Uuid();
@@ -22,7 +22,7 @@ class ApiClient {
           receiveTimeout: const Duration(seconds: 30),
           // We map non-2xx ourselves; let Dio surface them as errors.
         )) {
-    applyInsecureTlsIfEnabled(_dio);
+    applyErpTls(_dio);
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: _onRequest,
       onError: _onError,
