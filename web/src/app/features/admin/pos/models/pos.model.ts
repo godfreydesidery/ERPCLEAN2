@@ -18,6 +18,12 @@ export interface PosTillDto {
   branchId: string;
   name: string;
   status: MasterStatus;
+  /** True while a session in status OPEN holds this till. */
+  hasOpenSession?: boolean;
+  /** The occupying session — who holds the till and since when. Null when free. */
+  openSessionUid?: string | null;
+  openSessionCashierId?: string | null;
+  openSessionOpenedAt?: string | null;
 }
 
 // ── PosSessionDto ─────────────────────────────────────────────────────────────

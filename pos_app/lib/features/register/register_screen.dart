@@ -6,6 +6,7 @@ import '../../models/enums.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../widgets/ui.dart';
+import '../payment/pending_sale_recovery.dart';
 import '../session/session_menu.dart';
 import 'pharmacy_register.dart';
 import 'restaurant_register.dart';
@@ -29,6 +30,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             agent: app.defaultAgent,
             currency: app.currency,
           );
+      // Surface an interrupted sale as soon as the till is back at the register,
+      // rather than waiting until the cashier next reaches the payment sheet.
+      if (mounted) resolvePendingSale(context, ref);
     });
   }
 

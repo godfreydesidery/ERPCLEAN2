@@ -460,6 +460,47 @@ class BranchFallbackBanner extends StatelessWidget {
   }
 }
 
+/// A non-blocking amber strip for something that did not work but does not stop
+/// the cashier — e.g. "we couldn't check whether you already have a shift open".
+/// Dismissible so it never becomes permanent furniture.
+class NoticeStrip extends StatelessWidget {
+  const NoticeStrip(this.message, {super.key, this.onDismiss});
+  final String message;
+  final VoidCallback? onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: AppColors.warnSoft,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 18, color: AppColors.warn),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: const TextStyle(
+                    color: AppColors.warn,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600)),
+          ),
+          if (onDismiss != null)
+            IconButton(
+              tooltip: 'Dismiss',
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close, size: 16, color: AppColors.warn),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Tabular number style helper.
 TextStyle numStyle(
         {double size = 14,

@@ -13,6 +13,9 @@ class PosTill {
     required this.cashBankAccountId,
     required this.status,
     this.hasOpenSession = false,
+    this.openSessionUid,
+    this.openSessionCashierId,
+    this.openSessionOpenedAt,
   });
 
   final String id;
@@ -29,7 +32,22 @@ class PosTill {
   /// (the backend still enforces this with a 409 as a backstop).
   final bool hasOpenSession;
 
+  /// The occupying session, when there is one. Without these an occupied till is
+  /// a dead end — the cashier whose app was force-closed cannot tell their own
+  /// abandoned shift from a colleague's live one, so they can neither resume nor
+  /// cash it up.
+  final String? openSessionUid;
+  final String? openSessionCashierId;
+  final DateTime? openSessionOpenedAt;
+
   bool get isActive => status == 'ACTIVE';
+
+  /// True when this till is held by an open shift belonging to [cashierId].
+  bool isHeldBy(String? cashierId) =>
+      hasOpenSession &&
+      cashierId != null &&
+      openSessionCashierId != null &&
+      openSessionCashierId == cashierId;
 
   factory PosTill.fromJson(Map<String, dynamic> j) => PosTill(
         id: asStrOr(j['id']),
@@ -41,6 +59,9 @@ class PosTill {
         cashBankAccountId: asStr(j['cashBankAccountId']),
         status: asStrOr(j['status'], 'ACTIVE'),
         hasOpenSession: asBool(j['hasOpenSession']),
+        openSessionUid: asStr(j['openSessionUid']),
+        openSessionCashierId: asStr(j['openSessionCashierId']),
+        openSessionOpenedAt: asDate(j['openSessionOpenedAt']),
       );
 }
 

@@ -10,15 +10,21 @@ import '../../models/enums.dart';
 import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
+import '../../state/pending_sale_store.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../receipt/receipt_view.dart';
 import '../register/pickers.dart';
+import 'pending_sale_recovery.dart';
 
 /// Opens the payment modal. On a completed sale it clears the basket lines and
 /// shows the receipt.
 Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
+  // An earlier attempt whose outcome is still unknown must be settled FIRST.
+  // Ringing a new basket on top of one is how the same sale gets charged twice.
+  if (!await resolvePendingSale(context, ref)) return;
+  if (!context.mounted) return;
   // A sale needs a customer (AS-3). The cart normally defaults to the company's
   // walk-in customer; if none is set — no walk-in / no customer registered for
   // this company, or CUSTOMER.VIEW not granted — posting would fail server-side
@@ -49,9 +55,13 @@ class _PaymentSheet extends ConsumerStatefulWidget {
 }
 
 class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
-  /// Durable client transaction id for THIS logical sale — used as the
-  /// Idempotency-Key and X-Request-Id, and reused verbatim on every retry
-  /// (PRIN-4/PRIN-7) so an ambiguous attempt cannot double-post.
+  /// Client transaction id for THIS logical sale — used as the Idempotency-Key
+  /// and X-Request-Id, and reused verbatim on every retry (PRIN-4/PRIN-7) so an
+  /// ambiguous attempt cannot double-post.
+  ///
+  /// It is written to device storage (see [PendingSaleStore]) BEFORE the POST,
+  /// so it also survives the till being force-closed or losing power mid-sale —
+  /// in memory alone it would be lost exactly when it matters most.
   final String _txnId = ApiClient.newTxnId();
 
   final List<PosTender> _tenders = [];
@@ -225,10 +235,25 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       _busy = true;
       _ambiguous = false;
     });
+    final pendingStore = ref.read(pendingSaleStoreProvider);
     try {
+      // Persist the key + the exact body BEFORE the POST. If the till dies
+      // between the server's commit and the response, the next launch replays
+      // this under the same key instead of re-ringing a second invoice.
+      await pendingStore.save(PendingSale(
+        txnId: _txnId,
+        sessionUid: session.uid,
+        body: body,
+        startedAt: DateTime.now(),
+        amount: _gross,
+        currency: cart.currency,
+        tenderedAmount: tendered,
+      ));
       final sale = ref.read(saleServiceProvider);
       final invoice = await sale.ring(body,
           idempotencyKey: _txnId, xRequestId: _txnId);
+      // Terminal: the sale is finalised and we have it. Release the slot.
+      await pendingStore.clear();
       Receipt receipt;
       try {
         receipt = await sale.loadReceipt(invoice.uid,
@@ -244,11 +269,16 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       if (!mounted) return;
       Navigator.of(context).pop(receipt);
     } on ApiException catch (e) {
+      // A definite rejection (4xx) means nothing was written — drop the stored
+      // key so it can't resurface as an "unfinished sale". An ambiguous outcome
+      // KEEPS it: that is the case the durable key exists for.
+      if (!e.isAmbiguousWrite) await pendingStore.clear();
+      if (!mounted) return;
       setState(() {
         _busy = false;
         _ambiguous = e.isAmbiguousWrite;
       });
-      if (!e.isAmbiguousWrite && mounted) showToast(context, e.message);
+      if (!e.isAmbiguousWrite) showToast(context, e.message);
     }
   }
 
