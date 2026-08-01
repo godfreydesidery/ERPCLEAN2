@@ -240,9 +240,12 @@ copy_bundle_files() {
   cp "$SCRIPT_DIR"/bundle/docs/*.md "$out/docs/"
 
   # Placeholders replaced so the client's .env needs no hand-editing to match the build.
+  # The trailing `sed 's/\r$//'` forces LF: .gitattributes pins this file, but a build must
+  # not depend on the checkout being right. Docker feeds each .env line into the container
+  # verbatim, so one stray carriage return silently corrupts every setting.
   sed -e "s|__ERP_VERSION__|${VERSION}|g" \
       -e "s|__BUNDLE_ARCH__|${arch}|g" \
-      "$SCRIPT_DIR/bundle/.env.example" > "$out/.env.example"
+      "$SCRIPT_DIR/bundle/.env.example" | sed 's/\r$//' > "$out/.env.example"
 
   chmod +x "$out/orbixerp.sh" "$out/install.sh"
 
