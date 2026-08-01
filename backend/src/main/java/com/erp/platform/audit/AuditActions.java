@@ -159,6 +159,12 @@ public final class AuditActions {
     public static final String AR_OPENING_SET      = "AR.OPENING.SET";
     public static final String SALES_CREDIT_OVERRIDE = "SALES.CREDIT.OVERRIDE";
 
+    // -- Below-cost selling policy (V93; target_type = sales_invoices) -------
+    /** A line at/below cost was let through by a supervisor override (APPROVE mode). */
+    public static final String SALES_BELOW_COST_OVERRIDE = "SALES.BELOW_COST.OVERRIDE";
+    /** A line at/below cost was let through WITHOUT a rejection (WARN mode, or cost unknown). */
+    public static final String SALES_BELOW_COST_WARNING  = "SALES.BELOW_COST.WARNING";
+
     // -- Routes module (ADR-0012 D-12; target_type = plural table names) ----
     public static final String ROUTE_CREATE            = "ROUTE.CREATE";
     public static final String ROUTE_UPDATE            = "ROUTE.UPDATE";
