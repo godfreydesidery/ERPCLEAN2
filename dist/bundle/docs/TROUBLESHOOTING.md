@@ -1,0 +1,297 @@
+# Troubleshooting
+
+Start here:
+
+```
+orbixerp status          # ./orbixerp.sh status   or   .\orbixerp.ps1 status
+orbixerp logs
+```
+
+`status` tells you whether it is running and healthy. `logs` shows what it last complained
+about. Between them they explain most problems.
+
+---
+
+## Installation
+
+### "This installation bundle is built for arm64, but this machine is amd64"
+
+You were sent the wrong bundle for this computer's processor. Ask for the other one.
+Nothing has been changed, and nothing is wrong with your machine.
+
+### "Docker is installed but is not running"
+
+- **Windows** — start Docker Desktop from the Start menu and wait until the whale icon in
+  the system tray stops animating and reports *Engine running*. It can take a minute after
+  a reboot.
+- **Linux** — `sudo systemctl start docker`.
+
+### "Docker is not installed, or not available to this user" (but you installed it)
+
+On Linux this usually means your user is not allowed to use Docker:
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+Then **log out and log back in** — the change does not apply to your current session.
+
+### "Port 8080 on this machine is already in use"
+
+Another program has that port. Either stop it, or pick another: edit `ERP_HTTP_PORT` in
+`.env` and run the installer again.
+
+On Windows, ports 80 and 8080 are often taken by IIS or another web application. 8081, 8090
+and 9000 are usually free.
+
+### "No image files were found in images/"
+
+The bundle is incomplete — most often because the `.zip` was not fully unpacked, or was
+extracted with a tool that skipped large files. Unzip it again, then check the sizes against
+`CHECKSUMS.txt`.
+
+### "Could not load ..." while loading images
+
+The file is damaged, usually from an interrupted download or copy. Verify it:
+
+```bash
+sha256sum -c CHECKSUMS.txt                            # Linux / macOS
+Get-FileHash .\images\<file> -Algorithm SHA256        # Windows
+```
+
+If a hash does not match, ask for a fresh copy.
+
+---
+
+## Your own database (`host` mode)
+
+### "Cannot reach a PostgreSQL server at ..."
+
+Work through these in order, on the database server:
+
+1. Is PostgreSQL running? `sudo systemctl status postgresql`
+2. Is it listening beyond loopback? `postgresql.conf` needs `listen_addresses = '*'`
+3. Does `pg_hba.conf` permit Docker's network?
+   ```conf
+   host  erp  erp  172.16.0.0/12  scram-sha-256
+   ```
+4. Did you reload after editing? `sudo systemctl reload postgresql`
+5. Is a firewall blocking port 5432?
+
+[HOST-DB-SETUP.md](HOST-DB-SETUP.md) has the detail.
+
+### "Connected to the server, but could not open database 'erp' as role 'erp'"
+
+The server answered, so networking is fine — this is about credentials or permissions.
+
+- Does the database exist? `\l` in `psql`
+- Does the role exist? `\du`
+- Is the password in `.env` exactly right, with no stray spaces?
+- Does the role own the database, or at least have `CONNECT` on it?
+
+### "Database 'erp' already contains N tables, and they were not created by this system"
+
+The application needs a database of its own. This one holds something else, and installing
+into it would fail partway through and leave both systems damaged.
+
+Create an empty database for OrbixERP, put its name in `.env` as `ERP_DB_NAME`, and run the
+installer again.
+
+---
+
+## Starting up
+
+### "The system did not become ready within 15 minutes"
+
+**On a first install** this is usually slow disk or too little memory — the first start
+creates the entire database structure. Give Docker at least 4 GB of memory (Docker Desktop
+→ Settings → Resources) and try again.
+
+**On a later start**, run `orbixerp logs` and look for the first `ERROR`. Common causes:
+
+| In the log | Meaning |
+|---|---|
+| `Connection refused` / `UnknownHostException` | The database is unreachable — see the section above |
+| `password authentication failed` | `ERP_DB_PASSWORD` in `.env` does not match the database |
+| `Validate failed` / `migration checksum mismatch` | The database was upgraded by a **newer** version than the one now installed. Reinstall the newer version, or restore a backup taken before that upgrade |
+| `admin password` / `bootstrap` | `ERP_BOOTSTRAP_ADMIN_PASSWORD` is missing or shorter than 12 characters |
+
+### It says "unhealthy" but the pages load fine
+
+Give it a few minutes — the check runs every 30 seconds and needs several consecutive
+successes after a restart. If it stays unhealthy while working normally, note it and tell
+your supplier; it does not affect users.
+
+### It keeps restarting
+
+`orbixerp logs` will show the same error repeating. In `host` mode the usual cause is a database
+that is unreachable or refusing the credentials: the application exits, Docker restarts it,
+and the cycle repeats. Fix the database and it settles by itself.
+
+---
+
+## Using it
+
+### Other computers cannot reach the system
+
+1. **Check the setting.** `.env` must have `ERP_BIND_ADDR=0.0.0.0`. If it says `127.0.0.1`,
+   only this machine can connect. Change it and run `orbixerp restart`.
+2. **Check the firewall** on OrbixERP machine — allow inbound TCP on your `ERP_HTTP_PORT`.
+   - Windows: Windows Defender Firewall → Inbound Rules → New Rule → Port → TCP → 8080
+   - Linux: `sudo ufw allow 8080/tcp`
+3. **Check the address.** Other machines need this computer's name or IP, not `localhost`.
+   Find it with `ipconfig` (Windows) or `hostname -I` (Linux).
+
+### Everyone was logged out at once
+
+Sessions are validated with the keys in `secrets/jwt/`. If those files were replaced or
+deleted, every existing session becomes invalid. Users can simply sign in again. Restore
+`secrets/` from your backup so it does not recur, and see
+[OPERATIONS.md](OPERATIONS.md#three-things-to-keep-together).
+
+### "A database from a previous installation is already on this computer"
+
+The installer found a database left behind by an earlier installation — usually because the
+folder was deleted, moved or damaged while the database itself survived.
+
+**Click OK.** Your existing data is kept and reconnected, and you sign in with the same
+username and password as before. Nothing in that database is deleted or replaced.
+
+> **The installer can never delete a database.** There is no option for it, not even behind a
+> confirmation. This is deliberate: one mis-clicked button must not be able to destroy a
+> business's accounting history.
+
+### Starting again with an empty database
+
+Only do this if you are certain the existing data is not needed. **It cannot be undone**, and
+no part of OrbixERP will do it for you — you have to run the command yourself.
+
+**Take a backup first, even if you think you don't need one:**
+
+```
+orbixerp backup
+```
+Then copy the file out of the `backups` folder to somewhere safe.
+
+Then, and only then:
+
+```
+orbixerp stop
+docker volume rm orbixerp-db-data
+```
+
+The next start creates a brand-new, empty database and asks you to set up your organisation
+again.
+
+> If the command says the volume is *"in use"*, something is still running. Run
+> `orbixerp stop` first, and close Docker Desktop's Volumes screen if it is open.
+>
+> If your installation uses a different instance name — check `ERP_STACK_NAME` in `.env` —
+> then the volume is named `<that name>-db-data` instead.
+
+### The browser warns the site is "not private"
+
+Expected when `ERP_TLS_ENABLED=true` without a real domain name — the certificate is
+self-signed. Traffic is still encrypted. [OPERATIONS.md](OPERATIONS.md#turning-on-https)
+explains how to get a trusted certificate.
+
+### The page loads, but signing in fails with "Sign-in failed. Please try again."
+
+**If you have HTTPS turned on, this is almost certainly the certificate, not your password.**
+
+A wrong password produces a clear *"Invalid username or password."* The generic *"Sign-in
+failed"* means the browser got **no reply at all** from the server.
+
+Here is the trap. With a self-signed certificate the system issues itself a **new certificate
+every 12 hours**. When you clicked "proceed anyway", your browser remembered *that one
+certificate*. As soon as it is replaced, that permission is stale, and:
+
+- the **page still opens** — it is being served from your browser's cache
+- every **request behind it fails silently**, so the sign-in screen shows its generic message
+- the **server logs show nothing**, because the request never reached it
+
+Confirm it: press F12, open the **Network** tab, try to sign in, click the `login` row.
+*(failed)* or status `0` is this problem. Status `401` is genuinely a wrong password.
+
+**To get in now:** open the address in a new tab, accept the certificate warning again, then
+reload with Ctrl+Shift+R.
+
+> **If there is no "Proceed anyway" link**, the browser is refusing to let you click through
+> (it does this once a site has asked to be HTTPS-only). In Chrome or Edge, go to
+> `chrome://net-internals/#hsts`, paste the address into *Delete domain security policies*,
+> press Delete, then try again.
+
+**To stop it recurring** — it will come back every 12 hours otherwise — do one of these:
+
+1. **Install our certificate authority on each computer** (quickest). On the server:
+   ```
+   docker exec orbixerp-caddy cat /data/caddy/pki/authorities/local/root.crt > orbixerp-ca.crt
+   ```
+   Install `orbixerp-ca.crt` on each PC under *Trusted Root Certification Authorities*. That
+   authority is long-lived, so every future certificate is trusted automatically.
+2. **Use a real domain name** and get a proper free certificate — see
+   [OPERATIONS.md](OPERATIONS.md#turning-on-https).
+
+If you are **not** using HTTPS, the same generic message means the server is unreachable
+from the browser — check `orbixerp status` and the network sections above.
+
+### Everything is slow
+
+- Give Docker more memory (Docker Desktop → Settings → Resources), then `orbixerp restart`
+- Check free disk space — a nearly full disk slows the database sharply
+- `docker stats` shows what is actually consuming resources
+
+---
+
+## Odd Windows-specific problems
+
+### "cannot be loaded because running scripts is disabled"
+
+Windows blocks downloaded PowerShell scripts. **Double-click `Install.cmd` (or `OrbixERP.cmd`)
+instead** — those are not restricted, and they start PowerShell correctly for you.
+
+If you would rather type it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+### "Windows protected your PC", or a Security Warning, when double-clicking
+
+Expected for any file that arrived from another computer. Click **More info → Run anyway**,
+or **Run**. Nothing is being installed into Windows itself — the file only starts the
+installer sitting beside it.
+
+### The black window vanished before I could read the password
+
+Reopen it: double-click `Install.cmd` again. It is safe to re-run — it will not reinstall or
+overwrite anything, and your password is also saved in the `.env` file in this folder.
+
+### Settings in `.env` seem to be ignored, or a password is "wrong" though it looks right
+
+`.env` has probably been saved with Windows line endings. An invisible carriage return gets
+appended to every value, so a password becomes subtly wrong and a database address will not
+parse.
+
+Open `.env` in an editor that can control this (Notepad++, VS Code) and save it with **LF /
+Unix** line endings. Notepad on Windows 11 does this correctly; older versions do not.
+
+The installer always writes the file correctly — this only happens after hand-editing.
+
+---
+
+## Before contacting support
+
+Please gather:
+
+```
+orbixerp version
+orbixerp status
+orbixerp logs > logs.txt
+```
+
+Send `logs.txt`, plus which of the two database modes you use.
+
+**Do not send your `.env` file or anything from `secrets/` — they contain your passwords
+and security keys.** If a specific setting matters, quote just that line with the value
+removed.

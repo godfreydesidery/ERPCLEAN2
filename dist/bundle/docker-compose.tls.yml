@@ -1,0 +1,57 @@
+# OPTIONAL overlay — HTTPS via Caddy.
+#
+# Not used by a default install. Enable it by setting these in .env:
+#
+#   ERP_TLS_ENABLED=true
+#   ERP_PUBLIC_HOST=erp.yourcompany.co.tz     # the name or IP users type in the browser
+#   ERP_BIND_ADDR=127.0.0.1                   # stop the plain-HTTP port being reachable off-box
+#
+# then `./orbixerp.sh restart`. orbixerp.sh adds this file to the compose command automatically.
+#
+# Out of the box Caddy issues a SELF-SIGNED certificate from its own internal CA: traffic is
+# encrypted, but browsers show a "not private" warning that users must click through. That is
+# expected and unavoidable without a real domain name.
+#
+# TO GET A REAL, TRUSTED CERTIFICATE (free): point a domain's DNS A record at this machine,
+# put that domain in ERP_PUBLIC_HOST, open ports 80 and 443 to the internet, then delete the
+# `tls internal` line from the Caddyfile and run `./orbixerp.sh restart`. Caddy obtains and renews
+# a Let's Encrypt certificate by itself from then on.
+
+services:
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: ${ERP_STACK_NAME:-orbixerp}-caddy
+    restart: unless-stopped
+    depends_on:
+      - api
+
+    ports:
+      - "${ERP_HTTPS_PORT:-443}:443"
+      # Port 80 serves only a redirect to HTTPS. It is also the port Let's Encrypt uses to
+      # verify domain ownership, so leave it published if you plan to move to a real domain.
+      - "${ERP_HTTP_REDIRECT_PORT:-80}:80"
+
+    environment:
+      # Caddy binds its site to this name and issues the certificate for it. A bare ":443"
+      # has no name to certify, which browsers report as ERR_SSL_PROTOCOL_ERROR.
+      ERP_PUBLIC_HOST: ${ERP_PUBLIC_HOST:?ERP_PUBLIC_HOST must be set in .env to enable TLS}
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persists the internal CA and any issued certificates. Without these volumes every
+      # restart mints a brand-new certificate and users are re-prompted to trust it.
+      - orbixerp-caddy-data:/data
+      - orbixerp-caddy-config:/config
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  orbixerp-caddy-data:
+    name: ${ERP_STACK_NAME:-orbixerp}-caddy-data
+  orbixerp-caddy-config:
+    name: ${ERP_STACK_NAME:-orbixerp}-caddy-config
