@@ -120,6 +120,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final JournalEntryRepository journalEntries;
     /** Owner decision 2026-07-05 (V87): synchronous "block negative stock on sale" pre-check. */
     private final NegativeStockGuard negativeStockGuard;
+    /** Owner decision 2026-08-01 (V93): synchronous "sale at or below cost" policy check. */
+    private final BelowCostGuard belowCostGuard;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -144,7 +146,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    FxDocumentConverter fxConverter,
                                    PaymentTermsRepository paymentTermsRepo,
                                    JournalEntryRepository journalEntries,
-                                   NegativeStockGuard negativeStockGuard) {
+                                   NegativeStockGuard negativeStockGuard,
+                                   BelowCostGuard belowCostGuard) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -169,6 +172,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.paymentTermsRepo = paymentTermsRepo;
         this.journalEntries = journalEntries;
         this.negativeStockGuard = negativeStockGuard;
+        this.belowCostGuard = belowCostGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -285,6 +289,31 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         // Recompute totals one final time and freeze
         totalsCalc.recompute(inv, lineList);
+
+        // Owner decision 2026-08-01 (V93, sales_settings.below_cost_action): "sale at or below cost"
+        // policy. Runs immediately AFTER the recompute above, and that ordering is load-bearing —
+        // the guard compares against each line's freshly derived netAmount, which is where the
+        // VAT-inclusive branch (ADR-0056) and the discount apportionment already live. Comparing the
+        // raw unit_price_amount instead would read a GROSS figure on an inclusive price list and let
+        // a line ~18% under cost through. Rejecting here rolls the whole finalise back, so nothing
+        // reaches the outbox (same reasoning as the negative-stock pre-check above).
+        //
+        // Owner decision 2026-08-01: DIRECT and POS only — the origins where the price is agreed at
+        // the moment of sale and nothing has shipped yet. An SO-billed invoice is deliberately NOT
+        // checked: its delivery has already issued the stock, so rejecting at finalise would strand
+        // goods the customer physically holds, with no way to raise the invoice and no override
+        // under BLOCK. Below-cost order billing is a pricing question to catch on the order, not a
+        // reason to refuse the paperwork after the goods have gone.
+        if (issuesStock) {
+            belowCostGuard.assertNotBelowCost(
+                    inv.getCompanyId(), inv.getBranchId(), inv.getId(), inv.getUid(),
+                    lineList.stream()
+                            .map(l -> new BelowCostGuard.PricedLine(
+                                    l.getProductId(), l.getProductName(),
+                                    l.getNetAmount(), l.getQtyInBase()))
+                            .toList(),
+                    Boolean.TRUE.equals(safeReq.belowCostApproved()));
+        }
 
         // ADR-0036 D-4: stamp the immutable FX rate-triple at finalise (totals are now frozen).
         // toBase converts the gross to company base currency; for a base-currency invoice it is the

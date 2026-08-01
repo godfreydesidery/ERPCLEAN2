@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
-import { SalesSettingsDto, UpdateSalesSettingsRequest } from '../../models/sales.model';
+import { BelowCostAction, SalesSettingsDto, UpdateSalesSettingsRequest } from '../../models/sales.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { SalesSettingsService } from './sales-settings.service';
@@ -40,6 +40,28 @@ export class SalesSettingsComponent {
   readonly fCurrency = signal('TZS');
   /** Stores the raw DTO polarity (true = allow/backorder); the template renders it as an inverted "block" switch. */
   readonly fAllowNegativeStock = signal(false);
+  /** "Sale at or below cost" policy (V93). OFF = no check, the default. */
+  readonly fBelowCostAction = signal<BelowCostAction>('OFF');
+
+  /**
+   * The below-cost choices, each with the plain-language consequence. Kept here rather than in the
+   * template so the wording sits next to the value it belongs to and the spec can assert on it.
+   */
+  readonly belowCostOptions: ReadonlyArray<{ value: BelowCostAction; label: string; hint: string }> = [
+    { value: 'OFF', label: 'No check', hint: 'Sell at any price. Nothing is checked against cost.' },
+    { value: 'WARN', label: 'Allow, but record it', hint: 'The sale goes through and is recorded for review.' },
+    {
+      value: 'APPROVE',
+      label: 'Needs supervisor approval',
+      hint: 'The sale is stopped until a supervisor with permission to sell below cost approves it.',
+    },
+    { value: 'BLOCK', label: 'Never allow', hint: 'The sale is always stopped. Nobody can override it.' },
+  ];
+
+  /** The plain-language consequence of whatever is currently selected. */
+  readonly belowCostHint = computed(
+    () => this.belowCostOptions.find((o) => o.value === this.fBelowCostAction())?.hint ?? '',
+  );
 
   // ── Save state ─────────────────────────────────────────────────────────────
   readonly saving = signal(false);
@@ -104,6 +126,9 @@ export class SalesSettingsComponent {
     this.fThresholdAmount.set(String(s.soApprovalThresholdAmount ?? 0));
     this.fCurrency.set(s.currency ?? 'TZS');
     this.fAllowNegativeStock.set(s.allowNegativeStock);
+    // Defensive `?? 'OFF'`: a company saved before V93 (or an older API) sends no value, and the
+    // screen must then show exactly what the till enforces for that state — OFF.
+    this.fBelowCostAction.set(s.belowCostAction ?? 'OFF');
   }
 
   save(): void {
@@ -125,6 +150,7 @@ export class SalesSettingsComponent {
       soApprovalThresholdAmount: Number(threshold),
       currency: this.fCurrency().trim(),
       allowNegativeStock: this.fAllowNegativeStock(),
+      belowCostAction: this.fBelowCostAction(),
     };
 
     this.settingsService.update(request).subscribe({

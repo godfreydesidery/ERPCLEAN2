@@ -2,8 +2,10 @@ package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +13,7 @@ import com.erp.modules.cashbank.domain.entity.CashBankAccount;
 import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.PosTillDto;
 import com.erp.modules.sales.domain.entity.PosSession;
@@ -22,7 +25,10 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +50,7 @@ class PosTillServiceImplTest {
     private CompanyRepository          companies;
     private CashBankAccountRepository  cashAccounts;
     private PosSessionRepository       sessions;
+    private UserLookupService          userLookup;
     private ScopeGuard                 scopeGuard;
     private AuditService               audit;
     private SalesDepthNumberGenerator  numberGen;
@@ -55,11 +62,14 @@ class PosTillServiceImplTest {
         companies    = mock(CompanyRepository.class);
         cashAccounts = mock(CashBankAccountRepository.class);
         sessions     = mock(PosSessionRepository.class);
+        userLookup   = mock(UserLookupService.class);
         scopeGuard   = mock(ScopeGuard.class);
         audit        = mock(AuditService.class);
         numberGen    = mock(SalesDepthNumberGenerator.class);
         when(numberGen.nextPosTill(anyLong())).thenReturn("TILL-0001");
-        service      = new PosTillServiceImpl(tills, companies, cashAccounts, sessions, scopeGuard, audit, numberGen);
+        when(userLookup.displayNamesByIds(anyCollection())).thenReturn(Map.of());
+        service      = new PosTillServiceImpl(tills, companies, cashAccounts, sessions, userLookup,
+                scopeGuard, audit, numberGen);
 
         RequestContext.set(new RequestContext.Principal(1L, "operator", false, 10L, 20L, null));
     }
@@ -205,6 +215,101 @@ class PosTillServiceImplTest {
         assertThat(dto.hasOpenSession())
                 .as("a free till must report hasOpenSession=false")
                 .isFalse();
+    }
+
+    // -------------------------------------------------------------------------
+    // Naming the occupant of a busy till (orphaned-shift recovery, 2026-08).
+    // -------------------------------------------------------------------------
+
+    @Test
+    void getTillByUid_openSession_namesTheCashier() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 42L, "01HXYZ0000000000000000TEST");
+        when(tills.findByUid("01HXYZ0000000000000000TEST")).thenReturn(Optional.of(till));
+
+        PosSession openSession = mock(PosSession.class);
+        when(openSession.getCashierId()).thenReturn(7L);
+        when(sessions.findByPosTillIdAndStatus(42L, PosSessionStatus.OPEN))
+                .thenReturn(Optional.of(openSession));
+        when(userLookup.displayNamesByIds(anyCollection()))
+                .thenReturn(Map.of(7L, "Asha Mwakalinga"));
+
+        PosTillDto dto = service.getTillByUid("01HXYZ0000000000000000TEST");
+
+        assertThat(dto.openSessionCashierName())
+                .as("an occupied till must name its holder, not just carry the id")
+                .isEqualTo("Asha Mwakalinga");
+    }
+
+    /**
+     * A cashier whose account has since been removed must still produce friendly copy — never a
+     * null the till app has to paper over, and never an internal id.
+     */
+    @Test
+    void getTillByUid_cashierNoLongerResolvable_fallsBackToNeutralPhrase() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 42L, "01HXYZ0000000000000000TEST");
+        when(tills.findByUid("01HXYZ0000000000000000TEST")).thenReturn(Optional.of(till));
+
+        PosSession openSession = mock(PosSession.class);
+        when(openSession.getCashierId()).thenReturn(7L);
+        when(sessions.findByPosTillIdAndStatus(42L, PosSessionStatus.OPEN))
+                .thenReturn(Optional.of(openSession));
+        // userLookup returns an empty map (default stub) — the id resolved to nothing.
+
+        PosTillDto dto = service.getTillByUid("01HXYZ0000000000000000TEST");
+
+        assertThat(dto.openSessionCashierName()).isEqualTo("Another cashier");
+        assertThat(dto.openSessionCashierName()).doesNotContain("7");
+    }
+
+    @Test
+    void getTillByUid_noOpenSession_hasNoCashierName() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 44L, "01HXYZ0000000000000000FREE");
+        when(tills.findByUid("01HXYZ0000000000000000FREE")).thenReturn(Optional.of(till));
+
+        PosTillDto dto = service.getTillByUid("01HXYZ0000000000000000FREE");
+
+        assertThat(dto.openSessionCashierName())
+                .as("a free till has no occupant to name")
+                .isNull();
+    }
+
+    /**
+     * The names for a whole branch must be resolved in ONE lookup. Mapping row by row would ask
+     * IAM per till — an N+1 that grows with the branch, and the reason toDto takes a name map.
+     */
+    @Test
+    void listTillsByBranch_resolvesAllCashierNamesInOneBatchLookup() {
+        PosTill busy1 = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(busy1, 1L, "01HXYZ00000000000000000001");
+        PosTill busy2 = new PosTill(10L, 20L, "Till 2", 55L, 1L);
+        setIdAndUid(busy2, 2L, "01HXYZ00000000000000000002");
+        PosTill free = new PosTill(10L, 20L, "Till 3", 55L, 1L);
+        setIdAndUid(free, 3L, "01HXYZ00000000000000000003");
+        when(tills.findByCompanyIdAndBranchId(10L, 20L))
+                .thenReturn(List.of(busy1, busy2, free));
+
+        PosSession s1 = mock(PosSession.class);
+        when(s1.getCashierId()).thenReturn(7L);
+        PosSession s2 = mock(PosSession.class);
+        when(s2.getCashierId()).thenReturn(8L);
+        when(sessions.findByPosTillIdAndStatus(1L, PosSessionStatus.OPEN))
+                .thenReturn(Optional.of(s1));
+        when(sessions.findByPosTillIdAndStatus(2L, PosSessionStatus.OPEN))
+                .thenReturn(Optional.of(s2));
+        // till 3 unstubbed → Optional.empty()
+
+        when(userLookup.displayNamesByIds(anyCollection()))
+                .thenReturn(Map.of(7L, "Asha Mwakalinga", 8L, "Baraka Juma"));
+
+        List<PosTillDto> dtos = service.listTillsByBranch(10L, 20L);
+
+        assertThat(dtos).extracting(PosTillDto::openSessionCashierName)
+                .containsExactly("Asha Mwakalinga", "Baraka Juma", null);
+        verify(userLookup, times(1)).displayNamesByIds(anyCollection());
+        verify(userLookup).displayNamesByIds(Set.of(7L, 8L));
     }
 
     // -------------------------------------------------------------------------

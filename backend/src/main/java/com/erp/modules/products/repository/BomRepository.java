@@ -83,7 +83,7 @@ public interface BomRepository extends JpaRepository<Bom, Long> {
 
     /**
      * Check if any ACTIVE BOM exists for the given parent product (used by make/buy defaulting,
-     * D-3, and the isComposed upgrade in RecipeExplosionResolver, D-7).
+     * D-3, and by RecipeExplosionResolver when deciding whether a sale explodes at issue, D-7).
      */
     boolean existsByParentProductIdAndStatus(Long parentProductId, BomStatus status);
 }

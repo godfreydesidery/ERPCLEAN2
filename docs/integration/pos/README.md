@@ -80,7 +80,9 @@ Content-Type: application/json
   "cashBankAccountUid": null   // null -> defaults to the company's default cash/bank account
 }
 ```
-Response `data` is a `PosTillDto` (`{ id, uid, companyId, branchId, code, name, cashBankAccountId, status }`). Keep its **`uid`**.
+Response `data` is a `PosTillDto` (`{ id, uid, companyId, branchId, code, name, cashBankAccountId, status, hasOpenSession, openSessionUid, openSessionCashierId, openSessionCashierName, openSessionOpenedAt }`). Keep its **`uid`**.
+
+> **Show occupied tills honestly.** `hasOpenSession` is till-keyed — it does not tell you whose shift it is. Compare `openSessionCashierId` with your own user id (the access token's `sub`) so a cashier returning after a crash is offered *resume / cash up* on their own shift rather than a greyed-out tile; name a colleague's shift with `openSessionCashierName`. Nothing frees a till on a timer — only an explicit cash-up does. See [07 — Tills](./07-tills.md#occupancy--reading-hasopensession-and-the-opensession-fields).
 
 ### 4. Open a session
 Open a cashier session on the till with the opening cash float (requires `POS.SESSION.OPEN`):
@@ -91,6 +93,12 @@ Content-Type: application/json
 { "tillUid": "till_...", "openingFloatAmount": 200.00 }
 ```
 Response `data` is a `PosSessionDto` with `status: "OPEN"` and a `sessionNumber`. Keep its **`uid`** — every sale, the X-read, the close, and the reconcile reference this session uid. A till may have only one OPEN session at a time.
+
+> **Restarting the app does not end the shift.** Nothing auto-closes a session (no timeout, no logout hook) — only the explicit cash-up in step 9 does, because that call records a **counted** cash amount the system must never invent. So on relaunch, look for the shift you still hold *before* opening a new one:
+> ```http
+> GET /api/v1/pos/sessions?companyId={companyId}&status=OPEN&size=50
+> ```
+> The `status` filter is mandatory in practice — an unfiltered page 0 will miss the open shift once the company has more lifetime sessions than fit on a page. See [08 §5.1](./08-sessions.md).
 
 ### 5. Load catalog & prices
 Fetch the products and their selling prices for the cashier UI (see [03 — Catalog](./03-catalog-products-units.md) and [04 — Pricing, Tax & Currency](./04-pricing-tax-currency.md)):
@@ -125,7 +133,9 @@ On success you get **HTTP 201** and `data` is the **finalised** `SalesInvoiceDto
 
 > **What is *not* done by the time 201 returns:** stock issue, the GL revenue/VAT/cash journal, and the AR posting run **asynchronously** (a ~1s outbox poller), each in its own transaction. Do not assume the ledger is posted at response time. See [09 — Sales, Payments & Receipts](./09-sales-payments-receipts.md).
 >
-> **Idempotency (recommended):** send the `Idempotency-Key` header above and **reuse the same value** on any retry of that basket. If the POST times out but actually committed, resending with the same key returns the **original** invoice (no second sale). Omit the header and a blind retry creates a duplicate. See [11](./11-errors-offline-idempotency.md).
+> **Idempotency (do this):** send the `Idempotency-Key` header above and **reuse the same value** on any retry of that basket. If the POST times out but actually committed, resending with the same key returns the **original** invoice (no second sale). Omit the header and a blind retry creates a duplicate. The key must be **written to device storage before the POST**, cleared only on a confirmed terminal outcome, and reconciled on relaunch rather than re-rung — a key held in memory is lost by the app kill it exists to protect against. **A `409` means the original is still processing: keep the key and retry.** See [11 §4.1a/§4.2a](./11-errors-offline-idempotency.md).
+>
+> **Stock is checked before the sale commits:** a line that would take on-hand below zero is refused with **409** unless the company has opted into backorder — and a company with no sales-settings row **blocks**. See [06](./06-stock-availability.md).
 
 ### 7. Print the receipt
 The 201 body is everything you need to print — invoice number, line snapshots, VAT, gross total, and the `tenderedAmount` you submitted (compute change locally). No extra call is required for a basic receipt; reprints/lookups are covered in [09](./09-sales-payments-receipts.md). Note: a mis-rung POS sale can be **reversed** (whole-sale void/refund) via `POST /api/v1/pos/sales/uid/{uid}/reverse` (perm `POS.SALE.VOID`) while the session is OPEN — see [10 — Returns & Refunds](./10-returns-refunds.md) (partial/line-level refunds are deferred).
@@ -145,6 +155,8 @@ Content-Type: application/json
 { "countedCashAmount": 7150.00, "notes": "end of shift" }
 ```
 Response `data` is the `PosSessionDto` now in `CLOSED` status with `expectedCashAmount` and `varianceAmount` computed server-side. (Cash paid out mid-shift — e.g. supplier payments from the drawer — is recorded earlier via `POST /api/v1/pos/sessions/uid/{uid}/payouts`.)
+
+> **This is the only thing that ends a shift, and `countedCashAmount` must be typed in.** There is no auto-close and no timeout: never pre-fill the count from `expectedCashAmount` or an X-read, or the variance measures nothing.
 
 ### 10. Reconcile (Z-read) — posts the variance
 Finalise the session and post the cash variance to the GL (requires `POS.SESSION.RECONCILE`):

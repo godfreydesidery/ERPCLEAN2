@@ -272,11 +272,21 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       // A definite rejection (4xx) means nothing was written — drop the stored
       // key so it can't resurface as an "unfinished sale". An ambiguous outcome
       // KEEPS it: that is the case the durable key exists for.
-      if (!e.isAmbiguousWrite) await pendingStore.clear();
+      //
+      // 409 is the exception: it means an attempt with this same key is still
+      // being processed server-side, so the outcome is NOT yet decided.
+      // Clearing here would free the till to ring the same sale again while the
+      // original is still landing — the duplicate invoice this key exists to
+      // prevent. Keep it and let the recovery flow reconcile it.
+      final undecided = e.isAmbiguousWrite || e.statusCode == 409;
+      if (!undecided) await pendingStore.clear();
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _ambiguous = e.isAmbiguousWrite;
+        // 409 counts as undecided too, so the sheet offers "RETRY (same key)"
+        // rather than a fresh sale — retrying the same key is safe and is what
+        // resolves it; ringing again would duplicate.
+        _ambiguous = undecided;
       });
       if (!e.isAmbiguousWrite) showToast(context, e.message);
     }

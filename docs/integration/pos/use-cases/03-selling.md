@@ -96,7 +96,11 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
      `finalisedAt`, `uid`. Print the receipt (UC-C7).
 
 - **Alternate / exception flows:**
-  - Session not OPEN → **409** `POS session <uid> is not OPEN.` (open/resume it — [§08](../08-sessions.md)).
+  - Session not OPEN → **409** `This POS session is not OPEN.` (open/resume it — [§08](../08-sessions.md)).
+  - A line would take stock below zero and the company blocks negative stock (the default, including
+    when it has **no** sales-settings row) → **409** `Not enough stock of <product> to complete this
+    sale — …`. Nothing is written; reduce the quantity, drop the line, or get backorder enabled
+    ([§06](../06-stock-availability.md), [§09 §3](../09-sales-payments-receipts.md)).
   - Unknown `sessionUid` / `customerId` / line `productId` / `unitId` → **404**.
   - Product has no price on any price list → **400** `Product has no price on any price list (BR-SALES-03)`.
   - `currency` not enabled for the scope → **422** (`CurrencyNotEnabledException`).
@@ -105,9 +109,11 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
     **original** `SalesInvoiceDto` (note: the controller hardcodes 201, so identify a replay by
     matching the returned `uid` to one you already hold — not by a 200-vs-201 distinction).
   - **Idempotency in-flight** (same key, the winning request hasn't stamped its invoice yet) → **409**
-    `A POS sale with this Idempotency-Key is still in progress; retry shortly.` This 409 is
-    **retryable** — resend the **same** key after a short delay. (A failed/rolled-back sale frees the
-    key, so the next send with that key creates the sale normally.)
+    `This sale is still being processed. Please try again in a moment.` This 409 is **retryable and
+    NOT terminal** — **keep the key**, keep the till blocked, and resend the **same** key after a
+    short delay. Releasing the key here frees the till to ring the same basket twice. (A
+    failed/rolled-back sale frees the key server-side, so the next send with that key creates the
+    sale normally.)
   - Lacks `POS.SALE.CREATE`, or cannot act in the session's company → **403**.
   - Wrong `Content-Type` (must be `application/json`) → **415**.
 
@@ -391,7 +397,9 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
      has `quantity > 0`; `negative=true` flags an already-oversold branch.
   3. For lot/serial products: `GET /api/v1/stock-batches` (FEFO by `expiryDate`) or
      `GET /api/v1/stock-serials?...&status=IN_STOCK` ([§06 §5–6](../06-stock-availability.md)) to pick/scan the exact unit.
-  4. Ring the sale (UC-C1/UC-C2) regardless — the stock check is advisory.
+  4. Ring the sale (UC-C1/UC-C2). These *reads* are advisory — but the **sale itself is guarded**:
+     a line that would take on-hand below zero is refused with **409** (see below), so use the reads
+     to warn the cashier before they hit it.
 
 - **Alternate / exception flows:**
   - Token without active branch → **409 Conflict** (`No active company/branch in request context.` — `IllegalStateException`, mapped to 409 by the global handler).
@@ -402,9 +410,16 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 
 - **Notes & limitations:**
   - **On-hand reads are point-in-time and NOT reserved** — two terminals can both see the last
-    unit. The POS endpoint does **not** hard-block overselling; `allowNegative` is a
-    location/upstream policy. Build your own client guard if you need a hard reservation
-    ([§06 — how this feeds the sale](../06-stock-availability.md#how-this-feeds-the-sale)).
+    unit, and nothing here holds stock for you.
+  - **The sale endpoint DOES hard-block overselling by default.** `POST /api/v1/pos/sales` runs a
+    synchronous negative-stock check before anything commits and returns **409** with a
+    cashier-safe message (*"Not enough stock of … — 3 available, 5 requested. Ask a supervisor to
+    enable backorder if this should be allowed."*). It is per company
+    (`sales_settings.allow_negative_stock`) and a company with **no settings row blocks** — the
+    fail-safe default. Because the check is at sale time, the losing terminal in the race above
+    gets the 409 rather than a silent oversell; reduce the quantity or drop the line, do not retry
+    unchanged ([§06 — how this feeds the sale](../06-stock-availability.md#how-this-feeds-the-sale),
+    [§09 §3](../09-sales-payments-receipts.md)).
   - **Stock decrement is asynchronous** (outbox poller after 201). Live counts will lag your sale
     by ~1s+; re-query after a short delay if you display them.
   - **Selecting a specific lot/serial at the POS is advisory only.** `POST /api/v1/pos/sales` takes
@@ -482,8 +497,10 @@ End-to-end scenarios for ringing sales at the till on top of the single sale end
 
 - **Reconciliation use (after a timed-out sale):**
   1. **Preferred:** simply re-send the original POST with the **same `Idempotency-Key`** — a replay
-     returns the original invoice and creates nothing new ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header), UC-C1). If you get the
-     retryable **409** "still in progress", wait briefly and resend the same key.
+     returns the original invoice and creates nothing new ([§12 #1](../12-known-limitations.md#1-sale-idempotency-on-sale-creation--closed-idempotency-key-header), UC-C1). This only works if
+     the key (and the request body) were **persisted to device storage before the first POST** —
+     see [§11 §4.1a](../11-errors-offline-idempotency.md). If you get the retryable **409** "still
+     being processed", keep the key, wait briefly and resend it.
   2. **Fallback (only if you omitted the header):** list the recent invoices for the
      company/time-window with the search above and check whether a **FINALISED** invoice already
      matches the basket **before** retrying the POST ([§09 §10](../09-sales-payments-receipts.md), [§11](../11-errors-offline-idempotency.md)) — the legacy

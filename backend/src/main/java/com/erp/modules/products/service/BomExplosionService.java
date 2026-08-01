@@ -54,8 +54,8 @@ public interface BomExplosionService {
                                               boolean multiLevel);
 
     /**
-     * Returns true if the product has an ACTIVE BOM (used by {@code RecipeExplosionResolver.isComposed}
-     * upgrade and make/buy defaulting — D-7, D-3).
+     * Returns true if the product has an ACTIVE BOM (used by
+     * {@code RecipeExplosionResolver.shouldExplodeAtIssue} and make/buy defaulting — D-7, D-3).
      */
     boolean hasActiveBom(String parentProductUid);
 }

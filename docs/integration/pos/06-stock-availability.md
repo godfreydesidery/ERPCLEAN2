@@ -59,9 +59,9 @@ The primary "what's in stock at this terminal's branch" feed.
 | `companyId` | Long | tenant |
 | `branchId` | Long | branch |
 | `productId` | Long | product |
-| `quantity` | BigDecimal (string) | current on-hand at branch |
-| `reorderLevel` | BigDecimal (string) \| null | reorder threshold |
-| `maxQty` | BigDecimal (string) \| null | optional max-stock indicator |
+| `quantity` | BigDecimal (JSON number) | current on-hand at branch |
+| `reorderLevel` | BigDecimal (JSON number) \| null | reorder threshold |
+| `maxQty` | BigDecimal (JSON number) \| null | optional max-stock indicator |
 | `lastMovementAt` | String (ISO) \| null | last movement timestamp |
 | `lastCountedAt` | String (ISO) \| null | last physical count |
 | `negative` | boolean | **derived:** `quantity < 0` (overselling indicator) |
@@ -69,9 +69,9 @@ The primary "what's in stock at this terminal's branch" feed.
 | `version` | Long | optimistic-lock version |
 | `createdAt` / `createdBy` / `updatedAt` / `updatedBy` | String/Long | audit |
 
-> Numeric ids and `BigDecimal` quantities serialise as **JSON strings** (global Jackson config — avoids JS precision loss). Parse `quantity` as a decimal string, not a `number`.
+> **Wire types:** numeric **ids** (`Long`) serialise as **JSON strings** (the global Jackson `Long`-as-string config — avoids JS precision loss). **`BigDecimal` quantities and amounts do NOT** — they are plain JSON **numbers**, as stated in [00 §8](./00-overview-and-conventions.md). Only `Long`/`long` are stringified. Do not apply string operations to `quantity`, `reorderLevel`, `avgCost`, etc.
 
-For a POS "in stock?" check: a product is sellable from this branch if a row exists with `quantity > 0`. `negative=true` means the branch is already oversold (overselling is a flagged, not forbidden, state).
+For a POS "in stock?" check: a product is sellable from this branch if a row exists with `quantity > 0`. `negative=true` means the branch is *already* oversold. Note that selling further into negative is **blocked by default** on the sale path (see [How this feeds the sale](#how-this-feeds-the-sale)) — this read is what lets you warn the cashier before they hit that 409, not a licence to ignore it.
 
 **Success example:**
 
@@ -84,8 +84,8 @@ For a POS "in stock?" check: a product is sellable from this branch if a row exi
       "companyId": "1",
       "branchId": "3",
       "productId": "880",
-      "quantity": "42.000",
-      "reorderLevel": "10.000",
+      "quantity": 42.000,
+      "reorderLevel": 10.000,
       "maxQty": null,
       "lastMovementAt": "2026-06-19T08:14:55Z",
       "lastCountedAt": null,
@@ -139,9 +139,9 @@ When you need the breakdown across locations (e.g. only the `STORE` location is 
 | `productUid` | String | **returned `null` on this endpoint** (not enriched at this layer) |
 | `productCode` | String | **returned `null`** |
 | `productName` | String | **returned `null`** |
-| `quantity` | BigDecimal (string) | on-hand at that location |
-| `onHandValue` | BigDecimal (string) | inventory value (0 if unset) |
-| `avgCost` | BigDecimal (string) \| null | moving-average unit cost |
+| `quantity` | BigDecimal (JSON number) | on-hand at that location |
+| `onHandValue` | BigDecimal (JSON number) | inventory value (0 if unset) |
+| `avgCost` | BigDecimal (JSON number) \| null | moving-average unit cost |
 | `currency` | String | **hard-coded `"TZS"`** in the current query implementation |
 
 > Be aware that `productUid/productCode/productName` come back `null` here (the `LocationOnHandQuery.queryForBranch` leaves them unenriched — join `productId` against your own product cache or the products API). Likewise `currency` is currently a hard-coded `"TZS"` literal, not derived per company.
@@ -160,9 +160,9 @@ When you need the breakdown across locations (e.g. only the `STORE` location is 
       "productUid": null,
       "productCode": null,
       "productName": null,
-      "quantity": "30.000",
-      "onHandValue": "150000.0000",
-      "avgCost": "5000.0000",
+      "quantity": 30.000,
+      "onHandValue": 150000.0000,
+      "avgCost": 5000.0000,
       "currency": "TZS"
     }
   ],
@@ -202,12 +202,12 @@ The cleanest per-product call when ringing a line: "where (which locations) is t
     {
       "locationId": "11", "locationUid": null, "locationCode": null, "locationName": null,
       "productId": "880", "productUid": null, "productCode": null, "productName": null,
-      "quantity": "30.000", "onHandValue": "150000.0000", "avgCost": "5000.0000", "currency": "TZS"
+      "quantity": 30.000, "onHandValue": 150000.0000, "avgCost": 5000.0000, "currency": "TZS"
     },
     {
       "locationId": "12", "locationUid": null, "locationCode": null, "locationName": null,
       "productId": "880", "productUid": null, "productCode": null, "productName": null,
-      "quantity": "12.000", "onHandValue": "60000.0000", "avgCost": "5000.0000", "currency": "TZS"
+      "quantity": 12.000, "onHandValue": 60000.0000, "avgCost": 5000.0000, "currency": "TZS"
     }
   ],
   "errors": [],
@@ -320,7 +320,7 @@ Only relevant for **batch/lot-tracked** products. Use to pick a lot (e.g. FEFO �
 | `lotNumber` | String | lot/batch number |
 | `manufactureDate` | LocalDate (`YYYY-MM-DD`) \| null | manufacture date |
 | `expiryDate` | LocalDate (`YYYY-MM-DD`) \| null | expiry date |
-| `qtyOnHand` | BigDecimal (string) | quantity remaining in this lot |
+| `qtyOnHand` | BigDecimal (JSON number) | quantity remaining in this lot |
 | `expired` | boolean | derived expiry flag |
 
 **Success example:**
@@ -332,7 +332,7 @@ Only relevant for **batch/lot-tracked** products. Use to pick a lot (e.g. FEFO �
       "id": "9001", "uid": "batch_4c7e", "companyId": "1", "branchId": "3",
       "locationId": "11", "productId": "880", "lotNumber": "LOT-2026-031",
       "manufactureDate": "2026-01-10", "expiryDate": "2027-01-10",
-      "qtyOnHand": "18.000", "expired": false
+      "qtyOnHand": 18.000, "expired": false
     }
   ],
   "errors": [],
@@ -430,8 +430,12 @@ curl -s "https://erp.example.com/api/v1/stock-serials?companyId=1&locationId=11&
 A POS line ultimately posts to `POST /api/v1/pos/sales` with `lines[].productId`, `unitId`, `quantity`, `unitPrice`, `lineDiscountAmount` (shared **idempotency** contract). The stock reads above are **advisory** — they let you show availability and pick a lot/serial — but the authoritative decrement is applied **asynchronously** by the outbox poller after the sale finalises (shared **sale-posting** contract). Consequences for the client:
 
 - **Do not assume the ledger/stock reflects your sale immediately.** Re-query on-hand after a short delay (~1s+) if you display live counts.
-- **On-hand reads are point-in-time and not reserved.** Two terminals can both see the last unit. Overselling is a *flagged* state (`StockOnHandDto.negative=true`), not a hard block, unless the location's `allowNegative=false` policy applies upstream. Build your own client-side guard if you need hard stock reservation.
-- **Retrying a timed-out `POST /pos/sales` is safe *only* if you resend the same `Idempotency-Key`.** With the same key the server replays the **original** invoice (HTTP 201, matched by uid — no duplicate, no double post); a concurrent in-flight retry returns **409** "still in progress; retry shortly" (resend the same key). It is only a **blind** retry *without* the `Idempotency-Key` header that creates a SECOND sale (legacy non-idempotent path). Always send (and reuse) an `Idempotency-Key` per sale attempt, or check for the resulting invoice before retrying (shared **idempotency** contract — `Idempotency-Key`, ADR-0042 / commit f08fb08).
+- **On-hand reads are point-in-time and not reserved.** Two terminals can both see the last unit; nothing here holds stock for you. But the *sale* is guarded — see the next bullet — so your advisory read can disagree with the answer the sale gives you.
+- **A sale that would take stock below zero is refused with `409`.** The sale path runs a negative-stock guard **synchronously**, before the invoice commits, against branch availability (`stock_on_hand.quantity − reserved_qty`). If the line asks for more than that, `POST /api/v1/pos/sales` fails with **409 Conflict** and a cashier-safe message naming the product and what is available (e.g. *"Not enough stock of Sugar 1kg to complete this sale — 3 available, 5 requested. Ask a supervisor to enable backorder if this should be allowed."*). It is **terminal for those bytes**: reduce the quantity, drop the line, or have a supervisor change the setting. Do not retry unchanged.
+  - The behaviour is per-company (`sales_settings.allow_negative_stock`), maintained back-office. **A company with no settings row now BLOCKS** — the fail-safe default was flipped (it previously allowed), and the row is provisioned on company creation, so treat "blocks" as the norm and backorder as the opt-in exception.
+  - The guard covers lines issued **as themselves**. Non-stockable services, and kit/phantom products that explode into components at issue time, are skipped — they hold no on-hand row of their own.
+  - `StockOnHandDto.negative=true` therefore now means *historic* overselling (from before the guard, or from a company that opted into backorder), not "overselling is permitted".
+- **Retrying a timed-out `POST /pos/sales` is safe *only* if you resend the same `Idempotency-Key`.** With the same key the server replays the **original** invoice (HTTP 201, matched by uid — no duplicate, no double post); a retry that arrives while the original is still committing returns **409** "This sale is still being processed…" — **not terminal**: keep the key and resend it. It is only a **blind** retry *without* the `Idempotency-Key` header that creates a SECOND sale (legacy non-idempotent path). Always send (and reuse) an `Idempotency-Key` per sale attempt — persisted to device storage **before** the POST — or check for the resulting invoice before retrying (shared **idempotency** contract — `Idempotency-Key`, ADR-0042 / commit f08fb08, [§11 §4.1a](11-errors-offline-idempotency.md)).
 
 ---
 

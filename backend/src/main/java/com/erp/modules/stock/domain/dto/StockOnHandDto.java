@@ -8,8 +8,9 @@ import java.math.BigDecimal;
  *
  * <p>Derived flags ({@code negative}, {@code low}) are computed here, not stored on the entity
  * (D-2 — negative is a flagged, queryable state, not a forbidden one; low is indicator-only).
- * Quantities serialise as strings to avoid JS precision loss (the global Long-as-string config
- * handles Long ids; BigDecimal are also serialised as strings via the same Jackson config).
+ * Long ids serialise as JSON strings to avoid JS precision loss (global Jackson config).
+ * BigDecimal quantities serialise as JSON <em>numbers</em> — they are NOT stringified. Clients
+ * must parse them as numbers; treating them as strings breaks at runtime.
  *
  * <p>{@code productCode} and {@code productName} are enriched by the service layer from the
  * products module (cross-module boundary: service calls ProductService, not a repository join).

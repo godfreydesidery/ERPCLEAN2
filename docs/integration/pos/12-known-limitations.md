@@ -53,9 +53,9 @@ not by a `200`-vs-`201` distinction.
 
 **Concurrent in-flight duplicate.** The duplicate `INSERT` blocks until the winner commits, then
 returns the winner's original invoice. In the narrow window where the marker row exists but
-`invoice_uid` is not yet stamped, the duplicate gets **HTTP `409`** — *"A POS sale with this
-Idempotency-Key is still in progress; retry shortly"*. This specific `409` is **retryable**: resend
-the **same** key after a short delay.
+`invoice_uid` is not yet stamped, the duplicate gets **HTTP `409`** — *"This sale is still being
+processed. Please try again in a moment."* This `409` is **retryable and not terminal**: keep the
+key and resend it after a short delay.
 
 **Scope & rules.**
 - **Per company** — namespaced by the authenticated session's company. The key need only be unique
@@ -65,10 +65,24 @@ the **same** key after a short delay.
 - A **failed / rolled-back** sale frees the key — the next send with the same key creates the sale
   normally.
 
-**Client guidance.** Generate one key per logical sale attempt and reuse it across retries. On an
-ambiguous outcome, simply **resend with the same key** rather than reconciling out of band; if a
-replay returns an invoice `uid` you already have, treat it as the original (see
-[11 — Errors, Offline & Idempotency](./11-errors-offline-idempotency.md)).
+**The residual gap is on the client — and it is a real one.** The server side is closed; the
+guarantee still fails if the key is not **durable**. A key held in memory dies with the process, so
+an app killed between the server committing and the response landing loses it, the cashier re-rings
+the basket, a fresh key is minted, and a **second finalised invoice** is created — duplicate
+revenue, VAT, COGS and stock issue. The client contract is therefore:
+
+1. **Persist the key (with the request body) to device storage BEFORE the POST.**
+2. **Clear it only on a confirmed terminal outcome** — the invoice came back, or the server
+   definitively rejected the request. Ambiguity is not an outcome.
+3. **On relaunch, reconcile an unresolved key** by replaying the stored body under the stored key —
+   never silently re-ring the basket, and block the till until it is settled.
+4. **Never release the key on a `409`** — that response means the original attempt is still
+   processing, and freeing the key there re-opens the very duplicate window this closes.
+
+Full contract and the status→action table: [11 — Errors, Offline & Idempotency
+§4.1a/§4.2a](./11-errors-offline-idempotency.md). The shipped OrbixPOS client implements the durable
+slot and the unfinished-sale recovery prompt; its live payment path still releases the slot on a
+`409`, which is the one rule above it does not yet meet — build to the contract, not to that path.
 
 ---
 

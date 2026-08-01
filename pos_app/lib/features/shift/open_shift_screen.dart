@@ -297,12 +297,14 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                         ],
                       ),
                       const SizedBox(height: 3),
+                      // A busy tile shows WHO holds it instead of the till code —
+                      // the code identifies a till the row above already names,
+                      // whereas "In use" left the cashier guessing which
+                      // colleague to go and ask.
                       Text(
                           !occupied
                               ? t.code
-                              : (mine
-                                  ? '${t.code} · Your shift'
-                                  : '${t.code} · In use'),
+                              : (mine ? '${t.code} · Your shift' : t.occupantHolder),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -385,16 +387,23 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
     final sessionUid = t.openSessionUid;
     final since = _since(t.openSessionOpenedAt);
 
-    if (!mine || sessionUid == null) {
+    if (sessionUid == null) {
+      // Occupied, but the session reference did not come through, so we cannot
+      // offer resume or close. When the shift is OURS this must not fall
+      // through to the "another cashier holds it" wording — that would name the
+      // signed-in cashier and tell them to go and ask themselves.
+      if (!mine) {
+        await _showHeldByColleague(t, since);
+        return;
+      }
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
-          title: const Text('Till in use'),
+          title: const Text('Your shift'),
           content: Text(
-            'Another cashier has a shift open on ${t.name}$since. A shift only '
-            'ends once the drawer is counted — that cashier can close it from '
-            'their own sign-in, or an administrator can close it in the ERP.',
+            'You have a shift open on ${t.name}$since, but we could not load it '
+            'just now. Refresh and try again.',
             style: const TextStyle(color: AppColors.ink2),
           ),
           actions: [
@@ -406,6 +415,39 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
       return;
     }
 
+    if (!mine) {
+      await _showHeldByColleague(t, since);
+      return;
+    }
+
+    await _showOwnShift(t, sessionUid, since, app);
+  }
+
+  /// Someone else holds this till. Names them when the server could resolve the
+  /// name, and falls back to neutral wording when it could not.
+  Future<void> _showHeldByColleague(PosTill t, String since) async {
+    await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+          title: const Text('Till in use'),
+          content: Text(
+            '${t.occupantHolder} has a shift open on ${t.name}$since. A shift '
+            'only ends once the drawer is counted — that cashier can close it '
+            'from their own sign-in, or an administrator can close it in the ERP.',
+            style: const TextStyle(color: AppColors.ink2),
+          ),
+          actions: [
+            OrbixButton(
+                label: 'Got it', onPressed: () => Navigator.pop(context)),
+          ],
+        ),
+      );
+  }
+
+  /// Our own shift is still open on this till: offer resume, or a real cash-up.
+  Future<void> _showOwnShift(
+      PosTill t, String sessionUid, String since, AppData app) async {
     final canClose = app.can(Perms.sessionClose);
     final action = await showDialog<String>(
       context: context,

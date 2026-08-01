@@ -39,20 +39,39 @@ public record PosSaleRequest(
          * with {@code restrictedKind != NONE}, either this must be {@code true} OR the cashier
          * must hold {@code POS.SALE.AGE_OVERRIDE}; otherwise the sale is rejected with 409.
          */
-        Boolean ageVerified
+        Boolean ageVerified,
+        /**
+         * Below-cost approval acknowledgement (V93). Optional — existing clients that omit this
+         * field are treated as {@code false}. Only consulted when the company's below-cost policy is
+         * {@code APPROVE}: a line priced at or below cost then goes through if this is {@code true}
+         * AND the cashier holds {@code SALES.BELOW_COST.OVERRIDE}; otherwise the sale is rejected
+         * with 409. Passed straight through to the invoice finalise, which is where the policy is
+         * enforced.
+         */
+        Boolean belowCostApproved
 ) {
 
     /** Backward-compatible constructor (no tenders, no ageVerified) — existing callers unaffected. */
     public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
                           List<LineItem> lines, BigDecimal tenderedAmount, String notes) {
-        this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes, null);
+        this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes,
+                null, null);
     }
 
     /** Backward-compatible constructor (tenders, no ageVerified) — preserves ADR-0042 D-3 callers. */
     public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
                           List<LineItem> lines, List<PosTender> tenders,
                           BigDecimal tenderedAmount, String notes) {
-        this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes, null);
+        this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes,
+                null, null);
+    }
+
+    /** Backward-compatible constructor (ageVerified, no below-cost approval) — ADR-0044 D-3a callers. */
+    public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
+                          List<LineItem> lines, List<PosTender> tenders,
+                          BigDecimal tenderedAmount, String notes, Boolean ageVerified) {
+        this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes,
+                ageVerified, null);
     }
 
     public record LineItem(

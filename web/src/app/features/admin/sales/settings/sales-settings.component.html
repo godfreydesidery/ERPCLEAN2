@@ -3,7 +3,7 @@
     <h1 class="h4 mb-1">Sales Settings</h1>
     <p class="subtitle">
       <i class="bi bi-gear me-1" aria-hidden="true"></i>
-      Configure SO approval threshold per company.
+      Configure SO approval, stock and pricing policies per company.
     </p>
   </header>
 
@@ -118,6 +118,27 @@
                     <span class="hint">
                       When on, a sale is blocked if there isn't enough stock. Turn off to allow
                       overselling (backorder).
+                    </span>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label small text-muted mb-1" for="belowCostAction">
+                      Selling at or below cost
+                    </label>
+                    <select id="belowCostAction" name="belowCostAction"
+                            class="form-select"
+                            style="max-width:320px"
+                            aria-describedby="belowCostHint"
+                            [ngModel]="fBelowCostAction()"
+                            (ngModelChange)="fBelowCostAction.set($event)"
+                            [disabled]="saving() || !canEdit()">
+                      @for (opt of belowCostOptions; track opt.value) {
+                        <option [value]="opt.value">{{ opt.label }}</option>
+                      }
+                    </select>
+                    <span class="hint" id="belowCostHint">
+                      What happens when an item is priced the same as, or less than, what it cost to
+                      buy. {{ belowCostHint() }}
                     </span>
                   </div>
 

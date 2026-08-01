@@ -49,8 +49,11 @@ public record ApiResponse<T>(T data, List<String> errors, Object meta) { }
 **Error** (any non-2xx):
 
 ```json
-{ "data": null, "errors": ["POS session 9f3c-... is not OPEN."], "meta": null }
+{ "data": null, "errors": ["This POS session is not OPEN."], "meta": null }
 ```
+
+(Note the message names no uid, id, or field — user-facing error text deliberately carries no
+internal detail, so there is nothing in it for a client to parse.)
 
 ### Rules a client MUST rely on
 
@@ -96,19 +99,25 @@ sub-cases, because one is **terminal** and the other is **retryable**:
 
 | 409 sub-case | Example `errors[0]` | Retryable? | What the client should do |
 | --- | --- | --- | --- |
-| **Domain-rule violation** (`ConflictException`) | `"POS session <uid> is not OPEN."` | **No** | The session must be re-opened (or a new one opened). Do not auto-retry the sale; surface to the cashier. |
+| **Domain-rule violation** (`ConflictException`) | `"This POS session is not OPEN."` | **No** | The session must be re-opened (or a new one opened). Do not auto-retry the sale; surface to the cashier. |
+| **Not enough stock** (`ConflictException`) | `"Not enough stock of <product> to complete this sale — 3 available, 5 requested. Ask a supervisor to enable backorder if this should be allowed."` | **No** | The line would take on-hand negative and the company has not opted into backorder. Reduce the quantity, drop the line, or escalate. Resending the same bytes will fail identically. |
 | **Business-state conflict** (`IllegalStateException`) | `"Cannot finalise an invoice with no lines."`, `"Tenders under-cover the gross total..."`, `"Credit limit exceeded for customer <uid>. ... Requires SALES.CREDIT.OVERRIDE permission."` | **No** | The request itself is wrong (empty cart, under-tender, over-limit). Fix the request / obtain override; do not blind-retry. |
 | **Optimistic-lock conflict** (`OptimisticLockingFailureException` / `StaleObjectStateException` / jakarta `OptimisticLockException`) | `"This record was modified by another transaction. Please reload and try again."` | **Yes (transient)** | Reload the affected resource and retry. Expected under contention (e.g. concurrent stock-on-hand). |
-| **Idempotency-key in progress** (sale path only) | `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` | **Yes (transient)** | A concurrent in-flight duplicate caught the original sale after it reserved the key but before it stamped the invoice uid. Resend the **same** `Idempotency-Key` after a short delay; you will receive the winner's original invoice. See [§4](#4-idempotency-provided). |
+| **Sale still being processed** (sale path only, key sent) | `"This sale is still being processed. Please try again in a moment."` | **Yes (transient)** — and **NOT terminal** | The original attempt under this `Idempotency-Key` reserved the key but has not yet stamped its invoice uid. **Keep the key**, wait, and resend the *same* key; you will get the winner's original invoice. **Never release the key on this response** — see [§4.2a](#42a-a-409-is-not-a-terminal-answer). |
 | **DB unique violation** (`23505`) | `"A record with the same unique identifier already exists."` | No | Conflicting state already exists. |
 | **DB FK violation** (`23503`) | `"The referenced record does not exist or has been removed."` | No | A referenced row is missing/removed. |
 
 > **Why this distinction is load-bearing:** the credit-limit and empty-cart checks are
 > `IllegalStateException`, which `GlobalExceptionHandler.handleIllegalState` maps to **409**, not
 > 400. So a POS client that treats *all* 409s as "transient, retry" will hammer the server on a
-> genuinely rejected sale. **Match on the message family above, or simpler: only auto-retry a 409
-> whose message is exactly the optimistic-lock string or the idempotency-key "still in progress"
-> string** — and, for the latter, only ever resend the *same* `Idempotency-Key`.
+> genuinely rejected sale — while a client that treats all 409s as *terminal* will do something far
+> worse on the sale path: throw away a live `Idempotency-Key` and re-ring a sale that was still
+> committing. Branch on the sub-case: **auto-retry only the optimistic-lock and
+> still-being-processed cases**, and for the latter always by resending the *same* key.
+>
+> Message wording is display copy and can change between releases. On the sale path the safe rule
+> does not need the text at all: **a 409 on a POST that carried an `Idempotency-Key` never releases
+> that key.**
 
 ---
 
@@ -216,7 +225,7 @@ curl -i -X POST https://erp.example.com/api/v1/pos/sales \
 | `401` | Missing/expired token, or user no longer active. |
 | `403` | Caller lacks `POS.SALE.CREATE`, or cannot act in the session's company. |
 | `404` | Unknown `sessionUid`, `customerId`, `productId`, or `unitId`. |
-| `409` | `"POS session <uid> is not OPEN."`; `"Credit limit exceeded ... Requires SALES.CREDIT.OVERRIDE permission."`; tender under-cover; optimistic-lock (retryable); `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` (retryable — resend the SAME key after a short delay). |
+| `409` | `"This POS session is not OPEN."`; **not enough stock** for a line (see §2.1); `"Credit limit exceeded ... Requires SALES.CREDIT.OVERRIDE permission."`; tender under-cover; optimistic-lock (retryable); `"This sale is still being processed. Please try again in a moment."` (retryable — keep the key and resend the SAME key after a short delay). |
 | `415` | Body sent without `application/json`. |
 | `422` | `currency` not enabled for the session's company. |
 
@@ -325,12 +334,82 @@ posting, payment, or `SALE_FINALISED` event. This is grounded in the actual back
 | **Header** | `Idempotency-Key` — opaque string, **`<=80` chars**, optional. |
 | **Scope** | **Per company** (namespaced by the authenticated session's company). The key need only be unique within a company; the same value in another company is independent. |
 | **Replay** (same key, original already committed) | Returns the **original finalised `SalesInvoiceDto`** — no second invoice / stock issue / GL/AR / payment / `SALE_FINALISED` event. **A replay still returns HTTP `201`** (the controller hardcodes `CREATED`), so identify a replay by **matching the returned invoice `uid`** to one you already hold — *not* by a 200-vs-201 distinction. |
-| **Concurrent in-flight duplicate** | The duplicate `INSERT` **blocks until the winner commits**, then returns the winner's original invoice. In the narrow window where the marker row exists but `invoice_uid` is not yet stamped, the duplicate gets **`409 "A POS sale with this Idempotency-Key is still in progress; retry shortly."`** — this specific `409` is **retryable**: resend the *same* key after a short delay. |
+| **Concurrent in-flight duplicate** | The duplicate `INSERT` **blocks until the winner commits**, then returns the winner's original invoice. In the narrow window where the marker row exists but `invoice_uid` is not yet stamped, the duplicate gets **`409 "This sale is still being processed. Please try again in a moment."`** — this `409` is **retryable and non-terminal**: keep the key and resend it after a short delay. |
 | **Omitting the header** | Legacy **non-idempotent** behaviour — a blind retry creates a **duplicate** sale. The client **MUST** send the header to get the guarantee. |
 | **Failed / rolled-back sale** | **Frees the key** — the next send with the same key creates the sale normally. |
 
 > **The body is unchanged.** Idempotency is carried entirely by the header; `PosSaleRequest` itself
 > gained no key field.
+
+### 4.1a The key must be DURABLE on the client — the half that is your job
+
+The server guarantee is only as strong as the client's grip on the key. A key that lives in a
+variable, a widget field, or "the current sale" object in memory buys you nothing in the one
+scenario it exists for: the app is killed **between the server committing and the response
+arriving**. The key dies with the process, the cashier re-rings the basket, a *fresh* key is minted,
+and the server — correctly, having never seen that key — creates a **second finalised invoice**:
+duplicate revenue, VAT, COGS and stock issue, with the customer charged twice.
+
+The contract, in order:
+
+1. **Persist before you POST.** Write the key to device storage (with enough context to replay it —
+   the exact request body, the session uid, the basket total, a timestamp) and let that write
+   complete **before** the sale request goes out. This ordering is the whole mechanism; a key
+   persisted *after* the response is not a durable key.
+2. **Keep it for the whole attempt.** One slot is enough — a till rings one sale at a time, and an
+   unresolved attempt must block the next one. If a slot is occupied, do not let the cashier start
+   a new sale until it is settled.
+3. **Clear it only on a confirmed terminal outcome** — the sale came back finalised (**201**), or
+   the server *definitively* rejected it (a clean `400`/`403`/`404`/`415`/`422`). Ambiguity is not
+   an outcome, and **a `409` is not one either** ([§4.2a](#42a-a-409-is-not-a-terminal-answer)).
+   Nothing else clears the slot.
+4. **Reconcile it on relaunch, never silently re-ring.** If the app starts and finds an unresolved
+   slot, resolve it *before* the till can take a new sale: replay the stored body under the stored
+   key. The server returns the original invoice if it committed, and completes the sale exactly once
+   if it never arrived — either way exactly one invoice exists. Prompt the cashier ("an earlier sale
+   was interrupted — check it now"); do not auto-fire it silently and do not offer "just ring it
+   again" as the easy path.
+5. **Make storage failures non-fatal.** The persistence layer is a safety net around the sale path;
+   a net that can knock the sale over is worse than none. Log and continue rather than blocking a
+   cashier mid-payment on a local storage hiccup.
+6. **Fresh key per genuinely new basket.** Reuse is only ever for retries of the *same* logical
+   sale. Reusing a key across two different baskets makes the second one return the first one's
+   invoice.
+
+> **The shipped OrbixPOS client implements rules 1, 2, 4, 5 and 6** — a single durable slot in
+> device storage, written before the POST, and an unfinished-sale prompt on relaunch that replays
+> under the stored key (and that correctly *keeps* the slot on a `409`). **Known gap:** on the
+> live payment path a `409` currently *releases* the slot, so rule 3 above is the contract, not yet
+> a description of that path. Build to the contract.
+
+### 4.2a A `409` is not a terminal answer
+
+On the sale path, a `409` in response to a keyed POST may mean **the original attempt is still being
+processed** — its outcome not yet readable — or it may be a business rejection of the basket
+(session not OPEN, not enough stock, credit limit). What it never means is *"the key is spent"*: in
+the first case the original may still commit, and in the second the basket is what has to change.
+
+**Keep the key either way. Keep the till blocked. Correct the basket if the message says to, then
+try again.**
+
+Releasing the key here is the single most dangerous thing a client can do with this endpoint: it
+frees the till to ring the same basket under a new key while the original is still committing — and
+re-opens the exact duplicate-invoice window the durable key was introduced to close. "It returned an
+error, so nothing happened" is precisely the wrong inference.
+
+The safe branch on the sale path is therefore:
+
+| Response | Slot | Till |
+| --- | --- | --- |
+| `201` with an invoice | **clear** | released — print/reprint from the returned DTO |
+| `409` "still being processed" | **keep** | stays blocked; retry the *same* key after a short delay |
+| `409` business rejection (session not OPEN, not enough stock, credit limit) | **keep** | stays blocked until the *basket* is corrected — the same bytes will fail again, so do **not** loop the retry. Fix the basket, then resend under the same key |
+| Timeout / dropped connection / `500` | **keep** | stays blocked; retry the same key |
+| Clean terminal `4xx` (`400`/`403`/`404`/`415`/`422`) | clear | released — the request itself was rejected; surface the message |
+
+For the last row, "clear" still does not mean "assume it did not post": if the definite answer is
+one that does not *prove* the sale never happened (e.g. the shift has since been closed), release
+the till but point the cashier at today's sales to check before re-ringing. Never guess a negative.
 
 ### 4.2 What this means for retries — the new primary mechanism
 
@@ -344,7 +423,7 @@ by the outbox poller (within ~1s, retried on failure). Retry safety:
    downstream postings — a replay never re-queues them.)
 2. **Sending the same `Idempotency-Key` on retry is the PRIMARY safe-retry mechanism.** On *any*
    ambiguous outcome of the *same* logical sale — timeout, dropped connection, `500`, or a `409
-   "...still in progress..."` — **resend the SAME `Idempotency-Key`**. If the original committed you
+   "...still being processed..."` — **resend the SAME `Idempotency-Key`**. If the original committed you
    get its invoice back (match on `uid`); if it had not, the sale is created normally. This closes
    the "server committed but client never learned" window that previously could not be closed.
 3. **Reconcile-before-resend is now the FALLBACK** — only needed when the header was *omitted* (so
@@ -361,17 +440,20 @@ by the outbox poller (within ~1s, retried on failure). Retry safety:
      finalised invoice already exists, **treat the original as succeeded** — do not resend; reprint
      the receipt from the existing invoice.
 4. **Generate and persist a durable local sale id before the first POST**, and keep it across app
-   restarts. Use it as the `Idempotency-Key` on **every** attempt of the *same* logical sale, and
-   (optionally) also send it as `X-Request-Id` for log correlation. Use a fresh id for genuinely new
-   sales. Note `X-Request-Id` itself does **not** deduplicate — `JwtRequestContextFilter` only puts
-   it in the SLF4J MDC and echoes it back; only `Idempotency-Key` dedupes.
+   restarts — this is a hard requirement, not a nicety; the full contract is
+   [§4.1a](#41a-the-key-must-be-durable-on-the-client--the-half-that-is-your-job). Use it as the
+   `Idempotency-Key` on **every** attempt of the *same* logical sale, and (optionally) also send it
+   as `X-Request-Id` for log correlation. Use a fresh id for genuinely new sales. Note
+   `X-Request-Id` itself does **not** deduplicate — `JwtRequestContextFilter` only puts it in the
+   SLF4J MDC and echoes it back; only `Idempotency-Key` dedupes.
 5. **Branch retries on HTTP status, not message text** (see [§2.1](#21-the-409-family-the-one-that-matters-for-pos)):
    * `400` / `403` / `404` / `415` / `422` — **terminal**: fix the request, do not retry the same
-     bytes.
-   * `409` — **retry only** if `errors[0]` is exactly
-     `"This record was modified by another transaction. Please reload and try again."` **or**
-     `"A POS sale with this Idempotency-Key is still in progress; retry shortly."` (the latter only
-     by resending the *same* key); otherwise terminal.
+     bytes. Safe to release the key.
+   * `409` on a **keyed sale POST** — treat as **not terminal for the key**
+     ([§4.2a](#42a-a-409-is-not-a-terminal-answer)): keep the slot and retry the same key after a
+     short delay. Some 409s (session not OPEN, not enough stock, credit limit) do mean the *basket*
+     is rejected and must be corrected before it can succeed — but that is something for the cashier
+     to fix on the next attempt, not a reason to free the key and let the till re-ring.
    * `401` — refresh the token (`POST /api/v1/auth/refresh`) or re-login, then retry once **with the
      same `Idempotency-Key`**.
    * `500` / network failure — **ambiguous**: resend the **same `Idempotency-Key`** (rule 2). Only if
@@ -403,6 +485,9 @@ later". Offline POS therefore has hard constraints:
   period may outlast the cashier's session (it could be closed/reconciled by then). On reconnect,
   re-check `GET /pos/sessions/uid/{uid}` before replaying; if it is no longer OPEN, the queued sales
   cannot be posted to it and must be handled as an exception (open a new session / escalate).
+  Conversely, note that going offline — or being killed — never *closes* a session: nothing but an
+  explicit cash-up does (see [08 §1](08-sessions.md)). After a restart, find your still-open shift
+  with `GET /pos/sessions?companyId=…&status=OPEN` rather than opening a second one.
 
 ### 4.4 Capabilities summary
 
@@ -416,12 +501,18 @@ later". Offline POS therefore has hard constraints:
 | Outbox dedup protects against double-POST | n/a for HTTP retries — covered by `Idempotency-Key`; the outbox still dedupes same-event re-delivery |
 | Ledger posted synchronously with the 201 | **No** (stock/GL/AR are eventual, ~1s poll) |
 | Offline sale ingest endpoint | **None** |
-| Safe-retry responsibility | **Client sends the key**; the server then guarantees exactly-once |
+| Safe-retry responsibility | **Client sends a DURABLE key** ([§4.1a](#41a-the-key-must-be-durable-on-the-client--the-half-that-is-your-job)); the server then guarantees exactly-once |
+| A `409` on a keyed sale POST | **Not terminal** — keep the key ([§4.2a](#42a-a-409-is-not-a-terminal-answer)) |
+| Session auto-close / timeout sweeper | **None** — a shift ends only by an explicit cash-up |
 
 With the `Idempotency-Key` header, a deployment **can** get exactly-once sale posting, provided the
-client always sends a durable key per logical sale and resends the *same* key on retry. The only
-residual responsibility on the client is to **generate and persist that key** before the first POST
-and reuse it; if you omit the header you are back to the keyless reconcile-before-resend discipline.
+client always sends a durable key per logical sale and resends the *same* key on retry. The residual
+responsibility on the client is real and specific: **persist the key to storage before the first
+POST, clear it only on a confirmed terminal outcome, and reconcile an unresolved key on relaunch
+instead of re-ringing** ([§4.1a](#41a-the-key-must-be-durable-on-the-client--the-half-that-is-your-job),
+[§4.2a](#42a-a-409-is-not-a-terminal-answer)). A key held only in memory provides no protection
+against the crash it exists for. If you omit the header you are back to the keyless
+reconcile-before-resend discipline.
 
 ---
 
@@ -429,14 +520,15 @@ and reuse it; if you omit the header you are back to the keyless reconcile-befor
 
 | Status | Auto-retry? | Action |
 | --- | --- | --- |
-| `201` / `200` | n/a | Persist result locally; reprint from it. On a sale, match the returned `uid` to detect an idempotent replay. |
+| `201` / `200` | n/a | Persist result locally; reprint from it. On a sale, match the returned `uid` to detect an idempotent replay, then **clear the durable key slot**. |
 | `400` | No | Fix the field(s) in `errors[]`; resend corrected. |
 | `401` | After refresh/login | `POST /auth/refresh` then retry once (reuse the same `Idempotency-Key`). |
 | `403` | No | Cashier lacks permission / wrong scope — escalate. |
 | `404` | No | Bad id/uid — fix and resend. |
 | `409` optimistic-lock | Yes | Reload affected resource, retry. |
-| `409` idempotency "still in progress" | Yes | Resend the **same** `Idempotency-Key` after a short delay. |
-| `409` other | No | Terminal business conflict — surface to cashier. |
+| `409` "still being processed" | Yes | **Keep the key**; resend the **same** `Idempotency-Key` after a short delay. |
+| `409` not enough stock | No | Reduce/drop the line or escalate for backorder — the same bytes will fail again. |
+| `409` other | No (for the bytes) | Terminal business conflict — surface to cashier. On a keyed sale POST, still **do not release the key** ([§4.2a](#42a-a-409-is-not-a-terminal-answer)). |
 | `415` | No | Set `Content-Type: application/json`. |
 | `422` | No | Use a currency enabled for the company. |
 | `500` / network | **Yes — resend the SAME `Idempotency-Key`** | The key makes it safe (returns the original invoice if it had committed). If the key was omitted, reconcile before any resend. |

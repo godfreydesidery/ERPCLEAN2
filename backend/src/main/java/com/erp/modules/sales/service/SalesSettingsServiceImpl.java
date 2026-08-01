@@ -53,6 +53,16 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
         s.setSoApprovalEnabled(req.soApprovalEnabled());
         s.setSoApprovalThresholdAmount(req.soApprovalThresholdAmount());
         s.setAllowNegativeStock(req.allowNegativeStock());
+        // V93: an absent below-cost policy means OFF — the same answer getByCompanyUid gives for a
+        // company with no row at all, and the same one BelowCostGuard enforces. Keeping the three
+        // in lockstep is the whole point (see NegativeStockSettingCrossLayerContractTest).
+        // Absent means "leave as it is", NOT "switch it off". Mapping null to OFF would let any
+        // caller that omits the field silently disable a configured BLOCK/APPROVE policy — a
+        // safety control that turns itself off without anyone choosing to. A new row still starts
+        // at OFF, because that is the entity's own default.
+        if (req.belowCostAction() != null) {
+            s.setBelowCostAction(req.belowCostAction());
+        }
         if (req.currency() != null && !req.currency().isBlank()) {
             s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }
