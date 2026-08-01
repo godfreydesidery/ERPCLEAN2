@@ -33,9 +33,11 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.modules.sales.service.SalesSettingsService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.events.DomainEventDispatcher;
@@ -67,6 +69,7 @@ class SalesByBranchQueryIT extends PostgresIntegrationTest {
     @Autowired private DashboardService        dashboardService;
     @Autowired private SalesInvoiceService     salesInvoiceService;
     @Autowired private TaxRateSeeder           taxRateSeeder;
+    @Autowired private SalesSettingsService    salesSettingsService;
     @Autowired private CustomerService         customerService;
     @Autowired private AgentService            agentService;
     @Autowired private ProductService          productService;
@@ -115,6 +118,12 @@ class SalesByBranchQueryIT extends PostgresIntegrationTest {
                 rootAId, "sbb_root", true, companyA.getId(), branchA1.getId(), null));
 
         taxRateSeeder.seedDefaults(companyA.getId());
+
+        // This suite is about the sales-by-branch query, not stock — its products are
+        // never received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                companyA.getUid(), false, null, "TZS", true));
 
         pcsUid       = unitService.create(new CreateUnitOfMeasureRequest(
                 companyA.getUid(), "PCS", "Pieces")).uid();

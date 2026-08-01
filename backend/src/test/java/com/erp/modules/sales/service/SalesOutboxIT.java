@@ -36,6 +36,7 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.platform.common.money.MoneyDto;
@@ -79,6 +80,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
 
     @Autowired private SalesInvoiceService salesInvoiceService;
     @Autowired private TaxRateSeeder taxRateSeeder;
+    @Autowired private SalesSettingsService salesSettingsService;
     @Autowired private CustomerService customerService;
     @Autowired private AgentService agentService;
     @Autowired private ProductService productService;
@@ -120,6 +122,12 @@ class SalesOutboxIT extends PostgresIntegrationTest {
                 rootId, "so_root", true, companyA.getId(), branchA.getId(), null));
 
         taxRateSeeder.seedDefaults(companyA.getId());
+
+        // This suite is about outbox event emission, not stock — its products are
+        // never received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                companyA.getUid(), false, null, "TZS", true));
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));

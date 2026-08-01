@@ -44,6 +44,7 @@ import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PosSaleRequest;
 import com.erp.modules.sales.domain.dto.PosSessionDto;
 import com.erp.modules.sales.domain.dto.PosTillDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
@@ -86,6 +87,7 @@ class PosAgeRestrictionIT extends PostgresIntegrationTest {
     @Autowired private FiscalCalendarService   fiscalCalendarService;
     @Autowired private GlConfigService         glConfigService;
     @Autowired private TaxRateSeeder           taxRateSeeder;
+    @Autowired private SalesSettingsService    salesSettingsService;
 
     @Autowired private CashBankAccountService  cashBankAccountService;
     @Autowired private UnitOfMeasureService    unitService;
@@ -126,6 +128,13 @@ class PosAgeRestrictionIT extends PostgresIntegrationTest {
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
         taxRateSeeder.seedDefaults(company.getId());
+
+        // This suite is about the age-restriction gate, not stock — its products are never
+        // received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately. The POS negative-stock
+        // cases live in PosSaleServiceIT.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
 
         // Cash bank account on the seeded CoA account 1000 (CASH)
         String cashGlUid = chartOfAccountRepo

@@ -104,10 +104,10 @@ public class PosSaleServiceImpl implements PosSaleService {
             if (reserved == 0) {
                 var marker = idempotency.findByCompanyIdAndIdemKey(companyId, idempotencyKey)
                         .orElseThrow(() -> new ConflictException(
-                                "Idempotency-Key already used but its result is unavailable; retry."));
+                                "This sale is still being processed. Please try again in a moment."));
                 if (marker.getInvoiceUid() == null) {
                     throw new ConflictException(
-                            "A POS sale with this Idempotency-Key is still in progress; retry shortly.");
+                            "This sale is still being processed. Please try again in a moment.");
                 }
                 return invoiceService.getByUid(marker.getInvoiceUid());
             }

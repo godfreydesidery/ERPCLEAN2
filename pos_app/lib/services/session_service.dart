@@ -17,13 +17,24 @@ class SessionService {
   Future<PosSession> getByUid(String uid) async =>
       PosSession.fromJson(asMap(await _api.get('/pos/sessions/uid/$uid')));
 
+  /// Lists sessions for the company, newest first (the server orders them).
+  ///
+  /// [status] filters server-side — pass `'OPEN'` to look for a live shift. The
+  /// filter is not optional in practice: an unfiltered page 0 is every session
+  /// the company ever had, so once there are more than [size] of them the one
+  /// OPEN row falls off the page and the shift looks lost.
   Future<List<PosSession>> list(
     String companyId, {
+    String? status,
     int page = 0,
     int size = 50,
   }) async {
-    final data = await _api.get('/pos/sessions',
-        query: {'companyId': companyId, 'page': page, 'size': size});
+    final data = await _api.get('/pos/sessions', query: {
+      'companyId': companyId,
+      'status': status,
+      'page': page,
+      'size': size,
+    });
     return asList(data, PosSession.fromJson);
   }
 

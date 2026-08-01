@@ -51,8 +51,10 @@ import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.modules.sales.service.SalesSettingsService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
 import com.erp.modules.stock.domain.dto.OpeningBalanceRequest;
@@ -154,6 +156,7 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     @Autowired private CustomerService         customerService;
     @Autowired private AgentService            agentService;
     @Autowired private SalesInvoiceService     salesInvoiceService;
+    @Autowired private SalesSettingsService    salesSettingsService;
     @Autowired private TaxRateSeeder           taxRateSeeder;
 
     // ---- Events ----
@@ -485,6 +488,13 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         // Product created but never received → avg_cost remains null
         ProductDto product = stockableProduct("NoCostWidget");
 
+        // Deliberate backorder opt-in: an unreceived product is precisely the fixture this D-2 edge
+        // needs, and NegativeStockGuard would otherwise block the sale before it could finalise.
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
         SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
 

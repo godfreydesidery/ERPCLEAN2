@@ -37,6 +37,7 @@ import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesReportDto;
 import com.erp.modules.sales.domain.dto.SalesReportRowDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.stock.domain.dto.StockReceivedPayload;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
@@ -108,6 +109,7 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
     @Autowired private CustomerService         customerService;
     @Autowired private AgentService            agentService;
     @Autowired private SalesInvoiceService     salesInvoiceService;
+    @Autowired private SalesSettingsService    salesSettingsService;
     @Autowired private TaxRateSeeder           taxRateSeeder;
 
     // ---- Stock (to read back avg_cost) ----
@@ -244,6 +246,13 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
         // exact production-crash data shape for BUG #1.
         ProductDto product = stockableProduct("SalesRpt-NoCost");
 
+        // Deliberate backorder opt-in: this test NEEDS an unreceived product (that is what makes
+        // avg_cost null), and NegativeStockGuard would otherwise block the sale before finalise.
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
         BigDecimal sellQty = new BigDecimal("3");
         SalesInvoiceDto draft = makeSaleInvoice(product.uid(), sellQty);
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());

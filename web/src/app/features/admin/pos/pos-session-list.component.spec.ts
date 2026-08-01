@@ -21,6 +21,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
+import { UserService } from '../user/user.service';
 import { PosService } from './pos.service';
 import type { PosSessionPage } from './pos.service';
 import { PosSessionListComponent } from './pos-session-list.component';
@@ -80,6 +81,12 @@ function makeBed(opts: { listImpl?: () => any; canOpen?: boolean } = {}) {
         useValue: { list: vi.fn(() => of([{ uid: 'BR1', id: '2', name: 'HQ', code: 'HQ', companyId: '10', companyUid: 'CO1', isDefault: true, status: 'ACTIVE', timeZone: 'UTC' }])) },
       },
       {
+        provide: UserService,
+        useValue: {
+          list: vi.fn(() => of([{ id: '99', uid: 'U99', username: 'amina', displayName: 'Amina K' }])),
+        },
+      },
+      {
         provide: AlertService,
         useValue: { success: vi.fn(), error: vi.fn() },
       },
@@ -100,8 +107,33 @@ describe('PosSessionListComponent — init', () => {
     await vi.runAllTimersAsync();
 
     expect(svc.listSessions).toHaveBeenCalledTimes(1);
-    expect(svc.listSessions).toHaveBeenCalledWith('10', 0, 20);
+    // Defaults to OPEN — a supervisor opens this screen to find a stuck till.
+    expect(svc.listSessions).toHaveBeenCalledWith('10', 0, 20, 'OPEN');
     expect(comp.state()).toBe('idle');
+  });
+
+  it('re-queries with the chosen status and drops the filter for "all"', async () => {
+    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+    svc.listSessions.mockClear();
+
+    comp.onStatusChange('CLOSED');
+    await vi.runAllTimersAsync();
+    expect(svc.listSessions).toHaveBeenLastCalledWith('10', 0, 20, 'CLOSED');
+
+    comp.onStatusChange('');
+    await vi.runAllTimersAsync();
+    expect(svc.listSessions).toHaveBeenLastCalledWith('10', 0, 20, undefined);
+  });
+
+  it('resolves the cashier column to a display name, never a raw id', async () => {
+    const comp = TestBed.createComponent(PosSessionListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.cashierLabel('99')).toBe('Amina K');
+    expect(comp.cashierLabel('404')).toBe('—');
+    expect(comp.cashierLabel(null)).toBe('—');
   });
 
   it('isEmpty is true when no sessions returned', async () => {

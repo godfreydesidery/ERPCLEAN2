@@ -38,9 +38,11 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.modules.sales.service.SalesSettingsService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
 import com.erp.modules.stock.domain.dto.OpeningBalanceRequest;
@@ -102,6 +104,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     @Autowired private StockService            stockService;
     @Autowired private SalesInvoiceService     salesInvoiceService;
     @Autowired private TaxRateSeeder           taxRateSeeder;
+    @Autowired private SalesSettingsService    salesSettingsService;
     @Autowired private CustomerService         customerService;
     @Autowired private AgentService            agentService;
     @Autowired private ProductService          productService;
@@ -147,6 +150,13 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         setContext(companyA, branchA);
 
         taxRateSeeder.seedDefaults(companyA.getId());
+
+        // This suite exercises the ASYNC stock handler, whose documented behaviour is to let
+        // on-hand go negative (BR-STOCK-03) — several tests below assert exactly that. The
+        // synchronous NegativeStockGuard would reject those sales before they ever reached the
+        // outbox, so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                companyA.getUid(), false, null, "TZS", true));
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));

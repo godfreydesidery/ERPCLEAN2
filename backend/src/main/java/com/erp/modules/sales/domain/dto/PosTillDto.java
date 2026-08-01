@@ -1,6 +1,7 @@
 package com.erp.modules.sales.domain.dto;
 
 import com.erp.platform.common.domain.MasterStatus;
+import java.time.Instant;
 
 /**
  * Response DTO for a POS till (ADR-0029 D-5).
@@ -8,6 +9,12 @@ import com.erp.platform.common.domain.MasterStatus;
  * <p>{@code hasOpenSession} (busy-day-sim bugfix) tells the till picker whether a till is
  * currently occupied, so the cashier finds out BEFORE attempting to open a session — not via a
  * 409 after the fact. {@code true} when a {@code PosSession} in status OPEN exists for this till.
+ *
+ * <p>The {@code openSession*} fields describe WHO is holding it (orphaned-shift recovery,
+ * 2026-08). "Occupied" alone is a dead end: a cashier whose app was force-closed cannot tell
+ * their own abandoned shift from a colleague's live one. With the occupant's id and open time the
+ * till app offers "resume/close your own shift" and otherwise explains that a supervisor must
+ * close it. All four are {@code null} when no session is open.
  */
 public record PosTillDto(
         Long id,
@@ -18,5 +25,8 @@ public record PosTillDto(
         String name,
         Long cashBankAccountId,
         MasterStatus status,
-        boolean hasOpenSession
+        boolean hasOpenSession,
+        String openSessionUid,
+        Long openSessionCashierId,
+        Instant openSessionOpenedAt
 ) {}

@@ -26,15 +26,22 @@ import org.springframework.transaction.annotation.Transactional;
  * committed. Blocking here, before the triggering write commits, is what keeps a rejected sale from
  * ever reaching the outbox.
  *
- * <p><b>Scope — simple stockable lines only.</b> Mirrors {@code SaleIssueStockHandler.processLine}'s
- * own branching:
+ * <p><b>Scope — lines that are issued as themselves.</b> Mirrors the branching in
+ * {@code SaleIssueStockHandler.processLine}, using the very same predicate
+ * ({@link RecipeExplosionResolver#shouldExplodeAtIssue}) so what is checked here and what is
+ * deducted there can never drift apart:
  * <ul>
  *   <li>non-stockable products (services) never move stock — skipped, exactly as the handler skips
  *       them (BR-STOCK-02/04);</li>
- *   <li>composed/BOM products explode to their components at issue time and typically carry no
- *       on-hand row of their own — checking the composed product's own id would false-positive
- *       block every kit/bundle sale. Skipped here (out of scope for this pass); a future ADR can
- *       extend the guard to check each exploded component's availability if that becomes a real gap.</li>
+ *   <li>products that EXPLODE at issue time (ADR-0058: a point-of-sale kit with
+ *       {@code product_components}, or a non-stockable phantom assembled via a BOM) carry no on-hand
+ *       row of their own — checking the parent's own id would false-positive block every kit sale.
+ *       Skipped here (out of scope for this pass); a future ADR can extend the guard to check each
+ *       exploded component's availability if that becomes a real gap;</li>
+ *   <li>a STOCKABLE finished good whose only recipe is a manufacturing BOM is make-to-stock: the
+ *       handler issues it as ITSELF, so it IS checked here. It used to be skipped (the guard tested
+ *       the broader {@code isComposed}), which let such a product go straight negative with the
+ *       setting on — the guard/handler predicate drift this class no longer has.</li>
  * </ul>
  *
  * <p>Availability = {@code stock_on_hand.quantity − reserved_qty} at the branch default location
@@ -64,7 +71,7 @@ public class NegativeStockGuard {
      * @param companyId         tenant
      * @param branchId          branch the sale issues stock from
      * @param productId         the line product's internal id
-     * @param productUid        the line product's uid — used only to test compose-ness
+     * @param productUid        the line product's uid — used only to test whether it explodes at issue
      * @param productStockable  the line product's own {@code stockable} flag
      * @param productName       for the user-facing message only
      * @param qtyRequestedBase  requested quantity, base units
@@ -73,7 +80,7 @@ public class NegativeStockGuard {
     public void assertAvailable(Long companyId, Long branchId,
                                 Long productId, String productUid, boolean productStockable,
                                 String productName, BigDecimal qtyRequestedBase) {
-        if (!productStockable || explosion.isComposed(productUid)) {
+        if (!productStockable || explosion.shouldExplodeAtIssue(productUid, productStockable)) {
             return; // no direct movement against this product's own SKU — nothing to guard here
         }
         if (qtyRequestedBase == null || qtyRequestedBase.compareTo(BigDecimal.ZERO) <= 0) {
@@ -82,12 +89,15 @@ public class NegativeStockGuard {
 
         boolean allowNegative = settings.findByCompanyId(companyId)
                 .map(SalesSettings::isAllowNegativeStock)
-                // No Sales Settings row yet → the company has not opted into stock control, so it is
-                // NOT guarded (backorder allowed). Blocking is the default the moment Sales Settings
-                // is saved: the entity/DB default and the web toggle both default to block. (Owner
-                // decision 2026-07-05 — "allow until configured": avoids blocking every sale for a
-                // freshly-created, un-configured company.)
-                .orElse(true);
+                // No Sales Settings row → BLOCK (fail-safe). A row is now provisioned by
+                // SalesSettingsSeeder when the company is created (and healed on re-provision), so
+                // "un-configured" should not occur; if it somehow does, the safe reading of a missing
+                // row is the same as the value every other layer reports for it — the entity/DB
+                // default and the web toggle both say block. This deliberately REVERSES the earlier
+                // "allow until configured" fallback (owner decision 2026-07-05): it disagreed with
+                // what the Sales Settings screen showed for the very same missing row, so a company
+                // that had never opened the screen oversold while being told it was protected.
+                .orElse(false);
         if (allowNegative) {
             return;
         }

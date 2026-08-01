@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_exception.dart';
@@ -27,6 +28,8 @@ class AppData {
     this.mode = BusinessMode.supermarket,
     this.busy = false,
     this.error,
+    this.notice,
+    this.cashierId,
     this.defaultCustomer,
     this.defaultAgent,
     this.agents = const [],
@@ -42,6 +45,15 @@ class AppData {
   final BusinessMode mode;
   final bool busy;
   final String? error;
+
+  /// A non-blocking message about something that did not work but does not stop
+  /// the cashier — e.g. the open-shift lookup failed, so an occupied till may be
+  /// their own shift rather than a colleague's. Shown as a strip, never a modal.
+  final String? notice;
+
+  /// The signed-in cashier's own user id (the JWT `sub`). Used to tell "your
+  /// abandoned shift" apart from "someone else's live shift" on a busy till.
+  final String? cashierId;
 
   final Customer? defaultCustomer;
   final Agent? defaultAgent;
@@ -78,6 +90,9 @@ class AppData {
     bool? busy,
     String? error,
     bool clearError = false,
+    String? notice,
+    bool clearNotice = false,
+    String? cashierId,
     Customer? defaultCustomer,
     Agent? defaultAgent,
     List<Agent>? agents,
@@ -93,6 +108,8 @@ class AppData {
       mode: mode ?? this.mode,
       busy: busy ?? this.busy,
       error: clearError ? null : (error ?? this.error),
+      notice: clearNotice ? null : (notice ?? this.notice),
+      cashierId: cashierId ?? this.cashierId,
       defaultCustomer: defaultCustomer ?? this.defaultCustomer,
       defaultAgent: defaultAgent ?? this.defaultAgent,
       agents: agents ?? this.agents,
@@ -188,26 +205,46 @@ class AppController extends Notifier<AppData> {
 
     // Resume an existing OPEN session for this cashier (orphaned-shift recovery
     // after a restart / re-login) instead of forcing a duplicate-open later.
+    //
+    // The status filter is essential: unfiltered, this is every session the
+    // company ever had, so past one page the still-OPEN row is simply not there
+    // and the cashier is locked out of a till they themselves hold.
+    //
+    // "No open shift" and "we couldn't look" are different answers and must not
+    // be swallowed into the same silence — a miss is the normal case, a failure
+    // is why a cashier is left staring at an "In use" till with no explanation.
+    final sub = jwtSub(ref.read(tokenManagerProvider).bundle?.accessToken);
     PosSession? resumable;
+    String? notice;
     try {
-      final sub = jwtSub(ref.read(tokenManagerProvider).bundle?.accessToken);
       if (sub != null) {
         final open = await ref
             .read(sessionServiceProvider)
-            .list(context.companyId, size: 50);
+            .list(context.companyId, status: PosSessionStatus.open.wire, size: 50);
         resumable = open
             .where((s) => s.status.isOpen && s.cashierId == sub)
             .firstOrNull;
       }
-    } catch (_) {/* best-effort */}
+    } on ApiException catch (e) {
+      debugPrint('POS resume lookup failed: ${e.statusCode} ${e.message}');
+      notice = "We couldn't check whether you already have a shift open. "
+          'If your till shows as in use, open it again from the list below.';
+    } catch (e) {
+      debugPrint('POS resume lookup failed: $e');
+      notice = "We couldn't check whether you already have a shift open. "
+          'If your till shows as in use, open it again from the list below.';
+    }
 
     state = state.copyWith(
       phase: resumable != null ? AppPhase.register : AppPhase.openShift,
       me: me,
       context: context,
       shift: resumable,
+      cashierId: sub,
       busy: false,
       clearError: true,
+      notice: notice,
+      clearNotice: notice == null,
       defaultCustomer: walkIn,
       defaultAgent: defaultAgent,
       agents: agents,
@@ -228,6 +265,25 @@ class AppController extends Notifier<AppData> {
           await ref.read(sessionServiceProvider).open(tillUid, openingFloat);
       state = state.copyWith(
           phase: AppPhase.register, shift: session, mode: mode, busy: false);
+    } on ApiException catch (e) {
+      state = state.copyWith(busy: false, error: e.message);
+    }
+  }
+
+  /// Pick up a shift this cashier already has open on a till — the recovery path
+  /// after a force-close, where the session is still OPEN server-side because
+  /// nothing but a counted cash-up may ever close it.
+  Future<void> resumeShift(String sessionUid, BusinessMode mode) async {
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final session =
+          await ref.read(sessionServiceProvider).getByUid(sessionUid);
+      state = state.copyWith(
+          phase: AppPhase.register,
+          shift: session,
+          mode: mode,
+          busy: false,
+          clearNotice: true);
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
     }
@@ -268,6 +324,8 @@ class AppController extends Notifier<AppData> {
   }
 
   void clearError() => state = state.copyWith(clearError: true);
+
+  void clearNotice() => state = state.copyWith(clearNotice: true);
 
   /// Strips the "Bad state:" prefix that StateError.toString() adds, so context
   /// errors (e.g. "This user is not assigned to any company.") read cleanly.

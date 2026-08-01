@@ -38,8 +38,10 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.modules.sales.service.SalesSettingsService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
@@ -114,6 +116,7 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
     // ---- Sales prerequisites (copied from SalesPostingHandlerIT) ----
     @Autowired private SalesInvoiceService    salesInvoiceService;
     @Autowired private TaxRateSeeder          taxRateSeeder;
+    @Autowired private SalesSettingsService   salesSettingsService;
     @Autowired private CustomerService        customerService;
     @Autowired private AgentService           agentService;
     @Autowired private ProductService         productService;
@@ -176,6 +179,12 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
 
         // Sales prerequisites (matches SalesPostingHandlerIT setUp exactly)
         taxRateSeeder.seedDefaults(company.getId());
+
+        // This suite is about VAT return reconciliation, not stock — its products are
+        // never received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
 
         pcsUid = unitService.create(
                 new CreateUnitOfMeasureRequest(companyUid, "PCS", "Pieces")).uid();

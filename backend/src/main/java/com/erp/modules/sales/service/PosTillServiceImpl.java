@@ -4,6 +4,7 @@ import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.PosTillDto;
+import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.entity.PosTill;
 import com.erp.modules.sales.domain.enums.PosSessionStatus;
 import com.erp.modules.sales.repository.PosSessionRepository;
@@ -126,11 +127,19 @@ public class PosTillServiceImpl implements PosTillService {
                 .getId();
     }
 
+    /**
+     * Maps a till, naming its occupant when one exists. The open session is loaded once and reused
+     * for every field (no extra query beyond the occupancy check that was always here). Only the
+     * cashier's numeric id is exposed — resolving the display name needs an IAM lookup this module
+     * does not have, and the till app matches the id against its own signed-in user anyway.
+     */
     private PosTillDto toDto(PosTill t) {
-        boolean hasOpenSession = sessions
-                .findByPosTillIdAndStatus(t.getId(), PosSessionStatus.OPEN)
-                .isPresent();
+        var open = sessions.findByPosTillIdAndStatus(t.getId(), PosSessionStatus.OPEN);
         return new PosTillDto(t.getId(), t.getUid(), t.getCompanyId(), t.getBranchId(),
-                t.getCode(), t.getName(), t.getCashBankAccountId(), t.getStatus(), hasOpenSession);
+                t.getCode(), t.getName(), t.getCashBankAccountId(), t.getStatus(),
+                open.isPresent(),
+                open.map(PosSession::getUid).orElse(null),
+                open.map(PosSession::getCashierId).orElse(null),
+                open.map(PosSession::getOpenedAt).orElse(null));
     }
 }

@@ -381,8 +381,8 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         ProductDto product = stockableProduct("DirectGuardBlockWidget", "900");
         publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
 
-        // Explicit BLOCK — a company with no Sales Settings row now defaults to allow (backorder),
-        // so the block cases must opt in to blocking (allow_negative_stock = false).
+        // Explicit BLOCK (allow_negative_stock = false) — stated outright rather than relying on the
+        // no-row fallback, so this test keeps asserting the same thing if that fallback ever moves.
         setCtx();
         salesSettingsService.update(new UpdateSalesSettingsRequest(
                 company.getUid(), false, null, "TZS", false));
@@ -423,7 +423,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         ProductDto product = stockableProduct("DirectGuardAggWidget", "901");
         publishAndDispatchReceipt(product, new BigDecimal("5"), new BigDecimal("400"));
 
-        // Explicit BLOCK (no-row now defaults to allow).
+        // Explicit BLOCK (allow_negative_stock = false), stated outright.
         setCtx();
         salesSettingsService.update(new UpdateSalesSettingsRequest(
                 company.getUid(), false, null, "TZS", false));
@@ -699,7 +699,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         List<SalesOrderLineDto> soLines = salesOrderService.listLines(so.uid());
         String solUid = soLines.get(0).uid();
 
-        // Explicit BLOCK — no Sales Settings row now defaults to allow, so opt in to blocking.
+        // Explicit BLOCK (allow_negative_stock = false), stated outright.
         setCtx();
         salesSettingsService.update(new UpdateSalesSettingsRequest(
                 company.getUid(), false, null, "TZS", false));
