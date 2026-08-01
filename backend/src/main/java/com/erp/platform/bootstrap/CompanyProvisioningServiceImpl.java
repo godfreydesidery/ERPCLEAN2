@@ -17,6 +17,7 @@ import com.erp.modules.hr.service.HrStatutorySeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
+import com.erp.modules.sales.service.SalesSettingsSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
 import java.util.List;
@@ -42,6 +43,9 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
 
     private final UnitOfMeasureSeeder    unitSeeder;
     private final TaxRateSeeder          taxRateSeeder;
+    // Sales Settings row (allow_negative_stock default = block). Provisioned up front so no layer
+    // has to invent a meaning for a missing row.
+    private final SalesSettingsSeeder    salesSettingsSeeder;
     // GL seeders (ADR-0013 D-15)
     private final ChartOfAccountService  chartOfAccountService;
     private final FiscalCalendarService  fiscalCalendarService;
@@ -78,6 +82,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     CompanyProvisioningServiceImpl(
             UnitOfMeasureSeeder    unitSeeder,
             TaxRateSeeder          taxRateSeeder,
+            SalesSettingsSeeder    salesSettingsSeeder,
             ChartOfAccountService  chartOfAccountService,
             FiscalCalendarService  fiscalCalendarService,
             GlConfigService        glConfigService,
@@ -97,6 +102,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             CurrencyEnablementSeeder currencyEnablementSeeder) {
         this.unitSeeder               = unitSeeder;
         this.taxRateSeeder            = taxRateSeeder;
+        this.salesSettingsSeeder      = salesSettingsSeeder;
         this.chartOfAccountService    = chartOfAccountService;
         this.fiscalCalendarService    = fiscalCalendarService;
         this.glConfigService          = glConfigService;
@@ -136,6 +142,11 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
 
         // VAT rates (ADR-0008 D-5b)
         taxRateSeeder.seedDefaults(companyId);
+
+        // Sales Settings row, defaults = SO approval off + negative stock BLOCKED. NegativeStockGuard
+        // reads this row on every sale-issue path; provisioning it here (and on re-provision) is what
+        // keeps the setting the Sales Settings screen shows and the setting the till enforces identical.
+        salesSettingsSeeder.seedDefaults(companyId);
 
         // Chart of Accounts, fiscal year + periods, GL config mappings (ADR-0013 D-15)
         chartOfAccountService.seedDefaults(companyId);

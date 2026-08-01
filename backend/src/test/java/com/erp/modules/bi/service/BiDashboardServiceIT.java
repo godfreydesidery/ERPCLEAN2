@@ -53,8 +53,10 @@ import com.erp.modules.sales.domain.dto.AddPaymentRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.modules.sales.service.SalesSettingsService;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
@@ -105,6 +107,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
     // ── Data setup beans ──────────────────────────────────────────────────────
     @Autowired private SalesInvoiceService    salesInvoiceService;
     @Autowired private TaxRateSeeder          taxRateSeeder;
+    @Autowired private SalesSettingsService   salesSettingsService;
     @Autowired private CustomerService        customerService;
     @Autowired private AgentService           agentService;
     @Autowired private SupplierService        supplierService;
@@ -169,6 +172,12 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
                 rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
 
         taxRateSeeder.seedDefaults(companyA.getId());
+
+        // This suite is about BI dashboard aggregation, not stock — its products are
+        // never received. NegativeStockGuard now reads a missing sales_settings row as BLOCK
+        // (fail-safe), so opt this company into backorder deliberately.
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                companyA.getUid(), false, null, "TZS", true));
         chartOfAccountService.seedDefaults(companyA.getId());
         fiscalCalendarService.seedCurrentYear(companyA.getId());
         glConfigService.seedDefaults(companyA.getId());

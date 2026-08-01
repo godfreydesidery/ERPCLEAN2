@@ -19,10 +19,38 @@ public interface PosSessionRepository extends JpaRepository<PosSession, Long> {
 
     Optional<PosSession> findByPosTillIdAndStatus(Long posTillId, PosSessionStatus status);
 
-    Page<PosSession> findByCompanyId(Long companyId, Pageable pageable);
+    /**
+     * Paged sessions for a company, <b>newest first</b>. The explicit order is load-bearing: the
+     * till app reads page 0 to find the cashier's still-OPEN shift after a restart, and an
+     * unordered page 0 can bury that row once the company has more lifetime sessions than fit on
+     * one page — the shift then looks lost and the till reads as permanently occupied.
+     */
+    @Query(value = """
+            SELECT s FROM PosSession s
+            WHERE s.companyId = :companyId
+            ORDER BY s.openedAt DESC, s.id DESC
+            """,
+            countQuery = "SELECT COUNT(s) FROM PosSession s WHERE s.companyId = :companyId")
+    Page<PosSession> findByCompanyId(@Param("companyId") Long companyId, Pageable pageable);
 
-    /** Paged sessions filtered by status — used by the POS checkout to load only OPEN sessions. */
-    Page<PosSession> findByCompanyIdAndStatus(Long companyId, PosSessionStatus status, Pageable pageable);
+    /**
+     * Paged sessions filtered by status — used by the POS checkout to load only OPEN sessions.
+     * Same newest-first order as {@link #findByCompanyId(Long, Pageable)} for the same reason.
+     */
+    @Query(value = """
+            SELECT s FROM PosSession s
+            WHERE s.companyId = :companyId
+              AND s.status = :status
+            ORDER BY s.openedAt DESC, s.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(s) FROM PosSession s
+            WHERE s.companyId = :companyId
+              AND s.status = :status
+            """)
+    Page<PosSession> findByCompanyIdAndStatus(@Param("companyId") Long companyId,
+                                              @Param("status") PosSessionStatus status,
+                                              Pageable pageable);
 
     /** All invoices for reconciliation total computation. */
     @Query("""

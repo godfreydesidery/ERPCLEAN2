@@ -25,6 +25,7 @@ import com.erp.modules.hr.service.HrStatutorySeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
+import com.erp.modules.sales.service.SalesSettingsSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
 import java.util.List;
@@ -46,6 +47,7 @@ class CompanyProvisioningServiceImplTest {
 
     @Mock UnitOfMeasureSeeder    unitSeeder;
     @Mock TaxRateSeeder          taxRateSeeder;
+    @Mock SalesSettingsSeeder    salesSettingsSeeder;
     @Mock ChartOfAccountService  chartOfAccountService;
     @Mock FiscalCalendarService  fiscalCalendarService;
     @Mock GlConfigService        glConfigService;
@@ -69,7 +71,7 @@ class CompanyProvisioningServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new CompanyProvisioningServiceImpl(
-                unitSeeder, taxRateSeeder, chartOfAccountService, fiscalCalendarService,
+                unitSeeder, taxRateSeeder, salesSettingsSeeder, chartOfAccountService, fiscalCalendarService,
                 glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
                 inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
                 crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
@@ -85,6 +87,7 @@ class CompanyProvisioningServiceImplTest {
 
         verify(unitSeeder, times(1)).seedDefaults(companyId);
         verify(taxRateSeeder, times(1)).seedDefaults(companyId);
+        verify(salesSettingsSeeder, times(1)).seedDefaults(companyId);
         verify(chartOfAccountService, times(1)).seedDefaults(companyId);
         verify(fiscalCalendarService, times(1)).seedCurrentYear(companyId);
         verify(glConfigService, times(1)).seedDefaults(companyId);

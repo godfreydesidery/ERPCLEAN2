@@ -1,6 +1,7 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
@@ -45,13 +46,16 @@ import com.erp.modules.sales.domain.dto.PosSaleRequest;
 import com.erp.modules.sales.domain.dto.PosSessionDto;
 import com.erp.modules.sales.domain.dto.PosTillDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.modules.sales.repository.SalesSettingsRepository;
 import com.erp.modules.stock.domain.dto.StockReceivedPayload;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventDispatcher;
@@ -111,6 +115,8 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
     @Autowired private PosTillService          tillService;
     @Autowired private PosSessionService       sessionService;
     @Autowired private PosSaleService          saleService;
+    @Autowired private SalesSettingsService    salesSettingsService;
+    @Autowired private SalesSettingsRepository salesSettingsRepo;
     @Autowired private SalesInvoiceRepository  invoiceRepo;
     @Autowired private StockOnHandRepository   stockOnHandRepo;
     @Autowired private JournalEntryRepository  journalEntryRepo;
@@ -200,7 +206,11 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
     @Test
     void processSale_cashSale_finalisesAndPersistsPosOrigin() {
         setRootCtx();
-        Long productId = productService.getByUid(pricedProduct("Bread", "1000")).id();
+        ProductDto product = productService.getByUid(pricedProduct("Bread", "1000"));
+        // Real stock behind the sale: NegativeStockGuard blocks a POS sale that would take on-hand
+        // negative, and this test is about the persisted origin, not about overselling.
+        receiveStock(product, new BigDecimal("20"), new BigDecimal("500"));
+        Long productId = product.id();
 
         setCashierCtx();
         SalesInvoiceDto result = saleService.processSale(null, cashSaleRequest(productId));
@@ -226,7 +236,10 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
     @Test
     void processSale_idempotencyReplay_returnsOriginalAndDoesNotDoublePost() {
         setRootCtx();
-        Long productId = productService.getByUid(pricedProduct("Sugar 1kg", "2000")).id();
+        ProductDto product = productService.getByUid(pricedProduct("Sugar 1kg", "2000"));
+        // Stocked, so the replay path is exercised rather than the negative-stock block.
+        receiveStock(product, new BigDecimal("20"), new BigDecimal("500"));
+        Long productId = product.id();
 
         setCashierCtx();
         PosSaleRequest req = cashSaleRequest(productId);
@@ -304,6 +317,64 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
                 .isTrue();
     }
 
+    // =========================================================================
+    // Negative-stock block on the POS path. The till is where the client's overselling actually
+    // happened, and until now NO test drove NegativeStockGuard through PosSaleService — the DIRECT
+    // invoice cases in DeliveryServiceIT were the only coverage. Both settings shapes are covered:
+    // an explicitly saved allow_negative_stock=false, and the far more common shape in the field,
+    // a company that has NO sales_settings row at all.
+    // =========================================================================
+
+    @Test
+    void processSale_exceedsOnHand_blocked_whenAllowNegativeStockSavedAsFalse() {
+        setRootCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false));
+
+        ProductDto product = productService.getByUid(pricedProduct("Cooking Oil 1L", "3000"));
+        receiveStock(product, new BigDecimal("2"), new BigDecimal("1500"));
+
+        setCashierCtx();
+        PosSaleRequest oversell = cashSaleRequest(product.id(), new BigDecimal("5"));
+        assertThatThrownBy(() -> saleService.processSale(null, oversell))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Not enough stock of Cooking Oil 1L")
+                .hasMessageContaining("2 available")
+                .hasMessageContaining("5 requested");
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("a blocked POS sale must leave on-hand untouched")
+                .isEqualByComparingTo(new BigDecimal("2"));
+        assertThat(invoiceRepo.findAll())
+                .as("a blocked POS sale must not leave an invoice behind")
+                .isEmpty();
+    }
+
+    @Test
+    void processSale_exceedsOnHand_blocked_whenNoSalesSettingsRowAtAll() {
+        // This company is created straight through the repository, so it has NO sales_settings row —
+        // exactly the state a company that never opened the Sales Settings screen is in. The guard
+        // must read that as BLOCK, matching what the screen reports for the same missing row.
+        setRootCtx();
+        assertThat(salesSettingsRepo.findByCompanyId(company.getId()))
+                .as("fixture precondition: no sales_settings row for this company")
+                .isEmpty();
+
+        ProductDto product = productService.getByUid(pricedProduct("Maize Flour 2kg", "4000"));
+        receiveStock(product, new BigDecimal("3"), new BigDecimal("2000"));
+
+        setCashierCtx();
+        PosSaleRequest oversell = cashSaleRequest(product.id(), new BigDecimal("4"));
+        assertThatThrownBy(() -> saleService.processSale(null, oversell))
+                .as("an un-configured company must not be able to oversell from the till")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Not enough stock of Maize Flour 2kg");
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("a blocked POS sale must leave on-hand untouched")
+                .isEqualByComparingTo(new BigDecimal("3"));
+    }
+
     // ------------------------------------------------------------------------- helpers
 
     /** Publishes+dispatches a STOCK.RECEIVED event so the product has on-hand before a sale. */
@@ -349,9 +420,14 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
 
     /** One-line exact-cash sale (no tenders => server settles exact gross in CASH; no ageVerified). */
     private PosSaleRequest cashSaleRequest(Long productId) {
+        return cashSaleRequest(productId, BigDecimal.ONE);
+    }
+
+    /** As above, for a specific quantity (used by the negative-stock cases). */
+    private PosSaleRequest cashSaleRequest(Long productId, BigDecimal qty) {
         return new PosSaleRequest(
                 sessionUid, customerId, null, "TZS",
-                List.of(new PosSaleRequest.LineItem(productId, unitId(), BigDecimal.ONE, null, null)),
+                List.of(new PosSaleRequest.LineItem(productId, unitId(), qty, null, null)),
                 null, BigDecimal.TEN, null, null);
     }
 

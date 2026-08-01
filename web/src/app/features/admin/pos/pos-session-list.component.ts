@@ -15,11 +15,15 @@ import { BranchService } from '../branch/branch.service';
 import { Branch } from '../models/branch.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { UserService } from '../user/user.service';
 import { PosService } from './pos.service';
 import type { PosSessionPage } from './pos.service';
 import { OpenSessionRequest, PosSessionDto, PosSessionStatus, PosTillDto } from './models/pos.model';
 
 const DEFAULT_SIZE = 20;
+
+/** '' = every status. */
+type StatusFilter = PosSessionStatus | '';
 
 interface LoadTrigger { page: number }
 
@@ -40,6 +44,7 @@ export class PosSessionListComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly branchService = inject(BranchService);
+  private readonly userService = inject(UserService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -61,6 +66,20 @@ export class PosSessionListComponent {
   readonly meta = signal<PageMeta>({ page: 0, size: DEFAULT_SIZE, totalElements: 0, totalPages: 0, hasNext: false });
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('idle');
   readonly currentPage = signal(0);
+
+  /**
+   * Status filter, defaulted to OPEN. A supervisor comes to this screen because
+   * a till is stuck, and the only rows that matter then are the ones still open —
+   * unfiltered they sit behind every session the company has ever run.
+   */
+  readonly statusFilter = signal<StatusFilter>('OPEN');
+
+  /**
+   * Cashier display names by user id, so a stranded session can be traced to a
+   * person. Best-effort: without USER.VIEW the column falls back to a dash — a
+   * raw internal id is no use to anyone.
+   */
+  readonly cashierNames = signal<Record<string, string>>({});
 
   // ── Tills for picker ───────────────────────────────────────────────────────
   readonly tills = signal<PosTillDto[]>([]);
@@ -93,14 +112,21 @@ export class PosSessionListComponent {
       map((): LoadTrigger => ({ page: 0 })),
     );
 
-    merge(companyTrigger$, this.immediateTrigger$)
+    const statusTrigger$ = toObservable(this.statusFilter).pipe(
+      skip(1),
+      distinctUntilChanged(),
+      map((): LoadTrigger => ({ page: 0 })),
+    );
+
+    merge(companyTrigger$, statusTrigger$, this.immediateTrigger$)
       .pipe(
         switchMap(({ page }) => {
           const companyId = this.selectedCompanyId();
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
-          return this.posService.listSessions(companyId, page, DEFAULT_SIZE);
+          const status = this.statusFilter();
+          return this.posService.listSessions(companyId, page, DEFAULT_SIZE, status || undefined);
         }),
         takeUntilDestroyed(),
       )
@@ -115,6 +141,28 @@ export class PosSessionListComponent {
       });
 
     this.loadCompanies();
+    this.loadCashierNames();
+  }
+
+  /** Best-effort user directory for the Cashier column. Silent on failure. */
+  private loadCashierNames(): void {
+    this.userService.list().subscribe({
+      next: (users) =>
+        this.cashierNames.set(
+          Object.fromEntries(users.map((u) => [u.id, u.displayName || u.username])),
+        ),
+      error: () => this.cashierNames.set({}),
+    });
+  }
+
+  /** Display name for a session's cashier, or a dash when it can't be resolved. */
+  cashierLabel(cashierId: string | null): string {
+    if (!cashierId) return '—';
+    return this.cashierNames()[cashierId] ?? '—';
+  }
+
+  onStatusChange(status: StatusFilter): void {
+    this.statusFilter.set(status);
   }
 
   private loadCompanies(): void {

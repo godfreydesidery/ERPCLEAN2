@@ -3,11 +3,13 @@ package com.erp.api;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseCostSuggestionDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
+import com.erp.modules.purchases.service.PurchaseCostSuggestionService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -37,9 +39,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService service;
+    private final PurchaseCostSuggestionService costSuggestions;
 
-    public PurchaseOrderController(PurchaseOrderService service) {
+    public PurchaseOrderController(PurchaseOrderService service,
+                                    PurchaseCostSuggestionService costSuggestions) {
         this.service = service;
+        this.costSuggestions = costSuggestions;
     }
 
     /** Create a DRAFT PO. companyUid in body; branch from RequestContext. */
@@ -136,6 +141,23 @@ public class PurchaseOrderController {
             + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
     public ApiResponse<List<PurchaseOrderLineDto>> listLines(@PathVariable String uid) {
         return ApiResponse.ok(service.listLines(uid));
+    }
+
+    /**
+     * Suggested unit cost for a product/unit the buyer is about to add to this PO — from the last
+     * quote, then the last actual purchase from this supplier, then the product's cost price.
+     * Advisory only (nothing is written, the buyer's cost field stays editable), so it is gated on
+     * the same verb as the line edit it feeds: PURCHASE.ORDER.CREATE.
+     *
+     * <p>Returns {@code null} data when no source has a price — the caller leaves the cost blank
+     * rather than defaulting to zero.
+     */
+    @GetMapping("/uid/{uid}/cost-suggestion")
+    @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.CREATE')")
+    public ApiResponse<PurchaseCostSuggestionDto> costSuggestion(@PathVariable String uid,
+                                                                  @RequestParam String productUid,
+                                                                  @RequestParam String unitUid) {
+        return ApiResponse.ok(costSuggestions.suggestUnitCost(uid, productUid, unitUid).orElse(null));
     }
 
     /** Place the order: DRAFT → ORDERED; assigns PO-####. */

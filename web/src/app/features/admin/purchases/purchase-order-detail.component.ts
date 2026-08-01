@@ -19,7 +19,11 @@ import {
 } from '../models/purchases.model';
 import { ProductService } from '../products/product.service';
 import { DocumentsService } from '../documents/documents.service';
-import { PurchasesService } from './purchases.service';
+import {
+  PurchaseCostSource,
+  PurchaseCostSuggestionDto,
+  PurchasesService,
+} from './purchases.service';
 import { PurchaseSettingsService } from './settings/purchase-settings.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
@@ -95,6 +99,18 @@ export class PurchaseOrderDetailComponent {
   readonly addingLine = signal(false);
   readonly lineFormError = signal<string | null>(null);
 
+  // ── Unit-cost suggestion (SAM client feedback 2026-08) ─────────────────────
+  /**
+   * The suggested unit cost for the currently picked product + unit, or null when the system holds
+   * no price for it. A default, never a lock: it pre-fills the cost box, which stays fully editable,
+   * and nothing is suggested when nothing was found (the field is left blank, no error shown).
+   */
+  readonly costSuggestion = signal<PurchaseCostSuggestionDto | null>(null);
+  /** True while the cost box still holds the suggested figure — cleared as soon as the buyer types. */
+  private readonly costPrefilled = signal(false);
+  /** Guards against a slow lookup landing after a newer product/unit pick. */
+  private suggestionRequest = 0;
+
   private readonly productSearch$ = new Subject<string>();
 
   // ── Place ──────────────────────────────────────────────────────────────────
@@ -148,6 +164,18 @@ export class PurchaseOrderDetailComponent {
   });
 
   readonly hasLines = computed(() => this.lines().length > 0);
+
+  /**
+   * True when the suggested price is in a different currency from the order. No conversion is
+   * attempted anywhere — the buyer is simply told, so a figure from a foreign-currency quote is
+   * never mistaken for an order-currency amount.
+   */
+  readonly costCurrencyMismatch = computed(() => {
+    const suggestion = this.costSuggestion();
+    const orderCurrency = this.po()?.currency;
+    if (!suggestion || !orderCurrency) return false;
+    return suggestion.currency !== orderCurrency;
+  });
 
   /**
    * The effective approval status: prefer the field from the PO DTO — the persisted, reconciled
@@ -297,7 +325,10 @@ export class PurchaseOrderDetailComponent {
         this.lineUnits.set(units);
         this.lineUnitsState.set('idle');
         // Default-select the first returned unit (the base unit).
-        if (units.length > 0) this.newLineUnitUid.set(units[0].uid);
+        if (units.length > 0) {
+          this.newLineUnitUid.set(units[0].uid);
+          this.loadCostSuggestion(units[0].uid);
+        }
       },
       error: () => this.lineUnitsState.set('error'),
     });
@@ -308,6 +339,7 @@ export class PurchaseOrderDetailComponent {
     this.selectedProduct.set(null);
     this.newLineUnitUid.set('');
     this.lineUnits.set([]);
+    this.clearCostSuggestion();
     this.productSearch$.next(q);
   }
 
@@ -316,6 +348,77 @@ export class PurchaseOrderDetailComponent {
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
     this.loadUnitsForProduct(product.uid);
+  }
+
+  /** Prices are per unit, so a new unit invalidates the current suggestion — look it up again. */
+  onLineUnitChange(unitUid: string): void {
+    this.newLineUnitUid.set(unitUid);
+    this.loadCostSuggestion(unitUid);
+  }
+
+  /**
+   * Once the buyer edits the cost, it is theirs: a later suggestion may still be shown as a hint,
+   * but it no longer overwrites what they typed.
+   */
+  onUnitCostChange(value: unknown): void {
+    this.newLineUnitCost.set(this.asStr(value));
+    this.costPrefilled.set(false);
+  }
+
+  // ── Unit-cost suggestion ───────────────────────────────────────────────────
+
+  /**
+   * Fetch the suggested unit cost for the picked product + unit and pre-fill the cost box with it.
+   * Only an empty box is filled, so a figure the buyer typed is never overwritten. Nothing found
+   * (or a failed lookup) shows no hint and no error — the box simply stays blank.
+   */
+  private loadCostSuggestion(unitUid: string): void {
+    const productUid = this.selectedProduct()?.uid;
+    this.costSuggestion.set(null);
+    // Anything WE filled in belongs to the previous product/unit — drop it before looking the new
+    // one up, so a carton price can never linger on a line that is now ordered per piece.
+    if (this.costPrefilled()) {
+      this.newLineUnitCost.set('');
+      this.costPrefilled.set(false);
+    }
+    if (!productUid || !unitUid) return;
+
+    const request = ++this.suggestionRequest;
+    this.purchasesService.costSuggestion(this.uid(), productUid, unitUid).subscribe({
+      next: (suggestion) => {
+        if (request !== this.suggestionRequest) return;   // a newer pick already superseded this
+        this.costSuggestion.set(suggestion);
+        if (suggestion && this.asStr(this.newLineUnitCost()) === '') {
+          this.newLineUnitCost.set(String(suggestion.amount));
+          this.costPrefilled.set(true);
+        }
+      },
+      error: () => {
+        if (request === this.suggestionRequest) this.costSuggestion.set(null);
+      },
+    });
+  }
+
+  private clearCostSuggestion(): void {
+    this.suggestionRequest++;
+    this.costSuggestion.set(null);
+    // Drop the box too when the figure in it is OURS: otherwise switching product leaves the old
+    // product's price sitting in a non-empty box, which then blocks the new product's suggestion
+    // from ever being applied — the line would be added at the previous product's price.
+    if (this.costPrefilled()) this.newLineUnitCost.set('');
+    this.costPrefilled.set(false);
+  }
+
+  /** Friendly provenance wording for the hint under the cost box. */
+  costSourceLabel(source: PurchaseCostSource): string {
+    switch (source) {
+      case 'LAST_QUOTE':
+        return 'From the last quote';
+      case 'LAST_PURCHASE':
+        return 'From the last purchase';
+      case 'PRODUCT_COST':
+        return 'From the product cost price';
+    }
   }
 
   /** Coerce a number-typed-input signal value to a trimmed string (ngModel on type="number"
@@ -361,6 +464,7 @@ export class PurchaseOrderDetailComponent {
         this.newLineQty.set('');
         this.newLineUnitCost.set('');
         this.newLineNote.set('');
+        this.clearCostSuggestion();
         this.addingLine.set(false);
         this.alerts.success('Line added');
         this.loadLines();

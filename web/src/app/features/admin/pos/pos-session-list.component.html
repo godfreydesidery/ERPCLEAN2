@@ -58,6 +58,19 @@
       </p>
     }
 
+    <!-- Status filter — defaults to OPEN so a stuck till is the first thing seen -->
+    <div class="mb-3" style="max-width:320px">
+      <label class="form-label small text-muted mb-1" for="statusFilter">Status</label>
+      <select id="statusFilter" name="statusFilter" class="form-select"
+              [ngModel]="statusFilter()"
+              (ngModelChange)="onStatusChange($event)">
+        <option value="OPEN">Open</option>
+        <option value="CLOSED">Closed</option>
+        <option value="RECONCILED">Reconciled</option>
+        <option value="">All statuses</option>
+      </select>
+    </div>
+
     <!-- Toolbar -->
     <div class="erp-toolbar">
       @if (canOpen()) {
@@ -146,7 +159,12 @@
       @default {
         @if (isEmpty()) {
           <div class="erp-empty">
-            <i class="bi bi-shop" aria-hidden="true"></i> No sessions yet. Open one above.
+            <i class="bi bi-shop" aria-hidden="true"></i>
+            @if (statusFilter()) {
+              No sessions with this status. Try another status.
+            } @else {
+              No sessions yet. Open one above.
+            }
           </div>
         } @else {
           <div class="erp-card">
@@ -157,6 +175,7 @@
                   <tr>
                     <th scope="col">Session #</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Cashier</th>
                     <th scope="col">Opened At</th>
                     <th scope="col" class="text-end">Opening Float</th>
                     <th scope="col" class="text-end">Expected Cash</th>
@@ -174,6 +193,7 @@
                           <span class="status-tag__dot"></span>{{ s.status }}
                         </span>
                       </td>
+                      <td>{{ cashierLabel(s.cashierId) }}</td>
                       <td class="text-muted">{{ s.openedAt ?? '—' }}</td>
                       <td class="num">{{ +s.openingFloatAmount | number:'1.2-2' }}</td>
                       <td class="num">
