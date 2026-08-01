@@ -26,6 +26,18 @@
  *      ('APPROVED' from the DTO — no local override needed).
  * 20.  canPlace is false and the awaiting-approval banner renders (no Place Order button) when
  *      po().approvalStatus is 'PENDING'.
+ *
+ * Suite C — unit-cost suggestion (SAM client feedback 2026-08):
+ * 21.  Picking a product looks the suggestion up for the PO + product + defaulted unit.
+ * 22.  A suggestion pre-fills the unit-cost box.
+ * 23.  No suggestion leaves the box blank and shows no hint (and no error).
+ * 24.  A cost the buyer typed is never overwritten by a later suggestion.
+ * 25.  Changing the unit re-looks-up the suggestion for the new unit.
+ * 25b. A pre-filled price is cleared when the new unit has no stored price (no stale carton
+ *      price left on a line now ordered per piece).
+ * 26.  costCurrencyMismatch flags a suggestion quoted in another currency.
+ * 27.  The hint renders and is wired to the input via aria-describedby.
+ * 28.  A failed lookup is silent: no hint, the typed cost untouched.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -82,11 +94,17 @@ const STUB_PRODUCT = {
   status: 'ACTIVE', companyId: '10',
 };
 
+/** BigDecimal serialises as a JSON *number*; asOf is an ISO date. */
+const STUB_SUGGESTION = {
+  amount: 12500.5, currency: 'TZS', source: 'LAST_PURCHASE' as const, asOf: '2026-07-12',
+};
+
 // ── Test-bed factory ───────────────────────────────────────────────────────────
 
 interface BedOptions {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
   submitForApprovalSpy?: ReturnType<typeof vi.fn>;
+  costSuggestionSpy?: ReturnType<typeof vi.fn>;
   settingsResponse?: object | 'error';
   poOverride?: Partial<typeof STUB_PO>;
 }
@@ -97,6 +115,10 @@ function makeBed(opts: BedOptions = {}) {
 
   const submitForApprovalSpy =
     opts.submitForApprovalSpy ?? vi.fn(() => of({ ...STUB_PO }));
+
+  // Default: no stored price for the product — the suites that don't exercise the suggestion
+  // then behave exactly as before (blank cost box, no hint).
+  const costSuggestionSpy = opts.costSuggestionSpy ?? vi.fn(() => of(null));
 
   const po = { ...STUB_PO, ...opts.poOverride };
 
@@ -122,6 +144,7 @@ function makeBed(opts: BedOptions = {}) {
           closeOrder: vi.fn(() => of(po)),
           voidOrder: vi.fn(() => of(po)),
           submitForApproval: submitForApprovalSpy,
+          costSuggestion: costSuggestionSpy,
         },
       },
       {
@@ -156,7 +179,7 @@ function makeBed(opts: BedOptions = {}) {
     ],
   });
 
-  return { listProductUnitsSpy, submitForApprovalSpy, settingsSpy };
+  return { listProductUnitsSpy, submitForApprovalSpy, settingsSpy, costSuggestionSpy };
 }
 
 // ── Suite A: unit-picker (pre-existing) ───────────────────────────────────────
@@ -426,5 +449,176 @@ describe('PurchaseOrderDetailComponent — Submit for Approval (F25)', () => {
     );
     expect(banner).toBeTruthy();
     expect(banner.textContent).toContain('Awaiting approval');
+  });
+});
+
+// ── Suite C: unit-cost suggestion (SAM client feedback 2026-08) ───────────────
+
+describe('PurchaseOrderDetailComponent — unit-cost suggestion', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function setup(opts: BedOptions = {}) {
+    const spies = makeBed(opts);
+    const fixture = TestBed.createComponent(PurchaseOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'PO-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    return { comp, fixture, ...spies };
+  }
+
+  /** Pick a product and let the unit list + suggestion lookup settle. */
+  async function pickProduct(comp: PurchaseOrderDetailComponent) {
+    comp.selectProduct(STUB_PRODUCT as any);
+    await vi.runAllTimersAsync();
+  }
+
+  // ── 21. looked up for the PO + product + the unit that was defaulted ────────
+
+  it('looks the suggestion up for the PO, product and defaulted unit after a product pick', async () => {
+    const { comp, costSuggestionSpy } = await setup({
+      costSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)),
+    });
+    await pickProduct(comp);
+
+    expect(costSuggestionSpy).toHaveBeenCalledWith('PO-UID-1', 'PROD-UID-1', 'U-EACH');
+  });
+
+  // ── 22. a suggestion pre-fills the cost box ────────────────────────────────
+
+  it('pre-fills the unit cost from the suggestion', async () => {
+    const { comp } = await setup({ costSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)) });
+    await pickProduct(comp);
+
+    expect(comp.newLineUnitCost()).toBe('12500.5');
+    expect(comp.costSuggestion()).toEqual(STUB_SUGGESTION);
+  });
+
+  // ── 23. nothing found → blank field, no hint, no error ─────────────────────
+
+  it('leaves the unit cost blank and shows no hint when nothing is found', async () => {
+    const { comp, fixture } = await setup({ costSuggestionSpy: vi.fn(() => of(null)) });
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    expect(comp.costSuggestion()).toBeNull();
+    expect(comp.newLineUnitCost()).toBe('');
+    expect(fixture.nativeElement.querySelector('#lineUnitCostHint')).toBeNull();
+    expect(comp.lineFormError()).toBeNull();
+  });
+
+  // ── 24. a typed cost is never overwritten ──────────────────────────────────
+
+  it('does not overwrite a unit cost the buyer typed', async () => {
+    const { comp } = await setup({ costSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)) });
+    await pickProduct(comp);
+
+    comp.onUnitCostChange('999');
+    comp.onLineUnitChange('U-BOX');
+    await vi.runAllTimersAsync();
+
+    expect(comp.newLineUnitCost()).toBe('999');
+    // The hint still reports where the (unapplied) suggestion came from.
+    expect(comp.costSuggestion()).toEqual(STUB_SUGGESTION);
+  });
+
+  // ── 25. a unit change re-looks-up the price ────────────────────────────────
+
+  it('re-looks-up the suggestion when the unit changes', async () => {
+    const { comp, costSuggestionSpy } = await setup({
+      costSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)),
+    });
+    await pickProduct(comp);
+
+    comp.onLineUnitChange('U-BOX');
+    await vi.runAllTimersAsync();
+
+    expect(comp.newLineUnitUid()).toBe('U-BOX');
+    expect(costSuggestionSpy).toHaveBeenLastCalledWith('PO-UID-1', 'PROD-UID-1', 'U-BOX');
+  });
+
+  // ── 25b. a pre-filled price never survives a unit change that finds nothing ─
+
+  it('clears a pre-filled cost when the new unit has no stored price', async () => {
+    const costSuggestionSpy = vi
+      .fn()
+      .mockReturnValueOnce(of(STUB_SUGGESTION))   // for the defaulted base unit
+      .mockReturnValueOnce(of(null));             // nothing quoted/bought in the pack unit
+    const { comp } = await setup({ costSuggestionSpy });
+    await pickProduct(comp);
+    expect(comp.newLineUnitCost()).toBe('12500.5');
+
+    comp.onLineUnitChange('U-BOX');
+    await vi.runAllTimersAsync();
+
+    expect(comp.newLineUnitCost()).toBe('');
+    expect(comp.costSuggestion()).toBeNull();
+  });
+
+  // ── 25c. a pre-filled price never survives a PRODUCT change (regression) ───
+
+  it('clears a pre-filled cost when the buyer switches product', async () => {
+    const costSuggestionSpy = vi
+      .fn()
+      .mockReturnValueOnce(of(STUB_SUGGESTION))                          // first product: 12500.5
+      .mockReturnValueOnce(of({ ...STUB_SUGGESTION, amount: 4500 }));    // second product: 4500
+    const { comp } = await setup({ costSuggestionSpy });
+    await pickProduct(comp);
+    expect(comp.newLineUnitCost()).toBe('12500.5');
+
+    // Typing in the product box to pick a different product must not strand the first product's
+    // price in the cost field — a non-empty box would also block the new suggestion from applying.
+    comp.onProductSearchChange('nails');
+    await vi.runAllTimersAsync();
+    expect(comp.newLineUnitCost()).toBe('');
+
+    await pickProduct(comp);
+
+    expect(comp.newLineUnitCost()).toBe('4500');
+  });
+
+  // ── 26. foreign-currency suggestion is flagged, not converted ──────────────
+
+  it('flags a suggestion priced in a different currency from the order', async () => {
+    const { comp } = await setup({
+      costSuggestionSpy: vi.fn(() => of({ ...STUB_SUGGESTION, currency: 'USD' })),
+    });
+    await pickProduct(comp);
+
+    // STUB_PO is in TZS
+    expect(comp.costCurrencyMismatch()).toBe(true);
+  });
+
+  // ── 27. hint renders and describes the input ───────────────────────────────
+
+  it('renders the provenance hint and links it to the cost input via aria-describedby', async () => {
+    const { comp, fixture } = await setup({
+      costSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)),
+    });
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    const hint: HTMLElement = fixture.nativeElement.querySelector('#lineUnitCostHint');
+    expect(hint).toBeTruthy();
+    expect(hint.textContent).toContain('From the last purchase');
+    expect(hint.textContent).toContain('12 Jul 2026');
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('#lineUnitCost');
+    expect(input.getAttribute('aria-describedby')).toBe('lineUnitCostHint');
+  });
+
+  // ── 28. a failed lookup is silent ──────────────────────────────────────────
+
+  it('stays silent when the lookup fails', async () => {
+    const { comp, fixture } = await setup({
+      costSuggestionSpy: vi.fn(() => throwError(() => new Error('network'))),
+    });
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    expect(comp.costSuggestion()).toBeNull();
+    expect(comp.newLineUnitCost()).toBe('');
+    expect(comp.lineFormError()).toBeNull();
+    expect(fixture.nativeElement.querySelector('#lineUnitCostHint')).toBeNull();
   });
 });

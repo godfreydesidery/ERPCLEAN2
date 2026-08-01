@@ -328,7 +328,7 @@
                   } @else {
                     <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
                             [ngModel]="newLineUnitUid()"
-                            (ngModelChange)="newLineUnitUid.set($event)"
+                            (ngModelChange)="onLineUnitChange($event)"
                             [disabled]="addingLine() || !selectedProduct()">
                       @if (!selectedProduct()) {
                         <option value="">Select a product first</option>
@@ -359,8 +359,22 @@
                   </label>
                   <input id="lineUnitCost" name="lineUnitCost" type="number" min="0" step="any"
                          class="form-control form-control-sm"
-                         [ngModel]="newLineUnitCost()" (ngModelChange)="newLineUnitCost.set($event)"
+                         [ngModel]="newLineUnitCost()" (ngModelChange)="onUnitCostChange($event)"
+                         [attr.aria-describedby]="costSuggestion() ? 'lineUnitCostHint' : null"
                          [disabled]="addingLine()" />
+                  <!-- Provenance of the pre-filled cost. Absent (and silent) when nothing was found. -->
+                  @if (costSuggestion(); as suggestion) {
+                    <p id="lineUnitCostHint" class="form-text small text-muted mb-0" aria-live="polite">
+                      {{ costSourceLabel(suggestion.source)
+                      }}@if (suggestion.asOf) {, {{ suggestion.asOf | date: 'd MMM y' }}}. You can change it.
+                      @if (costCurrencyMismatch()) {
+                        <span class="d-block text-warning-emphasis">
+                          That price is in {{ suggestion.currency }} and this order is in
+                          {{ po()?.currency }} — check the amount before adding the line.
+                        </span>
+                      }
+                    </p>
+                  }
                 </div>
                 <!-- Note -->
                 <div class="col-sm-2">

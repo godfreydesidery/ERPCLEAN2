@@ -26,6 +26,21 @@ export interface GoodsReceiptPage {
   meta: PageMeta;
 }
 
+/** Which stored price a suggested PO-line unit cost came from (backend PurchaseCostSource). */
+export type PurchaseCostSource = 'LAST_QUOTE' | 'LAST_PURCHASE' | 'PRODUCT_COST';
+
+/**
+ * A suggested unit cost for a purchase-order line, with its provenance.
+ * `amount` is a BigDecimal on the backend, which serialises as a JSON *number*.
+ * `asOf` is an ISO date (yyyy-MM-dd); null for a product-master cost, which has no date.
+ */
+export interface PurchaseCostSuggestionDto {
+  amount: number;
+  currency: string;
+  source: PurchaseCostSource;
+  asOf: string | null;
+}
+
 /**
  * Purchases API client.
  * list() methods use SKIP_UNWRAP to read both data and PageMeta.
@@ -72,6 +87,24 @@ export class PurchasesService {
 
   listOrderLines(uid: string): Observable<PurchaseOrderLineDto[]> {
     return this.http.get<PurchaseOrderLineDto[]>(`${this.poBase}/uid/${uid}/lines`);
+  }
+
+  /**
+   * Suggested unit cost for a product/unit about to be added to this PO (PURCHASE.ORDER.CREATE).
+   * Emits null when no stored price was found — the caller leaves the cost field blank.
+   * SILENT_ERROR: the suggestion is a convenience, so a failed lookup must never raise a toast
+   * over a buyer who is mid-entry; the field simply stays as it was.
+   */
+  costSuggestion(
+    uid: string,
+    productUid: string,
+    unitUid: string,
+  ): Observable<PurchaseCostSuggestionDto | null> {
+    const params = new HttpParams().set('productUid', productUid).set('unitUid', unitUid);
+    return this.http.get<PurchaseCostSuggestionDto | null>(
+      `${this.poBase}/uid/${uid}/cost-suggestion`,
+      { params, context: new HttpContext().set(SILENT_ERROR, true) },
+    );
   }
 
   // ── Purchase Orders — mutations ──────────────────────────────────────────────

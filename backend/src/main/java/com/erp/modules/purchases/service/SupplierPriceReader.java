@@ -1,8 +1,10 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.purchases.domain.entity.SupplierQuoteLine;
 import com.erp.modules.purchases.repository.SupplierQuoteLineRepository;
 import java.math.BigDecimal;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,5 +31,24 @@ public class SupplierPriceReader {
     @Transactional(readOnly = true)
     public Optional<BigDecimal> lastQuotedUnitCost(Long companyId, Long supplierId, Long productId) {
         return quoteLines.findLastQuotedUnitCost(companyId, supplierId, productId);
+    }
+
+    /**
+     * Most recent quote LINE for a (company, supplier, product, unit) combination — the amount plus
+     * the currency and quote date needed to show a buyer where a suggested cost came from
+     * ({@code PurchaseCostSuggestionService} step 1).
+     *
+     * <p>Unit-matched, unlike {@link #lastQuotedUnitCost}: the amount-only read above stays as-is for
+     * the plain last-quoted-price reference endpoint, which has no unit in hand.
+     *
+     * @return the line, or {@link Optional#empty()} when this supplier has never quoted that
+     *         product in that unit
+     */
+    @Transactional(readOnly = true)
+    public Optional<SupplierQuoteLine> lastQuotedLine(Long companyId, Long supplierId,
+                                                       Long productId, Long unitId) {
+        return quoteLines.findLastQuotedLine(companyId, supplierId, productId, unitId,
+                        PageRequest.of(0, 1))
+                .stream().findFirst();
     }
 }
