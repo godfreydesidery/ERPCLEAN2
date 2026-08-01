@@ -15,6 +15,7 @@ class PosTill {
     this.hasOpenSession = false,
     this.openSessionUid,
     this.openSessionCashierId,
+    this.openSessionCashierName,
     this.openSessionOpenedAt,
   });
 
@@ -40,7 +41,20 @@ class PosTill {
   final String? openSessionCashierId;
   final DateTime? openSessionOpenedAt;
 
+  /// The occupant's name. The id alone only ever answered "is this shift mine?";
+  /// this answers "then whose is it?". The server substitutes a neutral phrase
+  /// (never an id) for a cashier it can no longer name, so it prints as-is —
+  /// null only when the till is free, or against a server that predates it.
+  final String? openSessionCashierName;
+
   bool get isActive => status == 'ACTIVE';
+
+  /// Who is holding this till, for a sentence like "$holder has a shift open".
+  /// Falls back to the wording the till has always shown when unnamed.
+  String get occupantHolder {
+    final name = openSessionCashierName?.trim();
+    return (name == null || name.isEmpty) ? 'Another cashier' : name;
+  }
 
   /// True when this till is held by an open shift belonging to [cashierId].
   bool isHeldBy(String? cashierId) =>
@@ -61,6 +75,7 @@ class PosTill {
         hasOpenSession: asBool(j['hasOpenSession']),
         openSessionUid: asStr(j['openSessionUid']),
         openSessionCashierId: asStr(j['openSessionCashierId']),
+        openSessionCashierName: asStr(j['openSessionCashierName']),
         openSessionOpenedAt: asDate(j['openSessionOpenedAt']),
       );
 }

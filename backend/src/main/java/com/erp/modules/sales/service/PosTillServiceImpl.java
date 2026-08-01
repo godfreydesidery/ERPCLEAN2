@@ -2,6 +2,7 @@ package com.erp.modules.sales.service;
 
 import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.PosTillDto;
 import com.erp.modules.sales.domain.entity.PosSession;
@@ -18,8 +19,12 @@ import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,10 +32,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PosTillServiceImpl implements PosTillService {
 
+    /**
+     * Stands in for an occupant the IAM lookup can no longer name (account removed). Says the same
+     * thing the till app used to say on its own — friendly, and never an id.
+     */
+    private static final String UNNAMED_CASHIER = "Another cashier";
+
     private final PosTillRepository          tills;
     private final CompanyRepository          companies;
     private final CashBankAccountRepository  cashAccounts;
     private final PosSessionRepository       sessions;
+    private final UserLookupService          userLookup;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final SalesDepthNumberGenerator  numberGen;
@@ -39,6 +51,7 @@ public class PosTillServiceImpl implements PosTillService {
                                CompanyRepository companies,
                                CashBankAccountRepository cashAccounts,
                                PosSessionRepository sessions,
+                               UserLookupService userLookup,
                                ScopeGuard scopeGuard,
                                AuditService audit,
                                SalesDepthNumberGenerator numberGen) {
@@ -46,6 +59,7 @@ public class PosTillServiceImpl implements PosTillService {
         this.companies    = companies;
         this.cashAccounts = cashAccounts;
         this.sessions     = sessions;
+        this.userLookup   = userLookup;
         this.scopeGuard   = scopeGuard;
         this.audit        = audit;
         this.numberGen    = numberGen;
@@ -83,8 +97,14 @@ public class PosTillServiceImpl implements PosTillService {
     @Transactional(readOnly = true)
     public List<PosTillDto> listTillsByBranch(Long companyId, Long branchId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return tills.findByCompanyIdAndBranchId(companyId, branchId)
-                .stream().map(this::toDto).toList();
+        var rows = tills.findByCompanyIdAndBranchId(companyId, branchId);
+        // Occupancy first, then ONE name lookup for every occupant on the branch. Mapping row by
+        // row would ask IAM for a name per till — an N+1 that grows with the branch's till count.
+        var openByTillId = rows.stream().collect(Collectors.toMap(
+                PosTill::getId,
+                t -> sessions.findByPosTillIdAndStatus(t.getId(), PosSessionStatus.OPEN)));
+        var names = cashierNames(openByTillId.values());
+        return rows.stream().map(t -> toDto(t, openByTillId.get(t.getId()), names)).toList();
     }
 
     @Override
@@ -128,18 +148,41 @@ public class PosTillServiceImpl implements PosTillService {
     }
 
     /**
-     * Maps a till, naming its occupant when one exists. The open session is loaded once and reused
-     * for every field (no extra query beyond the occupancy check that was always here). Only the
-     * cashier's numeric id is exposed — resolving the display name needs an IAM lookup this module
-     * does not have, and the till app matches the id against its own signed-in user anyway.
+     * Maps a single till, naming its occupant when one exists. The open session is loaded once and
+     * reused for every field (no extra query beyond the occupancy check that was always here).
      */
     private PosTillDto toDto(PosTill t) {
         var open = sessions.findByPosTillIdAndStatus(t.getId(), PosSessionStatus.OPEN);
+        return toDto(t, open, cashierNames(List.of(open)));
+    }
+
+    /**
+     * Maps a till against an already-loaded open session and an already-resolved name map, so a
+     * list mapping resolves every occupant in one go (see {@link #listTillsByBranch}).
+     *
+     * <p>The occupant is exposed by id AND by name: the id answers "is this shift mine?", the name
+     * answers "then whose is it?" — without it an occupied till only ever reads "another cashier".
+     * A cashier IAM can no longer name falls back to that same neutral phrase; an internal id is
+     * never surfaced as a label.
+     */
+    private PosTillDto toDto(PosTill t, Optional<PosSession> open, Map<Long, String> cashierNames) {
+        Long cashierId = open.map(PosSession::getCashierId).orElse(null);
         return new PosTillDto(t.getId(), t.getUid(), t.getCompanyId(), t.getBranchId(),
                 t.getCode(), t.getName(), t.getCashBankAccountId(), t.getStatus(),
                 open.isPresent(),
                 open.map(PosSession::getUid).orElse(null),
-                open.map(PosSession::getCashierId).orElse(null),
+                cashierId,
+                cashierId == null ? null : cashierNames.getOrDefault(cashierId, UNNAMED_CASHIER),
                 open.map(PosSession::getOpenedAt).orElse(null));
+    }
+
+    /** One IAM lookup for the cashiers holding the given sessions; empty when none are held. */
+    private Map<Long, String> cashierNames(Collection<Optional<PosSession>> open) {
+        var cashierIds = open.stream()
+                .flatMap(Optional::stream)
+                .map(PosSession::getCashierId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return userLookup.displayNamesByIds(cashierIds);
     }
 }

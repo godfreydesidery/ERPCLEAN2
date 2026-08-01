@@ -32,6 +32,38 @@ void main() {
     });
   });
 
+  group('PosTill.occupantHolder', () {
+    PosTill till(Map<String, dynamic> extra) => PosTill.fromJson({
+          'id': '1',
+          'uid': 'tilluid',
+          'companyId': '10',
+          'branchId': '20',
+          'code': 'T1',
+          'name': 'Till 1',
+          'status': 'ACTIVE',
+          'hasOpenSession': true,
+          'openSessionCashierId': '7',
+          ...extra,
+        });
+
+    test('names the colleague holding the till', () {
+      final t = till({'openSessionCashierName': 'Asha Mwakalinga'});
+      expect(t.occupantHolder, 'Asha Mwakalinga');
+    });
+
+    test('falls back to the neutral wording when the server sends no name', () {
+      expect(till({}).occupantHolder, 'Another cashier');
+      expect(till({'openSessionCashierName': null}).occupantHolder,
+          'Another cashier');
+      expect(till({'openSessionCashierName': '   '}).occupantHolder,
+          'Another cashier');
+    });
+
+    test('never falls back to the cashier id', () {
+      expect(till({}).occupantHolder, isNot(contains('7')));
+    });
+  });
+
   group('XRead tender breakdown (#227)', () {
     test('parses cashTenderAmount and per-tender subtotals', () {
       final x = XRead.fromJson({

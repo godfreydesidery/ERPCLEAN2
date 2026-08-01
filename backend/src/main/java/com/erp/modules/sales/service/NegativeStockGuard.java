@@ -39,9 +39,10 @@ import org.springframework.transaction.annotation.Transactional;
  *       Skipped here (out of scope for this pass); a future ADR can extend the guard to check each
  *       exploded component's availability if that becomes a real gap;</li>
  *   <li>a STOCKABLE finished good whose only recipe is a manufacturing BOM is make-to-stock: the
- *       handler issues it as ITSELF, so it IS checked here. It used to be skipped (the guard tested
- *       the broader {@code isComposed}), which let such a product go straight negative with the
- *       setting on — the guard/handler predicate drift this class no longer has.</li>
+ *       handler issues it as ITSELF, so it IS checked here. It used to be skipped, because the
+ *       guard tested a broader "is this composed at all?" predicate (since removed) rather than
+ *       the handler's "does this explode at issue?" — drift that let such a product go straight
+ *       negative with the setting on. Both sides now use the same predicate.</li>
  * </ul>
  *
  * <p>Availability = {@code stock_on_hand.quantity − reserved_qty} at the branch default location

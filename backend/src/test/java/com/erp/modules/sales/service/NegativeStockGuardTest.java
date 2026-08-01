@@ -3,7 +3,6 @@ package com.erp.modules.sales.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -187,15 +186,11 @@ class NegativeStockGuardTest {
     @Test
     void checksStockableFinishedGoodWithBomButNoComponents_becauseItIsIssuedAsItself() {
         // Make-to-stock finished good: an ACTIVE manufacturing BOM but no product_components, so
-        // shouldExplodeAtIssue is FALSE and the handler issues the product ITSELF. The guard used to
-        // branch on the broader isComposed(), skip it, and let its own on-hand go straight negative
-        // even with the setting on — the reported overselling shape.
+        // shouldExplodeAtIssue is FALSE and the handler issues the product ITSELF. The pre-fix guard
+        // branched on the broader "has any recipe" predicate, which an ACTIVE BOM alone satisfies:
+        // it skipped this shape and let its own on-hand go straight negative even with the setting
+        // on — the reported overselling shape. This case is what pins the fix.
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
-        // isComposed() is TRUE for this shape (an ACTIVE BOM makes it composed) and is what the
-        // pre-fix guard branched on. Stubbing it keeps this test honest: against the old predicate
-        // the guard would early-return here and never throw, so this test fails without the fix.
-        // lenient() because the fixed guard no longer calls isComposed at all.
-        lenient().when(explosion.isComposed(PRODUCT_UID)).thenReturn(true);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))

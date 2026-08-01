@@ -571,7 +571,7 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('SALES_MANAGER','DOCUMENT.RENDER'),
   ('SALES_MANAGER','BRANCH.VIEW'),
-  -- BRANCH_MANAGER (51 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- BRANCH_MANAGER (53 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
   ('BRANCH_MANAGER','SALES.INVOICE.VIEW'),
@@ -579,6 +579,10 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','SALES.INVOICE.VOID'),
   ('BRANCH_MANAGER','SALES.CREDIT.OVERRIDE'),
   ('BRANCH_MANAGER','POS.SESSION.VIEW'),
+  -- POS.SESSION.CLOSE: a branch manager must be able to close a session a cashier left open
+  -- (till stranded by an ended shift / lost device) before reconciling it -- without it CASHIER
+  -- was the only bundle holding the code, so a stranded till waited for a cashier to come back.
+  ('BRANCH_MANAGER','POS.SESSION.CLOSE'),
   ('BRANCH_MANAGER','POS.SESSION.RECONCILE'),
   ('BRANCH_MANAGER','POS.SALE.VOID'),
   ('BRANCH_MANAGER','POS.SALE.AGE_OVERRIDE'),

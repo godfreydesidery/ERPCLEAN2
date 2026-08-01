@@ -43,18 +43,31 @@ Notes that fall straight out of `PosSessionServiceImpl`:
 
 - **A till may have at most one OPEN session.** `openSession` checks
   `findByPosTillIdAndStatus(tillId, OPEN)` and throws **409 Conflict**
-  (`"Till <tillUid> already has an OPEN session."`) if one already exists. Close (or reconcile)
+  (`"This till already has an OPEN session."`) if one already exists. Close (or reconcile)
   the previous session before opening a new one on the same till.
 - **`openedAt` is server-stamped** at open (`PosSession.openedAt = Instant.now()` default); the
   `cashierId` is the calling user (`actorId()` from `RequestContext`). Clients do **not** send
   either.
 - **`OPEN` is required to ring sales.** `POST /api/v1/pos/sales` resolves the session by
   `sessionUid` and, if it is not `OPEN`, throws **409 Conflict**
-  (`"POS session <uid> is not OPEN."` — see `PosSaleServiceImpl`). So once a session is `CLOSED`
+  (`"This POS session is not OPEN."` — see `PosSaleServiceImpl`). So once a session is `CLOSED`
   or `RECONCILED`, sales against it are rejected; open a fresh session.
 - All session timestamps in DTOs (`openedAt`, `closedAt`, `reconciledAt`) are serialized as
   **strings** — `Instant.toString()`, i.e. ISO-8601 UTC like `2026-06-19T08:15:42.123Z` (or `null`
   when not yet set).
+
+> ### A session is **never** closed for you
+>
+> There is **no** idle timeout, no scheduled sweeper, and no logout/token-expiry hook that closes a
+> POS session. A shift ends **only** through an explicit cash-up — `POST .../uid/{uid}/close` with a
+> real `countedCashAmount` that a human counted. This is deliberate: closing a session writes the
+> counted-cash figure that the variance (and its GL posting) is derived from, and the system must
+> never invent a cash count. Two consequences a client must design for:
+>
+> 1. **Killing the app does not end the shift.** The session stays `OPEN` and keeps holding its
+>    till. On relaunch the cashier must be offered their own open shift — see §5.1.
+> 2. **Never pre-fill `countedCashAmount`.** Not with the expected figure, not with the last count.
+>    It must be typed in from a physical count every time, or the variance is meaningless.
 
 ---
 
@@ -65,12 +78,12 @@ Returned by **open**, **get-by-uid**, **list**, and **close**. Fields, exactly a
 
 | Field | JSON type | Meaning |
 |-------|-----------|---------|
-| `id` | number (Long) | Internal DB id. Prefer `uid` for addressing. |
+| `id` | string (Long) | Internal DB id, serialised as a **JSON string** (global Long-as-string config). Prefer `uid` for addressing. |
 | `uid` | string | Stable external identifier; use this in all `/uid/{uid}` paths. |
-| `companyId` | number (Long) | Owning company. |
-| `branchId` | number (Long) | Owning branch (inherited from the till). |
-| `posTillId` | number (Long) | The till this session runs on. |
-| `cashierId` | number (Long) | The user who opened the session. |
+| `companyId` | string (Long) | Owning company. |
+| `branchId` | string (Long) | Owning branch (inherited from the till). |
+| `posTillId` | string (Long) | The till this session runs on. |
+| `cashierId` | string (Long) | The user who opened the session. Compare it against the access token's `sub` claim to tell your own shift from a colleague's. |
 | `sessionNumber` | string | Human-readable reference, e.g. `POS-0001` (server-generated at open). |
 | `status` | string enum | `OPEN` \| `CLOSED` \| `RECONCILED`. |
 | `openedAt` | string (ISO-8601) \| null | When opened. |
@@ -80,11 +93,12 @@ Returned by **open**, **get-by-uid**, **list**, and **close**. Fields, exactly a
 | `countedCashAmount` | number (BigDecimal) \| null | Cashier-counted cash; null until close. |
 | `expectedCashAmount` | number (BigDecimal) \| null | System-computed expected cash; null until close. |
 | `varianceAmount` | number (BigDecimal) \| null | `counted − expected` (positive = over, negative = short); null until close. |
-| `varianceJournalId` | number (Long) \| null | GL journal id raised at reconcile when variance ≠ 0; else null. |
+| `varianceJournalId` | string (Long) \| null | GL journal id raised at reconcile when variance ≠ 0; else null. |
 | `notes` | string \| null | Free text set at close / reconcile. |
 
 `expectedCashAmount` is computed at close as
-`openingFloatAmount + cashSalesTotal − totalPayouts` (see §5).
+`openingFloatAmount + cashTenderTotal − totalPayouts` — only **CASH** tenders enter the drawer
+(card / mobile money / cheque never do), so gross turnover is not the input here. See §8.
 
 ---
 
@@ -115,12 +129,12 @@ Creates a new `OPEN` session on a till with a cash float.
 ```json
 {
   "data": {
-    "id": 41,
+    "id": "41",
     "uid": "b3d7e2c1-sess-...",
-    "companyId": 1,
-    "branchId": 3,
-    "posTillId": 7,
-    "cashierId": 12,
+    "companyId": "1",
+    "branchId": "3",
+    "posTillId": "7",
+    "cashierId": "12",
     "sessionNumber": "POS-0001",
     "status": "OPEN",
     "openedAt": "2026-06-19T08:15:42.123Z",
@@ -138,6 +152,8 @@ Creates a new `OPEN` session on a till with a cash float.
 }
 ```
 
+(Numeric ids serialise as JSON **strings**; the decimal amounts are JSON **numbers**.)
+
 **curl:**
 
 ```bash
@@ -153,7 +169,8 @@ curl -i -X POST https://erp.example.com/api/v1/pos/sessions \
 - `403` — caller lacks `POS.SESSION.OPEN`, or cannot act in the till's company
   (`ScopeGuard.assertCanActIn`).
 - `404` — `tillUid` does not resolve (`NotFoundException.of("PosTill", tillUid)`).
-- `409` — the till already has an `OPEN` session (`"Till <tillUid> already has an OPEN session."`).
+- `409` — the till already has an `OPEN` session (`"This till already has an OPEN session."`). If it
+  is **your own** shift, resume it instead of opening a new one (§5.1).
 - `415` — wrong `Content-Type` (must be `application/json`).
 
 ---
@@ -191,6 +208,9 @@ curl -s https://erp.example.com/api/v1/pos/sessions/uid/b3d7e2c1-sess-... \
 - **Success status:** `200 OK`
 - **Query params:**
   - `companyId` (Long, **required** — bound as `@RequestParam Long companyId`)
+  - `status` (`PosSessionStatus`, **optional** — `OPEN` / `CLOSED` / `RECONCILED`). When supplied,
+    only sessions in that status are returned; when omitted, every session of the company is
+    returned. An unrecognised value is a **400**.
   - `page` (zero-based, default `0`), `size` (default `20`), `sort` (e.g. `sort=openedAt,desc`)
     — standard Spring `Pageable` (see shared pagination contract).
 
@@ -198,18 +218,24 @@ This endpoint is **paged**: the controller returns
 `ApiResponse.ok(page.getContent(), PageMeta.from(page))`, so `data` is the array and `meta` carries
 the page metadata.
 
+**Ordering is guaranteed newest-first.** Both finders (`findByCompanyId` and
+`findByCompanyIdAndStatus`) carry an explicit `ORDER BY openedAt DESC, id DESC`, so page 0 is always
+the most recent sessions. Your own `sort=` parameter is applied on top of the query's ordering —
+don't rely on it to *fix* an ordering problem, and don't rely on the absence of it meaning
+"arbitrary order".
+
 **Success response:**
 
 ```json
 {
   "data": [
     {
-      "id": 41,
+      "id": "41",
       "uid": "b3d7e2c1-sess-...",
-      "companyId": 1,
-      "branchId": 3,
-      "posTillId": 7,
-      "cashierId": 12,
+      "companyId": "1",
+      "branchId": "3",
+      "posTillId": "7",
+      "cashierId": "12",
       "sessionNumber": "POS-0001",
       "status": "CLOSED",
       "openedAt": "2026-06-19T08:15:42.123Z",
@@ -231,16 +257,50 @@ the page metadata.
 **curl:**
 
 ```bash
-curl -s "https://erp.example.com/api/v1/pos/sessions?companyId=1&page=0&size=20&sort=openedAt,desc" \
+# every session, newest first
+curl -s "https://erp.example.com/api/v1/pos/sessions?companyId=1&page=0&size=20" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# only what is still open — the query a till app should be making
+curl -s "https://erp.example.com/api/v1/pos/sessions?companyId=1&status=OPEN&size=50" \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
 **Notable errors:**
 
 - `400` — `companyId` missing or non-numeric (`MissingServletRequestParameterException` /
-  `MethodArgumentTypeMismatchException`).
+  `MethodArgumentTypeMismatchException`), or `status` is not a valid `PosSessionStatus`.
 - `403` — lacks `POS.SESSION.VIEW`, or cannot act in `companyId`
   (`ScopeGuard.assertCanActIn`).
+
+### 5.1 Resuming an abandoned shift — **pass `status=OPEN`**
+
+Because nothing auto-closes a session (§1), a till app that was force-closed comes back to a shift
+that is still `OPEN` and still holding its till. Recovering it is a list-then-filter, and the filter
+**must be server-side**:
+
+```
+GET /api/v1/pos/sessions?companyId={companyId}&status=OPEN&size=50
+→ take the row whose cashierId == your token's `sub`  (and, if you know it, whose posTillId matches)
+→ resume against its uid
+```
+
+> **This is not a nicety — an unfiltered page 0 is a real production defect.** A client that asks
+> for page 0 of all sessions and filters `status == "OPEN"` in its own code works fine for the first
+> few dozen shifts and then silently stops: once the company has more lifetime sessions than fit on
+> the page, the cashier's own open shift is not *on* the page to be filtered. The symptom is a till
+> that reads as permanently "in use" with no way back in, which is exactly the lockout this filter
+> exists to prevent. Always send `status=OPEN`; never paginate through history to find an open
+> shift.
+
+Two more rules for the recovery path:
+
+- **Surface a lookup failure.** "You have no open shift" and "we couldn't check" are different
+  answers. Swallowing the second in a bare catch turns a transient error into a permanent-looking
+  lockout — show the cashier what happened.
+- **Match the cashier, not just the till.** A row with `status: "OPEN"` on your till whose
+  `cashierId` is *someone else* must not be resumed; it is a colleague's live shift (see the till
+  occupancy fields in [07 — Tills](07-tills.md)).
 
 ---
 
@@ -322,32 +382,42 @@ A non-mutating snapshot of the session's running totals — does **not** close t
 | Field | JSON type | Meaning |
 |-------|-----------|---------|
 | `sessionUid` | string | The session uid. |
-| `posTillId` | number (Long) | Till id. |
-| `cashierId` | number (Long) | Cashier (opener) id. |
+| `posTillId` | string (Long) | Till id. |
+| `cashierId` | string (Long) | Cashier (opener) id. |
 | `openedAt` | string (ISO-8601) | When opened. |
 | `openingFloatAmount` | number (BigDecimal) | Float at open. |
-| `totalSalesAmount` | number (BigDecimal) | Gross cash-sales total for the session (`sumGrossByPosSession`). |
+| `totalSalesAmount` | number (BigDecimal) | **Gross turnover across every tender type** (`sumGrossByPosSession`) — a reporting figure only; it does **not** drive expected cash. |
+| `cashTenderAmount` | number (BigDecimal) | Net **CASH** tender actually retained in the drawer (change netted). **This** is what feeds `expectedCashAmount`. |
 | `totalPayoutsNetAmount` | number (BigDecimal) | Total payouts (sum of all `REFUND` + `PAID_OUT`). |
-| `expectedCashAmount` | number (BigDecimal) | `openingFloat + totalSales − totalPayouts`. |
+| `expectedCashAmount` | number (BigDecimal) | `openingFloat + cashTenderAmount − totalPayouts`. |
 | `invoiceCount` | number (long) | Count of POS invoices on this session. |
+| `tenderSubtotals` | array | Per-tender-type breakdown of turnover (`TenderSubtotalDto`) — so a cashier can see at a glance why "sales" and "cash" legitimately differ. |
 
 ```json
 {
   "data": {
     "sessionUid": "b3d7e2c1-sess-...",
-    "posTillId": 7,
-    "cashierId": 12,
+    "posTillId": "7",
+    "cashierId": "12",
     "openedAt": "2026-06-19T08:15:42.123Z",
     "openingFloatAmount": 200000.00,
-    "totalSalesAmount": 696000.00,
+    "totalSalesAmount": 896000.00,
+    "cashTenderAmount": 696000.00,
     "totalPayoutsNetAmount": 50000.00,
     "expectedCashAmount": 846000.00,
-    "invoiceCount": 23
+    "invoiceCount": 23,
+    "tenderSubtotals": [
+      { "tenderType": "CASH", "amount": 696000.00 },
+      { "tenderType": "CARD", "amount": 200000.00 }
+    ]
   },
   "errors": [],
   "meta": null
 }
 ```
+
+> **Don't reconcile the drawer against `totalSalesAmount`.** On a multi-tender day it is larger than
+> the cash in the till by exactly the non-cash tenders. Use `cashTenderAmount` / `expectedCashAmount`.
 
 **curl:**
 
@@ -395,9 +465,15 @@ flips the session to `CLOSED`. **No GL posting happens here** — that is deferr
 
 On close, the server (per `PosSessionServiceImpl.closeSession`) sets:
 
-- `expectedCashAmount = openingFloatAmount + cashSalesTotal − totalPayouts`
+- `expectedCashAmount = openingFloatAmount + cashTenderTotal − totalPayouts` (net **CASH** tender
+  only — non-cash tenders never entered the drawer)
 - `varianceAmount = countedCashAmount − expectedCashAmount` (positive = over, negative = short)
 - `status = CLOSED`, `closedAt = now`, and stores `notes`.
+
+> **`countedCashAmount` must be a real count.** Do not pre-fill it from `expectedCashAmount`, from
+> an x-read, or from the previous shift. The whole point of the field is to be the *independent*
+> figure the variance is measured against — and since nothing else ever closes a session (§1), this
+> single number is the only cash truth the shift produces.
 
 **Success response:** the updated `PosSessionDto` envelope (now with `status: "CLOSED"`,
 `closedAt`, `countedCashAmount`, `expectedCashAmount`, `varianceAmount` populated):
@@ -405,12 +481,12 @@ On close, the server (per `PosSessionServiceImpl.closeSession`) sets:
 ```json
 {
   "data": {
-    "id": 41,
+    "id": "41",
     "uid": "b3d7e2c1-sess-...",
-    "companyId": 1,
-    "branchId": 3,
-    "posTillId": 7,
-    "cashierId": 12,
+    "companyId": "1",
+    "branchId": "3",
+    "posTillId": "7",
+    "cashierId": "12",
     "sessionNumber": "POS-0001",
     "status": "CLOSED",
     "openedAt": "2026-06-19T08:15:42.123Z",
@@ -490,37 +566,44 @@ is a human-initiated command (not the async outbox), missing GL config **fails t
 | Field | JSON type | Meaning |
 |-------|-----------|---------|
 | `sessionUid` | string | The session uid. |
-| `posTillId` | number (Long) | Till id. |
-| `cashierId` | number (Long) | Cashier id. |
+| `posTillId` | string (Long) | Till id. |
+| `cashierId` | string (Long) | Cashier id. |
 | `openedAt` | string (ISO-8601) | When opened. |
 | `closedAt` | string (ISO-8601) \| null | When closed. |
 | `reconciledAt` | string (ISO-8601) | When reconciled (just now). |
 | `openingFloatAmount` | number (BigDecimal) | Float at open. |
-| `totalSalesAmount` | number (BigDecimal) | Gross cash-sales total. |
+| `totalSalesAmount` | number (BigDecimal) | Gross turnover across **every** tender type — reporting only. |
+| `cashTenderAmount` | number (BigDecimal) | Net **CASH** tender retained in the drawer — the figure behind `expectedCashAmount` and the variance. |
 | `totalPayoutsNetAmount` | number (BigDecimal) | Total payouts. |
 | `expectedCashAmount` | number (BigDecimal) | Expected cash (from close). |
 | `countedCashAmount` | number (BigDecimal) | Counted cash (from close). |
 | `varianceAmount` | number (BigDecimal) | `counted − expected`. |
-| `varianceJournalId` | number (Long) \| null | GL journal id, or null when variance was 0. |
+| `varianceJournalId` | string (Long) \| null | GL journal id, or null when variance was 0. |
 | `invoiceCount` | number (long) | POS invoice count for the session. |
+| `tenderSubtotals` | array | Per-tender-type turnover breakdown (`TenderSubtotalDto`). |
 
 ```json
 {
   "data": {
     "sessionUid": "b3d7e2c1-sess-...",
-    "posTillId": 7,
-    "cashierId": 12,
+    "posTillId": "7",
+    "cashierId": "12",
     "openedAt": "2026-06-19T08:15:42.123Z",
     "closedAt": "2026-06-19T17:02:10.000Z",
     "reconciledAt": "2026-06-19T17:05:33.500Z",
     "openingFloatAmount": 200000.00,
-    "totalSalesAmount": 696000.00,
+    "totalSalesAmount": 896000.00,
+    "cashTenderAmount": 696000.00,
     "totalPayoutsNetAmount": 50000.00,
     "expectedCashAmount": 846000.00,
     "countedCashAmount": 845000.00,
     "varianceAmount": -1000.00,
-    "varianceJournalId": 90211,
-    "invoiceCount": 23
+    "varianceJournalId": "90211",
+    "invoiceCount": 23,
+    "tenderSubtotals": [
+      { "tenderType": "CASH", "amount": 696000.00 },
+      { "tenderType": "CARD", "amount": 200000.00 }
+    ]
   },
   "errors": [],
   "meta": null
