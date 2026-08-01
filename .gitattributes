@@ -10,6 +10,12 @@
 # Let git decide for unmarked files (normalizes to LF in the repo, checks out native on Windows).
 * text=auto
 
+# Windows batch launchers in the client distribution bundle. A .cmd with bare LF endings
+# misbehaves around labels and goto, so these must be CRLF in the working tree on every
+# platform — including a Linux checkout, from which a release may be built.
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
 # Force LF in the working tree too for these — never CRLF, on any platform.
 *.sql   text eol=lf
 *.sh    text eol=lf

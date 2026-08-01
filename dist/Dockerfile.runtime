@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+#
+# STAGE 2 OF 2 — the image the client actually receives.
+#
+# Build context is dist/build/ (which contains only app.jar, produced by Dockerfile.build).
+# Because this stage does nothing but land a prebuilt, architecture-independent jar on a
+# JRE base, it can be built for a foreign platform without QEMU emulating a compiler:
+#
+#   docker buildx build --platform linux/arm64 -t orbixerp-api:1.0.0 \
+#     --output type=docker,dest=orbixerp-api-1.0.0-arm64.tar -f dist/Dockerfile.runtime dist/build
+#
+# Differences from infra/prod/Dockerfile, which this supersedes for client distribution:
+#   1. HEALTHCHECK probes the MANAGEMENT port (9090), not 8081. Actuator moves to
+#      management.server.port (application.yml); on 8081 the readiness path 404s, which is
+#      why prod containers have been reporting (unhealthy) while serving traffic fine.
+#   2. Runs as a non-root user with a FIXED uid/gid (10001) so bind-mounted JWT key files
+#      can be chowned to a known owner by the installer on Linux hosts.
+#   3. Ships openssl + tzdata: the installer generates the RS256 keypair by running this
+#      image, which is the only way to do it on a Windows client with no openssl and no
+#      internet access.
+#   4. start-period is 180s, not 90s. First boot runs 93 Flyway migrations against an empty
+#      database; 90s marks a perfectly healthy first install as unhealthy.
+
+FROM eclipse-temurin:21-jre-alpine
+
+ARG ERP_VERSION=0.0.0
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="OrbixERP API" \
+      org.opencontainers.image.description="OrbixERP backend API with the Angular web client bundled" \
+      org.opencontainers.image.version="${ERP_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="Proprietary"
+
+# openssl — JWT keypair generation on the client box (offline, no host tooling required).
+# tzdata   — so the TZ env var actually resolves; alpine has no zoneinfo by default and
+#            timestamps would silently fall back to UTC.
+# Fixed uid/gid 10001: the installer chowns ./secrets/jwt to this owner so the container
+# can read private.pem at 0600. An auto-assigned uid would make that impossible to script.
+RUN apk add --no-cache openssl tzdata \
+ && addgroup -g 10001 -S erp \
+ && adduser -u 10001 -S -G erp -h /app erp
+
+WORKDIR /app
+COPY app.jar /app/app.jar
+RUN chown -R erp:erp /app
+
+USER erp
+
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom" \
+    ERP_API_PORT=8081 \
+    ERP_MANAGEMENT_PORT=9090 \
+    ERP_VERSION="${ERP_VERSION}"
+
+# 8081 only. 9090 (actuator/Prometheus) is deliberately NOT exposed — it is an internal
+# probe surface and must never be published to a client's LAN.
+EXPOSE 8081
+
+# Readiness includes the DB indicator (application.yml: health.group.readiness =
+# readinessState + db), so "healthy" genuinely means "connected to Postgres and serving".
+# /actuator/** is permitAll in SecurityConfig, so the probe needs no credentials.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+  CMD wget -qO- "http://127.0.0.1:${ERP_MANAGEMENT_PORT}/actuator/health/readiness" >/dev/null || exit 1
+
+# exec form via sh so $JAVA_OPTS expands; `exec` keeps java as PID 1 for graceful SIGTERM.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
