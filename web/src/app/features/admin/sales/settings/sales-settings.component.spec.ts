@@ -27,6 +27,7 @@ const STUB_SETTINGS = {
   id: '1', uid: 'S1', companyId: '10',
   soApprovalEnabled: false, soApprovalThresholdAmount: 5000, currency: 'TZS',
   allowNegativeStock: false,
+  belowCostAction: 'OFF',
 };
 
 function makeBed() {
@@ -116,6 +117,7 @@ describe('SalesSettingsComponent', () => {
       soApprovalThresholdAmount: 7500,
       currency: 'TZS',
       allowNegativeStock: false,
+      belowCostAction: 'OFF',
     });
 
     putReq.flush({ ...STUB_SETTINGS, soApprovalEnabled: true, soApprovalThresholdAmount: 7500 });
@@ -149,5 +151,95 @@ describe('SalesSettingsComponent', () => {
 
     putReq.flush({ ...STUB_SETTINGS, allowNegativeStock: false });
     expect(comp.settings()?.allowNegativeStock).toBe(false);
+  });
+
+  // ── Below-cost policy (V93) ────────────────────────────────────────────────
+
+  it('below-cost control renders every policy choice, labelled and described in plain language', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush(STUB_SETTINGS);
+    fixture.detectChanges();
+
+    const select = fixture.nativeElement.querySelector('#belowCostAction') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect([...select.options].map((o) => o.value)).toEqual(['OFF', 'WARN', 'APPROVE', 'BLOCK']);
+
+    // Accessible name comes from a real <label for>, description from aria-describedby.
+    const label = fixture.nativeElement.querySelector('label[for="belowCostAction"]');
+    expect(label.textContent).toContain('Selling at or below cost');
+    const describedBy = select.getAttribute('aria-describedby');
+    expect(describedBy).toBe('belowCostHint');
+    expect(fixture.nativeElement.querySelector(`#${describedBy}`)).toBeTruthy();
+
+    // No jargon on screen — the admin sees consequences, not enum names or column names.
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Needs supervisor approval');
+    expect(text).not.toContain('below_cost_action');
+    expect(text).not.toContain('V93');
+  });
+
+  it('below-cost hint follows the selected policy', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush(STUB_SETTINGS);
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.belowCostHint()).toContain('Nothing is checked against cost');
+
+    comp.fBelowCostAction.set('APPROVE');
+    fixture.detectChanges();
+    expect(comp.belowCostHint()).toContain('supervisor');
+    expect(fixture.nativeElement.querySelector('#belowCostHint').textContent).toContain('supervisor');
+  });
+
+  it('loads the stored below-cost policy and saves the chosen one', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush({ ...STUB_SETTINGS, belowCostAction: 'APPROVE' });
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.fBelowCostAction()).toBe('APPROVE');
+
+    comp.fBelowCostAction.set('BLOCK');
+    comp.save();
+
+    const putReq = http.expectOne(BASE);
+    expect(putReq.request.body.belowCostAction).toBe('BLOCK');
+
+    putReq.flush({ ...STUB_SETTINGS, belowCostAction: 'BLOCK' });
+    expect(comp.settings()?.belowCostAction).toBe('BLOCK');
+  });
+
+  it('a company saved before the policy existed shows OFF — the same value the till enforces', async () => {
+    // The screen must never report a stance the backend would not apply. An API response with no
+    // belowCostAction (pre-V93 row / older API) resolves to OFF on both sides.
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    const { belowCostAction: _omitted, ...legacySettings } = STUB_SETTINGS;
+    http.expectOne(`${BASE}/by-company/CO1`).flush(legacySettings);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.fBelowCostAction()).toBe('OFF');
+
+    // ngModel writes the control value on a microtask — settle before reading the rendered <select>.
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const select = fixture.nativeElement.querySelector('#belowCostAction') as HTMLSelectElement;
+    expect(select.value).toBe('OFF');
   });
 });

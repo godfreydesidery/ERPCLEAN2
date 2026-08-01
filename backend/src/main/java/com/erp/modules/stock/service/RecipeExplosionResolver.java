@@ -81,15 +81,6 @@ public class RecipeExplosionResolver {
         return explodeLegacy(composedProductUid, lineQtyInBase);
     }
 
-    /**
-     * Returns true if the product has any recipe: an ACTIVE BOM OR product_components rows.
-     * Extended from v1 to also check for ACTIVE BOM (D-7).
-     */
-    public boolean isComposed(String productUid) {
-        return bomExplosionService.hasActiveBom(productUid)
-                || !productService.listComponents(productUid).isEmpty();
-    }
-
     /** True if the product has a point-of-sale kit recipe ({@code product_components}, ADR-0010 D-8). */
     public boolean hasProductComponents(String productUid) {
         return !productService.listComponents(productUid).isEmpty();

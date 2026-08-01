@@ -1,8 +1,13 @@
 package com.erp.modules.iam.service;
 
+import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.common.domain.MasterStatus;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,5 +56,20 @@ public class UserLookupServiceImpl implements UserLookupService {
         // BR-PARTY-10); only then test company membership. Cheap indexed PK+status+root check first.
         return users.existsByIdAndStatusAndRootFalse(userId, MasterStatus.ACTIVE)
                 && userBranches.existsByUserIdAndBranchCompanyId(userId, companyId);
+    }
+
+    @Override
+    public Map<Long, String> displayNamesByIds(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        // One IN-list read for the whole caller batch — never a query per id (see the interface).
+        var ids = userIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return users.findAllById(ids).stream()
+                .filter(u -> u.getDisplayName() != null && !u.getDisplayName().isBlank())
+                .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
     }
 }

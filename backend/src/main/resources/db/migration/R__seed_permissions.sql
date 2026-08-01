@@ -188,6 +188,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('ROUTE.ASSIGN', 'routes', 'Assign/unassign customers and external agents to/from a route; set primary agent'),
     ('ROUTE.MANAGE', 'routes', 'Create, update, archive and restore routes; manage branch associations'),
     ('ROUTE.VIEW', 'routes', 'View, list, search and select routes'),
+    ('SALES.BELOW_COST.OVERRIDE', 'sales', 'Finalise a sale with a line priced at or below cost (audited supervisor override)'),
     ('SALES.BLANKET.CLOSE', 'sales', 'Manually close a blanket order'),
     ('SALES.BLANKET.CREATE', 'sales', 'Create blanket orders with committed quantities'),
     ('SALES.BLANKET.MANAGE', 'sales', 'Draw down (call-off) and cancel blanket orders'),
@@ -497,7 +498,7 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','NOTIFICATION.PREFERENCE.MANAGE'),
   ('ACCOUNTANT','DOCUMENT.RENDER'),
   ('ACCOUNTANT','BRANCH.VIEW'),
-  -- SALES_MANAGER (73 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- SALES_MANAGER (74 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('SALES_MANAGER','SALES.QUOTE.CREATE'),
   ('SALES_MANAGER','SALES.QUOTE.SEND'),
   ('SALES_MANAGER','SALES.QUOTE.ACCEPT'),
@@ -512,6 +513,7 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','SALES.INVOICE.OVERRIDE'),
   ('SALES_MANAGER','SALES.INVOICE.VOID'),
   ('SALES_MANAGER','SALES.CREDIT.OVERRIDE'),
+  ('SALES_MANAGER','SALES.BELOW_COST.OVERRIDE'),
   ('SALES_MANAGER','SALES.DELIVERY.CREATE'),
   ('SALES_MANAGER','SALES.DELIVERY.VIEW'),
   ('SALES_MANAGER','SALES.RETURN.CREATE'),
@@ -571,14 +573,21 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('SALES_MANAGER','DOCUMENT.RENDER'),
   ('SALES_MANAGER','BRANCH.VIEW'),
-  -- BRANCH_MANAGER (51 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- BRANCH_MANAGER (54 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
   ('BRANCH_MANAGER','SALES.INVOICE.VIEW'),
   ('BRANCH_MANAGER','SALES.INVOICE.OVERRIDE'),
   ('BRANCH_MANAGER','SALES.INVOICE.VOID'),
   ('BRANCH_MANAGER','SALES.CREDIT.OVERRIDE'),
+  -- SALES.BELOW_COST.OVERRIDE: the supervisor on the shop floor is who a cashier calls over when a
+  -- line prices out at or below cost (V93 APPROVE mode) -- without it the till waits for head office.
+  ('BRANCH_MANAGER','SALES.BELOW_COST.OVERRIDE'),
   ('BRANCH_MANAGER','POS.SESSION.VIEW'),
+  -- POS.SESSION.CLOSE: a branch manager must be able to close a session a cashier left open
+  -- (till stranded by an ended shift / lost device) before reconciling it -- without it CASHIER
+  -- was the only bundle holding the code, so a stranded till waited for a cashier to come back.
+  ('BRANCH_MANAGER','POS.SESSION.CLOSE'),
   ('BRANCH_MANAGER','POS.SESSION.RECONCILE'),
   ('BRANCH_MANAGER','POS.SALE.VOID'),
   ('BRANCH_MANAGER','POS.SALE.AGE_OVERRIDE'),

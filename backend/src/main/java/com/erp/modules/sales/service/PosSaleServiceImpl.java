@@ -185,8 +185,11 @@ public class PosSaleServiceImpl implements PosSaleService {
                     new AddPaymentRequest(TenderType.CASH, grossTotal, req.currency(), null));
         }
 
-        // 7 — Finalise
-        invoiceService.finalise(invoiceUid, new FinaliseInvoiceRequest());
+        // 7 — Finalise. Carries the below-cost approval through (V93): the policy is enforced inside
+        // finalise (BelowCostGuard), which needs both the cashier's acknowledgement and their
+        // SALES.BELOW_COST.OVERRIDE grant before it will let an at-or-below-cost line settle.
+        boolean belowCostApproved = Boolean.TRUE.equals(req.belowCostApproved());
+        invoiceService.finalise(invoiceUid, new FinaliseInvoiceRequest(null, belowCostApproved));
 
         // 7b — Stamp the created invoice onto the idempotency marker (same TX as the sale, so a
         // concurrent duplicate sees it the instant this transaction commits — ADR-0042 D-1).
@@ -200,7 +203,8 @@ public class PosSaleServiceImpl implements PosSaleService {
                 .detail(Map.of("sessionUid",  req.sessionUid(),
                                "gross",       grossTotal.toPlainString(),
                                "ageVerified", String.valueOf(ageVerified),
-                               "ageOverride", String.valueOf(ageOverride))));
+                               "ageOverride", String.valueOf(ageOverride),
+                               "belowCostApproved", String.valueOf(belowCostApproved))));
 
         return invoiceService.getByUid(invoiceUid);
     }

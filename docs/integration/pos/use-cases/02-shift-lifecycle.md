@@ -24,10 +24,11 @@ The status gates which actions are legal. Every state-violating call returns **4
 | Reconcile (Z-read) | `POST .../uid/{uid}/reconcile` | **`CLOSED`** | `RECONCILED` |
 | Get / list | `GET .../uid/{uid}`, `GET /api/v1/pos/sessions` | any | unchanged |
 
-Two hard rules to design around (both from `PosSessionServiceImpl`):
+Three hard rules to design around (all from `PosSessionServiceImpl`):
 
-- **A till can have at most one `OPEN` session.** Opening a second on the same till → **409** (`"Till <tillUid> already has an OPEN session."`).
+- **A till can have at most one `OPEN` session.** Opening a second on the same till → **409** (`"This till already has an OPEN session."`).
 - **Once `CLOSED` or `RECONCILED`, the session is read-only.** No more sales, payouts, or X-reads against it — open a fresh session for the next shift.
+- **Nothing ever closes a session for you.** There is no idle timeout, no nightly sweeper, and no logout/token-expiry hook — a shift ends **only** via an explicit cash-up (UC-B5) carrying a real counted-cash amount. This is deliberate: the close writes the number the variance and its GL posting are built on, and the system must never invent a cash count. So a force-closed app leaves an `OPEN` session still holding its till, and the way back in is **recovery (UC-B2)**, not waiting for it to expire.
 
 ---
 
@@ -40,7 +41,7 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
   - A target till exists and is `ACTIVE` (discover via `GET /api/v1/pos/tills?companyId=&branchId=` — [§07](../07-tills.md)).
   - The till has **no** existing `OPEN` session (one-open-per-till rule).
 - **Main flow:**
-  1. (If the till uid isn't known) list tills and let the cashier pick an `ACTIVE` one: `GET /api/v1/pos/tills?companyId={id}&branchId={id}` ([§07](../07-tills.md)). The list includes `INACTIVE`/`ARCHIVED` tills too — filter client-side on `status == "ACTIVE"`.
+  1. (If the till uid isn't known) list tills and let the cashier pick an `ACTIVE` one: `GET /api/v1/pos/tills?companyId={id}&branchId={id}` ([§07](../07-tills.md)). The list includes `INACTIVE`/`ARCHIVED` tills too — filter client-side on `status == "ACTIVE"`. Each row also reports whether it is occupied (`hasOpenSession`) and by whom (`openSessionUid`, `openSessionCashierId`, `openSessionCashierName`, `openSessionOpenedAt`): compare `openSessionCashierId` with the signed-in user (the access token's `sub`) so **your own** abandoned shift offers *resume / cash up* rather than reading as someone else's live till — and use `openSessionCashierName` to say *whose* it is ([§07 — Occupancy](../07-tills.md#occupancy--reading-hasopensession-and-the-opensession-fields)).
   2. Open the session: `POST /api/v1/pos/sessions` ([§08](../08-sessions.md)) with body `{ "tillUid", "openingFloatAmount" }`.
      - `tillUid` — `@NotBlank`; `openingFloatAmount` — `@NotNull`, `@DecimalMin("0.00")` (a `0.00` float is allowed).
   3. On **201 Created**, persist the returned `PosSessionDto.uid` — every sale, payout, X-read, close, and reconcile for this shift references it. Note also `sessionNumber` (e.g. `POS-0001`) for the receipt header, and `status: "OPEN"`.
@@ -48,7 +49,7 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
   - **400** — `tillUid` blank, or `openingFloatAmount` null/negative (bean validation).
   - **403** — lacks `POS.SESSION.OPEN`, or cannot act in the till's company.
   - **404** — `tillUid` does not resolve (`NotFoundException.of("PosTill", uid)`).
-  - **409** — the till already has an `OPEN` session. Resolve the prior session (close + reconcile it, or have the supervisor do so) before retrying. Find it via `GET /api/v1/pos/sessions?companyId={id}&sort=openedAt,desc` and filter `status == "OPEN"` for that till.
+  - **409** — the till already has an `OPEN` session. Resolve the prior session (resume it if it is your own, else close + reconcile it, or have the supervisor do so) before retrying. Find it with the **server-side** filter `GET /api/v1/pos/sessions?companyId={id}&status=OPEN` — see UC-B2; do **not** page through history filtering client-side.
   - **415** — body not `application/json`.
 - **Outcome:** a new session in `OPEN` status; `openedAt` and `cashierId` are **server-stamped** (the caller's user id) — the client never sends them. The till is now locked to this one open session. The session is ready to ring sales.
 - **Notes & limitations:**
@@ -64,17 +65,19 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
 - **Preconditions:** authenticated; holds `POS.SESSION.VIEW`; active scope can act in the session's company.
 - **Main flow (you already hold the uid):**
   1. `GET /api/v1/pos/sessions/uid/{uid}` ([§08 §4](../08-sessions.md)) → **200** with the `PosSessionDto` reflecting current state (e.g. `closedAt`/`varianceAmount` are populated only once the session has progressed; `null` while `OPEN`).
-- **Main flow (you need to discover the open session, e.g. after a crash):**
-  1. `GET /api/v1/pos/sessions?companyId={id}&sort=openedAt,desc` ([§08 §5](../08-sessions.md)) — **paged**: `companyId` is a required query param; `data` is the array, `meta` carries page info.
-  2. Filter the returned page for `posTillId == <your till>` and `status == "OPEN"`; recover its `uid` and resume.
+- **Main flow (you need to discover the open session, e.g. after a crash) — `status=OPEN` is mandatory:**
+  1. `GET /api/v1/pos/sessions?companyId={id}&status=OPEN&size=50` ([§08 §5.1](../08-sessions.md)) — **paged**: `companyId` is required, `status` filters server-side, and the finder orders **newest-first**.
+  2. Take the row whose `cashierId` equals your own user id (the access token's `sub`) — and, if you know it, whose `posTillId` is your till. Recover its `uid` and resume.
 - **Alternate / exception flows:**
-  - **400** (list) — `companyId` missing or non-numeric.
+  - **400** (list) — `companyId` missing or non-numeric, or `status` not a valid `PosSessionStatus`.
   - **403** — lacks `POS.SESSION.VIEW`, or cannot act in the session's/company's scope.
   - **404** (get-by-uid) — unknown session uid (`NotFoundException.of("PosSession", uid)`).
   - **Empty state** (list) — no sessions match → `data: []`, `meta` present, HTTP **200** (not a 404).
+  - **Lookup failed** (any of the above, or a network error) — this is **not** the same as "you have no open shift". Say so. Swallowing the failure and rendering the till as merely "in use" turns a transient error into what looks like a permanent lockout.
 - **Outcome:** read-only; nothing changes. You have the authoritative session state and uid to continue the loop.
 - **Notes & limitations:**
-  - There is no "get the open session for till X" convenience endpoint — discovery is list-then-filter (or hold the uid client-side from UC-B1).
+  - **Do not discover an open shift by paging unfiltered history.** Asking for page 0 with no `status` and filtering in client code works until the company has more lifetime sessions than fit on the page — after that the cashier's own open shift is simply not on the page, resume fails, and the till reads as permanently occupied. This was a real production defect, not a hypothetical. Always send `status=OPEN`.
+  - There is no "get the open session for till X" convenience endpoint — discovery is this filtered list (or hold the uid client-side from UC-B1). The till list also carries the occupying session's uid/cashier/opened-at ([§07](../07-tills.md)), which is usually the quickest route from a till picker.
   - Amounts like `expectedCashAmount`/`varianceAmount` are `null` until the session is closed (UC-B5) — for live running totals during the shift, use the X-read (UC-B4), not get-by-uid.
 
 ---
@@ -147,6 +150,7 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
   - **415** — body not `application/json`.
 - **Outcome:** session is `CLOSED`; `countedCashAmount`, `expectedCashAmount`, and `varianceAmount` are populated. **No GL posting happens at close** — the variance journal is deferred to reconcile (UC-B6). `varianceJournalId` is still `null`. The session is now read-only except for reconcile.
 - **Notes & limitations:**
+  - **Never pre-fill `countedCashAmount`** — not from `expectedCashAmount`, not from an X-read, not from the last shift. It must be typed in from a physical count, or the variance measures nothing. Since this cash-up is the *only* thing that ever ends a shift (there is no auto-close), this number is the single cash truth the shift produces.
   - There is **no "re-open"** for an over-eager close — the flow is one-way (`OPEN → CLOSED → RECONCILED`). If you closed with a wrong count, the variance gets recorded as-is; correct it via the back office, not by re-opening.
   - The close itself is not idempotent in the sense of being repeatable: a second close on the same session returns **409** (it is no longer `OPEN`), so a retry after an ambiguous timeout is naturally rejected — re-fetch the session (UC-B2) to confirm whether the first call landed.
 
@@ -183,7 +187,7 @@ Two hard rules to design around (both from `PosSessionServiceImpl`):
 
 ## Edge cases beyond the core shift loop
 
-These are common cash-management needs that sit outside the core shift loop. Most are still **not supported** by the session API (UC-B7, UC-B8, UC-B10) and are listed so a POS builder plans around them rather than discovering the gap at runtime. One — **whole-sale void/refund at the till (UC-B9)** — is now **supported** (commit `f08fb08`, ADR-0042); only its partial / line-level variant remains deferred.
+These are common cash-management needs that sit outside the core shift loop. Two remain **not supported** by the session API (UC-B7 float top-up, UC-B8 re-open/edit) and are listed so a POS builder plans around them rather than discovering the gap at runtime. Three are **supported**: whole-sale void/refund at the till (**UC-B9**, commit `f08fb08`/ADR-0042 — only its partial / line-level variant remains deferred), split & non-cash tender (**UC-B10**, same commit), and abandoned-shift recovery (**UC-B11**).
 
 ### UC-B7: Float top-up / cash-in mid-shift — **Not supported today**
 - **What you'd want:** add cash to the drawer (or correct the opening float) during an open shift.
@@ -209,10 +213,23 @@ These are common cash-management needs that sit outside the core shift loop. Mos
 - **Limitation — partial / line-level refunds are deferred (ADR-0042):** this endpoint reverses the **whole** sale only. To return some lines, or a partial quantity, use a back-office per-line credit note against the originating invoice — there is no at-till partial refund yet ([§12 #5](../12-known-limitations.md#5-partial--line-level-pos-refunds--deferred)).
 - **Closest workaround for a closed session:** if the originating session has already CLOSED/RECONCILED, `/reverse` returns **409** — handle the reversal via the back-office invoice void on `/sales-invoices`, where the cash difference is a reconciled-variance matter rather than a till refund.
 
-### UC-B10: Non-cash or split tender at the till — **Not supported today**
+### UC-B10: Non-cash or split tender at the till — **Supported** (commit `f08fb08`, ADR-0042)
 - **What you'd want:** card, mobile-money, cheque, or split (part-cash/part-card) tender on a sale during the shift.
-- **Why not:** POS sales are hard-coded to a single exact **CASH** tender for the full gross ([§12 #3](../12-known-limitations.md)); the session cash math (UC-B4/B5/B6) assumes all sales are cash. Non-cash tenders are not modelled in the drawer at all.
-- **Closest workaround:** none within POS — cash-only shifts are the supported model today. Non-cash sales must go through the back-office `/api/v1/sales-invoices` flow ([§09](../09-sales-payments-receipts.md)).
+- **How:** send an optional `tenders[]` list on `POST /api/v1/pos/sales` (`tenderType` `CASH`/`CARD`/`MOBILE_MONEY`/`CHEQUE`, `amount`, plus the instrument refs); the sum must cover the gross ([§09 §6](../09-sales-payments-receipts.md), [§12 #3](../12-known-limitations.md)). Omit it and the sale settles as a single exact **CASH** payment (the legacy behaviour).
+- **Effect on the drawer:** only **CASH** tenders enter it. The X/Z-read reports gross turnover (`totalSalesAmount`) *and* the net cash retained (`cashTenderAmount`, plus a `tenderSubtotals` breakdown), and expected cash is built from the **cash** figure — so a multi-tender day legitimately shows sales > cash ([§08 §7](../08-sessions.md)).
+
+### UC-B11: Recover an abandoned shift after a force-close — **Supported**
+- **Actor:** cashier whose app was killed (crash, force-close, device reboot) mid-shift.
+- **Goal:** get back into the shift they still hold, instead of staring at an "in use" till.
+- **Why this exists:** nothing auto-closes a session (see the state model above), so the shift is still `OPEN` and still holding its till. There is no expiry to wait for — the client must offer the way back in.
+- **Main flow:**
+  1. On startup, ask for open shifts only: `GET /api/v1/pos/sessions?companyId={id}&status=OPEN&size=50` ([§08 §5.1](../08-sessions.md)).
+  2. Take the row whose `cashierId` matches the signed-in user (the access token's `sub`) → resume against its `uid` (UC-B2).
+  3. If the cashier starts from the till picker instead, use each till's `hasOpenSession` + `openSessionCashierId` to offer **resume / cash up** on their own shift, and an explanation on a colleague's ([§07](../07-tills.md)).
+- **Outcome:** the cashier either carries on selling on the recovered session, or cashes it up properly (UC-B5) — with a **counted** amount, never a pre-filled one.
+- **Notes & limitations:**
+  - A failed lookup must be reported as a failure, not rendered as "no open shift" (UC-B2).
+  - A supervisor holding `POS.SESSION.CLOSE` can cash up a shift stranded by a cashier who has gone home; the back-office POS session list defaults to `OPEN` so stranded shifts are findable.
 
 ---
 

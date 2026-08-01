@@ -1,9 +1,12 @@
 package com.erp.modules.sales.domain.entity;
 
+import com.erp.modules.sales.domain.enums.BelowCostAction;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,6 +44,17 @@ public class SalesSettings extends UidEntity {
     @Column(name = "allow_negative_stock", nullable = false)
     @Setter
     private boolean allowNegativeStock = false;
+
+    /**
+     * Configurable "sale at or below cost" policy (owner decision 2026-08-01, V93).
+     * {@link BelowCostAction#OFF} (the default) = no check, the pre-V93 behaviour. Enforced
+     * synchronously by {@code BelowCostGuard} at sales-invoice finalise (which is also the POS
+     * path) against the product's moving-average cost.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "below_cost_action", nullable = false, length = 16)
+    @Setter
+    private BelowCostAction belowCostAction = BelowCostAction.OFF;
 
     @Column(name = "currency", nullable = false, length = 3)
     @Setter

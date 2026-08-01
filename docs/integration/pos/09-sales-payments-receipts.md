@@ -142,7 +142,7 @@ public record PosSaleRequest(
 
 | Field | JSON type | Required | Notes |
 | --- | --- | --- | --- |
-| `sessionUid` | string | yes (`@NotBlank`) | The open POS session uid (string, e.g. `pos-sess_…`). Resolved via `PosSessionRepository.findByUid`; must exist (else **404** `PosSession`) and be **OPEN** (else **409** `POS session <uid> is not OPEN.`). |
+| `sessionUid` | string | yes (`@NotBlank`) | The open POS session uid (string, e.g. `pos-sess_…`). Resolved via `PosSessionRepository.findByUid`; must exist (else **404** `PosSession`) and be **OPEN** (else **409** `This POS session is not OPEN.`). |
 | `customerId` | number (long) | yes (`@NotNull`) | Numeric DB id of the customer (not a uid). `customers.findById(customerId)`; unknown → **404** `Customer`. For a true walk-in, pass your configured cash/walk-in customer id. |
 | `agentId` | number (long) | **no** (ADR-0042 D-4 — was `@NotNull`) | Numeric DB id of the selling agent (cashier/clerk). **Informational and NOT forwarded** — see the important note below. The invoice's agent always defaults to the logged-in user, so the submitted `agentId` has no effect on attribution. The `@NotNull` was relaxed; you may omit it. |
 | `currency` | string | yes (`@NotBlank`) | ISO currency code, e.g. `"TZS"`. Must match the session company's enabled currencies, otherwise **422** `CurrencyNotEnabledException`. Becomes the invoice header currency and the currency forced onto **every** tender (each `PosTender` is recorded in this currency). |
@@ -217,8 +217,8 @@ One `@Transactional` method performs the whole quick-sale, in order:
 1. **Resolve + guard the session.** `posSessionRepo.findByUid(sessionUid)` (→ **404**
    if absent), then `scopeGuard.assertCanActIn(RequestContext.get(),
    session.getCompanyId())` (→ **403** if the caller cannot act in the session's
-   company), then assert `session.getStatus() == OPEN` (→ **409** `POS session
-   <uid> is not OPEN.`).
+   company), then assert `session.getStatus() == OPEN` (→ **409** `This POS session
+   is not OPEN.`).
 1b. **Reserve the `Idempotency-Key`** (only if the header was sent — ADR-0042 D-1).
    `idempotency.tryReserve(companyId, key)` runs `INSERT … ON CONFLICT
    (company_id, idem_key) DO NOTHING` **inside this transaction, before the
@@ -226,7 +226,8 @@ One `@Transactional` method performs the whole quick-sale, in order:
    already-used key it returns 0 (blocking first on any in-flight winner): if the
    marker's `invoiceUid` is stamped, the **original** finalised invoice is
    returned (replay — no second sale); if it is still null (a true in-flight
-   duplicate), a **409** `… still in progress; retry shortly` is thrown. See §10.
+   duplicate), a **409** `This sale is still being processed. Please try again in a
+   moment.` is thrown — **not** a terminal answer; keep the key and retry it (§10).
 2. **Resolve the customer + company.** `customers.findById(customerId)` (→ **404**),
    `companies.findById(session.getCompanyId())` (→ **404**). The sale's company is
    taken from the **session**, not from the request.
@@ -254,6 +255,27 @@ One `@Transactional` method performs the whole quick-sale, in order:
      the gross — `new AddPaymentRequest(TenderType.CASH, grossTotal, currency,
      null)` — is added, the original behaviour. No over-tender, hence no server
      change row.
+6b. **Negative-stock check** (inside finalise, before anything commits). Because a
+   POS invoice issues stock at finalise, the requested base quantity is
+   aggregated **per product across all lines** and each product is checked
+   against branch availability (`stock_on_hand.quantity − reserved_qty`). If a
+   product would go below zero and the company has not opted into backorder, the
+   whole sale is rejected with **409** and a cashier-safe message —
+   `Not enough stock of <product> to complete this sale — 3 available, 5
+   requested. Ask a supervisor to enable backorder if this should be allowed.`
+   (an on-hand at or below zero reads as "out of stock" rather than a raw
+   negative). Nothing is written: the invoice, the payments and the outbox event
+   all roll back with the transaction. Two details worth knowing:
+   - **The default is now BLOCK.** The behaviour is per company
+     (`sales_settings.allow_negative_stock`), and a company with **no settings
+     row blocks** — the fail-safe direction. (This reverses the earlier
+     "allow until configured" fallback, which silently let un-configured
+     companies oversell while the back-office screen claimed they were
+     protected.) The row is provisioned when a company is created.
+   - **Only lines issued as themselves are checked.** Non-stockable services, and
+     kit/phantom products that explode into components at issue time, are skipped
+     — they carry no on-hand row of their own. A stockable finished good with a
+     manufacturing BOM **is** checked, because it is issued as itself.
 7. **Finalise** via `invoiceService.finalise(invoiceUid, new
    FinaliseInvoiceRequest())`. This freezes totals, stamps the FX rate-triple,
    allocates the invoice number, validates paid-in-full, sets status
@@ -584,10 +606,18 @@ optional `Idempotency-Key` request header (ADR-0042 D-1, commit `f08fb08`,
 backed by the `pos_sale_idempotency` table from `V70`). Full cross-page detail is
 in `11-errors-offline-idempotency.md`; the POS-specific behaviour is:
 
-- **Send the header to get the guarantee.** Supply an opaque `Idempotency-Key`
-  (≤80 chars) and **reuse the same value** on every retry of *that* basket. The
-  key is reserved *before* the invoice is created (reserve-before-process), inside
-  the sale's single transaction.
+- **Send the header to get the guarantee — and make the key DURABLE.** Supply an
+  opaque `Idempotency-Key` (≤80 chars) and **reuse the same value** on every retry
+  of *that* basket. The key is reserved *before* the invoice is created
+  (reserve-before-process), inside the sale's single transaction. On the client
+  side the key must be **written to device storage before the POST goes out** and
+  **cleared only on a confirmed terminal outcome**; on relaunch an unresolved key
+  must be reconciled with the server rather than silently re-rung. A key that
+  lives only in memory is no protection at all — the case it exists for is the app
+  being killed between the server committing and the response arriving, which is
+  exactly when an in-memory key is lost and the re-rung basket mints a fresh one,
+  producing a **second finalised invoice**. Full contract:
+  `11-errors-offline-idempotency.md` §4.1a.
 - **Replay (same key, original already committed):** the server returns the
   **original** finalised `SalesInvoiceDto` — **no** duplicate invoice, stock
   issue, GL/AR posting, payment, or `SALE_FINALISED` event. Caveat: a replay still
@@ -597,9 +627,11 @@ in `11-errors-offline-idempotency.md`; the POS-specific behaviour is:
 - **Concurrent in-flight duplicate:** the duplicate `INSERT` **blocks** on the
   winner and then returns the winner's original invoice. In the narrow window
   where the marker row exists but `invoice_uid` is not yet stamped, the duplicate
-  gets **409** `A POS sale with this Idempotency-Key is still in progress; retry
-  shortly` — this specific 409 is **retryable**: resend the **same** key after a
-  short delay.
+  gets **409** `This sale is still being processed. Please try again in a moment.`
+  — this 409 is **retryable and NOT a terminal answer**: keep the key, keep the
+  till blocked, and resend the **same** key after a short delay. Releasing the key
+  on a 409 frees the till to ring the same basket again while the original is
+  still committing — re-opening the exact duplicate window the key closes.
 - **Scope is per company.** The key need only be unique within the authenticated
   session's company; the same value in another company is independent.
 - **A failed / rolled-back sale frees the key.** The reservation rolls back with
@@ -611,12 +643,15 @@ in `11-errors-offline-idempotency.md`; the POS-specific behaviour is:
   to be safe.
 
 Client guidance:
-- **Always send a stable `Idempotency-Key` per basket** (one value, reused across
-  retries) so a UI double-tap, auto-retry, or post-timeout resend cannot
-  double-post.
+- **Always send a stable, persisted `Idempotency-Key` per basket** (one value,
+  written to storage before the first POST and reused across retries) so a UI
+  double-tap, auto-retry, post-timeout resend, or an app kill cannot double-post.
 - Treat a timed-out POST as **unknown**, not failed — and just resend with the
   **same** key; the server either replays the original or completes the in-flight
   one (or returns the retryable 409 above).
+- **Block the till while a key is unresolved.** Ringing a fresh basket on top of
+  an unsettled attempt is how a sale gets charged twice; settle the old one first
+  (replay it) and only then accept the next sale.
 - Without a key, reconcile manually before re-sending: list the session's recent
   invoices (e.g. `GET /api/v1/sales-invoices?companyId=…` filtered to your session
   / time window) and check whether a finalised invoice already matches the basket.
@@ -633,7 +668,7 @@ These follow the shared error table; the POS-specific triggers are:
 | **401** | Missing/invalid/expired bearer token, or the user is no longer ACTIVE. |
 | **403** | Caller lacks `POS.SALE.CREATE`, or cannot act in the session's company (`ScopeGuard.assertCanActIn`), or a rejected `X-Branch-Uid`. |
 | **404** | Unknown `sessionUid` (`PosSession`), `customerId` (`Customer`), session company (`Company`), a line `productId` (`Product`) or `unitId` (`Unit`), or the freshly-created invoice uid. |
-| **409** | Session not OPEN (`POS session <uid> is not OPEN.`); **tenders do not cover the gross total** (`Tenders (…) do not cover the gross total (…)` — mode B, §6); an **in-flight duplicate** of the same `Idempotency-Key` (`… still in progress; retry shortly` — **retryable**, §10); cash invoice not paid-in-full (should not happen on the default path since the server pays exactly gross); credit-limit exceeded without `SALES.CREDIT.OVERRIDE` (only if pointed at a `CREDIT_ACCOUNT` customer); optimistic-lock conflict on concurrent stock/state (retryable). |
+| **409** | Session not OPEN (`This POS session is not OPEN.`); **not enough stock** for a line and the company blocks negative stock (`Not enough stock of <product> …` — §3 step 6b; fix the basket, the same bytes will fail again); **tenders do not cover the gross total** (`Tenders (…) do not cover the gross total (…)` — mode B, §6); the original attempt under the same `Idempotency-Key` is **still being processed** (`This sale is still being processed. Please try again in a moment.` — **retryable, and NOT terminal for the key**, §10); cash invoice not paid-in-full (should not happen on the default path since the server pays exactly gross); credit-limit exceeded without `SALES.CREDIT.OVERRIDE` (only if pointed at a `CREDIT_ACCOUNT` customer); optimistic-lock conflict on concurrent stock/state (retryable). |
 | **415** | Wrong `Content-Type` — must be `application/json`. |
 | **422** | `currency` not enabled for the session's company/branch scope (`CurrencyNotEnabledException`). |
 | **500** | Unexpected server error (generic message; stack logged server-side). |
@@ -730,10 +765,14 @@ curl -s -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   list / `tax_rates`**, **not** your `unitPrice` (accepted but ignored, ADR-0042
   D-4); only `lineDiscountAmount` of your discount fields is honoured. Trust the
   returned DTO totals.
-- **Idempotency:** send a stable **`Idempotency-Key`** (≤80 chars, per company)
-  and reuse it on retries — replay returns the original invoice (still HTTP 201;
-  match by `uid`), in-flight duplicate gets a retryable **409** (§10,
-  `11-errors-offline-idempotency.md`).
+- **Idempotency:** send a stable **`Idempotency-Key`** (≤80 chars, per company),
+  **persisted to device storage before the POST**, and reuse it on retries —
+  replay returns the original invoice (still HTTP 201; match by `uid`); a **409**
+  means the original is *still processing*, so keep the key and retry (§10,
+  `11-errors-offline-idempotency.md` §4.1a/§4.2a).
+- **Stock is guarded synchronously:** a line that would take on-hand negative is
+  refused with **409** before anything commits, unless the company has opted into
+  backorder — and a company with no sales-settings row **blocks** (§3 step 6b).
 - **Reverse a mis-rung sale:** `POST /api/v1/pos/sales/uid/{uid}/reverse` · perm
   `POS.SALE.VOID` (whole-sale only; session must be OPEN) — see
   `10-returns-refunds.md`.

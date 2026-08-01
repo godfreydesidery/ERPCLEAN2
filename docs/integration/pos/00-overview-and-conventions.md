@@ -208,8 +208,11 @@ Paged endpoints bind a Spring Data `Pageable` directly from query params. In the
 list** is paged:
 
 ```
-GET /api/v1/pos/sessions?companyId={id}&page=&size=&sort=
+GET /api/v1/pos/sessions?companyId={id}&status=&page=&size=&sort=
 ```
+
+(`status` is an optional `PosSessionStatus` filter — `OPEN` / `CLOSED` / `RECONCILED`. Both session
+finders already order **newest-first**, so page 0 is the most recent shifts. §10.7.)
 
 | Param | Meaning | Default |
 |---|---|---|
@@ -339,8 +342,11 @@ curl -sS -X POST "$BASE/api/v1/pos/tills" \
 
 ```json
 { "data": { "id": "5001", "uid": "till_a91c", "companyId": "100", "branchId": "3001",
-            "code": "TILL-001", "name": "Front Register 1",
-            "cashBankAccountId": "8800", "status": "ACTIVE" },
+            "code": "TILL-0001", "name": "Front Register 1",
+            "cashBankAccountId": "8800", "status": "ACTIVE",
+            "hasOpenSession": false, "openSessionUid": null,
+            "openSessionCashierId": null, "openSessionCashierName": null,
+            "openSessionOpenedAt": null },
   "errors": [], "meta": null }
 ```
 
@@ -358,6 +364,13 @@ curl -sS -X POST "$BASE/api/v1/pos/tills" \
 curl -sS "$BASE/api/v1/pos/tills?companyId=100&branchId=3001" \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+> **Each row reports its occupancy.** `hasOpenSession` plus `openSessionUid` /
+> `openSessionCashierId` / `openSessionCashierName` / `openSessionOpenedAt` say whether a till is
+> busy **and by whom**. `hasOpenSession` is till-keyed with no comparison against the caller, so a
+> client must compare `openSessionCashierId` with its own user id (the access token's `sub`) to tell
+> its own abandoned shift from a colleague's live one — the name is display copy only. See
+> [07 — Occupancy](./07-tills.md#occupancy--reading-hasopensession-and-the-opensession-fields).
 
 - **Notable errors:** 400 (missing/uncoercible `companyId`/`branchId`); 401; 403.
 
@@ -408,18 +421,26 @@ curl -sS -X POST "$BASE/api/v1/pos/sessions" \
 - **Success:** **200**, `data` = `PosSessionDto`.
 - **Notable errors:** 401; 403; 404 (`NotFoundException.of("PosSession", uid)`).
 
-### 10.7 `GET /api/v1/pos/sessions?companyId=&page=&size=&sort=` — list sessions (PAGED)
+### 10.7 `GET /api/v1/pos/sessions?companyId=&status=&page=&size=&sort=` — list sessions (PAGED)
 
 - **Permission:** `POS.SESSION.VIEW`
-- **Query params:** `companyId` (`@RequestParam Long`, required) + the `Pageable` params (§7).
+- **Query params:** `companyId` (`@RequestParam Long`, required), `status`
+  (`PosSessionStatus`, **optional** — `OPEN` / `CLOSED` / `RECONCILED`) + the `Pageable` params (§7).
+- **Ordering:** both finders order **newest-first** (`openedAt DESC, id DESC`) in the query itself.
 - **Success:** **200**, `data` = `List<PosSessionDto>`, `meta` = `PageMeta`.
 
 ```bash
-curl -sS "$BASE/api/v1/pos/sessions?companyId=100&page=0&size=20&sort=openedAt,desc" \
+# recovering a cashier's still-open shift — ALWAYS filter server-side
+curl -sS "$BASE/api/v1/pos/sessions?companyId=100&status=OPEN&size=50" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-- **Notable errors:** 400 (missing/uncoercible `companyId`); 401; 403.
+> **Use `status=OPEN` to find an open shift.** Fetching page 0 unfiltered and filtering in client
+> code silently stops working once the company has more lifetime sessions than fit on the page —
+> the open shift is not on the page to be found, and the cashier is locked out of a till only they
+> can close. See [08 §5.1](./08-sessions.md).
+
+- **Notable errors:** 400 (missing/uncoercible `companyId`, or an invalid `status`); 401; 403.
 
 ### 10.8 `POST /api/v1/pos/sessions/uid/{uid}/payouts` — record a payout
 
@@ -438,7 +459,7 @@ curl -sS -X POST "$BASE/api/v1/pos/sessions/uid/sess_4d2e/payouts" \
 ```
 
 - **Notable errors:** 400 (validation / bad enum); 401; 403; 404 (unknown session uid); 409 (session not
-  OPEN → `POS session <uid> is not OPEN.`); 415.
+  OPEN → `Session <sessionNumber> is not OPEN.`); 415.
 
 ### 10.9 `POST /api/v1/pos/sessions/uid/{uid}/close` — close a session
 
@@ -458,12 +479,20 @@ curl -sS -X POST "$BASE/api/v1/pos/sessions/uid/sess_4d2e/close" \
 
 - **Notable errors:** 400; 401; 403; 404; 409 (session not OPEN); 415.
 
+> **This call is the ONLY thing that ends a shift.** There is no idle timeout, no sweeper and no
+> logout hook that closes a session — by design, since the close records a **counted** cash figure
+> the system must never invent. So a killed app leaves its session `OPEN` and its till held; the
+> client's job is to offer recovery (`GET /pos/sessions?companyId=…&status=OPEN`, §10.7), and never
+> to pre-fill `countedCashAmount`.
+
 ### 10.10 `GET /api/v1/pos/sessions/uid/{uid}/x-read` — mid-session X-read
 
 - **Permission:** `POS.SESSION.VIEW` (scoped)
 - **Success:** **200**, `data` = `XReadDto`
   (`sessionUid, posTillId, cashierId, openedAt, openingFloatAmount, totalSalesAmount,
-  totalPayoutsNetAmount, expectedCashAmount, invoiceCount`). Does **not** close the session.
+  cashTenderAmount, totalPayoutsNetAmount, expectedCashAmount, invoiceCount, tenderSubtotals`).
+  Does **not** close the session. Note `totalSalesAmount` is gross turnover across every tender
+  type; the drawer figure is `cashTenderAmount` ([08 §7](./08-sessions.md)).
 - **Notable errors:** 401; 403; 404.
 
 ### 10.11 `POST /api/v1/pos/sessions/uid/{uid}/reconcile` — Z-read / reconcile
@@ -542,23 +571,29 @@ curl -sS -X POST "$BASE/api/v1/pos/sales" \
   - **401** / **403** — auth / lacks `POS.SALE.CREATE` / acting outside active scope.
   - **404** — unknown `sessionUid` (`NotFoundException.of("PosSession", uid)`), `customerId`, `productId`,
     or `unitId`.
-  - **409** — session **not OPEN** (`POS session <uid> is not OPEN.`); finalising with no lines;
-    cash/tenders not covering the gross; credit-limit exceeded without `SALES.CREDIT.OVERRIDE`;
-    a concurrent request is still in flight under the **same `Idempotency-Key`** (`still in progress; retry
-    shortly` — **retryable**, resend the same key); optimistic-lock conflict (`This record was modified by
+  - **409** — session **not OPEN** (`This POS session is not OPEN.`); **not enough stock** for a line
+    (`Not enough stock of <product> …` — blocked by default, see [06](./06-stock-availability.md));
+    finalising with no lines; cash/tenders not covering the gross; credit-limit exceeded without
+    `SALES.CREDIT.OVERRIDE`; the original attempt under the **same `Idempotency-Key`** is still
+    committing (`This sale is still being processed. Please try again in a moment.` — **retryable and
+    NOT terminal**: keep the key and resend it); optimistic-lock conflict (`This record was modified by
     another transaction. Please reload and try again.` — retryable).
   - **415** — wrong content type.
   - **422** — `currency` not enabled for the session's company/branch scope.
 
 > **Two critical behaviours for sale create** (each detailed on its own page):
 >
-> 1. **Idempotency is opt-in (ADR-0042 D-1, commit `f08fb08`).** Send an optional **`Idempotency-Key`**
->    request header (≤80 chars, per-company scope) and a blind retry after a timeout is safe: the key is
->    reserved before processing, so replaying it returns the **original** invoice (still **201**, matched by
->    uid) with no double post; a concurrent in-flight request under the same key gets a retryable **409**
->    (`still in progress; retry shortly`). **Omitting** the header keeps the legacy non-idempotent path, so
->    a blind retry there still duplicates the invoice (stock + GL/AR). `X-Request-Id` is correlation only and
->    is **not** used for dedup. See [11](./11-errors-offline-idempotency.md).
+> 1. **Idempotency is opt-in server-side, and DURABLE on the client (ADR-0042 D-1, commit `f08fb08`).**
+>    Send an optional **`Idempotency-Key`** request header (≤80 chars, per-company scope) and a retry after
+>    a timeout is safe: the key is reserved before processing, so replaying it returns the **original**
+>    invoice (still **201**, matched by uid) with no double post; a request that arrives while the original
+>    is still committing gets a **409** (`This sale is still being processed…`) which is **retryable and not
+>    terminal** — keep the key and resend it. The client's half of the contract is not optional: **persist
+>    the key (and body) to device storage before the POST, clear it only on a confirmed terminal outcome,
+>    and reconcile an unresolved key on relaunch instead of re-ringing** — a key held only in memory is lost
+>    by the app kill it exists to protect against. **Omitting** the header keeps the legacy non-idempotent
+>    path, so a blind retry there still duplicates the invoice (stock + GL/AR). `X-Request-Id` is
+>    correlation only and is **not** used for dedup. See [11](./11-errors-offline-idempotency.md) §4.1a.
 > 2. **Posting is only partially synchronous.** The 201 returns a **FINALISED, fully-paid** invoice, but
 >    the stock issue, GL journal, and AR posting are applied **asynchronously** by an outbox poller
 >    (~1s). Do **not** assume the ledger/stock is posted at response time.
