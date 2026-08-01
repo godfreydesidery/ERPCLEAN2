@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1.7
+#
+# STAGE 1 OF 2 — the compiler. Produces `app.jar` and nothing else.
+#
+# This image is NEVER shipped to a client. Its only job is to turn source into the single
+# architecture-independent artifact the runtime image needs.
+#
+# Why the build is split from the runtime (dist/Dockerfile.runtime):
+#   `app.jar` is JVM bytecode plus a static Angular bundle — identical on amd64 and arm64.
+#   Only the JRE base image differs between architectures. Building the whole thing under
+#   `buildx --platform linux/arm64` on an x86 machine would run npm and Maven under QEMU
+#   emulation: 30-60 minutes per release and a well-known source of flaky JVM builds.
+#   Compiling ONCE here natively, then stamping the same jar onto two JRE bases, makes the
+#   arm64 build a file copy that finishes in seconds.
+#
+# Build context = repo root. Invoked by dist/build-release.sh / .ps1 as:
+#   docker buildx build --target export --output type=local,dest=dist/build \
+#     -f dist/Dockerfile.build .
+#
+# The `export` target writes /app.jar into dist/build/ on the host — that directory then
+# becomes the build context for dist/Dockerfile.runtime.
+
+# ---------- Angular SPA ----------
+FROM node:20-alpine AS web-build
+WORKDIR /web
+# package.json + lockfile first so node_modules stays cached when only source changes.
+COPY web/package.json web/package-lock.json ./
+# `npm ci` (not `npm install`) — installs exactly the locked tree. A release build must be
+# reproducible; `npm install` is free to resolve newer semver-compatible versions.
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+# `ng build` defaults to the "production" configuration (see web/angular.json):
+# optimization + outputHashing, and NO source maps — production does not set sourceMap,
+# so the client never receives readable TypeScript. Do not add sourceMap to that config.
+RUN npm run build
+# Output: /web/dist/web/browser/
+
+# ---------- Spring Boot fat jar ----------
+FROM maven:3.9-eclipse-temurin-21 AS api-build
+WORKDIR /api
+# Dependency layer — only re-resolved when pom.xml changes.
+COPY backend/pom.xml ./
+RUN mvn -B -q -DskipTests dependency:go-offline
+COPY backend/src ./src
+# Drop the SPA into Spring Boot's static resource path so it ships INSIDE the jar and is
+# served same-origin with the API. SpaWebConfig (com.erp.api) resolves it from
+# classpath:/static/ with HTML5-route fallback, excluding /api/** and /actuator/**.
+# This is what makes the relative `apiBaseUrl: '/api/v1'` in the SPA work with no proxy
+# and no CORS configuration.
+COPY --from=web-build /web/dist/web/browser/ ./src/main/resources/static/
+# Tests are the PR gate (mvn -B clean test) and run in CI before a release is cut —
+# re-running them here would double the release time for no added signal.
+# NOTE: `erp-api` here is the Maven artifactId from backend/pom.xml, NOT a product name.
+# It is what Maven writes into target/, so it must match the pom and must NOT be renamed
+# along with the OrbixERP branding. (It was, once; the build failed with
+# "cp: cannot stat 'target/orbixerp-api-*.jar'".) If the artifactId ever changes in the pom,
+# change it here too.
+RUN mvn -B -q -Dmaven.test.skip=true package \
+ && cp target/erp-api-*.jar /api/app.jar
+
+# ---------- Export ----------
+# `scratch` + a single COPY: `--output type=local` writes exactly this filesystem to the
+# host, so dist/build/ ends up containing app.jar and nothing else.
+FROM scratch AS export
+COPY --from=api-build /api/app.jar /app.jar

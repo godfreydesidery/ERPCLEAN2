@@ -10,6 +10,20 @@
 # Let git decide for unmarked files (normalizes to LF in the repo, checks out native on Windows).
 * text=auto
 
+# Windows batch launchers in the client distribution bundle. A .cmd with bare LF endings
+# misbehaves around labels and goto, so these must be CRLF in the working tree on every
+# platform — including a Linux checkout, from which a release may be built.
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# The client's .env template must be LF. Docker passes each line of an env file into the
+# container verbatim, so a CRLF checkout gives every setting an invisible trailing carriage
+# return: passwords that are silently wrong, JDBC URLs that will not parse. Without this pin
+# it inherits `text=auto` and checks out CRLF on Windows, and a release built from that clone
+# ships the fault to the client.
+*.example   text eol=lf
+Caddyfile   text eol=lf
+
 # Force LF in the working tree too for these — never CRLF, on any platform.
 *.sql   text eol=lf
 *.sh    text eol=lf

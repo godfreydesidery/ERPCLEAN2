@@ -1,0 +1,78 @@
+# OrbixERP — base stack.
+#
+# This file defines the application ONLY. It is deliberately database-agnostic: it never
+# says where Postgres lives. One of two overlays supplies that, chosen by ERP_DB_MODE in
+# your .env file:
+#
+#   ERP_DB_MODE=docker  ->  -f docker-compose.yml -f docker-compose.db-docker.yml
+#   ERP_DB_MODE=host    ->  -f docker-compose.yml -f docker-compose.db-host.yml
+#
+# You do not need to type those flags. `orbixerp.sh` / `orbixerp.ps1` read ERP_DB_MODE and assemble
+# them for you:  ./orbixerp.sh start   |   .\orbixerp.ps1 start
+#
+# The web client is bundled INSIDE the api image and served on the same port as the API,
+# so there is no separate frontend container, no reverse proxy and no CORS setup to get
+# wrong. Browse to http://<this-host>:${ERP_HTTP_PORT}.
+
+# ERP_STACK_NAME namespaces the whole stack: the compose project, the container names, the
+# network and the data volume. Leaving it at "orbixerp" is right for a normal single install.
+# Changing it in a SECOND copy of this folder lets a separate instance (a training or demo
+# system, say) run on the same machine without touching the first one's data.
+name: ${ERP_STACK_NAME:-orbixerp}
+
+services:
+  api:
+    # Pinned to an exact version — never a moving tag. `${VAR:?message}` makes compose
+    # fail with a readable error instead of starting something unintended.
+    image: ${ERP_IMAGE:-orbixerp-api}:${ERP_VERSION:?ERP_VERSION is not set — is .env missing? Run the installer.}
+    container_name: ${ERP_STACK_NAME:-orbixerp}-api
+    restart: unless-stopped
+
+    # .env supplies operator settings (bootstrap values, timezone, JVM opts...).
+    # Anything in the `environment:` block below OVERRIDES .env — that is how the two
+    # database overlays force the correct datasource regardless of stale .env values.
+    env_file:
+      - .env
+
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ERP_API_PORT: "8081"
+      ERP_MANAGEMENT_PORT: "9090"
+      # Stable RS256 signing keys, generated on THIS machine by the installer and mounted
+      # read-only below. Without them the app would mint a new key on every restart and log
+      # every user out. The keys never leave this directory — back them up with .env.
+      ERP_JWT_SIGNING_MODE: file
+      ERP_JWT_PRIVATE_KEY: /run/secrets/jwt/private.pem
+      ERP_JWT_PUBLIC_KEY: /run/secrets/jwt/public.pem
+      # API documentation surface — off by default on a client install.
+      ERP_SWAGGER_ENABLED: "${ERP_SWAGGER_ENABLED:-false}"
+      TZ: "${ERP_TIME_ZONE:-Africa/Dar_es_Salaam}"
+
+    ports:
+      # ERP_BIND_ADDR defaults to 0.0.0.0 so other machines on the LAN (and the POS app)
+      # can reach the system. Set it to 127.0.0.1 to restrict access to this machine only,
+      # which is also what you want when you put the TLS overlay in front.
+      - "${ERP_BIND_ADDR:-0.0.0.0}:${ERP_HTTP_PORT:-8080}:8081"
+      # Port 9090 (actuator/metrics) is intentionally NOT published.
+
+    volumes:
+      - ./secrets/jwt:/run/secrets/jwt:ro
+
+    healthcheck:
+      # Probes the management port. "healthy" here means the app has finished its Flyway
+      # migrations AND holds a live database connection — not merely that the JVM started.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/actuator/health/readiness >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      # First boot applies 93 migrations to an empty database and is much slower than every
+      # subsequent start. Do not lower this or a healthy first install will be marked failed.
+      start_period: 180s
+      retries: 5
+
+    logging:
+      # Bound the log files. Without this a long-running install fills the disk with JSON
+      # logs and the first symptom is Postgres failing to write.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

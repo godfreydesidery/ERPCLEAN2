@@ -1,0 +1,120 @@
+================================================================================
+  TEMPLATE — NOT YET A LICENCE. REPLACE BEFORE SHIPPING TO ANY CLIENT.
+================================================================================
+
+  This file is a STARTING POINT drafted by an engineer, not a lawyer. It has no
+  legal review behind it and it is not legal advice.
+
+  Before the first client handover, the owner must:
+
+    1. Have this reviewed or redrafted by a qualified lawyer in the governing
+       jurisdiction (Tanzania, or wherever the contracting entity sits).
+    2. Fill in every <PLACEHOLDER>.
+    3. Delete this banner.
+
+  Why it matters more than it looks: a Docker image is a container for compiled
+  files, not a protection mechanism. Anyone holding the image can extract the
+  application and decompile it. This document, and the contract it sits under,
+  is the actual thing restricting what a client may do with the software.
+  See dist/README.md for the honest technical picture.
+
+================================================================================
+
+
+SOFTWARE LICENCE AGREEMENT
+
+Software:   <PRODUCT NAME>
+Version:    see the VERSION file supplied with this bundle
+Licensor:   <LEGAL ENTITY NAME>, <ADDRESS>
+Licensee:   the organisation named in the associated commercial agreement
+
+
+1. GRANT OF LICENCE
+
+   The Licensor grants the Licensee a non-exclusive, non-transferable licence to
+   install and use the Software for the Licensee's own internal business
+   operations, for the duration and on the terms of the associated commercial
+   agreement.
+
+   Scope of permitted use: <NUMBER OF INSTALLATIONS / SITES / NAMED USERS>.
+
+
+2. RESTRICTIONS
+
+   The Licensee shall not:
+
+   a) copy, distribute, sublicense, sell, rent, lease or otherwise make the
+      Software available to any third party;
+
+   b) decompile, disassemble, reverse engineer or otherwise attempt to derive
+      the source code, structure or internal design of the Software, except to
+      the extent that such an act cannot lawfully be prohibited;
+
+   c) modify the Software or create derivative works from it;
+
+   d) remove, obscure or alter any copyright, trademark or other proprietary
+      notice contained in or displayed by the Software;
+
+   e) use the Software to provide a service to third parties, or on behalf of
+      any organisation other than the Licensee, without prior written consent.
+
+
+3. OWNERSHIP
+
+   The Software is licensed, not sold. All intellectual property rights in the
+   Software remain with the Licensor. Data entered into the Software by the
+   Licensee remains the property of the Licensee.
+
+
+4. THIRD-PARTY COMPONENTS
+
+   The Software is distributed alongside third-party components, each licensed
+   under its own terms, which continue to apply to those components:
+
+     - PostgreSQL              PostgreSQL Licence
+     - Eclipse Temurin (JRE)   GPLv2 with Classpath Exception
+     - Caddy                   Apache Licence 2.0
+     - Spring Boot             Apache Licence 2.0
+     - Angular                 MIT Licence
+
+   <Confirm this list against the shipped images before each release. It is
+   indicative and is not a substitute for a generated bill of materials.>
+
+
+5. SUPPORT AND UPDATES
+
+   Support, updates and their service levels are governed by the associated
+   commercial agreement and are not granted by this licence.
+
+
+6. WARRANTY
+
+   <TO BE DRAFTED. Note that a blanket "as is" disclaimer is not necessarily
+   enforceable in every jurisdiction, particularly against consumers or where
+   local law implies statutory warranties. This clause needs legal input rather
+   than a copied template.>
+
+
+7. LIMITATION OF LIABILITY
+
+   <TO BE DRAFTED WITH LEGAL ADVICE. Consider the liability cap, the treatment
+   of data loss, and any carve-outs that cannot lawfully be excluded.>
+
+
+8. TERM AND TERMINATION
+
+   <TO BE DRAFTED: term, termination triggers, and what happens to the
+   Licensee's data and their ability to run the Software after termination.
+   Address data export explicitly — it is the clause clients ask about.>
+
+
+9. GOVERNING LAW
+
+   This agreement is governed by the laws of <JURISDICTION>.
+
+
+CONTACT
+
+   <LEGAL ENTITY NAME>
+   <ADDRESS>
+   <EMAIL>   <PHONE>

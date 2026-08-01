@@ -1,0 +1,65 @@
+# Database overlay — ERP_DB_MODE=docker
+#
+# "We provide the database." Adds a PostgreSQL 15 container and points the API at it.
+# Your data lives in the Docker named volume `orbixerp-db-data` on this machine.
+#
+# Applied automatically when .env says ERP_DB_MODE=docker. Never used together with
+# docker-compose.db-host.yml.
+#
+# >>> The volume `orbixerp-db-data` IS your database. `docker compose down -v` deletes it and
+# >>> every transaction in it. Use `./orbixerp.sh stop`, never `down -v`. Take backups with
+# >>> `./orbixerp.sh backup` before any update.
+
+services:
+
+  db:
+    image: postgres:15-alpine
+    container_name: ${ERP_STACK_NAME:-orbixerp}-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${ERP_DB_NAME:-erp}
+      POSTGRES_USER: ${ERP_DB_USER:-erp}
+      POSTGRES_PASSWORD: ${ERP_DB_PASSWORD:?ERP_DB_PASSWORD is not set in .env}
+
+    volumes:
+      - orbixerp-db-data:/var/lib/postgresql/data
+
+    # Not published to the host. Only the API container needs to reach Postgres, and
+    # `./orbixerp.sh backup` connects over the internal compose network. If you genuinely need
+    # DBA access, uncomment this — it binds to loopback only — and comment it out again after.
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ERP_DB_USER:-erp} -d ${ERP_DB_NAME:-erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    # The API fails fast if Postgres is unreachable at startup, so waiting for a genuinely
+    # healthy database (not merely a started container) avoids a restart loop on boot.
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # `db` is the compose service name, resolved by Docker's internal DNS. This overrides
+      # any ERP_DB_URL left in .env, so switching modes cannot leave a stale datasource behind.
+      ERP_DB_URL: jdbc:postgresql://db:5432/${ERP_DB_NAME:-erp}
+      ERP_DB_USER: ${ERP_DB_USER:-erp}
+      ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?ERP_DB_PASSWORD is not set in .env}
+
+volumes:
+  orbixerp-db-data:
+    # Named explicitly (and namespaced by ERP_STACK_NAME) so the volume that holds the
+    # database has a predictable name in `docker volume ls` rather than a compose-generated
+    # one. Deleting it deletes the database.
+    name: ${ERP_STACK_NAME:-orbixerp}-db-data

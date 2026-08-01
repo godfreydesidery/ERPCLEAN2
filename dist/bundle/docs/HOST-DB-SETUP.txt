@@ -1,0 +1,177 @@
+================================
+USING YOUR OWN POSTGRESQL SERVER
+================================
+
+  Only read this if you set ERP_DB_MODE=host. If the database runs in Docker
+  (ERP_DB_MODE=docker), everything here is done for you and you can ignore
+  this file.
+
+  Do all of this before running the installer. It checks each of these points
+  and stops with a clear message rather than starting a half-configured
+  system.
+
+------------------------------------------------------------------------------
+
+What is required
+================
+
+  Version
+  Requirement: PostgreSQL 15. Versions 14 and 16 are not tested and are not
+      supported.
+
+  Database
+  Requirement: A database used by nothing else, and empty at first install
+
+  Login role
+  Requirement: A role that owns that database
+
+  Privileges
+  Requirement: Ordinary ownership. No superuser rights are needed, and no
+      extensions are installed
+
+  Reachability
+  Requirement: The server must accept connections from Docker on this machine
+
+  > Why a database of its own. The application manages its own tables and
+    refuses to adopt a database it does not recognise. Pointing it at a
+    database that already holds other data will fail partway through. It costs
+    nothing to create a separate database.
+
+------------------------------------------------------------------------------
+
+1. Create the database and its login
+====================================
+
+  Connect as a PostgreSQL administrator (usually the postgres user) and run:
+
+      CREATE ROLE erp WITH LOGIN PASSWORD 'put-a-long-random-password-here';
+      CREATE DATABASE erp OWNER erp;
+
+  Use a long random password. On Linux or macOS:
+
+      openssl rand -base64 32
+
+  That password goes into .env as ERP_DB_PASSWORD - the installer asks you for
+  it.
+
+  If your organisation requires different names, use them, and put your names
+  into .env as ERP_DB_NAME and ERP_DB_USER.
+
+------------------------------------------------------------------------------
+
+2. Let the server accept connections
+====================================
+
+  Docker containers reach your database from a private internal network, so
+  PostgreSQL must be told to accept them. Two files control this.
+
+  Find where they are:
+
+      SHOW config_file;    -- postgresql.conf
+      SHOW hba_file;       -- pg_hba.conf
+
+  In postgresql.conf - make sure the server listens beyond its own loopback:
+
+      listen_addresses = '*'
+
+  In pg_hba.conf - add a rule permitting the Docker network. Put it before any
+  broader reject rule:
+
+      # TYPE  DATABASE  USER  ADDRESS         METHOD
+      host    erp       erp   172.16.0.0/12   scram-sha-256
+
+  172.16.0.0/12 is the address range Docker uses for its internal networks. If
+  your database is on a different machine from OrbixERP, use that machine's
+  address instead, for example 192.168.1.50/32.
+
+  Apply the changes:
+
+      sudo systemctl reload postgresql      # Linux
+  On Windows, restart the postgresql-x64-15 service from the Services panel.
+
+------------------------------------------------------------------------------
+
+3. Open the firewall
+====================
+
+  If the database is on another machine, allow TCP port 5432 from OrbixERP
+  machine.
+
+  - Linux: sudo ufw allow from <erp-machine-ip> to any port 5432
+  - Windows: Windows Defender Firewall -> Inbound Rules -> New Rule -> Port ->
+    TCP 5432
+
+  If the database is on the same machine as OrbixERP, no firewall change is
+  normally needed.
+
+------------------------------------------------------------------------------
+
+4. Answer the installer
+=======================
+
+  Question: Database server address
+  Answer: host.docker.internal if PostgreSQL is on this same machine;
+      otherwise its hostname or IP
+
+  Question: Port
+  Answer: 5432
+
+  Question: Database name
+  Answer: erp (or your name)
+
+  Question: Login role
+  Answer: erp (or your role)
+
+  Question: Password
+  Answer: the one you set in step 1
+
+  > What host.docker.internal means. It is a special name meaning "the
+    computer this software is running on". It is needed because the
+    application runs inside a container, where localhost refers to the
+    container itself and not to your machine. The configuration already
+    contains the setting that makes this name work on Linux as well as on
+    Windows and macOS.
+
+------------------------------------------------------------------------------
+
+Encrypted connections
+=====================
+
+  If your database requires TLS, add this to .env:
+
+      ERP_DB_URL_PARAMS=?sslmode=require
+
+  For a private certificate authority, use
+  ?sslmode=verify-full&sslrootcert=/path/to/ca.crt and make the certificate
+  available inside the container - ask your supplier for help with that step.
+
+------------------------------------------------------------------------------
+
+Your responsibilities in this mode
+==================================
+
+  Choosing your own database means these become yours:
+
+  - Backups. orbixerp backup still works and writes into backups/, but you may
+    prefer your own tooling. Either way, verify a restore actually works - an
+    untested backup is a guess.
+  - Availability. If the database is down, OrbixERP will not start.
+  - Upgrades. Stay on PostgreSQL 15. Do not upgrade the major version without
+    checking with your supplier first.
+  - Capacity. Monitor disk space. A full disk stops OrbixERP writing anything
+    at all.
+
+------------------------------------------------------------------------------
+
+Checking it yourself
+====================
+
+  To test the connection the same way the installer does, without installing
+  any tools:
+
+      docker run --rm --add-host host.docker.internal:host-gateway \
+        -e PGPASSWORD='your-password' postgres:15-alpine \
+        psql -h host.docker.internal -p 5432 -U erp -d erp -c '\conninfo'
+
+  If that prints connection details, OrbixERP will connect too. If it does
+  not, the error tells you which of the steps above still needs attention.

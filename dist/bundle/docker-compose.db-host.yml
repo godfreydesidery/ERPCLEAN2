@@ -1,0 +1,44 @@
+# Database overlay — ERP_DB_MODE=host
+#
+# "We use our own database." No Postgres container is started; the API connects to a
+# PostgreSQL 15 server you already run. Backups, storage and availability of that server
+# are yours to manage.
+#
+# Applied automatically when .env says ERP_DB_MODE=host. Never used together with
+# docker-compose.db-docker.yml.
+#
+# BEFORE STARTING, read docs/HOST-DB-SETUP.md. In short, your server needs:
+#   - PostgreSQL 15 (14 and 16 are untested; 15 is what the application is validated on)
+#   - an EMPTY database dedicated to this application, owned by the login role you configure
+#   - listen_addresses and pg_hba.conf configured to accept connections from Docker
+#
+# The application creates its own tables on first start (93 schema migrations). It needs no
+# superuser rights and installs no extensions — ownership of its own empty database is enough.
+
+services:
+
+  api:
+    # THE LOAD-BEARING LINE FOR THIS MODE.
+    #
+    # `host.docker.internal` — the name a container uses to reach the machine it runs on —
+    # exists automatically on Docker Desktop (Windows/macOS) but does NOT exist on Linux
+    # unless it is mapped to the special `host-gateway` value, as below. Declaring it here
+    # unconditionally is harmless on Desktop and makes ERP_DB_HOST=host.docker.internal the
+    # correct default on all three platforms.
+    #
+    # If your database is on a DIFFERENT machine, just set ERP_DB_HOST to its hostname or
+    # IP in .env; this line is then simply unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # Assembled from parts so the client never hand-edits a JDBC URL. ERP_DB_URL_PARAMS is
+      # the escape hatch for anything extra — most commonly TLS, e.g. "?sslmode=require".
+      ERP_DB_URL: jdbc:postgresql://${ERP_DB_HOST:-host.docker.internal}:${ERP_DB_PORT:-5432}/${ERP_DB_NAME:?ERP_DB_NAME is not set in .env}${ERP_DB_URL_PARAMS:-}
+      ERP_DB_USER: ${ERP_DB_USER:?ERP_DB_USER is not set in .env}
+      ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?ERP_DB_PASSWORD is not set in .env}
+
+    # No `depends_on` is possible here — the database is outside this stack. If it is
+    # unreachable the API exits and `restart: unless-stopped` retries it, which on its own
+    # looks like an unexplained crash loop. The installer therefore probes your database
+    # BEFORE starting anything and reports a readable error instead.

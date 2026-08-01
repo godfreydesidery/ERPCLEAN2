@@ -1,0 +1,411 @@
+===========================
+RUNNING ORBIXERP DAY TO DAY
+===========================
+
+  On Windows the simplest way is to double-click OrbixERP.cmd and choose from
+  the menu. It covers starting, stopping, checking, backing up and viewing
+  activity - everything most operators ever need.
+
+  Everything is also available as typed commands, run from the folder you
+  installed into:
+
+    Linux / macOS            Windows
+    -----------------------  ------------------------
+    ./orbixerp.sh <command>  .\orbixerp.ps1 <command>
+
+  This guide writes orbixerp <command> for both. Anything below that has no
+  menu entry - restoring a backup, updating, switching database mode - has to
+  be typed.
+
+------------------------------------------------------------------------------
+
+The commands
+============
+
+  Command: orbixerp start
+  What it does: Starts everything and waits until it is genuinely ready
+
+  Command: orbixerp stop
+  What it does: Shuts down cleanly. Your data is kept.
+
+  Command: orbixerp restart
+  What it does: Stop then start - use after editing .env
+
+  Command: orbixerp status
+  What it does: Whether it is running, healthy, and on which address
+
+  Command: orbixerp logs
+  What it does: The last 200 lines of application log
+
+  Command: orbixerp backup
+  What it does: Writes a database backup into backups/
+
+  Command: orbixerp restore <file>
+  What it does: Replaces the database from a backup
+
+  Command: orbixerp update <folder>
+  What it does: Upgrades to a newer release
+
+  Command: orbixerp version
+  What it does: What is installed
+
+------------------------------------------------------------------------------
+
+Backups
+=======
+
+Taking one
+----------
+
+      orbixerp backup
+
+  Writes backups/orbixerp_20260801_143022.dump and deletes backups older than
+  ERP_BACKUP_RETAIN_DAYS (14 by default).
+
+  If it fails, it says so and writes nothing. It refuses to leave behind an
+  empty file, because a zero-byte backup that looks successful is worse than
+  no backup at all.
+
+Three things to keep together
+-----------------------------
+
+  A database backup on its own is not enough to recover. Keep all three:
+
+            Why
+  --------  ----------------------------------
+  backups/  your data
+  .env      settings and the database password
+  secrets/  the sign-in security keys
+
+  Without secrets/, a restored system cannot validate anyone's sign-in and
+  every user is logged out. Without .env, the application cannot open its own
+  database.
+
+Getting them off the machine
+----------------------------
+
+  A backup stored only on the machine it came from protects you from mistakes,
+  not from that machine failing. Copy the three items to another computer, an
+  external drive, or cloud storage.
+
+Automating it
+-------------
+
+  Linux - crontab -e, then a 2 a.m. daily backup:
+
+      0 2 * * * cd /opt/orbixerp && ./orbixerp.sh backup >> /var/log/orbixerp-backup.log 2>&1
+
+  Windows - Task Scheduler -> Create Task:
+
+  - Trigger: Daily, 02:00
+  - Action: Start a program
+    - Program: powershell.exe
+    - Arguments: -NoProfile -ExecutionPolicy Bypass -File
+      C:\OrbixERP\orbixerp.ps1 backup
+    - Start in: C:\OrbixERP
+  - Tick Run whether user is logged on or not
+
+  Then add whatever your organisation uses to copy C:\OrbixERP\backups off the
+  machine.
+
+Restoring
+---------
+
+      orbixerp restore backups/orbixerp_20260801_143022.dump
+
+  This replaces the current database. Everything recorded since that backup is
+  lost, so the command makes you type RESTORE to confirm.
+
+  Practise this once, on purpose, before you ever need it. A backup you have
+  never restored is an assumption.
+
+------------------------------------------------------------------------------
+
+Updating
+========
+
+  OrbixERP is released regularly, so you will do this more often than you
+  installed it.
+
+  You will be sent a new bundle, e.g. orbixerp-1.2.0-amd64.zip. Unzip it
+  somewhere temporary
+  - not over your installation folder.
+
+Windows - double-click
+----------------------
+
+  Double-click Setup.cmd in the new bundle and point it at your existing
+  installation. It recognises what is already there:
+
+  > Version 1.1.0 is already installed in C:\OrbixERP. This bundle is version
+    1.2.0. Update the existing installation to 1.2.0?
+
+  Say yes, review what it tells you, and click Update. It skips all the setup
+  questions - your database, organisation and network settings are already
+  configured and are not asked again.
+
+  It will not let you install fresh over a working system, and if the two
+  versions match it simply says there is nothing to do.
+
+Linux / macOS, or from a terminal
+---------------------------------
+
+      orbixerp update /path/to/orbixerp-1.2.0-amd64
+
+What an update does, either way
+-------------------------------
+
+  Both routes run the same steps - the wizard simply presses the same buttons
+  for you:
+
+  1. Check the release matches your machine's processor type
+  2. Take a backup of your database - and stop entirely if that backup fails
+  3. Load the new software
+  4. Refresh the configuration files, guides and shortcuts
+  5. Record the new version, restart, and wait until the system is genuinely
+     healthy
+  6. Tell you the name of the backup from step 2
+
+What is kept, and what is replaced
+----------------------------------
+
+  Kept, untouched                         Replaced with the new version
+  --------------------------------------  ---------------------------------
+  Your data - the whole database          The application itself
+  .env - all your settings and passwords  The docker-compose files
+  secrets/ - your signing keys            The guides in docs/
+  backups/ - every existing backup        The scripts and Windows shortcuts
+
+  Nobody has to sign in again, and nothing has to be reconfigured.
+
+Going back
+----------
+
+  > Read this before updating. Database changes only run forwards. Once a new
+    version has upgraded your database, the previous version will not start
+    against it. Putting the old software back does not undo an update.
+  > The only way back is to restore the backup taken in step 2. The update
+    prints its exact filename - keep it until you are satisfied the new
+    version is behaving.
+
+      orbixerp restore backups/orbixerp_<the-one-it-named>.dump
+
+  Then reinstall the previous bundle.
+
+------------------------------------------------------------------------------
+
+Giving it a proper web address
+==============================
+
+  Straight after installation people reach OrbixERP at the computer's own name
+  and a port:
+
+      http://SERVER-PC:8080
+
+  That works on your office network immediately. The steps below make it
+  nicer, and you can stop at whichever one is enough for you.
+
+1. Stop the address changing - give the computer a fixed IP
+-----------------------------------------------------------
+
+  If the machine gets its address automatically, that address can change after
+  a power cut and everyone's bookmarks break. Ask whoever manages your router
+  or network for a DHCP reservation (sometimes called a static lease) for this
+  computer. Nothing changes in OrbixERP.
+
+2. Reach it by a name you choose - http://erp.mycompany.local:8080
+------------------------------------------------------------------
+
+  Add one entry to your internal DNS - on a Windows domain controller, your
+  router, or your firewall - pointing a name at that fixed IP:
+
+      erp.mycompany.local   ->   192.168.1.50
+
+  Nothing changes in OrbixERP. This is purely a network change.
+
+3. Drop the port number - http://erp.mycompany.local
+----------------------------------------------------
+
+  Set the port to 80 in .env, then orbixerp restart:
+
+      ERP_HTTP_PORT=80
+
+  > Port 80 is often already taken on Windows, by IIS or another web
+    application. If the system then refuses to start, that is why - put the
+    port back and use option 2.
+
+4. A real internet address with HTTPS - https://erp.mycompany.com
+-----------------------------------------------------------------
+
+  You need a domain you own, with its DNS pointing at this machine, and ports
+  80 and 443 reachable. Then see Turning on HTTPS below - you get a proper
+  trusted certificate automatically and for free.
+
+A folder on an existing website is NOT supported
+------------------------------------------------
+
+  An address like https://mycompany.com/orbix-erp - OrbixERP living in a
+  folder beneath a site you already run - does not work, and pointing a proxy
+  at it will produce a blank page. The web client is built to load from the
+  root of whatever address serves it.
+
+  Give it its own name instead, which is the normal way to do this and needs
+  no special setup:
+
+          https://mycompany.com/orbix-erp     will not work
+          https://erp.mycompany.com           correct - a subdomain of the same domain
+
+  A subdomain costs nothing, is one DNS entry, and can point at a completely
+  different machine from your main website. If a folder-style address is a
+  firm requirement for your organisation, talk to your supplier - it is
+  possible, but it is a change to the software rather than a setting.
+
+------------------------------------------------------------------------------
+
+Turning on HTTPS
+================
+
+  By default the system is served over plain http on your local network. That
+  is normally fine on a trusted office network. Turn on encryption if it is
+  reachable more widely, or if your policies require it.
+
+  In .env:
+
+      ERP_TLS_ENABLED=true
+      ERP_PUBLIC_HOST=erp.mycompany.co.tz     # the name or IP users type
+      ERP_BIND_ADDR=127.0.0.1                 # stop the unencrypted port being reachable
+
+  Then orbixerp restart.
+
+  With an IP address or an internal name, the certificate is self-signed:
+  traffic is encrypted, but browsers warn that the site is "not private" and
+  users must click through.
+
+  > Do not stop there - clicking through is not a solution. A self-signed
+    setup issues itself a fresh certificate every 12 hours, and "proceed
+    anyway" only ever applied to the one it replaced. Twice a day, users find
+    the page still opens (from cache) while everything they do fails,
+    typically appearing as "Sign-in failed. Please try again." See
+    TROUBLESHOOTING.txt.
+  > If you are staying on a self-signed certificate, install the certificate
+    authority on every computer that uses the system, once:
+      docker exec orbixerp-caddy cat /data/caddy/pki/authorities/local/root.crt > orbixerp-ca.crt
+  > Install orbixerp-ca.crt under Trusted Root Certification Authorities on
+    each PC. That authority is long-lived, so every future certificate is
+    trusted automatically and the warnings stop for good.
+
+  With a real domain name whose DNS points at this machine, and ports 80 and
+  443 reachable from the internet, you get a proper trusted certificate free:
+  delete the line tls internal from Caddyfile and run orbixerp restart.
+  Renewal is automatic from then on. This is the better answer - no
+  certificate to install on anyone's machine.
+
+  > A cloud provider's own hostname will not work for this. Addresses such as
+    ec2-...compute.amazonaws.com are refused by the free certificate
+    authority. You need a domain you own.
+
+------------------------------------------------------------------------------
+
+Changing settings
+=================
+
+  Edit .env, then orbixerp restart.
+
+  Commonly changed:
+
+  Setting: ERP_HTTP_PORT
+  Meaning: The port users browse to
+
+  Setting: ERP_BIND_ADDR
+  Meaning: 0.0.0.0 for network access, 127.0.0.1 for this machine only
+
+  Setting: ERP_TIME_ZONE
+  Meaning: Timezone for displayed dates and times
+
+  Setting: ERP_BACKUP_RETAIN_DAYS
+  Meaning: How long orbixerp backup keeps old files
+
+  Setting: JAVA_OPTS
+  Meaning: Memory tuning - raise only if you also gave Docker more memory
+
+  Settings whose names start with ERP_BOOTSTRAP_ are read only when the
+  database is first created. Changing them later has no effect; use the
+  application's own screens.
+
+------------------------------------------------------------------------------
+
+Moving to a different machine
+=============================
+
+  1. On the old machine: orbixerp stop, then orbixerp backup
+  2. Copy the whole installation folder - including backups/, .env and
+     secrets/
+  3. On the new machine: install Docker, then run the installer. It finds the
+     existing .env and keeps your settings and keys
+  4. orbixerp restore backups/<the newest file>
+
+------------------------------------------------------------------------------
+
+Running a second instance (e.g. a training system)
+==================================================
+
+  You can run a separate instance on the same machine - useful for training
+  staff, or trying something out without touching live data.
+
+  1. Unzip the bundle again into a different folder, e.g. C:\OrbixERP-Training
+  2. Run the installer there, and when it finishes, edit that folder's .env:
+         ERP_STACK_NAME=orbixerp-training     # must differ from the live one
+         ERP_HTTP_PORT=8081              # must differ from the live one
+  3. orbixerp restart in that folder
+
+  The two keep entirely separate databases, containers and backups. Nothing
+  you do in the training instance can affect the live one.
+
+  > Never change ERP_STACK_NAME on an existing installation. It is the name of
+    the volume holding your data. Changing it makes the system start against a
+    fresh, empty database, and it will look exactly as though everything has
+    been lost.
+
+------------------------------------------------------------------------------
+
+Switching between "docker" and "host" database mode
+===================================================
+
+  1. orbixerp backup
+  2. Prepare the destination - for host, follow HOST-DB-SETUP.txt
+  3. Change ERP_DB_MODE in .env (and the connection details, if moving to
+     host)
+  4. orbixerp start, let it create the empty structure, then orbixerp restore
+     backups/<file>
+
+------------------------------------------------------------------------------
+
+Where things are stored
+=======================
+
+  Your data
+  docker mode: Docker volume orbixerp-db-data on this machine
+  host mode: On your own PostgreSQL server
+
+  Backups
+  docker mode: backups/
+  host mode: backups/
+
+  Settings
+  docker mode: .env
+  host mode: .env
+
+  Security keys
+  docker mode: secrets/jwt/
+  host mode: secrets/jwt/
+
+------------------------------------------------------------------------------
+
+Two things never to do
+======================
+
+  Never run docker compose down -v. The -v deletes the database volume and
+  everything in it. orbixerp stop is always the safe shutdown.
+
+  Never delete the orbixerp-db-data volume in Docker Desktop's interface. In
+  docker mode, that volume is your database.

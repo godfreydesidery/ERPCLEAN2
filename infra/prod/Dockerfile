@@ -57,6 +57,10 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom
 # The operator can override with ERP_API_PORT in the env file, but 8081 is canonical.
 ENV ERP_API_PORT=8081
 
+# Management port — actuator lives HERE, not on the API port (application.yml sets
+# management.server.port to ${ERP_MANAGEMENT_PORT:9090}). Needed by the HEALTHCHECK below.
+ENV ERP_MANAGEMENT_PORT=9090
+
 # No ERP_BOOTSTRAP_ENABLED here — bootstrap is an operator decision at deploy time,
 # wired via the .env file.  Baking it true into the image would bootstrap every
 # container started from this image regardless of context.
@@ -69,10 +73,16 @@ EXPOSE 8081
 
 # Readiness probe: Spring Boot actuator readiness (requires SPRING_PROFILES_ACTIVE=prod
 # so management.endpoint.health.probes.enabled=true is active — see application-prod.yml).
-# The probe interval/timeout/retries below are conservative starting points; tune for
-# your deployment's JVM warm-up time.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-  CMD wget -qO- http://localhost:${ERP_API_PORT}/actuator/health/readiness || exit 1
+#
+# NOTE the port. Actuator is served on ERP_MANAGEMENT_PORT (9090), NOT on the API port —
+# application.yml moves every actuator endpoint there so Prometheus is never reachable from
+# the public 8081 edge. This probe used to target ${ERP_API_PORT}, where the path 404s
+# (SpaWebConfig deliberately declines to serve /actuator/** as an SPA route), so wget exited
+# non-zero and the container permanently reported (unhealthy) while serving traffic fine.
+#
+# start-period covers Flyway applying its migrations on a first boot against an empty DB.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+  CMD wget -qO- http://127.0.0.1:${ERP_MANAGEMENT_PORT}/actuator/health/readiness >/dev/null || exit 1
 
 # exec form — PID 1 is java, receives SIGTERM for graceful shutdown.
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

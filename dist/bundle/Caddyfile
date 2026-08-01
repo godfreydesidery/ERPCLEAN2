@@ -1,0 +1,42 @@
+# Caddy configuration for the optional HTTPS overlay (docker-compose.tls.yml).
+#
+# Only read when ERP_TLS_ENABLED=true in .env. {$ERP_PUBLIC_HOST} is supplied by that overlay.
+#
+# The application serves the web client and the API from a single origin, so this is a plain
+# pass-through to one upstream — there is no /api routing to configure and no chance of the
+# browser and the API disagreeing about the origin.
+
+{
+	# HTTP->HTTPS redirection is declared explicitly below, so Caddy's implicit version is off.
+	auto_https disable_redirects
+}
+
+# Plain HTTP: redirect everything to HTTPS.
+{$ERP_PUBLIC_HOST}:80 {
+	redir https://{host}{uri} permanent
+}
+
+{$ERP_PUBLIC_HOST}:443 {
+	# Self-signed certificate from Caddy's internal CA. DELETE THIS LINE once ERP_PUBLIC_HOST
+	# is a real domain pointed at this machine, and Caddy will fetch a trusted Let's Encrypt
+	# certificate instead (and renew it automatically).
+	tls internal
+
+	encode gzip zstd
+
+	# `api` is the compose service name, resolved on the internal Docker network. Port 8081 is
+	# the container's own port and is independent of ERP_HTTP_PORT on the host.
+	reverse_proxy api:8081 {
+		# Let the application see the original scheme and hostname so redirects and absolute
+		# links it generates say https://your-host, not http://api:8081.
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	# Uploads (bulk import spreadsheets) are capped at 8 MB by the application; allow a little
+	# headroom here so an oversized file is rejected with the application's own clear message
+	# rather than an opaque proxy error.
+	request_body {
+		max_size 16MB
+	}
+}

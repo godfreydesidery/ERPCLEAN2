@@ -83,11 +83,15 @@ services:
       # The paths inside the container must match ERP_JWT_PRIVATE_KEY / ERP_JWT_PUBLIC_KEY in .env.
       - ./jwt-keys:/run/secrets/jwt:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/readiness || exit 1"]
+      # Port 9090, not 8081: actuator is served on the management port (application.yml
+      # sets management.server.port). Probing 8081 returns 404 and marks a perfectly
+      # healthy container as (unhealthy) — that was the long-standing false alarm here.
+      # start_period covers Flyway migrating a fresh database on first boot.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/actuator/health/readiness >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
-      start_period: 90s
-      retries: 3
+      start_period: 180s
+      retries: 5
 
 volumes:
   erp-prod-db-data:
