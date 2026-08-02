@@ -74,26 +74,65 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     ref.read(cartProvider.notifier).setNotes(parts.isEmpty ? null : parts.join(' | '));
   }
 
-  void _add(Product p, {double? fixedQty, double? overridePrice}) {
+  /// Add a line. [saleUnit] overrides the product's base unit — used when a
+  /// scanned pack barcode names its own unit (a box rather than a strip).
+  void _add(Product p,
+      {double? fixedQty, double? overridePrice, SaleUnit? saleUnit}) {
     final app = ref.read(appControllerProvider);
-    final unit = app.unitsByUid[p.baseUnitUid];
-    if (unit == null) {
+    final base = app.unitsByUid[p.baseUnitUid];
+    final chosen = saleUnit ?? (base == null ? null : SaleUnit(base, 1));
+    if (chosen == null) {
       showToast(context, '${p.name}: no usable unit.');
       return;
     }
     final cart = ref.read(cartProvider.notifier);
-    cart.addProduct(p, unit, fixedQuantity: fixedQty, overridePrice: overridePrice);
+    cart.addProduct(p, chosen.unit,
+        unitFactor: chosen.factor,
+        fixedQuantity: fixedQty,
+        overridePrice: overridePrice);
     final id = ref.read(cartProvider).selectedId;
     if (overridePrice == null && id != null) {
-      _cache.previewPrice(p.uid, _currency).then((pp) {
-        if (pp != null && mounted) {
-          cart.setLinePrice(
-              id,
-              app.grossUnitPrice(pp.amount, p.vatStatus,
-                  vatInclusive: pp.vatInclusive));
-        }
-      });
+      _priceLine(id, p, chosen.factor);
     }
+  }
+
+  /// Patch a line's preview price. Price-list amounts are per BASE unit, so a
+  /// pack line previews at `base × factor` — the same arithmetic the server
+  /// applies when it re-derives the authoritative price.
+  void _priceLine(String lineId, Product p, double factor) {
+    final app = ref.read(appControllerProvider);
+    final cart = ref.read(cartProvider.notifier);
+    _cache.previewPrice(p.uid, _currency).then((pp) {
+      if (pp != null && mounted) {
+        cart.setLinePrice(
+            lineId,
+            app.grossUnitPrice(pp.amount * factor, p.vatStatus,
+                vatInclusive: pp.vatInclusive));
+      }
+    });
+  }
+
+  /// Open the unit picker for a line and apply the choice.
+  Future<void> _pickUnit(CartLine line) async {
+    final app = ref.read(appControllerProvider);
+    final units = await _cache.sellableUnits(line.product, app.unitsByUid);
+    if (!mounted) return;
+    if (units.length < 2) {
+      showToast(context, '${line.product.name} is only sold in ${line.unit.name}.');
+      return;
+    }
+    final picked = await showUnitPicker(context,
+        productName: line.product.name,
+        units: units,
+        currentUnitId: line.unit.id);
+    if (picked == null || !mounted) return;
+    ref
+        .read(cartProvider.notifier)
+        .setLineUnit(line.localId, picked.unit, picked.factor);
+    // setLineUnit may have merged this line into an existing one — re-price the
+    // line that now holds the selection.
+    final id = ref.read(cartProvider).selectedId;
+    if (id != null) _priceLine(id, line.product, picked.factor);
   }
 
   Future<void> _onSearch(String raw) async {
@@ -117,7 +156,16 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
             _reset();
             return;
           }
-          _add(p, fixedQty: bc.derivedQuantity);
+          // A barcode may address a pack (a box) rather than the base unit.
+          // Honour it when it is a configured unit for this product.
+          SaleUnit? scanned;
+          final uomId = bc.uomId;
+          if (uomId != null) {
+            scanned = await _cache.sellableUnitById(
+                p, uomId, ref.read(appControllerProvider).unitsByUid);
+            if (!mounted) return;
+          }
+          _add(p, fixedQty: bc.derivedQuantity, saleUnit: scanned);
           _reset();
           return;
         }
@@ -162,10 +210,13 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   /// a rejection at Pay. Silent when stock is unknown or sufficient.
   Widget _shortStockTag(CartLine line) {
     final oh = _stock.onHand(line.product.id);
-    if (oh == null || oh >= line.quantity) return const SizedBox.shrink();
+    // On-hand is in BASE units, so a pack line is checked against its base
+    // equivalent (2 boxes of 20 needs 40), not the pack count.
+    if (oh == null || oh >= line.baseQuantity) return const SizedBox.shrink();
+    final base = line.unitFactor == 1 ? '' : ' ${line.product.baseUnitCode ?? ''}';
     final label = oh <= 0
         ? 'out of stock'
-        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} left';
+        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)}$base left';
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: Container(
@@ -351,11 +402,28 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                           if (!l.voided) _shortStockTag(l),
                         ],
                       ),
-                      Text(
-                          '${l.product.code}  ·  ${l.product.baseUnitName ?? l.unit.name}'
-                          '${l.product.status == 'ACTIVE' ? '' : ''}',
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.ink3)),
+                      // The unit shown is the LINE's unit, not the product's
+                      // base unit — a box line must not read as a strip. Tap to
+                      // switch between the base unit and any configured pack.
+                      InkWell(
+                        onTap: l.voided ? null : () => _pickUnit(l),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${l.product.code}  ·  ${l.unit.name}',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: l.unitFactor == 1
+                                        ? FontWeight.w400
+                                        : FontWeight.w700,
+                                    color: l.unitFactor == 1
+                                        ? AppColors.ink3
+                                        : AppColors.brand)),
+                            const Icon(Icons.arrow_drop_down,
+                                size: 14, color: AppColors.ink3),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),

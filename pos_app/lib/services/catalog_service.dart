@@ -73,6 +73,13 @@ class CatalogService {
       asList(await _api.get('/products/uid/$productUid/prices'),
           ProductPrice.fromJson);
 
+  /// Configured bulk packs for a product (carton, box, …) with their
+  /// conversion factors. Requires `PRODUCT.VIEW` — the same permission the
+  /// catalogue search already needs, so a cashier who can ring can read these.
+  Future<List<ProductPack>> listPacks(String productUid) async =>
+      asList(await _api.get('/products/uid/$productUid/bulk-packs'),
+          ProductPack.fromJson);
+
   /// VAT rates by `vatStatus`, as a **fraction** (e.g. 0.18 = 18%). Lets the
   /// preview show VAT-inclusive totals that match the server's gross. Needs
   /// `TAXRATE.VIEW`; the caller treats an empty map (or a thrown 403) as "show

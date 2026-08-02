@@ -102,6 +102,43 @@ class ProductBarcode {
       );
 }
 
+/// A configured bulk pack (`ProductBulkPackDto`) — a sellable unit larger than
+/// the product's base unit, carrying the conversion factor the server applies
+/// (`qty_in_base = quantity × factorToBase`). The DTO identifies its unit by
+/// **uid only**, so the numeric `unitId` the sale payload needs is resolved from
+/// [AppData.unitsByUid].
+class ProductPack {
+  ProductPack({
+    required this.uid,
+    required this.unitUid,
+    required this.unitCode,
+    required this.unitName,
+    required this.factorToBase,
+    required this.barcode,
+    required this.saleDefault,
+  });
+
+  final String uid;
+  final String? unitUid;
+  final String? unitCode;
+  final String? unitName;
+
+  /// How many base units one of this pack contains. Always > 0 (DB CHECK).
+  final double factorToBase;
+  final String? barcode;
+  final bool saleDefault;
+
+  factory ProductPack.fromJson(Map<String, dynamic> j) => ProductPack(
+        uid: asStrOr(j['uid']),
+        unitUid: asStr(j['unitUid']),
+        unitCode: asStr(j['unitCode']),
+        unitName: asStr(j['unitName']),
+        factorToBase: asNum(j['factorToBase']) ?? 1,
+        barcode: asStr(j['barcode']),
+        saleDefault: asBool(j['saleDefault']),
+      );
+}
+
 /// A unit of measure (`UnitOfMeasureDto`).
 class Unit {
   Unit({
