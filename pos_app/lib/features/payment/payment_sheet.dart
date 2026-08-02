@@ -521,9 +521,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         borderRadius: AppRadii.brSm,
         border: Border.all(color: const Color(0xFFFDE68A)),
       ),
+      // Read by a cashier mid-sale, with a customer waiting: say what to do, not what
+      // went wrong internally. The reassurance is the important part — retrying looks
+      // like the risky choice and is in fact the safe one.
       child: const Text(
-        'The outcome was unknown (network/timeout). Press Complete again — the '
-        'same idempotency key returns the original sale if it went through.',
+        'No answer from the ERP, so we cannot tell whether this sale went through. '
+        'Press Retry — it is safe. If the sale was already recorded you will get that '
+        'same receipt back, never a second charge.',
         style: TextStyle(
             color: AppColors.warn, fontSize: 12.5, fontWeight: FontWeight.w600),
       ),
@@ -584,7 +588,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           SizedBox(
             width: double.infinity,
             child: PayButton(
-              label: _ambiguous ? 'RETRY (same key)' : 'Complete sale',
+              label: _ambiguous ? 'Retry this sale' : 'Complete sale',
               amount: formatAmount(_gross),
               onPressed: _busy ? null : _complete,
             ),

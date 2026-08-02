@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
@@ -76,6 +77,7 @@ class PosSaleServiceImplTest {
     private AuditService                audit;
     private PosSaleIdempotencyRepository idempotency;
     private PermissionResolver          permissionResolver;
+    private AgentRepository             agents;
 
     private PosSaleServiceImpl service;
 
@@ -92,10 +94,12 @@ class PosSaleServiceImplTest {
         audit              = mock(AuditService.class);
         idempotency        = mock(PosSaleIdempotencyRepository.class);
         permissionResolver = mock(PermissionResolver.class);
+        agents             = mock(AgentRepository.class);
 
         service = new PosSaleServiceImpl(
                 posSessionRepo, invoiceRepo, invoiceService, products, units,
-                customers, companies, scopeGuard, audit, idempotency, permissionResolver);
+                customers, companies, scopeGuard, audit, idempotency, permissionResolver,
+                agents);
 
         // Common stubs: open session in company scope
         PosSession session = buildSession();
