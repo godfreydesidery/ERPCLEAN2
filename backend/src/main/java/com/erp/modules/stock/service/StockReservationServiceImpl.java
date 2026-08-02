@@ -52,13 +52,31 @@ public class StockReservationServiceImpl implements StockReservationService {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public StockAvailabilityDto getAvailability(Long companyId, Long branchId, Long productId) {
-        Long locId = locationResolver.defaultLocationId(companyId, branchId);
-        return onHands
-                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(companyId, branchId, locId, productId)
-                .map(soh -> new StockAvailabilityDto(
-                        companyId, branchId, productId,
-                        soh.getQuantity(), soh.getReservedQty(), soh.availableQty()))
-                .orElseGet(() -> StockAvailabilityDto.zero(companyId, branchId, productId));
+        // Sum EVERY location in the branch, not just the default one.
+        //
+        // Reading the default location alone was safe while nothing enforced the answer. Once the
+        // negative-stock block went live it became a false refusal: a branch holding goods in a
+        // receiving bay, a transit location or any second store reads as zero and the till turns
+        // the customer away while the stock is on the shelf. Seen in production on 2026-08-02 —
+        // TEST 3 had 2 units at TRANSIT-KILI003 and 0 at the branch default, and every sale was
+        // rejected as "out of stock".
+        //
+        // Stock is fungible within a branch: what the cashier can sell is what the branch holds,
+        // regardless of which bin the paperwork put it in. Reservations still live on the
+        // default-location row (ADR-0028 D-3), so summing them changes nothing today and stays
+        // correct if that ever spreads.
+        var rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId);
+        if (rows.isEmpty()) {
+            return StockAvailabilityDto.zero(companyId, branchId, productId);
+        }
+        BigDecimal qty = BigDecimal.ZERO;
+        BigDecimal reserved = BigDecimal.ZERO;
+        for (StockOnHand soh : rows) {
+            qty = qty.add(soh.getQuantity());
+            reserved = reserved.add(soh.getReservedQty());
+        }
+        return new StockAvailabilityDto(companyId, branchId, productId,
+                qty, reserved, qty.subtract(reserved));
     }
 
     private void doApply(Long companyId, Long branchId, Long productId,
