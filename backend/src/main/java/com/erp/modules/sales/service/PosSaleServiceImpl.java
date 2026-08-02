@@ -27,6 +27,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
+import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -57,6 +58,8 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final PosSaleIdempotencyRepository idempotency;
     /** ADR-0044 D-3a: runtime permission check for POS.SALE.AGE_OVERRIDE. */
     private final PermissionResolver     permissionResolver;
+    /** BR-SALES-06: turns the request's numeric agent id into the uid the invoice service takes. */
+    private final AgentRepository        agents;
 
     public PosSaleServiceImpl(PosSessionRepository posSessionRepo,
                                SalesInvoiceRepository invoiceRepo,
@@ -68,7 +71,9 @@ public class PosSaleServiceImpl implements PosSaleService {
                                ScopeGuard scopeGuard,
                                AuditService audit,
                                PosSaleIdempotencyRepository idempotency,
-                               PermissionResolver permissionResolver) {
+                               PermissionResolver permissionResolver,
+                               AgentRepository agents) {
+        this.agents            = agents;
         this.posSessionRepo    = posSessionRepo;
         this.invoiceRepo       = invoiceRepo;
         this.invoiceService    = invoiceService;
@@ -116,14 +121,29 @@ public class PosSaleServiceImpl implements PosSaleService {
         // 2 — Resolve customer UID (PosSaleRequest carries customerId)
         var customer = customers.findById(req.customerId())
                 .orElseThrow(() -> NotFoundException.of("Customer", String.valueOf(req.customerId())));
-        // Resolve agent — PosSaleRequest carries agentId; invoiceService needs agentUid
-        // Use the company uid for the create call
         var company = companies.findById(session.getCompanyId())
                 .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(session.getCompanyId())));
 
+        // Resolve agent — PosSaleRequest carries a numeric agentId, invoiceService takes a uid.
+        // That conversion was missing: null was passed straight through, so the field was silently
+        // ignored and EVERY POS sale fell back to "the signed-in user's own internal agent". A
+        // cashier without one could not sell at all, and had no way to name an agent instead
+        // (BR-SALES-06 rejects the sale outright).
+        //
+        // Scoped to the session's company on the way through. The id arrives from the caller, so
+        // resolving it unscoped would let one company's till reference another company's agent —
+        // scope from the row you loaded, never from the parameter you were handed.
+        String agentUid = null;
+        if (req.agentId() != null) {
+            agentUid = agents.findById(req.agentId())
+                    .filter(a -> companyId.equals(a.getCompanyId()))
+                    .orElseThrow(() -> NotFoundException.of("Agent", String.valueOf(req.agentId())))
+                    .getUid();
+        }
+
         // 3 — Create DRAFT invoice via service (handles number allocation + audit)
         var createReq = new CreateSalesInvoiceRequest(
-                company.getUid(), customer.getUid(), null, req.currency(), req.notes(), null);
+                company.getUid(), customer.getUid(), agentUid, req.currency(), req.notes(), null);
         var draftDto = invoiceService.create(createReq);
         String invoiceUid = draftDto.uid();
 
