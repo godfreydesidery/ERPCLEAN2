@@ -1809,6 +1809,7 @@ $btnMStop    = New-ManageButton 'Stop the system'    248 106 140
 $btnMOpen    = New-ManageButton 'Open in browser'    396 106 156
 $btnMStart   = New-ManageButton 'Start the system'    24 142 156
 $btnMEnv     = New-ManageButton 'Settings (.env)'    188 142 156
+$btnMRestore = New-ManageButton 'Restore a backup'   352 142 156
 
 $script:ManageLog = New-Object System.Windows.Forms.TextBox
 $script:ManageLog.Multiline = $true; $script:ManageLog.ReadOnly = $true; $script:ManageLog.ScrollBars = 'Vertical'
@@ -1817,7 +1818,7 @@ $script:ManageLog.Size = New-Object System.Drawing.Size(620, 204)
 $script:ManageLog.Font = New-Object System.Drawing.Font('Consolas', 8)
 $script:ManageLog.BackColor = [System.Drawing.Color]::FromArgb(248, 249, 251)
 $pgManage.Controls.Add($script:ManageLog)
-New-Label $pgManage 'Restoring a backup is deliberately not offered here: it replaces the database and everything recorded since. docs\OPERATIONS.txt has the command.' 24 394 620 32 -Dim | Out-Null
+New-Label $pgManage 'Restoring replaces the database and loses everything recorded since that backup. A backup of what is being replaced is taken first, and the word RESTORE has to be typed.' 24 394 620 32 -Dim | Out-Null
 
 # ---------------------------------------------------------------------------
 # Navigation
@@ -2407,7 +2408,7 @@ function Invoke-ManageCommand {
     # duration of the command and put it back afterwards.
     $keep = $script:LogBox
     $script:LogBox = $script:ManageLog
-    foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv)) { $b.Enabled = $false }
+    foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv, $btnMRestore)) { $b.Enabled = $false }
     $was = $lblManageSub.Text
     try {
         # A backup of a real database is not quick, and this page has no progress bar - so
@@ -2426,7 +2427,7 @@ function Invoke-ManageCommand {
     } finally {
         $script:LogBox = $keep
         $lblManageSub.Text = $was
-        foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv)) { $b.Enabled = $true }
+        foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv, $btnMRestore)) { $b.Enabled = $true }
     }
 }
 
@@ -2585,6 +2586,149 @@ function Show-EnvEditor {
 }
 
 $btnMEnv.Add_Click({ Show-EnvEditor })
+
+# ---------------------------------------------------------------------------
+# Restore
+#
+# The one irreversible thing in this window, and the reason it is here rather than left to
+# a terminal: restoring is what you do when moving a system to a new server, and a cutover
+# is exactly the wrong moment to be typing commands by hand under time pressure. So it is
+# offered, but with the two things a hand-typed restore usually lacks - a backup of what is
+# about to be replaced, taken automatically first, and a confirmation you have to type.
+#
+# orbixerp.sh reads its own confirmation from /dev/tty and treats "no terminal" as a
+# refusal. A plain non-interactive session would therefore cancel silently every time and
+# look like nothing happened, so a terminal is allocated deliberately and the answer typed
+# into it.
+# ---------------------------------------------------------------------------
+function Get-SshTtyArgs {
+    param([string]$Remote = '')
+    $a = @('-tt', '-i', ('"' + $S.KeyFile + '"'), '-p', $S.SshPort)
+    $a += Get-CommonSshOptions
+    $a += ("$($S.SshUser)@$($S.SshHost)")
+    if ($Remote) { $a += $Remote }
+    return ($a -join ' ')
+}
+
+function Read-TypedConfirmation {
+    param([string]$Word, [string]$Message)
+    $d = New-Object System.Windows.Forms.Form
+    $d.Text = 'OrbixERP - confirm'; $d.Size = New-Object System.Drawing.Size(560, 260)
+    $d.StartPosition = 'CenterParent'; $d.MinimizeBox = $false; $d.MaximizeBox = $false; $d.FormBorderStyle = 'FixedDialog'
+
+    $l = New-Object System.Windows.Forms.Label
+    $l.Text = $Message; $l.Location = New-Object System.Drawing.Point(16, 16); $l.Size = New-Object System.Drawing.Size(510, 120)
+    $d.Controls.Add($l)
+
+    $p = New-Object System.Windows.Forms.Label
+    $p.Text = "Type $Word to continue:"; $p.Location = New-Object System.Drawing.Point(16, 140); $p.Size = New-Object System.Drawing.Size(180, 20)
+    $d.Controls.Add($p)
+
+    $t = New-Object System.Windows.Forms.TextBox
+    $t.Location = New-Object System.Drawing.Point(196, 138); $t.Size = New-Object System.Drawing.Size(160, 24)
+    $d.Controls.Add($t)
+
+    $go = New-Object System.Windows.Forms.Button
+    $go.Text = 'Restore'; $go.Size = New-Object System.Drawing.Size(100, 30)
+    $go.Location = New-Object System.Drawing.Point(320, 178); $go.FlatStyle = 'System'; $go.Enabled = $false
+    $d.Controls.Add($go)
+
+    $no = New-Object System.Windows.Forms.Button
+    $no.Text = 'Cancel'; $no.Size = New-Object System.Drawing.Size(100, 30)
+    $no.Location = New-Object System.Drawing.Point(428, 178); $no.FlatStyle = 'System'; $no.DialogResult = 'Cancel'
+    $d.Controls.Add($no); $d.CancelButton = $no
+
+    # Enabled only on an exact match, so the word has to be typed rather than guessed at.
+    $t.Add_TextChanged({ $go.Enabled = ($t.Text -ceq $Word) })
+    $go.Add_Click({ $d.DialogResult = 'OK' })
+
+    $r = $d.ShowDialog()
+    $d.Dispose()
+    return ($r -eq 'OK')
+}
+
+function Start-Restore {
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Title = 'Choose the backup to restore'
+    $dlg.Filter = 'Database backups (*.dump)|*.dump|All files (*.*)|*.*'
+    if ($dlg.ShowDialog() -ne 'OK') { return }
+    $local = $dlg.FileName
+
+    # The name reaches a shell command line on the server, so anything outside this set is
+    # replaced rather than quoted around. A backup called `x;rm -rf /.dump` is not a file
+    # this window is going to pass along verbatim.
+    $safe = [System.IO.Path]::GetFileName($local) -replace '[^A-Za-z0-9._-]', '_'
+    if ($safe -notmatch '\.dump$') { $safe = "$safe.dump" }
+    $sizeText = Format-Size ((Get-Item $local).Length)
+
+    $okToGo = Read-TypedConfirmation 'RESTORE' (
+        "This REPLACES the database on $($S.SshHost) with the contents of:" + [Environment]::NewLine + [Environment]::NewLine +
+        "    $safe  ($sizeText)" + [Environment]::NewLine + [Environment]::NewLine +
+        "Everything recorded on that server since this backup was taken will be lost." + [Environment]::NewLine + [Environment]::NewLine +
+        "A backup of the current database is taken first, so there is a way back.")
+    if (-not $okToGo) { $script:ManageLog.Clear(); Write-ManageLog 'Restore cancelled. Nothing was changed.'; return }
+
+    $script:ManageLog.Clear()
+    $keep = $script:LogBox
+    $script:LogBox = $script:ManageLog
+    foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv, $btnMRestore)) { $b.Enabled = $false }
+    $was = $lblManageSub.Text
+    try {
+        Write-ManageLog 'Step 1 of 3 - backing up the database that is about to be replaced'
+        $r = Invoke-Remote (Get-RunScript './orbixerp.sh backup') -OnTick {
+            param($secs) $lblManageSub.Text = "Backing up first - $([TimeSpan]::FromSeconds($secs).ToString('mm\:ss'))"
+        }
+        if ($r.Code -ne 0) {
+            Write-ManageLog ''
+            Write-ManageLog 'The safety backup failed, so nothing was restored. The database is untouched.'
+            return
+        }
+
+        Write-ManageLog ''
+        Write-ManageLog "Step 2 of 3 - sending $safe ($sizeText)"
+        Send-RemoteFile $local "$($S.RemoteDir)/backups/$safe" -OnProgress {
+            param($sent, $total, $secs)
+            $pct = if ($total -gt 0) { [int](100 * $sent / $total) } else { 0 }
+            $rate = if ($secs -gt 0) { Format-Size ($sent / $secs) } else { '' }
+            $lblManageSub.Text = "Sending the backup - $pct%$(if ($rate) { " ($rate/s)" })"
+        }
+
+        Write-ManageLog ''
+        Write-ManageLog 'Step 3 of 3 - restoring'
+        $cmd = "cd '$($S.RemoteDir)' && bash ./orbixerp.sh restore 'backups/$safe'"
+        $rr = Invoke-Piped $script:SshExe (Get-SshTtyArgs ('"' + $cmd + '"')) {
+            param($p)
+            # Typed into the allocated terminal. The prompt may not have appeared yet; a
+            # terminal buffers what is typed early, so this is read when it is reached.
+            $p.StandardInput.WriteLine('RESTORE')
+            $p.StandardInput.Flush()
+        }
+        if ($rr.Out) { Write-ManageLog ($rr.Out.TrimEnd()) }
+        if ($rr.Code -ne 0) {
+            Write-ManageLog ''
+            Write-ManageLog 'The restore did not finish. The messages above say why.'
+            Write-ManageLog 'The database is whatever the restore left behind - the safety backup from step 1'
+            Write-ManageLog 'is in the backups folder on the server if you need to go back.'
+            return
+        }
+        Write-ManageLog ''
+        Write-ManageLog 'Restored.'
+        Write-ManageLog ''
+        Write-ManageLog 'Sign in with the accounts from the system this backup came from - the ones that'
+        Write-ManageLog 'belonged to this server were replaced along with the rest of the database.'
+        Write-ManageLog 'If nobody can sign in at all, the secrets folder from the other system has not'
+        Write-ManageLog 'been copied across; the data is fine, the sign-in keys are not.'
+    } catch {
+        Write-ManageLog ''
+        Write-ManageLog "PROBLEM: $($_.Exception.Message)"
+    } finally {
+        $script:LogBox = $keep
+        $lblManageSub.Text = $was
+        foreach ($b in @($btnMStatus, $btnMLogs, $btnMBackup, $btnMRestart, $btnMUpdate, $btnMStop, $btnMOpen, $btnMStart, $btnMEnv, $btnMRestore)) { $b.Enabled = $true }
+    }
+}
+
+$btnMRestore.Add_Click({ Start-Restore })
 $btnMUpdate.Add_Click({
     if ($S.InstalledVersion -and $S.Version -and $S.InstalledVersion -eq $S.Version) {
         [System.Windows.Forms.MessageBox]::Show(

@@ -22,12 +22,13 @@ To install on a server for the first time, see [REMOTE-INSTALL](REMOTE-INSTALL.m
 | **Start the system** | Starts it and waits until it genuinely answers | Yes |
 | **Stop the system** | Shuts down cleanly. **Your data is kept.** | **No** — nobody can use it until started again |
 | **Settings (.env)** | Opens the server's settings file to read or change | Reading yes; saving needs a restart |
+| **Restore a backup** | Replaces the database with a backup file from your PC | **No** — and it cannot be undone |
 | **Update to this bundle** | Upgrades the server to the version in this folder | **No** — takes a backup first, then a short outage |
 | **Open in browser** | Opens the ERP address on this PC | Yes |
 
 Each button runs the matching command in the installation folder — `./orbixerp.sh status`,
-`logs`, `backup`, `restart`, `start`, `stop`, `update`. Nothing is done by a separate mechanism,
-so a person at the server's own terminal sees exactly the same behaviour.
+`logs`, `backup`, `restart`, `start`, `stop`, `update`, `restore`. Nothing is done by a separate
+mechanism, so a person at the server's own terminal sees exactly the same behaviour.
 
 While a job is running every button is disabled, and the heading shows a clock so you can tell the
 difference between *slow* and *stuck*. A database backup on a real system is not quick.
@@ -94,13 +95,45 @@ If the server is already on that version, the panel says so and does nothing.
 
 ---
 
-## Restoring a backup is not here
+## Restoring a backup
 
-Restoring **replaces** the database: everything recorded since that backup was taken is lost.
-That is not a button anybody should be able to press by accident, so it is deliberately left out.
+**Restore a backup** replaces this server's database with a backup file from your PC. It is how
+you move an existing system onto a new server: install here, then restore the other system's
+backup over the top.
 
-To restore, someone signs in to the server and runs it by hand — the command is in
-[OPERATIONS](OPERATIONS.md), and it asks for confirmation before doing anything.
+It runs in three steps, and says which one it is on:
+
+1. **A backup of the current database is taken first.** If that fails, nothing is restored.
+   This is your way back if the wrong file was chosen.
+2. The file is uploaded to `backups/` on the server, with a progress percentage.
+3. The restore runs.
+
+Before any of that you must **type `RESTORE`** — the button stays disabled until the word is
+exactly right. That is deliberate: this is the only action here that cannot be undone.
+
+> **Everything recorded on this server since that backup was taken is lost.** Not archived, not
+> merged — replaced.
+
+### Two things that follow a restore
+
+**Sign in with the accounts from the system the backup came from.** The users on this server were
+replaced along with the rest of the database, so the administrator password this server was
+installed with no longer exists.
+
+**If nobody can sign in at all, the `secrets/` folder was not copied across.** It holds the
+sign-in keys, and they do not travel inside a database backup. The data is intact; the system
+simply cannot validate anyone. Copy `secrets/` from the other system into the installation folder
+and restart.
+
+### Moving a system to a new server
+
+1. On the old server: **Stop the system**, then **Back up now**
+2. Copy the backup file **and the `secrets/` folder** off that server
+3. Install on the new server, put `secrets/` in place, then **Restore a backup**
+4. Sign in with the old system's accounts and check data you recognise
+
+Keep the old server switched off but intact for a week. Database changes only run forwards, so
+that machine is the only way back.
 
 ---
 
@@ -118,6 +151,11 @@ To restore, someone signs in to the server and runs it by hand — the command i
 
 ## What this panel will not do
 
-It will not delete anything, drop a database, or remove the installation. There is no button for
-any of that, on purpose. Anything genuinely destructive is left to a person at a terminal who has
-had to think about it first.
+It will not remove the installation, drop a database, or delete your backups. There is no button
+for any of that, on purpose.
+
+**Restore** is the single exception to the rule that nothing here is irreversible, and it earns
+its place: restoring is how a system is moved to a new server, and a cutover is exactly the wrong
+moment to be typing commands by hand under time pressure. So it is offered — but with the two
+things a hand-typed restore usually lacks: a backup of what is about to be replaced, taken
+automatically first, and a confirmation you have to type out.
