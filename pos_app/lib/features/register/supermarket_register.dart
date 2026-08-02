@@ -84,30 +84,71 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   // --------------------------------------------------------------- add / scan
 
+  /// Add a line. [saleUnit] overrides the product's base unit — used when a
+  /// scanned pack barcode names its own unit; null means sell by the base unit.
   void _addProduct(Product p,
-      {double quantity = 1, double? fixedQuantity, double? overridePrice}) {
+      {double quantity = 1,
+      double? fixedQuantity,
+      double? overridePrice,
+      SaleUnit? saleUnit}) {
     final app = ref.read(appControllerProvider);
-    final unit = app.unitsByUid[p.baseUnitUid];
-    if (unit == null) {
+    final base = app.unitsByUid[p.baseUnitUid];
+    final chosen = saleUnit ?? (base == null ? null : SaleUnit(base, 1));
+    if (chosen == null) {
       showToast(context, '${p.name}: no usable unit configured.');
       return;
     }
     final cart = ref.read(cartProvider.notifier);
-    cart.addProduct(p, unit,
+    cart.addProduct(p, chosen.unit,
+        unitFactor: chosen.factor,
         quantity: quantity,
         fixedQuantity: fixedQuantity,
         overridePrice: overridePrice);
     final lineId = ref.read(cartProvider).selectedId;
     if (overridePrice == null && lineId != null) {
-      _cache.previewPrice(p.uid, _currency).then((pp) {
-        if (pp != null && mounted) {
-          cart.setLinePrice(
-              lineId,
-              app.grossUnitPrice(pp.amount, p.vatStatus,
-                  vatInclusive: pp.vatInclusive));
-        }
-      });
+      _priceLine(lineId, p, chosen.factor);
     }
+  }
+
+  /// Patch a line's preview price: the price-list amount is per BASE unit, so a
+  /// pack line previews at `base × factor` — the same arithmetic the server does
+  /// in `PriceResolutionServiceImpl.unitFactor`, so the preview still matches the
+  /// authoritative total.
+  void _priceLine(String lineId, Product p, double factor) {
+    final app = ref.read(appControllerProvider);
+    final cart = ref.read(cartProvider.notifier);
+    _cache.previewPrice(p.uid, _currency).then((pp) {
+      if (pp != null && mounted) {
+        cart.setLinePrice(
+            lineId,
+            app.grossUnitPrice(pp.amount * factor, p.vatStatus,
+                vatInclusive: pp.vatInclusive));
+      }
+    });
+  }
+
+  /// Open the unit picker for a line and apply the choice. Silently does nothing
+  /// when the product has no pack configured — there is nothing to choose.
+  Future<void> _pickUnit(CartLine line) async {
+    final app = ref.read(appControllerProvider);
+    final units = await _cache.sellableUnits(line.product, app.unitsByUid);
+    if (!mounted) return;
+    if (units.length < 2) {
+      showToast(context, '${line.product.name} is only sold in ${line.unit.name}.');
+      return;
+    }
+    final picked = await showUnitPicker(context,
+        productName: line.product.name,
+        units: units,
+        currentUnitId: line.unit.id);
+    if (picked == null || !mounted) return;
+    ref
+        .read(cartProvider.notifier)
+        .setLineUnit(line.localId, picked.unit, picked.factor);
+    // The line may have merged into an existing one of the same product+unit —
+    // re-price whichever line now holds the selection, not the original id.
+    final lineId = ref.read(cartProvider).selectedId;
+    if (lineId != null) _priceLine(lineId, line.product, picked.factor);
   }
 
   Future<void> _onSubmit(String raw) async {
@@ -138,7 +179,18 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               _resetSearch();
               return;
             }
-            _addProduct(product, fixedQuantity: bc.derivedQuantity);
+            // A barcode may address a pack rather than the base unit (a carton
+            // label). Honour that unit when it is a configured one for this
+            // product; anything else falls back to the base unit.
+            SaleUnit? scanned;
+            final uomId = bc.uomId;
+            if (uomId != null) {
+              scanned = await _cache.sellableUnitById(
+                  product, uomId, ref.read(appControllerProvider).unitsByUid);
+              if (!mounted) return;
+            }
+            _addProduct(product,
+                fixedQuantity: bc.derivedQuantity, saleUnit: scanned);
             _resetSearch();
             return;
           }
@@ -655,11 +707,34 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               flex: 1,
               onTap: () => ctrl.select(line.localId)),
           cell(
-              Text(line.unit.code,
-                  style: const TextStyle(
-                      fontSize: 12, color: Color(0xFF5F6368))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(line.unit.code,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: line.unitFactor == 1
+                                ? FontWeight.w400
+                                : FontWeight.w700,
+                            color: line.unitFactor == 1
+                                ? const Color(0xFF5F6368)
+                                : AppColors.brand)),
+                  ),
+                  const Icon(Icons.arrow_drop_down,
+                      size: 14, color: Color(0xFF9AA0A6)),
+                ],
+              ),
               width: _wUnit,
-              align: Alignment.center),
+              align: Alignment.center,
+              onTap: voided
+                  ? null
+                  : () {
+                      ctrl.select(line.localId);
+                      _pickUnit(line);
+                    }),
           cell(
               NumText(
                   formatAmount(line.quantity,
@@ -760,10 +835,16 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// unknown or sufficient.
   Widget _shortStockTag(CartLine line) {
     final oh = _stock.onHand(line.product.id);
-    if (oh == null || oh >= line.quantity) return const SizedBox.shrink();
+    // On-hand is always in BASE units, so a pack line is compared against the
+    // base equivalent (2 cartons of 24 needs 48) — otherwise selling 2 cartons
+    // out of 30 pieces would look fine and fail at checkout.
+    if (oh == null || oh >= line.baseQuantity) return const SizedBox.shrink();
+    // Name the unit on a pack line — a bare "only 30 left" against 2 cartons
+    // reads as a contradiction unless it says 30 PCS.
+    final base = line.unitFactor == 1 ? '' : ' ${line.product.baseUnitCode ?? ''}';
     final label = oh <= 0
         ? 'out of stock'
-        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} left';
+        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)}$base left';
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: Container(
