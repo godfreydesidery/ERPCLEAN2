@@ -106,22 +106,22 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         overridePrice: overridePrice);
     final lineId = ref.read(cartProvider).selectedId;
     if (overridePrice == null && lineId != null) {
-      _priceLine(lineId, p, chosen.factor);
+      _priceLine(lineId, p, chosen);
     }
   }
 
-  /// Patch a line's preview price: the price-list amount is per BASE unit, so a
-  /// pack line previews at `base × factor` — the same arithmetic the server does
-  /// in `PriceResolutionServiceImpl.unitFactor`, so the preview still matches the
-  /// authoritative total.
-  void _priceLine(String lineId, Product p, double factor) {
+  /// Patch a line's preview price for the unit it is being sold in. The lookup
+  /// honours an explicit pack price where one is set and falls back to
+  /// `base × factor` otherwise — the same order the server resolves in, so the
+  /// preview matches the authoritative total either way.
+  void _priceLine(String lineId, Product p, SaleUnit unit) {
     final app = ref.read(appControllerProvider);
     final cart = ref.read(cartProvider.notifier);
-    _cache.previewPrice(p.uid, _currency).then((pp) {
+    _cache.previewPrice(p.uid, _currency, unit: unit).then((pp) {
       if (pp != null && mounted) {
         cart.setLinePrice(
             lineId,
-            app.grossUnitPrice(pp.amount * factor, p.vatStatus,
+            app.grossUnitPrice(pp.amount, p.vatStatus,
                 vatInclusive: pp.vatInclusive));
       }
     });
@@ -148,7 +148,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     // The line may have merged into an existing one of the same product+unit —
     // re-price whichever line now holds the selection, not the original id.
     final lineId = ref.read(cartProvider).selectedId;
-    if (lineId != null) _priceLine(lineId, line.product, picked.factor);
+    if (lineId != null) _priceLine(lineId, line.product, picked);
   }
 
   Future<void> _onSubmit(String raw) async {

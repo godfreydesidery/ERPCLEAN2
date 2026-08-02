@@ -276,6 +276,104 @@ void main() {
     });
   });
 
+  group('Catalogue.previewPrice — explicit pack prices', () {
+    // ADR-0048: a pack may carry a hand-set price that is NOT base x factor
+    // (a carton sold cheaper than 24 singles). The till must use that price
+    // verbatim; multiplying it by the factor would overstate the line 24-fold.
+    Map<String, dynamic> priceJson(num amount, {String? unitUid}) => {
+          'priceListUid': 'pl-1',
+          'priceListCode': 'RETAIL',
+          'price': {'amount': amount, 'currency': 'TZS'},
+          'unitUid': unitUid,
+          'priceIncludesVat': false,
+        };
+
+    test('uses the pack row as-is, without applying the factor', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)), // base: 1000 per piece
+        ProductPrice.fromJson(
+            priceJson(21000, unitUid: 'u-CARTON')), // carton: NOT 24000
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS',
+          unit: SaleUnit(carton, 24));
+
+      expect(pp?.amount, 21000, reason: 'the hand-set carton price wins');
+    });
+
+    test('falls back to base x factor when the pack has no price of its own',
+        () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS',
+          unit: SaleUnit(carton, 24));
+
+      expect(pp?.amount, 24000);
+    });
+
+    test('a pack price for a DIFFERENT pack is not borrowed', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)),
+        ProductPrice.fromJson(priceJson(11000, unitUid: 'u-BOX')),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS',
+          unit: SaleUnit(carton, 24));
+
+      expect(pp?.amount, 24000, reason: 'the BOX price must not price a CARTON');
+    });
+
+    test('the base unit ignores pack rows entirely', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)),
+        ProductPrice.fromJson(priceJson(21000, unitUid: 'u-CARTON')),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS', unit: SaleUnit(pcs, 1));
+
+      expect(pp?.amount, 1000);
+    });
+
+    test('no base row means no preview, as the server also refuses', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(21000, unitUid: 'u-CARTON')),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS', unit: SaleUnit(pcs, 1));
+
+      expect(pp, isNull);
+    });
+
+    test('carries the pack row own VAT-inclusive stance', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)),
+        ProductPrice.fromJson({
+          ...priceJson(24780, unitUid: 'u-CARTON'),
+          'priceIncludesVat': true,
+        }),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS',
+          unit: SaleUnit(carton, 24));
+
+      expect(pp?.vatInclusive, isTrue,
+          reason: 'ADR-0056: the pack row follows its own list, not the base row');
+    });
+
+    test('defaults to the base-unit price when no unit is given', () async {
+      final cat = Catalogue(_FakeCatalogService(const [], prices: [
+        ProductPrice.fromJson(priceJson(1000)),
+        ProductPrice.fromJson(priceJson(21000, unitUid: 'u-CARTON')),
+      ]));
+
+      final pp = await cat.previewPrice('p-soap', 'TZS');
+
+      expect(pp?.amount, 1000);
+    });
+  });
+
   group('pack price preview', () {
     // Mirrors PriceResolutionServiceImpl: the price list holds the BASE unit
     // price, and a pack resolves to base × factorToBase. The preview must use
@@ -300,16 +398,20 @@ void main() {
 /// Stands in for the HTTP layer: [Catalogue] only calls `listPacks` on these
 /// paths, so everything else is left to throw if it is ever reached.
 class _FakeCatalogService implements CatalogService {
-  _FakeCatalogService(this.packs, {this.fails = false});
+  _FakeCatalogService(this.packs, {this.fails = false, this.prices = const []});
 
   final List<ProductPack> packs;
   final bool fails;
+  final List<ProductPrice> prices;
 
   @override
   Future<List<ProductPack>> listPacks(String productUid) async {
     if (fails) throw Exception('packs unavailable');
     return packs;
   }
+
+  @override
+  Future<List<ProductPrice>> listPrices(String productUid) async => prices;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
