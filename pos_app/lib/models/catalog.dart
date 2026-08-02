@@ -177,12 +177,18 @@ class ProductPrice {
     required this.priceListUid,
     required this.priceListCode,
     required this.price,
+    this.unitUid,
     this.priceIncludesVat = false,
   });
 
   final String priceListUid;
   final String priceListCode;
   final Money price;
+
+  /// The unit this price is for. **Null means the base-unit price** (ADR-0048).
+  /// A non-null value is an explicit per-pack override — a carton price set by
+  /// hand that is deliberately NOT piece price × factor.
+  final String? unitUid;
 
   /// Whether [price] already includes VAT (the source price list's stance,
   /// ADR-0056). When true the POS preview must NOT add VAT on top.
@@ -192,6 +198,7 @@ class ProductPrice {
         priceListUid: asStrOr(j['priceListUid']),
         priceListCode: asStrOr(j['priceListCode']),
         price: Money.fromJson(asMap(j['price'])),
+        unitUid: asStr(j['unitUid']),
         priceIncludesVat: asBool(j['priceIncludesVat']),
       );
 }

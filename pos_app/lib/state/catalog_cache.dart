@@ -24,27 +24,55 @@ class Catalogue {
     }
   }
 
-  /// Fresh preview unit price for a product in [currency]; null if it has no price
-  /// row (the line still posts — the server prices it). Carries the source price
-  /// list's VAT-inclusive flag so the register knows whether to add VAT. Fetched
-  /// fresh on every call — never memoised.
-  Future<PreviewPrice?> previewPrice(String productUid, String currency) async {
+  /// Fresh preview price for ONE [unit] of a product in [currency]; null if it has
+  /// no price row (the line still posts — the server prices it). Carries the source
+  /// price list's VAT-inclusive flag so the register knows whether to add VAT.
+  /// Fetched fresh on every call — never memoised.
+  ///
+  /// Resolution mirrors `PriceResolutionServiceImpl.resolveUnitListPrice`, and the
+  /// order matters:
+  ///  1. an **explicit per-unit row** for the pack being sold — used verbatim,
+  ///     because a hand-set carton price is deliberately NOT piece price × factor
+  ///     (ADR-0048). Multiplying it would overstate the line by the factor.
+  ///  2. otherwise the **base-unit row × factor**.
+  ///
+  /// [unit] defaults to the base unit (factor 1), which is the pre-pack behaviour.
+  Future<PreviewPrice?> previewPrice(String productUid, String currency,
+      {SaleUnit? unit}) async {
     try {
       final prices = await _svc.listPrices(productUid);
-      ProductPrice? match;
-      for (final p in prices) {
-        if (p.price.currency == currency) {
-          match = p;
-          break;
+
+      if (unit != null && !unit.isBase) {
+        final explicit = _pick(
+            prices.where((p) => p.unitUid != null && p.unitUid == unit.unit.uid),
+            currency);
+        if (explicit != null) {
+          return PreviewPrice(explicit.price.amount, explicit.priceIncludesVat);
         }
       }
-      match ??= prices.isNotEmpty ? prices.first : null;
-      return match == null
+
+      // Base row only: the server also requires one (a product priced solely on a
+      // pack row has "no price configured"), so null here matches its behaviour.
+      final base = _pick(prices.where((p) => p.unitUid == null), currency);
+      return base == null
           ? null
-          : PreviewPrice(match.price.amount, match.priceIncludesVat);
+          : PreviewPrice(
+              base.price.amount * (unit?.factor ?? 1), base.priceIncludesVat);
     } catch (_) {
       return null;
     }
+  }
+
+  /// First row in [rows] matching [currency], else the first row at all — the
+  /// till previews *something* rather than nothing on a single-currency company
+  /// whose rows are stored under another code.
+  ProductPrice? _pick(Iterable<ProductPrice> rows, String currency) {
+    ProductPrice? fallback;
+    for (final p in rows) {
+      if (p.price.currency == currency) return p;
+      fallback ??= p;
+    }
+    return fallback;
   }
 
   /// Every unit [p] may be sold in: its base unit first (factor 1), then each

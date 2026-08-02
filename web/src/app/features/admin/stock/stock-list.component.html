@@ -119,7 +119,8 @@
 
     <!-- Opening balance form -->
     @if (showOpeningForm()) {
-      <form id="openingBalanceForm" class="erp-card mb-3"
+      <!-- overflow-visible: same absolutely-positioned product search as the adjust form. -->
+      <form id="openingBalanceForm" class="erp-card erp-card--overflow-visible mb-3"
             (ngSubmit)="submitOpeningBalance()" aria-label="Record opening balance">
         <div class="erp-card__head">
           <h2 class="h6 mb-0">Opening Balance</h2>
@@ -199,7 +200,9 @@
 
     <!-- Adjust Stock form (toolbar entry point — product search, not tied to a specific row) -->
     @if (showAdjustForm()) {
-      <form id="adjustStockForm" class="erp-card mb-3"
+      <!-- overflow-visible: the product-search results are absolutely positioned and spill past
+           the card, which `.erp-card`'s default `overflow: clip` would slice off. -->
+      <form id="adjustStockForm" class="erp-card erp-card--overflow-visible mb-3"
             (ngSubmit)="submitAdjust()" aria-label="Adjust stock">
         <div class="erp-card__head">
           <h2 class="h6 mb-0">Adjust Stock</h2>
@@ -444,7 +447,8 @@
                   @if (adjustingUid() === row.uid) {
                     <tr>
                       <td colspan="5">
-                        <form class="erp-card mb-0"
+                        <!-- overflow-visible: the in-row product search spills past this card too. -->
+                        <form class="erp-card erp-card--overflow-visible mb-0"
                               (ngSubmit)="submitAdjust()"
                               aria-label="Adjust stock for {{ row.productCode }} — {{ row.productName }}">
                           <div class="erp-card__head">
