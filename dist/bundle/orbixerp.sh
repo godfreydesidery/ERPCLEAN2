@@ -383,7 +383,8 @@ Ask your supplier for the ${host_arch} bundle."
   done
   # The Windows launchers travel with the bundle too, so a shared installation stays
   # consistent whichever platform performed the update.
-  for f in orbixerp.ps1 install.ps1 Setup.cmd setup-wizard.ps1 Install.cmd OrbixERP.cmd; do
+  for f in orbixerp.ps1 install.ps1 Setup.cmd setup-wizard.ps1 Install.cmd OrbixERP.cmd \
+           Remote-Setup.cmd remote-setup-wizard.ps1; do
     [ -f "$src/$f" ] && cp "$src/$f" "$SCRIPT_DIR/$f"
   done
 

@@ -1,0 +1,199 @@
+=================
+THE CONTROL PANEL
+=================
+
+  Once OrbixERP is on a server, the same window you installed it with becomes
+  its control panel. Double-click Remote-Setup.cmd, enter the server details,
+  and the wizard notices it is already installed and offers Open control
+  panel.
+
+  Everything here happens on the server. You never type a command on it, and
+  nothing is installed on your PC.
+
+  To install on a server for the first time, see REMOTE-INSTALL.
+
+------------------------------------------------------------------------------
+
+What each button does
+=====================
+
+  Button: Is it running?
+  What happens on the server: Reports whether each part is up, healthy, and on
+      which address
+  Safe while people are working?: Yes - reads only
+
+  Button: Recent activity
+  What happens on the server: The last 200 lines of the application log
+  Safe while people are working?: Yes - reads only
+
+  Button: Back up now
+  What happens on the server: Writes a database backup into backups/ on the
+      server
+  Safe while people are working?: Yes - runs against the live database
+
+  Button: Restart
+  What happens on the server: Stops and starts again
+  Safe while people are working?: No - a short outage, seconds
+
+  Button: Start the system
+  What happens on the server: Starts it and waits until it genuinely answers
+  Safe while people are working?: Yes
+
+  Button: Stop the system
+  What happens on the server: Shuts down cleanly. Your data is kept.
+  Safe while people are working?: No - nobody can use it until started again
+
+  Button: Settings (.env)
+  What happens on the server: Opens the server's settings file to read or
+      change
+  Safe while people are working?: Reading yes; saving needs a restart
+
+  Button: Update to this bundle
+  What happens on the server: Upgrades the server to the version in this
+      folder
+  Safe while people are working?: No - takes a backup first, then a short
+      outage
+
+  Button: Open in browser
+  What happens on the server: Opens the ERP address on this PC
+  Safe while people are working?: Yes
+
+  Each button runs the matching command in the installation folder -
+  ./orbixerp.sh status, logs, backup, restart, start, stop, update. Nothing is
+  done by a separate mechanism, so a person at the server's own terminal sees
+  exactly the same behaviour.
+
+  While a job is running every button is disabled, and the heading shows a
+  clock so you can tell the difference between slow and stuck. A database
+  backup on a real system is not quick.
+
+------------------------------------------------------------------------------
+
+Settings (.env)
+===============
+
+  Opens the server's .env - the file holding every setting, including its
+  passwords. It is read and written straight down the encrypted connection; no
+  copy is left on your PC.
+
+  Changes take effect only after a restart. The panel offers one as soon as
+  you save.
+
+  Before writing, the previous file is kept on the server as
+  .env.bak-<date>-<time>, so a mistyped line can always be put back.
+
+Four lines cannot be changed here
+---------------------------------
+
+  ERP_DB_PASSWORD, ERP_DB_MODE, ERP_DB_NAME and ERP_DB_USER are shown but
+  refused if edited.
+
+  This is not caution for its own sake. Changing the database password here
+  does not change the password on the database - the database already exists
+  and keeps the password it was created with. All you would achieve is
+  stopping OrbixERP being able to open its own data, and the way back is not
+  obvious to somebody who has just locked themselves out. The same is true of
+  the database name, its user, and whether it runs in a container or on the
+  host.
+
+  If one of those genuinely has to change, it is a job to do deliberately,
+  with a backup in hand and the database changed to match. Ask us.
+
+What is worth changing
+----------------------
+
+  Setting: ERP_PUBLIC_HOST
+  Why you might: The address people use has changed
+  Watch out for: With a certificate, it must match the real name or the
+      certificate stops matching
+
+  Setting: ERP_HTTP_PORT
+  Why you might: Something else already uses that port
+  Watch out for: Anyone using the old port has to be told
+
+  Setting: ERP_BIND_ADDR
+  Why you might: Restrict which network can reach it
+  Watch out for: Bind too narrowly and nobody reaches it at all
+
+  Setting: ERP_TLS_ENABLED
+  Why you might: Turn a proper certificate on or off
+  Watch out for: Needs a real domain name pointed at the server
+
+------------------------------------------------------------------------------
+
+Backups
+=======
+
+  Back up now writes into backups/ in the installation folder on the server.
+  It runs against the live database, so it is safe during the working day.
+
+  A backup that only exists on the same server is not really a backup. Copy it
+  somewhere else - another machine, or storage that is not that server. If the
+  server is lost, anything on it is lost with it.
+
+------------------------------------------------------------------------------
+
+Updating
+========
+
+  Update to this bundle upgrades the server to the version in the folder you
+  launched from. So to update, get a newer bundle from us, unpack it, and run
+  its Remote-Setup.cmd.
+
+  The update takes a database backup first and stops if that backup fails.
+  Your data, settings and security keys are kept.
+
+  If the server is already on that version, the panel says so and does
+  nothing.
+
+  > Database changes only run forwards. Restoring the backup the update names
+    is the only way back to the previous version, which is why the update
+    refuses to proceed without one.
+
+------------------------------------------------------------------------------
+
+Restoring a backup is not here
+==============================
+
+  Restoring replaces the database: everything recorded since that backup was
+  taken is lost. That is not a button anybody should be able to press by
+  accident, so it is deliberately left out.
+
+  To restore, someone signs in to the server and runs it by hand - the command
+  is in OPERATIONS, and it asks for confirmation before doing anything.
+
+------------------------------------------------------------------------------
+
+When something goes wrong
+=========================
+
+  What you see: That did not work with messages above
+  What it means: The command failed on the server
+  What to do: Read the messages; TROUBLESHOOTING covers the usual causes
+
+  What you see: The clock keeps counting on a backup
+  What it means: Normal on a large database
+  What to do: Leave it; backups take as long as they take
+
+  What you see: Is it running? says unhealthy
+  What it means: Started but not answering yet, or failing to start
+  What to do: Wait a minute and check again, then Recent activity
+
+  What you see: Nothing responds after a settings change
+  What it means: A setting is wrong
+  What to do: Re-open Settings, compare with .env.bak-..., put the line back,
+      restart
+
+  What you see: The server's identity has changed
+  What it means: The server's fingerprint no longer matches
+  What to do: Stop. Find out whether it was rebuilt before continuing
+
+------------------------------------------------------------------------------
+
+What this panel will not do
+===========================
+
+  It will not delete anything, drop a database, or remove the installation.
+  There is no button for any of that, on purpose. Anything genuinely
+  destructive is left to a person at a terminal who has had to think about it
+  first.
