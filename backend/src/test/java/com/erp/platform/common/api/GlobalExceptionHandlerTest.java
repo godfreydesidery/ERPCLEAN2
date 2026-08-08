@@ -21,6 +21,25 @@ class GlobalExceptionHandlerTest {
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
     @Test
+    void discountRefusal_carriesItsCodeInAHeader_soNoClientMustMatchEnglishProse() {
+        // UAT finding #13: the web invoice screen decided whether to offer a manager-approval
+        // prompt by string-matching the server's English refusal text. One rewording and the button
+        // silently disappears. The dedicated handler must win over the generic ConflictException
+        // one and surface the code.
+        var ex = new com.erp.modules.sales.domain.exception.DiscountApprovalException(
+                com.erp.modules.sales.domain.enums.DiscountRefusalCode.DISCOUNT_APPROVAL_REQUIRED,
+                "A manager needs to approve a discount this large.");
+
+        var response = handler.handleDiscountApproval(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getHeaders().getFirst("X-Discount-Refusal"))
+                .isEqualTo("DISCOUNT_APPROVAL_REQUIRED");
+        // The friendly sentence is unchanged — the code is additive, not a replacement.
+        assertThat(errorOf(response)).isEqualTo("A manager needs to approve a discount this large.");
+    }
+
+    @Test
     void missingRequestParameter_isFriendlyAndNamesNoParameter() {
         var ex = new MissingServletRequestParameterException("companyId", "Long");
 
