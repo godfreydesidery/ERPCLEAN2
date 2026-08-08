@@ -178,13 +178,31 @@ public class DocumentPdfRenderer {
         doc.add(outer);
     }
 
+    /**
+     * Renders the line table in one of three layouts:
+     * <ul>
+     *   <li>4 columns — a quantity-only document (delivery note): # / Description / Qty / Unit.</li>
+     *   <li>6 columns — a priced document where no line carries a discount (goods receipt):
+     *       adds Unit Price / Total.</li>
+     *   <li>7 columns — a priced document with discounts (invoice): adds Discount between them.</li>
+     * </ul>
+     *
+     * <p>The Discount column is opt-in per document because a document type that has no discount
+     * concept at all — a GRN — would otherwise print a permanently blank column between two figures,
+     * which reads as a rendering fault rather than as "no discount" (Kilimanjaro K2). An invoice line
+     * with a zero discount still carries a non-null 0.00 and so keeps its column.
+     */
     private void renderLineTable(Document doc, List<DocLine> lines, boolean hasPrices) {
-        int cols = hasPrices ? 7 : 4; // code, description, qty, unit [, unitPrice, discount, lineTotal]
+        boolean hasDiscount = hasPrices && lines.stream().anyMatch(l -> l.discount() != null);
+        // # , description, qty, unit [, unitPrice [, discount] , lineTotal]
+        int cols = hasPrices ? (hasDiscount ? 7 : 6) : 4;
         PdfPTable table = new PdfPTable(cols);
         table.setWidthPercentage(100);
 
-        if (hasPrices) {
+        if (hasPrices && hasDiscount) {
             try { table.setWidths(new float[]{8f, 30f, 10f, 8f, 14f, 10f, 14f}); } catch (Exception ignored) {}
+        } else if (hasPrices) {
+            try { table.setWidths(new float[]{8f, 32f, 12f, 10f, 19f, 19f}); } catch (Exception ignored) {}
         } else {
             try { table.setWidths(new float[]{8f, 50f, 22f, 20f}); } catch (Exception ignored) {}
         }
@@ -196,7 +214,9 @@ public class DocumentPdfRenderer {
         addHeaderCell(table, "Unit");
         if (hasPrices) {
             addHeaderCell(table, "Unit Price");
-            addHeaderCell(table, "Discount");
+            if (hasDiscount) {
+                addHeaderCell(table, "Discount");
+            }
             addHeaderCell(table, "Total");
         }
 
@@ -207,7 +227,9 @@ public class DocumentPdfRenderer {
             addCell(table, l.unit() != null ? l.unit() : "", FONT_NORMAL, Element.ALIGN_LEFT, false, false, null);
             if (hasPrices) {
                 addCell(table, fmtAmt(l.unitPrice()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
-                addCell(table, fmtAmt(l.discount()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
+                if (hasDiscount) {
+                    addCell(table, fmtAmt(l.discount()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
+                }
                 addCell(table, fmtAmt(l.lineTotal()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
             }
         }

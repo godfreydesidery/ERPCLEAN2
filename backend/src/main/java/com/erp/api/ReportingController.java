@@ -60,8 +60,11 @@ public class ReportingController {
         return reporting.incomeStatement(companyId, fromDate, toDate, cmpFrom, cmpTo);
     }
 
+    // Every export below requires its statement's own VIEW gate AS WELL AS REPORT.EXPORT. A download
+    // discloses strictly more than one on-screen page, so it must never be reachable by a caller the
+    // screen itself refuses; gating a download on REPORT.EXPORT alone inverts that.
     @GetMapping("/income-statement/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('REPORT.PL.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> incomeStatementExport(
             @RequestParam Long companyId,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
@@ -87,7 +90,7 @@ public class ReportingController {
     }
 
     @GetMapping("/balance-sheet/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('REPORT.BS.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> balanceSheetExport(
             @RequestParam Long companyId,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate asAtDate,
@@ -113,7 +116,7 @@ public class ReportingController {
     }
 
     @GetMapping("/cash-flow/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('REPORT.CASHFLOW.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> cashFlowExport(
             @RequestParam Long companyId,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
@@ -142,7 +145,7 @@ public class ReportingController {
     }
 
     @GetMapping("/account-ledger/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('REPORT.LEDGER.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> accountLedgerExport(
             @RequestParam Long companyId,
             @RequestParam String accountUid,

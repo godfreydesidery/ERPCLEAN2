@@ -25,6 +25,14 @@ import { SalesInvoiceDto } from '../models/sales.model';
 import { PosSessionDto, PosSaleLineRequest, PosSaleRequest } from './models/pos.model';
 import { PosService } from './pos.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import {
+  ManagerApproval,
+  ManagerApprovalDialogComponent,
+} from '../../../shared/manager-approval/manager-approval-dialog.component';
+import {
+  DISCOUNT_OVERRIDE_PERMISSION,
+  DiscountPolicyService,
+} from '../sales/discount-policy.service';
 
 /** A single line item in the checkout basket. */
 interface SaleLine {
@@ -46,6 +54,15 @@ interface SaleLine {
   /** Product-scoped unit options; empty until a product is selected for this line. */
   lineUnitOptions: UidOption[];
   lineUnitsLoading: boolean;
+  /**
+   * K7 — uid of the supervisor who authorised this line's discount, from a successful step-up.
+   * Per LINE: an approval for one heavily discounted item must not wave the rest of the basket
+   * through. Cleared whenever the product, quantity or discount on the line changes, so an approval
+   * can never be re-used for a bigger discount than the one it was given for.
+   */
+  discountAuthorisedByUid?: string;
+  /** Display name of that supervisor, for the "Approved by …" stamp. Never sent to the server. */
+  discountAuthorisedByName?: string;
 }
 
 let _lineCounter = 0;
@@ -61,17 +78,30 @@ function nextLineId(): string { return `line-${++_lineCounter}`; }
  * fetches the same list price on product select and previews the VAT-inclusive gross — it never asks
  * the cashier to type a price.
  *
+ * Line DISCOUNTS are the one figure the cashier does type, so they follow the company's discount
+ * policy (K7): above the ceiling the line needs a supervisor's step-up, prompted here and carried on
+ * the request as `discountAuthorisedByUid`. The policy ships OFF, so nothing shows today; the server
+ * enforces it regardless of what this screen does.
+ *
  * Route: /admin/pos/sell
  * Gated: POS.SALE.CREATE.
  */
 @Component({
   selector: 'app-pos-sale',
-  imports: [FormsModule, RouterLink, DecimalPipe, UidPickerComponent, CurrencySelectComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    DecimalPipe,
+    UidPickerComponent,
+    CurrencySelectComponent,
+    ManagerApprovalDialogComponent,
+  ],
   templateUrl: './pos-sale.component.html',
   styleUrl: './pos-sale.component.scss',
 })
 export class PosSaleComponent {
   private readonly posService = inject(PosService);
+  private readonly discountPolicy = inject(DiscountPolicyService);
   private readonly companyService = inject(CompanyService);
   private readonly branchService = inject(BranchService);
   private readonly organisationService = inject(OrganisationService);
@@ -171,6 +201,35 @@ export class PosSaleComponent {
   readonly submitting = signal(false);
   readonly formError = signal<string | null>(null);
   readonly savedInvoice = signal<SalesInvoiceDto | null>(null);
+
+  // ── Manager-authorised discount (K7) ───────────────────────────────────────
+  // The web checkout carries the SAME ungated discount box as the till, so the same policy has to
+  // apply here or the control is decorative — a cashier just moves to the browser. Enforcement is
+  // server-side and unconditional (SalesInvoiceService.addLine, which the POS sale is built out
+  // of); this screen only asks for the approval BEFORE sending, so nobody is bounced by a refusal
+  // they could have satisfied at the counter.
+  //
+  // The policy ships OFF for every company, so today none of this shows and the screen behaves
+  // exactly as it does now. See DiscountPolicyService for the single seam that turns it on.
+
+  /** The line whose discount is currently waiting on a supervisor; null when no prompt is open. */
+  readonly approvalLineId = signal<string | null>(null);
+  /** Seeded permission a supervisor must hold to wave a discount through. */
+  protected readonly discountOverridePermission = DISCOUNT_OVERRIDE_PERMISSION;
+  /**
+   * Set when the SERVER refused the sale for want of an approval. The client cannot know a company's
+   * ceiling until the policy endpoint exists, so this reveals the "Ask a supervisor" button on
+   * discounted lines after such a refusal. It only ADDS an affordance — it never blocks a sale.
+   */
+  readonly serverAskedForApproval = signal(false);
+
+  /** One plain sentence naming what the supervisor is being asked to approve. */
+  readonly approvalReason = computed(() => {
+    const line = this.lines().find((l) => l.id === this.approvalLineId());
+    if (!line) return '';
+    const product = line.productName || 'this item';
+    return `A discount of ${(+line.lineDiscountAmount || 0).toFixed(2)} on ${product} needs a supervisor's approval.`;
+  });
 
   // ── Permission ─────────────────────────────────────────────────────────────
   readonly canSell = computed(() => this.session.hasPermission('POS.SALE.CREATE'));
@@ -325,12 +384,15 @@ export class PosSaleComponent {
       ...ls,
       { id: nextLineId(), productUid: '', productId: '', productName: '', unitUid: '', unitId: '', unitName: '',
         quantity: '1', unitPrice: '0.00', lineDiscountAmount: '0.00', vatRate: '0', priceState: 'ok',
-        lineUnitOptions: [], lineUnitsLoading: false },
+        lineUnitOptions: [], lineUnitsLoading: false,
+        discountAuthorisedByUid: undefined, discountAuthorisedByName: undefined },
     ]);
   }
 
   removeLine(lineId: string): void {
     this.lines.update((ls) => ls.filter((l) => l.id !== lineId));
+    // A prompt open for a line that no longer exists would approve nothing.
+    if (this.approvalLineId() === lineId) this.approvalLineId.set(null);
   }
 
   onLineProductChange(lineId: string, productUid: string): void {
@@ -343,7 +405,9 @@ export class PosSaleComponent {
           ? { ...l, productUid, productId: product?.id ?? '', productName: product?.name ?? '',
               unitUid: '', unitId: '', unitName: '',
               vatRate: String(vatRate), unitPrice: '0.00', priceState: product ? 'loading' : 'ok',
-              lineUnitOptions: [], lineUnitsLoading: !!product }
+              lineUnitOptions: [], lineUnitsLoading: !!product,
+              // A different product is a different discount — an approval never carries over.
+              discountAuthorisedByUid: undefined, discountAuthorisedByName: undefined }
           : l,
       ),
     );
@@ -415,8 +479,66 @@ export class PosSaleComponent {
     // type="number" emits a JS number; coerce so SaleLine string fields never hold a raw number.
     const str = value === null || value === undefined ? '' : String(value);
     this.lines.update((ls) =>
-      ls.map((l) => l.id === lineId ? { ...l, [field]: str } : l),
+      ls.map((l) =>
+        l.id === lineId
+          // Editing the quantity or the discount changes what was approved, so an approval given
+          // for the old figure is dropped. Otherwise a cashier could get 5% signed off and then
+          // type 60% into the same box.
+          ? { ...l, [field]: str, discountAuthorisedByUid: undefined, discountAuthorisedByName: undefined }
+          : l,
+      ),
     );
+  }
+
+  // ── Manager-authorised discount (K7) ───────────────────────────────────────
+
+  /** The basis the discount comes off: unit price × quantity, exactly as the server computes it. */
+  private lineGrossBeforeDiscount(l: SaleLine): number {
+    return (+l.quantity || 0) * (+l.unitPrice || 0);
+  }
+
+  /** True when the company's policy will not let this line through without a supervisor. */
+  lineNeedsApproval(l: SaleLine): boolean {
+    if (l.discountAuthorisedByUid) return false;
+    return this.discountPolicy.needsApproval(
+      this.lineGrossBeforeDiscount(l),
+      +l.lineDiscountAmount || 0,
+      null,
+    );
+  }
+
+  /** Whether to offer the "Ask a supervisor" button on this line. */
+  lineCanRequestApproval(l: SaleLine): boolean {
+    if ((+l.lineDiscountAmount || 0) <= 0) return false;
+    if (l.discountAuthorisedByUid) return false;
+    return this.lineNeedsApproval(l) || this.serverAskedForApproval();
+  }
+
+  requestApproval(lineId: string): void {
+    this.approvalLineId.set(lineId);
+  }
+
+  cancelApproval(): void {
+    this.approvalLineId.set(null);
+  }
+
+  /** Stamps the approving supervisor onto the line the prompt was opened for. */
+  onApprovalGranted(approval: ManagerApproval): void {
+    const lineId = this.approvalLineId();
+    if (!lineId) return;
+    this.lines.update((ls) =>
+      ls.map((l) =>
+        l.id === lineId
+          ? {
+              ...l,
+              discountAuthorisedByUid: approval.authoriserUid,
+              discountAuthorisedByName: approval.authoriserName,
+            }
+          : l,
+      ),
+    );
+    this.approvalLineId.set(null);
+    this.formError.set(null);
   }
 
   /**
@@ -450,6 +572,10 @@ export class PosSaleComponent {
     if (!l.unitId) return 'Select a unit for every line.';
     if (l.priceState === 'missing') return `"${l.productName}" has no price set. Set a price for it before selling.`;
     if (!l.quantity || +l.quantity <= 0) return 'Quantity must be positive for every line.';
+    if (+l.lineDiscountAmount < 0) return 'Discount cannot be negative.';
+    if (this.lineNeedsApproval(l)) {
+      return `The discount on "${l.productName}" needs a supervisor's approval. Use "Ask a supervisor" on that line.`;
+    }
     return null;
   }
 
@@ -496,6 +622,9 @@ export class PosSaleComponent {
       quantity: String(l.quantity ?? ''),
       unitPrice: l.unitPrice,
       lineDiscountAmount: +l.lineDiscountAmount > 0 ? String(l.lineDiscountAmount) : undefined,
+      // K7: only ever sent when a supervisor actually approved THIS line. The server re-resolves
+      // the uid and requires that user to genuinely hold the override in the invoice's company.
+      discountAuthorisedByUid: l.discountAuthorisedByUid || undefined,
     }));
 
     const request: PosSaleRequest = {
@@ -519,6 +648,16 @@ export class PosSaleComponent {
       },
       error: (err: unknown) => {
         this.formError.set(this.messageFrom(err, 'Could not process sale.'));
+        // K7 reactive path: the client cannot know a company's discount ceiling until the policy
+        // endpoint exists, so if the SERVER refuses for want of an approval, offer the button on the
+        // discounted lines. Adds an affordance only — it never blocks or changes what was sent.
+        //
+        // Decided on the refusal's machine-readable code (`data.errorCode`), never on its wording.
+        // This used to search the English sentence for "discount" + "approval": one rewording, one
+        // translation, and the button vanished with nothing to show it had (UAT finding #13).
+        if (this.discountPolicy.approvalMayRescue(err)) {
+          this.serverAskedForApproval.set(true);
+        }
         this.submitting.set(false);
       },
     });
@@ -533,6 +672,8 @@ export class PosSaleComponent {
     this.tenderedAmount.set('');
     this.saleNotes.set('');
     this.formError.set(null);
+    this.approvalLineId.set(null);
+    this.serverAskedForApproval.set(false);
     // Refresh open sessions
     const cId = this.selectedCompanyId();
     if (cId) {

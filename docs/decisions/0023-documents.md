@@ -112,7 +112,7 @@ Constraints: `uq_document_branding_uid`, `uq_document_branding_company UNIQUE (c
 INVOICE          — sales invoice (sales_invoices, FINALISED/VOID)            → DocumentPdfRenderer (transactional)
 AR_STATEMENT     — customer statement (open items + ageing)                 → PdfStatementRenderer (REUSE the lifted pipeline)
 PURCHASE_ORDER   — purchase order (purchase_orders)                         → DocumentPdfRenderer (transactional)
-GOODS_RECEIPT    — goods-receipt note (goods_receipts)                      → DocumentPdfRenderer (transactional, qty-only)
+GOODS_RECEIPT    — goods-receipt note (goods_receipts)                      → DocumentPdfRenderer (transactional, PRICED since 2026-08-08 — was qty-only; see D-5)
 DELIVERY_NOTE    — delivery document (deliveries; NO prices — ADR-0021 D-7) → DocumentPdfRenderer (transactional, qty-only)
 CREDIT_NOTE      — AR credit note (ar_credit_notes)                         → DocumentPdfRenderer (transactional)
 -- reserved, NOT rendered in v1 (forward-shaped enum):
@@ -196,7 +196,7 @@ DocumentRenderModel(
     counterparty     PartyBlock( name, addressLines List<String>, taxId ),   // bill-to / ship-to / supplier
     lines            List<DocLine( lineNo, code, description, qty, unit,
                                    unitPrice (nullable), discount (nullable),
-                                   taxLabel (nullable), lineTotal (nullable) )>,  // prices NULL for qty-only docs (delivery/GRN)
+                                   taxLabel (nullable), lineTotal (nullable) )>,  // prices NULL for qty-only docs (delivery; GRN priced since 2026-08-08 — D-5)
     taxSummary       List<TaxRow(bandLabel, base, rate, vat)>,  // empty for qty-only docs
     totals           List<TotalRow(label, amount, emphasised)>, // net / VAT / gross; empty for qty-only docs
     currency         String,        // for display formatting (base TZS)
@@ -208,7 +208,7 @@ DocumentRenderModel(
 - **Per-type builders (in `DocumentModelBuilder`):**
   - **INVOICE** ← `SalesInvoiceDto`: branding + bill-to (customer) + meta (`INV-####`, date, agent, terms); lines with full price/discount/VAT/line-total; `taxSummary` from the invoice `tax_summary` JSONB; totals net/VAT/gross. The amounts are **copied from the DTO** — no recomputation (NFR-DOC-02 / BR-DOC-09).
   - **PURCHASE_ORDER** ← `PurchaseOrderDto`: branding + supplier block + meta (`PO-####`, date, delivery terms); lines with cost/qty/line-total; totals.
-  - **GOODS_RECEIPT** ← `GoodsReceiptDto`: branding + supplier + meta (GRN ref, date, against-PO); lines **qty-only** (received qty); no `taxSummary`/`totals` (the supplier copy is qty-only — BR-DOC-07).
+  - **GOODS_RECEIPT** ← `GoodsReceiptDto`: branding + supplier + meta (GRN ref, date, against-PO); lines ~~**qty-only** (received qty); no `taxSummary`/`totals` (the supplier copy is qty-only — BR-DOC-07)~~. **[Amended 2026-08-08 (Kilimanjaro K2) — SUPERSEDED: the GRN is priced.** Lines carry received qty **+ `unitPrice` (`goods_receipt_lines.unit_cost_amount`) + `lineTotal` (`line_cost_amount`)**, both persisted columns copied verbatim; `totals` carries a single emphasised **"Total Received Value"**; `taxSummary` stays empty (a receipt has no VAT band — VAT arrives with the supplier bill). Rationale: the GRN is the **internal receiving document** (delivery check + the AP three-way match against the supplier bill), not a supplier copy — with no values on it there is nothing to check against. **The receipt-level total has no source column, so it is computed in `GoodsReceiptServiceImpl` and handed over as `GoodsReceiptDto.receiptTotalAmount`** — the documents module derives no amount of its own, so **BR-DOC-02 / BR-DOC-09 / NFR-DOC-02 are untouched**. Two render-side consequences were handled with it: (1) `DocumentRenderModel.currency()` is never read by `DocumentPdfRenderer`, so the builder now emits a **`Currency` meta pair** or the printed figures would be unlabelled; (2) `hasPrices` used to force a fixed 7-column layout, which on a GRN meant a permanently blank **Discount** column — the renderer now derives that column from the lines (`any discount != null`), giving a 6-column priced layout for the GRN and leaving the 7-column invoice layout unchanged. **`DELIVERY_NOTE` is explicitly NOT amended** — same builder/renderer pair, still qty-only per ADR-0021 D-7.**]**
   - **DELIVERY_NOTE** ← `DeliveryDto`: branding + ship-to (customer) + meta (`DEL-####`, date, against-SO); lines **qty-only** (delivered qty) — **no prices** (ADR-0021 D-7 — the delivery line carries no pricing); no `taxSummary`/`totals`.
   - **CREDIT_NOTE** ← `ArCreditNoteDto`: branding + customer + meta (`CN-####`, date, reason, against-invoice); the credited net/VAT/gross; lines if the credit note carries them, else a single net line.
 - **AR_STATEMENT** ← the existing statement query → `StatementRenderModel` (REUSE — FR-DOC-11). `DocumentModelBuilder` delegates to the existing statement flattener; `PdfStatementRenderer` renders it. No new statement code.

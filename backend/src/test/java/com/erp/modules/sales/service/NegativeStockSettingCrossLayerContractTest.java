@@ -1,6 +1,8 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -127,7 +129,8 @@ class NegativeStockSettingCrossLayerContractTest {
 
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         // Nothing on hand — so whether the sale gets through is decided purely by the setting.
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        // reserve() both takes the claim and reports the availability it saw under the row lock.
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
     }

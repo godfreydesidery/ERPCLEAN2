@@ -102,6 +102,137 @@ class ProductBarcode {
       );
 }
 
+/// A configured bulk pack (`ProductBulkPackDto`) — a sellable unit larger than
+/// the product's base unit, carrying the conversion factor the server applies
+/// (`qty_in_base = quantity × factorToBase`). The DTO identifies its unit by
+/// **uid only**, so the numeric `unitId` the sale payload needs is resolved from
+/// [AppData.unitsByUid].
+class ProductPack {
+  ProductPack({
+    required this.uid,
+    required this.unitUid,
+    required this.unitCode,
+    required this.unitName,
+    required this.factorToBase,
+    required this.barcode,
+    required this.saleDefault,
+  });
+
+  final String uid;
+  final String? unitUid;
+  final String? unitCode;
+  final String? unitName;
+
+  /// How many base units one of this pack contains. Always > 0 (DB CHECK).
+  final double factorToBase;
+  final String? barcode;
+  final bool saleDefault;
+
+  factory ProductPack.fromJson(Map<String, dynamic> j) => ProductPack(
+        uid: asStrOr(j['uid']),
+        unitUid: asStr(j['unitUid']),
+        unitCode: asStr(j['unitCode']),
+        unitName: asStr(j['unitName']),
+        factorToBase: asNum(j['factorToBase']) ?? 1,
+        barcode: asStr(j['barcode']),
+        saleDefault: asBool(j['saleDefault']),
+      );
+}
+
+/// One row of the batch price read (`ResolvedUnitPriceDto`,
+/// `POST /product-prices/resolve` — P2).
+///
+/// This is **the** answer to "what will the server charge?": the endpoint runs
+/// the real `PriceResolutionService`, so a row here agrees with the invoice
+/// that gets posted. When [status] is not RESOLVED the client must show "no
+/// price" and must NOT substitute a locally-computed guess — that guess is the
+/// bug this endpoint exists to kill.
+///
+/// [amount] is the price for ONE [unitUid] (a pack price is already the whole
+/// pack — never multiply by the factor again).
+class ResolvedUnitPrice {
+  const ResolvedUnitPrice({
+    required this.productUid,
+    required this.unitUid,
+    required this.status,
+    this.amount,
+    this.currency,
+    this.vatInclusive = false,
+  });
+
+  final String productUid;
+
+  /// The unit the amount is expressed in — the requested unit, or the product's
+  /// own base unit when none was requested.
+  final String unitUid;
+  final UnitPriceStatus status;
+
+  /// JSON **number** (a BigDecimal), not a string. Null unless RESOLVED.
+  final double? amount;
+  final String? currency;
+
+  /// True => [amount] is GROSS; false => NET. Per row: a pack override inherits
+  /// its OWN price list's stance (ADR-0056), so two rows in one response can
+  /// legitimately disagree.
+  final bool vatInclusive;
+
+  bool get isResolved => status.isResolved && amount != null;
+
+  factory ResolvedUnitPrice.fromJson(Map<String, dynamic> j) =>
+      ResolvedUnitPrice(
+        productUid: asStrOr(j['productUid']),
+        unitUid: asStrOr(j['unitUid']),
+        status: UnitPriceStatus.fromWire(asStr(j['status'])),
+        amount: asNum(j['amount']),
+        currency: asStr(j['currency']),
+        vatInclusive: asBool(j['vatInclusive']),
+      );
+}
+
+/// What the branch holds of one product, as far as the till can tell.
+///
+/// [quantity] is the physical on-hand summed over every stock location in the
+/// branch. [available] is what checkout will actually honour — on-hand minus
+/// reservations — and is **null when the server does not tell us**, which is
+/// the case today: `StockOnHandDto` carries no `reservedQty`/`availableQty`.
+/// The distinction is kept explicit rather than papered over: a hint that
+/// silently promises stock the sale then refuses is worse than one that admits
+/// the number is the shelf count.
+class StockLevel {
+  const StockLevel({required this.quantity, this.reserved, this.available});
+
+  final double quantity;
+  final double? reserved;
+  final double? available;
+
+  /// The figure to show and compare against — the honoured quantity when the
+  /// server provides it, otherwise the physical on-hand.
+  double get sellable => available ?? quantity;
+
+  /// True when [sellable] is the quantity checkout enforces, not an
+  /// approximation of it.
+  bool get isAuthoritative => available != null;
+
+  StockLevel plus(StockLevel other) => StockLevel(
+        quantity: quantity + other.quantity,
+        // Reservations only sum when EVERY contributing row reported them.
+        // One silent row would understate the total and re-create exactly the
+        // over-promise this type exists to avoid.
+        reserved: (reserved == null || other.reserved == null)
+            ? null
+            : reserved! + other.reserved!,
+        available: (available == null || other.available == null)
+            ? null
+            : available! + other.available!,
+      );
+
+  factory StockLevel.fromJson(Map<String, dynamic> j) => StockLevel(
+        quantity: asNumOr(j['quantity']),
+        reserved: asNum(j['reservedQty']),
+        available: asNum(j['availableQty']),
+      );
+}
+
 /// A unit of measure (`UnitOfMeasureDto`).
 class Unit {
   Unit({
@@ -140,12 +271,18 @@ class ProductPrice {
     required this.priceListUid,
     required this.priceListCode,
     required this.price,
+    this.unitUid,
     this.priceIncludesVat = false,
   });
 
   final String priceListUid;
   final String priceListCode;
   final Money price;
+
+  /// The unit this price is for. **Null means the base-unit price** (ADR-0048).
+  /// A non-null value is an explicit per-pack override — a carton price set by
+  /// hand that is deliberately NOT piece price × factor.
+  final String? unitUid;
 
   /// Whether [price] already includes VAT (the source price list's stance,
   /// ADR-0056). When true the POS preview must NOT add VAT on top.
@@ -155,6 +292,7 @@ class ProductPrice {
         priceListUid: asStrOr(j['priceListUid']),
         priceListCode: asStrOr(j['priceListCode']),
         price: Money.fromJson(asMap(j['price'])),
+        unitUid: asStr(j['unitUid']),
         priceIncludesVat: asBool(j['priceIncludesVat']),
       );
 }

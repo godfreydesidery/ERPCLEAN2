@@ -3,6 +3,8 @@ package com.erp.modules.products.service;
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 import com.erp.modules.products.domain.entity.CustomerPrice;
 import com.erp.modules.products.domain.entity.PriceList;
 import com.erp.modules.products.domain.entity.PriceTier;
@@ -12,6 +14,7 @@ import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.Promotion;
 import com.erp.modules.products.domain.enums.PromotionEffect;
 import com.erp.modules.products.domain.enums.PromotionTarget;
+import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.repository.CustomerPriceRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
@@ -35,6 +38,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class PriceResolutionServiceImpl implements PriceResolutionService {
+
+    /** Kept verbatim from the pre-refactor throw so callers matching on the text still match. */
+    static final String NO_PRICE_MESSAGE = "Product has no price configured for this company.";
+
+    static final String UNIT_NOT_APPLICABLE_MESSAGE =
+            "This unit is not valid for this product. Use the product's base unit or "
+                    + "a configured pack unit.";
 
     private final CustomerPriceRepository customerPrices;
     private final PromotionRepository     promotions;
@@ -112,6 +122,26 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
 
     @Override
     public UnitListPriceDto resolveUnitListPrice(Long companyId, Long productId, Long unitId) {
+        // Single implementation of the unit-aware rules lives in resolveUnitListPriceQuote; this
+        // narrower shape is what the three sales services consume (currency comes from the header).
+        UnitPriceQuoteDto quote = resolveUnitListPriceQuote(companyId, productId, unitId);
+        return new UnitListPriceDto(quote.amount(), quote.vatInclusive());
+    }
+
+    @Override
+    public UnitPriceQuoteDto resolveUnitListPriceQuote(Long companyId, Long productId, Long unitId) {
+        // Thin throwing façade over the single non-throwing implementation below — sales documents
+        // price one line at a time and treat "unpriceable" as an error, so they keep this shape.
+        UnitPriceQuoteResult result = findUnitListPriceQuote(companyId, productId, unitId);
+        return switch (result.status()) {
+            case RESOLVED -> result.price();
+            case NO_PRICE -> throw new IllegalArgumentException(NO_PRICE_MESSAGE);
+            case UNIT_NOT_APPLICABLE -> throw new IllegalStateException(UNIT_NOT_APPLICABLE_MESSAGE);
+        };
+    }
+
+    @Override
+    public UnitPriceQuoteResult findUnitListPriceQuote(Long companyId, Long productId, Long unitId) {
         // Company-scoped finder (not bare findById) — prevents a confused-deputy cross-tenant
         // read if a caller ever passes a productId that isn't actually in companyId.
         Product product = products.findByCompanyIdAndId(companyId, productId)
@@ -124,9 +154,14 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                     productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productId, unitId);
             if (explicit.isPresent()) {
                 ProductPrice pack = explicit.get();
+                BigDecimal packAmount = amountOrNull(pack);
+                if (packAmount == null) {
+                    return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
+                }
                 // ADR-0056: a pack override inherits ITS OWN list's VAT stance, independent of
                 // whatever the base row's list says.
-                return new UnitListPriceDto(requireAmount(pack), pack.getPriceList().isPriceIncludesVat());
+                return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(packAmount,
+                        currencyOf(pack), pack.getPriceList().isPriceIncludesVat()));
             }
         }
 
@@ -134,14 +169,26 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         // First-wins across price lists: the live path is deliberately price-list-blind (ADR-0048),
         // and a product priced on several lists has several base rows — take the lowest-id one rather
         // than throwing on a multi-price-list product (restores the pre-D-1 findFirst tolerance).
-        ProductPrice base = productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Product has no price configured for this company."));
-        BigDecimal baseAmount = requireAmount(base);
+        // Checked BEFORE unit applicability so an unpriced product reads as NO_PRICE whatever unit
+        // the caller asked for (the order the batch statuses were specified in).
+        Optional<ProductPrice> baseRow =
+                productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productId);
+        if (baseRow.isEmpty()) {
+            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
+        }
+        ProductPrice base = baseRow.get();
+        BigDecimal baseAmount = amountOrNull(base);
+        if (baseAmount == null) {
+            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
+        }
 
         // 3 — unit must be the base or a configured pack, else reject (mirrors computeQtyInBase).
-        BigDecimal resolvedAmount = baseAmount.multiply(unitFactor(product, unitId));
-        return new UnitListPriceDto(resolvedAmount, base.getPriceList().isPriceIncludesVat());
+        BigDecimal factor = unitFactor(product, unitId);
+        if (factor == null) {
+            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.UNIT_NOT_APPLICABLE);
+        }
+        return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(baseAmount.multiply(factor),
+                currencyOf(base), base.getPriceList().isPriceIncludesVat()));
     }
 
     // ---- helpers ---------------------------------------------------------------
@@ -169,13 +216,22 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         return null;
     }
 
-    /** Extracts the price amount, rejecting a row whose Money is incomplete. */
-    private static BigDecimal requireAmount(ProductPrice pp) {
+    /**
+     * ISO 4217 code of the price row. {@code requireAmount} has already rejected an incomplete
+     * {@code Money}, so the currency is present whenever this is reached.
+     */
+    private static String currencyOf(ProductPrice pp) {
+        return CurrencyCode.value(pp.getPrice().getCurrency());
+    }
+
+    /**
+     * Extracts the price amount, or {@code null} when the row's {@code Money} is incomplete — an
+     * unusable row reads the same as no row at all ({@code NO_PRICE}). Returns a value rather than
+     * throwing so batch callers never trip the transaction (see {@code UnitPriceQuoteResult}).
+     */
+    private static BigDecimal amountOrNull(ProductPrice pp) {
         var money = pp.getPrice();
-        if (money == null || money.getAmount() == null) {
-            throw new IllegalArgumentException("Product has no price configured for this company.");
-        }
-        return money.getAmount();
+        return money == null ? null : money.getAmount();
     }
 
     /**
@@ -197,7 +253,9 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     /**
      * Factor-to-base multiplier for {@code unitId} against {@code product}'s base unit — mirrors
      * the sales modules' {@code computeQtyInBase} guard: base unit → 1, configured pack → its
-     * factor, any other unit → rejected.
+     * factor, any other unit → {@code null} (not applicable). Returns {@code null} rather than
+     * throwing so batch callers never trip the transaction (see {@code UnitPriceQuoteResult}); the
+     * throwing façade turns it back into an {@code IllegalStateException}.
      */
     private BigDecimal unitFactor(Product product, Long unitId) {
         if (product.getBaseUnit().getId().equals(unitId)) {
@@ -207,9 +265,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                 .filter(bp -> bp.getUnit().getId().equals(unitId))
                 .map(ProductBulkPack::getFactorToBase)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "This unit is not valid for this product. Use the product's base unit or "
-                                + "a configured pack unit."));
+                .orElse(null);
     }
 
     /**

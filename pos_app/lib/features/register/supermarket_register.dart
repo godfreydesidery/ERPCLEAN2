@@ -7,14 +7,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/barcode.dart';
+import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
+import '../../state/price_cache.dart';
 import '../../state/providers.dart';
 import '../../state/stock_cache.dart';
 import '../../widgets/ui.dart';
+import '../auth/approval_dialog.dart';
 import '../payment/payment_sheet.dart';
 import 'pickers.dart';
 
@@ -39,6 +42,12 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   bool _busyScan = false;
   Timer? _debounce;
 
+  /// The query the visible [_results] came from. The stock cache needs it to
+  /// tell "this branch holds none of it" (absent from a completed query) apart
+  /// from "we have not asked yet" — the two used to render identically, as
+  /// nothing, and a cashier reads nothing as "fine".
+  String _resultsQuery = '';
+
   // The numpad box is a real editable field: the hardware keyboard types into it
   // (once a Qty/Disc cell is tapped) AND the on-screen keys drive the same
   // controller. Enter applies it to the selected line.
@@ -48,6 +57,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
+  PriceCache get _prices => ref.read(priceCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   String get _currency => ref.read(cartProvider).currency;
 
@@ -55,6 +65,17 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// before the cashier rings (best-effort; repaints when it lands).
   void _refreshStock(String q) {
     _stock.refreshFor(q).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Price the whole visible result page in ONE request (K6, using P2's batch
+  /// endpoint). Prices come from the ERP's own resolver, so what the cashier
+  /// reads while keying in is what the invoice will charge — the till does not
+  /// approximate the pricing rules and then disagree with the posted sale.
+  void _refreshPrices(List<Product> results) {
+    if (results.isEmpty) return;
+    _prices.refreshFor(results.map((p) => p.uid)).then((_) {
       if (mounted) setState(() {});
     });
   }
@@ -84,30 +105,71 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   // --------------------------------------------------------------- add / scan
 
+  /// Add a line. [saleUnit] overrides the product's base unit — used when a
+  /// scanned pack barcode names its own unit; null means sell by the base unit.
   void _addProduct(Product p,
-      {double quantity = 1, double? fixedQuantity, double? overridePrice}) {
+      {double quantity = 1,
+      double? fixedQuantity,
+      double? overridePrice,
+      SaleUnit? saleUnit}) {
     final app = ref.read(appControllerProvider);
-    final unit = app.unitsByUid[p.baseUnitUid];
-    if (unit == null) {
+    final base = app.unitsByUid[p.baseUnitUid];
+    final chosen = saleUnit ?? (base == null ? null : SaleUnit(base, 1));
+    if (chosen == null) {
       showToast(context, '${p.name}: no usable unit configured.');
       return;
     }
     final cart = ref.read(cartProvider.notifier);
-    cart.addProduct(p, unit,
+    cart.addProduct(p, chosen.unit,
+        unitFactor: chosen.factor,
         quantity: quantity,
         fixedQuantity: fixedQuantity,
         overridePrice: overridePrice);
     final lineId = ref.read(cartProvider).selectedId;
     if (overridePrice == null && lineId != null) {
-      _cache.previewPrice(p.uid, _currency).then((pp) {
-        if (pp != null && mounted) {
-          cart.setLinePrice(
-              lineId,
-              app.grossUnitPrice(pp.amount, p.vatStatus,
-                  vatInclusive: pp.vatInclusive));
-        }
-      });
+      _priceLine(lineId, p, chosen);
     }
+  }
+
+  /// Patch a line's preview price for the unit it is being sold in. The lookup
+  /// honours an explicit pack price where one is set and falls back to
+  /// `base × factor` otherwise — the same order the server resolves in, so the
+  /// preview matches the authoritative total either way.
+  void _priceLine(String lineId, Product p, SaleUnit unit) {
+    final app = ref.read(appControllerProvider);
+    final cart = ref.read(cartProvider.notifier);
+    _cache.previewPrice(p.uid, _currency, unit: unit).then((pp) {
+      if (pp != null && mounted) {
+        cart.setLinePrice(
+            lineId,
+            app.grossUnitPrice(pp.amount, p.vatStatus,
+                vatInclusive: pp.vatInclusive));
+      }
+    });
+  }
+
+  /// Open the unit picker for a line and apply the choice. Silently does nothing
+  /// when the product has no pack configured — there is nothing to choose.
+  Future<void> _pickUnit(CartLine line) async {
+    final app = ref.read(appControllerProvider);
+    final units = await _cache.sellableUnits(line.product, app.unitsByUid);
+    if (!mounted) return;
+    if (units.length < 2) {
+      showToast(context, '${line.product.name} is only sold in ${line.unit.name}.');
+      return;
+    }
+    final picked = await showUnitPicker(context,
+        productName: line.product.name,
+        units: units,
+        currentUnitId: line.unit.id);
+    if (picked == null || !mounted) return;
+    ref
+        .read(cartProvider.notifier)
+        .setLineUnit(line.localId, picked.unit, picked.factor);
+    // The line may have merged into an existing one of the same product+unit —
+    // re-price whichever line now holds the selection, not the original id.
+    final lineId = ref.read(cartProvider).selectedId;
+    if (lineId != null) _priceLine(lineId, line.product, picked);
   }
 
   Future<void> _onSubmit(String raw) async {
@@ -138,7 +200,18 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               _resetSearch();
               return;
             }
-            _addProduct(product, fixedQuantity: bc.derivedQuantity);
+            // A barcode may address a pack rather than the base unit (a carton
+            // label). Honour that unit when it is a configured one for this
+            // product; anything else falls back to the base unit.
+            SaleUnit? scanned;
+            final uomId = bc.uomId;
+            if (uomId != null) {
+              scanned = await _cache.sellableUnitById(
+                  product, uomId, ref.read(appControllerProvider).unitsByUid);
+              if (!mounted) return;
+            }
+            _addProduct(product,
+                fixedQuantity: bc.derivedQuantity, saleUnit: scanned);
             _resetSearch();
             return;
           }
@@ -174,8 +247,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       } else if (hits.isEmpty) {
         showToast(context, 'No match for "$value".');
       } else {
-        _setResults(hits);
+        _setResults(hits, value);
         _refreshStock(value);
+        _refreshPrices(hits);
       }
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.message);
@@ -188,7 +262,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _debounce?.cancel();
     final q = v.trim();
     if (q.isEmpty) {
-      _setResults(const []);
+      _setResults(const [], '');
       return;
     }
     // Debounced fresh server search (no local cache — results are always live).
@@ -202,18 +276,22 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           .read(catalogServiceProvider)
           .searchProducts(_companyId, q: q, size: 60);
       if (mounted) {
-        _setResults(hits);
+        _setResults(hits, q);
         _refreshStock(q);
+        _refreshPrices(hits);
       }
     } catch (_) {
-      if (mounted) _setResults(const []);
+      if (mounted) _setResults(const [], q);
     }
   }
 
-  /// Replace the results dropdown and highlight the first row.
-  void _setResults(List<Product> r) {
+  /// Replace the results dropdown and highlight the first row. [query] is the
+  /// search these rows answered — the stock hint needs it to distinguish "none
+  /// in this branch" from "not asked yet".
+  void _setResults(List<Product> r, String query) {
     setState(() {
       _results = r;
+      _resultsQuery = query.trim();
       _resultIndex = r.isEmpty ? -1 : 0;
     });
   }
@@ -266,7 +344,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   void _resetSearch() {
     _search.clear();
-    _setResults(const []);
+    _setResults(const [], '');
     _searchFocus.requestFocus();
   }
 
@@ -463,6 +541,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       Expanded(
                           child: Text(p.name,
                               maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      _priceTag(p),
                       _stockTag(p.id),
                       if (p.restrictedKind.isRestricted)
                         Padding(
@@ -655,11 +734,34 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               flex: 1,
               onTap: () => ctrl.select(line.localId)),
           cell(
-              Text(line.unit.code,
-                  style: const TextStyle(
-                      fontSize: 12, color: Color(0xFF5F6368))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(line.unit.code,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: line.unitFactor == 1
+                                ? FontWeight.w400
+                                : FontWeight.w700,
+                            color: line.unitFactor == 1
+                                ? const Color(0xFF5F6368)
+                                : AppColors.brand)),
+                  ),
+                  const Icon(Icons.arrow_drop_down,
+                      size: 14, color: Color(0xFF9AA0A6)),
+                ],
+              ),
               width: _wUnit,
-              align: Alignment.center),
+              align: Alignment.center,
+              onTap: voided
+                  ? null
+                  : () {
+                      ctrl.select(line.localId);
+                      _pickUnit(line);
+                    }),
           cell(
               NumText(
                   formatAmount(line.quantity,
@@ -680,15 +782,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
-              NumText(
-                  line.lineDiscountAmount == 0
-                      ? '·'
-                      : formatAmount(line.lineDiscountAmount),
-                  style: numStyle(
-                      size: 13.5,
-                      color: line.lineDiscountAmount == 0
-                          ? AppColors.ink3
-                          : AppColors.brand)),
+              _discountCell(line),
               width: _wDisc,
               align: Alignment.centerRight,
               bg: discHi ? AppColors.brandSoft : null,
@@ -732,19 +826,68 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     );
   }
 
-  /// Compact on-hand hint for a product row: muted "N in stock", or a red
-  /// "Out of stock" when the branch holds none. Renders nothing while the
-  /// quantity is unknown (not fetched, or the cashier lacks STOCK.VIEW).
+  /// The selling price for one base unit, as the SERVER resolves it (K6).
+  ///
+  /// Price is the half of the picture the dropdown was missing: stock told the
+  /// cashier whether they *could* sell it, and nothing told them what it costs,
+  /// so every price question meant adding the line to find out and then
+  /// removing it again.
+  ///
+  /// Three states, all distinguishable: a figure, an explicit "no price", and
+  /// nothing at all while the answer is still in flight (or when this till may
+  /// not read prices — implying "unpriced" would be a lie).
+  Widget _priceTag(Product p) {
+    if (_prices.denied) return const SizedBox.shrink();
+    final price = _prices.priceFor(p.uid);
+    if (price == null) return const SizedBox.shrink();
+    if (!price.isResolved) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 8),
+        child: Text('no price',
+            style: TextStyle(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: AppColors.warn)),
+      );
+    }
+    final app = ref.read(appControllerProvider);
+    // Same VAT stance as the cart preview: an inclusive price list is already
+    // gross, so VAT is added exactly once or not at all.
+    final gross = app.grossUnitPrice(price.amount!, p.vatStatus,
+        vatInclusive: price.vatInclusive);
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Text(formatAmount(gross),
+          maxLines: 1,
+          softWrap: false,
+          style: numStyle(size: 12.5, weight: FontWeight.w700)),
+    );
+  }
+
+  /// Compact stock hint for a product row: muted "N in stock", or a red
+  /// "Out of stock" when the branch holds none.
+  ///
+  /// "Out of stock" is now stated explicitly. A product with no on-hand row is
+  /// simply absent from `/stock/on-hand`, and the old code rendered that as
+  /// nothing — identical to still-loading — so the most important case looked
+  /// like the most reassuring one.
+  ///
+  /// The figure is what checkout enforces when the server reports it, and the
+  /// physical shelf count when it does not (see [StockLevel]); the label says
+  /// which, rather than promising stock the sale might then refuse.
   Widget _stockTag(String productId) {
-    final oh = _stock.onHand(productId);
-    if (oh == null) return const SizedBox.shrink();
-    final out = oh <= 0;
+    final level = _stock.levelFor(productId, query: _resultsQuery);
+    if (level == null) return const SizedBox.shrink();
+    final qty = level.sellable;
+    final out = qty <= 0;
+    final text = out
+        ? 'Out of stock'
+        : '${formatAmount(qty, decimals: qty % 1 == 0 ? 0 : 2)} '
+            '${level.isAuthoritative ? 'available' : 'in stock'}';
     return Padding(
       padding: const EdgeInsets.only(left: 8),
       child: Text(
-        out
-            ? 'Out of stock'
-            : '${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} in stock',
+        text,
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -759,11 +902,18 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// hitting Pay, not as a checkout-time rejection). Silent when stock is
   /// unknown or sufficient.
   Widget _shortStockTag(CartLine line) {
-    final oh = _stock.onHand(line.product.id);
-    if (oh == null || oh >= line.quantity) return const SizedBox.shrink();
+    final level = _stock.levelForProduct(line.product.id);
+    final oh = level?.sellable;
+    // On-hand is always in BASE units, so a pack line is compared against the
+    // base equivalent (2 cartons of 24 needs 48) — otherwise selling 2 cartons
+    // out of 30 pieces would look fine and fail at checkout.
+    if (oh == null || oh >= line.baseQuantity) return const SizedBox.shrink();
+    // Name the unit on a pack line — a bare "only 30 left" against 2 cartons
+    // reads as a contradiction unless it says 30 PCS.
+    final base = line.unitFactor == 1 ? '' : ' ${line.product.baseUnitCode ?? ''}';
     final label = oh <= 0
         ? 'out of stock'
-        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)} left';
+        : 'only ${formatAmount(oh, decimals: oh % 1 == 0 ? 0 : 2)}$base left';
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: Container(
@@ -780,6 +930,65 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                 color: AppColors.danger)),
       ),
     );
+  }
+
+  /// The Disc cell. A discount that a manager has approved carries a small tick
+  /// so the approval is visible on the line it belongs to, not buried in a
+  /// toast that has already faded.
+  ///
+  /// **The till never decides whether an approval is needed.** The ceiling is
+  /// company policy held by the server, which is the only thing that can
+  /// enforce it — the client would just be a second, drifting copy. So there is
+  /// no "too big" styling here: the cashier may pre-authorise from the line
+  /// (long-press), and if the server refuses at Pay the payment sheet offers
+  /// the same approval there.
+  Widget _discountCell(CartLine line) {
+    if (line.lineDiscountAmount == 0) {
+      return NumText('·', style: numStyle(size: 13.5, color: AppColors.ink3));
+    }
+    final approved = line.discountAuthorisedByUid != null;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (approved)
+          const Padding(
+            padding: EdgeInsets.only(right: 3),
+            child: Icon(Icons.verified_user,
+                size: 12, color: AppColors.ok),
+          ),
+        Flexible(
+          child: NumText(formatAmount(line.lineDiscountAmount),
+              style: numStyle(size: 13.5, color: AppColors.brand)),
+        ),
+      ],
+    );
+  }
+
+  /// Asks a manager to authorise this line's discount before it is sent.
+  ///
+  /// Optional: the server is the authority on whether the discount needs one at
+  /// all, so this exists purely so a cashier who already knows can get the
+  /// approval while the manager is standing there, instead of discovering it at
+  /// Pay with a queue behind them.
+  Future<void> _approveDiscount(CartLine line) async {
+    if (line.lineDiscountAmount <= 0) {
+      showToast(context, 'Set a discount on the line first.');
+      return;
+    }
+    final approval = await showManagerApproval(
+      context,
+      ref,
+      action: GatedAction.discountOverride,
+      detail: '${line.product.name}: less '
+          '${formatAmount(line.lineDiscountAmount)} $_currency',
+    );
+    if (approval == null || !mounted) return;
+    final uid = approval.authoriserUid?.trim() ?? '';
+    if (uid.isEmpty) return;
+    ref
+        .read(cartProvider.notifier)
+        .setDiscountAuthorisation(line.localId, uid, approval.approverLabel);
+    showToast(context, 'Approved by ${approval.approverLabel}.', ok: true);
   }
 
   Widget _agePill(String label) => Container(
@@ -813,6 +1022,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           _customerChip(cart),
           const SizedBox(height: 11),
           _targetToggle(),
+          _discountApprovalBar(cart),
           const SizedBox(height: 8),
           _numDisplay(),
           const SizedBox(height: 8),
@@ -950,6 +1160,67 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         border: Border.all(color: AppColors.line),
       ),
       child: Row(children: [seg('× Qty', _NumTarget.qty), seg('− Disc', _NumTarget.disc)]),
+    );
+  }
+
+  /// Sits directly under the Qty/Disc toggle — where the cashier's eyes already
+  /// are the moment a discount is keyed — offering the manager approval, or
+  /// confirming the one already attached.
+  ///
+  /// Optional by design: the server owns the ceiling and will refuse anything
+  /// over it at Pay, where the same prompt is offered again. This is only about
+  /// getting the manager's approval while they are still standing there.
+  Widget _discountApprovalBar(CartState cart) {
+    final id = cart.selectedId;
+    if (id == null) return const SizedBox.shrink();
+    CartLine? line;
+    for (final l in cart.lines) {
+      if (l.localId == id) {
+        line = l;
+        break;
+      }
+    }
+    if (line == null || line.voided || line.lineDiscountAmount <= 0) {
+      return const SizedBox.shrink();
+    }
+    final approvedBy = line.discountAuthorisedByName;
+    if (approvedBy != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: AppColors.okSoft,
+            borderRadius: AppRadii.brSm,
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.verified_user, size: 14, color: AppColors.ok),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Discount approved by $approvedBy',
+                    maxLines: 2,
+                    style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.ok)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final target = line;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: OrbixButton(
+        label: 'Approve discount…',
+        icon: Icons.verified_user_outlined,
+        kind: BtnKind.ghost,
+        block: true,
+        onPressed: () => _approveDiscount(target),
+      ),
     );
   }
 

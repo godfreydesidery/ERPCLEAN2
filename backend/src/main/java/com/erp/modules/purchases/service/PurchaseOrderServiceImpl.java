@@ -32,6 +32,7 @@ import com.erp.modules.purchases.domain.entity.SupplierQuote;
 import com.erp.modules.purchases.domain.entity.SupplierQuoteLine;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
@@ -51,6 +52,8 @@ import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -142,6 +145,12 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     public PurchaseOrderDto create(CreatePurchaseOrderRequest req) {
+        return createWithOrigin(req, PurchaseOrderOrigin.MANUAL);
+    }
+
+    @Override
+    public PurchaseOrderDto createWithOrigin(CreatePurchaseOrderRequest req,
+                                              PurchaseOrderOrigin origin) {
         Long companyId = resolveCompanyId(req.companyUid());
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
@@ -155,6 +164,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 companyId, branchId, supplier.getId(),
                 supplier.getCode(), supplier.getDisplayName(),
                 req.currency(), actorId());
+        // V96 (K3): provenance is stamped here, at construction, so the row is never briefly
+        // mislabelled and no second UPDATE is needed. MANUAL is the entity default.
+        if (origin == PurchaseOrderOrigin.DIRECT_RECEIPT) {
+            po.markSynthesisedByDirectReceipt();
+        }
         po.setNotes(req.notes());
         if (req.expectedDate() != null) {
             po.setExpectedDate(req.expectedDate());
@@ -177,7 +191,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                         saved.getId(), saved.getUid())
                 .detail(Map.of(
                         "supplierUid", req.supplierUid(),
-                        "currency", req.currency())));
+                        "currency", req.currency(),
+                        "origin", saved.getOrigin().name())));
 
         return toDto(saved);
     }
@@ -198,14 +213,28 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return toDto(po);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>V96 (K3): the default list is the BUYER's list — orders a person raised. The orders
+     * synthesised to anchor a direct goods receipt are book-keeping artefacts (already fully
+     * received, nothing to action) and would otherwise swamp the screen one-per-delivery, so they
+     * are filtered out of both the browse and the search path unless the caller opts in.
+     * {@code origin} is NOT NULL with a MANUAL default, so every order that predates V96 still
+     * appears exactly as before.
+     */
     @Override
     @Transactional(readOnly = true)
-    public Page<PurchaseOrderDto> list(Long companyId, String q, Pageable pageable) {
+    public Page<PurchaseOrderDto> list(Long companyId, String q, boolean includeDirectReceipts,
+                                        Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Collection<PurchaseOrderOrigin> origins = includeDirectReceipts
+                ? EnumSet.allOf(PurchaseOrderOrigin.class)
+                : EnumSet.of(PurchaseOrderOrigin.MANUAL);
         if (q != null && !q.isBlank()) {
-            return orders.search(companyId, q, pageable).map(this::toDto);
+            return orders.search(companyId, q, origins, pageable).map(this::toDto);
         }
-        return orders.findByCompanyId(companyId, pageable).map(this::toDto);
+        return orders.findByCompanyIdAndOriginIn(companyId, origins, pageable).map(this::toDto);
     }
 
     @Override
@@ -776,6 +805,48 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         audit.record(AuditEvent.of(AuditActions.PO_APPROVE, "purchase_orders",
                         po.getId(), po.getUid())
                 .detail(Map.of("action", "submitted_for_approval",
+                        "approvalRequestUid", po.getApprovalRequestUid() != null
+                                ? po.getApprovalRequestUid() : "")));
+        return toDto(po);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Runs inside the direct receipt's transaction, immediately after the goods have been
+     * received, so the ratification request and the stock movement are committed together — the
+     * spend can never land on the books without the review that covers it also existing.
+     */
+    @Override
+    public PurchaseOrderDto requestDirectReceiptRatification(String uid) {
+        PurchaseOrder po = requireOrder(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
+
+        if (po.getOrigin() != PurchaseOrderOrigin.DIRECT_RECEIPT) {
+            // Internal invariant, not a user path: the ratification flow is exclusively for the
+            // orders synthesised by DirectGoodsReceiptService. A buyer's PO goes through
+            // submitForApproval() BEFORE placement, which is the preventive control.
+            throw new IllegalStateException("This order cannot be ratified.");
+        }
+        if (po.getApprovalRequestUid() != null) {
+            return toDto(po);   // already raised — idempotent
+        }
+
+        // Company-scoped finder, not a bare findById: the branch is resolved WITHIN the company of
+        // the already-loaded order, so a branch id belonging to another tenant can never resolve
+        // (TenantScopingRulesTest — confused-deputy guard).
+        String branchUid = branches.findByIdAndCompany_Id(po.getBranchId(), po.getCompanyId())
+                .map(Branch::getUid)
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
+
+        approvalGate.submitRatification(po, branchUid);   // sets approval_status + request uid
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+
+        audit.record(AuditEvent.of(AuditActions.PO_APPROVE, "purchase_orders",
+                        po.getId(), po.getUid())
+                .detail(Map.of("action", "ratification_requested",
+                        "origin", PurchaseOrderOrigin.DIRECT_RECEIPT.name(),
                         "approvalRequestUid", po.getApprovalRequestUid() != null
                                 ? po.getApprovalRequestUid() : "")));
         return toDto(po);

@@ -422,7 +422,8 @@
                 </label>
                 <input id="lineQty" name="lineQty" type="text" class="form-control form-control-sm"
                        placeholder="e.g. 1"
-                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                       [ngModel]="newLineQty()"
+                       (ngModelChange)="newLineQty.set($event); clearDiscountApproval()"
                        [disabled]="addingLine()" autocomplete="off" />
               </div>
 
@@ -431,7 +432,8 @@
                 <label class="form-label small text-muted mb-1" for="lineDiscAmt">Disc. amount</label>
                 <input id="lineDiscAmt" name="lineDiscAmt" type="text" class="form-control form-control-sm"
                        placeholder="e.g. 100"
-                       [ngModel]="newLineDiscountAmount()" (ngModelChange)="newLineDiscountAmount.set($event)"
+                       [ngModel]="newLineDiscountAmount()"
+                       (ngModelChange)="newLineDiscountAmount.set($event); clearDiscountApproval()"
                        [disabled]="addingLine()" autocomplete="off" />
               </div>
 
@@ -440,7 +442,8 @@
                 <label class="form-label small text-muted mb-1" for="lineDiscPct">Disc. %</label>
                 <input id="lineDiscPct" name="lineDiscPct" type="text" class="form-control form-control-sm"
                        placeholder="e.g. 5"
-                       [ngModel]="newLineDiscountPercent()" (ngModelChange)="newLineDiscountPercent.set($event)"
+                       [ngModel]="newLineDiscountPercent()"
+                       (ngModelChange)="newLineDiscountPercent.set($event); clearDiscountApproval()"
                        [disabled]="addingLine()" autocomplete="off" />
               </div>
             </div>
@@ -452,12 +455,43 @@
                 }
                 <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
               </button>
+
+              <!--
+                K7: a discount above the company's ceiling needs a supervisor. This screen cannot
+                know the ceiling, so the button appears only after the server has refused for a
+                reason a supervisor could sign off — and never for a policy nobody may override.
+              -->
+              @if (discountAuthorisedByName(); as approver) {
+                <span class="small text-success">
+                  <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+                  Discount approved by {{ approver }}
+                </span>
+              } @else if (canRequestDiscountApproval()) {
+                <button type="button" class="btn btn-sm btn-outline-warning"
+                        (click)="requestDiscountApproval()"
+                        [disabled]="addingLine()">
+                  <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Ask a supervisor
+                </button>
+              }
             </div>
 
             @if (lineFormError(); as msg) {
               <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
             }
           </form>
+
+          <!--
+            Manager step-up prompt (K7). Rendered outside the add-line form so its own submit button
+            cannot trip that form's, and only while an approval is actually being asked for.
+          -->
+          @if (approvalPromptOpen()) {
+            <app-manager-approval-dialog
+              [permissionCode]="discountOverridePermission"
+              [reason]="approvalReason()"
+              title="Supervisor approval for this discount"
+              (approved)="onDiscountApprovalGranted($event)"
+              (cancelled)="cancelDiscountApproval()" />
+          }
         }
       </div>
     </div>

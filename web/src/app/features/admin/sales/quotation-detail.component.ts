@@ -1,12 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
+import { blobErrorMessage } from '../../../core/api/blob-error';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { DocumentsService } from '../documents/documents.service';
 import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
 import {
   AddQuotationLineRequest,
@@ -20,7 +22,7 @@ type LoadState = 'loading' | 'idle' | 'error';
 
 /**
  * Quotation detail + lifecycle screen. Route: /admin/quotations/uid/:uid.
- * Actions: DRAFT → Send, Accept (converts to SO, navigates), Reject.
+ * Actions: DRAFT → Send, Accept (converts to SO, navigates), Reject, Print proforma.
  * Lines panel (DRAFT only): add / remove lines.
  */
 @Component({
@@ -32,8 +34,10 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class QuotationDetailComponent {
   private readonly soService = inject(SalesOrdersService);
   private readonly productService = inject(ProductService);
+  private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -75,10 +79,16 @@ export class QuotationDetailComponent {
   readonly rejecting = signal(false);
   readonly rejectError = signal<string | null>(null);
 
+  // ── Print proforma (K5) ──────────────────────────────────────────────────────
+  readonly printing = signal(false);
+  readonly printError = signal<string | null>(null);
+
   // ── Permissions ──────────────────────────────────────────────────────────────
   readonly canCreate = computed(() => this.session.hasPermission('SALES.QUOTE.CREATE'));
   readonly canSend = computed(() => this.session.hasPermission('SALES.QUOTE.SEND'));
   readonly canAccept = computed(() => this.session.hasPermission('SALES.QUOTE.ACCEPT'));
+  /** The generic render endpoint is gated DOCUMENT.RENDER — same gate as the invoice print. */
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.quote()?.status === 'DRAFT');
@@ -318,6 +328,42 @@ export class QuotationDetailComponent {
     });
   }
 
+  // ── Print proforma (K5) ───────────────────────────────────────────────────────
+
+  /**
+   * Renders the quotation as a PROFORMA INVOICE PDF and hands it to the browser.
+   *
+   * Uses the generic documents render endpoint (`GET /documents/render?type=QUOTATION&source=uid`),
+   * the same route the invoice/delivery-note prints take — there is no quotation-specific endpoint
+   * and no extra permission. The document TITLE comes from the company's own template row, so a
+   * tenant that renames "Proforma Invoice" gets its own wording on the page.
+   *
+   * Hidden for DRAFT in the template: a draft has no QUOTE-#### yet and the server refuses it with
+   * "This quotation is still a draft. Send it first…".
+   */
+  printProforma(): void {
+    if (this.printing()) return;
+    this.printing.set(true);
+    this.printError.set(null);
+    this.documentsService
+      .renderBlob('QUOTATION', this.uid())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.printing.set(false);
+          triggerBlobDownload(blob, `proforma-${this.quote()?.quoteNumber ?? this.uid()}.pdf`);
+        },
+        error: (err: unknown) => {
+          this.printing.set(false);
+          // The error body is a Blob (responseType:'blob'), so read the friendly server message
+          // out of it rather than showing a generic line over a real explanation.
+          void blobErrorMessage(err, 'Could not generate the proforma.').then((m) =>
+            this.printError.set(m),
+          );
+        },
+      });
+  }
+
   // ── Display helpers ───────────────────────────────────────────────────────────
 
   private messageFrom(err: unknown, fallback: string): string {
@@ -327,4 +373,14 @@ export class QuotationDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

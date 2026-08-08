@@ -23,6 +23,20 @@ interface LineEntry {
   qty: string;
 }
 
+/**
+ * Create a stock transfer. Route: /admin/stock-transfers/new.
+ *
+ * Transfer mode, stated accurately (K10 — the previous copy had it backwards):
+ *  - INSTANT    — stock leaves the source and lands at the destination in one step. Nobody at the
+ *                 destination confirms anything, and it is NOT restricted to one branch: the server
+ *                 only refuses source == destination LOCATION, and completing an instant transfer
+ *                 checks nothing about the caller's branch.
+ *  - IN_TRANSIT — dispatch, then someone at the destination receives it. Use when the receiving
+ *                 side should check the goods in.
+ *
+ * The default stays IN_TRANSIT: it is the mode that leaves a receiving record, so a mis-click is
+ * recoverable. Choosing INSTANT is a deliberate act.
+ */
 @Component({
   selector: 'app-stock-transfer-create',
   imports: [FormsModule, RouterLink, UidPickerComponent],

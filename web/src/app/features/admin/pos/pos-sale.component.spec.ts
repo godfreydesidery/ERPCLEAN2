@@ -13,12 +13,12 @@
  *  9. lineSubtotal computes qty × price − discount.
  * 10. resetSale clears form state.
  */
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
@@ -592,5 +592,84 @@ describe('PosSaleComponent — numeric line field coercion', () => {
     expect(svc.processSale).toHaveBeenCalledOnce();
     const body = svc.processSale.mock.calls[0][0];
     expect(body.lines[0].quantity).toBe('4');
+  });
+});
+
+// ── Discount approval is offered on the CODE, never on the wording (UAT #13) ──
+//
+// This screen used to decide whether to reveal "Ask a supervisor" by searching the server's refusal
+// sentence for "discount" and "approval". One rewording — or a translation — and the button silently
+// disappeared, leaving the cashier with a refusal and no remedy. The server now names the refusing
+// rule in `data.errorCode`, and these specs pin that the screen reads THAT.
+
+/** A refused POS sale, in the envelope PosSaleController actually sends. */
+function posRefusal(message: string, errorCode: string | null): HttpErrorResponse {
+  return new HttpErrorResponse({
+    status: 422,
+    error: { data: { code: 'REJECTED', message, errorCode }, errors: [message] },
+  });
+}
+
+function readyBasket(comp: any): void {
+  comp.customers.set([stubCustomer]);
+  comp.agents.set([stubAgent]);
+  comp.selectedSessionUid.set('SESS1');
+  comp.selectedCustomerUid.set('CUST1');
+  comp.selectedAgentUid.set('AGENT1');
+  comp.currency.set('TZS');
+  comp.tenderedAmount.set('2000');
+  comp.lines.set([{
+    id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
+    unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00',
+    lineDiscountAmount: '600.00', vatRate: '0', priceState: 'ok',
+    lineUnitOptions: [], lineUnitsLoading: false,
+  }]);
+}
+
+describe('PosSaleComponent — discount approval after a server refusal', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function submitAndFail(refusal: HttpErrorResponse) {
+    vi.useFakeTimers();
+    makeBed({ processSaleImpl: () => throwError(() => refusal) });
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    readyBasket(comp);
+    comp.submit();
+    await vi.runAllTimersAsync();
+    return comp;
+  }
+
+  it('reveals the button when the server names the missing approval', async () => {
+    const comp = await submitAndFail(
+      posRefusal('Something was refused.', 'DISCOUNT_APPROVAL_REQUIRED'),
+    );
+
+    expect(comp.serverAskedForApproval()).toBe(true);
+    expect(comp.lineCanRequestApproval(comp.lines()[0])).toBe(true);
+  });
+
+  it('reveals it even when the refusal sentence mentions neither discounts nor approvals', async () => {
+    // The exact regression the prose match would cause: reword the message, keep the code.
+    const comp = await submitAndFail(posRefusal('Kiasi hicho hakiruhusiwi.', 'DISCOUNT_APPROVAL_REQUIRED'));
+
+    expect(comp.serverAskedForApproval()).toBe(true);
+  });
+
+  it('does not reveal it when the server names a different rule', async () => {
+    // Prose-matching got this wrong in reverse: full of the trigger words, not a discount refusal.
+    const comp = await submitAndFail(
+      posRefusal('This sale needs approval because the discount period has closed.', null),
+    );
+
+    expect(comp.serverAskedForApproval()).toBe(false);
+  });
+
+  it('does not reveal it under BLOCK — nobody may authorise that discount', async () => {
+    const comp = await submitAndFail(
+      posRefusal('That discount is not allowed.', 'DISCOUNT_ABOVE_CEILING'),
+    );
+
+    expect(comp.serverAskedForApproval()).toBe(false);
   });
 });

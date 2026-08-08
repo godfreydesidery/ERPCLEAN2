@@ -20,6 +20,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.RfqDto;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisitionLine;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.domain.enums.RequisitionStatus;
 import com.erp.modules.purchases.domain.enums.RfqStatus;
@@ -317,6 +318,7 @@ class PurchaseRequisitionServiceImplTest {
     private PurchaseOrderDto purchaseOrderDto(String uid) {
         return new PurchaseOrderDto(
                 77L, uid, COMPANY_ID, BRANCH_ID, null, PurchaseOrderStatus.DRAFT,
+                PurchaseOrderOrigin.MANUAL,
                 1L, "SUP-01", "Acme", "TZS", BigDecimal.ZERO,
                 null, null, null, null,
                 null, null, null, null, null,

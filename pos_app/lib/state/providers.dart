@@ -10,6 +10,7 @@ import '../services/context_service.dart';
 import '../services/party_service.dart';
 import '../services/sale_service.dart';
 import '../services/session_service.dart';
+import '../services/step_up_service.dart';
 import '../services/till_service.dart';
 
 /// The ERP host (scheme+host+port). Seeded at startup from persisted config;
@@ -69,3 +70,8 @@ final sessionServiceProvider =
 
 final saleServiceProvider =
     Provider<SaleService>((ref) => SaleService(ref.watch(apiClientProvider)));
+
+/// Manager step-up. Rides on the cashier's own token — it verifies a second
+/// person's credentials without ever replacing the session.
+final stepUpServiceProvider =
+    Provider<StepUpService>((ref) => StepUpService(ref.watch(apiClientProvider)));

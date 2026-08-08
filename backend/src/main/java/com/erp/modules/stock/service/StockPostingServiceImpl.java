@@ -91,6 +91,12 @@ public class StockPostingServiceImpl implements StockPostingService {
         // Skip the insert AND the on-hand delta so the redelivered event is a no-op.
         // This prevents hitting the unique constraint uq_stock_movement_source_event on redelivery.
         // Only guard when sourceEventUid is non-null (manual ops have no event uid).
+        //
+        // The key MUST be unique per posting, not per event. While handlers passed the raw event uid
+        // for every line, this check turned "second line of the same product" into "redelivery of
+        // the first line" and silently dropped it — the document charged for both lines, COGS and
+        // on_hand_value moved for both, and only one movement row (and one on-hand delta) existed.
+        // Handlers now allocate a per-posting key via MovementSourceKeys; see its javadoc.
         if (sourceEventUid != null
                 && movements.existsBySourceEventUidAndProductId(sourceEventUid, productId)) {
             // Return the uid of the existing movement (caller may log it but doesn't need to re-process).
@@ -126,6 +132,13 @@ public class StockPostingServiceImpl implements StockPostingService {
         }
 
         return movement.getUid();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean alreadyPosted(String sourceEventUid, Long productId) {
+        return sourceEventUid != null
+                && movements.existsBySourceEventUidAndProductId(sourceEventUid, productId);
     }
 
     // -------------------------------------------------------------------------

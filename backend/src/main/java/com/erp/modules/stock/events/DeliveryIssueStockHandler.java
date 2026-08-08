@@ -10,6 +10,7 @@ import com.erp.modules.stock.service.InventoryGlPoster.CogsLeg;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.RecipeExplosionResolver;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.modules.stock.service.StockReservationService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -63,6 +64,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
     private final InventoryValuationService valuation;
     private final InventoryGlPoster         glPoster;
     private final DeliveryLineRepository    deliveryLineRepo;
+    private final StockReservationService   reservations;
     private final ObjectMapper              objectMapper;
 
     public DeliveryIssueStockHandler(IdempotencyGuard guard,
@@ -72,6 +74,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                                      InventoryValuationService valuation,
                                      InventoryGlPoster glPoster,
                                      DeliveryLineRepository deliveryLineRepo,
+                                     StockReservationService reservations,
                                      ObjectMapper objectMapper) {
         this.guard            = guard;
         this.posting          = posting;
@@ -80,6 +83,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
         this.valuation        = valuation;
         this.glPoster         = glPoster;
         this.deliveryLineRepo = deliveryLineRepo;
+        this.reservations     = reservations;
         this.objectMapper     = objectMapper;
     }
 
@@ -103,9 +107,10 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
             List<CogsLeg> cogsLegs = new ArrayList<>();
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
 
             for (DeliveryConfirmedPayload.LineItem line : payload.lines()) {
-                processLine(event, payload, line, cogsLegs);
+                processLine(event, payload, line, cogsLegs, keys);
             }
 
             if (!cogsLegs.isEmpty()) {
@@ -133,7 +138,8 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
     }
 
     private void processLine(DomainEvent event, DeliveryConfirmedPayload payload,
-                             DeliveryConfirmedPayload.LineItem line, List<CogsLeg> cogsLegs) {
+                             DeliveryConfirmedPayload.LineItem line, List<CogsLeg> cogsLegs,
+                             MovementSourceKeys keys) {
         ProductDto product = productService.getByUid(line.productUid());
 
         // ADR-0058: explode only a point-of-sale kit recipe (product_components) or a non-stockable
@@ -151,7 +157,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
             // SalesReturnServiceImpl can pro-rate the original cost for partial returns (ADR-0021 D-11).
             BigDecimal totalComponentValue = BigDecimal.ZERO;
             for (RecipeExplosionResolver.ExplosionLine comp : components) {
-                BigDecimal compValue = processComponent(event, payload, comp, cogsLegs);
+                BigDecimal compValue = processComponent(event, payload, comp, cogsLegs, keys);
                 if (compValue != null) {
                     totalComponentValue = totalComponentValue.add(compValue);
                 }
@@ -168,7 +174,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
             log.info("DeliveryIssueStockHandler: skipping non-stockable product uid={} on delivery uid={}",
                     line.productUid(), payload.deliveryUid());
         } else {
-            processSimpleLine(event, payload, line, product, cogsLegs);
+            processSimpleLine(event, payload, line, product, cogsLegs, keys);
         }
     }
 
@@ -180,10 +186,22 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
      */
     private BigDecimal processComponent(DomainEvent event, DeliveryConfirmedPayload payload,
                                         RecipeExplosionResolver.ExplosionLine comp,
-                                        List<CogsLeg> cogsLegs) {
+                                        List<CogsLeg> cogsLegs, MovementSourceKeys keys) {
+        // Allocated before any early return so a skipped component still consumes its slot.
+        String sourceKey = keys.nextFor(comp.productId());
+
         BigDecimal issuedMagnitude = comp.quantity().abs();
         if (issuedMagnitude.compareTo(BigDecimal.ZERO) == 0) {
             log.warn("DeliveryIssueStockHandler: zero issuedMagnitude for component productId={} on delivery uid={}",
+                    comp.productId(), payload.deliveryUid());
+            return null;
+        }
+
+        // Probe before costIssue — costIssue moves on_hand_value immediately while post() would
+        // no-op on an already-applied key, decoupling value from quantity (see SaleIssueStockHandler).
+        if (posting.alreadyPosted(sourceKey, comp.productId())) {
+            log.debug("DeliveryIssueStockHandler: component productId={} on delivery uid={} already " +
+                            "posted for this event — skipping (idempotent redelivery)",
                     comp.productId(), payload.deliveryUid());
             return null;
         }
@@ -195,7 +213,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                 event.getCompanyId(), event.getBranchId(), comp.productId(),
                 comp.quantity(),
                 MovementType.SALE_ISSUE,
-                event.getUid(),
+                sourceKey,
                 DOC_TYPE, payload.deliveryUid(),
                 null, null,
                 payload.deliveredAt(),
@@ -215,7 +233,17 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
 
     private void processSimpleLine(DomainEvent event, DeliveryConfirmedPayload payload,
                                     DeliveryConfirmedPayload.LineItem line, ProductDto product,
-                                    List<CogsLeg> cogsLegs) {
+                                    List<CogsLeg> cogsLegs, MovementSourceKeys keys) {
+        // One key per LINE — a delivery may legitimately carry the same product twice.
+        String sourceKey = keys.nextFor(line.productId());
+
+        if (posting.alreadyPosted(sourceKey, line.productId())) {
+            log.debug("DeliveryIssueStockHandler: line for product uid={} on delivery uid={} already " +
+                            "posted for this event — skipping (idempotent redelivery)",
+                    line.productUid(), payload.deliveryUid());
+            return;
+        }
+
         BigDecimal issuedQty = line.qtyInBase();
         BigDecimal issuedValue = valuation.costIssue(
                 event.getCompanyId(), event.getBranchId(), line.productId(), issuedQty);
@@ -229,13 +257,21 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                 event.getCompanyId(), event.getBranchId(), line.productId(),
                 issuedQty.negate(),
                 MovementType.SALE_ISSUE,
-                event.getUid(),
+                sourceKey,
                 DOC_TYPE, payload.deliveryUid(),
                 null, null,
                 payload.deliveredAt(),
                 null,
                 unitCost,
                 issuedValue);
+
+        // Release the claim NegativeStockGuard took at delivery-create, in the same transaction that
+        // posts the movement. DeliveryServiceImpl separately releases the SALES ORDER's reservation
+        // for the delivered quantity just before the guard runs, and the guard re-claims the same
+        // amount — so reserved_qty is unchanged across create and falls by the delivered qty here.
+        reservations.applyReservationDelta(
+                event.getCompanyId(), event.getBranchId(), line.productId(),
+                issuedQty.negate(), null);
 
         if (issuedValue == null) {
             log.warn("DeliveryIssueStockHandler: avg_cost not established for product uid={} " +

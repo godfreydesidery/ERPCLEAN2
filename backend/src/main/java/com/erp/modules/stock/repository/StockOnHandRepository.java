@@ -1,11 +1,13 @@
 package com.erp.modules.stock.repository;
 
 import com.erp.modules.stock.domain.entity.StockOnHand;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -43,6 +45,37 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
      */
     Optional<StockOnHand> findByCompanyIdAndBranchIdAndLocationIdAndProductId(
             Long companyId, Long branchId, Long locationId, Long productId);
+
+    /**
+     * Same row as {@link #findByCompanyIdAndBranchIdAndLocationIdAndProductId}, taken under a
+     * {@code SELECT … FOR UPDATE} row lock held to the end of the caller's transaction.
+     *
+     * <p>This is what makes the synchronous negative-stock decision safe. The on-hand quantity for a
+     * sale is decremented <em>asynchronously</em> by the outbox poller roughly a second after the
+     * invoice commits, so an unlocked read lets every till inside that window see the same stale
+     * quantity and every one of them pass the check — eight back-to-back sales of 30 against 198 on
+     * hand all succeeded and left −42. Serialising the reserve on this row closes the window:
+     * the second transaction blocks here and re-reads the reservation the first one committed.
+     *
+     * <p>Reservations for a branch live on the branch default-location row (ADR-0028 D-3), so that
+     * single row is the natural serialisation point for a (company, branch, product).
+     *
+     * <p><strong>Call it before any other read of the same row in the transaction.</strong> If the
+     * entity is already managed, Hibernate returns the cached copy and the lock buys nothing.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT s FROM StockOnHand s
+            WHERE s.companyId = :companyId
+              AND s.branchId = :branchId
+              AND s.locationId = :locationId
+              AND s.productId = :productId
+            """)
+    Optional<StockOnHand> lockByCompanyBranchLocationProduct(
+            @Param("companyId") Long companyId,
+            @Param("branchId") Long branchId,
+            @Param("locationId") Long locationId,
+            @Param("productId") Long productId);
 
     /** uid-lookup for the reorder-level edit endpoint (D-11). */
     Optional<StockOnHand> findByUid(String uid);

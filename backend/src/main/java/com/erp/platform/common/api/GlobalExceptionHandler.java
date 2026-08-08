@@ -55,6 +55,20 @@ public class GlobalExceptionHandler {
     /** Prefix shared by all enum-mismatch messages. */
     private static final String INVALID_VALUE_PREFIX = "Invalid value '";
 
+    /**
+     * Shown when a required request parameter is absent. Deliberately names no parameter: the
+     * identifier is an internal wire detail, and a user who sees it can do nothing with it. The
+     * actionable advice is to reopen the screen (a stale or hand-edited link is the usual cause).
+     */
+    private static final String MISSING_PARAMETER_MESSAGE =
+            "This request was missing some required information. Please reopen the page or the "
+            + "report and try again.";
+
+    /** Shown when a supplied parameter cannot be read as the value the endpoint needs. */
+    private static final String UNUSABLE_PARAMETER_MESSAGE =
+            "One of the values in this request could not be read. Please check the filters or "
+            + "selections you chose and try again.";
+
     // -------------------------------------------------------------------------
     // Existing handlers (preserved verbatim)
     // -------------------------------------------------------------------------
@@ -72,6 +86,13 @@ public class GlobalExceptionHandler {
      * Missing or un-coercible required query param / path-var type mismatch → 400.
      * {@link HttpMessageNotReadableException} is handled in its own method below to scrub enum
      * FQCN leaks (theme #10).
+     *
+     * <p><b>Error hygiene (UAT finding #11).</b> Spring's own text —
+     * {@code "Missing required request parameter: companyId"} — names an internal request-parameter
+     * identifier the user never typed and cannot act on, which is exactly what PROJECT-CONVENTIONS
+     * §3.1 forbids. Both branches now return a friendly, actionable sentence; the parameter name and
+     * its expected type go to the log at DEBUG (a caller mistake, not a server fault) so the API is
+     * still diagnosable from the server side.
      */
     @ExceptionHandler({
             MissingServletRequestParameterException.class,
@@ -79,11 +100,18 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex) {
         String msg = switch (ex) {
-            case MissingServletRequestParameterException e ->
-                    "Missing required request parameter: " + e.getParameterName();
-            case MethodArgumentTypeMismatchException e ->
-                    "Invalid value for parameter '" + e.getName() + "'.";
-            default -> "Invalid request.";
+            case MissingServletRequestParameterException e -> {
+                log.debug("Missing request parameter '{}' (type {})",
+                        e.getParameterName(), e.getParameterType());
+                yield MISSING_PARAMETER_MESSAGE;
+            }
+            case MethodArgumentTypeMismatchException e -> {
+                log.debug("Un-coercible request parameter '{}' (required type {})",
+                        e.getName(),
+                        e.getRequiredType() != null ? e.getRequiredType().getSimpleName() : "unknown");
+                yield UNUSABLE_PARAMETER_MESSAGE;
+            }
+            default -> "Please check the details you entered and try again.";
         };
         return ResponseEntity.badRequest().body(ApiResponse.error(msg));
     }

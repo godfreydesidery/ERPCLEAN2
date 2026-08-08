@@ -140,8 +140,11 @@ public class BiDashboardController {
     // byte[] passes through ApiResponseAdvice un-wrapped (downloads keep own headers)
     // -------------------------------------------------------------------------
 
+    // BI.VIEW as well as BI.EXPORT: the export is the same dashboard as a file, so it must never be
+    // reachable by a caller the dashboard endpoint itself refuses (no seeded role holds BI.EXPORT
+    // without BI.VIEW today — this keeps it that way for hand-built roles).
     @GetMapping("/dashboard/export")
-    @PreAuthorize("@perm.has('BI.EXPORT')")
+    @PreAuthorize("@perm.has('BI.VIEW') and @perm.has('BI.EXPORT')")
     public ResponseEntity<byte[]> export(
             @RequestParam Long companyId,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,

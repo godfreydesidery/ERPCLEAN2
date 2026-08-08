@@ -416,23 +416,57 @@
                 <select id="masterBaseUnit" name="masterBaseUnit" class="form-select"
                         required
                         [ngModel]="fBaseUnitUid()" (ngModelChange)="onBaseUnitChange($event)"
-                        [disabled]="saving()">
+                        [disabled]="saving()"
+                        aria-describedby="masterBaseUnitHelp">
                   <option value="">— select unit —</option>
                   @for (u of companyUnits(); track u.uid) {
                     <option [value]="u.uid">{{ u.code }} — {{ u.name }}</option>
                   }
                 </select>
+                <p id="masterBaseUnitHelp" class="form-text small mb-0">
+                  The smallest unit you sell or count. Stock, cost and every pack size are measured
+                  in it.
+                </p>
               }
             </div>
+
+            <!--
+              K4: the base unit is the yardstick for on-hand quantity and average cost. Changing it
+              does NOT rescale what is already recorded — 24 pieces stay the number 24 and start
+              reading as 24 cartons. Warned, never blocked: a genuine correction has to be possible.
+            -->
+            @if (baseUnitChanged()) {
+              <div class="col-12">
+                <div class="alert alert-warning d-flex gap-2 py-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-triangle-fill flex-shrink-0" aria-hidden="true"></i>
+                  <span class="small">
+                    <strong>You are changing the base unit</strong> from
+                    {{ loadedBaseUnitLabel() }} to {{ baseUnitLabel() }}.
+                    Existing stock quantities and costs are stored as plain numbers in
+                    {{ loadedBaseUnitLabel() }} and will <strong>not</strong> be converted — after
+                    saving, the same figures will be read as {{ baseUnitLabel() }}. Only do this if
+                    the product has no stock yet, or you are about to correct the quantities
+                    yourself. The pack sizes below are also expressed in the base unit and may need
+                    re-entering.
+                  </span>
+                </div>
+              </div>
+            }
           </div>
 
           <!-- Pack / bulk units -->
           <div class="mb-2 d-flex align-items-center justify-content-between">
             <span class="fw-semibold">Pack / bulk units</span>
           </div>
+          <p class="form-text mt-0">
+            A pack unit lets you buy or sell this product in a bigger container while stock stays
+            counted in {{ baseUnitLabel() }}. Tell us how many {{ baseUnitLabel() }} are inside one
+            pack — for example, if a carton holds 12 pieces and pieces are the base unit, enter
+            <strong>12</strong>, not 1/12.
+          </p>
           <div class="row g-2 align-items-end mb-2">
             <div class="col-sm-3">
-              <label class="form-label small" for="masterNewPackUnit">Unit</label>
+              <label class="form-label small" for="masterNewPackUnit">Pack unit</label>
               <select id="masterNewPackUnit" name="masterNewPackUnit" class="form-select form-select-sm"
                       [ngModel]="newBulkPackUnitUid()" (ngModelChange)="newBulkPackUnitUid.set($event)"
                       [disabled]="saving()">
@@ -442,12 +476,20 @@
                 }
               </select>
             </div>
-            <div class="col-sm-2">
-              <label class="form-label small" for="masterNewPackFactor">Factor to base</label>
-              <input id="masterNewPackFactor" name="masterNewPackFactor" type="text"
+            <div class="col-sm-4">
+              <label class="form-label small" for="masterNewPackFactor">
+                How many {{ baseUnitLabel() }} make one {{ newBulkPackUnitLabel() }}?
+              </label>
+              <input id="masterNewPackFactor" name="masterNewPackFactor" type="number"
+                     min="0.000001" step="any" inputmode="decimal"
                      class="form-control form-control-sm" placeholder="e.g. 12"
+                     aria-describedby="masterNewPackFactorHelp"
                      [ngModel]="newBulkPackFactor()" (ngModelChange)="newBulkPackFactor.set($event)"
                      [disabled]="saving()" autocomplete="off" />
+              <p id="masterNewPackFactorHelp" class="form-text small mb-0">
+                Count the contents of the pack. A carton of 12 pieces is <strong>12</strong>;
+                a box of 48 pieces is <strong>48</strong>.
+              </p>
             </div>
             <div class="col-sm-2 d-flex align-items-end">
               <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -456,14 +498,46 @@
               </button>
             </div>
           </div>
+
+          <!-- Read the entered number back in words: a reversed entry is obvious on sight. -->
+          @if (bulkPackSizeInWords(); as summary) {
+            <p class="small text-muted mb-2" aria-live="polite">
+              <i class="bi bi-box-seam me-1" aria-hidden="true"></i>{{ summary }}
+            </p>
+          }
+          @if (bulkPackFactorInvalid()) {
+            <p class="text-danger small mb-2" role="alert">
+              Enter the pack size as a number greater than zero.
+            </p>
+          }
+          <!--
+            SOFT warning only. A factor below 1 usually means the direction was read backwards
+            (1/12 instead of 12) — but a 0.5 kg pack of a kg-based product is legitimate, so this
+            asks the question and lets the user proceed.
+          -->
+          @if (bulkPackFactorBelowOne()) {
+            <div class="alert alert-warning d-flex gap-2 py-2 mb-2" aria-live="polite">
+              <i class="bi bi-question-circle-fill flex-shrink-0" aria-hidden="true"></i>
+              <span class="small">
+                This pack is <strong>smaller</strong> than one {{ baseUnitLabel() }} — usually the
+                base unit should be the smallest thing you sell. Is that what you meant? If a
+                {{ newBulkPackUnitLabel() }} actually holds several {{ baseUnitLabel() }}, enter that
+                count instead.
+              </span>
+            </div>
+          }
+          @if (bulkPackRowError(); as msg) {
+            <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+          }
+
           @if (bulkPackRows().length > 0) {
             <div class="erp-table-wrap mb-4">
               <table class="erp-table">
                 <caption class="sr-only">Pack unit rows</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Unit</th>
-                    <th scope="col">Factor to base</th>
+                    <th scope="col">Pack unit</th>
+                    <th scope="col">{{ baseUnitLabel() }} per pack</th>
                     <th scope="col"><span class="sr-only">Remove</span></th>
                   </tr>
                 </thead>
@@ -471,7 +545,12 @@
                   @for (row of bulkPackRows(); track trackByLocalId($index, row)) {
                     <tr>
                       <td>{{ unitLabel(row.unitUid) }}</td>
-                      <td>{{ row.factorToBase }}</td>
+                      <td>
+                        {{ row.factorToBase }}
+                        <span class="d-block small text-muted">
+                          1 {{ unitLabel(row.unitUid) }} = {{ row.factorToBase }} {{ baseUnitLabel() }}
+                        </span>
+                      </td>
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-danger"
                                 (click)="removeBulkPackRow(row.localId)"

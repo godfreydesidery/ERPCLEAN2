@@ -3,6 +3,8 @@ package com.erp.modules.products.service;
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 
 /**
  * Deterministic single-price resolver (ADR-0029 D-6, FR-SD-12).
@@ -55,4 +57,47 @@ public interface PriceResolutionService {
      *                                   bulk-pack unit
      */
     UnitListPriceDto resolveUnitListPrice(Long companyId, Long productId, Long unitId);
+
+    /**
+     * Same resolution as {@link #resolveUnitListPrice}, additionally carrying the currency of the
+     * price row the amount came from.
+     *
+     * <p>{@code resolveUnitListPrice} delegates here — there is exactly ONE implementation of the
+     * unit-aware rules. Sales documents take currency from their header, so they use the narrower
+     * method; the batch price-read API (POS search page, till, quotation picker) renders a price
+     * before any document header exists and needs the currency with it.
+     *
+     * @param companyId defence-in-depth company check (the product already implies one company)
+     * @param productId the product being priced
+     * @param unitId    the unit the price should be expressed in
+     * @return amount + currency + VAT-inclusive stance; never null
+     * @throws IllegalArgumentException if the product has no price configured
+     * @throws IllegalStateException    if {@code unitId} is neither the base unit nor a configured
+     *                                   bulk-pack unit
+     */
+    UnitPriceQuoteDto resolveUnitListPriceQuote(Long companyId, Long productId, Long unitId);
+
+    /**
+     * Non-throwing twin of {@link #resolveUnitListPriceQuote} — same rules, same numbers, but
+     * "this product cannot be priced" comes back as a {@link UnitPriceQuoteResult} instead of an
+     * exception.
+     *
+     * <p><b>Use this from any caller that prices MORE THAN ONE product in a request.</b> Both
+     * methods run inside this service's {@code @Transactional} proxy; an exception crossing that
+     * boundary marks the caller's transaction rollback-only even when the caller catches it, so a
+     * batch that swallowed the exception still died on COMMIT with
+     * {@code UnexpectedRollbackException} (HTTP 500 for the whole page). Returning the outcome as a
+     * value keeps the transaction clean.
+     *
+     * <p>A missing product is still an exception ({@link
+     * com.erp.platform.common.api.NotFoundException}): that is a caller bug, not a per-row
+     * pricing condition.
+     *
+     * @param companyId defence-in-depth company check (the product already implies one company)
+     * @param productId the product being priced
+     * @param unitId    the unit the price should be expressed in
+     * @return {@code RESOLVED} + the quote, or {@code NO_PRICE} / {@code UNIT_NOT_APPLICABLE} with
+     *         no quote; never null
+     */
+    UnitPriceQuoteResult findUnitListPriceQuote(Long companyId, Long productId, Long unitId);
 }

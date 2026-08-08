@@ -1,6 +1,7 @@
 package com.erp.modules.sales.domain.entity;
 
 import com.erp.modules.sales.domain.enums.BelowCostAction;
+import com.erp.modules.sales.domain.enums.DiscountApprovalAction;
 import com.erp.platform.common.domain.UidEntity;
 import com.erp.platform.common.money.CurrencyCode;
 import jakarta.persistence.Column;
@@ -55,6 +56,31 @@ public class SalesSettings extends UidEntity {
     @Column(name = "below_cost_action", nullable = false, length = 16)
     @Setter
     private BelowCostAction belowCostAction = BelowCostAction.OFF;
+
+    /**
+     * Configurable "manager-authorised discount" policy (K7, V95).
+     * {@link DiscountApprovalAction#OFF} (the default) = no ceiling is enforced, the pre-K7
+     * behaviour. Enforced synchronously by {@code DiscountAuthorisationGuard} on every path that can
+     * put a discount on a sales-invoice line — the web invoice screen and the till alike, since a
+     * POS sale is built out of add-line calls.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "discount_approval_action", nullable = false, length = 16)
+    @Setter
+    private DiscountApprovalAction discountApprovalAction = DiscountApprovalAction.OFF;
+
+    /**
+     * The discount a cashier may apply unaided, as a percent of the line's gross (V95,
+     * {@code NUMERIC(5,2)}, DB CHECK 0–100). {@code NULL} = no ceiling configured, which
+     * {@code DiscountAuthorisationGuard} reads as ZERO once the policy is on — turning the policy on
+     * without naming a number means every discount needs authority. That is the safe direction to
+     * fail: reading an unset ceiling as "unlimited" would make switching the policy on do nothing,
+     * which is exactly how the negative-stock toggle managed to look enabled while allowing
+     * everything. Ignored entirely while the action is OFF.
+     */
+    @Column(name = "max_discount_percent", precision = 5, scale = 2)
+    @Setter
+    private BigDecimal maxDiscountPercent;
 
     @Column(name = "currency", nullable = false, length = 3)
     @Setter

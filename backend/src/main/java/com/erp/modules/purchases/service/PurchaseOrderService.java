@@ -8,6 +8,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,14 +18,31 @@ import org.springframework.data.domain.Pageable;
  */
 public interface PurchaseOrderService {
 
-    /** Create a DRAFT PO (supplier + optional initial lines). */
+    /** Create a DRAFT PO (supplier + optional initial lines). Provenance is MANUAL. */
     PurchaseOrderDto create(CreatePurchaseOrderRequest req);
+
+    /**
+     * Create a DRAFT PO stamped with an explicit provenance (V96, K3).
+     *
+     * <p>Purchases-internal: the only non-MANUAL caller is {@code DirectGoodsReceiptService}, which
+     * synthesises the order that anchors a receipt with no prior LPO. Every controller-reachable
+     * path goes through {@link #create(CreatePurchaseOrderRequest)} instead, so provenance can never
+     * be chosen by a client — {@code origin} is deliberately absent from
+     * {@link CreatePurchaseOrderRequest}.
+     */
+    PurchaseOrderDto createWithOrigin(CreatePurchaseOrderRequest req, PurchaseOrderOrigin origin);
 
     /** Get a PO by uid; assertCanActIn on every read path. */
     PurchaseOrderDto getByUid(String uid);
 
-    /** Paged list for a company (scoped by tenant predicate). */
-    Page<PurchaseOrderDto> list(Long companyId, String q, Pageable pageable);
+    /**
+     * Paged list for a company (scoped by tenant predicate).
+     *
+     * <p>{@code includeDirectReceipts} false is the buyer's list: orders synthesised for a direct
+     * goods receipt are excluded so they do not clutter the screen. True returns every provenance.
+     */
+    Page<PurchaseOrderDto> list(Long companyId, String q, boolean includeDirectReceipts,
+                                Pageable pageable);
 
     /** Update header fields (supplier, notes, expected date) while DRAFT. */
     PurchaseOrderDto update(String uid, UpdatePurchaseOrderRequest req);
@@ -96,4 +114,22 @@ public interface PurchaseOrderService {
      * placed (DRAFT→ORDERED) only once approval_status = APPROVED via {@link #placeOrder}.
      */
     PurchaseOrderDto submitForApproval(String uid);
+
+    /**
+     * Raise the post-hoc <b>ratification</b> request for a direct goods receipt (K3 owner decision,
+     * 2026-08-08).
+     *
+     * <p>A direct receipt is exempt from PRE-approval — see
+     * {@link PoApprovalGate#isExemptFromPreApproval} for why the pre-approval demand was
+     * structurally unsatisfiable — so the spend is reviewed after the fact instead. This submits the
+     * already-received order to the SAME approval engine, document type and policies as a normal PO,
+     * so the ratification appears in the approvals inbox managers already use with its existing
+     * audit trail. No new columns.
+     *
+     * <p>Only valid for an order whose origin is {@code DIRECT_RECEIPT}; idempotent (a second call
+     * returns the order unchanged), and never fatal to the receipt that triggered it.
+     *
+     * @param uid uid of the synthesised purchase order
+     */
+    PurchaseOrderDto requestDirectReceiptRatification(String uid);
 }

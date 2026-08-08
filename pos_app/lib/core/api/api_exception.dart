@@ -1,5 +1,9 @@
 import 'package:dio/dio.dart';
 
+/// Response header carrying the POS sale path's machine-readable outcome
+/// (`PosSaleController.POS_SALE_STATUS_HEADER`).
+const String kPosSaleStatusHeader = 'X-Pos-Sale-Status';
+
 /// One error entry from the `errors[]` of the `ApiResponse` envelope.
 class ApiError {
   const ApiError(this.code, this.message);
@@ -25,6 +29,7 @@ class ApiException implements Exception {
     this.errors = const [],
     this.isNetwork = false,
     this.isTimeout = false,
+    this.code,
     this.cause,
   });
 
@@ -39,6 +44,17 @@ class ApiException implements Exception {
 
   final bool isNetwork;
   final bool isTimeout;
+
+  /// The server's **machine-readable** outcome token for this refusal, when it
+  /// sent one: `data.code` in the envelope, else the `X-Pos-Sale-Status`
+  /// response header (the sale path sends both — see `PosSaleController`).
+  ///
+  /// This is what control flow may branch on, alongside [statusCode]. The
+  /// human text in [errors]/[message] is for the cashier's eyes only and must
+  /// never decide anything: it is written for a person, it gets reworded, and
+  /// it is translated.
+  final String? code;
+
   final Object? cause;
 
   /// True when the outcome is *unknown* — no response came back. The sale path
@@ -100,17 +116,33 @@ class ApiException implements Exception {
     }
   }
 
-  /// Builds from a non-2xx [Response], extracting `errors[]` from the envelope
-  /// and choosing a friendly message by status code.
+  /// Builds from a non-2xx [Response], extracting `errors[]` from the envelope,
+  /// the machine-readable [code], and a friendly message chosen by status code.
   factory ApiException.fromResponse(Response response, {Object? cause}) {
     final status = response.statusCode;
     final errors = _extractErrors(response.data);
     return ApiException(
       statusCode: status,
       errors: errors,
+      code: _extractCode(response),
       message: _messageFor(status, errors),
       cause: cause,
     );
+  }
+
+  /// The refusal's machine-readable token. Prefers `data.code` from the
+  /// envelope; falls back to the `X-Pos-Sale-Status` header, which carries the
+  /// same value so a client that never parses the body still gets it.
+  static String? _extractCode(Response response) {
+    final data = response.data;
+    if (data is Map && data['data'] is Map) {
+      final inner = (data['data'] as Map)['code'];
+      final s = inner?.toString().trim();
+      if (s != null && s.isNotEmpty) return s;
+    }
+    final header = response.headers.value(kPosSaleStatusHeader);
+    final h = header?.trim();
+    return (h == null || h.isEmpty) ? null : h;
   }
 
   static List<ApiError> _extractErrors(dynamic data) {

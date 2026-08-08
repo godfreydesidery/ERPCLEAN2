@@ -47,6 +47,8 @@ import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +205,7 @@ public class ProductServiceImpl implements ProductService {
         assertServiceNotStockable(req.type(), req.stockable());
 
         // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
+        UnitOfMeasure previousBaseUnit = p.getBaseUnit();
         UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());
 
         // ADR-0044 D-1b: a weighed product must keep a WEIGHT base unit. The /weighing endpoint
@@ -236,8 +239,51 @@ public class ProductServiceImpl implements ProductService {
         p.setUpdatedAt(Instant.now());
         p.setUpdatedBy(actorId());
 
-        audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid()));
-        return ProductDto.from(p);
+        List<String> warnings = baseUnitChangeWarnings(p, previousBaseUnit, baseUnit);
+        AuditEvent event = AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid());
+        if (!warnings.isEmpty()) {
+            // The advisory goes on the append-only audit trail too, so a base-unit change that a
+            // client dropped on the floor is still answerable months later ("who re-based this
+            // product, and when?"). Warnings are user-safe text — no internal detail.
+            event = event.detail(Map.of(
+                    "action", "BASE_UNIT_CHANGE",
+                    "previousBaseUnitCode", previousBaseUnit != null ? previousBaseUnit.getCode() : "",
+                    "newBaseUnitCode", baseUnit.getCode(),
+                    "warnings", warnings));
+        }
+        audit.record(event);
+        return ProductDto.from(p).withWarnings(warnings);
+    }
+
+    /**
+     * Soft signal for a base-unit swap on an existing product (Kilimanjaro finding #1, second half).
+     *
+     * <p>Changing the base unit does NOT convert anything: {@code stock_on_hand.qty_on_hand},
+     * {@code avg_cost}, {@code on_hand_value} and every {@code product_prices} amount stay as the
+     * same numbers and are simply re-read against the new unit — 20 "boxes" silently become 20
+     * "pieces". The API used to accept that in silence; now it says so.
+     *
+     * <p>Advisory, never a refusal: re-basing a product is a legitimate correction, and blocking it
+     * would strand anyone who picked the wrong unit at creation.
+     *
+     * <p>The warning fires on ANY base-unit change rather than only when stock exists, because
+     * quantity-on-hand lives in the stock module and this module may not read it (module-boundary
+     * rule — products talks to stock only through DTOs/events). A conditional version needs a
+     * sanctioned cross-module read; unconditional is the honest thing this side of the boundary,
+     * and a base-unit change is rare and always consequential.
+     */
+    private static List<String> baseUnitChangeWarnings(Product p, UnitOfMeasure previousBaseUnit,
+                                                       UnitOfMeasure newBaseUnit) {
+        if (previousBaseUnit == null || newBaseUnit == null
+                || previousBaseUnit.getId() == null
+                || previousBaseUnit.getId().equals(newBaseUnit.getId())) {
+            return List.of();
+        }
+        return List.of("The base unit of " + p.getName() + " changed from "
+                + previousBaseUnit.getName() + " to " + newBaseUnit.getName()
+                + ". Existing stock quantities, average cost and prices are NOT converted — every"
+                + " figure already recorded will now be read as " + newBaseUnit.getName()
+                + ". Check this product's stock on hand and prices before selling or buying it.");
     }
 
     @Override
@@ -329,10 +375,62 @@ public class ProductServiceImpl implements ProductService {
                             + baseDim.name().toLowerCase() + " unit.");
         }
 
+        List<String> warnings = packFactorWarnings(p, unit, req.factorToBase());
+
         ProductBulkPack bp = bulkPacks.save(new ProductBulkPack(p, unit, req.factorToBase(), actorId()));
+        Map<String, Object> detail = warnings.isEmpty()
+                ? Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid())
+                : Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid(),
+                         "factorToBase", req.factorToBase().toPlainString(),
+                         "warnings", warnings);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
-                .detail(Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid())));
-        return ProductBulkPackDto.from(bp);
+                .detail(detail));
+        return ProductBulkPackDto.from(bp, warnings);
+    }
+
+    /**
+     * Soft signal for a pack that holds LESS than one base unit (Kilimanjaro finding #1).
+     *
+     * <p>K4 added this check in the Angular product-detail screen, which protects exactly one
+     * screen: the API still accepted {@code factorToBase = 0.0208333} on a Box of a piece-counted
+     * product with a clean 201, and bulk import and any direct API call bypassed the warning
+     * entirely. That factor is the classic inversion — the operator typed "1 piece is 1/48 of a
+     * box" where the field means "1 box contains N pieces" — and it silently divides every
+     * purchase, sale and stock figure booked in that pack by ~48.
+     *
+     * <p>Deliberately a WARNING, not a rejection. A sub-1 factor is legitimate whenever the pack is
+     * a smaller measure of the same dimension (a 0.5 kg pack of a kg-based product), so a hard
+     * {@code >= 1} rule would contradict ratified ADR-0007. The response and the audit trail carry
+     * the signal; the pack is saved either way.
+     */
+    private static List<String> packFactorWarnings(Product p, UnitOfMeasure packUnit,
+                                                   BigDecimal factorToBase) {
+        if (factorToBase == null || factorToBase.signum() <= 0
+                || factorToBase.compareTo(BigDecimal.ONE) >= 0) {
+            return List.of();
+        }
+        String baseUnitName = p.getBaseUnit() != null ? p.getBaseUnit().getName() : "base unit";
+        StringBuilder message = new StringBuilder()
+                .append("A ").append(packUnit.getName()).append(" is being set to ")
+                .append(factorToBase.stripTrailingZeros().toPlainString()).append(' ')
+                .append(baseUnitName).append(" — LESS than one ").append(baseUnitName)
+                .append(". This field means \"how many ").append(baseUnitName)
+                .append(" are in one ").append(packUnit.getName()).append("\".");
+        // The inverse is what the operator almost certainly meant when the factor looks like 1/N.
+        BigDecimal inverse = BigDecimal.ONE.divide(factorToBase, 6, RoundingMode.HALF_UP);
+        message.append(" If one ").append(packUnit.getName()).append(" holds ")
+                .append(inverse.setScale(0, RoundingMode.HALF_UP).toPlainString()).append(' ')
+                .append(baseUnitName).append(", enter that instead.");
+        if (packUnit.getDimensionType() == DimensionType.COUNT
+                && p.getBaseUnit() != null
+                && p.getBaseUnit().getDimensionType() == DimensionType.COUNT) {
+            message.append(" A counted pack smaller than one counted item is almost always a"
+                    + " typo — stock, costs and prices booked in this pack will be out by this"
+                    + " factor.");
+        } else {
+            message.append(" Ignore this if the pack really is a fraction of the base unit.");
+        }
+        return List.of(message.toString());
     }
 
     @Override

@@ -1,0 +1,298 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Stock Movement Report
+      </h1>
+      <p class="subtitle">
+        How stock moved over a period: opening balance, what came in, what went out, and what is
+        left. Quantities are in each product's base unit.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Stock Movement Report.
+    </div>
+  } @else {
+
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="smr-from">
+              From date <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="smr-from" name="smr-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="smr-to">
+              To date <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="smr-to" name="smr-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="smr-mode">Level of detail</label>
+            <select id="smr-mode" name="smr-mode" class="form-select"
+                    [ngModel]="mode()" (ngModelChange)="onModeChange($event)"
+                    aria-describedby="smr-mode-help">
+              <option value="SUMMARY">Summary — one row per product</option>
+              <option value="DETAIL">Detail — every movement</option>
+            </select>
+            <p id="smr-mode-help" class="form-text small mb-0">
+              Detail lists each receipt, sale and adjustment with a running balance.
+            </p>
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="smr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="smr-branch" name="smr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="smr-product">
+              Product <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="smr-product" name="smr-product"
+                            [(ngModel)]="productUid"
+                            [options]="productOptions()"
+                            placeholder="All products" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()"
+                    [disabled]="state() === 'loading' || !fromDate() || !toDate()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+
+        @if (filterError(); as msg) {
+          <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+        }
+      </div>
+    </div>
+
+    <!-- Report states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building Stock Movement Report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not load the Stock Movement Report. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-arrow-left-right" aria-hidden="true"></i>
+            Choose a period, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- Company header block (only non-empty fields render) -->
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (r.company.legalName) {
+                <p class="small text-muted mb-1">{{ r.company.legalName }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Stock Movement {{ isSummary() ? 'Summary' : 'Detail' }}</h2>
+          <p class="text-muted small mb-1">
+            Period: {{ r.fromDate }} to {{ r.toDate }}
+            @if (r.branchName) { · Branch: {{ r.branchName }} } @else { · All branches }
+            @if (r.productLabel) { · Product: {{ r.productLabel }} }
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <!--
+            Printed on the page on purpose: without it a reader cannot tell why
+            Opening + Purchases − Sales does not equal Closing. Adjustments / Other holds transfers,
+            stock counts, imports, production and project issues — everything that moves stock
+            without being a purchase or a sale.
+          -->
+          <p class="text-muted small mb-3">
+            Closing = Opening + Purchases − Sales + Adjustments / Other (transfers, counts, imports,
+            production and project issues). Quantities are in each product's base unit.
+          </p>
+
+          @if (isSummary()) {
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">
+                  Stock Movement Report — opening, purchases, sales, adjustments and closing per product
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Code</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="num">Opening</th>
+                    <th scope="col" class="num">Purchases</th>
+                    <th scope="col" class="num">Sales</th>
+                    <th scope="col" class="num">Adj / Other</th>
+                    <th scope="col" class="num">Closing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (r.summaryRows.length === 0) {
+                    <tr>
+                      <td colspan="8" class="text-center text-muted py-4">
+                        No stock moved in this period.
+                      </td>
+                    </tr>
+                  }
+                  @for (row of r.summaryRows; track row.productCode) {
+                    <tr>
+                      <td class="mono">{{ row.productCode }}</td>
+                      <td>{{ row.productName }}</td>
+                      <td class="small text-muted">{{ row.unitLabel ?? '—' }}</td>
+                      <td class="num mono">{{ fmtQty(row.openingQty) }}</td>
+                      <td class="num mono">{{ fmtQty(row.purchasesIn) }}</td>
+                      <td class="num mono">{{ fmtQty(row.salesOut) }}</td>
+                      <td class="num mono">{{ fmtQty(row.adjustmentsOther) }}</td>
+                      <td class="num mono fw-semibold">{{ fmtQty(row.closingQty) }}</td>
+                    </tr>
+                  }
+                </tbody>
+                <tfoot>
+                  <!-- Totals cover the WHOLE matching set, not the page — the footer never moves. -->
+                  <tr class="fw-semibold">
+                    <td colspan="3" class="text-end">Totals (all pages)</td>
+                    <td class="num mono">{{ fmtQty(r.totals.openingQty) }}</td>
+                    <td class="num mono">{{ fmtQty(r.totals.purchasesIn) }}</td>
+                    <td class="num mono">{{ fmtQty(r.totals.salesOut) }}</td>
+                    <td class="num mono">{{ fmtQty(r.totals.adjustmentsOther) }}</td>
+                    <td class="num mono">{{ fmtQty(r.totals.closingQty) }}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          } @else {
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">
+                  Stock Movement Report — every movement in the period with a running balance
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Code</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">In / Out</th>
+                    <th scope="col" class="num">Qty</th>
+                    <th scope="col" class="num">Balance</th>
+                    <th scope="col">Reason</th>
+                    <th scope="col">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @if (r.detailRows.length === 0) {
+                    <tr>
+                      <td colspan="10" class="text-center text-muted py-4">
+                        No stock moved in this period.
+                      </td>
+                    </tr>
+                  }
+                  @for (row of r.detailRows; track row.movementUid) {
+                    <tr>
+                      <td class="small">{{ row.occurredAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                      <td class="mono">{{ row.productCode }}</td>
+                      <td>{{ row.productName }}</td>
+                      <td class="small text-muted">{{ row.unitLabel ?? '—' }}</td>
+                      <td class="small">{{ humanise(row.movementType) }}</td>
+                      <td>
+                        <span class="status-tag"
+                              [class.status-tag--ok]="row.direction === 'IN'"
+                              [class.status-tag--warn]="row.direction !== 'IN'">
+                          {{ row.direction === 'IN' ? 'In' : 'Out' }}
+                        </span>
+                      </td>
+                      <td class="num mono">{{ fmtQty(row.quantity) }}</td>
+                      <td class="num mono fw-semibold">{{ fmtQty(row.runningBalance) }}</td>
+                      <td class="small">{{ humanise(row.reason) }}</td>
+                      <td class="small text-muted">
+                        {{ sourceLabel(row.sourceDocumentType, row.sourceDocumentUid) }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+                <tfoot>
+                  <tr class="fw-semibold">
+                    <td colspan="7" class="text-end">Closing balance (all pages)</td>
+                    <td class="num mono">{{ fmtQty(r.totals.closingQty) }}</td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          }
+
+          <app-paginator [meta]="meta()" label="Stock movement rows" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>

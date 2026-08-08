@@ -10,6 +10,11 @@ import 'package:win32/win32.dart';
 
 import 'receipt_printer.dart' show ReceiptPrinterException;
 
+/// Raw spooler printing exists on Windows only. This file is compiled on every
+/// target that has `dart:io` — Android and the other desktops included — so the
+/// answer has to be a runtime one, not a compile-time one.
+bool rawPrintingSupported() => Platform.isWindows;
+
 /// Enumerates installed printers with `EnumPrinters` (level 4 — fast, name-only)
 /// over local printers and connections. Returns an empty list off Windows.
 List<String> listPrinters() {

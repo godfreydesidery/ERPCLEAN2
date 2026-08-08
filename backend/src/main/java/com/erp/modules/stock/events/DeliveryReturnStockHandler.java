@@ -89,8 +89,12 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
             BigDecimal totalOriginalValue = BigDecimal.ZERO;
             boolean anyCostNull = false;
 
+            // One idempotency key per LINE — see MovementSourceKeys. A single event-wide key
+            // silently dropped every line after the first for a repeated product.
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
+
             for (DeliveryReturnedPayload.ReturnLineItem line : payload.lines()) {
-                BigDecimal lineValue = processLine(event, payload, line);
+                BigDecimal lineValue = processLine(event, payload, line, keys);
                 if (lineValue == null) {
                     anyCostNull = true;
                 } else {
@@ -134,10 +138,23 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
      * @return the line's original issue value (positive), or null if none.
      */
     private BigDecimal processLine(DomainEvent event, DeliveryReturnedPayload payload,
-                                    DeliveryReturnedPayload.ReturnLineItem line) {
+                                    DeliveryReturnedPayload.ReturnLineItem line,
+                                    MovementSourceKeys keys) {
+        // Allocated before any early return so a skipped line still consumes its slot.
+        String sourceKey = keys.nextFor(line.productId());
+
         BigDecimal returnQty = line.qtyReturnedBase();
         if (returnQty == null || returnQty.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("DeliveryReturnStockHandler: zero/null returnQty for productId={} on return uid={} — skipped",
+                    line.productId(), payload.returnUid());
+            return null;
+        }
+
+        // Probe before reverseIssue — it mutates on_hand_value immediately, while post() would
+        // no-op on an already-applied key.
+        if (posting.alreadyPosted(sourceKey, line.productId())) {
+            log.debug("DeliveryReturnStockHandler: line for productId={} on return uid={} already " +
+                            "posted for this event — skipping (idempotent redelivery)",
                     line.productId(), payload.returnUid());
             return null;
         }
@@ -165,7 +182,7 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
                 event.getCompanyId(), event.getBranchId(), line.productId(),
                 returnQty,                    // positive — stock comes back IN
                 MovementType.SALE_REVERSAL,
-                event.getUid(),
+                sourceKey,
                 DOC_TYPE, payload.returnUid(),
                 null, null,
                 payload.returnedAt(),

@@ -58,8 +58,13 @@ public class SalesReportController {
         return salesReportQuery.report(companyId, fromDate, toDate, agentUid, routeUid, supplierUid, branchUid);
     }
 
+    /**
+     * The export requires the on-screen gate ({@code SALES.INVOICE.VIEW}) <em>as well as</em>
+     * {@code REPORT.EXPORT}: a download discloses strictly more than one screen, so it must never be
+     * reachable by a caller the screen itself refuses.
+     */
     @GetMapping("/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportSalesReport(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,

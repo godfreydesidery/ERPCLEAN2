@@ -6,6 +6,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * A sales quotation as returned by the API and consumed by the document renderer.
+ *
+ * <p>{@code customerName} is denormalised onto the DTO because a printed proforma has to show who
+ * it is addressed to, and the renderer reads the source DTO only — it never reaches into the
+ * parties module. Nullable: a quotation whose customer row has since been removed still prints,
+ * with the customer line simply omitted, rather than failing at print time.
+ */
 public record QuotationDto(
         Long id,
         String uid,
@@ -14,6 +22,7 @@ public record QuotationDto(
         String quoteNumber,
         String status,
         Long customerId,
+        String customerName,
         Long agentId,
         String currency,
         LocalDate quoteDate,
@@ -36,13 +45,16 @@ public record QuotationDto(
         String sourceOpportunityUid,
         List<QuotationLineDto> lines
 ) {
-    public static QuotationDto from(Quotation q, List<QuotationLineDto> lines) {
+    /**
+     * @param customerName the customer's display name, or {@code null} when it cannot be resolved
+     */
+    public static QuotationDto from(Quotation q, String customerName, List<QuotationLineDto> lines) {
         return new QuotationDto(
                 q.getId(), q.getUid(),
                 q.getCompanyId(), q.getBranchId(),
                 q.getQuoteNumber(),
                 q.getStatus().name(),
-                q.getCustomerId(), q.getAgentId(),
+                q.getCustomerId(), customerName, q.getAgentId(),
                 q.getCurrency().value(),
                 q.getQuoteDate(), q.getValidUntil(),
                 q.getCustomerPoNumber(), q.getRevisionNo(), q.getProbability(),

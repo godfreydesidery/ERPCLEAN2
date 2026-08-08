@@ -94,13 +94,51 @@ class TransferDispatchStockHandlerTest {
         List<String> eventUids = sourceEventUidCaptor.getAllValues();
         List<MovementType> types = movementTypeCaptor.getAllValues();
 
-        // First post: TRANSFER_OUT with D1 leg code
+        // First post: TRANSFER_OUT with the 'D' leg code, line index 0
         assertThat(types.get(0)).isEqualTo(MovementType.TRANSFER_OUT);
-        assertThat(eventUids.get(0)).isEqualTo(EVENT_UID.substring(0, 24) + "D1");
+        assertThat(eventUids.get(0)).isEqualTo(EVENT_UID.substring(0, 21) + "D0000");
 
-        // Second post: TRANSFER_IN with D2 leg code
+        // Second post: TRANSFER_IN with the 'd' leg code, same line index
         assertThat(types.get(1)).isEqualTo(MovementType.TRANSFER_IN);
-        assertThat(eventUids.get(1)).isEqualTo(EVENT_UID.substring(0, 24) + "D2");
+        assertThat(eventUids.get(1)).isEqualTo(EVENT_UID.substring(0, 21) + "d0000");
+    }
+
+    /**
+     * The repeated-product regression: a transfer may legitimately list the same product on two
+     * lines. Per-LEG keys alone reused one key per leg for every line, so the backstop in
+     * {@link com.erp.modules.stock.service.StockPostingServiceImpl} suppressed the second line's OUT
+     * and IN outright — while {@code transferCost} moved the value for both, leaving the source
+     * over-valued and the destination short. Every posting must now get its own key.
+     */
+    @Test
+    void handle_twoLinesOfTheSameProduct_postEveryLegWithADistinctKey() throws Exception {
+        TransferDispatchedPayload.LineItem first = new TransferDispatchedPayload.LineItem(
+                PRODUCT_ID, null, null, new BigDecimal("5"), new BigDecimal("100"), new BigDecimal("500"));
+        TransferDispatchedPayload.LineItem second = new TransferDispatchedPayload.LineItem(
+                PRODUCT_ID, null, null, new BigDecimal("7"), new BigDecimal("100"), new BigDecimal("700"));
+        DomainEvent event = buildEvent(EVENT_UID, new TransferDispatchedPayload(
+                "XFER-UID-1", COMPANY_ID, BRANCH_ID, SRC_LOCATION_ID, TRANSIT_LOC_ID,
+                Instant.now(), List.of(first, second)));
+
+        handler.handle(event);
+
+        ArgumentCaptor<String> uidCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<BigDecimal> qtyCaptor = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(posting, times(4)).post(
+                anyLong(), anyLong(), anyLong(), anyLong(), qtyCaptor.capture(),
+                any(MovementType.class),
+                uidCaptor.capture(), anyString(), anyString(),
+                any(), any(), any(Instant.class), any(), any(), any());
+
+        assertThat(uidCaptor.getAllValues())
+                .as("every leg of every line needs its own idempotency key")
+                .doesNotHaveDuplicates()
+                .allSatisfy(key -> assertThat(key).hasSize(26));
+
+        // Both lines' quantities actually move — 5 then 7, out and in.
+        assertThat(qtyCaptor.getAllValues()).containsExactly(
+                new BigDecimal("-5"), new BigDecimal("5"),
+                new BigDecimal("-7"), new BigDecimal("7"));
     }
 
     /**

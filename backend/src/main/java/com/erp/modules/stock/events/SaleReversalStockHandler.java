@@ -95,8 +95,23 @@ public class SaleReversalStockHandler implements DomainEventHandler {
             BigDecimal totalOriginalValue = BigDecimal.ZERO;
             boolean anyCostNull = false;
 
+            // One idempotency key per REVERSED MOVEMENT — see MovementSourceKeys. Now that an
+            // invoice with two lines of the same product leaves two SALE_ISSUE rows, the void must
+            // be able to write two reversals; a single event-wide key would reverse only the first
+            // while reverseIssue restored the value of both.
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
+
             for (StockMovement original : issued) {
                 BigDecimal originalValue = original.getValueAmount();
+                String sourceKey = keys.nextFor(original.getProductId());
+
+                // Probe before reverseIssue — it mutates on_hand_value immediately.
+                if (posting.alreadyPosted(sourceKey, original.getProductId())) {
+                    log.debug("SaleReversalStockHandler: movement uid={} on invoice uid={} already " +
+                                    "reversed for this event — skipping (idempotent redelivery)",
+                            original.getUid(), payload.invoiceUid());
+                    continue;
+                }
 
                 if (originalValue == null) {
                     log.warn("SaleReversalStockHandler: original SALE_ISSUE movement uid={} has no " +
@@ -117,7 +132,7 @@ public class SaleReversalStockHandler implements DomainEventHandler {
                         original.getCompanyId(), original.getBranchId(), original.getProductId(),
                         original.getQuantity().negate(),  // SALE_ISSUE was negative → reversal is positive
                         MovementType.SALE_REVERSAL,
-                        event.getUid(),
+                        sourceKey,
                         DOC_TYPE, payload.invoiceUid(),
                         null, null,
                         null,

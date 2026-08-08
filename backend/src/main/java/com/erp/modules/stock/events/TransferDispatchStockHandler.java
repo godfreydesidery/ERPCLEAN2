@@ -22,15 +22,15 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Value-preserving: TRANSFER_OUT and TRANSFER_IN are net-zero on account 1300 — no GL posted.
  *
- * <p><strong>Per-leg idempotency key (STOCK-039 fix):</strong> each leg of a dispatch requires a
- * distinct {@code source_event_uid} so the (source_event_uid, product_id) idempotency backstop in
- * {@link com.erp.modules.stock.service.StockPostingServiceImpl} does not suppress the second leg.
- * The {@code source_event_uid} column is {@code VARCHAR(26)} — a raw ULID event uid is exactly 26
- * chars, so appending {@code ":OUT"} / {@code ":IN"} overflows the column (PostgreSQL raises
- * {@code 22001 value too long}, rolling back the transaction). The fix computes a 26-char
- * deterministic key by truncating the event uid to 24 chars and appending a 2-char leg code
- * ({@code D1} / {@code D2} for Dispatch legs 1 and 2). This is safe and idempotent: the same
- * event uid always produces the same per-leg key, which the backstop check finds on redelivery.
+ * <p><strong>Per-leg, per-line idempotency key (STOCK-039 + the repeated-product fix):</strong> each
+ * movement needs a distinct {@code source_event_uid} so the (source_event_uid, product_id)
+ * idempotency backstop in {@link com.erp.modules.stock.service.StockPostingServiceImpl} does not
+ * suppress it. Two distinctions are needed, not one: the OUT and IN legs of a line, and the same
+ * product appearing on two lines of the transfer. Per-leg keys alone fixed only the first — a
+ * transfer listing a product twice posted its second line nowhere while {@code transferCost} moved
+ * the value for both. Keys come from {@link MovementSourceKeys} (leg {@code 'D'} = source OUT,
+ * {@code 'd'} = in-transit IN), which also explains why the 26-char column forbids simply appending
+ * a suffix to the 26-char ULID.
  */
 @Component
 public class TransferDispatchStockHandler implements DomainEventHandler {
@@ -70,20 +70,32 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
 
         TransferDispatchedPayload payload = deserialise(event.getPayload());
 
-        // Deterministic 26-char per-leg source_event_uid keys (STOCK-039 fix — see class javadoc).
-        // The source_event_uid column is VARCHAR(26); appending a suffix to the 26-char ULID overflows.
-        // Truncate to 24 chars and append a 2-char leg code that is unique within this handler.
-        final String legOutKey = event.getUid().substring(0, 24) + "D1";
-        final String legInKey  = event.getUid().substring(0, 24) + "D2";
+        // Deterministic 26-char per-leg, per-LINE source_event_uid keys (see MovementSourceKeys).
+        // Per-leg alone was not enough: a transfer listing the same product on two lines reused the
+        // same leg key for both, so the backstop suppressed the second line's OUT and IN entirely.
+        // The two sequences advance in lockstep, so a line's OUT and IN share an index.
+        final MovementSourceKeys outKeys = MovementSourceKeys.forLeg(event.getUid(), 'D');
+        final MovementSourceKeys inKeys  = MovementSourceKeys.forLeg(event.getUid(), 'd');
 
         RequestContext.Principal previous = RequestContext.get();
         RequestContext.set(new RequestContext.Principal(
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
             for (TransferDispatchedPayload.LineItem line : payload.lines()) {
+                final String legOutKey = outKeys.nextFor(line.productId());
+                final String legInKey  = inKeys.nextFor(line.productId());
+
+                // Probe before posting: transferCost below moves on_hand_value immediately, while
+                // post() would no-op on an already-applied key. Skip the line whole on redelivery.
+                if (posting.alreadyPosted(legOutKey, line.productId())) {
+                    log.debug("TransferDispatchStockHandler: line for productId={} on transfer uid={} " +
+                                    "already posted for this event — skipping (idempotent redelivery)",
+                            line.productId(), payload.transferUid());
+                    continue;
+                }
 
                 // (1) TRANSFER_OUT at source location (quantity decreases).
-                // Uses leg key "D1" — distinct from the in-transit IN leg so the
+                // Uses the 'D' leg key — distinct from the in-transit IN leg so the
                 // (source_event_uid, product_id) idempotency backstop in StockPostingServiceImpl
                 // does not suppress the second leg (STOCK-039).
                 posting.post(
@@ -96,7 +108,7 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
                         line.unitCostAmount(), line.valueAmount() != null ? line.valueAmount().negate() : null);
 
                 // (2) TRANSFER_IN at in-transit pseudo-location (quantity increases).
-                // Uses leg key "D2" — distinct from the source OUT leg above so both movements
+                // Uses the 'd' leg key — distinct from the source OUT leg above so both movements
                 // are written and the in-transit holding balance is established correctly.
                 posting.post(
                         payload.companyId(), payload.sourceBranchId(), payload.inTransitLocationId(),

@@ -1,0 +1,295 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1 class="h4 mb-1">Receive Goods Without an Order</h1>
+    <p class="subtitle">
+      <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
+      For stock that arrived with no purchase order — a walk-in or cash supplier.
+    </p>
+    <p class="small text-muted mb-0">
+      This records a real purchase at the price you paid, so inventory is valued correctly.
+      A manager is asked to ratify it afterwards.
+      <a routerLink="/admin/goods-receipts">Back to goods receipts</a>
+    </p>
+  </header>
+
+  @if (!canReceiveDirect()) {
+    <div class="erp-empty">
+      <i class="bi bi-shield-lock"></i>
+      You don't have permission to receive goods without a purchase order.
+    </div>
+  } @else {
+    <!-- Company selector -->
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load companies. Is the API running?
+        </p>
+      }
+      @default {
+        @if (companies().length > 1) {
+          <div class="mb-3" style="max-width:320px">
+            <label class="form-label small text-muted mb-1" for="companyPicker">Company</label>
+            <select id="companyPicker" name="companyPicker" class="form-select"
+                    [ngModel]="selectedCompanyId()"
+                    (ngModelChange)="onCompanyChange($event)">
+              @for (c of companies(); track c.uid) {
+                <option [value]="c.id">{{ c.name }}</option>
+              }
+            </select>
+          </div>
+        }
+      }
+    }
+
+    @if (selectedCompanyId()) {
+      <!-- Delivery header -->
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Delivery</h2>
+        </div>
+        <div class="erp-card__body">
+          <div class="erp-form-grid">
+            <!-- Supplier picker -->
+            <div class="erp-field position-relative" style="grid-column:span 2">
+              <label class="form-label small text-muted mb-1" for="drSupplierSearch">
+                Supplier <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="drSupplierSearch" name="drSupplierSearch" type="search"
+                     class="form-control"
+                     placeholder="Search by name or code…"
+                     [ngModel]="supplierSearchQ()"
+                     (ngModelChange)="onSupplierSearchChange($event)"
+                     [disabled]="submitting()"
+                     autocomplete="off"
+                     [attr.aria-expanded]="supplierResults().length > 0"
+                     aria-haspopup="listbox"
+                     aria-autocomplete="list"
+                     [attr.aria-label]="selectedSupplier() ? 'Supplier: ' + selectedSupplier()!.label : 'Search supplier'" />
+              @if (selectedSupplier()) {
+                <div class="d-flex align-items-center gap-1 mt-1">
+                  <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                  <span class="small text-muted">{{ selectedSupplier()!.label }}</span>
+                </div>
+              }
+              @if (supplierResults().length > 0) {
+                <ul class="list-group position-absolute shadow-sm mt-1 w-100"
+                    aria-label="Supplier suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                  @for (s of supplierResults(); track s.uid) {
+                    <li class="list-group-item p-0">
+                      <button type="button" class="btn btn-link text-decoration-none text-start w-100 small py-2 px-3"
+                              (click)="selectSupplier(s)">
+                        <strong>{{ s.code }}</strong> — {{ s.displayName }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+
+            <!-- Currency -->
+            <div class="erp-field">
+              <label class="form-label small text-muted mb-1" for="drCurrency">Currency</label>
+              <app-currency-select id="drCurrency" name="drCurrency"
+                                   [(ngModel)]="currency"
+                                   [companyUid]="selectedCompanyUid()"
+                                   [disabled]="submitting()" />
+            </div>
+
+            <!-- Notes -->
+            <div class="erp-field full">
+              <label class="form-label small text-muted mb-1" for="drNotes">
+                Delivery note reference / notes
+              </label>
+              <input id="drNotes" name="drNotes" type="text" class="form-control"
+                     placeholder="e.g. supplier delivery note 4471"
+                     [ngModel]="notes()" (ngModelChange)="notes.set($event)"
+                     [disabled]="submitting()" autocomplete="off" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item entry -->
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Add an item</h2>
+        </div>
+        <div class="erp-card__body">
+          <form (ngSubmit)="addLine()" aria-label="Add an item to this delivery">
+            <div class="erp-form-grid mb-2">
+              <!-- Product picker -->
+              <div class="erp-field position-relative" style="grid-column:span 2">
+                <label class="form-label small text-muted mb-1" for="drProductSearch">
+                  Item <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="drProductSearch" name="drProductSearch" type="search"
+                       class="form-control"
+                       placeholder="Search by name or code…"
+                       [ngModel]="productSearchQ()"
+                       (ngModelChange)="onProductSearchChange($event)"
+                       [disabled]="submitting()"
+                       autocomplete="off"
+                       [attr.aria-expanded]="productResults().length > 0"
+                       aria-haspopup="listbox"
+                       aria-autocomplete="list"
+                       [attr.aria-label]="selectedProduct() ? 'Item: ' + selectedProduct()!.label : 'Search item'" />
+                @if (selectedProduct()) {
+                  <div class="d-flex align-items-center gap-1 mt-1">
+                    <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+                    <span class="small text-muted">{{ selectedProduct()!.label }}</span>
+                  </div>
+                }
+                @if (productResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100"
+                      aria-label="Item suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (p of productResults(); track p.uid) {
+                      <li class="list-group-item p-0">
+                        <button type="button" class="btn btn-link text-decoration-none text-start w-100 small py-2 px-3"
+                                (click)="selectProduct(p)">
+                          <strong>{{ p.code }}</strong> — {{ p.name }}
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+
+              <!-- Unit -->
+              <div class="erp-field">
+                <label class="form-label small text-muted mb-1" for="drUnit">
+                  Delivered in <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="drUnit" name="drUnit" class="form-select"
+                        [ngModel]="newLineUnitUid()"
+                        (ngModelChange)="newLineUnitUid.set($event)"
+                        [disabled]="submitting() || lineUnits().length === 0">
+                  <option value="">Select a unit…</option>
+                  @for (u of lineUnits(); track u.uid) {
+                    <option [value]="u.uid">{{ u.name }} ({{ u.code }})</option>
+                  }
+                </select>
+              </div>
+
+              <!-- Qty -->
+              <div class="erp-field">
+                <label class="form-label small text-muted mb-1" for="drQty">
+                  Quantity <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="drQty" name="drQty" type="number" min="0" step="any" class="form-control"
+                       [ngModel]="newLineQty()" (ngModelChange)="newLineQty.set($event)"
+                       [disabled]="submitting()" />
+              </div>
+
+              <!-- Unit cost -->
+              <div class="erp-field">
+                <label class="form-label small text-muted mb-1" for="drCost">
+                  Unit cost <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="drCost" name="drCost" type="number" min="0" step="any" class="form-control"
+                       [ngModel]="newLineCost()" (ngModelChange)="newLineCost.set($event)"
+                       [disabled]="submitting()"
+                       aria-describedby="drCostHelp" />
+                <span id="drCostHelp" class="form-text small">What you paid, per unit above.</span>
+              </div>
+
+              <!-- Note -->
+              <div class="erp-field full">
+                <label class="form-label small text-muted mb-1" for="drLineNote">
+                  Note <span class="text-muted">(required when the cost is zero)</span>
+                </label>
+                <input id="drLineNote" name="drLineNote" type="text" class="form-control"
+                       [ngModel]="newLineNote()" (ngModelChange)="newLineNote.set($event)"
+                       [disabled]="submitting()" autocomplete="off" />
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+              <button type="submit" class="btn btn-outline-primary" [disabled]="submitting()">
+                <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add item
+              </button>
+              @if (lineFormError(); as msg) {
+                <p class="text-danger small mb-0" role="alert">{{ msg }}</p>
+              }
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Staged lines -->
+      @if (stagedLines().length === 0) {
+        <div class="erp-empty">
+          <i class="bi bi-box"></i>
+          No items added yet. Add what the supplier delivered.
+        </div>
+      } @else {
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="visually-hidden">Items on this delivery</caption>
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Unit</th>
+                <th scope="col" class="num">Qty</th>
+                <th scope="col" class="num">Unit cost</th>
+                <th scope="col" class="num">Line total</th>
+                <th scope="col">Note</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (l of stagedLines(); track $index) {
+                <tr>
+                  <td>{{ l.productLabel }}</td>
+                  <td>{{ l.unitLabel }}</td>
+                  <td class="num">{{ +l.qty | number:'1.0-3' }}</td>
+                  <td class="num">{{ +l.unitCost | number:'1.2-2' }}</td>
+                  <td class="num">{{ lineTotal(l) | number:'1.2-2' }}</td>
+                  <td class="small text-muted">{{ l.note }}</td>
+                  <td>
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            (click)="removeLine($index)"
+                            [disabled]="submitting()"
+                            [attr.aria-label]="'Remove ' + l.productLabel">
+                      <i class="bi bi-trash" aria-hidden="true"></i>
+                      <span class="visually-hidden">Remove</span>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row" colspan="4" class="num">Total</th>
+                <td class="num"><strong>{{ currency() }} {{ total() | number:'1.2-2' }}</strong></td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      }
+
+      <!-- Submit -->
+      <div class="d-flex gap-2 align-items-center mt-3">
+        <button type="button" class="btn btn-primary"
+                (click)="submit()"
+                [disabled]="submitting() || stagedLines().length === 0">
+          @if (submitting()) {
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Recording…
+          } @else {
+            <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Receive into stock
+          }
+        </button>
+        @if (formError(); as msg) {
+          <p class="text-danger small mb-0" role="alert">{{ msg }}</p>
+        }
+      </div>
+    }
+  }
+</section>

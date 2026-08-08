@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/enums.dart';
@@ -14,6 +15,7 @@ import '../../state/pending_sale_store.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
+import '../auth/approval_dialog.dart';
 import '../receipt/receipt_view.dart';
 import '../register/pickers.dart';
 import 'pending_sale_recovery.dart';
@@ -64,6 +66,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// in memory alone it would be lost exactly when it matters most.
   final String _txnId = ApiClient.newTxnId();
 
+  /// When this basket was taken to payment (K11). Sent as `capturedAt` so a
+  /// basket that only reaches the server days later is refused as a stale
+  /// replay instead of being quietly re-priced into the current period.
+  final DateTime _capturedAt = DateTime.now();
+
   final List<PosTender> _tenders = [];
   TenderType _type = TenderType.cash;
   // The amount box is a real editable field: the hardware keyboard types into it
@@ -71,7 +78,21 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   final TextEditingController _amountCtrl = TextEditingController();
   final FocusNode _amountFocus = FocusNode();
   bool _busy = false;
+
+  /// The outcome is genuinely unknown — retrying under the SAME key is the safe
+  /// move and is what resolves it.
   bool _ambiguous = false;
+
+  /// The server refused the sale outright. Nothing was written, so the till is
+  /// free — but the sheet stays open with the basket intact so the cashier can
+  /// fix what was wrong and try again.
+  String? _rejection;
+
+  /// True when a refusal COULD be about an unapproved discount, so offering the
+  /// manager-approval path is worth doing. The threshold itself is the server's
+  /// business (it is company policy and the till is never told what it is) —
+  /// this is only ever about which button to show.
+  bool _offerDiscountApproval = false;
 
   @override
   void dispose() {
@@ -229,11 +250,14 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       tenders: tenders,
       tenderedAmount: tendered,
       ageVerified: ageVerified,
+      capturedAt: _capturedAt,
     );
 
     setState(() {
       _busy = true;
       _ambiguous = false;
+      _rejection = null;
+      _offerDiscountApproval = false;
     });
     final pendingStore = ref.read(pendingSaleStoreProvider);
     try {
@@ -244,7 +268,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         txnId: _txnId,
         sessionUid: session.uid,
         body: body,
-        startedAt: DateTime.now(),
+        startedAt: _capturedAt,
         amount: _gross,
         currency: cart.currency,
         tenderedAmount: tendered,
@@ -269,27 +293,102 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       if (!mounted) return;
       Navigator.of(context).pop(receipt);
     } on ApiException catch (e) {
-      // A definite rejection (4xx) means nothing was written — drop the stored
-      // key so it can't resurface as an "unfinished sale". An ambiguous outcome
-      // KEEPS it: that is the case the durable key exists for.
-      //
-      // 409 is the exception: it means an attempt with this same key is still
-      // being processed server-side, so the outcome is NOT yet decided.
-      // Clearing here would free the till to ring the same sale again while the
-      // original is still landing — the duplicate invoice this key exists to
-      // prevent. Keep it and let the recovery flow reconcile it.
-      final undecided = e.isAmbiguousWrite || e.statusCode == 409;
-      if (!undecided) await pendingStore.clear();
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        // 409 counts as undecided too, so the sheet offers "RETRY (same key)"
-        // rather than a fresh sale — retrying the same key is safe and is what
-        // resolves it; ringing again would duplicate.
-        _ambiguous = undecided;
-      });
-      if (!e.isAmbiguousWrite) showToast(context, e.message);
+      await _handleRingFailure(e, pendingStore);
     }
+  }
+
+  /// Decides what the refusal means for the till.
+  ///
+  /// **This is the K11 defect.** The old rule was "409 = undecided, keep the
+  /// pending slot" — and until K11 the server answered 409 for four different
+  /// things, including a plain first-attempt business rejection. So a cashier
+  /// who under-tendered, or hit an out-of-stock line, armed a durable "pending
+  /// sale" for an attempt that had never been in flight at all: a ghost that
+  /// then blocked the till on every subsequent Pay, forever, with nothing to
+  /// find on the server.
+  ///
+  /// The slot is now armed for genuinely ambiguous outcomes ONLY:
+  ///
+  /// * no response at all (timeout / connection drop) — the request may or may
+  ///   not have reached the server;
+  /// * a 5xx, which can arrive after the row committed;
+  /// * `IN_FLIGHT`, which means an attempt under this key really is running.
+  ///
+  /// `REJECTED` (nothing was written) and `STALE_REPLAY` (too old to complete)
+  /// are definite: the slot is dropped and the basket stays on screen to be
+  /// fixed. Branching is on the machine-readable code and the status — never on
+  /// the message.
+  Future<void> _handleRingFailure(
+      ApiException e, PendingSaleStore pendingStore) async {
+    final status = PosSaleFlowStatus.resolve(e.code, e.statusCode);
+    final undecided = e.isAmbiguousWrite || status == PosSaleFlowStatus.inFlight;
+    if (!undecided) await pendingStore.clear();
+    if (!mounted) return;
+
+    // Offer the manager-approval path only for an explicit business REJECTED,
+    // and only when there is in fact an unapproved discount it could be about.
+    // Offering it after a 403 or a validation error would be a guess dressed up
+    // as a remedy — the till does not know the ceiling and must not pretend to.
+    final canApprove = status == PosSaleFlowStatus.rejected &&
+        ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty;
+
+    setState(() {
+      _busy = false;
+      _ambiguous = undecided;
+      _rejection = undecided ? null : e.message;
+      _offerDiscountApproval = canApprove;
+    });
+    if (status == PosSaleFlowStatus.staleReplay) {
+      showToast(context,
+          'This basket is too old to complete. Nothing was charged — ring it '
+          'again.');
+      return;
+    }
+    if (!e.isAmbiguousWrite) showToast(context, e.message);
+  }
+
+  /// Asks a manager to authorise the discounts the server would not take on the
+  /// cashier's authority alone (K7), then retries under the SAME key.
+  ///
+  /// The approval is stamped on the specific lines named in the prompt, not on
+  /// the sale: a basket may hold one heavily discounted item and nine ordinary
+  /// ones, and a sale-level flag would let one approval wave the rest through.
+  /// The server independently re-resolves the named manager and requires them
+  /// to genuinely hold the override in this invoice's company, so what travels
+  /// on the wire is a pointer to an approval, never the approval itself.
+  Future<void> _approveDiscountsAndRetry() async {
+    final lines = ref.read(cartProvider).linesNeedingDiscountApproval;
+    if (lines.isEmpty) return;
+    final detail = lines
+        .map((l) =>
+            '${l.product.name}: less ${formatAmount(l.lineDiscountAmount)}')
+        .join('\n');
+    final approval = await showManagerApproval(
+      context,
+      ref,
+      action: GatedAction.discountOverride,
+      detail: detail,
+      correlationId: _txnId,
+    );
+    if (approval == null || !mounted) return;
+    final uid = approval.authoriserUid?.trim() ?? '';
+    if (uid.isEmpty) {
+      // Cannot happen against a correct server (an approval always names its
+      // approver) — but stamping a blank uid would read to the server as "no
+      // approval supplied", i.e. the same refusal with an extra round trip.
+      showToast(context, 'That approval could not be applied. Try again.');
+      return;
+    }
+    final ctrl = ref.read(cartProvider.notifier);
+    for (final l in lines) {
+      ctrl.setDiscountAuthorisation(l.localId, uid, approval.approverLabel);
+    }
+    setState(() {
+      _rejection = null;
+      _offerDiscountApproval = false;
+    });
+    showToast(context, 'Approved by ${approval.approverLabel}.', ok: true);
+    await _complete();
   }
 
   double? _cashPortion() {
@@ -395,6 +494,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           if (_ambiguous) ...[
             const SizedBox(height: 10),
             _ambiguousBanner(),
+          ],
+          if (_rejection != null) ...[
+            const SizedBox(height: 10),
+            _rejectedBanner(_rejection!),
           ],
         ],
       ),
@@ -530,6 +633,44 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         'same receipt back, never a second charge.',
         style: TextStyle(
             color: AppColors.warn, fontSize: 12.5, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  /// Shown when the ERP definitely refused the sale. The wording leads with the
+  /// reassurance that matters at a till with a customer waiting — nothing was
+  /// charged — because a refusal that looks ambiguous is what makes a cashier
+  /// ring it a second time "to be sure".
+  Widget _rejectedBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.dangerSoft,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: const Color(0xFFFECACA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(message,
+              style: const TextStyle(
+                  color: AppColors.danger,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text('Nothing was charged. Fix it and try again.',
+              style: TextStyle(color: AppColors.ink2, fontSize: 11.5)),
+          if (_offerDiscountApproval) ...[
+            const SizedBox(height: 10),
+            OrbixButton(
+              label: 'Get manager approval for the discount',
+              icon: Icons.verified_user_outlined,
+              kind: BtnKind.ghost,
+              block: true,
+              onPressed: _busy ? null : _approveDiscountsAndRetry,
+            ),
+          ],
+        ],
       ),
     );
   }

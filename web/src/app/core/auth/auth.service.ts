@@ -1,8 +1,15 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, of, switchMap, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { LoginRequest, MeResponse, TokenResponse } from './auth.model';
+import { SILENT_ERROR } from '../api/http-context.tokens';
+import {
+  AuthorityVerificationDto,
+  LoginRequest,
+  MeResponse,
+  TokenResponse,
+  VerifyAuthorityRequest,
+} from './auth.model';
 import { SessionStore } from './session.store';
 import { UserBranch } from '../../features/admin/models/user-branch.model';
 
@@ -70,6 +77,22 @@ export class AuthService {
    */
   myBranches(): Observable<UserBranch[]> {
     return this.http.get<UserBranch[]>(`${this.base}/my-branches`);
+  }
+
+  /**
+   * Manager step-up: verifies an AUTHORISER's username + password and their authority for
+   * `permissionCode`, without touching the caller's session (no token is issued or rotated — the
+   * cashier stays logged in mid-sale).
+   *
+   * A refusal comes back as HTTP 200 with `authorised: false` and a friendly `message`; callers must
+   * branch on `authorised`, not on the status code, so the manager can simply retype. The
+   * SILENT_ERROR context token is set so a genuine transport failure does not also pop the global
+   * error modal on top of the dialog's own inline message.
+   */
+  verifyAuthority(request: VerifyAuthorityRequest): Observable<AuthorityVerificationDto> {
+    return this.http.post<AuthorityVerificationDto>(`${this.base}/verify-authority`, request, {
+      context: new HttpContext().set(SILENT_ERROR, true),
+    });
   }
 
   /**

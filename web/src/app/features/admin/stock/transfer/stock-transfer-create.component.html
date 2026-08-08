@@ -52,10 +52,35 @@
                 <label for="transferMode" class="form-label">Transfer Mode <span aria-hidden="true">*</span></label>
                 <select id="transferMode" class="form-select form-select-sm"
                         [ngModel]="transferMode()" (ngModelChange)="transferMode.set($event)"
-                        name="transferMode" required>
-                  <option value="IN_TRANSIT">In-Transit (cross-branch: DRAFT → DISPATCHED → RECEIVED)</option>
-                  <option value="INSTANT">Instant (same-branch: DRAFT → COMPLETED)</option>
+                        name="transferMode" required
+                        aria-describedby="transferModeHelp">
+                  <option value="IN_TRANSIT">In-transit — the destination must receive it before the stock lands</option>
+                  <option value="INSTANT">Instant — stock moves straight away, nobody has to confirm</option>
                 </select>
+                <!--
+                  Both modes work between any two locations, including two different branches. The
+                  only difference is whether anyone at the destination has to act. (The old copy said
+                  in-transit meant "cross-branch" and instant meant "same-branch", which is not what
+                  the server does — the create call only refuses source == destination LOCATION, and
+                  completing an INSTANT transfer checks nothing about who or where the caller is.)
+                -->
+                <div id="transferModeHelp" class="form-text mt-1">
+                  @if (transferMode() === 'INSTANT') {
+                    <span>
+                      <strong>Instant:</strong> the stock leaves the source and arrives at the
+                      destination the moment you complete the transfer. Nobody at the destination
+                      confirms anything, and it works across branches just as well as within one.
+                      Steps: DRAFT → COMPLETED.
+                    </span>
+                  } @else {
+                    <span>
+                      <strong>In-transit:</strong> you dispatch the stock, and someone at the
+                      destination must then receive it before it counts as theirs. Use this when you
+                      want the receiving side to check the goods in. Steps: DRAFT → DISPATCHED →
+                      RECEIVED.
+                    </span>
+                  }
+                </div>
               </div>
               <div class="erp-field">
                 <label for="transferDate" class="form-label">Transfer Date <span aria-hidden="true">*</span></label>
@@ -98,6 +123,13 @@
           <!-- Destination -->
           <fieldset class="mb-4">
             <legend class="erp-section-title">Destination</legend>
+            <p class="form-text mt-0 mb-2">
+              Sending stock somewhere that does not use the system — a roadside kiosk, a van, a
+              customer site? Register it as a branch that nobody logs into, give it one location,
+              and transfer to it in <strong>Instant</strong> mode. The stock moves out of your
+              warehouse and sits under that branch; no one there needs an account, and nothing waits
+              to be confirmed.
+            </p>
             <div class="erp-form-grid">
               <div class="erp-field">
                 <label class="form-label" id="destBranchLabel">Destination Branch <span aria-hidden="true">*</span></label>
