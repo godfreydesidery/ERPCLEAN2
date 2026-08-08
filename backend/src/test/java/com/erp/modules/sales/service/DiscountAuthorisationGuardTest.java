@@ -303,6 +303,38 @@ class DiscountAuthorisationGuardTest {
     }
 
     @Test
+    void anOperatorCannotBeTheirOwnAuthoriser_evenHoldingTheOverridePermission() {
+        // Two-person integrity: an over-the-shoulder approval involves a SECOND person by
+        // definition. A sales manager serving a customer holds SALES.DISCOUNT.OVERRIDE, so without
+        // this rule they could grant themselves an unlimited discount and the audit trail would
+        // read as a supervised approval. Mirrors StepUpAuthServiceImpl.verifyAuthority — the same
+        // integrity model must mean the same thing at every gate.
+        RequestContext.set(new RequestContext.Principal(
+                MANAGER_ID, "manager", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
+        givenPolicy(DiscountApprovalAction.APPROVE, "10");
+        givenManagerWithAuthority();
+
+        assertThatThrownBy(() -> guard.authoriseLineDiscount(request(
+                new BigDecimal("1000"), new BigDecimal("500"), null, MANAGER_UID)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("not accepted");
+        // Refused BEFORE the permission check, so holding the code never rescues a self-approval.
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void aDifferentManagerStillApproves_soTheSelfApprovalRuleDoesNotBlockRealSupervision() {
+        // Guards the fix against over-reach: the caller is the cashier, the authoriser is someone
+        // else, and that must keep working exactly as before.
+        givenPolicy(DiscountApprovalAction.APPROVE, "10");
+        givenManagerWithAuthority();
+
+        assertThat(guard.authoriseLineDiscount(request(
+                new BigDecimal("1000"), new BigDecimal("500"), null, MANAGER_UID)))
+                .isEqualTo(MANAGER_ID);
+    }
+
+    @Test
     void aNamedUserWithoutTheOverridePermissionIsNotAnApproval() {
         // The uid alone is never enough — otherwise any client could name any colleague.
         givenPolicy(DiscountApprovalAction.APPROVE, "10");

@@ -154,6 +154,29 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("HTTP method not allowed for this endpoint."));
     }
 
+    /**
+     * Discount refused by the company's K7 policy → 409, carrying the machine-readable refusal
+     * code in an {@code X-Discount-Refusal} header alongside the friendly message.
+     *
+     * <p>Declared BEFORE the generic {@link ConflictException} handler it specialises. Without it,
+     * the generic handler wins and the code is discarded, so the web invoice screen has to decide
+     * whether to offer a manager-approval prompt by string-matching the English refusal text —
+     * exactly the fragility UAT finding #13 raised. The POS path already returns the code in its
+     * {@code data} payload; this gives the non-POS paths the same signal without changing the
+     * envelope shape any existing client parses.
+     *
+     * <p>A header rather than a body field deliberately: {@code ApiResponse} has a fixed
+     * {@code (data, errors, meta)} shape, and populating {@code data} on a failure would break the
+     * "data is null on error" contract every other error path upholds.
+     */
+    @ExceptionHandler(com.erp.modules.sales.domain.exception.DiscountApprovalException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDiscountApproval(
+            com.erp.modules.sales.domain.exception.DiscountApprovalException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .header("X-Discount-Refusal", ex.getCode().name())
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     /** Domain rule violated (duplicate code, invalid default, etc.) → 409. */
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {

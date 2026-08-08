@@ -197,6 +197,25 @@ public class DiscountAuthorisationGuard {
         }
 
         RequestContext.Principal caller = RequestContext.get();
+
+        // TWO-PERSON INTEGRITY: an over-the-shoulder approval involves a SECOND person by
+        // definition, so the operator ringing the sale can never be their own authoriser — even
+        // when they legitimately hold SALES.DISCOUNT.OVERRIDE. Without this, a sales manager
+        // serving a customer could grant themselves an unlimited discount and the audit trail
+        // would read as a supervised approval. Not a privilege escalation (only a genuine
+        // permission-holder can reach it) but it hollows out the control, and it matched
+        // StepUpAuthServiceImpl.verifyAuthority's rule nowhere until now — the same integrity
+        // model must mean the same thing at every gate.
+        if (caller != null && caller.userId() != null
+                && caller.userId().equals(authoriser.getId())) {
+            log.warn("Discount approval rejected on invoice {} (company {}): the operator named "
+                    + "themselves as the authoriser.", req.invoiceUid(), req.companyId());
+            throw refuse(req, requested, ceiling, DiscountApprovalAction.APPROVE,
+                    "SELF_APPROVAL", authoriser.getUsername(),
+                    DiscountRefusalCode.DISCOUNT_APPROVAL_NOT_ACCEPTED,
+                    approvalNotAcceptedMessage());
+        }
+
         // Company comes from the LOADED invoice; the branch is the caller's active one (the till the
         // sale is being rung at). A caller-supplied company is never trusted here.
         RequestContext.Principal authoriserInInvoiceScope = new RequestContext.Principal(
