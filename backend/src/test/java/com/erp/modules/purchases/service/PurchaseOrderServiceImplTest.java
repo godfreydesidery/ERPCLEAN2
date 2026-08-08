@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -23,6 +24,7 @@ import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
@@ -30,6 +32,7 @@ import com.erp.modules.purchases.domain.entity.PurchaseOrderLine;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisition;
 import com.erp.modules.purchases.domain.entity.PurchaseRequisitionLine;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
 import com.erp.modules.purchases.repository.PurchaseOrderLineRepository;
@@ -40,14 +43,19 @@ import com.erp.modules.purchases.repository.SupplierQuoteLineRepository;
 import com.erp.modules.purchases.repository.SupplierQuoteRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Unit tests for PurchaseOrderServiceImpl — approval gate (ADR-0027 D-6, FR-PROC-13)
@@ -103,6 +111,12 @@ class PurchaseOrderServiceImplTest {
                 orders, lines, receipts, suppliers, paymentTerms, products, units, bulkPacks,
                 companies, numberGen, totals, scopeGuard, audit, approvalGate,
                 quotes, quoteLines, branches, requisitions, requisitionLines);
+    }
+
+    /** RequestContext is a ThreadLocal — leaving it set would bleed into the next test. */
+    @AfterEach
+    void tearDown() {
+        RequestContext.clear();
     }
 
     // -------------------------------------------------------------------------
@@ -356,9 +370,114 @@ class PurchaseOrderServiceImplTest {
         assertThat(poCaptor.getValue().getCurrency().value()).isEqualTo("TZS");
     }
 
+    @Test
+    void createFromRequisition_producesAManualOrder() {
+        stubRequisitionConversion(35L, "REQ-UID-35", 200L, 300L, new BigDecimal("5"), new BigDecimal("4"));
+
+        service.createFromRequisition("REQ-UID-35", "SUP-UID-1", "TZS");
+
+        ArgumentCaptor<PurchaseOrder> poCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(orders).save(poCaptor.capture());
+        assertThat(poCaptor.getValue().getOrigin())
+                .as("converting a requisition is a person raising an order — V96 MANUAL")
+                .isEqualTo(PurchaseOrderOrigin.MANUAL);
+    }
+
+    // -------------------------------------------------------------------------
+    // V96 / K3 — provenance (purchase_orders.origin)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_stampsManualOrigin() {
+        stubHeaderOnlyCreate();
+
+        PurchaseOrderDto dto = service.create(new CreatePurchaseOrderRequest(
+                "CO-UID-1", "SUP-UID-1", "TZS", null, null, null, List.of()));
+
+        ArgumentCaptor<PurchaseOrder> poCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(orders).save(poCaptor.capture());
+        assertThat(poCaptor.getValue().getOrigin()).isEqualTo(PurchaseOrderOrigin.MANUAL);
+        assertThat(dto.origin())
+                .as("the UI reads provenance off the DTO to badge a synthesised order")
+                .isEqualTo(PurchaseOrderOrigin.MANUAL);
+    }
+
+    @Test
+    void createWithOrigin_directReceipt_stampsDirectReceiptOrigin() {
+        stubHeaderOnlyCreate();
+
+        PurchaseOrderDto dto = service.createWithOrigin(new CreatePurchaseOrderRequest(
+                        "CO-UID-1", "SUP-UID-1", "TZS", null, null, null, List.of()),
+                PurchaseOrderOrigin.DIRECT_RECEIPT);
+
+        ArgumentCaptor<PurchaseOrder> poCaptor = ArgumentCaptor.forClass(PurchaseOrder.class);
+        verify(orders).save(poCaptor.capture());
+        assertThat(poCaptor.getValue().getOrigin())
+                .as("stamped at construction, so the row is never briefly mislabelled")
+                .isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+        assertThat(dto.origin()).isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+    }
+
+    @Test
+    void list_byDefault_excludesOrdersSynthesisedForADirectReceipt() {
+        Pageable page = Pageable.unpaged();
+        when(orders.findByCompanyIdAndOriginIn(eq(10L), any(), any())).thenReturn(Page.empty());
+
+        service.list(10L, null, false, page);
+
+        // The buyer's list shows the orders people raised, not the receipt book-keeping.
+        verify(orders).findByCompanyIdAndOriginIn(
+                10L, EnumSet.of(PurchaseOrderOrigin.MANUAL), page);
+    }
+
+    @Test
+    void list_withOptIn_includesEveryOrigin() {
+        Pageable page = Pageable.unpaged();
+        when(orders.findByCompanyIdAndOriginIn(eq(10L), any(), any())).thenReturn(Page.empty());
+
+        service.list(10L, null, true, page);
+
+        verify(orders).findByCompanyIdAndOriginIn(
+                10L, EnumSet.allOf(PurchaseOrderOrigin.class), page);
+    }
+
+    @Test
+    void list_searchPath_appliesTheSameOriginFilterAsBrowse() {
+        Pageable page = Pageable.unpaged();
+        when(orders.search(eq(10L), eq("acme"), any(), any())).thenReturn(Page.empty());
+
+        service.list(10L, "acme", false, page);
+
+        // Otherwise typing a supplier name leaks the rows the browse page hides.
+        verify(orders).search(10L, "acme", EnumSet.of(PurchaseOrderOrigin.MANUAL), page);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Wires the minimum for a header-only {@code create}: a resolvable company, an ACTIVE supplier,
+     * an echoing {@code orders.save}, and an empty line read for the DTO mapping. A RequestContext
+     * with a branch is required — {@code branchIdFromContext} refuses to create a PO without one.
+     */
+    private void stubHeaderOnlyCreate() {
+        RequestContext.set(new RequestContext.Principal(7L, "buyer", false, 10L, 20L, null));
+
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(10L);
+        when(companies.findByUid("CO-UID-1")).thenReturn(Optional.of(company));
+
+        Supplier supplier = mock(Supplier.class);
+        when(supplier.getId()).thenReturn(9L);
+        when(supplier.getCode()).thenReturn("SUP-01");
+        when(supplier.getDisplayName()).thenReturn("Acme");
+        when(supplier.getStatus()).thenReturn(MasterStatus.ACTIVE);
+        when(suppliers.findByCompanyIdAndUid(10L, "SUP-UID-1")).thenReturn(Optional.of(supplier));
+
+        when(orders.save(any(PurchaseOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(any())).thenReturn(List.of());
+    }
 
     private PurchaseRequisition mockRequisition(long id, String uid, long companyId, long branchId) {
         PurchaseRequisition r = mock(PurchaseRequisition.class);

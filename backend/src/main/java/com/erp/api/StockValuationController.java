@@ -7,6 +7,7 @@ import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockValuationQuery;
 import com.erp.platform.security.RequestContext;
 import jakarta.validation.Valid;
+import java.time.Clock;
 import java.time.LocalDate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,11 +39,14 @@ public class StockValuationController {
 
     private final StockValuationQuery       valuationQuery;
     private final InventoryValuationService valuationService;
+    private final Clock                     clock;
 
     public StockValuationController(StockValuationQuery valuationQuery,
-                                     InventoryValuationService valuationService) {
+                                     InventoryValuationService valuationService,
+                                     Clock clock) {
         this.valuationQuery   = valuationQuery;
         this.valuationService = valuationService;
+        this.clock            = clock;
     }
 
     /**
@@ -52,13 +56,39 @@ public class StockValuationController {
      * (Σ on_hand_value vs GL 1300 balance). Branch-scoped to the caller's active branch context;
      * the report aggregates across branches within the company unless the query narrows further.
      *
-     * <p>Optional {@code asOf} date parameter is reserved for future point-in-time reporting;
-     * currently ignored by the query (real-time balance is returned).
+     * <p><strong>{@code asOf} is no longer silently ignored.</strong> It used to be bound, parsed,
+     * and then dropped — a user asking for 30 June got today's numbers with a 200 OK and no hint
+     * that the date had not been applied. The query reads {@code stock_on_hand}, which is a
+     * maintained CURRENT projection, so TODAY is the only date it can honestly answer; a past date
+     * is rejected with a 400 that points at the period-windowed Stock Movement report instead.
+     *
+     * <p>A FUTURE date is rejected for the same reason and used not to be: it returned today's
+     * numbers with a 200, so a report headed "as at 31 Dec 2027" was really "as at today" — the
+     * identical silent-lie the past-date guard was added to stop. Nothing can be known about stock
+     * that has not moved yet, so there is no honest answer to give.
+     *
+     * <p>A back-dated valuation cannot simply be replayed from {@code stock_movements} either:
+     * opening-valuation and landed-cost paths adjust {@code on_hand_value} without writing a
+     * correspondingly valued movement row, so Σ {@code value_amount} up to a date is not the
+     * on-hand value at that date. Real point-in-time valuation needs a costed-history model — that
+     * is a design change, not a parameter.
      */
     @GetMapping("/report")
     @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW')")
     public StockValuationReportDto report(
             @RequestParam(name = "asOf", required = false) LocalDate asOf) {
+        LocalDate today = LocalDate.now(clock);
+        if (asOf != null && asOf.isBefore(today)) {
+            throw new IllegalArgumentException(
+                    "Stock valuation is only available for the current position. "
+                    + "To see stock as at an earlier date, use the Stock Movement report.");
+        }
+        if (asOf != null && asOf.isAfter(today)) {
+            throw new IllegalArgumentException(
+                    "Stock valuation is only available for the current position. "
+                    + "A future date cannot be reported on — leave the date blank for today's "
+                    + "stock position.");
+        }
         RequestContext.Principal principal = RequestContext.get();
         return valuationQuery.report(principal.companyId());
     }

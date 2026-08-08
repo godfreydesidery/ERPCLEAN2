@@ -6,6 +6,8 @@
       </h1>
       <p class="subtitle">
         Current on-hand quantity, buying price, selling price and value — for printing and export.
+        Need a date range instead?
+        <a routerLink="/admin/reports/stock-movement">Open the Stock Movement report</a>.
       </p>
     </div>
   </header>
@@ -99,6 +101,7 @@
           <h2 class="h5">Stock Report</h2>
           <p class="text-muted small mb-3">
             Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+            · Quantities are in each product's base unit
           </p>
 
           <div class="erp-table-wrap">

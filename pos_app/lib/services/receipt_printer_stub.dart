@@ -3,6 +3,9 @@
 // the web build never pulls in win32 or FFI.
 import 'receipt_printer.dart' show ReceiptPrinterException;
 
+/// There is no raw spooler on this platform, so nothing here can ever print.
+bool rawPrintingSupported() => false;
+
 /// No spooler here — nothing to enumerate.
 List<String> listPrinters() => const <String>[];
 

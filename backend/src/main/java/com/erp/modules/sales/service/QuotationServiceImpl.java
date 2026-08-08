@@ -35,9 +35,13 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -140,8 +144,11 @@ public class QuotationServiceImpl implements QuotationService {
     @Transactional(readOnly = true)
     public Page<QuotationDto> list(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return quotations.findByCompanyId(companyId, pageable)
-                .map(this::toDtoNoLines);
+        Page<Quotation> page = quotations.findByCompanyId(companyId, pageable);
+        // Resolve every customer name in ONE query. Doing it per row would turn a 20-row page into
+        // 21 queries for a column that is pure decoration on a list screen.
+        Map<Long, String> names = customerNames(page.getContent());
+        return page.map(q -> QuotationDto.from(q, names.get(q.getCustomerId()), List.of()));
     }
 
     @Override
@@ -361,11 +368,35 @@ public class QuotationServiceImpl implements QuotationService {
     private QuotationDto toDto(Quotation q) {
         List<QuotationLineDto> lines = quotationLines.findByQuotationIdOrderByLineNo(q.getId())
                 .stream().map(QuotationLineDto::from).toList();
-        return QuotationDto.from(q, lines);
+        return QuotationDto.from(q, customerName(q.getCompanyId(), q.getCustomerId()), lines);
     }
 
-    private QuotationDto toDtoNoLines(Quotation q) {
-        return QuotationDto.from(q, List.of());
+    /**
+     * Display name of one quotation's customer, or null when the row is gone.
+     *
+     * <p>Resolved through the company-scoped finder (TenantScopingRulesTest): the company comes from
+     * the quotation row we already loaded, never from a caller-supplied parameter, so a stale or
+     * cross-company customer FK can never surface another tenant's display name.
+     */
+    private String customerName(Long companyId, Long customerId) {
+        if (customerId == null) return null;
+        return customers.findByCompanyIdAndId(companyId, customerId)
+                .map(Customer::getDisplayName)
+                .orElse(null);
+    }
+
+    /** Display names for a whole page of quotations, in one query. */
+    private Map<Long, String> customerNames(List<Quotation> page) {
+        Set<Long> ids = page.stream()
+                .map(Quotation::getCustomerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) return Map.of();
+        Map<Long, String> names = new HashMap<>();
+        for (Customer c : customers.findAllById(ids)) {
+            names.put(c.getId(), c.getDisplayName());
+        }
+        return names;
     }
 
     private Long requireBranchId(RequestContext.Principal ctx) {

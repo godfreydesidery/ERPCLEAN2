@@ -48,8 +48,13 @@ public class StockReportController {
         return stockReportQuery.report(companyId);
     }
 
+    /**
+     * The export requires the on-screen gate ({@code INVENTORY.VALUATION.VIEW}) <em>as well as</em>
+     * {@code REPORT.EXPORT}: a download discloses strictly more than one screen, so it must never be
+     * reachable by a caller the screen itself refuses.
+     */
     @GetMapping("/export")
-    @PreAuthorize("@perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportStockReport(
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         Long companyId = RequestContext.get().companyId();

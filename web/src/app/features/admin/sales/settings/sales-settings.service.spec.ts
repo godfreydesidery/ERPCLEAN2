@@ -46,6 +46,10 @@ describe('SalesSettingsService', () => {
       currency: 'TZS',
       allowNegativeStock: false,
       belowCostAction: 'OFF' as const,
+      // K7: the stance and its ceiling are one policy — the request type requires both, because the
+      // server refuses a ceiling sent on its own.
+      discountApprovalAction: 'OFF' as const,
+      maxDiscountPercent: null,
     };
     let result: unknown;
     service.update(body).subscribe((r) => (result = r));

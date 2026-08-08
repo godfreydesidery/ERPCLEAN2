@@ -34,3 +34,36 @@ export interface LoginRequest {
   username: string;
   password: string;
 }
+
+// ── Manager step-up ("supervisor override") ───────────────────────────────────
+
+/**
+ * POST /api/v1/auth/verify-authority — the supervisor types their OWN username + password on the
+ * operator's device to authorise one action. Sent with the OPERATOR's normal bearer token; the
+ * operator's session is untouched (no token is minted, nothing is rotated), so a cashier stays
+ * logged in mid-sale.
+ *
+ * `permissionCode` must be a real seeded code — the server refuses anything else, so a typo can
+ * never read as "approved".
+ */
+export interface VerifyAuthorityRequest {
+  username: string;
+  password: string;
+  permissionCode: string;
+}
+
+/**
+ * The outcome of a step-up check. A refusal is HTTP **200** with `authorised: false` and every
+ * authoriser field null — branch on `authorised`, never on the status code, so the manager can
+ * retype without the caller unwinding what it was doing.
+ */
+export interface AuthorityVerificationDto {
+  authorised: boolean;
+  permissionCode: string;
+  /** The approving user's uid — carry this into the business request. Null when refused. */
+  authoriserUid: string | null;
+  authoriserUsername: string | null;
+  authoriserName: string | null;
+  /** Friendly, non-disclosing explanation — safe to show verbatim. */
+  message: string;
+}

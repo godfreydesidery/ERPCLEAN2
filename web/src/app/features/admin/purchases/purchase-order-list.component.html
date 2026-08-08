@@ -68,6 +68,22 @@
         </select>
       </div>
 
+      <!-- Direct-receipt opt-in (V96, K3) -->
+      <div class="align-self-end">
+        <div class="form-check mb-2">
+          <input id="includeDirectReceipts" name="includeDirectReceipts" type="checkbox"
+                 class="form-check-input"
+                 [ngModel]="includeDirectReceipts()"
+                 (ngModelChange)="onIncludeDirectReceiptsChange($event)" />
+          <label class="form-check-label small" for="includeDirectReceipts">
+            Show direct receipts
+            <span class="visually-hidden">
+              — include the orders raised automatically for goods received without a purchase order
+            </span>
+          </label>
+        </div>
+      </div>
+
       <div class="erp-toolbar__spacer"></div>
 
       @if (canCreate()) {
@@ -219,7 +235,15 @@
               <tbody>
                 @for (po of rows(); track po.uid) {
                   <tr>
-                    <td class="mono">{{ orderLabel(po) }}</td>
+                    <td class="mono">
+                      {{ orderLabel(po) }}
+                      @if (isDirectReceipt(po)) {
+                        <span class="status-tag status-tag--neutral ms-1"
+                              title="Raised automatically for goods received without a purchase order">
+                          Direct receipt
+                        </span>
+                      }
+                    </td>
                     <td>{{ po.supplierName }}</td>
                     <td>
                       <span class="status-tag"

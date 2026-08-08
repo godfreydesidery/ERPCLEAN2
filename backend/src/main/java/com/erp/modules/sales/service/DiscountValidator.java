@@ -12,6 +12,13 @@ import java.math.BigDecimal;
  * </ul>
  * Negative discounts are silently dropped by the totals calculator, so they must be
  * rejected at the boundary to prevent silent mis-computation and misleading stored data.
+ *
+ * <p><b>This class checks shape, not policy.</b> It deliberately still accepts 100% and accepts an
+ * absolute amount larger than the line (which {@link InvoiceTotalsCalculator} floors to a zero net):
+ * whether a given discount is ALLOWED is a per-company business rule, and it lives in
+ * {@link DiscountAuthorisationGuard}, which runs immediately after this on every add-line and
+ * update-line path. Do not add a hardcoded ceiling here — a ceiling that is the same for every
+ * tenant is the wrong ceiling for all of them.
  */
 final class DiscountValidator {
 

@@ -281,7 +281,26 @@
                                      (ngModelChange)="onLineFieldChange(l.id, 'lineDiscountAmount', $event)"
                                      [name]="'disc-' + l.id"
                                      [disabled]="submitting()"
-                                     [attr.aria-label]="'Line discount for line ' + l.id" />
+                                     [attr.aria-label]="'Line discount for ' + (l.productName || 'this line')" />
+
+                              <!--
+                                K7: a discount above the company ceiling needs a supervisor. The
+                                policy ships OFF, so none of this renders today; it also appears if
+                                the server refuses the sale asking for an approval.
+                              -->
+                              @if (l.discountAuthorisedByName) {
+                                <small class="d-block text-success mt-1">
+                                  <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+                                  Approved by {{ l.discountAuthorisedByName }}
+                                </small>
+                              } @else if (lineCanRequestApproval(l)) {
+                                <button type="button" class="btn btn-sm btn-outline-warning mt-1 w-100"
+                                        (click)="requestApproval(l.id)"
+                                        [disabled]="submitting()"
+                                        [attr.aria-label]="'Ask a supervisor to approve the discount on ' + (l.productName || 'this line')">
+                                  <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Ask a supervisor
+                                </button>
+                              }
                             </td>
                             <td class="num">
                               {{ lineSubtotal(l) | number:'1.2-2' }}
@@ -379,6 +398,19 @@
             </button>
 
           </form>
+        }
+
+        <!--
+          Manager step-up prompt (K7). Rendered outside the checkout form so its own submit cannot
+          trip the sale's, and only while a line is actually waiting on an approval.
+        -->
+        @if (approvalLineId()) {
+          <app-manager-approval-dialog
+            [permissionCode]="discountOverridePermission"
+            [reason]="approvalReason()"
+            title="Supervisor approval for this discount"
+            (approved)="onApprovalGranted($event)"
+            (cancelled)="cancelApproval()" />
         }
       }
     }

@@ -1,0 +1,65 @@
+<!--
+  Rendered inline by the host (no portal): the host controls when it exists, so there is exactly one
+  at a time and it disappears the instant the caller stops asking for it.
+-->
+<div class="manager-approval__backdrop" (keydown.escape)="cancel()" tabindex="-1">
+  <div class="manager-approval__panel erp-card"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="managerApprovalTitle"
+       aria-describedby="managerApprovalReason">
+    <div class="erp-card__head">
+      <h2 id="managerApprovalTitle" class="h6 mb-0">
+        <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>{{ title() }}
+      </h2>
+    </div>
+    <div class="erp-card__body">
+      <p id="managerApprovalReason" class="small text-muted">
+        {{ reason() || 'A supervisor must approve this before it can go through.' }}
+        The supervisor enters their own sign-in details here — you stay signed in.
+      </p>
+
+      <form (ngSubmit)="submit()" aria-label="Supervisor approval">
+        <div class="mb-2">
+          <label class="form-label small mb-1" for="managerApprovalUsername">
+            Supervisor username <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="managerApprovalUsername" name="managerApprovalUsername" type="text"
+                 class="form-control form-control-sm"
+                 #usernameField
+                 autocomplete="off"
+                 [ngModel]="username()" (ngModelChange)="username.set($event)"
+                 [disabled]="checking()" required />
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1" for="managerApprovalPassword">
+            Supervisor password <span class="text-danger" aria-hidden="true">*</span>
+          </label>
+          <input id="managerApprovalPassword" name="managerApprovalPassword" type="password"
+                 class="form-control form-control-sm"
+                 autocomplete="off"
+                 [ngModel]="password()" (ngModelChange)="password.set($event)"
+                 [disabled]="checking()" required />
+        </div>
+
+        @if (errorMessage(); as msg) {
+          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+        }
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-sm btn-primary" [disabled]="checking()">
+            @if (checking()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Checking…
+            } @else {
+              Approve
+            }
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  (click)="cancel()" [disabled]="checking()">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

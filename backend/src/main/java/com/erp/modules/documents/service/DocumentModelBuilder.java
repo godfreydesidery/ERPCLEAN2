@@ -19,6 +19,8 @@ import com.erp.modules.reporting.export.StatementRenderModel;
 import com.erp.modules.reporting.export.StatementRenderModel.Row;
 import com.erp.modules.sales.domain.dto.DeliveryDto;
 import com.erp.modules.sales.domain.dto.DeliveryLineDto;
+import com.erp.modules.sales.domain.dto.QuotationDto;
+import com.erp.modules.sales.domain.dto.QuotationLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -27,6 +29,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -133,7 +136,19 @@ public class DocumentModelBuilder {
     }
 
     // -------------------------------------------------------------------------
-    // GOODS_RECEIPT — qty-only (ADR-0023 D-5 / BR-DOC-07)
+    // GOODS_RECEIPT — priced (ADR-0023 D-5 as amended 2026-08-08 / BR-DOC-07 as amended)
+    //
+    // Kilimanjaro K2: the GRN now prints the per-line cost and the receipt value. The original
+    // qty-only rule assumed a supplier copy; in practice the GRN is the internal receiving document
+    // the storekeeper and the accounts clerk check the delivery and the supplier bill against, and a
+    // GRN with no values cannot be checked against anything.
+    //
+    // Every figure here is COPIED, never derived (BR-DOC-02 / BR-DOC-09): the unit cost and line
+    // total are persisted columns on goods_receipt_lines, and the receipt total is computed by the
+    // purchases service and handed over on the DTO.
+    //
+    // The DELIVERY_NOTE (below) shares this builder/renderer pair and deliberately stays qty-only —
+    // it is a shipment document (ADR-0021 D-7) and must not disclose prices to whoever signs for it.
     // -------------------------------------------------------------------------
 
     public DocumentRenderModel buildGoodsReceipt(GoodsReceiptDto gr,
@@ -148,24 +163,38 @@ public class DocumentModelBuilder {
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("GRN No.", gr.receiptNumber()));
         if (gr.receivedAt() != null) meta.add(new MetaPair("Received", gr.receivedAt().toString()));
+        if (gr.supplierName() != null) meta.add(new MetaPair("Supplier", gr.supplierName()));
+        // The renderer never reads model.currency(), so a priced document must state its currency as
+        // a meta pair or the printed amounts are unlabelled figures.
+        if (gr.currency() != null) meta.add(new MetaPair("Currency", gr.currency()));
         if (gr.notes() != null) meta.add(new MetaPair("Notes", gr.notes()));
 
-        // Supplier name not available on GoodsReceiptDto — use supplierId as reference
-        String supplierRef = gr.supplierId() != null ? "Supplier #" + gr.supplierId() : "";
+        // Supplier name is carried on the DTO from the backing PO snapshot; fall back to blank rather
+        // than printing an internal database id on a document a human reads.
+        String supplierRef = gr.supplierName() != null ? gr.supplierName() : "";
         PartyBlock party = new PartyBlock(supplierRef, List.of(), null);
 
-        // qty-only: no unit price, no line total
         List<DocLine> docLines = new ArrayList<>();
         for (GoodsReceiptLineDto l : lines) {
             docLines.add(new DocLine(
                     l.lineNo(), l.productCode(), l.productName(),
                     l.receivedQty(), l.unitName(),
-                    null, null, null, null));
+                    l.unitCostAmount(),
+                    // A goods receipt has no discount concept — leaving this null tells the renderer
+                    // to drop the Discount column instead of printing an empty one (K2).
+                    null,
+                    null,
+                    l.lineCostAmount()));
+        }
+
+        List<TotalRow> totals = new ArrayList<>();
+        if (gr.receiptTotalAmount() != null) {
+            totals.add(new TotalRow("Total Received Value", gr.receiptTotalAmount(), true));
         }
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), List.of(),
-                lines.isEmpty() ? null : lines.get(0).currency(),
+                List.of(), totals,
+                gr.currency(),
                 Instant.now().toString(), isVoid ? "VOID" : null);
     }
 
@@ -233,6 +262,107 @@ public class DocumentModelBuilder {
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
                 List.of(), totals, cn.currency(), Instant.now().toString(), null);
+    }
+
+    // -------------------------------------------------------------------------
+    // QUOTATION — printed as "PROFORMA INVOICE" (K5, Kilimanjaro 2026-08-08)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Builds the proforma from a priced quotation.
+     *
+     * <p>The title is NOT hardcoded here — it arrives from the company's {@code document_templates}
+     * row, seeded as "PROFORMA INVOICE" by {@code DocumentBrandingSeeder}. Same as every other type,
+     * so a tenant can rename it without a code change.
+     *
+     * <p>Shape matches the tax invoice on purpose: the whole point of a proforma is that the
+     * customer can read it as the invoice they are about to receive. Branded header, addressed to
+     * the customer by name, one row per line showing unit and unit price, then net / VAT / gross.
+     * Amounts are read off the DTO, never recomputed (NFR-DOC-02 / BR-DOC-09); the only arithmetic
+     * is summing already-stored per-line VAT into bands for the summary table, which the quotation —
+     * unlike the invoice — does not persist as a JSONB snapshot.
+     *
+     * <p>Rendering is read-only: no stock move, no GL posting, no mutation of the quotation. A
+     * proforma is a promise, not a transaction.
+     */
+    public DocumentRenderModel buildQuotation(QuotationDto q,
+                                              List<QuotationLineDto> lines,
+                                              DocumentBranding branding,
+                                              String title) {
+        BrandingBlock brand = toBrandingBlock(branding);
+
+        List<MetaPair> meta = new ArrayList<>();
+        // Labelled "Document No." rather than "Proforma No." or "Quotation No.": the title is
+        // per-company configurable, so a label that names either one is wrong for the tenant that
+        // renamed the template. The QUOTE- prefix on the number already says which series it is.
+        // A DRAFT quote has no number yet, and the render service refuses to print one — but the
+        // builder still must not print the literal "null" if it is ever called with one.
+        if (q.quoteNumber() != null) meta.add(new MetaPair("Document No.", q.quoteNumber()));
+        if (q.quoteDate()    != null) meta.add(new MetaPair("Date", q.quoteDate().toString()));
+        if (q.validUntil()   != null) meta.add(new MetaPair("Valid Until", q.validUntil().toString()));
+        if (q.customerName() != null) meta.add(new MetaPair("Customer", q.customerName()));
+        if (q.customerPoNumber() != null) meta.add(new MetaPair("Your Ref.", q.customerPoNumber()));
+        if (q.currency()     != null) meta.add(new MetaPair("Currency", q.currency()));
+        if (q.notes()        != null) meta.add(new MetaPair("Notes", q.notes()));
+
+        PartyBlock party = new PartyBlock(q.customerName(), List.of(), null);
+
+        List<DocLine> docLines = new ArrayList<>();
+        for (QuotationLineDto l : lines) {
+            docLines.add(new DocLine(
+                    l.lineNo(), l.productCode(), l.productName(),
+                    l.quantity(), l.unitName(),
+                    l.unitPriceAmount(), l.lineDiscountAmount(),
+                    l.vatStatus(),
+                    l.grossAmount()));
+        }
+
+        List<TotalRow> totals = new ArrayList<>();
+        totals.add(new TotalRow("Net Total", q.netTotalAmount(), false));
+        totals.add(new TotalRow("VAT Total", q.vatTotalAmount(), false));
+        totals.add(new TotalRow("Gross Total", q.grossTotalAmount(), true));
+
+        return new DocumentRenderModel(title, brand, meta, party, docLines,
+                quotationTaxRows(lines), totals, q.currency(), Instant.now().toString(),
+                quotationStamp(q.status()));
+    }
+
+    /**
+     * VAT bands for a quotation, aggregated from the lines' own stored net/VAT amounts.
+     * Grouped by (VAT status, rate) and printed in first-appearance order so the table reads in the
+     * same order as the lines above it.
+     */
+    private static List<TaxRow> quotationTaxRows(List<QuotationLineDto> lines) {
+        Map<String, TaxRow> bands = new LinkedHashMap<>();
+        for (QuotationLineDto l : lines) {
+            String status = l.vatStatus() != null ? l.vatStatus() : "";
+            BigDecimal rate = l.vatRate() != null ? l.vatRate() : BigDecimal.ZERO;
+            String key = status + "|" + rate.toPlainString();
+            TaxRow seen = bands.get(key);
+            BigDecimal net = seen == null ? BigDecimal.ZERO : seen.base();
+            BigDecimal vat = seen == null ? BigDecimal.ZERO : seen.vat();
+            bands.put(key, new TaxRow(status,
+                    net.add(l.netAmount() != null ? l.netAmount() : BigDecimal.ZERO),
+                    rate,
+                    vat.add(l.vatAmount() != null ? l.vatAmount() : BigDecimal.ZERO)));
+        }
+        return List.copyOf(bands.values());
+    }
+
+    /**
+     * The status stamp printed across a proforma. A quotation that is no longer live must say so on
+     * its face — reprinting an expired or rejected quote with nothing to distinguish it from a live
+     * one is how a stale price gets honoured. SENT/DRAFT print clean; ACCEPTED is stamped too, so a
+     * proforma cannot be mistaken for the tax invoice that follows it.
+     */
+    private static String quotationStamp(String status) {
+        if (status == null) return null;
+        return switch (status) {
+            case "EXPIRED"  -> "EXPIRED";
+            case "REJECTED" -> "REJECTED";
+            case "ACCEPTED" -> "ACCEPTED — NOT A TAX INVOICE";
+            default -> null;
+        };
     }
 
     // -------------------------------------------------------------------------

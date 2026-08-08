@@ -343,6 +343,14 @@ export const ADMIN_ROUTES: Routes = [
       import('./purchases/goods-receipt-create.component').then((m) => m.GoodsReceiptCreateComponent),
   },
   {
+    // K3 — receive stock that arrived with no LPO. The guard code must EQUAL the backend
+    // permission on POST /goods-receipts/direct, or a 403 would read to the user as "cannot open".
+    path: 'goods-receipts/direct',
+    canActivate: [requirePermission('PURCHASE.RECEIVE.DIRECT')],
+    loadComponent: () =>
+      import('./purchases/direct-goods-receipt.component').then((m) => m.DirectGoodsReceiptComponent),
+  },
+  {
     path: 'goods-receipts/uid/:uid',
     canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
     loadComponent: () =>
@@ -598,6 +606,16 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
     loadComponent: () =>
       import('./inventory-valuation/stock-report.component').then((m) => m.StockReportComponent),
+  },
+  // K9: the period-windowed counterpart of reports/stock (which is a present-moment snapshot).
+  // Same read gate — INVENTORY.VALUATION.VIEW — matching the backend's @PreAuthorize.
+  {
+    path: 'reports/stock-movement',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-movement-report.component').then(
+        (m) => m.StockMovementReportComponent,
+      ),
   },
   // ── Approvals ─────────────────────────────────────────────────────────────
   {

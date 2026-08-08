@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -244,16 +245,22 @@ class DocumentHttpIT extends PostgresIntegrationTest {
     }
 
     // ===================================================================
-    // Test 8 — Root lists templates → 200 array with 6 seeded v1 types
+    // Test 8 — Root lists templates → 200 array with every seeded type
+    //          (INVOICE, AR_STATEMENT, PURCHASE_ORDER, GOODS_RECEIPT,
+    //           DELIVERY_NOTE, CREDIT_NOTE, QUOTATION/"PROFORMA INVOICE")
     // ===================================================================
 
     @Test
-    void root_listTemplates_returns6SeedTypes() throws Exception {
+    void root_listTemplates_returnsEverySeededType() throws Exception {
         mockMvc.perform(get("/api/v1/documents/templates")
                         .header("Authorization", "Bearer " + rootToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data.length()").value(6));
+                .andExpect(jsonPath("$.data.length()").value(7))
+                // The proforma template must exist for a company that was provisioned normally —
+                // that is the whole reason a quotation could not be printed before (K5).
+                .andExpect(jsonPath("$.data[?(@.documentType == 'QUOTATION')].title")
+                        .value(hasItem("PROFORMA INVOICE")));
     }
 
     // ===================================================================

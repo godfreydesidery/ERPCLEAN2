@@ -33,6 +33,36 @@ public interface StockReservationService {
                                BigDecimal delta, Long actorId);
 
     /**
+     * Serialised reserve: takes the branch reservation row under a {@code SELECT … FOR UPDATE}
+     * lock, reads available-to-promise <em>under that lock</em>, adds {@code qty} to
+     * {@code reserved_qty}, and returns the availability as it stood <strong>before</strong> the
+     * reservation was applied.
+     *
+     * <p>This is the synchronous half of the negative-stock decision. A sale's quantity is not
+     * deducted until the outbox poller runs the stock handler ~a second later, so a plain read of
+     * {@code stock_on_hand} lets every sale inside that window see the same pre-sale quantity: with
+     * 198 on hand and blocking switched on, eight consecutive sales of 30 were all accepted and left
+     * −42. Reserving here, in the same transaction as the check and behind the row lock, means the
+     * next caller blocks until this one commits and then sees this sale's claim.
+     *
+     * <p>The reservation is a <em>claim on stock already sold but not yet issued</em>; the stock
+     * handler releases it (negative delta) in the same transaction that posts the movement, so the
+     * two changes are never visible apart. A caller that rejects the sale simply throws — its
+     * transaction rolls back and takes the reservation with it, which is why this method reserves
+     * unconditionally rather than deciding for the caller.
+     *
+     * <p><strong>Deadlocks.</strong> One row is locked per product, and a document with several
+     * products locks them in the order its caller iterates. Two documents sharing two products in
+     * opposite order can therefore deadlock; PostgreSQL detects it and aborts one transaction, which
+     * rolls the whole sale back — safe (nothing is oversold), visible, and rare. Single-product
+     * sales, the case this fixes, never contend beyond the one row.
+     *
+     * @return availability observed under the lock, before this reservation was added
+     */
+    StockAvailabilityDto reserve(Long companyId, Long branchId, Long productId,
+                                 BigDecimal qty, Long actorId);
+
+    /**
      * Read-only available-to-promise for a (company, branch, product) at the branch default
      * location: {@code quantity − reserved_qty}. Does not mutate anything. Missing on-hand row
      * (product never touched at this branch) resolves to all-zero (never blocks on a technicality).

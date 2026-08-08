@@ -1,8 +1,10 @@
 package com.erp.api;
 
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
+import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
+import com.erp.modules.purchases.service.DirectGoodsReceiptService;
 import com.erp.modules.purchases.service.GoodsReceiptService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -30,9 +32,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class GoodsReceiptController {
 
     private final GoodsReceiptService service;
+    private final DirectGoodsReceiptService directService;
 
-    public GoodsReceiptController(GoodsReceiptService service) {
+    public GoodsReceiptController(GoodsReceiptService service,
+                                   DirectGoodsReceiptService directService) {
         this.service = service;
+        this.directService = directService;
     }
 
     /**
@@ -44,6 +49,25 @@ public class GoodsReceiptController {
     @PreAuthorize("@perm.scoped(#req.purchaseOrderUid(), 'purchaseorder', 'PURCHASE.RECEIVE')")
     public ApiResponse<GoodsReceiptDto> createAndReceive(@RequestBody CreateGoodsReceiptRequest req) {
         return ApiResponse.ok(service.createAndReceive(req));
+    }
+
+    /**
+     * Receive goods with NO prior LPO — a walk-in / cash purchase (K3, Kilimanjaro 2026-08-08).
+     * The service auto-raises the backing purchase order and receives against it atomically.
+     *
+     * <p><b>Permission.</b> {@code PURCHASE.RECEIVE.DIRECT} — its own verb, seeded in
+     * {@code R__seed_permissions.sql} and granted to STOREKEEPER. It is deliberately NOT
+     * {@code PURCHASE.RECEIVE}: that verb means "receive against an order a buyer already raised and
+     * priced", whereas this one also authors the order and its costs in one unreviewed step, which is
+     * a materially different authority. Holding {@code PURCHASE.RECEIVE} alone therefore no longer
+     * reaches this endpoint. The {@code scoped} form with the {@code company} target type matches
+     * {@code PurchaseOrderController#create} — the write is company-scoped from the body's companyUid.
+     */
+    @PostMapping("/direct")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RECEIVE.DIRECT')")
+    public ApiResponse<GoodsReceiptDto> receiveDirect(@RequestBody DirectGoodsReceiptRequest req) {
+        return ApiResponse.ok(directService.receiveDirect(req));
     }
 
     /** Get GR by uid. */

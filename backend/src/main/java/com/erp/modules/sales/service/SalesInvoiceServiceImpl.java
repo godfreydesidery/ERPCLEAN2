@@ -122,6 +122,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final NegativeStockGuard negativeStockGuard;
     /** Owner decision 2026-08-01 (V93): synchronous "sale at or below cost" policy check. */
     private final BelowCostGuard belowCostGuard;
+    /** K7: manager-authorised discount ceiling. Ships OFF, so no tenant's behaviour changes. */
+    private final DiscountAuthorisationGuard discountGuard;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -147,7 +149,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    PaymentTermsRepository paymentTermsRepo,
                                    JournalEntryRepository journalEntries,
                                    NegativeStockGuard negativeStockGuard,
-                                   BelowCostGuard belowCostGuard) {
+                                   BelowCostGuard belowCostGuard,
+                                   DiscountAuthorisationGuard discountGuard) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -173,6 +176,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.journalEntries = journalEntries;
         this.negativeStockGuard = negativeStockGuard;
         this.belowCostGuard = belowCostGuard;
+        this.discountGuard = discountGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -594,22 +598,50 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Record what the caller entered so weighed-goods scale-step rounding is visible (D-1b).
         line.setRequestedQuantity(req.quantity());
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
+        // K7: the discount ceiling. Runs BEFORE the line is saved, so a refused discount leaves the
+        // draft exactly as it was — the cashier fixes the number, or fetches a manager, and retries.
+        // Company comes from the LOADED invoice, never from the request.
+        //
+        // The returned id is the manager who approved an over-ceiling discount, or null when none
+        // was needed (the OFF default, or a discount within the ceiling). It is stamped on the line
+        // (V95) as well as recorded in the audit detail below, so "who allowed this?" is answerable
+        // from the document itself.
+        Long discountAuthoriserId = discountGuard.authoriseLineDiscount(
+                new DiscountAuthorisationGuard.DiscountRequest(
+                        inv.getCompanyId(), inv.getId(), inv.getUid(), product.getName(),
+                        listPrice.multiply(quantity),
+                        req.lineDiscountAmount(), req.lineDiscountPercent(),
+                        req.discountAuthorisedByUid()));
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
+        line.setDiscountAuthorisedBy(discountAuthoriserId);
 
         SalesInvoiceLine saved = lines.save(line);
 
         // Recompute header totals
         recomputeTotals(inv);
 
+        // The discount was absent from this row entirely — the single most audit-worthy thing a
+        // cashier can do to a line was the one thing the trail did not record. detail is JSONB, so
+        // adding it needs no schema. authorisedBy is populated only when a manager approved.
+        Map<String, Object> lineDetail = new LinkedHashMap<>();
+        lineDetail.put("productUid", req.productUid());
+        lineDetail.put("quantity", quantity.toPlainString());
+        lineDetail.put("unitPrice", listPrice.toPlainString());
+        lineDetail.put("lineDiscountAmount", plainOrEmpty(req.lineDiscountAmount()));
+        lineDetail.put("lineDiscountPercent", plainOrEmpty(req.lineDiscountPercent()));
+        lineDetail.put("discountAuthorisedBy",
+                discountAuthoriserId != null ? String.valueOf(discountAuthoriserId) : "");
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_LINE_ADD, "sales_invoice_lines",
                         inv.getId(), inv.getUid())
-                .detail(Map.of(
-                        "productUid", req.productUid(),
-                        "quantity", quantity.toPlainString(),
-                        "unitPrice", listPrice.toPlainString())));
+                .detail(lineDetail));
 
         return SalesInvoiceLineDto.from(saved);
+    }
+
+    /** BigDecimal → plain string for an audit detail, or "" when absent (JSONB, but keep it flat). */
+    private static String plainOrEmpty(BigDecimal value) {
+        return value != null ? value.toPlainString() : "";
     }
 
     @Override
@@ -640,19 +672,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         BigDecimal qtyInBase = computeQtyInBase(product, unit, quantity);
 
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
+        // K7: gate the update too. Adding a 5% line and then editing it to 60% must hit the same
+        // ceiling as adding it at 60% — otherwise "update" is simply the way round the policy.
+        Long discountAuthoriserId = discountGuard.authoriseLineDiscount(
+                new DiscountAuthorisationGuard.DiscountRequest(
+                        inv.getCompanyId(), inv.getId(), inv.getUid(), line.getProductName(),
+                        line.getUnitPriceAmount().multiply(quantity),
+                        req.lineDiscountAmount(), req.lineDiscountPercent(),
+                        req.discountAuthorisedByUid()));
         line.setQuantity(quantity);
         line.setQtyInBase(qtyInBase);
         line.setRequestedQuantity(req.quantity());
         line.setLineDiscountAmount(req.lineDiscountAmount());
         line.setLineDiscountPercent(req.lineDiscountPercent());
+        // Re-stamped, not merged: the approval describes THIS discount. Editing an approved 60%
+        // back down to 5% must clear the approver — nobody authorised 5%, and leaving a manager's
+        // name on it would credit them for a decision they never made.
+        line.setDiscountAuthorisedBy(discountAuthoriserId);
         line.setUpdatedAt(Instant.now());
         line.setUpdatedBy(actorId());
 
         recomputeTotals(inv);
 
+        Map<String, Object> updateDetail = new LinkedHashMap<>();
+        updateDetail.put("lineUid", lineUid);
+        updateDetail.put("quantity", req.quantity().toPlainString());
+        updateDetail.put("lineDiscountAmount", plainOrEmpty(req.lineDiscountAmount()));
+        updateDetail.put("lineDiscountPercent", plainOrEmpty(req.lineDiscountPercent()));
+        updateDetail.put("discountAuthorisedBy",
+                discountAuthoriserId != null ? String.valueOf(discountAuthoriserId) : "");
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_LINE_UPDATE, "sales_invoice_lines",
                         inv.getId(), inv.getUid())
-                .detail(Map.of("lineUid", lineUid, "quantity", req.quantity().toPlainString())));
+                .detail(updateDetail));
 
         return SalesInvoiceLineDto.from(line);
     }

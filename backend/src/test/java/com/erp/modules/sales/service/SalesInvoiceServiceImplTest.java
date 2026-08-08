@@ -24,6 +24,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -63,6 +64,9 @@ class SalesInvoiceServiceImplTest {
     @Mock com.erp.modules.parties.repository.PaymentTermsRepository paymentTermsRepo;
     @Mock com.erp.modules.gl.repository.JournalEntryRepository journalEntries;
     @Mock NegativeStockGuard negativeStockGuard;
+    // K7: addLine consults the discount guard. Mocked (not null) because @InjectMocks would
+    // otherwise pass null and every add-line test would NPE on the guard call.
+    @Mock DiscountAuthorisationGuard discountGuard;
 
     @InjectMocks SalesInvoiceServiceImpl service;
 
@@ -70,6 +74,8 @@ class SalesInvoiceServiceImplTest {
     private static final Long BRANCH_ID = 10L;
     private static final Long CUSTOMER_ID = 200L;
     private static final Long AGENT_ID = 300L;
+    /** The approving manager's internal id, as the discount guard hands it back (K7). */
+    private static final Long MANAGER_ID = 77L;
 
     @AfterEach
     void tearDown() {
@@ -171,8 +177,74 @@ class SalesInvoiceServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // K7 (V95) — the manager who authorised an over-ceiling discount is stamped on the LINE, not
+    // just written into the audit trail. "Who allowed this?" has to be answerable from the document.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addLine_stampsTheManagerWhoAuthorisedAnOverCeilingDiscount() {
+        SalesInvoice inv = givenAddableLine(503L, "INVUID0000000000000000013",
+                903L, "PRODUID00000000000000013", 940L, "BASEUID0000000000000013");
+        // The guard accepted the manager named on the request and handed back their internal id.
+        when(discountGuard.authoriseLineDiscount(any())).thenReturn(MANAGER_ID);
+
+        service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000013", "BASEUID0000000000000013", BigDecimal.ONE,
+                new BigDecimal("500"), null, "MGRUID000000000000000000001"));
+
+        assertThat(savedLine().getDiscountAuthorisedBy()).isEqualTo(MANAGER_ID);
+    }
+
+    @Test
+    void addLine_withNoAuthorisationNeeded_leavesTheAuthoriserNull() {
+        // The shipped default: the policy is OFF, the guard returns null, and the column stays empty
+        // exactly as it was before K7. Nothing about an ordinary line changes.
+        SalesInvoice inv = givenAddableLine(504L, "INVUID0000000000000000014",
+                904L, "PRODUID00000000000000014", 941L, "BASEUID0000000000000014");
+        // Stubbed explicitly because an unstubbed Mockito method returning Long yields 0L, not null
+        // — the opposite of what the real guard does. DiscountAuthorisationGuardTest pins that the
+        // OFF/within-ceiling paths genuinely return null; this asserts the service passes it through.
+        when(discountGuard.authoriseLineDiscount(any())).thenReturn(null);
+
+        service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000014", "BASEUID0000000000000014", BigDecimal.ONE,
+                new BigDecimal("500"), null));
+
+        assertThat(savedLine().getDiscountAuthorisedBy()).isNull();
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /** The line the service actually persisted. */
+    private com.erp.modules.sales.domain.entity.SalesInvoiceLine savedLine() {
+        ArgumentCaptor<com.erp.modules.sales.domain.entity.SalesInvoiceLine> captor =
+                ArgumentCaptor.forClass(com.erp.modules.sales.domain.entity.SalesInvoiceLine.class);
+        verify(lines).save(captor.capture());
+        return captor.getValue();
+    }
+
+    /** Stubs everything {@code addLine} needs for one 1 000/unit STANDARD-VAT product. */
+    private SalesInvoice givenAddableLine(Long invoiceId, String invoiceUid,
+                                          Long productId, String productUid,
+                                          Long unitId, String unitUid) {
+        SalesInvoice inv = invoiceWithId(invoiceId, invoiceUid);
+        when(invoices.findByUid(invoiceUid)).thenReturn(Optional.of(inv));
+
+        UnitOfMeasure baseUnit = unitWithId(unitId, unitUid, "PCS");
+        Product product = productWithId(productId, productUid, "PROD-K7", "Sugar 1kg", baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, productUid)).thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, unitUid)).thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, productId, unitId))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("1000.0000"), false));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(invoiceId)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+        return inv;
+    }
 
     private static SalesInvoice invoiceWithId(Long id, String uid) {
         SalesInvoice inv = new SalesInvoice(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, "TZS", 1L);

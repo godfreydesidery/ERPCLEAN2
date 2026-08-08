@@ -148,6 +148,66 @@ class TenderSubtotal {
       );
 }
 
+/// One payout-type subtotal within an X/Z-read (`PayoutSubtotalDto`, P3).
+///
+/// [amount] is always POSITIVE — a payout is cash leaving the drawer, and the
+/// whole breakdown is subtracted from expected cash. The subtotals always sum
+/// to `totalPayoutsNetAmount` on the same read.
+///
+/// The server zero-fills one row per payout type on every read, in enum order,
+/// so a printed report keeps the same shape shift to shift and two reads of one
+/// session are byte-identical.
+class PayoutSubtotal {
+  PayoutSubtotal(
+      {required this.payoutType, required this.amount, required this.count});
+
+  final PosPayoutType payoutType;
+  final double amount;
+
+  /// How many payouts of this type. Arrives as a JSON **string** (a `Long`),
+  /// like `invoiceCount` — parsed with the same tolerant helper.
+  final int count;
+
+  factory PayoutSubtotal.fromJson(Map<String, dynamic> j) => PayoutSubtotal(
+        payoutType: PosPayoutType.fromWire(asStr(j['payoutType'])),
+        amount: asNumOr(j['amount']),
+        count: asIntOr(j['count']),
+      );
+}
+
+/// One recorded cash payout (`PosPayoutDto`, K8) — the row a drawer-expense
+/// list is built from.
+///
+/// [journalEntryUid] is populated ONLY on the response that CREATES the payout;
+/// there is no column to read it back from yet, so it is always null when
+/// listing. That is a known seam, not a parsing bug.
+class PosPayout {
+  PosPayout({
+    required this.uid,
+    required this.payoutType,
+    required this.amount,
+    required this.reason,
+    required this.recordedAt,
+    this.journalEntryUid,
+  });
+
+  final String uid;
+  final PosPayoutType payoutType;
+  final double amount;
+  final String? reason;
+  final DateTime? recordedAt;
+  final String? journalEntryUid;
+
+  factory PosPayout.fromJson(Map<String, dynamic> j) => PosPayout(
+        uid: asStrOr(j['uid']),
+        payoutType: PosPayoutType.fromWire(asStr(j['payoutType'])),
+        amount: asNumOr(j['amount']),
+        reason: asStr(j['reason']),
+        recordedAt: asDate(j['recordedAt']),
+        journalEntryUid: asStr(j['journalEntryUid']),
+      );
+}
+
 /// `GET /pos/sessions/uid/{uid}/x-read` — mid-shift snapshot.
 ///
 /// [totalSalesAmount] is gross turnover across ALL tenders (a reporting figure);
@@ -165,6 +225,7 @@ class XRead {
     required this.expectedCashAmount,
     required this.invoiceCount,
     required this.tenderSubtotals,
+    this.payoutSubtotals = const [],
   });
 
   final String sessionUid;
@@ -177,6 +238,10 @@ class XRead {
   final int invoiceCount;
   final List<TenderSubtotal> tenderSubtotals;
 
+  /// Payouts broken down by type (P3). Empty against a server that predates it,
+  /// which prints as a single "Payouts" line — the old behaviour, not an error.
+  final List<PayoutSubtotal> payoutSubtotals;
+
   factory XRead.fromJson(Map<String, dynamic> j) => XRead(
         sessionUid: asStrOr(j['sessionUid']),
         openedAt: asDate(j['openedAt']),
@@ -187,10 +252,16 @@ class XRead {
         expectedCashAmount: asNumOr(j['expectedCashAmount']),
         invoiceCount: asIntOr(j['invoiceCount']),
         tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
+        payoutSubtotals: asList(j['payoutSubtotals'], PayoutSubtotal.fromJson),
       );
 }
 
-/// `POST /pos/sessions/uid/{uid}/reconcile` — end-of-shift Z-read.
+/// The end-of-shift Z-read, returned by BOTH
+/// `POST /pos/sessions/uid/{uid}/reconcile` (once, the reconciling call) and
+/// `GET /pos/sessions/uid/{uid}/z-read` (repeatable, read-only — P3).
+///
+/// The server builds both through one private builder over persisted columns,
+/// so a reprint can never drift from the document the cashier signed off.
 class ZRead {
   ZRead({
     required this.sessionUid,
@@ -206,6 +277,7 @@ class ZRead {
     required this.varianceAmount,
     required this.invoiceCount,
     required this.tenderSubtotals,
+    this.payoutSubtotals = const [],
   });
 
   final String sessionUid;
@@ -222,6 +294,9 @@ class ZRead {
   final int invoiceCount;
   final List<TenderSubtotal> tenderSubtotals;
 
+  /// Payouts broken down by type (P3). Empty against an older server.
+  final List<PayoutSubtotal> payoutSubtotals;
+
   factory ZRead.fromJson(Map<String, dynamic> j) => ZRead(
         sessionUid: asStrOr(j['sessionUid']),
         openedAt: asDate(j['openedAt']),
@@ -236,5 +311,6 @@ class ZRead {
         varianceAmount: asNumOr(j['varianceAmount']),
         invoiceCount: asIntOr(j['invoiceCount']),
         tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
+        payoutSubtotals: asList(j['payoutSubtotals'], PayoutSubtotal.fromJson),
       );
 }

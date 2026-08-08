@@ -881,6 +881,196 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Persona UAT C1 — a repeated product on ONE document must post EVERY line.
+    //
+    // Every line of a document shared the document's event uid as its source_event_uid, and
+    // StockPostingService dedups on (source_event_uid, product_id). So the second line of the same
+    // product looked like a redelivery of the first and was silently dropped — while the invoice
+    // charged for both lines, COGS posted for both and on_hand_value was credited for both.
+    // Live evidence before the fix: INV-0458 sold 3 + 4 of one product and left ONE −3 movement.
+    //
+    // The bar these tests hold: Σ movement quantity == Σ line quantity, and Σ movement value ==
+    // the on_hand_value delta == the COGS posted. Ledger, valuation and GL must tell one story.
+    // =========================================================================
+
+    @Test
+    void saleWithTwoLinesOfTheSameProduct_postsBothLines_andLedgerTiesToValuationAndGl() {
+        ProductDto product = stockableProduct("RepeatLineWidget");
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-REPEAT-001", product,
+                new BigDecimal("20"), new BigDecimal("600"), 1L));
+
+        BigDecimal valueBefore = requireSoh(product.id()).getOnHandValue();   // 12 000
+        BigDecimal cogsBefore  = cogsBalance();
+
+        // One invoice, two lines, SAME product — a price-override split, the everyday shape.
+        setCtx();
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
+        setCtx();
+        salesInvoiceService.addLine(draft.uid(),
+                new AddInvoiceLineRequest(product.uid(), pcsUid, new BigDecimal("4"), null, null));
+
+        setCtx();
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+
+        // C2 half: the claim is taken synchronously at finalise, BEFORE the async deduction runs.
+        StockOnHand atFinalise = requireSoh(product.id());
+        assertThat(atFinalise.getQuantity())
+                .as("stock is not deducted until the outbox handler runs")
+                .isEqualByComparingTo(new BigDecimal("20"));
+        assertThat(atFinalise.getReservedQty())
+                .as("finalise must claim the sold quantity so a concurrent till cannot re-sell it")
+                .isEqualByComparingTo(new BigDecimal("7"));
+
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        // (1) Quantity: BOTH lines moved. Before the fix this was 17 (only the 3 landed).
+        StockOnHand after = requireSoh(product.id());
+        assertThat(after.getQuantity())
+                .as("on-hand must fall by the FULL invoiced quantity (3 + 4)")
+                .isEqualByComparingTo(new BigDecimal("13"));
+
+        // (2) Ledger: Σ movement quantity == Σ line quantity, across two distinct rows.
+        List<com.erp.modules.stock.domain.entity.StockMovement> issues =
+                stockMovementRepo.findBySourceDocumentUidAndMovementType(
+                        draft.uid(), com.erp.modules.stock.domain.enums.MovementType.SALE_ISSUE);
+        assertThat(issues).as("one movement row per invoice line").hasSize(2);
+        assertThat(issues.stream()
+                .map(com.erp.modules.stock.domain.entity.StockMovement::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .as("Σ movement quantity must equal Σ line quantity")
+                .isEqualByComparingTo(new BigDecimal("-7"));
+        assertThat(issues.stream()
+                .map(com.erp.modules.stock.domain.entity.StockMovement::getSourceEventUid)
+                .distinct().count())
+                .as("each line needs its own idempotency key, or the backstop drops it")
+                .isEqualTo(2L);
+
+        // (3) Valuation: the on_hand_value delta equals Σ movement value (7 × 600 = 4200).
+        BigDecimal ledgerValue = issues.stream()
+                .map(com.erp.modules.stock.domain.entity.StockMovement::getValueAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(ledgerValue).isEqualByComparingTo(new BigDecimal("4200"));
+        assertThat(valueBefore.subtract(after.getOnHandValue()))
+                .as("on_hand_value delta must equal Σ movement value — the recon that broke")
+                .isEqualByComparingTo(ledgerValue);
+
+        // (4) GL: COGS matches the same figure.
+        assertThat(cogsBalance().subtract(cogsBefore))
+                .as("COGS posted must equal the value that actually left inventory")
+                .isEqualByComparingTo(ledgerValue.setScale(4, RoundingMode.HALF_UP));
+
+        // (5) C2 half: the claim is released by the same transaction that posts the movements.
+        assertThat(after.getReservedQty())
+                .as("the claim must lift exactly when the quantity falls")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void receiptOfTheSameProductInTwoLots_landsBothLots() {
+        ProductDto product = stockableProduct("TwoLotWidget");
+
+        // A GRN receiving one product twice — two lots, two costs. Aggregating the lines would be
+        // wrong here (lot and expiry differ per line), so each line needs its own posting key.
+        StockReceivedPayload payload = new StockReceivedPayload(
+                "RCPT-TWOLOT-001", company.getId(), branch.getId(), Instant.now(),
+                List.of(
+                        new StockReceivedPayload.LineItem(product.id(), product.uid(), null,
+                                new BigDecimal("12"), new BigDecimal("300"),
+                                "LOT-A", null, LocalDate.now().plusYears(1), List.of()),
+                        new StockReceivedPayload.LineItem(product.id(), product.uid(), null,
+                                new BigDecimal("8"), new BigDecimal("320"),
+                                "LOT-B", null, LocalDate.now().plusMonths(3), List.of())));
+        txTemplate.execute(s -> {
+            outboxPublisher.publish(DomainEventType.STOCK_RECEIVED,
+                    DomainEventType.AGG_GOODS_RECEIPT, 1L, "RCPT-TWOLOT-001",
+                    company.getId(), branch.getId(), payload);
+            return null;
+        });
+        BigDecimal inventoryBefore = inventoryBalance();
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.STOCK_RECEIVED));
+
+        // Before the fix only LOT-A's 12 units landed, while the average and the DR INVENTORY leg
+        // counted all 20 — inventory debited for goods that were never on hand.
+        StockOnHand soh = requireSoh(product.id());
+        assertThat(soh.getQuantity())
+                .as("both lots must land on hand")
+                .isEqualByComparingTo(new BigDecimal("20"));
+
+        List<com.erp.modules.stock.domain.entity.StockMovement> receipts =
+                stockMovementRepo.findBySourceDocumentUidAndMovementType(
+                        "RCPT-TWOLOT-001", com.erp.modules.stock.domain.enums.MovementType.GOODS_RECEIPT);
+        assertThat(receipts).as("one movement row per receipt line").hasSize(2);
+        assertThat(receipts.stream()
+                .map(com.erp.modules.stock.domain.entity.StockMovement::getSourceEventUid)
+                .distinct().count()).isEqualTo(2L);
+
+        // Value ties: 12 × 300 + 8 × 320 = 6160, on hand, in the ledger and in the GL.
+        BigDecimal expectedValue = new BigDecimal("6160").setScale(4, RoundingMode.HALF_UP);
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo(expectedValue);
+        assertThat(inventoryBalance().subtract(inventoryBefore)).isEqualByComparingTo(expectedValue);
+    }
+
+    // =========================================================================
+    // Persona UAT C2 — the negative-stock block was defeated by ordinary fast selling.
+    //
+    // The block is decided synchronously at finalise, but the deduction is asynchronous (the outbox
+    // poller runs ~1s later). Every sale started inside that window read the same pre-sale quantity,
+    // so with 198 on hand and blocking ON, eight consecutive sales of 30 were ALL accepted and
+    // on-hand finished at −42, with no refusal and no signal.
+    //
+    // The fix claims the quantity on stock_on_hand.reserved_qty in the same transaction as the
+    // check, behind a row lock, and releases it when the movement finally posts. These tests pin the
+    // claim/release lifecycle. The RACE ITSELF IS NOT COVERED BY A TEST — two genuinely concurrent
+    // transactions cannot be driven deterministically from this single-threaded harness; what is
+    // covered is that the state a second caller would read is written before the first commits.
+    // =========================================================================
+
+    @Test
+    void secondSaleInsideTheAsyncDeductionWindowIsRefused_notSilentlyOversold() {
+        ProductDto product = stockableProduct("RaceWidget");
+        dispatcher.dispatchOne(publishReceiptEvent("RCPT-RACE-001", product,
+                new BigDecimal("10"), new BigDecimal("500"), 1L));
+
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false));   // block negative stock
+
+        // Sale 1 of 8 — finalises fine, but its stock event is deliberately NOT dispatched yet.
+        // This is exactly the state every till was in during the eight-sale oversell.
+        setCtx();
+        SalesInvoiceDto first = makeSaleInvoice(product.uid(), new BigDecimal("8"));
+        setCtx();
+        salesInvoiceService.finalise(first.uid(), new FinaliseInvoiceRequest());
+
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("nothing has been deducted yet — this is the window the race lived in")
+                .isEqualByComparingTo(new BigDecimal("10"));
+
+        // Sale 2 of 5. On-hand still reads 10, so a plain availability read would wave it through
+        // and leave −3. The claim from sale 1 makes only 2 available, so it must be refused.
+        setCtx();
+        SalesInvoiceDto second = makeSaleInvoice(product.uid(), new BigDecimal("5"));
+        assertThatThrownBy(() -> {
+            setCtx();
+            salesInvoiceService.finalise(second.uid(), new FinaliseInvoiceRequest());
+        })
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Not enough stock of RaceWidget")
+                .hasMessageContaining("2 available");
+
+        // The refused sale leaves no claim behind — its transaction rolled back whole.
+        assertThat(requireSoh(product.id()).getReservedQty())
+                .as("a refused sale must not strand a reservation")
+                .isEqualByComparingTo(new BigDecimal("8"));
+
+        // Once sale 1 actually issues, the claim lifts and the quantity falls — never both at once.
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+        StockOnHand after = requireSoh(product.id());
+        assertThat(after.getQuantity()).isEqualByComparingTo(new BigDecimal("2"));
+        assertThat(after.getReservedQty()).isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    // =========================================================================
     // ADR-0028 D-2 FIX — Finding 1: receipt at LOC1 syncs avg to LOC2 as well
     //
     // Scenario:

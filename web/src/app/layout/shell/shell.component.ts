@@ -193,6 +193,7 @@ export class ShellComponent {
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
         { label: 'Stock Report', route: '/admin/reports/stock', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
+        { label: 'Stock Movement Report', route: '/admin/reports/stock-movement', icon: 'bi-arrow-left-right', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],

@@ -18,8 +18,15 @@ public record PosSaleRequest(
         @NotBlank String sessionUid,
         @NotNull  Long customerId,
         /**
-         * Optional (ADR-0042 D-4). Currently informational — a POS sale is recorded against the
-         * logged-in cashier; the submitted value is not applied.
+         * Selling agent for the sale (optional, ADR-0042 D-4). <strong>The submitted value IS
+         * applied</strong>: it is resolved to the agent's uid, scoped to the session's company, and
+         * carried onto the created invoice — so it drives agent commission and every agent-filtered
+         * sales report. An id that does not belong to the session's company is rejected as not found.
+         *
+         * <p>Omit it (null) to fall back to the signed-in user's own agent record; a cashier with no
+         * agent record and no {@code agentId} cannot sell at all (BR-SALES-06). This field was once
+         * documented as ignored while the code already honoured it — the mismatch caused a production
+         * defect, so keep this note true to {@code PosSaleServiceImpl}.
          */
         Long agentId,
         @NotBlank String currency,
@@ -48,14 +55,27 @@ public record PosSaleRequest(
          * with 409. Passed straight through to the invoice finalise, which is where the policy is
          * enforced.
          */
-        Boolean belowCostApproved
+        Boolean belowCostApproved,
+        /**
+         * When the till captured this basket (K11 stale-replay guard). Optional — clients that omit
+         * it behave exactly as before.
+         *
+         * <p>The "unfinished sale" dialog keeps a basket on the device until it is resolved. If that
+         * basket is submitted days later it would be re-priced at today's prices and taken out of
+         * today's stock, silently posting an old sale into the current period. When this timestamp is
+         * present and older than {@code erp.pos.sale.max-age}, the sale is refused with
+         * {@code STALE_REPLAY} instead — the cashier is told to ring it again.
+         *
+         * <p>A value in the future is ignored (clock skew must never block a live till).
+         */
+        java.time.Instant capturedAt
 ) {
 
     /** Backward-compatible constructor (no tenders, no ageVerified) — existing callers unaffected. */
     public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
                           List<LineItem> lines, BigDecimal tenderedAmount, String notes) {
         this(sessionUid, customerId, agentId, currency, lines, null, tenderedAmount, notes,
-                null, null);
+                null, null, null);
     }
 
     /** Backward-compatible constructor (tenders, no ageVerified) — preserves ADR-0042 D-3 callers. */
@@ -63,7 +83,7 @@ public record PosSaleRequest(
                           List<LineItem> lines, List<PosTender> tenders,
                           BigDecimal tenderedAmount, String notes) {
         this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes,
-                null, null);
+                null, null, null);
     }
 
     /** Backward-compatible constructor (ageVerified, no below-cost approval) — ADR-0044 D-3a callers. */
@@ -71,7 +91,16 @@ public record PosSaleRequest(
                           List<LineItem> lines, List<PosTender> tenders,
                           BigDecimal tenderedAmount, String notes, Boolean ageVerified) {
         this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes,
-                ageVerified, null);
+                ageVerified, null, null);
+    }
+
+    /** Backward-compatible constructor (below-cost approval, no capturedAt) — V93 callers. */
+    public PosSaleRequest(String sessionUid, Long customerId, Long agentId, String currency,
+                          List<LineItem> lines, List<PosTender> tenders,
+                          BigDecimal tenderedAmount, String notes, Boolean ageVerified,
+                          Boolean belowCostApproved) {
+        this(sessionUid, customerId, agentId, currency, lines, tenders, tenderedAmount, notes,
+                ageVerified, belowCostApproved, null);
     }
 
     public record LineItem(
@@ -84,8 +113,25 @@ public record PosSaleRequest(
              * via {@code lineDiscountAmount}.
              */
             BigDecimal unitPrice,
-            BigDecimal lineDiscountAmount
-    ) {}
+            BigDecimal lineDiscountAmount,
+            /**
+             * Optional (K7). The {@code authoriserUid} from a successful manager step-up
+             * ({@code POST /api/v1/auth/verify-authority}, permission {@code SALES.DISCOUNT.OVERRIDE}).
+             * Per LINE, not per sale: a basket may contain one heavily discounted item and nine
+             * ordinary ones, and a single sale-level flag would let the approval for the first wave
+             * the rest through. Only consulted when the company's discount policy is APPROVE and the
+             * line's discount exceeds the ceiling; the server re-verifies the named user's authority.
+             * Existing clients omit it and are unaffected — the policy ships OFF.
+             */
+            @Size(max = 26) String discountAuthorisedByUid
+    ) {
+
+        /** Back-compat: a till line with no manager authorisation attached. */
+        public LineItem(Long productId, Long unitId, BigDecimal quantity,
+                        BigDecimal unitPrice, BigDecimal lineDiscountAmount) {
+            this(productId, unitId, quantity, unitPrice, lineDiscountAmount, null);
+        }
+    }
 
     /**
      * A single POS tender (ADR-0042 D-3). The optional instrument fields mirror

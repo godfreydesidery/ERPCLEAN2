@@ -3,6 +3,7 @@ package com.erp.modules.sales.service;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,7 +49,7 @@ class NegativeStockGuardTest {
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         new BigDecimal("5"), BigDecimal.ZERO, new BigDecimal("5")));
 
@@ -73,7 +74,7 @@ class NegativeStockGuardTest {
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
         // Legacy overselling from before this guard existed — on-hand already negative.
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         new BigDecimal("-2240.000000"), BigDecimal.ZERO, new BigDecimal("-2240.000000")));
 
@@ -92,7 +93,7 @@ class NegativeStockGuardTest {
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         new BigDecimal("2.500000"), BigDecimal.ZERO, new BigDecimal("2.500000")));
 
@@ -111,7 +112,7 @@ class NegativeStockGuardTest {
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         new BigDecimal("10"), new BigDecimal("2"), new BigDecimal("8")));
 
@@ -120,16 +121,66 @@ class NegativeStockGuardTest {
     }
 
     @Test
-    void allowsOverdraftWhenSettingIsOn() {
+    void allowsOverdraftWhenSettingIsOn_butStillTakesTheReservation() {
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(true)));
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("5"), BigDecimal.ZERO, new BigDecimal("5")));
 
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
                 "Widget", new BigDecimal("1000"));
 
-        // Setting is on — never even needs to read availability.
+        // Backorder is allowed, so nothing is blocked — but the claim is STILL taken. The release
+        // side (SaleIssueStockHandler) has no visibility of this sales setting and releases every
+        // issued line unconditionally; reserving conditionally here would make its release steal a
+        // concurrent sale's claim, and a setting flipped between finalise and dispatch would
+        // permanently strand one.
+        verify(stock).reserve(COMPANY_ID, BRANCH_ID, PRODUCT_ID, new BigDecimal("1000"), null);
+    }
+
+    @Test
+    void takesTheReservationInTheSameStepAsTheCheck_notAPlainRead() {
+        // THE fix for the oversell race. The quantity is not deducted until the outbox poller runs
+        // the stock handler ~1s later, so a guard that only READ availability let every sale started
+        // inside that window pass: 198 on hand, blocking on, eight sales of 30 — eight acceptances
+        // and −42 on hand. The guard must claim what it just checked, under the same row lock, in
+        // this transaction. Reading without claiming is the defect, so this test pins the write.
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(settingsRow(false)));
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("198"), BigDecimal.ZERO, new BigDecimal("198")));
+
+        guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("30"));
+
+        verify(stock).reserve(COMPANY_ID, BRANCH_ID, PRODUCT_ID, new BigDecimal("30"), null);
         verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    void secondSaleInsideTheAsyncDeductionWindowIsRefused_becauseTheFirstReservedItsUnits() {
+        // Two tills, 198 on hand, 30 each, and NO stock movement yet — the deduction is still on the
+        // outbox. The second caller's reserve() answers with the first caller's claim already
+        // applied (that is what the row lock in StockReservationServiceImpl guarantees), so a big
+        // enough second sale is refused instead of quietly overselling.
+        when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(settingsRow(false)));
+        // quantity still 198 (nothing issued yet); 180 already reserved by six earlier sales.
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
+                .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
+                        new BigDecimal("198"), new BigDecimal("180"), new BigDecimal("18")));
+
+        assertThatThrownBy(() -> guard.assertAvailable(
+                COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
+                "Widget", new BigDecimal("30")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("18 available")
+                .hasMessageContaining("30 requested");
     }
 
     @Test
@@ -141,7 +192,7 @@ class NegativeStockGuardTest {
         // company that had never opened the screen oversell while being told it was protected.
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.empty());
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
 
@@ -152,7 +203,7 @@ class NegativeStockGuardTest {
                 .hasMessageContaining("Not enough stock of Widget");
 
         // Availability IS read — the guard no longer short-circuits on a missing row.
-        verify(stock).getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID);
+        verify(stock).reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any());
     }
 
     @Test
@@ -160,7 +211,7 @@ class NegativeStockGuardTest {
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, false,
                 "Consulting Service", new BigDecimal("1000"));
 
-        verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
+        verify(stock, never()).reserve(anyLong(), anyLong(), anyLong(), any(), any());
         verify(settings, never()).findByCompanyId(any());
     }
 
@@ -179,7 +230,7 @@ class NegativeStockGuardTest {
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
                 "Bundle Kit", new BigDecimal("1000"));
 
-        verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
+        verify(stock, never()).reserve(anyLong(), anyLong(), anyLong(), any(), any());
         verify(settings, never()).findByCompanyId(any());
     }
 
@@ -193,7 +244,7 @@ class NegativeStockGuardTest {
         when(explosion.shouldExplodeAtIssue(PRODUCT_UID, true)).thenReturn(false);
         when(settings.findByCompanyId(COMPANY_ID))
                 .thenReturn(Optional.of(settingsRow(false)));
-        when(stock.getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID))
+        when(stock.reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any()))
                 .thenReturn(new StockAvailabilityDto(COMPANY_ID, BRANCH_ID, PRODUCT_ID,
                         new BigDecimal("2"), BigDecimal.ZERO, new BigDecimal("2")));
 
@@ -205,7 +256,7 @@ class NegativeStockGuardTest {
                 .hasMessageContaining("2 available")
                 .hasMessageContaining("6 requested");
 
-        verify(stock).getAvailability(COMPANY_ID, BRANCH_ID, PRODUCT_ID);
+        verify(stock).reserve(eq(COMPANY_ID), eq(BRANCH_ID), eq(PRODUCT_ID), any(), any());
     }
 
     @Test
@@ -215,7 +266,7 @@ class NegativeStockGuardTest {
         guard.assertAvailable(COMPANY_ID, BRANCH_ID, PRODUCT_ID, PRODUCT_UID, true,
                 "Widget", BigDecimal.ZERO);
 
-        verify(stock, never()).getAvailability(anyLong(), anyLong(), anyLong());
+        verify(stock, never()).reserve(anyLong(), anyLong(), anyLong(), any(), any());
     }
 
     // -------------------------------------------------------------------------

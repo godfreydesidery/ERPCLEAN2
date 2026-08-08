@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
 import { formatReportAddress, ReportCompanyHeaderDto } from '../models/report-company-header.model';
 import { ExportFormat } from '../reporting/models/reporting.model';
@@ -20,7 +21,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-stock-report',
-  imports: [DatePipe],
+  imports: [DatePipe, RouterLink],
   templateUrl: './stock-report.component.html',
   styleUrl: './stock-report.component.scss',
 })
@@ -80,10 +81,19 @@ export class StockReportComponent implements OnInit {
       : '0.00';
   }
 
+  /**
+   * Quantity, in the product's BASE unit.
+   *
+   * K4: this used to round to 0 decimal places, so under a carton base unit 20 loose pieces
+   * (0.4166… cartons) printed as "0" and the shop read it as out of stock. Up to 3 dp now — whole
+   * numbers still print clean ("120", not "120.000"), and a fractional holding can no longer
+   * disappear. 3 dp is the same precision the backend export uses for the movement report, so a
+   * printed page and this screen agree.
+   */
   fmtQty(v: number | string | null | undefined): string {
     const n = +(v ?? 0);
     return Number.isFinite(n)
-      ? n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      ? n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })
       : '0';
   }
 

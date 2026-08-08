@@ -118,6 +118,71 @@ export class ProductDetailComponent {
   readonly bulkPackFormError = signal<string | null>(null);
   readonly rowBusyBulkPackId = signal<string | null>(null);
 
+  // ── Pack-factor guardrails (K4) ────────────────────────────────────────────
+  // The factor is the single number that decides how a purchase in cartons is valued and how a sale
+  // in cartons is taken out of stock. Entered upside-down (1/12 instead of 12) it silently mis-values
+  // every receipt of that product, so this screen states the direction in words, shows the result
+  // back, and questions anything below 1 — without ever blocking, because a 0.5 kg pack of a
+  // kg-based product is perfectly legitimate.
+
+  /** The product's base unit as a human label — the unit the factor must be expressed IN. */
+  readonly baseUnitLabel = computed(() => {
+    const unit = this.selectedBaseUnit();
+    if (unit) return unit.name || unit.code;
+    return this.product()?.baseUnitName || this.product()?.baseUnitCode || 'base unit';
+  });
+
+  /** The pack unit currently chosen in the add-pack form. */
+  readonly newBulkPackUnit = computed(() =>
+    this.companyUnits().find((u) => u.uid === this.newBulkPackUnitUid()),
+  );
+  readonly newBulkPackUnitLabel = computed(() => {
+    const unit = this.newBulkPackUnit();
+    return unit ? unit.name || unit.code : 'pack';
+  });
+
+  /** The typed factor as a number, or null when it is blank or not a number at all. */
+  readonly newBulkPackFactorValue = computed<number | null>(() => {
+    const raw = String(this.newBulkPackFactor() ?? '').trim();
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  });
+
+  /** Something was typed but it is not a usable positive number. */
+  readonly bulkPackFactorInvalid = computed(() => {
+    const raw = String(this.newBulkPackFactor() ?? '').trim();
+    if (!raw) return false;
+    const value = this.newBulkPackFactorValue();
+    return value === null || value <= 0;
+  });
+
+  /** SOFT warning only: a pack smaller than the base unit is unusual but legal (e.g. a 0.5 kg bag). */
+  readonly bulkPackFactorBelowOne = computed(() => {
+    const value = this.newBulkPackFactorValue();
+    return value !== null && value > 0 && value < 1;
+  });
+
+  /** "1 Carton = 12 Pieces" — the entered factor read back in words so a reversed entry is obvious. */
+  readonly bulkPackSizeInWords = computed(() => {
+    const value = this.newBulkPackFactorValue();
+    if (value === null || value <= 0) return '';
+    return `1 ${this.newBulkPackUnitLabel()} = ${this.trimNumber(value)} ${this.baseUnitLabel()}`;
+  });
+
+  // ── Base-unit change guard (K4) ────────────────────────────────────────────
+  /** The base unit the product was loaded with — the yardstick every stored quantity/cost is in. */
+  private readonly loadedBaseUnitUid = signal('');
+  readonly loadedBaseUnitLabel = computed(() => {
+    const unit = this.companyUnits().find((u) => u.uid === this.loadedBaseUnitUid());
+    if (unit) return unit.name || unit.code;
+    return this.product()?.baseUnitName || this.product()?.baseUnitCode || 'the previous unit';
+  });
+  /** True once the user has moved the base-unit picker off the product's saved base unit. */
+  readonly baseUnitChanged = computed(
+    () => !!this.loadedBaseUnitUid() && this.fBaseUnitUid() !== this.loadedBaseUnitUid(),
+  );
+
   // ── Prices ────────────────────────────────────────────────────────────────
   readonly prices = signal<ProductPriceDto[]>([]);
   readonly pricesState = signal<LoadState>('loading');
@@ -290,6 +355,7 @@ export class ProductDetailComponent {
     this.fSellable.set(p.sellable);
     this.fStockable.set(p.stockable);
     this.fBaseUnitUid.set(p.baseUnitUid ?? '');
+    this.loadedBaseUnitUid.set(p.baseUnitUid ?? '');
     this.fCostAmount.set(p.cost?.amount ?? '');
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
     this.fVatStatus.set(p.vatStatus ?? 'STANDARD');
@@ -389,9 +455,21 @@ export class ProductDetailComponent {
 
   addBulkPack(): void {
     const unitUid = this.newBulkPackUnitUid();
-    const factor = this.newBulkPackFactor().trim();
-    if (!unitUid || !factor) {
-      this.bulkPackFormError.set('Unit and factor are required.');
+    // ngModel on a type="number" input hands back a JS number (or null) — coerce before trimming.
+    const factor = String(this.newBulkPackFactor() ?? '').trim();
+    if (!unitUid) {
+      this.bulkPackFormError.set('Choose the pack unit first.');
+      return;
+    }
+    if (!factor) {
+      this.bulkPackFormError.set(
+        `Enter how many ${this.baseUnitLabel()} make one ${this.newBulkPackUnitLabel()}.`,
+      );
+      return;
+    }
+    const factorValue = Number(factor);
+    if (!Number.isFinite(factorValue) || factorValue <= 0) {
+      this.bulkPackFormError.set('The pack size must be a number greater than zero.');
       return;
     }
     this.addingBulkPack.set(true);
@@ -704,6 +782,8 @@ export class ProductDetailComponent {
     this.productService.update(this.uid(), request).subscribe({
       next: (updated) => {
         this.product.set(updated);
+        // The saved base unit is the new yardstick — the "you changed it" notice has done its job.
+        this.loadedBaseUnitUid.set(updated.baseUnitUid ?? baseUnitUid);
         this.saving.set(false);
         this.alerts.success('Product saved', updated.name);
       },
@@ -792,5 +872,10 @@ export class ProductDetailComponent {
       if (errors?.length) return errors[0];
     }
     return fallback;
+  }
+
+  /** 12 → "12", 0.5 → "0.5" — a number written the way a person would write it. */
+  private trimNumber(value: number): string {
+    return String(Number(value.toFixed(6)));
   }
 }

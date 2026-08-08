@@ -22,11 +22,31 @@ class SaleService {
     return SalesInvoice.fromJson(asMap(data));
   }
 
-  /// Reverses (voids) a whole POS sale while its session is still OPEN
-  /// (`POS.SALE.VOID`). Reverses revenue/VAT/cash + stock server-side.
-  Future<void> reverse(String invoiceUid, String reason) async {
-    await _api.post('/pos/sales/uid/$invoiceUid/reverse',
-        body: {'reason': reason});
+  /// Asks what became of the sale sent under [idempotencyKey] (K11).
+  ///
+  /// This is a READ. It never posts, never re-runs a business guard and stays
+  /// valid after the session closes — so it can give the unfinished-sale prompt
+  /// a terminal answer instead of another question.
+  Future<PosSaleLookup> lookupByIdempotencyKey(String idempotencyKey) async {
+    final data = await _api.get('/pos/sales/idempotency/$idempotencyKey');
+    return PosSaleLookup.fromJson(asMap(data));
+  }
+
+  /// Reverses (voids) a whole POS sale while its session is still OPEN.
+  /// Reverses revenue/VAT/cash + stock server-side.
+  ///
+  /// [authorisedByUid] is the uid a successful manager step-up returned. It is
+  /// not decoration and it is not optional in practice: the server re-resolves
+  /// it and refuses the refund unless it names a real, active user — someone
+  /// OTHER than the cashier — who genuinely holds `SALES.INVOICE.VOID` in this
+  /// invoice's company. Send null only when the signed-in user holds that
+  /// authority themselves, in which case there is nobody to escalate to.
+  Future<void> reverse(String invoiceUid, String reason,
+      {String? authorisedByUid}) async {
+    await _api.post('/pos/sales/uid/$invoiceUid/reverse', body: {
+      'reason': reason,
+      'authorisedByUid': ?authorisedByUid,
+    });
   }
 
   // ----------------------------------------------------------------- receipt reads

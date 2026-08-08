@@ -142,6 +142,55 @@
                     </span>
                   </div>
 
+                  <!--
+                    Discount policy (K7). The stance and its ceiling are ONE policy: both are sent on
+                    every save, because the server applies them together and refuses a ceiling on its
+                    own. The percent box appears only once a stance is chosen — under "No limit" the
+                    number is ignored entirely, and showing an input that does nothing invites the
+                    reading that it does something.
+                  -->
+                  <div class="mb-3">
+                    <label class="form-label small text-muted mb-1" for="discountApprovalAction">
+                      Discounts above a limit
+                    </label>
+                    <select id="discountApprovalAction" name="discountApprovalAction"
+                            class="form-select"
+                            style="max-width:320px"
+                            aria-describedby="discountApprovalHint"
+                            [ngModel]="fDiscountApprovalAction()"
+                            (ngModelChange)="fDiscountApprovalAction.set($event)"
+                            [disabled]="saving() || !canEdit()">
+                      @for (opt of discountOptions; track opt.value) {
+                        <option [value]="opt.value">{{ opt.label }}</option>
+                      }
+                    </select>
+                    <span class="hint" id="discountApprovalHint">
+                      What happens when a salesperson takes more off a line than the limit below.
+                      {{ discountHint() }}
+                    </span>
+                  </div>
+
+                  @if (discountCeilingApplies()) {
+                    <div class="mb-3">
+                      <label class="form-label small text-muted mb-1" for="maxDiscountPercent">
+                        Discount a salesperson may give (%)
+                      </label>
+                      <input id="maxDiscountPercent" name="maxDiscountPercent" type="number"
+                             class="form-control"
+                             style="max-width:320px"
+                             placeholder="e.g. 10"
+                             inputmode="decimal"
+                             min="0" max="100" step="0.01"
+                             aria-describedby="maxDiscountHint"
+                             [ngModel]="fMaxDiscountPercent()"
+                             (ngModelChange)="fMaxDiscountPercent.set(String($event ?? ''))"
+                             [disabled]="saving() || !canEdit()" />
+                      <span class="hint" id="maxDiscountHint">
+                        {{ discountCeilingHint() }} Up to two decimal places, 0 to 100.
+                      </span>
+                    </div>
+                  }
+
                   @if (saveError(); as msg) {
                     <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
                   }

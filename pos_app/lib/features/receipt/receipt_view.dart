@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/context.dart';
@@ -14,6 +15,7 @@ import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
+import '../auth/approval_dialog.dart';
 import 'receipt_text.dart';
 
 /// Shows a printed-style receipt built from the finalised invoice (the receipt
@@ -63,12 +65,21 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
   bool _reversed = false;
   bool _printing = false;
 
+  /// Who approved the reversal, for the on-screen stamp. Display only — the
+  /// authoritative record is the server's audit row.
+  String? _reversedBy;
+
   Receipt get r => widget.receipt;
 
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appControllerProvider);
-    final canReverse = app.can(Perms.saleVoid) &&
+    // Mirror of the endpoint's gate: POS.SALE.VOID (a cashier, who then needs a
+    // manager) OR SALES.INVOICE.VOID (a supervisor, who does not). Showing only
+    // the first would hide the button from exactly the person the refund policy
+    // sends the cashier to find.
+    final canReverse = (app.can(Perms.saleVoid) ||
+            app.can(stepUpRuleFor(GatedAction.saleReverse).permissionCode)) &&
         (app.shift?.status.isOpen ?? false) &&
         !_reversed &&
         !r.invoice.status.isVoid;
@@ -238,6 +249,10 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                 child: Text('\n*** REVERSED ***',
                     style: mono.copyWith(
                         color: AppColors.danger, fontWeight: FontWeight.w800))),
+          if (_reversedBy != null)
+            Center(
+                child: Text('Approved by $_reversedBy',
+                    style: mono.copyWith(color: const Color(0xFF64748B)))),
         ],
       ),
     );
@@ -307,6 +322,29 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
     }
   }
 
+  /// Reverses the sale: reason, then a **manager step-up**, then the call.
+  ///
+  /// A refund is money out of the drawer against a receipt that already exists,
+  /// so it is the textbook shrinkage route and cannot rest on the cashier's own
+  /// authority. The step-up asks for `SALES.INVOICE.VOID` specifically because
+  /// the CASHIER bundle does NOT hold it — gating on `POS.SALE.VOID`, which
+  /// cashiers do hold, would have let a cashier approve their own refund by
+  /// retyping their own password, which is a control in appearance only.
+  ///
+  /// The verification issues no token: the till stays signed in as the cashier
+  /// throughout, so the manager walks away and the queue keeps moving.
+  ///
+  /// **The approver's uid is sent with the reversal.** Without that, everything
+  /// above was theatre: the password prompt lived entirely in this app, so curl,
+  /// a script or a second client reached the same endpoint with no manager
+  /// anywhere near it. The server re-resolves the uid and refuses the refund
+  /// unless it names a real, active, DIFFERENT user who genuinely holds
+  /// `SALES.INVOICE.VOID` in this invoice's company — so a fabricated uid buys
+  /// nothing, and the name lands in the audit trail either way.
+  ///
+  /// A supervisor who is signed in at the till themselves is not asked to find a
+  /// second supervisor: they already are the authority, and the server accepts
+  /// the reversal with no `authorisedByUid` at all.
   Future<void> _reverse() async {
     final reasonCtrl = TextEditingController();
     final ok = await showDialog<bool>(
@@ -319,7 +357,8 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
           children: [
             const Text(
                 'This voids the whole sale and reverses revenue, VAT, cash and '
-                'stock. Allowed while the session is open.'),
+                'stock. Allowed while the session is open, and it needs a '
+                'manager.'),
             const SizedBox(height: 12),
             OrbixField(
                 label: 'Reason', controller: reasonCtrl, autofocus: true),
@@ -330,22 +369,66 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel')),
           OrbixButton(
-              label: 'Reverse',
+              label: 'Continue',
               kind: BtnKind.danger,
               onPressed: () => Navigator.pop(context, true)),
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true) {
+      reasonCtrl.dispose();
+      return;
+    }
     final reason = reasonCtrl.text.trim().isEmpty
         ? 'POS reversal'
         : reasonCtrl.text.trim();
+    reasonCtrl.dispose();
+    if (!mounted) return;
+
+    // A supervisor signed in at the till IS the authority the step-up looks for.
+    // Prompting them for a second manager's password would deadlock a one-manager
+    // shop — and, since nobody may approve themselves, retyping their own
+    // password now correctly fails. Skip straight to the reversal; the server
+    // reaches the same conclusion independently.
+    final selfAuthorised = ref
+        .read(appControllerProvider)
+        .can(stepUpRuleFor(GatedAction.saleReverse).permissionCode);
+
+    String? approvedByUid;
+    String? approverLabel;
+    if (!selfAuthorised) {
+      final outcome = await approveIfRequired(
+        context,
+        ref,
+        action: GatedAction.saleReverse,
+        detail: 'Receipt ${r.invoice.invoiceNumber} — '
+            '${formatMoneyParts(r.invoice.grossTotalAmount, r.invoice.currency)}',
+        correlationId: r.invoice.uid,
+      );
+      if (!outcome.allowed) {
+        if (mounted) showToast(context, 'Not approved — the sale stands.');
+        return;
+      }
+      approvedByUid = outcome.approval?.authoriserUid;
+      approverLabel = outcome.approverLabel;
+    }
+    if (!mounted) return;
+
     try {
-      await ref.read(saleServiceProvider).reverse(r.invoice.uid, reason);
+      await ref.read(saleServiceProvider).reverse(r.invoice.uid, reason,
+          authorisedByUid: approvedByUid);
       // Reconcile the local journal so an offline reprint reflects the reversal.
       await ref.read(receiptJournalProvider).markReversed(r.invoice.uid);
-      setState(() => _reversed = true);
-      if (mounted) showToast(context, 'Sale reversed.', ok: true);
+      final by = approverLabel;
+      setState(() {
+        _reversed = true;
+        _reversedBy = by;
+      });
+      if (mounted) {
+        showToast(context,
+            by == null ? 'Sale reversed.' : 'Sale reversed — approved by $by.',
+            ok: true);
+      }
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.message);
     }

@@ -45,9 +45,18 @@ import org.springframework.transaction.annotation.Transactional;
  *       negative with the setting on. Both sides now use the same predicate.</li>
  * </ul>
  *
- * <p>Availability = {@code stock_on_hand.quantity − reserved_qty} at the branch default location
- * (ADR-0021 D-5 formula), read via {@link StockReservationService#getAvailability} — a cross-module
- * DTO read, not an entity import (module-boundary rule).
+ * <p>Availability = {@code stock_on_hand.quantity − reserved_qty} across the branch (ADR-0021 D-5
+ * formula), obtained via {@link StockReservationService#reserve} — a cross-module DTO call, not an
+ * entity import (module-boundary rule).
+ *
+ * <p><b>Check and claim are one step.</b> {@code reserve} locks the branch reservation row, reads
+ * availability under that lock and adds the requested quantity to {@code reserved_qty}, all inside
+ * this transaction. Merely reading availability was not enough: the deduction itself is asynchronous
+ * (the outbox poller runs {@code SaleIssueStockHandler} about a second after finalise commits), so
+ * concurrent sales all read the same pre-sale quantity and all passed — with 198 on hand and
+ * blocking switched on, eight back-to-back sales of 30 units were every one of them accepted and
+ * on-hand finished at −42. The claim is released by the stock handler in the same transaction that
+ * posts the movement, so quantity falls and the claim lifts together.
  */
 @Component
 public class NegativeStockGuard {
@@ -88,6 +97,20 @@ public class NegativeStockGuard {
             return;
         }
 
+        // Claim the quantity before deciding, in this transaction and behind the on-hand row lock
+        // (see StockReservationService#reserve). Reading availability without claiming it made the
+        // block trivially defeatable by ordinary speed: the deduction happens asynchronously about a
+        // second later, so every sale started inside that window read the same pre-sale quantity and
+        // every one of them passed — 198 on hand, blocking on, eight tills selling 30 each, eight
+        // acceptances, −42 on hand and not one refusal. The claim is released by the stock handler in
+        // the same transaction that finally posts the movement, so the two are never visible apart.
+        //
+        // The reservation is taken even when the company allows backorder, so that the release side
+        // never has to know which way the setting stood when the sale was made — the handler releases
+        // unconditionally, and a setting flipped between finalise and dispatch cannot strand a claim.
+        StockAvailabilityDto avail = stock.reserve(
+                companyId, branchId, productId, qtyRequestedBase, null /* actorId — system claim */);
+
         boolean allowNegative = settings.findByCompanyId(companyId)
                 .map(SalesSettings::isAllowNegativeStock)
                 // No Sales Settings row → BLOCK (fail-safe). A row is now provisioned by
@@ -103,7 +126,8 @@ public class NegativeStockGuard {
             return;
         }
 
-        StockAvailabilityDto avail = stock.getAvailability(companyId, branchId, productId);
+        // Throwing rolls the caller's whole transaction back, and the reservation taken above goes
+        // with it — nothing to unwind by hand, and a rejected sale leaves no claim behind.
         if (qtyRequestedBase.compareTo(avail.availableQty()) > 0) {
             // Busy-day-sim bugfix: a non-positive on-hand (common once a company has been
             // overselling from before this guard existed) used to print a raw 6dp negative like

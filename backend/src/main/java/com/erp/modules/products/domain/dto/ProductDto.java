@@ -7,6 +7,7 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Full response DTO for a Product (ADR-0007 D-12).
@@ -15,6 +16,10 @@ import java.math.BigDecimal;
  * how ProductPriceDto carries priceList code/name.
  * vatStatus added in V5 (ADR-0008 D-5a).
  * D-10 planning/sourcing fields added in ADR-0040.
+ *
+ * <p>{@code warnings} carries SOFT advisory messages raised by the write that produced this
+ * response (e.g. a base-unit change that silently re-interprets existing stock and cost). The save
+ * still happened — these are signals, not refusals. Always empty on read paths.
  */
 public record ProductDto(
         Long id,
@@ -62,8 +67,47 @@ public record ProductDto(
         boolean weighed,
         BigDecimal tareWeight,
         BigDecimal scaleStep,
-        BigDecimal maxSaleWeight
+        BigDecimal maxSaleWeight,
+        // Soft advisories from the write that produced this response; empty on reads.
+        List<String> warnings
 ) {
+
+    /**
+     * Backward-compatible constructor for the pre-{@code warnings} shape — every existing caller
+     * (and the stock module's test fixtures) keeps compiling and gets no warnings.
+     */
+    public ProductDto(
+            Long id, String uid, Long companyId, String code, String name, String description,
+            ProductType type, boolean sellable, boolean stockable, boolean lotTracked,
+            boolean serialTracked, boolean expiryTracked, String baseUnitUid, String baseUnitCode,
+            String baseUnitName, MoneyDto cost, VatStatus vatStatus, MasterStatus status,
+            String brand, String manufacturer, BigDecimal weight, BigDecimal volume,
+            String dimensions, String hsCode, Long version, String createdAt, Long createdBy,
+            String updatedAt, Long updatedBy, BigDecimal reorderLevel, BigDecimal reorderQty,
+            BigDecimal safetyStock, BigDecimal minStock, BigDecimal maxStock, Integer leadTimeDays,
+            boolean purchasable, Long preferredSupplierId, RestrictedKind restrictedKind,
+            boolean weighed, BigDecimal tareWeight, BigDecimal scaleStep, BigDecimal maxSaleWeight) {
+        this(id, uid, companyId, code, name, description, type, sellable, stockable, lotTracked,
+                serialTracked, expiryTracked, baseUnitUid, baseUnitCode, baseUnitName, cost,
+                vatStatus, status, brand, manufacturer, weight, volume, dimensions, hsCode, version,
+                createdAt, createdBy, updatedAt, updatedBy, reorderLevel, reorderQty, safetyStock,
+                minStock, maxStock, leadTimeDays, purchasable, preferredSupplierId, restrictedKind,
+                weighed, tareWeight, scaleStep, maxSaleWeight, List.of());
+    }
+
+    /** Same product, with soft advisories attached (write paths only). */
+    public ProductDto withWarnings(List<String> warnings) {
+        if (warnings == null || warnings.isEmpty()) {
+            return this;
+        }
+        return new ProductDto(id, uid, companyId, code, name, description, type, sellable,
+                stockable, lotTracked, serialTracked, expiryTracked, baseUnitUid, baseUnitCode,
+                baseUnitName, cost, vatStatus, status, brand, manufacturer, weight, volume,
+                dimensions, hsCode, version, createdAt, createdBy, updatedAt, updatedBy,
+                reorderLevel, reorderQty, safetyStock, minStock, maxStock, leadTimeDays,
+                purchasable, preferredSupplierId, restrictedKind, weighed, tareWeight, scaleStep,
+                maxSaleWeight, List.copyOf(warnings));
+    }
 
     public static ProductDto from(Product p) {
         return new ProductDto(

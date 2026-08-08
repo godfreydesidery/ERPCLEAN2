@@ -3,6 +3,7 @@ package com.erp.modules.purchases.domain.entity;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PoBillingStatus;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
@@ -49,6 +50,15 @@ public class PurchaseOrder extends UidEntity {
     @Column(name = "status", nullable = false, length = 25)
     @Setter
     private PurchaseOrderStatus status = PurchaseOrderStatus.DRAFT;
+
+    /**
+     * How this order came into existence (V96, K3). Set-once at construction to
+     * {@link PurchaseOrderOrigin#MANUAL}; only {@link #markSynthesisedByDirectReceipt()} moves it.
+     * Deliberately has NO setter — provenance is not an editable field.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin", nullable = false, length = 16)
+    private PurchaseOrderOrigin origin = PurchaseOrderOrigin.MANUAL;
 
     /** FK → suppliers.id; scalar (ADR-0011 D-1). */
     @Column(name = "supplier_id", nullable = false)
@@ -193,5 +203,15 @@ public class PurchaseOrder extends UidEntity {
         this.supplierName = supplierName;
         this.currency     = CurrencyCode.ofNullable(currency);
         this.createdBy    = createdBy;
+    }
+
+    /**
+     * Stamps this order as one the direct-receipt service synthesised to anchor a receipt that had
+     * no prior LPO (K3). One-way and idempotent: a manually-raised order can be relabelled only by
+     * the code path that creates it, and nothing can turn a synthesised order back into a manual one.
+     * Called by {@code PurchaseOrderServiceImpl} at create time, before the order is placed.
+     */
+    public void markSynthesisedByDirectReceipt() {
+        this.origin = PurchaseOrderOrigin.DIRECT_RECEIPT;
     }
 }
