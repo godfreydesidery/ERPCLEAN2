@@ -33,6 +33,44 @@ class PosTender {
       };
 }
 
+/// `GET /pos/sales/idempotency/{key}` — the definitive answer to "did the sale
+/// I sent under this reference actually post?" (K11).
+///
+/// Cheap and read-only: it consults the idempotency marker alone, runs no
+/// business guard and touches neither the session nor stock, so it still
+/// answers correctly long after the shift was closed. That is precisely what
+/// the old "replay the whole sale" recovery could not do — days later it
+/// answered "the session is closed", which is not an answer, so the unfinished
+/// sale question could never be closed out.
+class PosSaleLookup {
+  const PosSaleLookup({
+    required this.idempotencyKey,
+    required this.verdict,
+    required this.message,
+    this.invoiceUid,
+    this.invoiceNumber,
+    this.grossTotalAmount,
+  });
+
+  final String idempotencyKey;
+  final PosSaleLookupVerdict verdict;
+  final String message;
+
+  /// Populated only when [verdict] is POSTED.
+  final String? invoiceUid;
+  final String? invoiceNumber;
+  final double? grossTotalAmount;
+
+  factory PosSaleLookup.fromJson(Map<String, dynamic> j) => PosSaleLookup(
+        idempotencyKey: asStrOr(j['idempotencyKey']),
+        verdict: PosSaleLookupVerdict.fromWire(asStr(j['verdict'])),
+        message: asStrOr(j['message']),
+        invoiceUid: asStr(j['invoiceUid']),
+        invoiceNumber: asStr(j['invoiceNumber']),
+        grossTotalAmount: asNum(j['grossTotalAmount']),
+      );
+}
+
 /// The finalised invoice header returned by `POST /pos/sales` — the **receipt of
 /// record** (AS-8). All money is server-authoritative.
 class SalesInvoice {

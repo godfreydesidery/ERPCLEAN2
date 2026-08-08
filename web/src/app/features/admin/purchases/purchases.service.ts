@@ -8,6 +8,7 @@ import {
   AddPurchaseOrderLineRequest,
   CreateGoodsReceiptRequest,
   CreatePurchaseOrderRequest,
+  DirectGoodsReceiptRequest,
   GoodsReceiptDto,
   PurchaseOrderDto,
   PurchaseOrderLineDto,
@@ -56,12 +57,18 @@ export class PurchasesService {
 
   // ── Purchase Orders — list / get ─────────────────────────────────────────────
 
+  /**
+   * @param includeDirectReceipts opt-in (V96, K3). The backend defaults this to `false`, hiding the
+   *   orders synthesised to anchor a goods receipt with no LPO — they are already fully received
+   *   and would otherwise swamp the buyer's list one row per delivery.
+   */
   listOrders(
     companyId: string,
     q?: string,
     status?: string,
     page = 0,
     size = 20,
+    includeDirectReceipts = false,
   ): Observable<PurchaseOrderPage> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -69,6 +76,7 @@ export class PurchasesService {
       .set('size', String(size));
     if (q?.trim()) params = params.set('q', q.trim());
     if (status?.trim()) params = params.set('status', status.trim());
+    if (includeDirectReceipts) params = params.set('includeDirectReceipts', 'true');
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
@@ -187,6 +195,17 @@ export class PurchasesService {
     // The create screen renders its own inline over-receipt (409) banner, so silence the global
     // error notification for this call — the user sees one calm message, not a duplicate toast.
     return this.http.post<GoodsReceiptDto>(this.grBase, request, {
+      context: new HttpContext().set(SILENT_ERROR, true),
+    });
+  }
+
+  /**
+   * Receive stock that arrived with no purchase order (PURCHASE.RECEIVE.DIRECT, K3).
+   * SILENT_ERROR for the same reason as {@link createReceipt}: the screen renders the server's
+   * message inline, so a global toast would just say it twice.
+   */
+  receiveDirect(request: DirectGoodsReceiptRequest): Observable<GoodsReceiptDto> {
+    return this.http.post<GoodsReceiptDto>(`${this.grBase}/direct`, request, {
       context: new HttpContext().set(SILENT_ERROR, true),
     });
   }

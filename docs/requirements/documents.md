@@ -102,7 +102,8 @@ or a delivery note, and a procure-to-pay flow that cannot produce a PO PDF, are 
    - **AR_STATEMENT** — a customer statement (open items + ageing) — **reuses the existing statement
      render pipeline**, lifted to the platform service.
    - **PURCHASE_ORDER** — a `PO-####` with supplier + line table + totals, for sending to the supplier.
-   - **GOODS_RECEIPT** — a `GRN`/goods-receipt note (received lines + quantities).
+   - **GOODS_RECEIPT** — a `GRN`/goods-receipt note (received lines + quantities **+ unit cost, line
+     value and a receipt total** — amended 2026-08-08, Kilimanjaro K2; see BR-DOC-07).
    - **DELIVERY_NOTE** — a `DEL-####` delivery document (delivered lines + quantities; **no prices** —
      it is a shipment document, matching ADR-0021 D-7 where the delivery line carries no pricing).
    - **CREDIT_NOTE** — an AR credit note (`CN-####`) reversing revenue/VAT, with reason.
@@ -223,7 +224,18 @@ or a delivery note, and a procure-to-pay flow that cannot produce a PO PDF, are 
   fails for lack of branding.
 - **BR-DOC-07** — The **delivery note carries no monetary values** (it is a shipment document — ADR-0021
   D-7); the **purchase order** and **invoice** carry full pricing/totals; the **GRN** carries received
-  quantities (cost is internal — not printed for the supplier copy in v1).
+  quantities ~~(cost is internal — not printed for the supplier copy in v1)~~.
+  **[Amended 2026-08-08 (Kilimanjaro K2) — the GRN clause is superseded: the GRN now prints the
+  per-line unit cost, the line value and a receipt-level total.** The original rule modelled the GRN as
+  a *supplier* copy. In practice it is the **internal receiving document**: the storekeeper checks the
+  delivery against it and the accounts clerk three-way-matches the supplier bill against it, and a GRN
+  with no values cannot be checked against anything — the client was pricing receipts by hand off a
+  separate spreadsheet. Cost is not confidential to the party that quoted it. Implemented in
+  `DocumentModelBuilder.buildGoodsReceipt` (unit cost + line value copied from the persisted
+  `goods_receipt_lines` columns) plus a `receiptTotalAmount` **computed in the purchases service** and
+  carried on `GoodsReceiptDto` — the documents module still derives nothing (BR-DOC-02 / BR-DOC-09
+  unchanged). **The delivery-note clause is NOT amended and stays absolute** — it shares the same
+  builder/renderer pair, so the change is scoped to the GRN builder only.**]**
 - **BR-DOC-08** — `generated_documents` is an **append-only log** (no update, no delete of a render
   record); a re-render appends. (Soft-delete / archival of the log is a deferred retention concern.)
 - **BR-DOC-09** — Money on documents is formatted in the document/source **currency** (base currency TZS

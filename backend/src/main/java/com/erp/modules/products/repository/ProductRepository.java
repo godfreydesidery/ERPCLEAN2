@@ -1,6 +1,8 @@
 package com.erp.modules.products.repository;
 
 import com.erp.modules.products.domain.entity.Product;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +18,21 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     /** Tenant-scoped id lookup — returns empty when the product exists but belongs to a different company. */
     Optional<Product> findByCompanyIdAndId(Long companyId, Long id);
+
+    /**
+     * Tenant-scoped BATCH uid lookup — the whole point of the batch price read (a POS search page
+     * asks for up to ~60 products in one request, not 60 requests). The company predicate is applied
+     * in the DB, so a foreign-company uid simply does not come back; the caller never sees it and
+     * cannot tell it apart from a uid that does not exist.
+     *
+     * <p>{@code JOIN FETCH} on the base unit because every returned row is priced in (and labelled
+     * with) its base unit when the request names no unit — without the fetch that is one extra
+     * lazy-load query per product.
+     */
+    @Query("SELECT p FROM Product p JOIN FETCH p.baseUnit "
+            + "WHERE p.companyId = :companyId AND p.uid IN :uids")
+    List<Product> findByCompanyIdAndUidIn(@Param("companyId") Long companyId,
+                                          @Param("uids") Collection<String> uids);
 
     Optional<Product> findByCompanyIdAndCode(Long companyId, String code);
 

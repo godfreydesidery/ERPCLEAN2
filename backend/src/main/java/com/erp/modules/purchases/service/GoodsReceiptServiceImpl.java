@@ -65,6 +65,17 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
 
     private static final Logger log = LoggerFactory.getLogger(GoodsReceiptServiceImpl.class);
 
+    /** Scale of every quantity-in-base column ({@code numeric(19,6)}). */
+    private static final int BASE_QTY_SCALE = 6;
+    /** Scale of every money column ({@code numeric(19,4)}), including {@code stock_movements.unit_cost_amount}. */
+    private static final int MONEY_SCALE = 4;
+    /**
+     * One unit in the last place of a base quantity. A conversion that lands at most this far
+     * ABOVE the outstanding remainder is a rounding artefact of the unit conversion, not a genuine
+     * over-receipt, and is snapped onto the remainder (see {@link #buildGrLine}).
+     */
+    private static final BigDecimal BASE_QTY_ULP = new BigDecimal("0.000001");
+
     private final GoodsReceiptRepository           receipts;
     private final GoodsReceiptLineRepository       grLines;
     private final GoodsReceiptLineSerialRepository grLineSerials;
@@ -319,17 +330,47 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                     "Received quantity must be greater than zero.");
         }
 
-        // Compute qty_in_base: receivedQty × (poLine.orderedQtyInBase / poLine.orderedQty)
-        // This is safe: the PO line already snapshotted the factor at order-placement.
-        BigDecimal factor = poLine.getOrderedQtyInBase().divide(
-                poLine.getOrderedQty(), 10, java.math.RoundingMode.HALF_UP);
-        BigDecimal qtyInBase = lineReq.receivedQty().multiply(factor)
-                .setScale(6, java.math.RoundingMode.HALF_UP);
+        // Compute qty_in_base: receivedQty × (poLine.orderedQtyInBase / poLine.orderedQty).
+        // The PO line already snapshotted the factor at order-placement, so the ratio is authoritative.
+        //
+        // K4 (Kilimanjaro 2026-08-08): this used to re-derive the factor by dividing at 10 dp and then
+        // re-round the product to 6 dp — TWO rounding steps, and the second one rounds AWAY from the
+        // ordered quantity. On a non-integral factor a receipt of the whole remainder could land a few
+        // ULPs above it, which is not an over-receipt but read as one (or, with a tolerance configured,
+        // slipped through to fail as a raw DB constraint violation instead of a friendly message).
+        // Evaluating it as (receivedQty × orderedQtyInBase) ÷ orderedQty gives exactly ONE rounding step.
+        BigDecimal qtyInBase = lineReq.receivedQty()
+                .multiply(poLine.getOrderedQtyInBase())
+                .divide(poLine.getOrderedQty(), BASE_QTY_SCALE, java.math.RoundingMode.HALF_UP);
 
         // Over-receipt check (BR-PURCH-10, ADR-0011 D-3): friendly 409 before the DB CHECK fires.
         // The user-facing message stays free of internal detail (ULID, base-unit values, rule/ADR
         // codes) — those go to the log only, so the error shown to the user is safe and readable.
         BigDecimal outstanding = poLine.getOrderedQtyInBase().subtract(poLine.getReceivedQtyInBase());
+
+        // K4: snap the final ULP. Receiving the whole remainder of a line bought in a pack unit whose
+        // factor does not divide evenly can round to one ULP above the remainder; snapping means the
+        // last receipt closes the line exactly (PO reaches RECEIVED) instead of being rejected — or
+        // leaving 0.000001 outstanding forever if we had rounded the other way.
+        if (outstanding.signum() > 0
+                && qtyInBase.compareTo(outstanding) > 0
+                && qtyInBase.subtract(outstanding).compareTo(BASE_QTY_ULP) <= 0) {
+            qtyInBase = outstanding;
+        }
+
+        // K4: a quantity that converts to zero base units would hit the raw
+        // chk_goods_receipt_line_qty_in_base (> 0) DB constraint and surface as an opaque 500.
+        // Reject it here with a message the storekeeper can act on.
+        if (qtyInBase.signum() <= 0) {
+            log.warn("Goods receipt rejected on PO line id={} uid={}: receivedQty={} converts to "
+                            + "qtyInBase={} (orderedQty={}, orderedQtyInBase={})",
+                    poLine.getId(), poLine.getUid(), lineReq.receivedQty(), qtyInBase,
+                    poLine.getOrderedQty(), poLine.getOrderedQtyInBase());
+            throw new IllegalArgumentException(
+                    "The quantity received for " + poLine.getProductName()
+                            + " is too small to record in the product's stock unit. "
+                            + "Enter a larger quantity and try again.");
+        }
         // Over-receipt is an opt-in per-company policy (Saidi #4): commodities delivered by weight
         // (rice, produce) rarely match the PO exactly. When purchase_settings.receipt_tolerance_pct is
         // set, allow the cumulative received to exceed the ordered amount by up to that percent — the
@@ -405,13 +446,43 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                             resolveProductUid(l.getProductId()),
                             l.getUnitId(),
                             l.getQtyInBase(),
-                            l.getUnitCostAmount(),   // ADR-0020 D-3
+                            baseUnitCost(l),         // ADR-0020 D-3 (K4: per BASE unit, not per order unit)
                             l.getLotNumber(),
                             l.getManufactureDate(),
                             l.getExpiryDate(),
                             serials);
                 })
                 .toList();
+    }
+
+    /**
+     * Cost of ONE BASE unit for a received line — {@code line_cost_amount ÷ qty_in_base}.
+     *
+     * <p><b>K4 (Kilimanjaro 2026-08-08) — inventory valuation fix.</b> The payload's
+     * {@code unitCostAmount} is consumed by {@code GoodsReceiptStockHandler}, which pairs it with
+     * {@code qtyInBase} and multiplies the two ({@code InventoryValuationService.recomputeOnReceipt}
+     * → {@code receiptValue = qtyInBase × cost}). {@code goods_receipt_lines.unit_cost_amount} is a
+     * cost per ORDER unit, so sending it raw is only correct while the purchase unit happens to equal
+     * the base unit. Buy a 12-piece carton at 1,200 against a piece base and the old code valued the
+     * receipt at 24 × 1,200 = 28,800 instead of 24 × 100 = 2,400 — inventory and GL 1300 inflated by
+     * the pack factor on every single receipt, and the moving average with them.
+     *
+     * <p>Dividing the LINE TOTAL by the base quantity is factor-agnostic: it is right for a base-unit
+     * purchase (where it reduces to the unit cost unchanged) and right for any pack unit, without
+     * this service having to know the factor. Rounded to the ledger's own scale
+     * ({@code stock_movements.unit_cost_amount} is {@code numeric(19,4)}), so the value stored on the
+     * movement — which the void path reverses at — is exactly the value we computed here.
+     *
+     * <p>Returns ZERO for a defensive non-positive base quantity; {@link #buildGrLine} already
+     * rejects that case, so this is unreachable in practice and never divides by zero.
+     */
+    private BigDecimal baseUnitCost(GoodsReceiptLine line) {
+        BigDecimal qtyInBase = line.getQtyInBase();
+        BigDecimal lineCost  = line.getLineCostAmount();
+        if (qtyInBase == null || qtyInBase.signum() <= 0 || lineCost == null) {
+            return BigDecimal.ZERO;
+        }
+        return lineCost.divide(qtyInBase, MONEY_SCALE, java.math.RoundingMode.HALF_UP);
     }
 
     /** Resolve product uid from id — needed to populate the outbox payload (ADR-0011 D-8). */
@@ -453,10 +524,35 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                     return GoodsReceiptLineDto.from(l, serials);
                 })
                 .toList();
-        String poUid = orders.findById(gr.getPurchaseOrderId())
-                .map(PurchaseOrder::getUid)
-                .orElse(null);
-        return GoodsReceiptDto.from(gr, poUid, lineDtos);
+        PurchaseOrder po = orders.findById(gr.getPurchaseOrderId()).orElse(null);
+        return GoodsReceiptDto.from(
+                gr,
+                po != null ? po.getUid() : null,
+                po != null ? po.getSupplierName() : null,
+                resolveReceiptCurrency(po, lines),
+                receiptTotal(lines),
+                lineDtos);
+    }
+
+    /**
+     * K2: the receipt-level total = Σ line_cost_amount. There is no source column for it, and the
+     * documents module is forbidden from deriving amounts (BR-DOC-02 / BR-DOC-09) — so the value
+     * printed on the GRN is computed here, once, and carried on the DTO.
+     */
+    private BigDecimal receiptTotal(List<GoodsReceiptLine> lines) {
+        return lines.stream()
+                .map(GoodsReceiptLine::getLineCostAmount)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(MONEY_SCALE, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** Document currency: the PO header is authoritative; fall back to the first line's snapshot. */
+    private String resolveReceiptCurrency(PurchaseOrder po, List<GoodsReceiptLine> lines) {
+        if (po != null && po.getCurrency() != null) {
+            return CurrencyCode.value(po.getCurrency());
+        }
+        return lines.isEmpty() ? null : CurrencyCode.value(lines.get(0).getCurrency());
     }
 
     private Long actorId() {

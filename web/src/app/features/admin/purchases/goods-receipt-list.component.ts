@@ -52,6 +52,8 @@ export class GoodsReceiptListComponent {
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
   readonly canReceive = computed(() => this.session.hasPermission('PURCHASE.RECEIVE'));
+  /** K3 — separate permission from PURCHASE.RECEIVE; must match the route guard and the endpoint. */
+  readonly canReceiveDirect = computed(() => this.session.hasPermission('PURCHASE.RECEIVE.DIRECT'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
   constructor() {

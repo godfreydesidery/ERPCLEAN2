@@ -11,6 +11,15 @@ import java.util.List;
  * netted, BR-SALES-07) — this, not {@code totalSalesAmount}, feeds {@code expectedCashAmount}.
  * {@code tenderSubtotals} breaks turnover down per tender type for the cashier/manager to see at
  * a glance why "sales" and "cash" can legitimately differ.
+ *
+ * <p>{@code payoutSubtotals} does the same for {@code totalPayoutsNetAmount}: one row per
+ * {@link com.erp.modules.sales.domain.enums.PosPayoutType} (zero-filled, enum order) so refunds,
+ * drawer drops and till EXPENSES each print as their own line rather than one merged figure. It
+ * always sums back to {@code totalPayoutsNetAmount}.
+ *
+ * <p>An X-read is a mid-shift, NON-resetting read and may be taken on an OPEN or a CLOSED session
+ * — a shift that has ended can still be re-examined. Once the session is RECONCILED the Z-read is
+ * the authoritative report.
  */
 public record XReadDto(
         String sessionUid,
@@ -23,5 +32,6 @@ public record XReadDto(
         BigDecimal totalPayoutsNetAmount,
         BigDecimal expectedCashAmount,
         long invoiceCount,
-        List<TenderSubtotalDto> tenderSubtotals
+        List<TenderSubtotalDto> tenderSubtotals,
+        List<PayoutSubtotalDto> payoutSubtotals
 ) {}

@@ -26,6 +26,7 @@ import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
 import com.erp.modules.sales.service.SalesSettingsSeeder;
+import com.erp.modules.sales.service.TillExpenseGlSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
 import java.util.List;
@@ -65,6 +66,7 @@ class CompanyProvisioningServiceImplTest {
     @Mock NotificationTypeSeeder notificationTypeSeeder;
     @Mock ManufacturingGlSeeder  manufacturingGlSeeder;
     @Mock CurrencyEnablementSeeder currencyEnablementSeeder;
+    @Mock TillExpenseGlSeeder    tillExpenseGlSeeder;
 
     private CompanyProvisioningServiceImpl service;
 
@@ -75,7 +77,7 @@ class CompanyProvisioningServiceImplTest {
                 glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
                 inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
                 crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
-                manufacturingGlSeeder, currencyEnablementSeeder);
+                manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder);
     }
 
     @Test
@@ -106,6 +108,9 @@ class CompanyProvisioningServiceImplTest {
         verify(manufacturingGlSeeder, times(1)).seedDefaults(companyId);
         verify(currencyEnablementSeeder, times(1))
                 .seedDefaults(companyId, "TZS", "TZS", enabled);
+        // V97: the till-expense account + POS_TILL_EXPENSE mapping. Without it a new company would
+        // post drawer spend to the cash-SHORTAGE variance account, exactly the defect V97 closes.
+        verify(tillExpenseGlSeeder, times(1)).seedDefaults(companyId);
     }
 
     @Test
@@ -114,12 +119,14 @@ class CompanyProvisioningServiceImplTest {
         service.provisionDefaults(1L, "TZS", "TZS", List.of("TZS"));
 
         InOrder order = inOrder(chartOfAccountService, arGlSeeder, apGlSeeder,
-                cashBankSeeder, inventoryGlSeeder);
+                cashBankSeeder, inventoryGlSeeder, tillExpenseGlSeeder);
         order.verify(chartOfAccountService).seedDefaults(1L);
         order.verify(arGlSeeder).seedDefaults(1L);
         order.verify(apGlSeeder).seedDefaults(1L);
         order.verify(cashBankSeeder).seedDefaults(1L);
         order.verify(inventoryGlSeeder).seedDefaults(1L);
+        // V97: the till-expense seeder adopts or extends the chart, so it runs after the CoA seed.
+        order.verify(tillExpenseGlSeeder).seedDefaults(1L);
     }
 
     @Test

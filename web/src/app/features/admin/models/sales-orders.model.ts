@@ -81,6 +81,12 @@ export interface QuotationDto {
   quoteNumber: string | null;
   status: QuotationStatus;
   customerId: string;
+  /**
+   * K5: denormalised on the backend DTO so the proforma renderer (and this screen) can address the
+   * quotation to someone without reaching into the parties module. Null when the customer row can
+   * no longer be resolved — the quote still prints, just without the customer line.
+   */
+  customerName: string | null;
   agentId: string | null;
   currency: string;
   quoteDate: string;

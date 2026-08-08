@@ -9,6 +9,7 @@ import com.erp.modules.stock.service.InventoryGlPoster.CogsLeg;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.RecipeExplosionResolver;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.modules.stock.service.StockReservationService;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -44,7 +45,16 @@ import org.springframework.transaction.annotation.Transactional;
  * a WARN log; quantity still moves (D-2 edge note).
  *
  * <p>Idempotency: checked via {@link IdempotencyGuard} (primary, ADR-0009 D-6a) + DB backstop
- * {@code uq_stock_movement_source_event (source_event_uid, product_id)} (secondary, D-6b).
+ * {@code uq_stock_movement_source_event (source_event_uid, product_id)} (secondary, D-6b). The
+ * backstop key is allocated <em>per posting</em> by {@link MovementSourceKeys}, not per event: with
+ * one key for the whole invoice, a second line of the same product looked like a redelivery of the
+ * first and was dropped — the customer was charged for 3 + 4 and COGS posted for 7 while stock fell
+ * by 3.
+ *
+ * <p>Reservation lifecycle: {@code NegativeStockGuard} claims the quantity on
+ * {@code stock_on_hand.reserved_qty} when the invoice finalises, because the deduction below does
+ * not happen until this handler runs. Each simple line releases its own claim in the same
+ * transaction that posts the movement.
  */
 @Component
 public class SaleIssueStockHandler implements DomainEventHandler {
@@ -63,6 +73,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
     private final RecipeExplosionResolver    explosion;
     private final InventoryValuationService  valuation;
     private final InventoryGlPoster          glPoster;
+    private final StockReservationService    reservations;
     private final ObjectMapper               objectMapper;
 
     public SaleIssueStockHandler(IdempotencyGuard guard,
@@ -71,6 +82,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                                   RecipeExplosionResolver explosion,
                                   InventoryValuationService valuation,
                                   InventoryGlPoster glPoster,
+                                  StockReservationService reservations,
                                   ObjectMapper objectMapper) {
         this.guard          = guard;
         this.posting        = posting;
@@ -78,6 +90,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
         this.explosion      = explosion;
         this.valuation      = valuation;
         this.glPoster       = glPoster;
+        this.reservations   = reservations;
         this.objectMapper   = objectMapper;
     }
 
@@ -111,9 +124,10 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                 null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
         try {
             List<CogsLeg> cogsLegs = new ArrayList<>();
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
 
             for (SaleFinalisedPayload.LineItem line : payload.lines()) {
-                processLine(event, payload, line, cogsLegs);
+                processLine(event, payload, line, cogsLegs, keys);
             }
 
             // One COGS journal per SALE.FINALISED event (one per invoice), all components combined.
@@ -142,7 +156,8 @@ public class SaleIssueStockHandler implements DomainEventHandler {
     }
 
     private void processLine(DomainEvent event, SaleFinalisedPayload payload,
-                              SaleFinalisedPayload.LineItem line, List<CogsLeg> cogsLegs) {
+                              SaleFinalisedPayload.LineItem line, List<CogsLeg> cogsLegs,
+                              MovementSourceKeys keys) {
         ProductDto product = productService.getByUid(line.productUid());
 
         // ADR-0058: explode into components ONLY for a point-of-sale kit recipe (product_components,
@@ -160,14 +175,14 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                         line.productUid(), payload.invoiceUid());
             }
             for (RecipeExplosionResolver.ExplosionLine comp : components) {
-                processComponent(event, payload, comp, cogsLegs);
+                processComponent(event, payload, comp, cogsLegs, keys);
             }
         } else if (!product.stockable()) {
             log.info("SaleIssueStockHandler: skipping non-stockable product uid={} name='{}' " +
                             "on invoice uid={} (BR-STOCK-02, D-3)",
                     line.productUid(), product.name(), payload.invoiceUid());
         } else {
-            processSimpleLine(event, payload, line, product, cogsLegs);
+            processSimpleLine(event, payload, line, product, cogsLegs, keys);
         }
     }
 
@@ -177,13 +192,27 @@ public class SaleIssueStockHandler implements DomainEventHandler {
      */
     private void processComponent(DomainEvent event, SaleFinalisedPayload payload,
                                    RecipeExplosionResolver.ExplosionLine comp,
-                                   List<CogsLeg> cogsLegs) {
+                                   List<CogsLeg> cogsLegs, MovementSourceKeys keys) {
+        // Allocate the key unconditionally, before any early return, so a component that is skipped
+        // still consumes its slot and every later posting of the same product keeps a stable key.
+        String sourceKey = keys.nextFor(comp.productId());
+
         // quantity() is already negated by the resolver (component going out)
         BigDecimal issuedMagnitude = comp.quantity().abs();
         // FIX G: guard zero magnitude — unit-cost re-derivation divides by issuedMagnitude
         if (issuedMagnitude.compareTo(BigDecimal.ZERO) == 0) {
             log.warn("SaleIssueStockHandler: zero issuedMagnitude for component " +
                              "productId={} on invoice uid={} — COGS leg skipped (FIX G)",
+                    comp.productId(), payload.invoiceUid());
+            return;
+        }
+
+        // Redelivery check BEFORE costIssue: costIssue mutates and saves on_hand_value immediately,
+        // whereas post() would silently no-op on an already-applied key — value would move while
+        // quantity stood still. Skip the component whole.
+        if (posting.alreadyPosted(sourceKey, comp.productId())) {
+            log.debug("SaleIssueStockHandler: component productId={} on invoice uid={} already " +
+                            "posted for this event — skipping (idempotent redelivery)",
                     comp.productId(), payload.invoiceUid());
             return;
         }
@@ -195,7 +224,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                 event.getCompanyId(), event.getBranchId(), comp.productId(),
                 comp.quantity(),
                 MovementType.SALE_ISSUE,
-                event.getUid(),
+                sourceKey,
                 DOC_TYPE, payload.invoiceUid(),
                 null, null,
                 payload.finalisedAt(),
@@ -220,7 +249,20 @@ public class SaleIssueStockHandler implements DomainEventHandler {
      */
     private void processSimpleLine(DomainEvent event, SaleFinalisedPayload payload,
                                     SaleFinalisedPayload.LineItem line, ProductDto product,
-                                    List<CogsLeg> cogsLegs) {
+                                    List<CogsLeg> cogsLegs, MovementSourceKeys keys) {
+        // One key per LINE, not per event — two lines of the same product are two real issues.
+        String sourceKey = keys.nextFor(line.productId());
+
+        // Redelivery check BEFORE costIssue: costIssue mutates and saves on_hand_value immediately,
+        // whereas post() would silently no-op on an already-applied key. Probing first keeps value
+        // and quantity moving together (or not at all).
+        if (posting.alreadyPosted(sourceKey, line.productId())) {
+            log.debug("SaleIssueStockHandler: line for product uid={} on invoice uid={} already " +
+                            "posted for this event — skipping (idempotent redelivery)",
+                    line.productUid(), payload.invoiceUid());
+            return;
+        }
+
         BigDecimal issuedQty = line.qtyInBase();
         BigDecimal issuedValue = valuation.costIssue(
                 event.getCompanyId(), event.getBranchId(), line.productId(), issuedQty);
@@ -235,13 +277,22 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                 event.getCompanyId(), event.getBranchId(), line.productId(),
                 issuedQty.negate(),
                 MovementType.SALE_ISSUE,
-                event.getUid(),
+                sourceKey,
                 DOC_TYPE, payload.invoiceUid(),
                 null, null,
                 payload.finalisedAt(),
                 null,
                 unitCost,
                 issuedValue);
+
+        // Release the claim NegativeStockGuard took at finalise, in the same transaction that posts
+        // the movement — quantity falls and the claim lifts together, so no window exists in which
+        // the stock is counted twice. Mirrors the guard exactly: it reserves only for lines issued
+        // as themselves, which is precisely this branch (non-stockable and exploded lines are
+        // skipped on both sides by the same shouldExplodeAtIssue predicate).
+        reservations.applyReservationDelta(
+                event.getCompanyId(), event.getBranchId(), line.productId(),
+                issuedQty.negate(), null);
 
         if (issuedValue == null) {
             log.warn("SaleIssueStockHandler: avg_cost not established for product uid={} " +

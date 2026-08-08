@@ -17,8 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Mutates reserved_qty only — no stock_movements row, no GL entry (BR-SO-03).
  * Over-reservation (available < 0) is allowed and not blocked here (OQ-SO-02).
  *
- * <p>Concurrency: uses the @Version optimistic lock already on stock_on_hand with one retry
- * on ObjectOptimisticLockingFailureException (the ADR-0020 D-2 precedent, NFR-SO-05).
+ * <p>Concurrency: {@link #applyReservationDelta} uses the @Version optimistic lock already on
+ * stock_on_hand with one retry on ObjectOptimisticLockingFailureException (the ADR-0020 D-2
+ * precedent, NFR-SO-05). {@link #reserve} needs more than that — it must give a <em>reader</em> a
+ * consistent answer, not merely detect a lost update — so it takes a pessimistic row lock and holds
+ * it to commit.
  */
 @Service
 @Transactional(propagation = Propagation.MANDATORY)
@@ -45,6 +48,37 @@ public class StockReservationServiceImpl implements StockReservationService {
                     companyId, productId);
             doApply(companyId, branchId, productId, delta, actorId);
         }
+    }
+
+    @Override
+    public StockAvailabilityDto reserve(Long companyId, Long branchId, Long productId,
+                                        BigDecimal qty, Long actorId) {
+        Long locId = locationResolver.defaultLocationId(companyId, branchId);
+
+        // Lock FIRST — before any other read of this row in the transaction. A PESSIMISTIC_WRITE
+        // query on an already-managed entity returns the cached copy, so reading availability before
+        // locking would re-introduce the very staleness the lock exists to remove.
+        StockOnHand reservationRow = onHands
+                .lockByCompanyBranchLocationProduct(companyId, branchId, locId, productId)
+                .orElseGet(() -> onHands.saveAndFlush(new StockOnHand(companyId, branchId, locId, productId)));
+
+        // Availability spans every location in the branch (stock is fungible within a branch — see
+        // getAvailability); reservations all sit on the locked default-location row, so that one
+        // lock still serialises every reserve for this (company, branch, product).
+        BigDecimal qtyOnHand = BigDecimal.ZERO;
+        BigDecimal reserved  = BigDecimal.ZERO;
+        for (StockOnHand soh : onHands.findAllByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)) {
+            qtyOnHand = qtyOnHand.add(soh.getQuantity());
+            reserved  = reserved.add(soh.getReservedQty());
+        }
+        StockAvailabilityDto before = new StockAvailabilityDto(
+                companyId, branchId, productId, qtyOnHand, reserved, qtyOnHand.subtract(reserved));
+
+        if (qty != null && qty.compareTo(BigDecimal.ZERO) > 0) {
+            reservationRow.applyReservationDelta(qty, actorId);
+            onHands.save(reservationRow);
+        }
+        return before;
     }
 
     // Not readOnly: locationResolver.defaultLocationId() lazily seeds a branch default location on

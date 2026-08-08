@@ -7,6 +7,12 @@ import org.springframework.data.domain.Pageable;
 
 /**
  * Inter-location stock transfer operations (ADR-0028 D-5, FR-INVD-08..11).
+ *
+ * <p>Neither mode is limited to a single branch. The difference is who closes the transfer:
+ * INSTANT is one-sided (the sender posts both legs and the document is done), IN_TRANSIT is
+ * two-sided (the destination confirms receipt). INSTANT is therefore the mode for sending stock to
+ * a location whose branch has no users on the system at all — that is a supported setup, not a
+ * workaround.
  */
 public interface StockTransferService {
 
@@ -14,8 +20,10 @@ public interface StockTransferService {
     StockTransferDto create(CreateStockTransferRequest request);
 
     /**
-     * Dispatch an INSTANT transfer (same-branch): posts TRANSFER_OUT at source + TRANSFER_IN at
-     * dest in one TX, completes the document (DRAFT → COMPLETED).
+     * Complete an INSTANT transfer: posts TRANSFER_OUT at the source and TRANSFER_IN at the
+     * destination in one TX, then completes the document (DRAFT → COMPLETED). No in-transit leg and
+     * no confirmation from the destination — source and destination may be in different branches,
+     * and the destination branch need not have a single user.
      */
     StockTransferDto completeInstant(String transferUid);
 

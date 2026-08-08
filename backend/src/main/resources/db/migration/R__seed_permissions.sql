@@ -132,6 +132,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('PERMISSION.VIEW', 'iam', 'View the permission catalogue'),
     ('PETTY_CASH.MANAGE', 'cashbank', 'Create/edit petty cash funds and record disbursements, replenishments and adjustments'),
     ('PETTY_CASH.VIEW', 'cashbank', 'View petty cash funds and their transactions'),
+    ('POS.EXPENSE.RECORD', 'sales', 'Record a categorised expense paid out of the till drawer'),
+    ('POS.EXPENSE.VIEW', 'sales', 'View the till-expense report across sessions'),
     ('POS.SALE.AGE_OVERRIDE', 'pos', 'Sell an age-restricted item without an age-verification acknowledgement'),
     ('POS.SALE.CREATE', 'sales', 'Ring a POS sale on an open session'),
     ('POS.SALE.VOID', 'sales', 'Reverse / void a POS sale at the till (refund)'),
@@ -167,6 +169,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('PURCHASE.ORDER.VIEW', 'purchases', 'View and list/search purchase orders'),
     ('PURCHASE.ORDER.VOID', 'purchases', 'Void a purchase order'),
     ('PURCHASE.RECEIVE', 'purchases', 'Create a draft GR and receive (finalise) it — pushes stock in'),
+    ('PURCHASE.RECEIVE.DIRECT', 'purchases', 'Receive goods straight into stock without a prior LPO (auto-raises the backing PO)'),
     ('PURCHASE.REQUISITION.APPROVE', 'purchases', 'Approve/reject a submitted requisition (fallback approval gate, ADR-0027 D-6)'),
     ('PURCHASE.REQUISITION.CREATE', 'purchases', 'Create, edit, submit, cancel a requisition'),
     ('PURCHASE.REQUISITION.VIEW', 'purchases', 'View and list purchase requisitions'),
@@ -196,6 +199,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('SALES.CREDIT.OVERRIDE', 'sales', 'Finalise a credit sale that exceeds the customer credit limit (audited override)'),
     ('SALES.DELIVERY.CREATE', 'sales', 'Create a delivery against a confirmed sales order (issues stock + COGS)'),
     ('SALES.DELIVERY.VIEW', 'sales', 'View delivery documents'),
+    ('SALES.DISCOUNT.OVERRIDE', 'sales', 'Authorise a line discount above the company ceiling (manager step-up)'),
     ('SALES.DROPSHIP.CREATE', 'sales', 'Flag an SO line as drop-ship and trigger the linked PO'),
     ('SALES.DROPSHIP.VIEW', 'sales', 'View drop-ship SO lines and linked supplier POs'),
     ('SALES.INVOICE.CREATE', 'sales', 'Create and edit draft invoices; add/edit/remove lines; finalise'),
@@ -344,6 +348,10 @@ SELECT r.id, p.id FROM (VALUES
   ('CASHIER','POS.SESSION.OPEN'),
   ('CASHIER','POS.SESSION.CLOSE'),
   ('CASHIER','POS.SESSION.VIEW'),
+  -- Kilimanjaro 2026-08-08 (K8): the cashier is the one who pays cash out of the drawer, so they
+  -- record the expense. Reading the cross-session expense REPORT is a manager capability
+  -- (POS.EXPENSE.VIEW) and is deliberately NOT granted here.
+  ('CASHIER','POS.EXPENSE.RECORD'),
   ('CASHIER','POS.TILL.VIEW'),
   ('CASHIER','SALES.INVOICE.SETTLE'),
   ('CASHIER','SALES.INVOICE.VIEW'),
@@ -429,6 +437,14 @@ SELECT r.id, p.id FROM (VALUES
   ('STOREKEEPER','INVENTORY.SERIAL.VIEW'),
   ('STOREKEEPER','INVENTORY.EXPIRY.VIEW'),
   ('STOREKEEPER','PURCHASE.RECEIVE'),
+  -- Kilimanjaro 2026-08-08 (K3): receive a walk-in / cash purchase with no prior LPO. The service
+  -- auto-raises the backing PO, so the storekeeper never authors spend directly; PO approval
+  -- thresholds still apply. Held alongside PURCHASE.RECEIVE, which they already have.
+  ('STOREKEEPER','PURCHASE.RECEIVE.DIRECT'),
+  -- Kilimanjaro 2026-08-08 (K9): the shipped stock + valuation reports were unreachable for the very
+  -- role that lives in them — the storekeeper could not open the report they are measured on.
+  ('STOREKEEPER','INVENTORY.VALUATION.VIEW'),
+  ('STOREKEEPER','REPORT.EXPORT'),
   ('STOREKEEPER','PURCHASE.GOODS_RECEIPT.VIEW'),
   ('STOREKEEPER','PURCHASE.ORDER.VIEW'),
   ('STOREKEEPER','PURCHASE.RETURN.CREATE'),
@@ -484,6 +500,12 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','REPORT.CASHFLOW.VIEW'),
   ('ACCOUNTANT','REPORT.LEDGER.VIEW'),
   ('ACCOUNTANT','REPORT.EXPORT'),
+  -- 2026-08-08 (K9): reconciling stock to the GL is core accountant work, but the bundle held
+  -- REPORT.EXPORT without INVENTORY.VALUATION.VIEW — so an accountant was refused the stock
+  -- reports on screen while still able to download the identical data as a file. Granting the
+  -- read closes the gap in the safe direction; the export gate was separately tightened to
+  -- require BOTH, so a user who cannot see a report can no longer download it.
+  ('ACCOUNTANT','INVENTORY.VALUATION.VIEW'),
   ('ACCOUNTANT','BI.VIEW'),
   ('ACCOUNTANT','BI.FINANCE.VIEW'),
   ('ACCOUNTANT','CUSTOMER.VIEW'),
@@ -572,6 +594,16 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','NOTIFICATION.VIEW'),
   ('SALES_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('SALES_MANAGER','DOCUMENT.RENDER'),
+  -- Kilimanjaro 2026-08-08 (K7/K8): the two capabilities a cashier must escalate TO. SALES.DISCOUNT.OVERRIDE
+  -- is what the manager step-up verifies against when a discount exceeds the company ceiling;
+  -- POS.EXPENSE.VIEW is the cross-session till-expense report the cashier cannot see.
+  ('SALES_MANAGER','SALES.DISCOUNT.OVERRIDE'),
+  ('SALES_MANAGER','POS.EXPENSE.VIEW'),
+  -- 2026-08-08 (K1): the sales manager is the till supervisor — they authorise a Z-read via the
+  -- step-up prompt — but did not hold POS.SESSION.VIEW, so they could approve a report they were
+  -- then refused permission to read. An approver who cannot see what they approved is an audit
+  -- failure, not a security posture.
+  ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','BRANCH.VIEW'),
   -- BRANCH_MANAGER (54 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
@@ -632,6 +664,8 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','NOTIFICATION.VIEW'),
   ('BRANCH_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('BRANCH_MANAGER','DOCUMENT.RENDER'),
+  ('BRANCH_MANAGER','SALES.DISCOUNT.OVERRIDE'),
+  ('BRANCH_MANAGER','POS.EXPENSE.VIEW'),
   ('BRANCH_MANAGER','BRANCH.VIEW'),
   -- PROCUREMENT_OFFICER (25 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('PROCUREMENT_OFFICER','PURCHASE.REQUISITION.CREATE'),
@@ -652,6 +686,12 @@ SELECT r.id, p.id FROM (VALUES
   ('PROCUREMENT_OFFICER','PAYMENTTERMS.VIEW'),
   ('PROCUREMENT_OFFICER','STOCK.VIEW'),
   ('PROCUREMENT_OFFICER','PRODUCT.VIEW'),
+  -- Kilimanjaro 2026-08-08 (K4): procurement owns product master data (they register the SKUs), but
+  -- PRODUCT.MANAGE and UOM.MANAGE were granted to NO operational bundle — only ORG_ADMIN absorbed them
+  -- via its CROSS JOIN. Nobody but an org admin could create a pack unit or attach a per-UOM price,
+  -- which is why the carton/outer/piece setup was unreachable for the people who needed it.
+  ('PROCUREMENT_OFFICER','PRODUCT.MANAGE'),
+  ('PROCUREMENT_OFFICER','UOM.MANAGE'),
   ('PROCUREMENT_OFFICER','UOM.VIEW'),
   ('PROCUREMENT_OFFICER','CURRENCY.VIEW'),
   ('PROCUREMENT_OFFICER','DOCUMENT.VIEW'),
@@ -678,6 +718,8 @@ SELECT r.id, p.id FROM (VALUES
   ('PROCUREMENT_MANAGER','PAYMENTTERMS.VIEW'),
   ('PROCUREMENT_MANAGER','STOCK.VIEW'),
   ('PROCUREMENT_MANAGER','PRODUCT.VIEW'),
+  ('PROCUREMENT_MANAGER','PRODUCT.MANAGE'),
+  ('PROCUREMENT_MANAGER','UOM.MANAGE'),
   ('PROCUREMENT_MANAGER','UOM.VIEW'),
   ('PROCUREMENT_MANAGER','CURRENCY.VIEW'),
   ('PROCUREMENT_MANAGER','DOCUMENT.VIEW'),

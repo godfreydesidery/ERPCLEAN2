@@ -117,6 +117,17 @@ export interface PosSaleLineRequest {
   quantity: string;
   unitPrice: string;
   lineDiscountAmount?: string;
+  /**
+   * K7 — optional. The `authoriserUid` from a successful manager step-up
+   * (`POST /api/v1/auth/verify-authority` with permission `SALES.DISCOUNT.OVERRIDE`).
+   *
+   * Per LINE, not per sale: a basket may hold one heavily discounted item and nine ordinary ones,
+   * and a single sale-level flag would let the approval for the first wave the rest through. Only
+   * consulted when the company's discount policy is APPROVE and the line's discount exceeds the
+   * ceiling; the server re-verifies the named user's authority in the invoice's company, so the
+   * uid alone is never enough.
+   */
+  discountAuthorisedByUid?: string;
 }
 
 export interface PosSaleRequest {

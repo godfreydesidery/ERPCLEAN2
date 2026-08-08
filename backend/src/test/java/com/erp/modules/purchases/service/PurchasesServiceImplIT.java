@@ -29,6 +29,8 @@ import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptLineRequest;
+import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
@@ -38,6 +40,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
@@ -103,6 +106,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
 
     @Autowired private PurchaseOrderService    poService;
     @Autowired private GoodsReceiptService     grService;
+    @Autowired private DirectGoodsReceiptService directGrService;
     @Autowired private SupplierService         supplierService;
     @Autowired private ProductService          productService;
     @Autowired private UnitOfMeasureService    unitService;
@@ -807,6 +811,396 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         assertThat(updated.lines()).hasSize(1);
         // 2 cartons × 12 = 24 in base.
         assertThat(updated.lines().get(0).orderedQtyInBase()).isEqualByComparingTo(new BigDecimal("24"));
+    }
+
+    // =========================================================================
+    // 12. K4 (Kilimanjaro 2026-08-08) — a receipt in a PACK unit must value stock at the
+    //     BASE-unit cost. Regression guard: the STOCK.RECEIVED payload used to carry the PO
+    //     line's per-ORDER-unit cost next to the base quantity, and the stock handler multiplies
+    //     the two — inflating inventory and GL 1300 by the pack factor on every receipt. This is
+    //     invisible while the purchase unit equals the base unit, which is why it stayed dormant.
+    // =========================================================================
+
+    @Test
+    void receiveInPackUnit_valuesStockAtTheBaseUnitCost() {
+        ProductDto product = stockableProduct("PackCost-Soap");
+
+        // Base unit is PCS; the supplier sells by the 12-piece carton.
+        UnitOfMeasureDto carton = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton of 12"));
+        productService.addBulkPack(product.uid(),
+                new CreateBulkPackRequest(carton.uid(), new BigDecimal("12")));
+
+        // 2 cartons at 1,200 per CARTON = 2,400 spent = 24 pieces at 100 each.
+        PurchaseOrderDto draft = poService.create(new CreatePurchaseOrderRequest(
+                companyA.getUid(), supplierUid, "TZS", null, null,
+                List.of(new AddPurchaseOrderLineRequest(
+                        product.uid(), carton.uid(),
+                        new BigDecimal("2"), new BigDecimal("1200"), null))));
+        PurchaseOrderDto placed = poService.placeOrder(draft.uid());
+        PurchaseOrderLineDto poLine = placed.lines().get(0);
+
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("2")))));
+
+        dispatcher.dispatchOne(pendingEventId(DomainEventType.STOCK_RECEIVED));
+
+        var soh = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row for the received product"));
+
+        assertThat(soh.getQuantity())
+                .as("2 cartons × 12 = 24 base units")
+                .isEqualByComparingTo(new BigDecimal("24"));
+        assertThat(soh.getOnHandValue())
+                .as("K4: on_hand_value must be what was SPENT (2 × 1,200 = 2,400), "
+                        + "not qtyInBase × per-carton cost (24 × 1,200 = 28,800)")
+                .isEqualByComparingTo(new BigDecimal("2400"));
+        assertThat(soh.getAvgCost())
+                .as("K4: the moving average is per BASE unit — 2,400 ÷ 24 = 100 per piece")
+                .isEqualByComparingTo(new BigDecimal("100"));
+
+        // The ledger row must agree, because the void path reverses at the value stored on it.
+        var movements = stockMovementRepo.findBySourceDocumentUidAndMovementType(
+                gr.uid(), MovementType.GOODS_RECEIPT);
+        assertThat(movements).hasSize(1);
+        assertThat(movements.get(0).getUnitCostAmount())
+                .as("stock_movements.unit_cost_amount is a per-base-unit cost")
+                .isEqualByComparingTo(new BigDecimal("100"));
+        assertThat(movements.get(0).getValueAmount())
+                .isEqualByComparingTo(new BigDecimal("2400"));
+
+        assertLedgerMatchesOnHand(product.id());
+    }
+
+    // Control: the base-unit path (purchase unit == base unit) must be unchanged by the K4 fix —
+    // dividing the line total by the base quantity has to reduce to the unit cost exactly.
+    @Test
+    void receiveInBaseUnit_valuesStockAtTheUnitCost_unchanged() {
+        ProductDto product = stockableProduct("BaseCost-Widget");
+
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("10"), new BigDecimal("250"));
+        PurchaseOrderLineDto poLine = placed.lines().get(0);
+
+        grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("10")))));
+
+        dispatcher.dispatchOne(pendingEventId(DomainEventType.STOCK_RECEIVED));
+
+        var soh = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row for the received product"));
+
+        assertThat(soh.getQuantity()).isEqualByComparingTo(new BigDecimal("10"));
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo(new BigDecimal("2500"));
+        assertThat(soh.getAvgCost()).isEqualByComparingTo(new BigDecimal("250"));
+    }
+
+    // =========================================================================
+    // 13. K2 (Kilimanjaro 2026-08-08) — the GRN read model carries the values the
+    //     printed goods-receipt note needs: the receipt total is computed HERE (the
+    //     documents module is forbidden from deriving amounts — BR-DOC-02/BR-DOC-09).
+    // =========================================================================
+
+    @Test
+    void goodsReceiptDto_carriesTheComputedReceiptTotalAndCurrency() {
+        ProductDto product = stockableProduct("GrnPrint-Widget");
+
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("4"), new BigDecimal("175"));
+        PurchaseOrderLineDto poLine = placed.lines().get(0);
+
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("4")))));
+
+        assertThat(gr.receiptTotalAmount())
+                .as("Σ line_cost_amount = 4 × 175")
+                .isEqualByComparingTo(new BigDecimal("700"));
+        assertThat(gr.currency()).isEqualTo("TZS");
+        assertThat(gr.supplierName())
+                .as("printed on the GRN in place of an internal supplier id")
+                .isEqualTo("Test Supplier");
+        assertThat(gr.lines().get(0).unitCostAmount()).isEqualByComparingTo(new BigDecimal("175"));
+        assertThat(gr.lines().get(0).lineCostAmount()).isEqualByComparingTo(new BigDecimal("700"));
+
+        // A re-read must produce the same figures (the printed document is re-rendered from live source).
+        GoodsReceiptDto reread = grService.getByUid(gr.uid());
+        assertThat(reread.receiptTotalAmount()).isEqualByComparingTo(new BigDecimal("700"));
+    }
+
+    // =========================================================================
+    // 14. K3 (Kilimanjaro 2026-08-08) — direct goods receipt with no prior LPO:
+    //     one call produces the backing PO AND the finalised receipt, atomically.
+    // =========================================================================
+
+    @Test
+    void directReceipt_autoRaisesTheBackingPoAndReceivesIt() {
+        ProductDto product = stockableProduct("Direct-Rice");
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", "Cash purchase, delivery note 4471",
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("40"), new BigDecimal("55"), null))));
+
+        assertThat(gr.status()).isEqualTo(GoodsReceiptStatus.RECEIVED);
+        assertThat(gr.receiptNumber()).isEqualTo("GRN-0001");
+        assertThat(gr.purchaseOrderUid())
+                .as("the receipt is anchored to the auto-raised PO — nothing downstream sees a special case")
+                .isNotNull();
+        assertThat(gr.receiptTotalAmount()).isEqualByComparingTo(new BigDecimal("2200"));
+
+        // The backing PO exists, is numbered, and is fully received (nothing left outstanding).
+        PurchaseOrderDto backing = poService.getByUid(gr.purchaseOrderUid());
+        assertThat(backing.orderNumber()).isEqualTo("PO-0001");
+        assertThat(backing.status()).isEqualTo(PurchaseOrderStatus.RECEIVED);
+        assertThat(backing.origin())
+                .as("V96: the synthesised order is labelled for ever after, so it can be told apart "
+                        + "from an order a buyer actually raised")
+                .isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+        assertThat(backing.lines().get(0).outstandingQtyInBase()).isEqualByComparingTo(BigDecimal.ZERO);
+
+        // The same STOCK.RECEIVED path as any other receipt: quantity AND value land correctly.
+        dispatcher.dispatchOne(pendingEventId(DomainEventType.STOCK_RECEIVED));
+        var soh = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row for the received product"));
+        assertThat(soh.getQuantity()).isEqualByComparingTo(new BigDecimal("40"));
+        assertThat(soh.getOnHandValue())
+                .as("a direct receipt values stock at what was PAID — not at the current moving "
+                        + "average, which is the whole reason the stock-adjustment workaround was wrong")
+                .isEqualByComparingTo(new BigDecimal("2200"));
+    }
+
+    @Test
+    void directReceipt_inAPackUnit_valuesStockAtTheBaseUnitCost() {
+        ProductDto product = stockableProduct("Direct-Soap");
+        UnitOfMeasureDto carton = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton of 12"));
+        productService.addBulkPack(product.uid(),
+                new CreateBulkPackRequest(carton.uid(), new BigDecimal("12")));
+
+        directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, null, null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), carton.uid(), new BigDecimal("3"), new BigDecimal("1200"), null))));
+
+        dispatcher.dispatchOne(pendingEventId(DomainEventType.STOCK_RECEIVED));
+
+        var soh = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row for the received product"));
+        assertThat(soh.getQuantity()).isEqualByComparingTo(new BigDecimal("36"));
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo(new BigDecimal("3600"));
+        assertThat(soh.getAvgCost()).isEqualByComparingTo(new BigDecimal("100"));
+    }
+
+    @Test
+    void directReceipt_withNoLines_isRejectedWithAFriendlyMessage() {
+        assertThatThrownBy(() -> directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null, List.of())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Add at least one item to receive.");
+    }
+
+    @Test
+    void directReceipt_withSupplierFromAnotherCompany_isRejectedAndWritesNothing() {
+        Organisation orgD = organisations.save(new Organisation("Org D-Direct"));
+        Company companyD  = companies.save(new Company(orgD, "DSUPP", "D Supplier Co"));
+        Branch branchD    = branches.save(new Branch(companyD, "D-S1", "D Branch"));
+
+        setContext(companyD, branchD);
+        SupplierDto supplierD = supplierService.create(new CreateSupplierRequest(
+                companyD.getId(), PartyType.INDIVIDUAL, "D-Supplier",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                SupplierKind.GOODS, null, null));
+
+        setContext(companyA, branchA);
+        ProductDto product = stockableProduct("Direct-CrossTenant");
+
+        long posBefore = poRepo.count();
+        long grsBefore = grRepo.count();
+
+        assertThatThrownBy(() -> directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierD.uid(), "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("1"), new BigDecimal("10"), null)))))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+
+        assertThat(poRepo.count()).as("no phantom PO is left behind").isEqualTo(posBefore);
+        assertThat(grRepo.count()).isEqualTo(grsBefore);
+    }
+
+    // -------------------------------------------------------------------------
+    // 14b. K3 — spend approval on a direct receipt is DETECTIVE, not preventive.
+    //
+    // The defect this pins: DirectGoodsReceiptService creates the backing PO and places it inside
+    // ONE method, so the PO does not exist until that call makes it. When PoApprovalGate demanded
+    // pre-approval there was no moment at which anyone could approve — every direct receipt in an
+    // approval-enabled company failed with a 409 and nobody had ever completed one. Owner decision
+    // (2026-08-08): the goods are already on the dock, so record them and ratify afterwards.
+    // -------------------------------------------------------------------------
+
+    /** Turns the PO approval gate on for company A with the harshest possible threshold. */
+    private void enablePoApprovalForEverySpend() {
+        purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
+                companyA.getUid(), true, BigDecimal.ZERO, "TZS",
+                null, null, null, null, null, null, null, null));
+    }
+
+    @Test
+    void directReceipt_completesEvenWhenEverySpendNeedsApproval() {
+        enablePoApprovalForEverySpend();
+        ProductDto product = stockableProduct("Direct-Approval");
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("10"), new BigDecimal("500"), null))));
+
+        assertThat(gr.status())
+                .as("refusing goods that are already on the dock does not un-buy them — it only "
+                        + "makes stock wrong, which is the worse failure")
+                .isEqualTo(GoodsReceiptStatus.RECEIVED);
+
+        // And the stock really moved — the whole point of accepting the receipt.
+        dispatcher.dispatchOne(pendingEventId(DomainEventType.STOCK_RECEIVED));
+        var soh = stockOnHandRepo
+                .findByCompanyIdAndBranchIdAndProductId(
+                        companyA.getId(), branchA.getId(), product.id())
+                .orElseThrow(() -> new AssertionError("No on-hand row for the received product"));
+        assertThat(soh.getQuantity()).isEqualByComparingTo(new BigDecimal("10"));
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo(new BigDecimal("5000"));
+    }
+
+    @Test
+    void directReceipt_raisesARatificationRequestAgainstTheBackingOrder() {
+        enablePoApprovalForEverySpend();
+        ProductDto product = stockableProduct("Direct-Ratify");
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("2"), new BigDecimal("750"), null))));
+
+        var backing = poRepo.findByUid(gr.purchaseOrderUid()).orElseThrow();
+        assertThat(backing.getApprovalRequestUid())
+                .as("the spend still gets reviewed — through the SAME approvals engine and inbox a "
+                        + "manager already uses, just after the event instead of before it")
+                .isNotNull();
+    }
+
+    @Test
+    void theApprovalExemptionDoesNotLeakToAnOrderABuyerRaised() {
+        enablePoApprovalForEverySpend();
+        ProductDto product = stockableProduct("Manual-StillGated");
+        PurchaseOrderDto draft = createDraftWithLine(product.uid(), new BigDecimal("5"),
+                new BigDecimal("100"));
+
+        assertThatThrownBy(() -> poService.placeOrder(draft.uid()))
+                .as("the preventive control is untouched wherever pre-approval is actually possible")
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requires approval");
+    }
+
+    // =========================================================================
+    // 15. K3 / V96 — provenance keeps the synthesised orders out of the buyer's list.
+    // =========================================================================
+
+    @Test
+    void aNormallyRaisedPurchaseOrderIsManualAndStaysInTheDefaultList() {
+        ProductDto product = stockableProduct("Origin-Manual");
+        PurchaseOrderDto po = createDraftWithLine(product.uid(), new BigDecimal("5"),
+                new BigDecimal("100"));
+
+        assertThat(po.origin())
+                .as("nothing about the normal PO screen changed — MANUAL is the default")
+                .isEqualTo(PurchaseOrderOrigin.MANUAL);
+
+        assertThat(poService.list(companyA.getId(), null, false, Pageable.unpaged()).getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .contains(po.uid());
+    }
+
+    @Test
+    void placingAndReceivingANormalOrderNeverChangesItsProvenance() {
+        // Provenance is set once at create; no lifecycle transition may quietly relabel an order.
+        ProductDto product = stockableProduct("Origin-Lifecycle");
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(), new BigDecimal("6"),
+                new BigDecimal("30"));
+
+        grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(placed.lines().get(0).uid(),
+                        new BigDecimal("6")))));
+
+        assertThat(poRepo.findByUid(placed.uid()).orElseThrow().getOrigin())
+                .isEqualTo(PurchaseOrderOrigin.MANUAL);
+        assertThat(poService.list(companyA.getId(), null, false, Pageable.unpaged()).getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .as("a received order is still the buyer's order and stays on their list")
+                .contains(placed.uid());
+    }
+
+    @Test
+    void theDirectReceiptsBackingOrderIsHiddenFromTheDefaultListButAvailableOnOptIn() {
+        ProductDto product = stockableProduct("Origin-Hidden");
+        PurchaseOrderDto buyersOrder = createDraftWithLine(product.uid(), new BigDecimal("5"),
+                new BigDecimal("100"));
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("4"), new BigDecimal("60"), null))));
+        String syntheticUid = gr.purchaseOrderUid();
+
+        // Default: the buyer sees their own order and nothing else.
+        assertThat(poService.list(companyA.getId(), null, false, Pageable.unpaged()).getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .as("a delivery per day would otherwise bury the buyer's real orders")
+                .contains(buyersOrder.uid())
+                .doesNotContain(syntheticUid);
+
+        // Opt-in: everything, badged with its provenance.
+        assertThat(poService.list(companyA.getId(), null, true, Pageable.unpaged()).getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .contains(buyersOrder.uid(), syntheticUid);
+
+        // The synthesised order is never unreachable — its own uid still resolves.
+        assertThat(poService.getByUid(syntheticUid).origin())
+                .isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+    }
+
+    @Test
+    void searchingBySupplierDoesNotLeakTheHiddenBackingOrder() {
+        // Both orders are for the same supplier, so a name search would surface both if the
+        // search path forgot the filter that the browse path applies.
+        ProductDto product = stockableProduct("Origin-Search");
+        PurchaseOrderDto buyersOrder = createDraftWithLine(product.uid(), new BigDecimal("5"),
+                new BigDecimal("100"));
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("1"), new BigDecimal("10"), null))));
+
+        assertThat(poService.list(companyA.getId(), "Test Supplier", false, Pageable.unpaged())
+                .getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .contains(buyersOrder.uid())
+                .doesNotContain(gr.purchaseOrderUid());
+
+        assertThat(poService.list(companyA.getId(), "Test Supplier", true, Pageable.unpaged())
+                .getContent())
+                .extracting(PurchaseOrderDto::uid)
+                .contains(buyersOrder.uid(), gr.purchaseOrderUid());
     }
 
     // =========================================================================

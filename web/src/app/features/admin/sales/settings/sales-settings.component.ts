@@ -4,7 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
-import { BelowCostAction, SalesSettingsDto, UpdateSalesSettingsRequest } from '../../models/sales.model';
+import {
+  BelowCostAction,
+  DiscountApprovalAction,
+  SalesSettingsDto,
+  UpdateSalesSettingsRequest,
+} from '../../models/sales.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { SalesSettingsService } from './sales-settings.service';
@@ -61,6 +66,62 @@ export class SalesSettingsComponent {
   /** The plain-language consequence of whatever is currently selected. */
   readonly belowCostHint = computed(
     () => this.belowCostOptions.find((o) => o.value === this.fBelowCostAction())?.hint ?? '',
+  );
+
+  // ── Discount policy (K7, V95) ──────────────────────────────────────────────
+  // The server has enforced this since K7; until now there was no way for the manager who owns the
+  // policy to turn it on, which made a shipped control undeliverable. Both fields are sent together
+  // on every save: the server applies the pair atomically and refuses a ceiling on its own.
+
+  /** "Manager-authorised discount" stance (V95). OFF = no ceiling enforced, the default. */
+  readonly fDiscountApprovalAction = signal<DiscountApprovalAction>('OFF');
+  /**
+   * The ceiling, held as the raw text the admin typed so an in-progress entry ("7.") is never
+   * silently coerced to a number the server would then store. Empty = no ceiling configured.
+   */
+  readonly fMaxDiscountPercent = signal('');
+
+  readonly discountOptions: ReadonlyArray<{
+    value: DiscountApprovalAction;
+    label: string;
+    hint: string;
+  }> = [
+    { value: 'OFF', label: 'No limit', hint: 'Any discount a salesperson types is accepted.' },
+    {
+      value: 'WARN',
+      label: 'Allow, but record it',
+      hint: 'A discount over the limit still goes through and is recorded for review.',
+    },
+    {
+      value: 'APPROVE',
+      label: 'Needs supervisor approval',
+      hint: 'A discount over the limit is held until a supervisor with permission to approve discounts signs for it.',
+    },
+    {
+      value: 'BLOCK',
+      label: 'Never allow',
+      hint: 'A discount over the limit is always refused. Nobody can override it.',
+    },
+  ];
+
+  /** The plain-language consequence of the selected stance. */
+  readonly discountHint = computed(
+    () => this.discountOptions.find((o) => o.value === this.fDiscountApprovalAction())?.hint ?? '',
+  );
+
+  /** The ceiling only means anything once a stance is chosen; OFF ignores it entirely. */
+  readonly discountCeilingApplies = computed(() => this.fDiscountApprovalAction() !== 'OFF');
+
+  /**
+   * What an empty ceiling actually does, said out loud. The server reads "not configured" as ZERO
+   * once the policy is on — every discount then needs a supervisor. Showing this as "no limit"
+   * would be the negative-stock toggle all over again: a screen describing the opposite of what the
+   * till enforces.
+   */
+  readonly discountCeilingHint = computed(() =>
+    this.fMaxDiscountPercent().trim() === ''
+      ? 'Leave this empty and no discount at all is allowed on its own — every discount goes to the policy above.'
+      : 'The most a salesperson may take off a line without help. Anything above it follows the policy above.',
   );
 
   // ── Save state ─────────────────────────────────────────────────────────────
@@ -129,6 +190,14 @@ export class SalesSettingsComponent {
     // Defensive `?? 'OFF'`: a company saved before V93 (or an older API) sends no value, and the
     // screen must then show exactly what the till enforces for that state — OFF.
     this.fBelowCostAction.set(s.belowCostAction ?? 'OFF');
+    // Same reasoning for the discount policy (K7): a response without the field is a company the
+    // server enforces as OFF, so that is what this must show.
+    this.fDiscountApprovalAction.set(s.discountApprovalAction ?? 'OFF');
+    this.fMaxDiscountPercent.set(
+      s.maxDiscountPercent === null || s.maxDiscountPercent === undefined
+        ? ''
+        : String(s.maxDiscountPercent),
+    );
   }
 
   save(): void {
@@ -138,6 +207,14 @@ export class SalesSettingsComponent {
     const threshold = this.fThresholdAmount().trim();
     if (!threshold || isNaN(Number(threshold)) || Number(threshold) < 0) {
       this.saveError.set('Threshold amount must be zero or positive.');
+      return;
+    }
+
+    const ceiling = this.parseDiscountCeiling();
+    if (ceiling === 'invalid') {
+      this.saveError.set(
+        'The maximum discount must be a percentage between 0 and 100, with at most two decimal places.',
+      );
       return;
     }
 
@@ -151,6 +228,10 @@ export class SalesSettingsComponent {
       currency: this.fCurrency().trim(),
       allowNegativeStock: this.fAllowNegativeStock(),
       belowCostAction: this.fBelowCostAction(),
+      // Always BOTH: the server applies the stance and its ceiling as one policy, and refuses a
+      // ceiling sent on its own (it used to answer 200 OK and save nothing — UAT finding #3).
+      discountApprovalAction: this.fDiscountApprovalAction(),
+      maxDiscountPercent: ceiling,
     };
 
     this.settingsService.update(request).subscribe({
@@ -165,6 +246,23 @@ export class SalesSettingsComponent {
         this.saving.set(false);
       },
     });
+  }
+
+  /**
+   * The typed ceiling as the server's `NUMERIC(5,2)` sees it: a number in 0–100 with at most two
+   * decimals, `null` for "no ceiling configured", or `'invalid'` when it cannot be either.
+   *
+   * Checked here rather than left to the browser's `type="number"` validation alone, because a
+   * number input reports an out-of-range value as an empty string in some browsers — which would
+   * turn "120" into "no ceiling", i.e. the strictest possible policy, silently.
+   */
+  private parseDiscountCeiling(): number | null | 'invalid' {
+    const raw = this.fMaxDiscountPercent().trim();
+    if (raw === '') return null;
+    if (!/^\d{1,3}(\.\d{1,2})?$/.test(raw)) return 'invalid';
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || value > 100) return 'invalid';
+    return value;
   }
 
   private messageFrom(err: unknown, fallback: string): string {

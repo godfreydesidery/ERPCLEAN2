@@ -45,6 +45,19 @@ public final class AuditActions {
     public static final String LOGIN_FAIL    = "LOGIN.FAIL";
     public static final String ACCOUNT_LOCKED = "ACCOUNT.LOCKED";
 
+    // -- Manager step-up / supervisor override --------------------------------
+    /**
+     * A second, more privileged user authorised an action for the signed-in operator (supervisor
+     * override at a till). Actor is the OPERATOR who asked; the target row is the authoriser, and
+     * detail carries the permission code that was authorised.
+     */
+    public static final String AUTH_STEP_UP_SUCCESS = "AUTH.STEP_UP.SUCCESS";
+    /**
+     * A step-up attempt was refused (bad credentials, unavailable account, or the named user does
+     * not hold the requested permission). Detail carries the attempted username and the reason.
+     */
+    public static final String AUTH_STEP_UP_FAIL    = "AUTH.STEP_UP.FAIL";
+
     // -- Root bypass (ADR-0004 D-9) -------------------------------------------
     public static final String ROOT_BYPASS = "ROOT.BYPASS";
 
@@ -164,6 +177,12 @@ public final class AuditActions {
     public static final String SALES_BELOW_COST_OVERRIDE = "SALES.BELOW_COST.OVERRIDE";
     /** A line at/below cost was let through WITHOUT a rejection (WARN mode, or cost unknown). */
     public static final String SALES_BELOW_COST_WARNING  = "SALES.BELOW_COST.WARNING";
+
+    // -- Manager-authorised discount policy (K7; target_type = sales_invoice_lines) --
+    /** An over-ceiling line discount was approved by a named manager (APPROVE mode). */
+    public static final String SALES_DISCOUNT_OVERRIDE = "SALES.DISCOUNT.OVERRIDE";
+    /** An over-ceiling line discount was allowed without approval (WARN mode). */
+    public static final String SALES_DISCOUNT_WARNING  = "SALES.DISCOUNT.WARNING";
 
     // -- Routes module (ADR-0012 D-12; target_type = plural table names) ----
     public static final String ROUTE_CREATE            = "ROUTE.CREATE";

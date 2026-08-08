@@ -144,10 +144,24 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
             Map<Long, Deque<StockReceiptVoidedPayload.LineItem>> linesByProduct =
                     groupLinesByProduct(payload.lines());
 
+            // One idempotency key per REVERSED MOVEMENT — see MovementSourceKeys. A GRN that
+            // received one product in two lots now leaves two GOODS_RECEIPT rows, and the void must
+            // be able to write a reversal for each.
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
+
             for (StockMovement original : received) {
                 BigDecimal originalValue = original.getValueAmount();
                 // Original GOODS_RECEIPT quantity is positive; reversal posts negative.
                 BigDecimal originalQty = original.getQuantity();
+                String sourceKey = keys.nextFor(original.getProductId());
+
+                // Probe before reverseReceipt — it mutates avg_cost/on_hand_value immediately.
+                if (posting.alreadyPosted(sourceKey, original.getProductId())) {
+                    log.debug("GoodsReceiptReversalStockHandler: movement uid={} on receipt uid={} " +
+                                    "already reversed for this event — skipping (idempotent redelivery)",
+                            original.getUid(), payload.receiptUid());
+                    continue;
+                }
 
                 if (originalValue == null) {
                     log.warn("GoodsReceiptReversalStockHandler: original GOODS_RECEIPT movement uid={} " +
@@ -167,7 +181,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                         original.getCompanyId(), original.getBranchId(), original.getProductId(),
                         originalQty.negate(),             // GOODS_RECEIPT was +; reversal is −
                         MovementType.GOODS_RECEIPT_REVERSAL,
-                        event.getUid(),                   // void event uid (D-5)
+                        sourceKey,                        // per-movement key off the void event uid (D-5)
                         DOC_TYPE, payload.receiptUid(),
                         null, null,
                         null,

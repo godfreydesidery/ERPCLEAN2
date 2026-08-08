@@ -159,6 +159,14 @@ export interface AddInvoiceLineRequest {
   quantity: string;
   lineDiscountAmount?: string;
   lineDiscountPercent?: string;
+  /**
+   * K7 — uid of the supervisor who authorised a discount above the company's ceiling, handed back by
+   * a successful step-up (`POST /auth/verify-authority` with `SALES.DISCOUNT.OVERRIDE`). Only ever
+   * sent when a supervisor actually approved THIS line; the server re-resolves the uid and requires
+   * that user to be active and to genuinely hold the permission in the invoice's company, so sending
+   * a uid is not by itself an approval. Omitted on every ordinary line.
+   */
+  discountAuthorisedByUid?: string;
 }
 
 /**
@@ -204,6 +212,16 @@ export interface CreateTaxRateRequest {
  */
 export type BelowCostAction = 'OFF' | 'WARN' | 'APPROVE' | 'BLOCK';
 
+/**
+ * Per-company stance on a line discount above `maxDiscountPercent` (K7, V95). Mirrors the backend
+ * `DiscountApprovalAction` enum exactly; serialised as the enum NAME by Jackson.
+ *  - OFF     — no ceiling is enforced (the default, and the pre-K7 behaviour)
+ *  - WARN    — allow it, and record that it happened
+ *  - APPROVE — needs a supervisor who holds SALES.DISCOUNT.OVERRIDE
+ *  - BLOCK   — always refused; nobody can authorise it
+ */
+export type DiscountApprovalAction = 'OFF' | 'WARN' | 'APPROVE' | 'BLOCK';
+
 export interface SalesSettingsDto {
   id: string;
   uid: string;
@@ -218,6 +236,17 @@ export interface SalesSettingsDto {
   allowNegativeStock: boolean;
   /** "Sale at or below cost" policy (owner decision 2026-08-01, V93). */
   belowCostAction: BelowCostAction;
+  /** "Manager-authorised discount" stance (K7, V95). OFF until a company opts in. */
+  discountApprovalAction: DiscountApprovalAction;
+  /**
+   * The discount percent a cashier may apply unaided. Wire shape is a JSON *number*
+   * (BigDecimal → number; only Long ids are stringified), NUMERIC(5,2) so at most two decimals.
+   * `null` means "no ceiling configured", which the server reads as ZERO once the stance is
+   * APPROVE/BLOCK — every discount then needs a manager. The screen must say exactly that, because
+   * showing "no limit" for a state the till enforces as "nothing at all" is the negative-stock
+   * failure repeated.
+   */
+  maxDiscountPercent: number | null;
 }
 
 export interface UpdateSalesSettingsRequest {
@@ -227,6 +256,14 @@ export interface UpdateSalesSettingsRequest {
   currency: string;
   allowNegativeStock: boolean;
   belowCostAction: BelowCostAction;
+  /**
+   * K7: the stance and its ceiling are ONE policy and the server applies them together. Send BOTH
+   * or NEITHER — a ceiling on its own is refused (it used to answer 200 OK and save nothing), and
+   * omitting both means "leave the stored policy exactly as it is".
+   */
+  discountApprovalAction: DiscountApprovalAction;
+  /** Null is a real instruction alongside a stance: "no ceiling configured" (enforced as zero). */
+  maxDiscountPercent: number | null;
 }
 
 // ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────

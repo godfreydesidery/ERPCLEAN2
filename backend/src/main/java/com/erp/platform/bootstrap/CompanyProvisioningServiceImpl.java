@@ -18,6 +18,7 @@ import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
 import com.erp.modules.sales.service.SalesSettingsSeeder;
+import com.erp.modules.sales.service.TillExpenseGlSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
 import java.util.List;
@@ -78,6 +79,10 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     private final ManufacturingGlSeeder  manufacturingGlSeeder;
     // Currency enablement seeder (ADR-0039 D-9)
     private final CurrencyEnablementSeeder currencyEnablementSeeder;
+    // Till-expense GL account + POS_TILL_EXPENSE mapping (V97). Provisioned here so a new company
+    // never posts drawer spend to the cash-SHORTAGE variance account; the POS expense path also
+    // self-heals an existing company on first use, so an upgrade needs no manual step.
+    private final TillExpenseGlSeeder    tillExpenseGlSeeder;
 
     CompanyProvisioningServiceImpl(
             UnitOfMeasureSeeder    unitSeeder,
@@ -99,7 +104,8 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             HrStatutorySeeder      hrStatutorySeeder,
             NotificationTypeSeeder notificationTypeSeeder,
             ManufacturingGlSeeder  manufacturingGlSeeder,
-            CurrencyEnablementSeeder currencyEnablementSeeder) {
+            CurrencyEnablementSeeder currencyEnablementSeeder,
+            TillExpenseGlSeeder    tillExpenseGlSeeder) {
         this.unitSeeder               = unitSeeder;
         this.taxRateSeeder            = taxRateSeeder;
         this.salesSettingsSeeder      = salesSettingsSeeder;
@@ -120,6 +126,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         this.notificationTypeSeeder   = notificationTypeSeeder;
         this.manufacturingGlSeeder    = manufacturingGlSeeder;
         this.currencyEnablementSeeder = currencyEnablementSeeder;
+        this.tillExpenseGlSeeder      = tillExpenseGlSeeder;
     }
 
     /**
@@ -190,6 +197,10 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
 
         // Manufacturing GL accounts + gl_configs (ADR-0035 D-7)
         manufacturingGlSeeder.seedDefaults(companyId);
+
+        // Till-expense account 5175 + gl_configs[POS_TILL_EXPENSE] (V97). Runs after the CoA seed
+        // above, which is what it adopts or extends.
+        tillExpenseGlSeeder.seedDefaults(companyId);
 
         // Company currency allow-list (ADR-0039 D-9)
         currencyEnablementSeeder.seedDefaults(companyId, baseCurrency, defaultCurrency,

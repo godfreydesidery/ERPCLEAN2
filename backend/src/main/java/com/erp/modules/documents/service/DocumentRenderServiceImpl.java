@@ -25,8 +25,11 @@ import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.modules.reporting.export.PdfStatementRenderer;
 import com.erp.modules.reporting.export.StatementRenderModel;
 import com.erp.modules.sales.domain.dto.DeliveryDto;
+import com.erp.modules.sales.domain.dto.QuotationDto;
+import com.erp.modules.sales.domain.dto.QuotationLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.service.DeliveryService;
+import com.erp.modules.sales.service.QuotationService;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -70,6 +73,9 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
     private static final Logger log = LoggerFactory.getLogger(DocumentRenderServiceImpl.class);
     private static final String DOCUMENT_RENDER = "DOCUMENT.RENDER";
 
+    /** Source-status name shared by every "not issued yet, so not printable" guard below. */
+    private static final String DRAFT = "DRAFT";
+
     private final DocumentTemplateRepository  templates;
     private final DocumentBrandingRepository  brandings;
     private final GeneratedDocumentRepository generatedDocs;
@@ -81,6 +87,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
     private final PurchaseOrderService purchaseOrderService;
     private final ArCreditNoteService  arCreditNoteService;
     private final ArAgeingQuery        arAgeingQuery;
+    private final QuotationService     quotationService;
 
     private final DocumentNumberGenerator  numberGenerator;
     private final DocumentModelBuilder     modelBuilder;
@@ -101,6 +108,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
             PurchaseOrderService purchaseOrderService,
             ArCreditNoteService arCreditNoteService,
             ArAgeingQuery arAgeingQuery,
+            QuotationService quotationService,
             DocumentNumberGenerator numberGenerator,
             DocumentModelBuilder modelBuilder,
             DocumentPdfRenderer pdfRenderer,
@@ -118,6 +126,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         this.purchaseOrderService = purchaseOrderService;
         this.arCreditNoteService  = arCreditNoteService;
         this.arAgeingQuery        = arAgeingQuery;
+        this.quotationService     = quotationService;
         this.numberGenerator      = numberGenerator;
         this.modelBuilder         = modelBuilder;
         this.pdfRenderer          = pdfRenderer;
@@ -321,6 +330,17 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
                 DocumentRenderModel model = modelBuilder.buildCreditNote(cn, branding, title);
                 yield new RenderResult(pdfRenderer.render(model), "AR_CREDIT_NOTE");
             }
+            case QUOTATION -> {
+                // The proforma (K5). Read-only like every other type: getByUid + listLines, no
+                // stock move, no GL posting, no mutation of the quotation.
+                assertSourceUidPresent(req);
+                QuotationDto quote = quotationService.getByUid(req.sourceUid());
+                assertRenderableQuotation(quote);
+                List<QuotationLineDto> quoteLines = quotationService.listLines(req.sourceUid());
+                DocumentRenderModel model =
+                        modelBuilder.buildQuotation(quote, quoteLines, branding, title);
+                yield new RenderResult(pdfRenderer.render(model), "QUOTATION");
+            }
             case AR_STATEMENT -> {
                 if (req.sourceParams() == null) {
                     throw new IllegalArgumentException(
@@ -365,6 +385,7 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
             case PURCHASE_ORDER -> "purchaseorder";
             case GOODS_RECEIPT  -> "goodsreceipt";
             case DELIVERY_NOTE  -> "delivery";
+            case QUOTATION      -> "quotation";
             default -> throw new IllegalArgumentException("Not renderable in v1: " + type);
         };
 
@@ -388,15 +409,30 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
 
     private void assertRenderablePurchaseOrder(PurchaseOrderDto po) {
         if (po.status() == null) return;
-        if ("DRAFT".equals(po.status().name())) {
+        if (DRAFT.equals(po.status().name())) {
             throw new IllegalStateException("Purchase order is DRAFT — place the order first.");
         }
     }
 
     private void assertRenderableGoodsReceipt(GoodsReceiptDto gr) {
         if (gr.status() == null) return;
-        if ("DRAFT".equals(gr.status().name())) {
+        if (DRAFT.equals(gr.status().name())) {
             throw new IllegalStateException("Goods receipt is DRAFT — receive it first.");
+        }
+    }
+
+    /**
+     * A DRAFT quotation has no QUOTE-#### yet (the number is allocated at send), so a proforma
+     * printed from one would carry a blank document number — and the customer would be holding a
+     * priced document the business has no record of having issued. Same stance as the purchase
+     * order. Every other state prints, including EXPIRED and REJECTED: reprints are legitimate, and
+     * the builder stamps those across the face of the page so a stale price cannot pass for a live
+     * one.
+     */
+    private void assertRenderableQuotation(QuotationDto quote) {
+        if (DRAFT.equals(quote.status())) {
+            throw new IllegalStateException(
+                    "This quotation is still a draft. Send it first, then print the proforma.");
         }
     }
 

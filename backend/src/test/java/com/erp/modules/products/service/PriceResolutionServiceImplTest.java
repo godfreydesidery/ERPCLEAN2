@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.entity.PriceList;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
@@ -196,6 +197,51 @@ class PriceResolutionServiceImplTest {
 
         assertThat(result.unitPriceAmount()).isEqualByComparingTo("1180.0000");
         assertThat(result.vatInclusive()).isTrue();
+    }
+
+    // -------------------------------------------------------------------------
+    // resolveUnitListPriceQuote — same rules, plus the currency the batch price-read API needs
+    // -------------------------------------------------------------------------
+
+    @Test
+    void resolveUnitListPriceQuote_explicitPerUnitOverride_carriesAmountAndCurrency() {
+        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(product.getId(), boxUnit.getId()))
+                .thenReturn(Optional.of(priceRow(boxUnit, "1150.0000")));
+
+        UnitPriceQuoteDto quote =
+                service.resolveUnitListPriceQuote(COMPANY_ID, product.getId(), boxUnit.getId());
+
+        assertThat(quote.amount()).isEqualByComparingTo("1150.0000");
+        assertThat(quote.currency()).isEqualTo("TZS");
+        assertThat(quote.vatInclusive()).isFalse();
+    }
+
+    @Test
+    void resolveUnitListPriceQuote_derivedFromBaseRow_carriesTheBaseRowsCurrency() {
+        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(product.getId(), boxUnit.getId()))
+                .thenReturn(Optional.empty());
+        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
+                .thenReturn(Optional.of(priceRow(null, "100.0000")));
+
+        UnitPriceQuoteDto quote =
+                service.resolveUnitListPriceQuote(COMPANY_ID, product.getId(), boxUnit.getId());
+
+        assertThat(quote.amount()).isEqualByComparingTo("1200.0000"); // 100 x 12
+        assertThat(quote.currency()).isEqualTo("TZS");
+    }
+
+    @Test
+    void resolveUnitListPrice_delegatesToTheQuote_soBothStayInAgreement() {
+        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
+                .thenReturn(Optional.of(priceRow(null, "1180.0000", true)));
+
+        UnitListPriceDto narrow =
+                service.resolveUnitListPrice(COMPANY_ID, product.getId(), baseUnit.getId());
+        UnitPriceQuoteDto quote =
+                service.resolveUnitListPriceQuote(COMPANY_ID, product.getId(), baseUnit.getId());
+
+        assertThat(narrow.amount()).isEqualByComparingTo(quote.amount());
+        assertThat(narrow.vatInclusive()).isEqualTo(quote.vatInclusive());
     }
 
     // -------------------------------------------------------------------------

@@ -38,6 +38,12 @@
 
             <!-- Metadata -->
             <dl class="row g-1 mb-0 flex-grow-1" style="font-size:0.875rem">
+              <!-- K5: the DTO now carries the customer's name, so the screen (and the printed
+                   proforma) can say who the quote is for instead of showing nothing. -->
+              @if (q.customerName) {
+                <dt class="col-sm-3 text-muted fw-normal">Customer</dt>
+                <dd class="col-sm-9 mb-0">{{ q.customerName }}</dd>
+              }
               <dt class="col-sm-3 text-muted fw-normal">Currency</dt>
               <dd class="col-sm-9 mb-0">{{ q.currency }}</dd>
               <dt class="col-sm-3 text-muted fw-normal">Quote Date</dt>
@@ -144,6 +150,27 @@
                 Reject
               </button>
               @if (rejectError(); as msg) {
+                <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+              }
+            }
+
+            <!--
+              Print proforma (K5). Hidden for DRAFT: a draft has no quote number yet and the server
+              refuses it. Gated DOCUMENT.RENDER — the same permission the invoice print uses.
+            -->
+            @if (!isDraft() && canPrint()) {
+              <button type="button" class="btn btn-outline-secondary"
+                      [disabled]="printing()"
+                      (click)="printProforma()">
+                @if (printing()) {
+                  <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Preparing…
+                } @else {
+                  <i class="bi bi-printer me-1" aria-hidden="true"></i>
+                  Print Proforma
+                }
+              </button>
+              @if (printError(); as msg) {
                 <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
               }
             }

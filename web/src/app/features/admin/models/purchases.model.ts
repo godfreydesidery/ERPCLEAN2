@@ -78,7 +78,17 @@ export interface PurchaseOrderDto {
    * the PO has no approval status (gate disabled or below threshold).
    */
   approvalStatus?: PoApprovalStatus | null;
+  /**
+   * How this order came to exist (V96). `MANUAL` = a buyer raised it. `DIRECT_RECEIPT` = it was
+   * synthesised to anchor a goods receipt with no prior LPO, so it is a book-keeping artefact:
+   * already fully received, nothing to action, and hidden from the default list unless the caller
+   * passes `includeDirectReceipts`. Absent on responses that predate V96 — treat as `MANUAL`.
+   */
+  origin?: PurchaseOrderOrigin | null;
 }
+
+/** `purchase_orders.origin` (V96, K3). */
+export type PurchaseOrderOrigin = 'MANUAL' | 'DIRECT_RECEIPT';
 
 // ── GoodsReceiptLineDto ─────────────────────────────────────────────────────────
 
@@ -171,6 +181,38 @@ export interface CreateGoodsReceiptRequest {
 
 export interface VoidGoodsReceiptRequest {
   reason: string;
+}
+
+// ── Direct goods receipt (no prior LPO) — K3 ────────────────────────────────
+
+/**
+ * One line of a direct goods receipt. Unlike {@link GoodsReceiptLineRequest} it names the product
+ * itself — there is no purchase-order line to point at. `unitCostAmount` is per `unitUid` (i.e. per
+ * carton when the delivery is in cartons); zero is accepted only with a `note`.
+ */
+export interface DirectGoodsReceiptLineRequest {
+  productUid: string;
+  unitUid: string;
+  receivedQty: string;
+  unitCostAmount: string;
+  note?: string;
+  lotNumber?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
+  serialNumbers?: string[];
+}
+
+/**
+ * Receive stock that arrived without a purchase order. The backend auto-raises the backing order
+ * (stamped `DIRECT_RECEIPT`), receives it in full and raises a ratification request for a manager
+ * — the storekeeper never sees a purchase order.
+ */
+export interface DirectGoodsReceiptRequest {
+  companyUid: string;
+  supplierUid: string;
+  currency?: string;
+  notes?: string;
+  lines: DirectGoodsReceiptLineRequest[];
 }
 
 // ── Purchase Return enums / DTOs / requests ─────────────────────────────────

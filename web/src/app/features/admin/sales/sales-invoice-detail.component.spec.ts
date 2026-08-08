@@ -103,6 +103,7 @@ function makeBed(overrides: {
   getFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
   issueFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
   overrideLinePriceSpy?: ReturnType<typeof vi.fn>;
+  addLineSpy?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
@@ -114,6 +115,7 @@ function makeBed(overrides: {
   const issueFiscalReceiptSpy = overrides.issueFiscalReceiptSpy ?? vi.fn(() => of(STUB_FISCAL_ISSUED));
   const overrideLinePriceSpy =
     overrides.overrideLinePriceSpy ?? vi.fn(() => of({ ...STUB_LINE, unitPriceAmount: '90', priceOverridden: true }));
+  const addLineSpy = overrides.addLineSpy ?? vi.fn(() => of({}));
   const alertsSpy = { success: vi.fn(), error: vi.fn() };
 
   TestBed.configureTestingModule({
@@ -128,7 +130,7 @@ function makeBed(overrides: {
           getByUid: vi.fn(() => of(invoice)),
           listLines: vi.fn(() => of(lines)),
           listPayments: vi.fn(() => of([])),
-          addLine: vi.fn(() => of({})),
+          addLine: addLineSpy,
           removeLine: vi.fn(() => of(undefined)),
           addPayment: vi.fn(() => of({})),
           removePayment: vi.fn(() => of(undefined)),
@@ -169,7 +171,7 @@ function makeBed(overrides: {
 
   return {
     listProductUnitsSpy, renderBlobSpy, getFiscalReceiptSpy, issueFiscalReceiptSpy,
-    overrideLinePriceSpy, alertsSpy,
+    overrideLinePriceSpy, addLineSpy, alertsSpy,
   };
 }
 
@@ -866,5 +868,133 @@ describe('SalesInvoiceDetailComponent — weighed-goods rounding note', () => {
 
     expect(fixture.nativeElement.textContent).toContain('entered 0.813');
     expect(fixture.nativeElement.textContent).toContain('billed 0.815');
+  });
+});
+
+// ── Suite D — manager-authorised discount (K7, UAT B3/#13) ────────────────────
+//
+// A wholesale or credit invoice that trips the company's discount ceiling used to be a dead end on
+// this screen: the refusal appeared with no way forward, and the step-up existed only at the POS
+// screen — so the answer to "the system won't take my discount" was "go and ring it on a till".
+// These specs pin the affordance and, just as importantly, when it must NOT appear.
+
+/** A refusal the way the server sends it: friendly text in errors[0], no code channel on this path. */
+function refusal(status: number, message: string, data?: unknown): HttpErrorResponse {
+  return new HttpErrorResponse({ status, error: { data: data ?? null, errors: [message] } });
+}
+
+describe('SalesInvoiceDetailComponent — manager-authorised discount', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  /** Drives the screen to "a discounted line was refused", the state the affordance answers. */
+  async function refusedDiscountedLine(addLineSpy: ReturnType<typeof vi.fn>) {
+    makeBed({ addLineSpy });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectProduct(STUB_PRODUCT as any);
+    await vi.runAllTimersAsync();
+    comp.newLineQty.set('10');
+    comp.newLineDiscountPercent.set('60');
+    comp.addLine();
+    await vi.runAllTimersAsync();
+    return { fixture, comp };
+  }
+
+  it('offers the step-up after the server refuses a discounted line', async () => {
+    const addLineSpy = vi.fn(() =>
+      throwError(() => refusal(409, 'The discount on Beverage is above 10% and needs a manager’s approval.')),
+    );
+    const { fixture, comp } = await refusedDiscountedLine(addLineSpy);
+
+    expect(comp.canRequestDiscountApproval()).toBe(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Ask a supervisor');
+  });
+
+  it('does not offer it when the refusal names a rule no supervisor can override', async () => {
+    // BLOCK: prompting for an approval that would be refused anyway is a lie told to a customer.
+    const addLineSpy = vi.fn(() =>
+      throwError(() =>
+        refusal(422, 'That discount is not allowed.', {
+          code: 'REJECTED',
+          errorCode: 'DISCOUNT_ABOVE_CEILING',
+        }),
+      ),
+    );
+    const { comp } = await refusedDiscountedLine(addLineSpy);
+
+    expect(comp.canRequestDiscountApproval()).toBe(false);
+  });
+
+  it('does not offer it when there is no discount to approve', async () => {
+    const addLineSpy = vi.fn(() => throwError(() => refusal(409, 'Not enough stock.')));
+    makeBed({ addLineSpy });
+    const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+    fixture.componentRef.setInput('uid', 'INV-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectProduct(STUB_PRODUCT as any);
+    await vi.runAllTimersAsync();
+    comp.newLineQty.set('10');
+    comp.addLine();
+    await vi.runAllTimersAsync();
+
+    expect(comp.canRequestDiscountApproval()).toBe(false);
+  });
+
+  it('sends the approver uid on the retry and reports who signed', async () => {
+    const addLineSpy = vi
+      .fn()
+      .mockImplementationOnce(() => throwError(() => refusal(409, 'Needs a manager.')))
+      .mockImplementationOnce(() => of({}));
+    const { fixture, comp } = await refusedDiscountedLine(addLineSpy);
+
+    comp.requestDiscountApproval();
+    expect(comp.approvalPromptOpen()).toBe(true);
+
+    comp.onDiscountApprovalGranted({ authoriserUid: 'MGR-UID-1', authoriserName: 'Maria Manager' });
+    await vi.runAllTimersAsync();
+
+    expect(addLineSpy).toHaveBeenCalledTimes(2);
+    expect(addLineSpy.mock.calls[0][1].discountAuthorisedByUid).toBeUndefined();
+    expect(addLineSpy.mock.calls[1][1].discountAuthorisedByUid).toBe('MGR-UID-1');
+    expect(comp.approvalPromptOpen()).toBe(false);
+    fixture.detectChanges();
+    // The line went through, so the form is reset — the approval must not linger on the next line.
+    expect(comp.discountAuthorisedByUid()).toBeNull();
+  });
+
+  it('throws the approval away when the discount it was given for changes', async () => {
+    const addLineSpy = vi
+      .fn()
+      .mockImplementationOnce(() => throwError(() => refusal(409, 'Needs a manager.')))
+      .mockImplementation(() => throwError(() => refusal(409, 'Needs a manager.')));
+    const { comp } = await refusedDiscountedLine(addLineSpy);
+
+    comp.onDiscountApprovalGranted({ authoriserUid: 'MGR-UID-1', authoriserName: 'Maria Manager' });
+    await vi.runAllTimersAsync();
+    // The retry was refused again, so nothing is stamped; sign once more and then edit the figure.
+    comp.discountAuthorisedByUid.set('MGR-UID-1');
+    comp.discountAuthorisedByName.set('Maria Manager');
+
+    comp.newLineDiscountPercent.set('80');
+    comp.clearDiscountApproval();
+
+    expect(comp.discountAuthorisedByUid()).toBeNull();
+    expect(comp.discountAuthorisedByName()).toBeNull();
+  });
+
+  it('does not offer it for a failure a supervisor cannot fix', async () => {
+    const addLineSpy = vi.fn(() =>
+      throwError(() => refusal(403, 'You do not have permission to perform this action.')),
+    );
+    const { comp } = await refusedDiscountedLine(addLineSpy);
+
+    expect(comp.canRequestDiscountApproval()).toBe(false);
   });
 });

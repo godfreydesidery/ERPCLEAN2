@@ -105,12 +105,30 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
 
             List<ReceiptLeg> glLegs = new ArrayList<>();
 
+            // One idempotency key per LINE, not per event. A GRN routinely receives the same product
+            // in two lots (different expiry, different lot number) — with a single event-wide key the
+            // second lot looked like a redelivery of the first, so its quantity never landed while
+            // the moving-average recompute and the DR INVENTORY leg counted both.
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
+
             for (StockReceivedPayload.LineItem line : payload.lines()) {
                 ProductDto product = productService.getByUid(line.productUid());
                 if (!product.stockable()) {
                     log.info("GoodsReceiptStockHandler: skipping non-stockable product uid={} " +
                                     "name='{}' on receipt uid={} (D-3, defensive)",
                             line.productUid(), product.name(), payload.receiptUid());
+                    continue;
+                }
+
+                String sourceKey = keys.nextFor(line.productId());
+
+                // Probe before the valuation recompute: recomputeOnReceipt mutates avg_cost and
+                // on_hand_value immediately, while post() would no-op on an already-applied key —
+                // value would move without quantity. Skip the line whole, tracking writes included.
+                if (posting.alreadyPosted(sourceKey, line.productId())) {
+                    log.debug("GoodsReceiptStockHandler: line for product uid={} on receipt uid={} " +
+                                    "already posted for this event — skipping (idempotent redelivery)",
+                            line.productUid(), payload.receiptUid());
                     continue;
                 }
 
@@ -131,7 +149,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
                         event.getCompanyId(), event.getBranchId(), line.productId(),
                         line.qtyInBase(),
                         MovementType.GOODS_RECEIPT,
-                        event.getUid(),
+                        sourceKey,
                         DOC_TYPE, payload.receiptUid(),
                         null, null,
                         payload.receivedAt(),

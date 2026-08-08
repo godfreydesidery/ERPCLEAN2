@@ -292,7 +292,15 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
 
         // Act — this must NOT throw (the busy-day-sim defect: always 409 via
         // FLOW-ORDER-TO-CASH-027's settled-tender guard, making POS void unsatisfiable).
-        setCashierCtx();
+        //
+        // Reversed under the ROOT context, not the cashier's. A till reversal now needs supervisor
+        // authority — either the caller's own SALES.INVOICE.VOID or a re-verified manager step-up
+        // (K1 C3) — and this IT's cashier is a bare AppUser with no role at all, so it has neither.
+        // Root satisfies the authority rule, which leaves this test asserting the thing it was
+        // written to assert: that the POS void path itself reverses the invoice, the stock and the
+        // GL without tripping the AR settled-tender guard. Who may authorise a reversal is covered
+        // exhaustively by PosSaleServiceImplTest and StepUpAuthServiceImplTest.
+        setRootCtx();
         saleService.reverseSale(sale.uid(), "cashier rang the wrong item");
 
         SalesInvoice voided = invoiceRepo.findByUid(sale.uid()).orElseThrow();

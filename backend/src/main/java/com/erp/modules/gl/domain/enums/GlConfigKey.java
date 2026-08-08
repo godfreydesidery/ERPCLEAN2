@@ -32,6 +32,16 @@ public enum GlConfigKey {
     // --- sales-depth (ADR-0029 D-4) — POS over/short variance accounts ---
     POS_CASH_OVER,
     POS_CASH_SHORT,
+    /**
+     * Operating expenses paid in cash out of a till drawer (V97).
+     *
+     * <p>Deliberately separate from {@link #POS_CASH_SHORT}: that is a VARIANCE account whose only
+     * job is to make drawer discrepancies visible, so booking routine spend into it destroys the
+     * control signal AND misclassifies operating expense by nature on the P&amp;L. Provisioned per
+     * company by application code (never seeded in SQL), and never silently defaulted back to the
+     * shortage account — an unmapped company is refused, not mis-posted.
+     */
+    POS_TILL_EXPENSE,
     // --- Fixed Assets increment (ADR-0030 D-3) ---
     FIXED_ASSETS,
     FIXED_ASSET_CLEARING,

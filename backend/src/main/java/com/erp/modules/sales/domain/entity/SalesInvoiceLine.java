@@ -129,6 +129,19 @@ public class SalesInvoiceLine {
     @Setter
     private BigDecimal lineDiscountPercent;
 
+    /**
+     * FK → app_users.id (V95, K7); NULL unless a manager authorised a discount above the company's
+     * ceiling via the step-up endpoint. Mirrors {@link #overriddenBy} on this same table: the WHO
+     * behind a discretionary act, on the document rather than only in the audit trail.
+     *
+     * <p>Re-stamped by every add/update of the line, so it always describes the discount currently
+     * on the row — an approved 60% edited back down to 5% clears it, because nobody approved 5%.
+     * Stays NULL under OFF (the default) and under WARN, which allows without an approver.
+     */
+    @Column(name = "discount_authorised_by")
+    @Setter
+    private Long discountAuthorisedBy;
+
     /** Snapshot of product VAT status at sale time (ADR-0008 D-3/D-5). */
     @Enumerated(EnumType.STRING)
     @Column(name = "vat_status", nullable = false, length = 20)

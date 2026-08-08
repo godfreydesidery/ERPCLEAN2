@@ -22,6 +22,11 @@ import { UnitOfMeasureDto } from '../models/product.model';
 import { ProductService } from '../products/product.service';
 import { DocumentsService } from '../documents/documents.service';
 import { SalesService } from './sales.service';
+import {
+  ManagerApproval,
+  ManagerApprovalDialogComponent,
+} from '../../../shared/manager-approval/manager-approval-dialog.component';
+import { DISCOUNT_OVERRIDE_PERMISSION, DiscountPolicyService } from './discount-policy.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -41,7 +46,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-sales-invoice-detail',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, ManagerApprovalDialogComponent],
   templateUrl: './sales-invoice-detail.component.html',
   styleUrl: './sales-invoice-detail.component.scss',
 })
@@ -49,6 +54,7 @@ export class SalesInvoiceDetailComponent {
   private readonly salesService = inject(SalesService);
   private readonly productService = inject(ProductService);
   private readonly documentsService = inject(DocumentsService);
+  private readonly discountPolicy = inject(DiscountPolicyService);
   private readonly alerts = inject(AlertService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
@@ -87,6 +93,52 @@ export class SalesInvoiceDetailComponent {
   readonly newLineDiscountPercent = signal('');
   readonly addingLine = signal(false);
   readonly lineFormError = signal<string | null>(null);
+
+  // ── Manager-authorised discount (K7) ───────────────────────────────────────
+  // This screen carries the same ungated discount boxes as the till, and the server applies the
+  // same policy to both (a POS sale is built out of these very add-line calls). Until now a
+  // wholesale or credit invoice that tripped the ceiling was a dead end here: the refusal appeared
+  // with no way forward, and the step-up existed only at the POS screen — so the answer to "the
+  // system won't take my discount" was "go and ring it on a till", which is not an answer.
+  //
+  // The affordance appears only AFTER the server has refused, because this screen cannot know the
+  // company's ceiling (the policy endpoint is gated on SALES.SETTINGS.MANAGE, which a salesperson
+  // does not hold). Whether to offer it is decided on the refusal's machine-readable code, never on
+  // its wording.
+
+  /** True once the server refused an add-line in a way a supervisor could rescue. */
+  readonly discountNeedsApproval = signal(false);
+  /** Open state of the step-up prompt. */
+  readonly approvalPromptOpen = signal(false);
+  /** The approving supervisor, once they have signed. Sent with the next add-line attempt. */
+  readonly discountAuthorisedByUid = signal<string | null>(null);
+  readonly discountAuthorisedByName = signal<string | null>(null);
+  /** Seeded permission a supervisor must hold to wave a discount through. */
+  protected readonly discountOverridePermission = DISCOUNT_OVERRIDE_PERMISSION;
+
+  /** True when the line being added carries a discount at all — nothing to approve otherwise. */
+  readonly newLineHasDiscount = computed(
+    () =>
+      Number(this.newLineDiscountAmount().trim() || '0') > 0 ||
+      Number(this.newLineDiscountPercent().trim() || '0') > 0,
+  );
+
+  /** Show the "Ask a supervisor" button only where it could actually help. */
+  readonly canRequestDiscountApproval = computed(
+    () =>
+      this.discountNeedsApproval() &&
+      this.newLineHasDiscount() &&
+      this.discountAuthorisedByUid() === null,
+  );
+
+  /** One plain sentence naming what the supervisor is being asked to approve. */
+  readonly approvalReason = computed(() => {
+    const product = this.selectedProduct()?.label ?? 'this line';
+    const amount = this.newLineDiscountAmount().trim();
+    const percent = this.newLineDiscountPercent().trim();
+    const size = percent ? `${percent}%` : amount ? amount : 'A discount';
+    return `A discount of ${size} on ${product} needs a supervisor's approval.`;
+  });
 
   private readonly productSearch$ = new Subject<string>();
 
@@ -257,6 +309,7 @@ export class SalesInvoiceDetailComponent {
     this.newLineUnitUid.set('');
     this.lineUnits.set([]);
     this.productSearch$.next(q);
+    this.clearDiscountApproval();
   }
 
   selectProduct(product: ProductModel): void {
@@ -264,6 +317,21 @@ export class SalesInvoiceDetailComponent {
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
     this.loadUnitsForProduct(product.uid);
+    this.clearDiscountApproval();
+  }
+
+  /**
+   * Called whenever the quantity or either discount box changes.
+   *
+   * A supervisor approved a specific discount on a specific line. Letting that approval survive an
+   * edit would mean a signature given for 10% off silently covering 60% off — so any change to what
+   * was approved throws the approval away and the salesperson must ask again.
+   */
+  clearDiscountApproval(): void {
+    if (this.discountAuthorisedByUid() !== null) {
+      this.discountAuthorisedByUid.set(null);
+      this.discountAuthorisedByName.set(null);
+    }
   }
 
   addLine(): void {
@@ -293,6 +361,10 @@ export class SalesInvoiceDetailComponent {
       quantity: qty,
       lineDiscountAmount: this.newLineDiscountAmount().trim() || undefined,
       lineDiscountPercent: this.newLineDiscountPercent().trim() || undefined,
+      // K7: only ever sent when a supervisor actually signed for THIS discount. The server
+      // re-resolves the uid and requires that user to be active and to genuinely hold the override
+      // in this invoice's company, so sending it is a pointer to an approval, never the approval.
+      discountAuthorisedByUid: this.discountAuthorisedByUid() ?? undefined,
     };
 
     this.salesService.addLine(this.uid(), request).subscribe({
@@ -304,6 +376,9 @@ export class SalesInvoiceDetailComponent {
         this.newLineQty.set('');
         this.newLineDiscountAmount.set('');
         this.newLineDiscountPercent.set('');
+        this.discountNeedsApproval.set(false);
+        this.discountAuthorisedByUid.set(null);
+        this.discountAuthorisedByName.set(null);
         this.addingLine.set(false);
         this.alerts.success('Line added');
         this.loadLines();
@@ -311,9 +386,42 @@ export class SalesInvoiceDetailComponent {
       },
       error: (err) => {
         this.lineFormError.set(this.messageFrom(err, 'Could not add line.'));
+        // Offer the step-up when the server's refusal is one a supervisor could sign off. Decided on
+        // the refusal's machine-readable code where the endpoint sends one, and otherwise on the
+        // HTTP status — never on the message text, which is written for the human and gets reworded.
+        // A rejected approval clears the stale authoriser so the next attempt asks again rather than
+        // resending a signature the server has already turned down.
+        if (this.discountPolicy.approvalMayRescue(err)) {
+          this.discountAuthorisedByUid.set(null);
+          this.discountAuthorisedByName.set(null);
+          this.discountNeedsApproval.set(true);
+        }
         this.addingLine.set(false);
       },
     });
+  }
+
+  // ── Manager-authorised discount (K7) ───────────────────────────────────────
+
+  requestDiscountApproval(): void {
+    this.approvalPromptOpen.set(true);
+  }
+
+  cancelDiscountApproval(): void {
+    this.approvalPromptOpen.set(false);
+  }
+
+  /**
+   * A supervisor signed. Stamp the approval on the pending line and send it straight away — making
+   * them press "Add Line" again after a manager has already walked over and typed their password is
+   * one step too many at a counter with a customer waiting.
+   */
+  onDiscountApprovalGranted(approval: ManagerApproval): void {
+    this.discountAuthorisedByUid.set(approval.authoriserUid);
+    this.discountAuthorisedByName.set(approval.authoriserName);
+    this.approvalPromptOpen.set(false);
+    this.lineFormError.set(null);
+    this.addLine();
   }
 
   removeLine(line: SalesInvoiceLineDto): void {

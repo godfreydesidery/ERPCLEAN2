@@ -84,14 +84,21 @@ public class PurchaseOrderController {
      * The service applies its own company-scope predicate ({@code assertCanActIn}), so a holder of
      * any of these verbs reads only their OWN company's POs — this widens the permission gate, not
      * the tenant scope.
+     *
+     * <p><b>{@code includeDirectReceipts}</b> (V96, K3) — defaults to {@code false}: the orders that
+     * {@code POST /goods-receipts/direct} synthesises to anchor a receipt with no prior LPO are left
+     * out, because they are already fully received and there is nothing for a buyer to do with them.
+     * Pass {@code true} to audit them (they are still reachable one-by-one from their goods receipt,
+     * and {@code PurchaseOrderDto.origin} badges them wherever they surface).
      */
     @GetMapping
     @PreAuthorize("@perm.has('PURCHASE.ORDER.VIEW') or @perm.has('AP.BILL.ENTER') or @perm.has('PURCHASE.RECEIVE')")
     public ApiResponse<List<PurchaseOrderDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false, defaultValue = "false") boolean includeDirectReceipts,
             Pageable pageable) {
-        Page<PurchaseOrderDto> page = service.list(companyId, q, pageable);
+        Page<PurchaseOrderDto> page = service.list(companyId, q, includeDirectReceipts, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 

@@ -76,8 +76,22 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
             BigDecimal totalReturnValue = BigDecimal.ZERO;
             String currency = payload.currency() != null ? payload.currency() : "TZS";
 
+            // One idempotency key per LINE — a return can send back the same product from two
+            // receipt lines. A single event-wide key dropped every line after the first while
+            // reverseReceipt still backed all of them out of the average (see MovementSourceKeys).
+            MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());
+
             for (PurchaseReturnedPayload.ReturnLine line : payload.lines()) {
                 BigDecimal lineValue = line.lineValue();
+                String sourceKey = keys.nextFor(line.productId());
+
+                // Probe before reverseReceipt — it mutates avg_cost/on_hand_value immediately.
+                if (posting.alreadyPosted(sourceKey, line.productId())) {
+                    log.debug("PurchaseReturnStockHandler: line grLineId={} on return uid={} already " +
+                                    "posted for this event — skipping (idempotent redelivery)",
+                            line.goodsReceiptLineId(), payload.purchaseReturnUid());
+                    continue;
+                }
 
                 if (lineValue != null && lineValue.signum() > 0) {
                     // Back out the receipt from the moving-average at original cost (ADR-0020 D-5)
@@ -95,7 +109,7 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                         payload.companyId(), payload.branchId(), line.productId(),
                         line.returnedQtyInBase().negate(),  // negative = stock out
                         MovementType.PURCHASE_RETURN,
-                        event.getUid(),
+                        sourceKey,
                         DOC_TYPE, payload.purchaseReturnUid(),
                         null, null,
                         null,

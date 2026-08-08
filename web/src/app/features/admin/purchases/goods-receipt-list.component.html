@@ -57,6 +57,14 @@
 
       <div class="erp-toolbar__spacer"></div>
 
+      @if (canReceiveDirect()) {
+        <a class="btn btn-outline-primary" routerLink="/admin/goods-receipts/direct">
+          <i class="bi bi-box-arrow-in-down me-1" aria-hidden="true"></i>
+          Receive Without Order
+          <span class="visually-hidden"> — stock that arrived with no purchase order</span>
+        </a>
+      }
+
       @if (canReceive()) {
         <a class="btn btn-primary" routerLink="/admin/goods-receipts/create"
            aria-label="Create a new goods receipt">

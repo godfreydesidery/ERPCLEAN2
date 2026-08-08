@@ -23,7 +23,7 @@ import { CurrencySelectComponent } from '../../../shared/currency-select/currenc
 
 const DEFAULT_SIZE = 20;
 
-interface LoadTrigger { q: string; status: string; page: number }
+interface LoadTrigger { q: string; status: string; page: number; includeDirect: boolean }
 
 /**
  * Purchase Order list screen. Company scope, debounced search, status filter, inline create.
@@ -59,6 +59,12 @@ export class PurchaseOrderListComponent {
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly searchQ = signal('');
   readonly statusFilter = signal('');
+  /**
+   * Opt-in for the orders auto-raised behind a direct goods receipt (V96, K3). Off by default —
+   * they are already fully received and there is nothing to action on them, so they would bury the
+   * buyer's real orders one row per delivery. On, they appear with an origin badge.
+   */
+  readonly includeDirectReceipts = signal(false);
 
   // ── Create form ────────────────────────────────────────────────────────────
   readonly showCreateForm = signal(false);
@@ -94,17 +100,24 @@ export class PurchaseOrderListComponent {
       skip(1),
       debounceTime(300),
       distinctUntilChanged(),
-      map((q): LoadTrigger => ({ q, status: this.statusFilter(), page: 0 })),
+      map((q): LoadTrigger => ({
+        q,
+        status: this.statusFilter(),
+        page: 0,
+        includeDirect: this.includeDirectReceipts(),
+      })),
     );
 
     merge(typingTrigger$, this.immediateTrigger$)
       .pipe(
-        switchMap(({ q, status, page }) => {
+        switchMap(({ q, status, page, includeDirect }) => {
           const companyId = this.selectedCompanyId();
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
-          return this.purchasesService.listOrders(companyId, q || undefined, status || undefined, page, DEFAULT_SIZE);
+          return this.purchasesService.listOrders(
+            companyId, q || undefined, status || undefined, page, DEFAULT_SIZE, includeDirect,
+          );
         }),
         takeUntilDestroyed(),
       )
@@ -167,10 +180,20 @@ export class PurchaseOrderListComponent {
     this.load(0);
   }
 
+  onIncludeDirectReceiptsChange(include: boolean): void {
+    this.includeDirectReceipts.set(include);
+    this.load(0);
+  }
+
   load(page: number): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.immediateTrigger$.next({ q: this.searchQ(), status: this.statusFilter(), page });
+    this.immediateTrigger$.next({
+      q: this.searchQ(),
+      status: this.statusFilter(),
+      page,
+      includeDirect: this.includeDirectReceipts(),
+    });
   }
 
   goToPage(page: number): void { this.load(page); }
@@ -247,6 +270,11 @@ export class PurchaseOrderListComponent {
 
   orderLabel(po: PurchaseOrderDto): string {
     return po.orderNumber ?? 'DRAFT';
+  }
+
+  /** True for the orders auto-raised behind a direct goods receipt (absent origin = pre-V96 = MANUAL). */
+  isDirectReceipt(po: PurchaseOrderDto): boolean {
+    return po.origin === 'DIRECT_RECEIPT';
   }
 
   private messageFrom(err: unknown, fallback: string): string {

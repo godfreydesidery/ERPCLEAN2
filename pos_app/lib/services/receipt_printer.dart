@@ -21,6 +21,15 @@ class ReceiptPrinterException implements Exception {
 class ReceiptPrinter {
   const ReceiptPrinter();
 
+  /// Whether this build can put ink on paper at all.
+  ///
+  /// **True on the Windows desktop build only.** The web build gets the stub;
+  /// the Android build compiles the win32 file (it has `dart:io`) but every
+  /// entry point there guards on `Platform.isWindows`, so it links and then
+  /// politely refuses. Callers use this to leave out a Print control that could
+  /// never work, rather than offering one that always fails.
+  bool get supported => impl.rawPrintingSupported();
+
   /// Names of installed printers, for the Setup dropdown. Empty off Windows.
   List<String> listPrinters() => impl.listPrinters();
 

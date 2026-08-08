@@ -209,7 +209,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   /// below the quantity being dispensed — a heads-up before checkout rather than
   /// a rejection at Pay. Silent when stock is unknown or sufficient.
   Widget _shortStockTag(CartLine line) {
-    final oh = _stock.onHand(line.product.id);
+    final oh = _stock.levelForProduct(line.product.id)?.sellable;
     // On-hand is in BASE units, so a pack line is checked against its base
     // equivalent (2 boxes of 20 needs 40), not the pack count.
     if (oh == null || oh >= line.baseQuantity) return const SizedBox.shrink();

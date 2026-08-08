@@ -154,7 +154,7 @@ class TransferReceiveStockHandlerTest {
     }
 
     @Test
-    void handle_sourceEventUidLegCodesAreR1AndR2() throws Exception {
+    void handle_sourceEventUidLegCodesAreRAndLowerR() throws Exception {
         DomainEvent event = buildEvent(EVENT_UID, buildPayload());
 
         handler.handle(event);
@@ -166,8 +166,8 @@ class TransferReceiveStockHandlerTest {
                 uidCaptor.capture(), anyString(), anyString(),
                 any(), any(), any(Instant.class), any(), any(), any());
 
-        assertThat(uidCaptor.getAllValues().get(0)).isEqualTo(EVENT_UID.substring(0, 24) + "R1");
-        assertThat(uidCaptor.getAllValues().get(1)).isEqualTo(EVENT_UID.substring(0, 24) + "R2");
+        assertThat(uidCaptor.getAllValues().get(0)).isEqualTo(EVENT_UID.substring(0, 21) + "R0000");
+        assertThat(uidCaptor.getAllValues().get(1)).isEqualTo(EVENT_UID.substring(0, 21) + "r0000");
     }
 
     @Test

@@ -24,6 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Inter-location stock transfer REST surface (ADR-0028 D-5, FR-INVD-08..11).
  *
+ * <p>Both transfer modes work between any two locations in the company, in the same branch or in
+ * different branches. INSTANT is the one-sided mode — the sender completes it alone, so it is the
+ * mode to use when the destination is a shop that is not on the system (no destination user, no
+ * confirmation step). IN_TRANSIT is the two-sided mode where the destination confirms receipt.
+ *
  * <p>Permission gates:
  * <ul>
  *   <li>STOCK.TRANSFER.VIEW — read</li>
@@ -55,7 +60,11 @@ public class StockTransferController {
         return transferService.create(request);
     }
 
-    /** Instant same-branch transfer: DRAFT → COMPLETED in one TX (no in-transit). */
+    /**
+     * Complete an INSTANT transfer: DRAFT → COMPLETED in one TX (no in-transit leg, no confirmation
+     * from the destination). Works across branches as well as within one — the destination branch
+     * needs no user account, which is exactly what an off-system shop looks like.
+     */
     @PatchMapping("/uid/{uid}/complete-instant")
     @PreAuthorize("@perm.scoped(#uid, 'stocktransfer', 'STOCK.TRANSFER.CREATE')")
     public StockTransferDto completeInstant(@PathVariable String uid) {

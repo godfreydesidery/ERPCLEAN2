@@ -70,6 +70,21 @@ public interface StockPostingService {
                 Long projectId, Long projectTaskId);
 
     /**
+     * Has a movement already been posted for this {@code (sourceEventUid, productId)} pair?
+     *
+     * <p>The same test {@link #post} applies internally as its idempotency backstop, exposed so a
+     * caller can decide <em>before</em> doing any other work whether this posting is a redelivery.
+     * That matters because several handlers recompute valuation ({@code on_hand_value},
+     * {@code avg_cost}) before calling {@code post}: valuation mutates and saves immediately, so on a
+     * redelivery the value moved while the quantity — correctly suppressed by the backstop — did
+     * not, silently decoupling the ledger from the valuation. Handlers now probe first and skip the
+     * whole line, valuation included.
+     *
+     * <p>Always false for a null {@code sourceEventUid} (manual movements are not event-keyed).
+     */
+    boolean alreadyPosted(String sourceEventUid, Long productId);
+
+    /**
      * Legacy location-unaware overload — routes to the default location via the impl.
      * @deprecated Prefer the location-aware overload; this is retained for backward compatibility.
      */
