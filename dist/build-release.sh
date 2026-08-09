@@ -115,24 +115,29 @@ in build-release.sh. Replace the characters listed and build again."
 # Pattern-matching across many files cannot be trusted to catch every category of match, so
 # the build asserts the outcome instead of trusting the edit.
 check_stack_name() {
-  local from_env from_compose from_wizard
+  local from_env from_compose from_wizard from_remote
   from_env="$(grep -E '^ERP_STACK_NAME=' "$SCRIPT_DIR/bundle/.env.example" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '\r')"
   from_compose="$(grep -oE 'ERP_STACK_NAME:-[a-zA-Z0-9_-]+' "$SCRIPT_DIR/bundle/docker-compose.yml" 2>/dev/null | head -1 | sed 's/.*:-//')"
   from_wizard="$(grep -oE "StackName[[:space:]]*=[[:space:]]*'[a-zA-Z0-9_-]+'" "$SCRIPT_DIR/bundle/setup-wizard.ps1" 2>/dev/null | head -1 | sed "s/.*'\(.*\)'/\1/")"
+  # The remote wizard writes .env on a SERVER, where a name collision is even less welcome
+  # than on a desktop - so it is held to the same rule as its local sibling.
+  from_remote="$(grep -oE "StackName[[:space:]]*=[[:space:]]*'[a-zA-Z0-9_-]+'" "$SCRIPT_DIR/bundle/remote-setup-wizard.ps1" 2>/dev/null | head -1 | sed "s/.*'\(.*\)'/\1/")"
 
-  [ -n "$from_env" ] && [ -n "$from_compose" ] && [ -n "$from_wizard" ] \
-    || die "Could not read the default stack name from all three sources.
-  .env.example       '${from_env}'
-  docker-compose.yml '${from_compose}'
-  setup-wizard.ps1   '${from_wizard}'"
+  [ -n "$from_env" ] && [ -n "$from_compose" ] && [ -n "$from_wizard" ] && [ -n "$from_remote" ] \
+    || die "Could not read the default stack name from all four sources.
+  .env.example             '${from_env}'
+  docker-compose.yml       '${from_compose}'
+  setup-wizard.ps1         '${from_wizard}'
+  remote-setup-wizard.ps1  '${from_remote}'"
 
-  if [ "$from_env" != "$from_compose" ] || [ "$from_env" != "$from_wizard" ]; then
+  if [ "$from_env" != "$from_compose" ] || [ "$from_env" != "$from_wizard" ] || [ "$from_env" != "$from_remote" ]; then
     die "The default stack name disagrees between files:
-  .env.example       ${from_env}
-  docker-compose.yml ${from_compose}
-  setup-wizard.ps1   ${from_wizard}
+  .env.example             ${from_env}
+  docker-compose.yml       ${from_compose}
+  setup-wizard.ps1         ${from_wizard}
+  remote-setup-wizard.ps1  ${from_remote}
 
-All three must match, or the installer writes one name into .env while compose defaults to
+All four must match, or an installer writes one name into .env while compose defaults to
 another - and the client ends up with wrongly-named containers that collide on their machine."
   fi
   ok "Stack name is consistent everywhere (${from_env})"
@@ -224,14 +229,15 @@ copy_bundle_files() {
 
   for f in docker-compose.yml docker-compose.db-docker.yml docker-compose.db-host.yml \
            docker-compose.tls.yml Caddyfile orbixerp.sh orbixerp.ps1 install.sh install.ps1 \
-           Setup.cmd setup-wizard.ps1 Install.cmd OrbixERP.cmd LICENSE.txt; do
+           Setup.cmd setup-wizard.ps1 Install.cmd OrbixERP.cmd \
+           Remote-Setup.cmd remote-setup-wizard.ps1 LICENSE.txt; do
     cp "$SCRIPT_DIR/bundle/$f" "$out/$f" || die "Missing bundle file: $f"
   done
 
   # Batch launchers must carry CRLF endings. A .cmd with bare LF misbehaves around labels
   # and goto, and a release cut from a Linux checkout would otherwise ship broken ones.
   # awk rather than sed: `sed 's/$/\r/'` inserts a literal "r" on BSD/macOS.
-  for f in Setup.cmd Install.cmd OrbixERP.cmd; do
+  for f in Setup.cmd Install.cmd OrbixERP.cmd Remote-Setup.cmd; do
     awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$out/$f" > "$out/$f.crlf" \
       && mv "$out/$f.crlf" "$out/$f"
   done

@@ -4,6 +4,15 @@ INSTALLING ORBIXERP
 
   This guide takes about 15 minutes. You do not need to be a developer.
 
+  > Installing onto a server somewhere else? If OrbixERP is to run on a Linux
+    server - in your server room, or with a hosting provider such as AWS -
+    rather than on the computer in front of you, double-click Remote-Setup.cmd
+    instead and follow REMOTE-INSTALL.txt. That wizard runs on your Windows
+    PC, sends everything to the server over the network, installs it there,
+    and afterwards checks, backs up, restarts and updates it - without you
+    ever typing a command on the server. The rest of this guide is for
+    installing on this computer.
+
 ------------------------------------------------------------------------------
 
 1. What you need first
@@ -153,6 +162,9 @@ Windows
   Or type it yourself, from PowerShell in this folder:
 
       powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+  To install onto a remote Linux server instead, double-click Remote-Setup.cmd
+  - see REMOTE-INSTALL.txt.
 
   -ExecutionPolicy Bypass is needed because Windows blocks PowerShell scripts
   that came from elsewhere. It applies to that one command and changes nothing
