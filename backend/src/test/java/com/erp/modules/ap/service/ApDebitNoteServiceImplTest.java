@@ -67,7 +67,7 @@ class ApDebitNoteServiceImplTest {
         SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
         SupplierBill bill = mock(SupplierBill.class);
         when(bill.getUid()).thenReturn("BILL-UID-042");
-        when(billRepo.findById(42L)).thenReturn(Optional.of(bill));
+        when(billRepo.findByCompanyIdAndId(10L, 42L)).thenReturn(Optional.of(bill));
 
         // Act
         ApDebitNoteDto dto = ApDebitNoteServiceImpl.toDto(note, List.of(alloc), billRepo);
@@ -151,7 +151,7 @@ class ApDebitNoteServiceImplTest {
         when(alloc.getAllocatedAmount()).thenReturn(new BigDecimal("200.00"));
 
         SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
-        when(billRepo.findById(999L)).thenReturn(Optional.empty());
+        when(billRepo.findByCompanyIdAndId(10L, 999L)).thenReturn(Optional.empty());
 
         ApDebitNoteDto dto = ApDebitNoteServiceImpl.toDto(note, List.of(alloc), billRepo);
 

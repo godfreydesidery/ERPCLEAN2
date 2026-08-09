@@ -445,7 +445,8 @@ function Invoke-Update {
     # The Windows double-click launchers are refreshed too, so an updated installation does
     # not keep last year's Setup.cmd sitting next to this year's application.
     foreach ($f in @('orbixerp.ps1', 'install.ps1', 'orbixerp.sh', 'install.sh',
-                     'Setup.cmd', 'setup-wizard.ps1', 'Install.cmd', 'OrbixERP.cmd')) {
+                     'Setup.cmd', 'setup-wizard.ps1', 'Install.cmd', 'OrbixERP.cmd',
+                     'Remote-Setup.cmd', 'remote-setup-wizard.ps1')) {
         $from = Join-Path $src $f
         if (Test-Path $from) { Copy-Item $from (Join-Path $ScriptDir $f) -Force }
     }

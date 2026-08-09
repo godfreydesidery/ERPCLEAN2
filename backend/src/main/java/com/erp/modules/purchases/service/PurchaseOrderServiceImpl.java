@@ -18,6 +18,7 @@ import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
@@ -54,9 +55,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -211,6 +216,41 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // instead of staying PENDING forever (see reconcileApprovalStatus).
         reconcileApprovalStatus(po);
         return toDto(po);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>One query, no engine poll, no write — see the interface for why the AP bill list must not
+     * reach these two facts through {@link #getByUid(String)}. Deliberately NOT wired into
+     * {@code placeOrder} or the AP payment gate: those act on the decision and so must see a
+     * reconciled status, not a stored one.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, PurchaseOrderApprovalSnapshotDto> findApprovalSnapshots(
+            Collection<String> uids) {
+        if (uids == null || uids.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> distinct = uids.stream()
+                .filter(u -> u != null && !u.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (distinct.isEmpty()) {
+            return Map.of();
+        }
+        RequestContext.Principal ctx = RequestContext.get();
+        Map<String, PurchaseOrderApprovalSnapshotDto> byUid = new LinkedHashMap<>();
+        for (PurchaseOrderApprovalSnapshotDto snapshot
+                : orders.findApprovalSnapshotsByUidIn(distinct)) {
+            // Tenancy scoped from the LOADED row, never from a caller parameter. Out-of-scope rows
+            // are dropped rather than refused: this feeds a listing, and one stray reference must
+            // not take the whole page down.
+            if (scopeGuard.canActIn(ctx, snapshot.companyId())) {
+                byUid.put(snapshot.uid(), snapshot);
+            }
+        }
+        return byUid;
     }
 
     /**

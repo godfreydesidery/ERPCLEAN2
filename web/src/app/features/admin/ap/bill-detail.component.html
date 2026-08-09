@@ -45,7 +45,16 @@
                   [class.status-tag--warn]="b.status === 'PARTIALLY_PAID'">
               <span class="status-tag__dot"></span>{{ b.status }}
             </span>
+            <!-- Direct-receipt ratification: renders nothing for ordinary bills. -->
+            <app-direct-receipt-ratification class="ms-2" [state]="b.directReceiptRatification" />
           </div>
+          @if (showsRatification(b)) {
+            <div class="erp-card__body pb-0">
+              <app-direct-receipt-ratification
+                variant="detail"
+                [state]="b.directReceiptRatification" />
+            </div>
+          }
           <div class="erp-card__body">
             <div class="row g-3">
               <div class="col-sm-6 col-md-4">
@@ -112,9 +121,19 @@
           </div>
           @if (canPayBill(b) && canPay()) {
             <div class="erp-card__body border-top pt-3">
-              <a routerLink="/admin/ap/payments/record" class="btn btn-primary btn-sm">
-                <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
-              </a>
+              @if (ratificationBlocksPayment(b)) {
+                <button type="button" class="btn btn-primary btn-sm" disabled
+                        aria-describedby="paymentHoldNote">
+                  <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
+                </button>
+                <p id="paymentHoldNote" class="small text-muted mb-0 mt-2">
+                  {{ paymentHoldNote(b) }}
+                </p>
+              } @else {
+                <a routerLink="/admin/ap/payments/record" class="btn btn-primary btn-sm">
+                  <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
+                </a>
+              }
             </div>
           }
         </div>

@@ -25,6 +25,17 @@ export type BillMatchStatus =
   | 'HELD_QTY_VARIANCE'
   | 'VARIANCE_ACCEPTED';
 
+/**
+ * Post-hoc ratification state of the purchase order backing a bill (K3 follow-up).
+ * Derived server-side at read time — never stored. AWAITING_RATIFICATION and
+ * RATIFICATION_REFUSED both block payment release; the bill may still be entered and matched.
+ */
+export type DirectReceiptRatificationState =
+  | 'NOT_APPLICABLE'
+  | 'AWAITING_RATIFICATION'
+  | 'RATIFICATION_REFUSED'
+  | 'RATIFIED';
+
 export type ApPaymentKind = 'SINGLE' | 'PAYMENT_RUN';
 
 export type AgeingBucket =
@@ -88,6 +99,11 @@ export interface SupplierBillDto {
   currency: string;
   status: SupplierBillStatus;
   postedGlEntryUid: string | null;
+  /**
+   * Derived, never stored. Optional so responses predating the K3 follow-up (and fixtures that
+   * do not care) simply render nothing — treat a missing value as NOT_APPLICABLE.
+   */
+  directReceiptRatification?: DirectReceiptRatificationState | null;
   lines: SupplierBillLineDto[];
 }
 

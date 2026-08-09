@@ -125,17 +125,24 @@ function Test-StackName {
     $m = Select-String -Path (Join-Path $bundle 'setup-wizard.ps1') -Pattern "StackName\s*=\s*'([A-Za-z0-9_-]+)'" | Select-Object -First 1
     if ($m) { $fromWizard = $m.Matches[0].Groups[1].Value }
 
-    if (-not $fromEnv -or -not $fromCompose -or -not $fromWizard) {
-        Stop-WithError "Could not read the default stack name from all three sources.`n  .env.example       '$fromEnv'`n  docker-compose.yml '$fromCompose'`n  setup-wizard.ps1   '$fromWizard'"
+    # The remote wizard writes .env on a SERVER, where a name collision is even less welcome
+    # than on a desktop - so it is held to the same rule as its local sibling.
+    $fromRemote = ''
+    $m = Select-String -Path (Join-Path $bundle 'remote-setup-wizard.ps1') -Pattern "StackName\s*=\s*'([A-Za-z0-9_-]+)'" | Select-Object -First 1
+    if ($m) { $fromRemote = $m.Matches[0].Groups[1].Value }
+
+    if (-not $fromEnv -or -not $fromCompose -or -not $fromWizard -or -not $fromRemote) {
+        Stop-WithError "Could not read the default stack name from all four sources.`n  .env.example             '$fromEnv'`n  docker-compose.yml       '$fromCompose'`n  setup-wizard.ps1         '$fromWizard'`n  remote-setup-wizard.ps1  '$fromRemote'"
     }
-    if ($fromEnv -ne $fromCompose -or $fromEnv -ne $fromWizard) {
+    if ($fromEnv -ne $fromCompose -or $fromEnv -ne $fromWizard -or $fromEnv -ne $fromRemote) {
         Stop-WithError @"
 The default stack name disagrees between files:
-  .env.example       $fromEnv
-  docker-compose.yml $fromCompose
-  setup-wizard.ps1   $fromWizard
+  .env.example             $fromEnv
+  docker-compose.yml       $fromCompose
+  setup-wizard.ps1         $fromWizard
+  remote-setup-wizard.ps1  $fromRemote
 
-All three must match, or the installer writes one name into .env while compose defaults to
+All four must match, or an installer writes one name into .env while compose defaults to
 another - and the client ends up with wrongly-named containers that collide on their machine.
 "@
     }
@@ -255,7 +262,8 @@ function Copy-BundleFiles {
     foreach ($f in @('docker-compose.yml', 'docker-compose.db-docker.yml', 'docker-compose.db-host.yml',
                      'docker-compose.tls.yml', 'Caddyfile', 'orbixerp.sh', 'orbixerp.ps1',
                      'install.sh', 'install.ps1', 'Setup.cmd', 'setup-wizard.ps1',
-                     'Install.cmd', 'OrbixERP.cmd', 'LICENSE.txt')) {
+                     'Install.cmd', 'OrbixERP.cmd', 'Remote-Setup.cmd', 'remote-setup-wizard.ps1',
+                     'LICENSE.txt')) {
         $from = Join-Path $src $f
         if (-not (Test-Path $from)) { Stop-WithError "Missing bundle file: $f" }
         Copy-Item $from (Join-Path $Out $f) -Force
@@ -263,7 +271,7 @@ function Copy-BundleFiles {
 
     # Batch launchers must carry CRLF endings - a .cmd with bare LF misbehaves around
     # labels and goto.
-    foreach ($f in @('Setup.cmd', 'Install.cmd', 'OrbixERP.cmd')) {
+    foreach ($f in @('Setup.cmd', 'Install.cmd', 'OrbixERP.cmd', 'Remote-Setup.cmd')) {
         $p = Join-Path $Out $f
         $t = (([System.IO.File]::ReadAllText($p) -split "`r?`n") -join "`r`n")
         [System.IO.File]::WriteAllText($p, $t, (New-Object System.Text.UTF8Encoding($false)))

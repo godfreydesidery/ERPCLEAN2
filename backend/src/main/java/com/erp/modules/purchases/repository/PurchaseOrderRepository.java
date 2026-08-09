@@ -1,5 +1,6 @@
 package com.erp.modules.purchases.repository;
 
+import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
@@ -57,4 +58,21 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     /** ScopeGuard target-type projection (ADR-0011 D-10). */
     @Query("SELECT p.companyId FROM PurchaseOrder p WHERE p.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /**
+     * Origin + stored approval status for a set of orders, in ONE query (K3 follow-up).
+     *
+     * <p>A projection, not entities: nothing loaded here can be mutated by accident, which is the
+     * point — the caller is a listing that must stay a pure read. See
+     * {@link com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto} for why the
+     * ordinary detail read is unsuitable there.
+     */
+    @Query("""
+            SELECT new com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto(
+                       p.uid, p.companyId, p.origin, p.approvalStatus)
+            FROM PurchaseOrder p
+            WHERE p.uid IN :uids
+            """)
+    List<PurchaseOrderApprovalSnapshotDto> findApprovalSnapshotsByUidIn(
+            @Param("uids") Collection<String> uids);
 }

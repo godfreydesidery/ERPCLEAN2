@@ -15,6 +15,14 @@ public interface SupplierBillLineRepository extends JpaRepository<SupplierBillLi
 
     Optional<SupplierBillLine> findBySupplierBillIdAndUid(Long supplierBillId, String uid);
 
+    /**
+     * Company-scoped id lookup, for resolving a line referenced by internal id from an already-loaded
+     * aggregate. Prefer this over {@code findById}: the bare finder is a confused-deputy risk and is
+     * what TenantScopingRulesTest exists to prevent — the company must come from the LOADED entity,
+     * never from a caller-supplied value.
+     */
+    Optional<SupplierBillLine> findByCompanyIdAndId(Long companyId, Long id);
+
     @Query("SELECT COALESCE(MAX(l.lineNo), 0) FROM SupplierBillLine l WHERE l.supplierBillId = :billId")
     int findMaxLineNo(@Param("billId") Long billId);
 }

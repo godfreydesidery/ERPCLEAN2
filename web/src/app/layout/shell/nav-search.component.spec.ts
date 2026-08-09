@@ -20,11 +20,38 @@ const DESTINATIONS: readonly NavDestination[] = [
   { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', group: 'HR & Payroll', icon: 'bi-cash-stack' },
 ];
 
-function createComponent() {
+/**
+ * Destinations carrying hidden synonyms. "Stock Report (Opening & Closing)" is the real shipped
+ * entry: a client searched for it by the words they use ("opening balance") and concluded the
+ * feature did not exist, which is what `keywords` fixes.
+ */
+const KEYWORD_DESTINATIONS: readonly NavDestination[] = [
+  {
+    label: 'Stock Report (Opening & Closing)',
+    route: '/admin/reports/stock-movement',
+    group: 'Inventory',
+    icon: 'bi-arrow-left-right',
+    keywords: ['stock movement', 'opening balance', 'closing balance', 'purchases', 'sales'],
+  },
+  {
+    label: 'Receive Without Order',
+    route: '/admin/goods-receipts/direct',
+    group: 'Purchasing',
+    icon: 'bi-box-arrow-in-down-left',
+    keywords: ['direct receipt', 'no lpo', 'grn'],
+  },
+  { label: 'Sales Invoices', route: '/admin/sales-invoices', group: 'Sales', icon: 'bi-receipt' },
+];
+
+function createComponentWith(destinations: readonly NavDestination[]) {
   const fixture = TestBed.createComponent(NavSearchComponent);
-  fixture.componentRef.setInput('destinations', DESTINATIONS);
+  fixture.componentRef.setInput('destinations', destinations);
   fixture.detectChanges();
   return fixture;
+}
+
+function createComponent() {
+  return createComponentWith(DESTINATIONS);
 }
 
 function setQuery(fixture: ReturnType<typeof createComponent>, value: string) {
@@ -114,6 +141,40 @@ describe('NavSearchComponent', () => {
     setQuery(fixture, 'chart');
     const results = fixture.componentInstance.results();
     expect(results[0].label).toBe('Chart of Accounts');
+  });
+
+  // ── Hidden keyword synonyms ───────────────────────────────────────────────
+
+  it('matches a destination by a hidden keyword that is not in its label', () => {
+    const fixture = createComponentWith(KEYWORD_DESTINATIONS);
+    setQuery(fixture, 'opening balance');
+    const labels = fixture.componentInstance.results().map((r) => r.label);
+    expect(labels).toContain('Stock Report (Opening & Closing)');
+  });
+
+  it('matches a destination by a keyword the label shares no word with', () => {
+    const fixture = createComponentWith(KEYWORD_DESTINATIONS);
+    setQuery(fixture, 'no lpo');
+    const labels = fixture.componentInstance.results().map((r) => r.label);
+    expect(labels).toContain('Receive Without Order');
+  });
+
+  it('ranks a label match above a keyword-only match', () => {
+    const fixture = createComponentWith(KEYWORD_DESTINATIONS);
+    // "sales" is in the "Sales Invoices" label/group but only a hidden keyword on the stock report.
+    setQuery(fixture, 'sales');
+    const labels = fixture.componentInstance.results().map((r) => r.label);
+    expect(labels.indexOf('Sales Invoices')).toBeLessThan(
+      labels.indexOf('Stock Report (Opening & Closing)'),
+    );
+  });
+
+  it('never renders hidden keywords in the results list', () => {
+    const fixture = createComponentWith(KEYWORD_DESTINATIONS);
+    setQuery(fixture, 'no lpo');
+    const text: string = fixture.nativeElement.textContent ?? '';
+    expect(text).toContain('Receive Without Order');
+    expect(text.toLowerCase()).not.toContain('no lpo');
   });
 
   // ── Keyboard navigation ───────────────────────────────────────────────────
