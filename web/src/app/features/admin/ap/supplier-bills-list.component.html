@@ -175,6 +175,10 @@
                             [class.status-tag--warn]="bill.status === 'PARTIALLY_PAID'">
                         {{ bill.status }}
                       </span>
+                      <!-- Direct-receipt ratification: renders nothing for ordinary bills. -->
+                      <app-direct-receipt-ratification
+                        class="d-block mt-1"
+                        [state]="bill.directReceiptRatification" />
                     </td>
                     <td class="small text-muted">{{ bill.source }}</td>
                     <td class="d-flex gap-1 flex-nowrap">

@@ -66,7 +66,7 @@ class ApPaymentServiceImplTest {
         SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
         SupplierBill bill = mock(SupplierBill.class);
         when(bill.getUid()).thenReturn("BILL-UID-042");
-        when(billRepo.findById(42L)).thenReturn(Optional.of(bill));
+        when(billRepo.findByCompanyIdAndId(10L, 42L)).thenReturn(Optional.of(bill));
 
         // Act
         ApPaymentDto dto = ApPaymentServiceImpl.toDto(payment, List.of(alloc), billRepo);
@@ -114,7 +114,7 @@ class ApPaymentServiceImplTest {
         when(alloc.getAllocatedAmount()).thenReturn(BigDecimal.TEN);
 
         SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
-        when(billRepo.findById(999L)).thenReturn(Optional.empty());
+        when(billRepo.findByCompanyIdAndId(10L, 999L)).thenReturn(Optional.empty());
 
         ApPaymentDto dto = ApPaymentServiceImpl.toDto(payment, List.of(alloc), billRepo);
 

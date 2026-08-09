@@ -18,6 +18,10 @@ import { NavSearchComponent, NavDestination } from './nav-search.component';
  * - `anyPermission`: when set (instead of `permission`), the item is shown to a user holding ANY of
  *   the listed codes — mirrors the route's `requireAnyPermission` guard for a screen reachable by
  *   more than one atomic permission (e.g. the generic bulk-import wizard, gated per entity type).
+ * - `keywords`: extra search terms for the Ctrl+K palette only (never rendered). They exist because
+ *   users search for a screen by the words THEY use, not the words we labelled it with — a client
+ *   asked for "a stock report with opening balance, purchases, sales and closing" and concluded the
+ *   feature did not exist, because the only label carrying those words was "Stock Movement Report".
  */
 interface NavItem {
   readonly label: string;
@@ -26,6 +30,7 @@ interface NavItem {
   readonly available: boolean;
   readonly permission?: string;
   readonly anyPermission?: readonly string[];
+  readonly keywords?: readonly string[];
 }
 
 interface NavGroup {
@@ -192,8 +197,15 @@ export class ShellComponent {
         { label: 'Serial Numbers', route: '/admin/stock/serials', icon: 'bi-upc-scan', available: true, permission: 'STOCK.VIEW' },
         { label: 'Stock Valuation', route: '/admin/stock/valuation', icon: 'bi-clipboard-data', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
         { label: 'Opening Valuation', route: '/admin/stock/valuation/opening', icon: 'bi-pencil-square', available: true, permission: 'INVENTORY.OPENING.SET' },
-        { label: 'Stock Report', route: '/admin/reports/stock', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
-        { label: 'Stock Movement Report', route: '/admin/reports/stock-movement', icon: 'bi-arrow-left-right', available: true, permission: 'INVENTORY.VALUATION.VIEW' },
+        // Two stock reports sit side by side and are easy to confuse, so both labels say which
+        // question they answer. Gate = INVENTORY.VALUATION.VIEW on both, matching the route guards
+        // in admin.routes.ts and the backend @PreAuthorize — a link that only ever 403s reads as
+        // a broken app, which is worse than no link at all.
+        { label: 'Stock Report (Current Balances)', route: '/admin/reports/stock', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock report', 'on hand', 'snapshot', 'today', 'valuation'] },
+        // Label deliberately leads with "Stock Report" and names opening/closing: this is the screen
+        // the client asked for as "stock report with opening balance, purchasing, sales and closing
+        // balances", and "Stock Movement Report" alone did not read as that to them.
+        { label: 'Stock Report (Opening & Closing)', route: '/admin/reports/stock-movement', icon: 'bi-arrow-left-right', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock movement', 'movement report', 'opening balance', 'closing balance', 'purchases', 'sales', 'adjustments', 'date range', 'period', 'in and out'] },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],
@@ -203,6 +215,13 @@ export class ShellComponent {
       items: [
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
         { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
+        // Sits directly under Goods Receipts and reuses the exact wording of the "Receive Without
+        // Order" button on the receipts list, so the two read as the same action reached two ways
+        // rather than as two different features. It is not redundant: goods arriving with no LPO
+        // give a storekeeper no reason to open the receipts list first, which is precisely how the
+        // client concluded the feature was missing. Gate = PURCHASE.RECEIVE.DIRECT, equal to the
+        // route guard (admin.routes.ts) and to POST /goods-receipts/direct's @PreAuthorize.
+        { label: 'Receive Without Order', route: '/admin/goods-receipts/direct', icon: 'bi-box-arrow-in-down-left', available: true, permission: 'PURCHASE.RECEIVE.DIRECT', keywords: ['direct receipt', 'direct goods receipt', 'no lpo', 'without lpo', 'without purchase order', 'grn', 'receive stock'] },
         { label: 'Purchase Requisitions', route: '/admin/purchase-requisitions', icon: 'bi-clipboard-plus', available: true, permission: 'PURCHASE.REQUISITION.VIEW' },
         { label: 'RFQs / Sourcing', route: '/admin/rfqs', icon: 'bi-search', available: true, permission: 'PURCHASE.RFQ.VIEW' },
         { label: 'Purchase Returns', route: '/admin/purchase-returns', icon: 'bi-arrow-return-left', available: true, permission: 'PURCHASE.RETURN.VIEW' },
@@ -425,7 +444,13 @@ export class ShellComponent {
     this.nav().flatMap((g) =>
       g.items
         .filter((i) => i.available)
-        .map((i) => ({ label: i.label, route: i.route, group: g.label, icon: i.icon })),
+        .map((i) => ({
+          label: i.label,
+          route: i.route,
+          group: g.label,
+          icon: i.icon,
+          keywords: i.keywords,
+        })),
     ),
   );
 

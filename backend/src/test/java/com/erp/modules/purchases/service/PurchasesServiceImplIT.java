@@ -35,11 +35,13 @@ import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
+import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
@@ -65,7 +67,9 @@ import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1201,6 +1205,80 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                 .getContent())
                 .extracting(PurchaseOrderDto::uid)
                 .contains(buyersOrder.uid(), gr.purchaseOrderUid());
+    }
+
+    // =========================================================================
+    // findApprovalSnapshots — the read seam AP's bill list uses (K3 follow-up)
+    // =========================================================================
+
+    @Test
+    void findApprovalSnapshots_returnsOriginAndApprovalStatusForAWholePageInOneQuery() {
+        // Pins the JPQL projection against a real database (a mocked repository would prove
+        // nothing about the constructor expression) and the contract AP depends on: the two facts
+        // it needs, for every order on a page, with no approval-engine poll and no write.
+        ProductDto product = stockableProduct("Snapshot-Batch");
+        PurchaseOrderDto buyersOrder = createDraftWithLine(product.uid(), new BigDecimal("5"),
+                new BigDecimal("100"));
+
+        GoodsReceiptDto gr = directGrService.receiveDirect(new DirectGoodsReceiptRequest(
+                companyA.getUid(), supplierUid, "TZS", null,
+                List.of(new DirectGoodsReceiptLineRequest(
+                        product.uid(), pcsUid, new BigDecimal("3"), new BigDecimal("70"), null))));
+        String directUid = gr.purchaseOrderUid();
+
+        Map<String, PurchaseOrderApprovalSnapshotDto> snapshots = poService.findApprovalSnapshots(
+                Arrays.asList(directUid, buyersOrder.uid(), directUid, null, "   ", "NO-SUCH-ORDER"));
+
+        // Duplicates collapse; blanks, nulls and unknown uids are simply absent.
+        assertThat(snapshots).containsOnlyKeys(directUid, buyersOrder.uid());
+
+        PurchaseOrderApprovalSnapshotDto direct = snapshots.get(directUid);
+        assertThat(direct.origin()).isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+        assertThat(direct.companyId()).isEqualTo(companyA.getId());
+        assertThat(direct.approvalStatus())
+                .as("a direct receipt always carries a post-hoc ratification request")
+                .isIn(PoApprovalStatus.PENDING, PoApprovalStatus.APPROVED);
+        assertThat(snapshots.get(buyersOrder.uid()).origin())
+                .isEqualTo(PurchaseOrderOrigin.MANUAL);
+
+        // The cheap read and the detail read must never disagree about the same order.
+        assertThat(direct.approvalStatus().name())
+                .isEqualTo(poService.getByUid(directUid).approvalStatus());
+    }
+
+    @Test
+    void findApprovalSnapshots_leavesOutOrdersTheCallerMayNotSee() {
+        // Tenancy is scoped from the LOADED row. Company B's order is dropped, not refused: this
+        // feeds a listing, and one stray reference must never take a whole page down.
+        ProductDto product = stockableProduct("Snapshot-Tenant");
+        PurchaseOrderDto ownOrder = createDraftWithLine(product.uid(), new BigDecimal("2"),
+                new BigDecimal("50"));
+
+        Organisation orgB = organisations.save(new Organisation("Snapshot Org B"));
+        Company companyB = companies.save(new Company(orgB, "PURCB", "Purch IT Co B"));
+        Branch branchB = branches.save(new Branch(companyB, "PURCH-B1", "Purch IT Branch B1"));
+        String foreignUid = createForeignOrder(companyB, branchB);
+
+        // A NON-root clerk in company A: root short-circuits every scope check, so testing this as
+        // root would prove nothing (the RBAC lesson from the tenant-isolation sweep).
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "purch_clerk", false, companyA.getId(), branchA.getId(), null));
+
+        Map<String, PurchaseOrderApprovalSnapshotDto> snapshots =
+                poService.findApprovalSnapshots(List.of(ownOrder.uid(), foreignUid));
+
+        assertThat(snapshots).containsOnlyKeys(ownOrder.uid());
+    }
+
+    /** Creates a PO in another company, from that company's own context. */
+    private String createForeignOrder(Company company, Branch branch) {
+        setContext(company, branch);
+        SupplierDto supplierB = supplierService.create(new CreateSupplierRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Other Co Supplier",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                SupplierKind.GOODS, null, null));
+        return poService.create(new CreatePurchaseOrderRequest(
+                company.getUid(), supplierB.uid(), "TZS", null, null, List.of())).uid();
     }
 
     // =========================================================================

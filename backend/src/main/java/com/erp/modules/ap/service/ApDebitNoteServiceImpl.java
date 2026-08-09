@@ -559,7 +559,10 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
                                  SupplierBillRepository billRepo) {
         List<AllocationDto> allocDtos = allocs == null ? List.of() : allocs.stream()
                 .map(a -> {
-                    String billUid = billRepo.findById(a.getSupplierBillId())
+                    // Company-scoped, from the LOADED debit note — a note and its allocated bills
+                    // always share a company, so this resolves the same row for every legitimate
+                    // call while closing the confused-deputy hole the bare finder left open.
+                    String billUid = billRepo.findByCompanyIdAndId(n.getCompanyId(), a.getSupplierBillId())
                             .map(b -> b.getUid()).orElse(null);
                     return new AllocationDto(a.getId(), a.getSupplierBillId(), billUid,
                             a.getAllocatedAmount());

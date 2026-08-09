@@ -284,7 +284,11 @@ public class BillMatchServiceImpl implements BillMatchService {
                 .detail(Map.of("action", "acceptVariance", "billLineUid", billLineUid)));
 
         List<LineMatchDto> lineResults = allMatches.stream().map(m -> {
-            SupplierBillLine l = lines.findById(m.getSupplierBillLineId()).orElse(null);
+            // Company-scoped, from the LOADED bill — the lines of a bill always share its company,
+            // so this is the same row for every legitimate call and closes the confused-deputy hole.
+            SupplierBillLine l = lines
+                    .findByCompanyIdAndId(bill.getCompanyId(), m.getSupplierBillLineId())
+                    .orElse(null);
             String lUid = l != null ? l.getUid() : null;
             return new LineMatchDto(m.getSupplierBillLineId(), lUid, m.getMatchStatus(),
                     m.getPriceVarianceAmount(), m.getPriceVariancePct(), m.getQtyVariance(),

@@ -369,6 +369,22 @@ public class PosSaleServiceImpl implements PosSaleService {
                 + ". Do not ring it again.");
     }
 
+    /**
+     * Convenience overload, overridden here ON PURPOSE rather than left as the interface default.
+     *
+     * <p>A {@code default} method is not declared on this class, so the class-level
+     * {@link Transactional} never applies to it, and the default body's call to the real method goes
+     * through {@code this} — bypassing the Spring proxy. The result was a reversal running with NO
+     * transaction at all, which blew up on the first {@code MANDATORY} audit write
+     * (IllegalTransactionStateException, caught by PosSaleServiceIT). Declaring the overload here
+     * puts it back under the proxy, so a transaction is open before the delegate runs and the audit
+     * writes join it.
+     */
+    @Override
+    public void reverseSale(String invoiceUid, String reason) {
+        reverseSale(invoiceUid, new VoidInvoiceRequest(reason));
+    }
+
     @Override
     public void reverseSale(String invoiceUid, VoidInvoiceRequest request) {
         String reason = request == null ? null : request.reason();

@@ -10,6 +10,7 @@ import com.erp.modules.ap.domain.entity.PaymentRun;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.enums.ApPaymentKind;
 import com.erp.modules.ap.domain.enums.ApPaymentStatus;
+import com.erp.modules.ap.domain.enums.DirectReceiptRatificationState;
 import com.erp.modules.ap.domain.enums.PaymentRunStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.ApPaymentAllocationRepository;
@@ -36,6 +37,7 @@ import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
@@ -89,6 +91,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final CashTransactionRecorder       cashTxnRecorder;
     private final WhtCaptureService             whtCapture;
     private final CurrencyConversionService     fxConversion;
+    /**
+     * K3 follow-up — holds cash for a bill whose goods were received without an LPO until a manager
+     * ratifies the delivery. See {@link DirectReceiptRatificationGuard} for why the block lives here
+     * and not at bill entry.
+     */
+    private final DirectReceiptRatificationGuard ratification;
     private final ScopeGuard                    scopeGuard;
     private final AuditService                  audit;
 
@@ -105,6 +113,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                  CashTransactionRecorder cashTxnRecorder,
                                  WhtCaptureService whtCapture,
                                  CurrencyConversionService fxConversion,
+                                 DirectReceiptRatificationGuard ratification,
                                  ScopeGuard scopeGuard,
                                  AuditService audit) {
         this.bills                   = bills;
@@ -120,6 +129,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.cashTxnRecorder         = cashTxnRecorder;
         this.whtCapture              = whtCapture;
         this.fxConversion            = fxConversion;
+        this.ratification            = ratification;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
     }
@@ -141,6 +151,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             throw NotFoundException.of("SupplierBill", req.supplierBillUid());
         }
         SupplierBill bill = open.get(0);
+
+        // K3 follow-up — hold the cash until the direct receipt behind this bill has been ratified.
+        // The caller named this one bill, so refuse it outright rather than quietly doing nothing.
+        assertRatified(bill);
 
         BigDecimal toAllocate = req.amount().min(bill.getOutstandingAmount());
         if (toAllocate.compareTo(BigDecimal.ZERO) <= 0) {
@@ -231,8 +245,9 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         }
 
         // Select bills (SELECT FOR UPDATE)
+        boolean billsNamedByCaller = req.billUids() != null && !req.billUids().isEmpty();
         List<SupplierBill> openBills;
-        if (req.billUids() != null && !req.billUids().isEmpty()) {
+        if (billsNamedByCaller) {
             openBills = bills.findOpenByUids(companyId, req.billUids());
         } else if (supplierId != null) {
             openBills = bills.findOpenForPayment(companyId, supplierId, req.dueOnOrBefore());
@@ -242,6 +257,34 @@ public class ApPaymentServiceImpl implements ApPaymentService {
 
         if (openBills.isEmpty()) {
             throw new IllegalStateException("No open bills selected by the payment run criteria.");
+        }
+
+        // K3 follow-up — bills whose goods came in without an LPO and whose delivery no manager has
+        // ratified yet must not release cash. Which answer is right depends on how the run was built:
+        //  - the caller NAMED the bills → refuse the run, so the answer is never silence;
+        //  - the run was built from criteria ("everything due by Friday") → drop those bills and pay
+        //    the rest. Failing the whole run would let one unratified delivery block every supplier
+        //    payment in the company, with no way for the operator to exclude it.
+        // Either way the state is already on the bill (SupplierBillDto#directReceiptRatification),
+        // so nothing here is news to the AP clerk.
+        int held = 0;
+        DirectReceiptRatificationGuard.Lookup lookup = ratification.newLookup();
+        if (billsNamedByCaller) {
+            for (SupplierBill bill : openBills) {
+                assertRatified(bill, lookup);
+            }
+        } else {
+            int before = openBills.size();
+            openBills = openBills.stream()
+                    .filter(b -> !lookup.blocksPayment(b.getPurchaseOrderUid()))
+                    .toList();
+            held = before - openBills.size();
+            if (openBills.isEmpty()) {
+                throw new ConflictException(
+                        "Nothing in this payment run can be paid yet. "
+                                + DirectReceiptRatificationGuard.refusalMessage(
+                                        DirectReceiptRatificationState.AWAITING_RATIFICATION));
+            }
         }
 
         // FX adversarial-review HIGH (ADR-0036 D — same-currency guard): a payment run applies ONE
@@ -343,7 +386,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 .detail(Map.of("paymentNumber", payNum,
                         "runNumber", run.getRunNumber(),
                         "totalPaid", totalPaid.toPlainString(),
-                        "billCount", String.valueOf(openBills.size()))));
+                        "billCount", String.valueOf(openBills.size()),
+                        // K3 follow-up: how many bills this run skipped because the direct receipt
+                        // behind them is still unratified — so "why wasn't X paid?" is answerable.
+                        "billsHeldAwaitingRatification", String.valueOf(held))));
 
         return toDto(payment, allocList, bills);
     }
@@ -375,6 +421,36 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return payments.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
                 .map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills));
+    }
+
+    // -------------------------------------------------------------------------
+    // K3 follow-up — direct-receipt ratification gate
+    // -------------------------------------------------------------------------
+
+    /**
+     * Refuses to release cash against a bill whose backing goods receipt was recorded without an LPO
+     * and has not been ratified (or was refused) by a manager.
+     *
+     * <p>A direct receipt is exempt from PO PRE-approval by design — the goods are already on the
+     * dock — and is reviewed afterwards instead. Without this check that review had no teeth on the
+     * money: the bill could be entered, matched and paid before anyone opened the request. Entry and
+     * matching are deliberately still allowed (the invoice is real, the liability is real); only the
+     * irreversible step waits.
+     *
+     * @throws ConflictException (HTTP 409) with a message that tells the clerk what has to happen
+     *                           next and names nothing internal
+     */
+    private void assertRatified(SupplierBill bill) {
+        assertRatified(bill, ratification.newLookup());
+    }
+
+    private void assertRatified(SupplierBill bill, DirectReceiptRatificationGuard.Lookup lookup) {
+        DirectReceiptRatificationState state = lookup.stateFor(bill.getPurchaseOrderUid());
+        if (state.blocksPayment()) {
+            throw new ConflictException(
+                    "This bill cannot be paid yet. "
+                            + DirectReceiptRatificationGuard.refusalMessage(state));
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -557,7 +633,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                SupplierBillRepository billRepo) {
         List<PaymentAllocationDto> dtoAllocs = allocList.stream()
                 .map(a -> {
-                    String billUid = billRepo.findById(a.getSupplierBillId())
+                    // Company-scoped, taken from the LOADED payment — never a bare findById. A payment
+                    // and its allocated bills always share a company, so this is the same row for every
+                    // legitimate call and closes the confused-deputy hole the bare finder left open.
+                    String billUid = billRepo.findByCompanyIdAndId(p.getCompanyId(), a.getSupplierBillId())
                             .map(b -> b.getUid()).orElse(null);
                     return new PaymentAllocationDto(
                             a.getId(), a.getSupplierBillId(), billUid, a.getAllocatedAmount());

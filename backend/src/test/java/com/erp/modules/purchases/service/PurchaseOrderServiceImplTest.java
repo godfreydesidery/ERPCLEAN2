@@ -25,6 +25,7 @@ import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
@@ -217,6 +218,74 @@ class PurchaseOrderServiceImplTest {
 
         verify(po, never()).setApprovalStatus(any(PoApprovalStatus.class));
         assertThat(dto.approvalStatus()).isEqualTo("PENDING");
+    }
+
+    // -------------------------------------------------------------------------
+    // findApprovalSnapshots — the read seam for screens that only DISPLAY approval state
+    // -------------------------------------------------------------------------
+
+    @Test
+    void findApprovalSnapshots_readsTheStoredRow_withoutPollingTheApprovalEngine() {
+        // The whole point of this accessor: getByUid reconciles (poll + mutate + audit), which a
+        // read-only caller such as the AP bill list must not do — in a readOnly transaction
+        // Hibernate flushes MANUALLY and the mutation is discarded silently anyway.
+        when(scopeGuard.canActIn(any(), eq(10L))).thenReturn(true);
+        when(orders.findApprovalSnapshotsByUidIn(any())).thenReturn(List.of(
+                snapshot("PO-UID-A", 10L, PurchaseOrderOrigin.DIRECT_RECEIPT, PoApprovalStatus.PENDING)));
+
+        var snapshots = service.findApprovalSnapshots(List.of("PO-UID-A"));
+
+        assertThat(snapshots).containsOnlyKeys("PO-UID-A");
+        assertThat(snapshots.get("PO-UID-A").origin())
+                .isEqualTo(PurchaseOrderOrigin.DIRECT_RECEIPT);
+        assertThat(snapshots.get("PO-UID-A").approvalStatus()).isEqualTo(PoApprovalStatus.PENDING);
+        verify(approvalGate, never()).queryState(anyString(), any());
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked") // ArgumentCaptor cannot express Collection<String> generically
+    void findApprovalSnapshots_hitsTheRepositoryOnce_withDistinctNonBlankUids() {
+        when(scopeGuard.canActIn(any(), eq(10L))).thenReturn(true);
+        when(orders.findApprovalSnapshotsByUidIn(any())).thenReturn(List.of());
+
+        service.findApprovalSnapshots(java.util.Arrays.asList(
+                "PO-UID-A", "PO-UID-B", "PO-UID-A", null, "   "));
+
+        ArgumentCaptor<java.util.Collection<String>> uids =
+                ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(orders).findApprovalSnapshotsByUidIn(uids.capture());
+        assertThat(uids.getValue()).containsExactly("PO-UID-A", "PO-UID-B");
+    }
+
+    @Test
+    void findApprovalSnapshots_nothingToLookUp_touchesTheDatabaseNotAtAll() {
+        assertThat(service.findApprovalSnapshots(List.of())).isEmpty();
+        assertThat(service.findApprovalSnapshots(null)).isEmpty();
+        assertThat(service.findApprovalSnapshots(java.util.Arrays.asList(null, "  "))).isEmpty();
+
+        verify(orders, never()).findApprovalSnapshotsByUidIn(any());
+    }
+
+    @Test
+    void findApprovalSnapshots_dropsOrdersOutsideTheCallersScope_ratherThanThrowing() {
+        // Tenancy is scoped from the LOADED row (never a caller parameter). Dropping rather than
+        // refusing is deliberate: this feeds a listing, and one stray reference must not 500 a page.
+        when(scopeGuard.canActIn(any(), eq(10L))).thenReturn(true);
+        when(scopeGuard.canActIn(any(), eq(99L))).thenReturn(false);
+        when(orders.findApprovalSnapshotsByUidIn(any())).thenReturn(List.of(
+                snapshot("PO-UID-A", 10L, PurchaseOrderOrigin.DIRECT_RECEIPT, PoApprovalStatus.PENDING),
+                snapshot("PO-UID-X", 99L, PurchaseOrderOrigin.DIRECT_RECEIPT, PoApprovalStatus.PENDING)));
+
+        var snapshots = service.findApprovalSnapshots(List.of("PO-UID-A", "PO-UID-X"));
+
+        assertThat(snapshots).containsOnlyKeys("PO-UID-A");
+    }
+
+    private static PurchaseOrderApprovalSnapshotDto snapshot(String uid, Long companyId,
+                                                             PurchaseOrderOrigin origin,
+                                                             PoApprovalStatus approvalStatus) {
+        return new PurchaseOrderApprovalSnapshotDto(uid, companyId, origin, approvalStatus);
     }
 
     @Test

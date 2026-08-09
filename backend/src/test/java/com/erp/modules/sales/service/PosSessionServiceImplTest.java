@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -952,9 +953,11 @@ class PosSessionServiceImplTest {
     }
 
     /**
-     * Self-healing provisioning: the mapping is ensured on the posting path, so a tenant that
-     * upgrades into V97 with tills already trading gets it on the first expense — no manual setup
-     * step and nothing seeded in SQL (standing rule: provisioning over data migrations).
+     * Self-healing provisioning: the mapping is ensured on the posting path as a backstop to the
+     * seeder's start-up pass, so a company created between two boots gets it on the first expense —
+     * no manual setup step and nothing seeded in SQL (standing rule: provisioning over data
+     * migrations). {@code ensureMapping}, not {@code seedDefaults}: the mapping must be committed in
+     * its own transaction so it outlives an expense that is refused for some other reason.
      */
     @Test
     void recordExpense_provisionsTheTillExpenseMappingOnDemand() {
@@ -966,7 +969,30 @@ class PosSessionServiceImplTest {
         service.recordExpense("V97-2",
                 new PosExpenseRequest(new BigDecimal("500.00"), "Water", "Drinking water"));
 
-        verify(tillExpenseGl).seedDefaults(1L);
+        verify(tillExpenseGl).ensureMapping(1L);
+        verify(tillExpenseGl, never()).seedDefaults(anyLong());
+    }
+
+    /**
+     * A seeder that cannot provision must not surface as a raw failure. {@code ensureMapping} is
+     * documented never to throw, but the posting path is what a cashier actually meets, so it is
+     * guarded here too: the refusal a till shows is the actionable "set the till expense account"
+     * sentence, never internal detail.
+     */
+    @Test
+    void recordExpense_whenProvisioningItselfFails_stillRefusesWithTheFriendlyMessage() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("V97-3")).thenReturn(Optional.of(session));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new IllegalStateException("chart_of_accounts insert exploded"))
+                .when(tillExpenseGl).ensureMapping(1L);
+
+        assertThatThrownBy(() -> service.recordExpense("V97-3",
+                new PosExpenseRequest(new BigDecimal("500.00"), "Water", "Drinking water")))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("till expense account")
+                .hasMessageNotContaining("chart_of_accounts");
+        verify(glPosting, never()).post(any());
     }
 
     /**
