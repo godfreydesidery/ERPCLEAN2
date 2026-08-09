@@ -18,6 +18,7 @@ import {
   TenderType,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
 
@@ -35,7 +36,7 @@ import { TaxService } from '../tax/tax.service';
  */
 @Component({
   selector: 'app-record-payment',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, DirectReceiptRatificationComponent],
   templateUrl: './record-payment.component.html',
   styleUrl: './record-payment.component.scss',
 })

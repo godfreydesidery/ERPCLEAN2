@@ -3,13 +3,16 @@ package com.erp.modules.purchases.service;
 import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -32,8 +35,33 @@ public interface PurchaseOrderService {
      */
     PurchaseOrderDto createWithOrigin(CreatePurchaseOrderRequest req, PurchaseOrderOrigin origin);
 
-    /** Get a PO by uid; assertCanActIn on every read path. */
+    /**
+     * Get a PO by uid; assertCanActIn on every read path.
+     *
+     * <p>NOT a pure read: it reconciles {@code approval_status} against the approval engine and
+     * persists the answer (plus an audit row), so a decision taken in the generic Approvals inbox
+     * lands on the order. Call it from a read-WRITE transaction — from a {@code readOnly} one
+     * Hibernate's MANUAL flush mode drops the reconcile silently. A caller that only needs to
+     * display where an order stands should use {@link #findApprovalSnapshots(Collection)} instead.
+     */
     PurchaseOrderDto getByUid(String uid);
+
+    /**
+     * Origin + stored approval status for a set of orders, keyed by uid — one query, no
+     * approval-engine poll, no write (K3 follow-up).
+     *
+     * <p>This is the read seam for screens that merely SHOW where an order stands, notably the AP
+     * bill list, which needs those two facts per bill and previously reached them through
+     * {@link #getByUid(String)} — one engine round-trip per row, from a {@code readOnly}
+     * transaction whose mutation Hibernate then discarded. Control points that must act on a
+     * freshly reconciled decision (payment release, placement) keep using {@code getByUid}.
+     *
+     * <p>Tenancy is scoped from the LOADED order: an order in a company the caller may not act in
+     * is simply absent from the result rather than throwing, so one stray reference cannot 500 a
+     * whole page. Unknown, blank and null uids are absent too; callers must treat "absent" as
+     * "nothing known", never as a decision.
+     */
+    Map<String, PurchaseOrderApprovalSnapshotDto> findApprovalSnapshots(Collection<String> uids);
 
     /**
      * Paged list for a company (scoped by tenant predicate).

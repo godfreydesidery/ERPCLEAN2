@@ -709,10 +709,13 @@ public class PosSessionServiceImpl implements PosSessionService {
      * The account a till payout is debited to — the {@link GlConfigKey#POS_TILL_EXPENSE} mapping,
      * provisioned on demand (V97).
      *
-     * <p><b>Self-healing.</b> {@link TillExpenseGlSeeder#seedDefaults(Long)} runs first and is a
-     * single indexed read once the mapping exists. That is what lets a tenant upgrade into V97
-     * without a manual setup step: the first expense recorded after the upgrade creates the account
-     * and the mapping in its own transaction, and every one after that finds them.
+     * <p><b>Self-healing.</b> {@link TillExpenseGlSeeder#ensureMapping(Long)} runs first and is a
+     * single indexed read once the mapping exists. An upgraded tenant is normally already healed by
+     * the seeder's start-up pass; this call is the backstop for a company created between two boots,
+     * and it commits the mapping in a transaction of its own — so the mapping survives even if this
+     * expense is refused a moment later, instead of rolling back with it and leaving the next
+     * attempt in the same state. It never throws: when it cannot provision, the resolve below
+     * produces the actionable refusal.
      *
      * <p><b>No fallback, on purpose.</b> If the mapping still cannot be resolved — the chart is
      * missing, or someone mapped the key to an account and then archived it — this refuses the
@@ -721,8 +724,8 @@ public class PosSessionServiceImpl implements PosSessionService {
      * deal with beats a silent misposting nobody will ever notice.
      */
     private ChartOfAccount resolveTillExpenseAccount(Long companyId) {
-        tillExpenseGl.seedDefaults(companyId);
         try {
+            tillExpenseGl.ensureMapping(companyId);
             return glConfig.resolve(companyId, GlConfigKey.POS_TILL_EXPENSE);
         } catch (RuntimeException ex) {
             // Technical detail (which key, which account, why) goes to the log ONLY.

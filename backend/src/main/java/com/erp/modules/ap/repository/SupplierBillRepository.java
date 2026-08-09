@@ -24,6 +24,14 @@ public interface SupplierBillRepository extends JpaRepository<SupplierBill, Long
 
     Optional<SupplierBill> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped id lookup, for resolving a bill referenced by internal id from an already-loaded
+     * aggregate (e.g. a payment allocation). Prefer this over {@code findById}: the bare finder is a
+     * confused-deputy risk and is what TenantScopingRulesTest exists to prevent — the company must come
+     * from the LOADED entity, never from a caller-supplied value.
+     */
+    Optional<SupplierBill> findByCompanyIdAndId(Long companyId, Long id);
+
     Page<SupplierBill> findByCompanyId(Long companyId, Pageable pageable);
 
     Page<SupplierBill> findByCompanyIdAndSupplierId(Long companyId, Long supplierId, Pageable pageable);

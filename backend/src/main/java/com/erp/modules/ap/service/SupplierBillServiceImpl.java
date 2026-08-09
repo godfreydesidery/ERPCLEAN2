@@ -6,6 +6,7 @@ import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.dto.SupplierBillLineDto;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.entity.SupplierBillLine;
+import com.erp.modules.ap.domain.enums.DirectReceiptRatificationState;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
@@ -52,6 +53,8 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     private final ChartOfAccountRepository   chartOfAccounts;
     /** ADR-0041 D4 — reads PO lines via the Purchases service boundary (no entity import, NFR-AP-06). */
     private final PurchaseMatchReader        purchaseMatchReader;
+    /** K3 follow-up — surfaces "this receipt still needs ratifying" on every bill read. */
+    private final DirectReceiptRatificationGuard ratification;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
 
@@ -62,6 +65,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                                     CompanyRepository companies,
                                     ChartOfAccountRepository chartOfAccounts,
                                     PurchaseMatchReader purchaseMatchReader,
+                                    DirectReceiptRatificationGuard ratification,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.bills               = bills;
@@ -71,6 +75,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         this.companies           = companies;
         this.chartOfAccounts     = chartOfAccounts;
         this.purchaseMatchReader = purchaseMatchReader;
+        this.ratification        = ratification;
         this.scopeGuard          = scopeGuard;
         this.audit               = audit;
     }
@@ -220,7 +225,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         "grossAmount", grossAmount.toPlainString(),
                         "supplierId", String.valueOf(supplierId))));
 
-        return toDto(bill, savedLines);
+        return toDto(bill, savedLines, ratification.stateFor(bill.getPurchaseOrderUid()));
     }
 
     @Override
@@ -229,28 +234,58 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         SupplierBill bill = Lookups.orNotFound(bills.findByUid(uid), "SupplierBill", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), bill.getCompanyId());
         List<SupplierBillLine> billLines = lines.findBySupplierBillIdOrderByLineNo(bill.getId());
-        return toDto(bill, billLines);
+        return toDto(bill, billLines, ratification.stateFor(bill.getPurchaseOrderUid()));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SupplierBillDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return bills.findByCompanyId(companyId, pageable)
-                .map(b -> toDto(b, lines.findBySupplierBillIdOrderByLineNo(b.getId())));
+        return toDtoPage(bills.findByCompanyId(companyId, pageable));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SupplierBillDto> listBySupplier(Long companyId, Long supplierId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return bills.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
-                .map(b -> toDto(b, lines.findBySupplierBillIdOrderByLineNo(b.getId())));
+        return toDtoPage(bills.findByCompanyIdAndSupplierId(companyId, supplierId, pageable));
     }
 
     // -------------------------------------------------------------------------
 
+    /**
+     * Maps one page of bills to DTOs, resolving the direct-receipt ratification state for the whole
+     * page in a single purchase-order read.
+     *
+     * <p>Two things this must NOT do, both learned the hard way. It must not reach the state through
+     * the Purchases detail read: that read reconciles the order against the approval engine and
+     * writes the result, and these list methods are {@code readOnly}, where Hibernate's MANUAL flush
+     * mode discards the write without a sound. And it must not resolve one bill at a time: that is
+     * an approval-engine round-trip per row. {@link DirectReceiptRatificationGuard#snapshotFor} does
+     * both correctly — no writes, one call for the page — and answers NOT_APPLICABLE for anything it
+     * could not resolve, so a lookup that misbehaves costs a badge, never the page.
+     */
+    private Page<SupplierBillDto> toDtoPage(Page<SupplierBill> page) {
+        DirectReceiptRatificationGuard.Snapshot ratificationStates = ratification.snapshotFor(
+                page.getContent().stream()
+                        .map(SupplierBill::getPurchaseOrderUid)
+                        .filter(uid -> uid != null && !uid.isBlank())
+                        .distinct()
+                        .toList());
+        return page.map(b -> toDto(b, lines.findBySupplierBillIdOrderByLineNo(b.getId()),
+                ratificationStates.stateFor(b.getPurchaseOrderUid())));
+    }
+
+    /**
+     * Overload for callers with no backing purchase order (AP opening balances), where the
+     * ratification gate cannot apply.
+     */
     static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList) {
+        return toDto(b, lineList, DirectReceiptRatificationState.NOT_APPLICABLE);
+    }
+
+    static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList,
+                                  DirectReceiptRatificationState ratificationState) {
         List<SupplierBillLineDto> lineDtos = lineList.stream().map(l ->
                 new SupplierBillLineDto(
                         l.getId(), l.getUid(), l.getSupplierBillId(), l.getLineNo(),
@@ -276,6 +311,9 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 b.getCurrency().value(), b.getStatus(), b.getPostedGlEntryUid(),
                 // D-7: WHT snapshot
                 b.getWhtTypeId(), b.getWhtTaxableBase(), b.getWhtAmount(),
+                // K3 follow-up: derived ratification state of the backing direct receipt
+                ratificationState != null
+                        ? ratificationState : DirectReceiptRatificationState.NOT_APPLICABLE,
                 lineDtos);
     }
 

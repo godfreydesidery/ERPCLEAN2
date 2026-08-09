@@ -16,6 +16,12 @@ export interface NavDestination {
   readonly route: string;
   readonly group: string;
   readonly icon: string;
+  /**
+   * Hidden synonyms for this destination — never rendered, matched only by the palette so a user
+   * who searches in their own words ("opening balance", "no LPO") still lands on the right screen.
+   * Keyword-only hits rank below label and group hits.
+   */
+  readonly keywords?: readonly string[];
 }
 
 const MAX_RESULTS = 8;
@@ -67,6 +73,10 @@ export class NavSearchComponent {
       const lLabel = dest.label.toLowerCase();
       const lGroup = dest.group.toLowerCase();
       const combined = `${lGroup} ${lLabel}`;
+      // Hidden synonyms are searched last so a real label match always outranks them.
+      const searchable = dest.keywords?.length
+        ? `${combined} ${dest.keywords.join(' ').toLowerCase()}`
+        : combined;
 
       let score = 0;
 
@@ -76,10 +86,11 @@ export class NavSearchComponent {
         score = 2;
       } else if (combined.includes(q)) {
         score = 1;
-      } else {
+      } else if (words.every((w) => combined.includes(w))) {
         // multi-word: all words must appear somewhere in label+group
-        const allPresent = words.every((w) => combined.includes(w));
-        if (allPresent) score = 1;
+        score = 1;
+      } else if (searchable.includes(q) || words.every((w) => searchable.includes(w))) {
+        score = 0.5;
       }
 
       if (score > 0) ranked.push({ dest, score });

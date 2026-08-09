@@ -4,6 +4,10 @@ import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
 import { SupplierBillDto } from './models/ap.model';
 import { ApService } from './ap.service';
+import {
+  DirectReceiptRatificationComponent,
+  hasRatificationNotice,
+} from './direct-receipt-ratification.component';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
 
@@ -14,7 +18,7 @@ type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-bill-detail',
-  imports: [RouterLink],
+  imports: [RouterLink, DirectReceiptRatificationComponent],
   templateUrl: './bill-detail.component.html',
   styleUrl: './bill-detail.component.scss',
 })
@@ -50,5 +54,25 @@ export class BillDetailComponent implements OnInit {
 
   canPayBill(bill: SupplierBillDto): boolean {
     return bill.status === 'MATCHED' || bill.status === 'APPROVED' || bill.status === 'PARTIALLY_PAID';
+  }
+
+  /** True only for bills backed by a direct goods receipt — ordinary bills show no notice. */
+  showsRatification(bill: SupplierBillDto): boolean {
+    return hasRatificationNotice(bill.directReceiptRatification);
+  }
+
+  /** Payment is refused server-side while the delivery is unratified or refused. */
+  ratificationBlocksPayment(bill: SupplierBillDto): boolean {
+    return (
+      bill.directReceiptRatification === 'AWAITING_RATIFICATION' ||
+      bill.directReceiptRatification === 'RATIFICATION_REFUSED'
+    );
+  }
+
+  /** Why the Record Payment button is unavailable, in the clerk's words. */
+  paymentHoldNote(bill: SupplierBillDto): string {
+    return bill.directReceiptRatification === 'RATIFICATION_REFUSED'
+      ? 'Payment is blocked: a manager refused this delivery.'
+      : 'Payment is on hold until a manager confirms this delivery.';
   }
 }

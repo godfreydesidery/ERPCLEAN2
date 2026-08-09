@@ -18,6 +18,7 @@ import {
   RaiseDebitNoteRequest,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { formatMoney } from '../../../shared/money.util';
 
@@ -38,7 +39,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-supplier-bills-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent],
+  imports: [FormsModule, RouterLink, PaginatorComponent, DirectReceiptRatificationComponent],
   templateUrl: './supplier-bills-list.component.html',
   styleUrl: './supplier-bills-list.component.scss',
 })
