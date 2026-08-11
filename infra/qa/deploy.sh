@@ -14,11 +14,35 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Precedence: environment > deploy.env.local > deploy.env.
+#
+# Capture the environment BEFORE sourcing. `source deploy.env` is a plain
+# assignment, so it used to overwrite an env-supplied value — which meant the
+# override this script's own usage documents, `BRANCH=develop ./deploy.sh`,
+# silently deployed deploy.env's branch instead and still exited 0. A deploy
+# that ships the wrong branch must not look like a successful one.
+_env_BRANCH="${BRANCH:-}"
+_env_EC2_HOST="${EC2_HOST:-}"
+_env_EC2_USER="${EC2_USER:-}"
+_env_REMOTE_DIR="${REMOTE_DIR:-}"
+_env_CONTAINER="${CONTAINER:-}"
+_env_IMAGE="${IMAGE:-}"
+_env_DB_VOLUME="${DB_VOLUME:-}"
+
 # shellcheck disable=SC1091
 [ -f "$here/deploy.env" ] && source "$here/deploy.env"
 # optional local, gitignored overrides (SSH_KEY=..., GH_PAT=...)
 # shellcheck disable=SC1091
 [ -f "$here/deploy.env.local" ] && source "$here/deploy.env.local"
+
+BRANCH="${_env_BRANCH:-${BRANCH:-}}"
+EC2_HOST="${_env_EC2_HOST:-${EC2_HOST:-}}"
+EC2_USER="${_env_EC2_USER:-${EC2_USER:-}}"
+REMOTE_DIR="${_env_REMOTE_DIR:-${REMOTE_DIR:-}}"
+CONTAINER="${_env_CONTAINER:-${CONTAINER:-}}"
+IMAGE="${_env_IMAGE:-${IMAGE:-}}"
+DB_VOLUME="${_env_DB_VOLUME:-${DB_VOLUME:-}}"
 
 : "${EC2_HOST:?set EC2_HOST in deploy.env}"
 : "${EC2_USER:=ubuntu}"
@@ -37,6 +61,10 @@ echo '==> git pull (${BRANCH})'
 git fetch --all --quiet
 git checkout "${BRANCH}" --quiet
 git pull --ff-only
+# Print what actually landed. Docker reports every layer CACHED when the source
+# has not moved, so without this line a deploy of the wrong branch reads exactly
+# like a successful one.
+echo "==> now at \$(git rev-parse --abbrev-ref HEAD) \$(git rev-parse --short HEAD)"
 echo '==> docker build'
 docker build -f infra/qa/Dockerfile -t "${IMAGE}" .
 echo '==> restart container'
