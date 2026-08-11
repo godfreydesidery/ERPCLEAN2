@@ -90,7 +90,12 @@ public class SalesReportQuery {
             filterParams.add(supplier.id());
         }
 
-        List<SalesReportRowDto> rows = queryRows(companyId, from, to, filterSql.toString(), filterParams);
+        // The on-hand column follows the branch filter. It used to be company-wide regardless, so a
+        // branch-filtered register showed that branch's sales beside the WHOLE company's stock —
+        // read at a counter as a stock discrepancy. Only the branch narrows it: agent/route/supplier
+        // filter the sales, not where the goods physically are.
+        List<SalesReportRowDto> rows = queryRows(companyId, from, to, filterSql.toString(),
+                filterParams, branch != null ? branch.id() : null);
 
         BigDecimal totalQty = BigDecimal.ZERO;
         BigDecimal totalDiscount = BigDecimal.ZERO;
@@ -126,9 +131,14 @@ public class SalesReportQuery {
     // -------------------------------------------------------------------------
 
     private List<SalesReportRowDto> queryRows(Long companyId, OffsetDateTime from, OffsetDateTime to,
-                                               String filterSql, List<Object> filterParams) {
+                                               String filterSql, List<Object> filterParams,
+                                               Long stockBranchId) {
         List<Object> mainParams = new ArrayList<>();
         mainParams.add(companyId); // stock_on_hand subquery
+        // Bound twice by design: the predicate is "this branch, or every branch when none was
+        // asked for", so the same id is compared and null-checked in one pass.
+        mainParams.add(stockBranchId);
+        mainParams.add(stockBranchId);
         mainParams.add(companyId); // i.company_id
         mainParams.add(from);
         mainParams.add(to);
@@ -151,6 +161,7 @@ public class SalesReportQuery {
                     SELECT product_id, SUM(quantity) AS qty
                     FROM stock_on_hand
                     WHERE company_id = ?
+                      AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
                     GROUP BY product_id
                 ) soh ON soh.product_id = l.product_id
                 WHERE i.company_id = ?

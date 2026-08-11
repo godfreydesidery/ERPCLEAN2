@@ -60,6 +60,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class StockImportHandlerIT extends PostgresIntegrationTest {
 
     @Autowired private StockImportHandler handler;
+    @Autowired private com.erp.modules.gl.service.ChartOfAccountService chartOfAccountService;
+    @Autowired private com.erp.modules.gl.service.FiscalCalendarService fiscalCalendarService;
+    @Autowired private com.erp.modules.gl.service.GlConfigService glConfigService;
+    @Autowired private com.erp.modules.ap.service.ApGlSeeder apGlSeeder;
     @Autowired private StockService stockService;
     @Autowired private ProductService productService;
     @Autowired private UnitOfMeasureService unitService;
@@ -91,6 +95,15 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
         root = users.save(root);
         rootId = root.getId();
         asRoot();
+
+        // Chart of accounts + fiscal year + gl_configs: the Unit Cost column posts a real opening
+        // valuation journal (DR Inventory / CR Opening Balance Equity), so this fixture now needs a
+        // company that could actually post. The quantity-only tests never did — an adjustment with
+        // no average cost skips the GL leg entirely, which is the gap the column closes.
+        chartOfAccountService.seedDefaults(companyA.getId());
+        fiscalCalendarService.seedCurrentYear(companyA.getId());
+        glConfigService.seedDefaults(companyA.getId());
+        apGlSeeder.seedDefaults(companyA.getId()); // OPENING_BALANCE_EQUITY (3100) — the credit leg
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));
@@ -261,6 +274,137 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
         assertThat(lastMovement(product.id()).getLocationId()).isEqualTo(loc2.getId());
     }
 
+    // ── Unit Cost / opening valuation ──────────────────────────────────────
+    //
+    // An ADJUSTMENT can only carry an existing average forward, never establish one, so stock first
+    // brought in through this sheet used to land with quantity but NO value: blank cost on the stock
+    // report, missing from the valuation total, and no cost-of-sale posted when sold. Reported from
+    // the field ("stock report doesn't show cost for items we uploaded by Excel").
+
+    @Test
+    void commit_unitCost_setsTheOpeningValuationOnNewlyImportedStock() {
+        ProductDto product = stockableProduct("Absolute 375ml");
+
+        RowOutcome o = handler.process(companyA.getId(),
+                row("Product Code", product.code(), "New On-Hand Qty", "17", "Unit Cost", "12000"),
+                ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.UPDATE);
+        assertThat(onHand(product.id())).isEqualByComparingTo("17");
+        StockOnHand soh = singleOnHand(product.id());
+        assertThat(soh.getAvgCost()).isEqualByComparingTo("12000");
+        // Value follows the quantity that was just set — cost is applied AFTER the adjustment, so
+        // valuing 17 units, never the zero level the row replaced.
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo("204000");
+    }
+
+    @Test
+    void commit_unitCostAlone_valuesStockThatIsAlreadyAtTheRightLevel() {
+        ProductDto product = stockableProduct("Amarula 375");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("62"), null));
+        assertThat(singleOnHand(product.id()).getAvgCost()).isNull(); // the gap being closed
+
+        RowOutcome o = handler.process(companyA.getId(),
+                row("Product Code", product.code(), "Unit Cost", "9500"),
+                ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.UPDATE);
+        assertThat(onHand(product.id())).isEqualByComparingTo("62"); // quantity untouched
+        assertThat(singleOnHand(product.id()).getAvgCost()).isEqualByComparingTo("9500");
+    }
+
+    @Test
+    void commit_unitCost_neverOverwritesAnExistingValuation() {
+        ProductDto product = stockableProduct("Campari 200ml");
+        handler.process(companyA.getId(),
+                row("Product Code", product.code(), "New On-Hand Qty", "30", "Unit Cost", "8000"),
+                ImportMode.COMMIT, new ImportContext());
+
+        RowOutcome o = handler.process(companyA.getId(),
+                row("Product Code", product.code(), "Unit Cost", "999999"),
+                ImportMode.COMMIT, new ImportContext());
+
+        // Reported, not thrown: one already-priced item must not abort a sheet of hundreds. And
+        // reported as SKIP, not UPDATE — nothing changed, so the operator's summary must not claim
+        // it did.
+        assertThat(o.action()).isEqualTo(RowAction.SKIP);
+        assertThat(o.message()).contains("already valued");
+        assertThat(singleOnHand(product.id()).getAvgCost()).isEqualByComparingTo("8000");
+    }
+
+    @Test
+    void commit_negativeUnitCost_isRejected() {
+        ProductDto product = stockableProduct("NegCost");
+
+        assertThatThrownBy(() -> handler.process(companyA.getId(),
+                row("Product Code", product.code(), "New On-Hand Qty", "5", "Unit Cost", "-1"),
+                ImportMode.COMMIT, new ImportContext()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("negative");
+    }
+
+    @Test
+    void commit_unitCost_requiresTheOpeningValuationPermission() {
+        ProductDto product = stockableProduct("Gated");
+        asNonRoot(); // STOCK.IMPORT got them this far; INVENTORY.OPENING.SET posts the GL leg
+
+        assertThatThrownBy(() -> handler.process(companyA.getId(),
+                row("Product Code", product.code(), "New On-Hand Qty", "5", "Unit Cost", "100"),
+                ImportMode.COMMIT, new ImportContext()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("permission");
+    }
+
+    @Test
+    void commit_blankQuantityAndBlankCost_isStillSkipped() {
+        ProductDto product = stockableProduct("Untouched");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), null));
+        long movesBefore = movements.count();
+
+        RowOutcome o = handler.process(companyA.getId(),
+                row("Product Code", product.code()), ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.SKIP);
+        assertThat(onHand(product.id())).isEqualByComparingTo("50");
+        assertThat(movements.count()).isEqualTo(movesBefore);
+    }
+
+    @Test
+    void export_leavesUnitCostBlank_soAnUntouchedReuploadChangesNothing() {
+        ProductDto product = stockableProduct("CostCol");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("10"), null));
+
+        LinkedHashMap<String, String> exported = handler.exportRows(companyA.getId(), Map.of()).stream()
+                .filter(r -> product.code().equals(r.get("Product Code")))
+                .findFirst().orElseThrow();
+        assertThat(exported).containsKey("Unit Cost");
+        assertThat(exported.get("Unit Cost")).isEmpty();
+
+        RowOutcome o = handler.process(companyA.getId(),
+                new ImportRow(2, exported), ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.SKIP);
+        assertThat(singleOnHand(product.id()).getAvgCost()).isNull();
+    }
+
+    @Test
+    void export_thenReuploadWithCostFilledIn_valuesTheStock() {
+        ProductDto product = stockableProduct("RoundTripCost");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("10"), null));
+
+        LinkedHashMap<String, String> exported = handler.exportRows(companyA.getId(), Map.of()).stream()
+                .filter(r -> product.code().equals(r.get("Product Code")))
+                .findFirst().orElseThrow();
+        exported.put("Unit Cost", "250"); // price only, leave the count alone
+
+        RowOutcome o = handler.process(companyA.getId(),
+                new ImportRow(2, exported), ImportMode.COMMIT, new ImportContext());
+
+        assertThat(o.action()).isEqualTo(RowAction.UPDATE);
+        assertThat(onHand(product.id())).isEqualByComparingTo("10");
+        assertThat(singleOnHand(product.id()).getOnHandValue()).isEqualByComparingTo("2500");
+    }
+
     @Test
     void export_prefillsCurrentOnHand_andLeavesNewBlank() {
         ProductDto product = stockableProduct("Exported");
@@ -297,6 +441,25 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
     private void asRoot() {
         RequestContext.set(new RequestContext.Principal(
                 rootId, "si_root", true, companyA.getId(), branchA.getId(), null));
+    }
+
+    /**
+     * A signed-in user who is NOT root and holds no roles, so every permission resolves to false —
+     * the shape that matters here, since root short-circuits the check it is meant to exercise.
+     */
+    private void asNonRoot() {
+        AppUser clerk = users.save(new AppUser(
+                "si_clerk", passwordEncoder.encode("ClerkPass1!"), "SI Clerk"));
+        RequestContext.set(new RequestContext.Principal(
+                clerk.getId(), "si_clerk", false, companyA.getId(), branchA.getId(), null));
+    }
+
+    /** The product's single on-hand row at the active branch — asserts the single-row assumption. */
+    private StockOnHand singleOnHand(Long productId) {
+        List<StockOnHand> rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
+                companyA.getId(), branchA.getId(), productId);
+        assertThat(rows).hasSize(1);
+        return rows.get(0);
     }
 
     private ProductDto stockableProduct(String name) {
