@@ -39,7 +39,10 @@ mvn -Dit.test=BranchOverrideIT verify                    # one integration test 
 
 # Web tests / build
 npm test -- --watch=false                                 # vitest unit + axe a11y specs (the CI gate)
-npm test -- --watch=false src/app/features/admin/sales   # narrow to a path; or `-t "<name pattern>"`
+npm test -- --watch=false --include=src/app/features/admin/sales   # narrow to a path; or `-t "<name pattern>"`
+                                                          # --include= is required: a BARE path is parsed as the
+                                                          # project name, the builder never loads, and the run
+                                                          # dies on "Unknown argument: watch" having run 0 tests
 npm run build                                             # production bundle (also a CI gate)
 npm run e2e                                               # Playwright + axe (opt-in; needs API on :8081 — see below)
 
