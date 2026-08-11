@@ -349,10 +349,21 @@ export interface CreatePriceListRequest {
   name: string;
   /** ADR-0056: omitted ⇒ backend defaults to true (VAT-inclusive) for new lists. */
   priceIncludesVat?: boolean;
+  /**
+   * Marks the new list as the company's default — the one the Product List and Stock Value reports
+   * read selling prices from. Omitted ⇒ backend leaves the flag false.
+   */
+  isDefault?: boolean;
 }
 
 export interface UpdatePriceListRequest {
   name: string;
   /** ADR-0056: omitted ⇒ backend keeps the existing stored value. */
   priceIncludesVat?: boolean;
+  /**
+   * The company's default price list — the one the Product List and Stock Value reports read
+   * selling prices from. Omitted ⇒ backend keeps the existing stored value, which is what a plain
+   * name/VAT edit must do; only the explicit "Set default" action sends it.
+   */
+  isDefault?: boolean;
 }

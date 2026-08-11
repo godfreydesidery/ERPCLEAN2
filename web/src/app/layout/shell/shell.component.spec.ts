@@ -100,6 +100,44 @@ describe('ShellComponent — sidebar navigation', () => {
     expect(item?.permission).toBe('INVENTORY.VALUATION.VIEW');
   });
 
+  // ── Product List / Stock Value registers — INVENTORY.VALUATION.VIEW ───────
+
+  it('shows the Product List and Stock Value registers to a holder of INVENTORY.VALUATION.VIEW', () => {
+    const fixture = shellWithPermissions(['INVENTORY.VALUATION.VIEW']);
+    expect(routes(fixture)).toContain('/admin/reports/product-list');
+    expect(routes(fixture)).toContain('/admin/reports/stock-value');
+    expect(renderedNavHrefs(fixture)).toContain('/admin/reports/product-list');
+    expect(renderedNavHrefs(fixture)).toContain('/admin/reports/stock-value');
+  });
+
+  it('hides both registers from a user without INVENTORY.VALUATION.VIEW', () => {
+    const fixture = shellWithPermissions(['STOCK.VIEW']);
+    expect(routes(fixture)).not.toContain('/admin/reports/product-list');
+    expect(routes(fixture)).not.toContain('/admin/reports/stock-value');
+    expect(renderedNavHrefs(fixture)).not.toContain('/admin/reports/product-list');
+    expect(renderedNavHrefs(fixture)).not.toContain('/admin/reports/stock-value');
+  });
+
+  it('gates both registers on the same code as their route guards', () => {
+    const fixture = shellWithPermissions(['INVENTORY.VALUATION.VIEW']);
+    const items = navItems(fixture);
+    expect(items.find((i) => i.route === '/admin/reports/product-list')?.permission).toBe(
+      'INVENTORY.VALUATION.VIEW',
+    );
+    expect(items.find((i) => i.route === '/admin/reports/stock-value')?.permission).toBe(
+      'INVENTORY.VALUATION.VIEW',
+    );
+  });
+
+  it('finds the registers in the palette by the words the request arrived in', () => {
+    const fixture = shellWithPermissions(['INVENTORY.VALUATION.VIEW']);
+    const dests = fixture.componentInstance.searchDestinations();
+    expect(dests.find((d) => d.route === '/admin/reports/product-list')?.keywords)
+      .toContain('orodha ya bidhaa');
+    expect(dests.find((d) => d.route === '/admin/reports/stock-value')?.keywords)
+      .toContain('supplier wise');
+  });
+
   // ── Direct goods receipt (K3) — PURCHASE.RECEIVE.DIRECT ───────────────────
 
   it('shows Receive Without Order to a user with PURCHASE.RECEIVE.DIRECT', () => {

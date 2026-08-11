@@ -617,6 +617,27 @@ export const ADMIN_ROUTES: Routes = [
         (m) => m.StockMovementReportComponent,
       ),
   },
+  // The two standard product registers the shop floor asks for by name. Both read the company's
+  // DEFAULT price list for the selling price; Stock Value adds cost/sale value per item and grand
+  // totals, and can be run supplier-wise. Guard = INVENTORY.VALUATION.VIEW, IDENTICAL to the
+  // @PreAuthorize on ProductStockReportController — a guard code that differs from the endpoint's
+  // turns a 403 into what reads to the user as "the page won't open".
+  {
+    path: 'reports/product-list',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/product-list-report.component').then(
+        (m) => m.ProductListReportComponent,
+      ),
+  },
+  {
+    path: 'reports/stock-value',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-value-report.component').then(
+        (m) => m.StockValueReportComponent,
+      ),
+  },
   // ── Approvals ─────────────────────────────────────────────────────────────
   {
     path: 'approvals/inbox',
