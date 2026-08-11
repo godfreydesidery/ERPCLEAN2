@@ -103,7 +103,18 @@ export class PosService {
 
   // ── Sales ─────────────────────────────────────────────────────────────────
 
-  processSale(request: PosSaleRequest): Observable<SalesInvoiceDto> {
-    return this.http.post<SalesInvoiceDto>(this.saleBase, request);
+  /**
+   * Ring a sale. `idempotencyKey` MUST be stable for one basket and reused verbatim on every
+   * retry — mint it once when the operator starts the sale, never per attempt.
+   *
+   * Without the header the server (where it is `required = false`) skips its dedup reserve
+   * entirely, so a retried or double-submitted POST becomes a second finalised invoice: duplicate
+   * revenue, VAT, COGS and stock issue. That is the shape of the doubled sales-report quantities
+   * reported from the field, and it is why this parameter is not optional here.
+   */
+  processSale(request: PosSaleRequest, idempotencyKey: string): Observable<SalesInvoiceDto> {
+    return this.http.post<SalesInvoiceDto>(this.saleBase, request, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
   }
 }

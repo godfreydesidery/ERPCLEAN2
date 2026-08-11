@@ -43,11 +43,34 @@ public class StockReportQuery {
     }
 
     public StockReportDto report(Long companyId) {
+        return report(companyId, null);
+    }
+
+    /**
+     * @param branchUid optional; when given, the listing covers only that branch's stock.
+     *
+     * <p>Without a branch this sums EVERY branch in the company, which is the right answer for a
+     * head-office register and the wrong one at a counter: a branch manager comparing a physical
+     * count against a company-wide figure sees a discrepancy that is not there. Reported from
+     * Kilimanjaro, whose stock also spans several locations within the branch — those still sum
+     * together, because stock is fungible within a branch (the {@code getAvailability} rule).
+     */
+    public StockReportDto report(Long companyId, String branchUid) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
 
         CompanyHeader header = loadCompanyHeader(companyId);
         Long defaultPriceListId = resolveDefaultPriceListId(companyId);
+        NamedRef branch = resolveNamedRef("branches", "name", branchUid, companyId, "Branch");
+
+        List<Object> params = new ArrayList<>();
+        params.add(defaultPriceListId);
+        params.add(companyId);
+        String branchSql = "";
+        if (branch != null) {
+            branchSql = " AND soh.branch_id = ?";
+            params.add(branch.id());
+        }
 
         List<Object[]> rawRows = jdbc.query(
                 """
@@ -62,6 +85,8 @@ public class StockReportQuery {
                 LEFT JOIN product_prices pp ON pp.product_id = soh.product_id
                        AND pp.price_list_id = ? AND pp.unit_id IS NULL
                 WHERE soh.company_id = ?
+                """ + branchSql + """
+
                 GROUP BY p.code, p.name, pp.amount
                 ORDER BY p.code NULLS LAST
                 """,
@@ -73,7 +98,7 @@ public class StockReportQuery {
                         rs.getBigDecimal("total_value"),
                         rs.getBigDecimal("selling_price")
                 },
-                defaultPriceListId, companyId);
+                params.toArray());
 
         List<StockReportRowDto> rows = new ArrayList<>(rawRows.size());
         BigDecimal totalValue = BigDecimal.ZERO;
@@ -112,6 +137,27 @@ public class StockReportQuery {
                 companyId);
     }
 
+    /**
+     * Resolve an optional uid filter to (id, display name), scoped to the caller's company — so a
+     * branch uid from another tenant reads as "not found" rather than filtering across the boundary.
+     * Same shape as {@code StockMovementReportQuery}/{@code SalesReportQuery}.
+     */
+    private NamedRef resolveNamedRef(String table, String nameColumn, String uid,
+                                      Long companyId, String entityName) {
+        if (uid == null || uid.isBlank()) {
+            return null;
+        }
+        String sql = "SELECT id, " + nameColumn + " AS name FROM " + table
+                + " WHERE uid = ? AND company_id = ?";
+        List<NamedRef> found = jdbc.query(sql,
+                (rs, rowNum) -> new NamedRef(rs.getLong("id"), rs.getString("name")),
+                uid, companyId);
+        if (found.isEmpty()) {
+            throw NotFoundException.of(entityName, uid);
+        }
+        return found.get(0);
+    }
+
     private CompanyHeader loadCompanyHeader(Long companyId) {
         List<CompanyHeader> found = jdbc.query(
                 """
@@ -139,6 +185,8 @@ public class StockReportQuery {
         }
         return found.get(0);
     }
+
+    private record NamedRef(Long id, String name) {}
 
     private record CompanyHeader(String name, String legalName, String taxId, String vrn,
                                   String contactPhone, String contactEmail,

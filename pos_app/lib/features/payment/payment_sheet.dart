@@ -190,6 +190,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   }
 
   Future<void> _complete() async {
+    // Single entry point for a POST that takes money, so the guard lives here
+    // rather than only on the buttons. The call sites await dialogs (age check,
+    // manager approval) before reaching the request, and _busy is false across
+    // those gaps — so two taps could otherwise queue two runs of this method.
+    if (_busy) return;
     final cart = ref.read(cartProvider);
     final app = ref.read(appControllerProvider);
     final session = app.shift;
@@ -276,8 +281,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       final sale = ref.read(saleServiceProvider);
       final invoice = await sale.ring(body,
           idempotencyKey: _txnId, xRequestId: _txnId);
-      // Terminal: the sale is finalised and we have it. Release the slot.
-      await pendingStore.clear();
+      // The sale is COMMITTED from here on. The basket must not be re-ringable,
+      // so the key stays in the durable slot until the receipt has actually been
+      // handed to the register. Clearing it here (which is what this code used to
+      // do) opened the double-charge window: any exit between this point and the
+      // pop below left a committed sale with a live basket AND no key, so the next
+      // Pay minted a fresh _txnId and the server had nothing to dedupe against —
+      // the whole basket posted twice.
       Receipt receipt;
       try {
         receipt = await sale.loadReceipt(invoice.uid,
@@ -290,6 +300,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             clientTxnId: _txnId,
             tenderedAmount: tendered);
       }
+      // Hand the receipt back BEFORE releasing the slot. If the sheet was disposed
+      // while the POST was in flight there is no route to pop, so the slot is left
+      // armed on purpose: the next launch replays under the SAME key, gets the same
+      // invoice back, and the sale is reconciled instead of duplicated.
+      if (!mounted) return;
+      await pendingStore.clear();
       if (!mounted) return;
       Navigator.of(context).pop(receipt);
     } on ApiException catch (e) {
@@ -321,7 +337,17 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   Future<void> _handleRingFailure(
       ApiException e, PendingSaleStore pendingStore) async {
     final status = PosSaleFlowStatus.resolve(e.code, e.statusCode);
-    final undecided = e.isAmbiguousWrite || status == PosSaleFlowStatus.inFlight;
+    // "Nothing was written" is a claim only the SERVER may make, via an explicit
+    // REJECTED or STALE_REPLAY verdict. Anything else — a proxy that rewrote a 502
+    // into a 4xx, a 401 the refresh could not repair, a response we failed to parse
+    // — is an unknown outcome that can sit on top of a commit. Treating those as
+    // definite refusals cleared the key and told the cashier nothing was charged,
+    // which is precisely the instruction that produced a second invoice.
+    final declaredNoWrite = status == PosSaleFlowStatus.rejected ||
+        status == PosSaleFlowStatus.staleReplay;
+    final undecided = !declaredNoWrite ||
+        e.isAmbiguousWrite ||
+        status == PosSaleFlowStatus.inFlight;
     if (!undecided) await pendingStore.clear();
     if (!mounted) return;
 
@@ -357,6 +383,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// to genuinely hold the override in this invoice's company, so what travels
   /// on the wire is a pointer to an approval, never the approval itself.
   Future<void> _approveDiscountsAndRetry() async {
+    // The button is disabled on _busy, but _busy is false while this awaits the
+    // manager prompt — so without this the cashier can stack two approval dialogs
+    // and two retries. Hide the affordance for the rest of this attempt instead.
+    if (_busy || !_offerDiscountApproval) return;
+    setState(() => _offerDiscountApproval = false);
     final lines = ref.read(cartProvider).linesNeedingDiscountApproval;
     if (lines.isEmpty) return;
     final detail = lines
@@ -403,24 +434,32 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   @override
   Widget build(BuildContext context) {
     final change = _changePreview();
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 840, maxHeight: 620),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(),
-            Flexible(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: _left(change)),
-                  SizedBox(width: 320, child: _right()),
-                ],
+    // barrierDismissible:false stops a click-away, and the X button is disabled
+    // while _busy — but neither blocks the Esc key, which pops a Flutter dialog by
+    // default on desktop. Esc pressed during a slow POST disposed this State mid
+    // sale, which is one of the ways a committed sale used to lose its sheet. The
+    // route stays put until the request settles.
+    return PopScope(
+      canPop: !_busy,
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 840, maxHeight: 620),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _header(),
+              Flexible(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _left(change)),
+                    SizedBox(width: 320, child: _right()),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -658,6 +697,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
+          // Only promise "nothing was charged" for a refusal the server declared.
+          // This banner is now reached only on REJECTED/STALE_REPLAY; every other
+          // failure routes to the ambiguous banner, which says to press Retry.
           const Text('Nothing was charged. Fix it and try again.',
               style: TextStyle(color: AppColors.ink2, fontSize: 11.5)),
           if (_offerDiscountApproval) ...[

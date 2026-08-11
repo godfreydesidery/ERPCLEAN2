@@ -41,11 +41,19 @@ public class StockReportController {
         this.exporter         = exporter;
     }
 
+    /**
+     * @param branchUid optional; omit for the whole company, supply one to list a single branch.
+     *
+     * <p>Left optional rather than defaulting to the caller's branch: this register is used both at
+     * head office (where company-wide is the point) and at a counter, and silently narrowing an
+     * existing company-wide report to one branch would change what today's users see without asking.
+     */
     @GetMapping
     @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW')")
-    public StockReportDto stockReport() {
+    public StockReportDto stockReport(
+            @RequestParam(required = false) String branchUid) {
         Long companyId = RequestContext.get().companyId();
-        return stockReportQuery.report(companyId);
+        return stockReportQuery.report(companyId, branchUid);
     }
 
     /**
@@ -56,9 +64,10 @@ public class StockReportController {
     @GetMapping("/export")
     @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportStockReport(
-            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+            @RequestParam(defaultValue = "PDF") ExportFormat format,
+            @RequestParam(required = false) String branchUid) {
         Long companyId = RequestContext.get().companyId();
-        StockReportDto dto = stockReportQuery.report(companyId);
+        StockReportDto dto = stockReportQuery.report(companyId, branchUid);
         return download(exporter.export(flatten(dto), format));
     }
 
