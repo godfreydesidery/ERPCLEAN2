@@ -18,7 +18,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
@@ -263,6 +263,89 @@ describe('PosSaleComponent — submit success', () => {
     expect(payload.currency).toBe('TZS');
     expect(payload.lines).toHaveLength(1);
     expect(payload.tenderedAmount).toBe('1000');
+  });
+});
+
+// ── duplicate-sale protection ──────────────────────────────────────────────────
+
+/**
+ * A basket that posts twice becomes two finalised invoices — duplicate revenue, VAT, COGS and
+ * stock issue — and shows up as doubled quantities in the sales report. Reported from the field.
+ * The key must therefore be stable across retries of ONE basket and fresh for the next.
+ */
+describe('PosSaleComponent — duplicate-sale protection', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  /** Fills in the minimum a sale needs, so submit() reaches the service. */
+  async function armedComponent(opts: { processSaleImpl?: () => any } = {}) {
+    makeBed(opts);
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.selectedAgentUid.set('AGENT1');
+    comp.currency.set('TZS');
+    comp.lines.set([{
+      id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '1', unitPrice: '500.00',
+      lineDiscountAmount: '0.00', lineUnitOptions: [], lineUnitsLoading: false,
+    }]);
+    comp.tenderedAmount.set('500');
+    return { comp, svc };
+  }
+
+  it('sends an Idempotency-Key with the sale', async () => {
+    const { comp, svc } = await armedComponent();
+    comp.submit();
+    expect(svc.processSale).toHaveBeenCalledOnce();
+    expect(svc.processSale.mock.calls[0][1]).toBeTruthy();
+  });
+
+  it('reuses the SAME key when the cashier retries a refused basket', async () => {
+    // A key regenerated per attempt defeats the mechanism entirely: the server sees two unrelated
+    // sales and posts both.
+    const { comp, svc } = await armedComponent({
+      processSaleImpl: () => throwError(() => new HttpErrorResponse({ status: 500 })),
+    });
+    comp.submit();
+    comp.submit();
+    expect(svc.processSale).toHaveBeenCalledTimes(2);
+    expect(svc.processSale.mock.calls[1][1]).toBe(svc.processSale.mock.calls[0][1]);
+  });
+
+  it('does not fire a second time while the first is still in flight', async () => {
+    // Enter on the form re-triggers submit(); submitting() is only raised after validation.
+    const { comp, svc } = await armedComponent({ processSaleImpl: () => new Subject() });
+    comp.submit();
+    comp.submit();
+    expect(svc.processSale).toHaveBeenCalledOnce();
+  });
+
+  it('mints a NEW key for the next basket, so the sale is not replayed', async () => {
+    const { comp, svc } = await armedComponent();
+    comp.submit();
+    const first = svc.processSale.mock.calls[0][1];
+
+    comp.resetSale();
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.selectedAgentUid.set('AGENT1');
+    comp.currency.set('TZS');
+    comp.lines.set([{
+      id: 'line-2', productUid: 'P1', productId: '10', productName: 'Widget',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '1', unitPrice: '500.00',
+      lineDiscountAmount: '0.00', lineUnitOptions: [], lineUnitsLoading: false,
+    }]);
+    comp.tenderedAmount.set('500');
+    comp.submit();
+
+    expect(svc.processSale.mock.calls[1][1]).not.toBe(first);
   });
 });
 

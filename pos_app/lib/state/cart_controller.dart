@@ -263,6 +263,10 @@ class CartController extends Notifier<CartState> {
             l.unit.id == unit.id)
         .firstOrNull;
     if (twin != null) {
+      // Raw add, NOT a base-unit conversion. Consistent with the no-rescale rule
+      // above: the cashier switching a "2" line to Carton is restating it as two
+      // cartons, so the merge is 2 + the twin's cartons. Converting instead would
+      // yield fractional cartons (2 pcs of 24 → 0.083), which no till can ring.
       twin.quantity += line.quantity;
       final mergedDiscount = twin.lineDiscountAmount + line.lineDiscountAmount;
       // The merged discount is one the manager never saw as a single figure, so

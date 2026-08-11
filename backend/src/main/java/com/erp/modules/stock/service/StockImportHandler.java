@@ -3,6 +3,7 @@ package com.erp.modules.stock.service;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
+import com.erp.modules.stock.domain.dto.SetOpeningValuationRequest;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.domain.enums.AdjustmentReason;
 import com.erp.modules.stock.repository.StockOnHandRepository;
@@ -14,8 +15,11 @@ import com.erp.platform.bulk.ImportParsers;
 import com.erp.platform.bulk.ImportRow;
 import com.erp.platform.bulk.RowOutcome;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,7 +46,17 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Permission.</b> Gated by {@code STOCK.IMPORT} — a distinct, higher-privilege capability than
  * the single-record {@code STOCK.ADJUST} (which this handler does not additionally require): a role
- * can be granted mass import without manual adjust, or vice-versa.
+ * can be granted mass import without manual adjust, or vice-versa. The optional <b>Unit Cost</b>
+ * column additionally requires {@code INVENTORY.OPENING.SET}, because it posts a GL entry.
+ *
+ * <p><b>Unit Cost (opening valuation).</b> An ADJUSTMENT can only carry an existing moving average
+ * forward — it can never establish one. So stock first brought in through this sheet (rather than a
+ * purchase order) landed with a quantity but no cost: blank on the stock report, excluded from the
+ * valuation total, and posting NO cost-of-sale when sold, which overstates gross profit. Filling in
+ * Unit Cost sets the one-time opening valuation through {@link InventoryValuationService#setOpeningValue}
+ * (ADR-0020 D-5b) — the same ratified path as the Opening Valuation screen, GL leg included. It
+ * never overwrites an existing valuation: an already-valued product is reported and left alone, so
+ * a later cost change still goes through a purchase or a revaluation.
  *
  * <p><b>Download → edit → re-upload.</b> {@link #exportRows} emits one row per active, stockable
  * product with its current on-hand shown in a read-only reference column; the editable "New On-Hand
@@ -63,19 +77,35 @@ public class StockImportHandler implements BulkImportHandler {
     private static final String COL_NAME    = "Product Name";
     private static final String COL_CURRENT = "Current On-Hand";
     private static final String COL_NEW     = "New On-Hand Qty";
+    private static final String COL_COST    = "Unit Cost";
     private static final String COL_REASON  = "Reason";
     private static final String COL_NOTE    = "Note";
+
+    /** Higher-privilege capability: establishing a cost posts to the GL (ADR-0020 D-5b). */
+    private static final String PERM_OPENING_SET = "INVENTORY.OPENING.SET";
+
+    /**
+     * Posting date is the operator's business day, not the server's. On a UTC host an evening
+     * upload in Dar would otherwise post to the following day and land in the wrong period.
+     */
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Dar_es_Salaam");
 
     private final StockService stockService;
     private final ProductService productService;
     private final StockOnHandRepository onHands;
+    private final InventoryValuationService valuation;
+    private final PermissionResolver permissionResolver;
 
     public StockImportHandler(StockService stockService,
                               ProductService productService,
-                              StockOnHandRepository onHands) {
+                              StockOnHandRepository onHands,
+                              InventoryValuationService valuation,
+                              PermissionResolver permissionResolver) {
         this.stockService = stockService;
         this.productService = productService;
         this.onHands = onHands;
+        this.valuation = valuation;
+        this.permissionResolver = permissionResolver;
     }
 
     @Override
@@ -106,6 +136,13 @@ public class StockImportHandler implements BulkImportHandler {
                         "The quantity you want ON HAND. The system posts the difference from the "
                       + "current level as an adjustment. Blank = LEAVE UNCHANGED; a value equal to "
                       + "the current level is a no-op."),
+                ColumnSpec.number(COL_COST, false,
+                        "Buying price per unit, for a product that has never been valued (stock "
+                      + "brought in outside a purchase order). Sets the opening valuation ONCE, so "
+                      + "the item shows a cost and value on the stock and valuation reports and "
+                      + "posts cost-of-sale when sold. Blank = leave the cost as it is. Ignored "
+                      + "with a note if the product is already valued — a later cost change goes "
+                      + "through a purchase or a revaluation, never here."),
                 ColumnSpec.choice(COL_REASON, false,
                         "Adjustment reason for the difference. Blank = COUNT_CORRECTION.", reasons),
                 ColumnSpec.of(COL_NOTE, false, "Optional note recorded on the adjustment."));
@@ -114,11 +151,15 @@ public class StockImportHandler implements BulkImportHandler {
     @Override
     public RowOutcome process(Long companyId, ImportRow row, ImportMode mode, ImportContext ctx) {
         BigDecimal target = ImportParsers.parseDecimal(row, COL_NEW);
-        if (target == null) {
+        BigDecimal unitCost = ImportParsers.parseDecimal(row, COL_COST);
+        if (unitCost != null && unitCost.signum() < 0) {
+            throw new IllegalArgumentException("'" + COL_COST + "' cannot be negative.");
+        }
+        if (target == null && unitCost == null) {
             return RowOutcome.skip(row.rowNumber(), row.get(COL_PRODUCT),
                     "No new on-hand quantity entered — left unchanged.");
         }
-        if (target.signum() < 0) {
+        if (target != null && target.signum() < 0) {
             throw new IllegalArgumentException("'" + COL_NEW + "' cannot be negative.");
         }
 
@@ -141,23 +182,100 @@ public class StockImportHandler implements BulkImportHandler {
         BigDecimal current = onHandRows.stream()
                 .map(soh -> soh.getQuantity() != null ? soh.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal delta = target.subtract(current);
-        if (delta.signum() == 0) {
-            return RowOutcome.skip(row.rowNumber(), product.code(),
-                    "Already at " + fmt(target) + " — no change.");
-        }
+        // A blank quantity column is "leave the level alone", which is a zero delta — so a row that
+        // carries only a cost still reaches the valuation step below.
+        BigDecimal delta = target == null ? BigDecimal.ZERO : target.subtract(current);
 
+        if (delta.signum() == 0 && unitCost == null) {
+            return RowOutcome.skip(row.rowNumber(), product.code(),
+                    "Already at " + fmt(current) + " — no change.");
+        }
+        if (delta.signum() != 0) {
+            applyQuantity(product, delta, row);
+        }
+        // Cost AFTER quantity, deliberately: opening value is qty × cost, so valuing first would
+        // value the level the row is replacing. An adjustment can only carry an average forward, it
+        // can never create one — which is why stock brought in this way (no purchase order) used to
+        // sit at zero value, drop out of the valuation report, and post NO cost-of-sale when sold.
+        CostOutcome cost = unitCost == null
+                ? CostOutcome.NONE
+                : applyOpeningCost(companyId, product, unitCost);
+
+        String detail = describeOutcome(product, target, delta, cost.note());
+        // Report what actually happened. A row whose cost was refused and whose level did not move
+        // changed nothing, and counting it as "updated" would inflate the operator's summary.
+        return delta.signum() == 0 && !cost.applied()
+                ? RowOutcome.skip(row.rowNumber(), product.code(), cost.note())
+                : RowOutcome.update(row.rowNumber(), detail);
+    }
+
+    /** Whether the opening valuation was actually written, plus the note to report either way. */
+    private record CostOutcome(boolean applied, String note) {
+        static final CostOutcome NONE = new CostOutcome(false, null);
+    }
+
+    /** Post the level change through the same service the single Adjust screen uses. */
+    private void applyQuantity(ProductDto product, BigDecimal delta, ImportRow row) {
         AdjustmentReason reason = ImportParsers.parseEnum(
                 AdjustmentReason.class, row, COL_REASON, AdjustmentReason.COUNT_CORRECTION);
         String note = ImportParsers.text(row, COL_NOTE);
-
-        // Route through the SAME service as the single Adjust screen: negative-stock guard,
-        // moving-average valuation, GL posting, audit and outbox all fire. Branch comes from context.
+        // Negative-stock guard, moving-average valuation, GL posting, audit and outbox all fire
+        // exactly as for a hand-entered adjustment. Branch comes from the request context.
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), delta, reason, note, null, null));
+    }
 
-        return RowOutcome.update(row.rowNumber(),
-                product.code() + " → " + fmt(target) + " (" + signed(delta) + ")");
+    private static String describeOutcome(ProductDto product, BigDecimal target,
+                                           BigDecimal delta, String costNote) {
+        String s = delta.signum() != 0
+                ? product.code() + " → " + fmt(target) + " (" + signed(delta) + ")"
+                : product.code();
+        return costNote == null ? s : s + "; " + costNote;
+    }
+
+    /**
+     * Set the one-time opening valuation via the ratified path (ADR-0020 D-5b), which writes
+     * avg_cost + on_hand_value and posts DR Inventory / CR Opening Balance Equity.
+     *
+     * <p>Gated on {@code INVENTORY.OPENING.SET} in addition to the sheet's own {@code STOCK.IMPORT}:
+     * this leg posts to the GL, so holding mass-import alone must not confer it. Refused rather than
+     * silently dropped — a cost the operator typed and believes was applied is worse than an error.
+     *
+     * <p>Never overwrites an existing valuation: the service rejects an already-valued product, and
+     * that refusal is reported as a note instead of failing the row, so one already-priced item does
+     * not abort a sheet of hundreds.
+     *
+     * @return a short outcome note, or null when there was nothing to value
+     */
+    private CostOutcome applyOpeningCost(Long companyId, ProductDto product, BigDecimal unitCost) {
+        if (!permissionResolver.hasPermission(
+                RequestContext.get(), PERM_OPENING_SET, System.currentTimeMillis())) {
+            throw new IllegalArgumentException(
+                    "'" + COL_COST + "' needs the opening-valuation permission. Clear the column, or "
+                  + "ask an administrator to grant it.");
+        }
+        // Re-read: adjust() above may have created the row this values.
+        List<StockOnHand> rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
+                companyId, activeBranchId(), product.id());
+        if (rows.isEmpty()) {
+            return new CostOutcome(false, "no stock here to value");
+        }
+        if (rows.size() > 1) {
+            // Safety net on a GL-posting path. The single-location check above ran BEFORE the
+            // adjustment; adjust() corrects a row in place today, so this should not arise — but
+            // valuing an arbitrary bin would post the cost to the wrong row, so report instead.
+            return new CostOutcome(false, "cost not set (stocked at " + rows.size()
+                 + " locations — value it per location)");
+        }
+        StockOnHand soh = rows.get(0);
+        boolean alreadyValued = soh.getAvgCost() != null
+                || soh.getOnHandValue().compareTo(BigDecimal.ZERO) != 0;
+        if (alreadyValued) {
+            return new CostOutcome(false, "cost unchanged (already valued)");
+        }
+        valuation.setOpeningValue(
+                new SetOpeningValuationRequest(soh.getUid(), unitCost), LocalDate.now(BUSINESS_ZONE));
+        return new CostOutcome(true, "cost " + fmt(unitCost) + " set");
     }
 
     @Override
@@ -185,6 +303,9 @@ public class StockImportHandler implements BulkImportHandler {
         r.put(COL_NAME, p.name());
         r.put(COL_CURRENT, fmt(current));
         r.put(COL_NEW, "");
+        // Left blank like the quantity: a re-upload of an untouched export must change nothing, and
+        // a blank cost means "leave the valuation as it is".
+        r.put(COL_COST, "");
         r.put(COL_REASON, "");
         r.put(COL_NOTE, "");
         return r;

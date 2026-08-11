@@ -1,6 +1,7 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.gl.service.ChartOfAccountService;
@@ -181,6 +182,48 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
     @AfterEach
     void tearDown() {
         RequestContext.clear();
+    }
+
+    /**
+     * The branch filter must bind and execute against real Postgres.
+     *
+     * <p>The on-hand column is scoped by {@code (CAST(? AS BIGINT) IS NULL OR branch_id = ...)} —
+     * a construct that only fails at execution time, and every other test here passes a null branch,
+     * so the non-null side would otherwise ship unexecuted. It also pins the fix itself: the column
+     * used to sum stock company-wide even under a branch filter, so a branch register showed that
+     * branch's sales beside the whole company's stock and read as a discrepancy at the counter.
+     */
+    @Test
+    void branchFilter_bindsAndScopesTheOnHandColumnToThatBranch() {
+        ProductDto product = stockableProduct("SalesRpt-BranchScope");
+        dispatcher.dispatchOne(publishReceiptEvent(
+                "RCPT-SR-BR-001", product, new BigDecimal("10"), new BigDecimal("500.00"), 1L));
+
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        SalesReportDto report = salesReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1),
+                null, null, null, branch.getUid());   // the previously unexecuted path
+
+        SalesReportRowDto row = report.rows().stream()
+                .filter(r -> product.code().equals(r.productCode()))
+                .findFirst().orElseThrow();
+        assertThat(row.qtySold()).isEqualByComparingTo("3");
+        // 10 received less 3 sold, counted at THIS branch.
+        assertThat(row.currentStock()).isEqualByComparingTo("7");
+    }
+
+    /** An unknown branch uid is a clean 404, never a filter that silently spans branches. */
+    @Test
+    void branchFilter_unknownUid_isRejected() {
+        setCtx();
+        assertThatThrownBy(() -> salesReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1),
+                null, null, null, "NOSUCHBRANCHUID0000000000"))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
     }
 
     // =========================================================================

@@ -204,11 +204,13 @@ describe('PosService — processSale', () => {
       lines: [{ productId: '10', unitId: '1', quantity: '2', unitPrice: '500.00' }],
       tenderedAmount: '1000.00',
     };
-    svc.processSale(body).subscribe();
+    svc.processSale(body, 'txn-key-1').subscribe();
 
     const req = http.expectOne(`${API}/pos/sales`);
     expect(req.request.method).toBe('POST');
     expect(req.request.body.sessionUid).toBe('SESS1');
+    // Without this header the server skips its dedup reserve and a retry posts a SECOND invoice.
+    expect(req.request.headers.get('Idempotency-Key')).toBe('txn-key-1');
     req.flush({ id: '99', uid: 'INV1', invoiceNumber: 'INV-0001', status: 'FINALISED', grossTotalAmount: '1000.00', currency: 'TZS' });
   });
 });

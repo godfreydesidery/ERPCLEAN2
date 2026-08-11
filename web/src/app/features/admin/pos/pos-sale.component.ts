@@ -202,6 +202,24 @@ export class PosSaleComponent {
   readonly formError = signal<string | null>(null);
   readonly savedInvoice = signal<SalesInvoiceDto | null>(null);
 
+  /**
+   * Idempotency key for the basket currently on screen. Minted once, reused verbatim on every
+   * retry, and rotated only when a new basket starts (`resetSale`) — a key regenerated per attempt
+   * defeats the mechanism completely, which is how one basket becomes two finalised invoices.
+   *
+   * Null until the first submit; `saleKey()` mints on demand so an abandoned form costs nothing.
+   */
+  private txnKey: string | null = null;
+
+  private saleKey(): string {
+    // crypto.randomUUID needs a secure context; the POS is served over TLS, but fall back rather
+    // than throw on a plain-HTTP dev origin — any stable-per-basket value satisfies the contract.
+    this.txnKey ??=
+      globalThis.crypto?.randomUUID?.() ??
+      `pos-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    return this.txnKey;
+  }
+
   // ── Manager-authorised discount (K7) ───────────────────────────────────────
   // The web checkout carries the SAME ungated discount box as the till, so the same policy has to
   // apply here or the control is decorative — a cashier just moves to the browser. Enforcement is
@@ -596,6 +614,9 @@ export class PosSaleComponent {
   }
 
   submit(): void {
+    // The button is [disabled] on submitting(), but the form also submits on Enter and the flag is
+    // only raised after the validation/resolution steps below — so guard the method itself.
+    if (this.submitting()) { return; }
     const sessionUid = this.selectedSessionUid().trim();
     const customerUid = this.selectedCustomerUid().trim();
     const agentUid = this.selectedAgentUid().trim();
@@ -640,7 +661,7 @@ export class PosSaleComponent {
     this.submitting.set(true);
     this.formError.set(null);
 
-    this.posService.processSale(request).subscribe({
+    this.posService.processSale(request, this.saleKey()).subscribe({
       next: (invoice) => {
         this.submitting.set(false);
         this.savedInvoice.set(invoice);
@@ -664,6 +685,10 @@ export class PosSaleComponent {
   }
 
   resetSale(): void {
+    // A NEW basket needs a NEW key. Reusing the previous one would make the server replay the sale
+    // just completed and hand back that same invoice instead of ringing this one. Rotated here
+    // only — never on a retry of the same basket, which is the whole point of the key.
+    this.txnKey = null;
     this.savedInvoice.set(null);
     this.lines.set([]);
     this.selectedSessionUid.set('');
