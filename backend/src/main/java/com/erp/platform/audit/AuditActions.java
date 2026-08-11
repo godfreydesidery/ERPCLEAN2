@@ -115,6 +115,8 @@ public final class AuditActions {
     public static final String PRICELIST_UPDATE         = "PRICELIST.UPDATE";
     public static final String PRICELIST_ARCHIVE        = "PRICELIST.ARCHIVE";
     public static final String PRICELIST_RESTORE        = "PRICELIST.RESTORE";
+    /** Which list the company's reports and pricing screens resolve to — worth an audit trail. */
+    public static final String PRICELIST_SET_DEFAULT    = "PRICELIST.SET_DEFAULT";
 
     // -- UnitOfMeasure lifecycle (brief §AuditActions) ------------------------
     public static final String UOM_CREATE               = "UOM.CREATE";

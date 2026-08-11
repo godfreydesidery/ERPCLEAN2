@@ -243,6 +243,17 @@ export class ProductService {
     return this.http.put<PriceListDto>(`${this.priceListBase}/uid/${uid}`, request);
   }
 
+  /**
+   * Makes this list the company default, clearing the flag on the others in one transaction.
+   *
+   * A dedicated action, not a generic update: it moves only the flag (an update would also rewrite
+   * fields the admin never opened), it cannot leave the company with no default at all, and it is
+   * what the audit log records as setting a default rather than as an edit.
+   */
+  setDefaultPriceList(uid: string): Observable<PriceListDto> {
+    return this.http.patch<PriceListDto>(`${this.priceListBase}/uid/${uid}/default`, {});
+  }
+
   archivePriceList(uid: string): Observable<PriceListDto> {
     return this.http.put<PriceListDto>(`${this.priceListBase}/uid/${uid}/archive`, {});
   }

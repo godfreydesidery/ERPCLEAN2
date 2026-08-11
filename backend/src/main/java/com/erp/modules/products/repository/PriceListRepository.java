@@ -1,6 +1,7 @@
 package com.erp.modules.products.repository;
 
 import com.erp.modules.products.domain.entity.PriceList;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,6 +43,17 @@ public interface PriceListRepository extends JpaRepository<PriceList, Long> {
     Page<PriceList> search(@Param("companyId") Long companyId,
                            @Param("q") String q,
                            Pageable pageable);
+
+    /**
+     * Every list in the company currently flagged as the default.
+     *
+     * <p>A List, not an Optional, and deliberately so: {@code price_lists} carries no partial unique
+     * index behind {@code is_default}, and the flag has been settable through create/update since the
+     * column shipped, so a company can already hold more than one flagged row. Setting a default
+     * clears all of them rather than the first one it happens to find.
+     */
+    @Query("SELECT pl FROM PriceList pl WHERE pl.companyId = :companyId AND pl.isDefault = true")
+    List<PriceList> findDefaultsOfCompany(@Param("companyId") Long companyId);
 
     /**
      * Resolves a price list uid to its owning company id — used by {@code ScopeGuard.companyIdOf}

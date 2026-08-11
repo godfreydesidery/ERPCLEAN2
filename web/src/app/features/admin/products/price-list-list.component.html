@@ -2,7 +2,11 @@
   <div class="erp-page-head">
     <div class="erp-page-head__titles">
       <h1><i class="bi bi-tags me-2" aria-hidden="true"></i>Price Lists</h1>
-      <p class="subtitle">Manage price lists used to set product selling prices.</p>
+      <p class="subtitle">
+        Manage price lists used to set product selling prices. The list marked
+        <strong>Default</strong> is the one your Product List and Stock Value reports price stock
+        from.
+      </p>
     </div>
     @if (canManage() && selectedCompanyId()) {
       <div class="erp-page-head__actions">
@@ -98,6 +102,19 @@
                 on.
               </p>
             </div>
+            <div class="form-check mt-2">
+              <input id="newIsDefault" name="newIsDefault" type="checkbox"
+                     class="form-check-input"
+                     [ngModel]="newIsDefault()" (ngModelChange)="newIsDefault.set($event)"
+                     [disabled]="saving()" />
+              <label class="form-check-label small" for="newIsDefault">
+                Make this the default price list
+              </label>
+              <p class="text-muted small mb-0">
+                The Product List and Stock Value reports read selling prices from the default list.
+                Choosing this replaces the current default.
+              </p>
+            </div>
             @if (formError(); as msg) {
               <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
             }
@@ -132,14 +149,46 @@
             No price lists yet. Add one above.
           </div>
         } @else {
+          <!-- Only when NOTHING resolves as the default (see resolvedDefault): the reports fall back
+               to a DEFAULT/STANDARD code and to a lone active list, and a warning on a shop those
+               already price correctly would contradict the reports it is about. -->
+          @if (hasNoDefault()) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                No active list is the <strong>Default</strong>, so the Product List and Stock Value
+                reports cannot show selling prices.
+                @if (canManage()) {
+                  Choose <strong>Set default</strong> on the list you sell from.
+                } @else {
+                  Ask someone who manages price lists to set one.
+                }
+              </span>
+            </div>
+          }
+          @if (hasManyDefaults()) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                More than one active list is marked <strong>Default</strong>. Reports will price
+                stock from only one of them.
+                @if (canManage()) {
+                  Choose <strong>Set default</strong> on the list you sell from to settle it.
+                }
+              </span>
+            </div>
+          }
           <div class="erp-table-wrap">
             <table class="erp-table">
-              <caption class="sr-only">Price lists in this company</caption>
+              <caption class="sr-only">
+                Price lists in this company. The default list is the one reports price stock from.
+              </caption>
               <thead>
                 <tr>
                   <th scope="col">Code</th>
                   <th scope="col">Name</th>
                   <th scope="col">VAT</th>
+                  <th scope="col">Default</th>
                   <th scope="col">Status</th>
                   @if (canManage()) {
                     <th scope="col"><span class="sr-only">Actions</span></th>
@@ -205,6 +254,16 @@
                       }
                     </td>
                     <td>
+                      <!-- ACTIVE only: an archived list prices nothing, so a green Default tag beside
+                           its ARCHIVED status tag would claim otherwise. -->
+                      @if (showsDefaultBadge(pl)) {
+                        <span class="status-tag status-tag--ok">Default</span>
+                      } @else {
+                        <span class="text-muted" aria-hidden="true">—</span>
+                        <span class="sr-only">Not the default</span>
+                      }
+                    </td>
+                    <td>
                       <span class="status-tag"
                             [class.status-tag--ok]="pl.status === 'ACTIVE'"
                             [class.status-tag--neutral]="pl.status !== 'ACTIVE'">
@@ -221,6 +280,17 @@
                                     [attr.aria-label]="'Edit ' + pl.name">
                               <i class="bi bi-pencil" aria-hidden="true"></i>
                               <span class="sr-only">Edit</span>
+                            </button>
+                          }
+                          @if (!pl.isDefault && pl.status === 'ACTIVE') {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    [disabled]="rowBusyUid() !== null || settingDefaultUid() !== null"
+                                    (click)="setDefault(pl)"
+                                    [attr.aria-label]="'Set ' + pl.name + ' as the default price list'">
+                              @if (settingDefaultUid() === pl.uid) {
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                              }
+                              Set default
                             </button>
                           }
                           @if (pl.status === 'ACTIVE') {

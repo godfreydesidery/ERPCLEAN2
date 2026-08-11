@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -78,5 +79,22 @@ public class PriceListController {
     @PreAuthorize("@perm.scoped(#uid,'pricelist','PRICELIST.MANAGE')")
     public void restore(@PathVariable String uid) {
         priceListService.restoreByUid(uid);
+    }
+
+    /**
+     * Makes this list the company default, clearing the flag on the others.
+     *
+     * <p>Same shape as {@code StockLocationController#setDefault} — a dedicated action rather than a
+     * field on the update form, because a form field can be UNticked and would leave the company with
+     * no default at all, which is exactly the state that blanks selling prices on the stock reports.
+     * An action can only ever move the flag.
+     *
+     * <p>Gated on the existing {@code PRICELIST.MANAGE} — choosing the default is price-list
+     * administration, not a new kind of authority, so no new permission code is minted.
+     */
+    @PatchMapping("/uid/{uid}/default")
+    @PreAuthorize("@perm.scoped(#uid,'pricelist','PRICELIST.MANAGE')")
+    public PriceListDto setDefault(@PathVariable String uid) {
+        return priceListService.setDefaultByUid(uid);
     }
 }

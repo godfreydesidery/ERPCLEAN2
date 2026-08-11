@@ -1,0 +1,282 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-cash-stack me-2" aria-hidden="true"></i>Stock Value
+      </h1>
+      <p class="subtitle">
+        What your stock cost and what it is worth at selling price, item by item, with grand totals
+        at the foot. Filter to one supplier to value that supplier's stock on its own. Just need a
+        plain listing? <a routerLink="/admin/reports/product-list">Open the Product List</a>.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Stock Value report.
+    </div>
+  } @else {
+
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="psv-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="psv-branch" name="psv-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+            <!-- The branch was refused, not the report: said here, beside the control that caused
+                 it, while the figures already on screen stay put. -->
+            @if (branchFilterError(); as msg) {
+              <p class="text-danger small mb-0 mt-1" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+                Showing the previous results.
+              </p>
+            }
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="psv-supplier">
+              Supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="psv-supplier" name="psv-supplier"
+                            [(ngModel)]="supplierUid"
+                            [options]="supplierOptions()"
+                            placeholder="All suppliers" />
+            <!-- Plain sibling help text: the uid-picker forwards id/aria-label* to its inner
+                 <select> but has no aria-describedby input, so an id here would promise an
+                 association that never reaches the control. -->
+            <p class="form-text small mb-0">
+              Pick one supplier for a supplier-wise stock value.
+            </p>
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading'">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report states -->
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the Stock Value report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not load the Stock Value report. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <!-- Prefer the server's own sentence: it names what to do about it. -->
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-cash-stack" aria-hidden="true"></i>
+            Click Run report to value your stock.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- No default price list: without one there are no selling prices, so the sale-value
+               total would read as zero. Say why, in plain words. The diagnosis reaches everyone;
+               only the remedy forks, because Price Lists is closed to most of the roles that read
+               this report (see canSetDefaultPriceList). Kept in step with the Product List banner. -->
+          @if (noPriceList()) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                No <strong>default price list</strong> is set for this company, so selling prices and
+                sale values cannot be shown and the sale-value total is not meaningful.
+                @if (canSetDefaultPriceList()) {
+                  Open <a routerLink="/admin/price-lists">Price Lists</a> and choose
+                  <strong>Set default</strong> on the list you sell from.
+                } @else {
+                  Ask whoever manages your price lists to mark one as the default, and the values
+                  will appear here.
+                }
+              </span>
+            </div>
+          }
+
+          <!-- Company header block (only non-empty fields render) -->
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (r.company.legalName) {
+                <p class="small text-muted mb-1">{{ r.company.legalName }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Stock Value</h2>
+          <p class="text-muted small mb-3">
+            Branch: {{ r.branchName ?? 'All branches' }}
+            · Supplier: {{ r.supplierName ?? 'All suppliers' }}
+            · Price list: {{ r.priceListName ?? 'none set' }}
+            · Currency: {{ r.currency }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+            · Quantities are in each product's base unit
+          </p>
+
+          <!-- The on-screen twin of the export's "Excluded from totals" header line. Shown directly
+               above the table so nobody reads the foot without it. -->
+          @if (excludedFromTotals(); as x) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                <strong>{{ x.unvalued }}</strong> item(s) hold stock with no buying price and
+                <strong>{{ x.unpriced }}</strong> with no selling price. Those items add nothing to
+                the totals below, so the totals are <strong>lower than the real value</strong>.
+              </span>
+            </div>
+          }
+
+          <!-- The on-screen twin of the export's "Includes N discontinued item(s)" header line.
+               These rows are what keeps the cost total tied to the books, so they are counted here
+               and NOT on the Product List — said plainly, or the two reports look inconsistent. -->
+          @if (discontinuedCount(); as n) {
+            <div class="alert alert-info d-flex align-items-center gap-2">
+              <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+              <span>
+                Includes <strong>{{ n }}</strong> item(s) you no longer sell that still hold stock.
+                They are counted in the totals, so this valuation matches your books, and are marked
+                <strong>Discontinued</strong> below. You won't find them on the Product List.
+              </span>
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Stock Value — code, description, supplier, on-hand quantity, buying price, cost
+                value, selling price and sale value, with grand totals in the last rows.
+                @if (discontinuedCount()) {
+                  Items you no longer sell that still hold stock are marked Discontinued in the
+                  description column.
+                }
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col" class="num">Qty On Hand</th>
+                  <th scope="col" class="num">Buying Price</th>
+                  <th scope="col" class="num">Cost Value</th>
+                  <th scope="col" class="num">{{ sellingHeader() }}</th>
+                  <th scope="col" class="num">Sale Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                      No products match these filters.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track row.productCode) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>
+                      {{ row.productName }}
+                      <!-- Plain text, not an icon: the mark has to survive a screen reader and a
+                           black-and-white printout. -->
+                      @if (row.discontinued) {
+                        <span class="status-tag status-tag--warn ms-2">Discontinued</span>
+                      }
+                    </td>
+                    <td class="small text-muted">{{ row.supplierName ?? '—' }}</td>
+                    <td class="num mono">{{ fmtQty(row.quantityOnHand) }}</td>
+                    <td class="num mono">{{ fmtAmt(row.buyingPrice) }}</td>
+                    <td class="num mono">{{ fmtAmt(row.costValue) }}</td>
+                    <td class="num mono">{{ fmtAmt(row.sellingPrice) }}</td>
+                    <td class="num mono">{{ fmtAmt(row.saleValue) }}</td>
+                  </tr>
+                }
+              </tbody>
+              @if (r.totals; as t) {
+                <tfoot>
+                  <tr class="totals-row fw-semibold">
+                    <td colspan="3" class="text-end">TOTAL</td>
+                    <td class="num mono">{{ fmtQty(t.totalQuantity) }}</td>
+                    <td></td>
+                    <td class="num mono">{{ fmtAmt(t.totalCostValue) }}</td>
+                    <td></td>
+                    <td class="num mono">{{ fmtAmt(t.totalSaleValue) }}</td>
+                  </tr>
+                  <tr class="totals-note small text-muted">
+                    <td colspan="5" class="text-end">Potential margin on the shelf</td>
+                    <td colspan="3" class="num mono">{{ fmtAmt(t.potentialMargin) }}</td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+
+          <p class="text-muted small mt-2 mb-0">
+            A dash means the figure is unknown — the product has never been costed or has no entry in
+            the default price list. It does not mean zero. Total quantity adds up base units across
+            different products, so read it as a count of pieces, not as a single measure.
+          </p>
+        }
+      }
+    }
+  }
+</section>

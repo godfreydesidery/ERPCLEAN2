@@ -206,6 +206,13 @@ export class ShellComponent {
         // the client asked for as "stock report with opening balance, purchasing, sales and closing
         // balances", and "Stock Movement Report" alone did not read as that to them.
         { label: 'Stock Report (Opening & Closing)', route: '/admin/reports/stock-movement', icon: 'bi-arrow-left-right', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock movement', 'movement report', 'opening balance', 'closing balance', 'purchases', 'sales', 'adjustments', 'date range', 'period', 'in and out'] },
+        // The two standard registers, labelled the way the shop floor asks for them. Gate =
+        // INVENTORY.VALUATION.VIEW on both, matching the route guards in admin.routes.ts and the
+        // backend @PreAuthorize — a link that only ever 403s reads as a broken app. The Swahili
+        // terms sit in `keywords` because that is the language the request arrived in, and the
+        // palette is where a user goes when the English label is not the word in their head.
+        { label: 'Product List', route: '/admin/reports/product-list', icon: 'bi-list-columns-reverse', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['product list', 'item list', 'catalogue', 'catalog', 'buying price', 'selling price', 'supplier', 'orodha ya bidhaa', 'bei ya kununua', 'bei ya kuuza'] },
+        { label: 'Stock Value', route: '/admin/reports/stock-value', icon: 'bi-cash-stack', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock value', 'cost value', 'sale value', 'supplier wise', 'by supplier', 'total value', 'grand total', 'thamani ya bidhaa', 'thamani ya stoo'] },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],

@@ -1,0 +1,17 @@
+// Stock Value report — the grand totals are the point of the report, so the foot is given a rule
+// and a tint above the global table styling. A bold weight alone gets lost at the bottom of a long
+// catalogue, and the totals row is the line the owner actually reads.
+.report-header {
+  max-width: 640px;
+}
+
+.erp-table tfoot .totals-row td {
+  border-top: 2px solid var(--erp-text-3);
+  background: #f8fafc;
+  height: var(--erp-row-h);
+}
+
+.erp-table tfoot .totals-note td {
+  background: #f8fafc;
+  padding-bottom: 0.5rem;
+}
