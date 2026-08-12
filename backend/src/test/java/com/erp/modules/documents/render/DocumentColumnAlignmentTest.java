@@ -7,20 +7,25 @@ import com.erp.modules.documents.render.DocumentPdfRenderer.ColumnPlan;
 import com.erp.modules.documents.render.DocumentRenderModel.DocLine;
 import com.lowagie.text.Element;
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 /**
- * Pins the column-alignment rule the client asked for (K9 follow-up, 2026-08-12):
- * <b>only money is right-aligned</b>, and a heading always takes its own column's alignment.
+ * Pins the table-alignment rule the owner settled on (Kilimanjaro, 2026-08-12):
  *
- * <p>The bug this guards against was purely visual — headings were pinned left while the figures
- * under them were right-aligned, so every number drifted to the far edge of its column and read as
- * belonging to the next one along. Extracted PDF text cannot show that (it carries no positions),
- * so the rule is asserted on the column plan instead, which is the single place both the heading
- * and its values take their alignment from.
+ * <ul>
+ *   <li><b>Only money VALUES are right-aligned</b> — cost, selling price, previous cost, discount
+ *       and the line amount, so the decimal points stack and the column reads down. A quantity is a
+ *       count, not an amount, and reads left with the text columns.</li>
+ *   <li><b>Headings always read left</b>, money columns included: a heading is a column NAME, not a
+ *       figure.</li>
+ * </ul>
+ *
+ * <p>Extracted PDF text carries no positions, so the rule is asserted where the cells actually take
+ * it from — the column plan and {@code HEADING_ALIGN} — rather than by parsing a rendered page.
  */
 class DocumentColumnAlignmentTest {
 
@@ -31,23 +36,43 @@ class DocumentColumnAlignmentTest {
             new BigDecimal("15000"), new BigDecimal("13000"), new BigDecimal("13.33"));
 
     @Test
-    void onlyMoneyColumnsAreRightAligned() {
-        Map<String, Integer> align = alignmentsOf(
+    void onlyMoneyValuesAreRightAligned() {
+        Map<String, Integer> align = valueAlignmentsOf(
                 DocumentPdfRenderer.planColumns(List.of(GRN_LINE), true, true));
 
         // Text reads left — including the quantity, which is a count, not an amount.
-        assertThat(align.get("Code")).isEqualTo(Element.ALIGN_LEFT);
-        assertThat(align.get("Product Description")).isEqualTo(Element.ALIGN_LEFT);
-        assertThat(align.get("Qty")).isEqualTo(Element.ALIGN_LEFT);
-        assertThat(align.get("Unit")).isEqualTo(Element.ALIGN_LEFT);
+        assertThat(align)
+                .containsEntry("Code", Element.ALIGN_LEFT)
+                .containsEntry("Product Description", Element.ALIGN_LEFT)
+                .containsEntry("Qty", Element.ALIGN_LEFT)
+                .containsEntry("Unit", Element.ALIGN_LEFT);
 
-        // Money reads right, so the decimal points stack down the column.
-        assertThat(align.get("CP")).isEqualTo(Element.ALIGN_RIGHT);
-        assertThat(align.get("SP")).isEqualTo(Element.ALIGN_RIGHT);
-        assertThat(align.get("Last CP")).isEqualTo(Element.ALIGN_RIGHT);
-        assertThat(align.get("Amount")).isEqualTo(Element.ALIGN_RIGHT);
-        // The margin rides with them: two decimals, sitting between two money columns.
-        assertThat(align.get("Mar.(%)")).isEqualTo(Element.ALIGN_RIGHT);
+        // Money reads right, so the decimal points stack. The margin rides with them: two decimals,
+        // sitting between two money columns.
+        assertThat(align)
+                .containsEntry("CP", Element.ALIGN_RIGHT)
+                .containsEntry("SP", Element.ALIGN_RIGHT)
+                .containsEntry("Last CP", Element.ALIGN_RIGHT)
+                .containsEntry("Mar.(%)", Element.ALIGN_RIGHT)
+                .containsEntry("Amount", Element.ALIGN_RIGHT);
+    }
+
+    /**
+     * A heading is a column name, so it reads left over every column — money included, where it
+     * therefore DIFFERS from the values beneath it. That divergence is the deliberate part: making
+     * the heading match its figures is a strong instinct, it was tried once, and it was rejected.
+     */
+    @Test
+    void headingsReadLeftEvenOverRightAlignedMoneyColumns() {
+        assertThat(DocumentPdfRenderer.HEADING_ALIGN).isEqualTo(Element.ALIGN_LEFT);
+
+        ColumnPlan plan = DocumentPdfRenderer.planColumns(List.of(GRN_LINE), true, true);
+        Col amount = plan.cols().stream()
+                .filter(c -> "Amount".equals(c.header()))
+                .findFirst().orElseThrow();
+
+        assertThat(amount.valueAlign()).isEqualTo(Element.ALIGN_RIGHT);
+        assertThat(DocumentPdfRenderer.HEADING_ALIGN).isNotEqualTo(amount.valueAlign());
     }
 
     /**
@@ -78,20 +103,20 @@ class DocumentColumnAlignmentTest {
         }
     }
 
-    /** A document with no prices keeps four plain left-aligned columns. */
+    /** A document with no prices has nothing to right-align. */
     @Test
-    void aQuantityOnlyDocumentHasNoRightAlignedColumns() {
+    void aQuantityOnlyDocumentHasNoRightAlignedValues() {
         ColumnPlan plan = DocumentPdfRenderer.planColumns(
                 List.of(new DocLine(1, "P1", "Item", new BigDecimal("2"), "EA",
                         null, null, null, null)),
                 false, false);
 
         assertThat(plan.cols()).hasSize(4);
-        assertThat(plan.cols()).allMatch(c -> c.align() == Element.ALIGN_LEFT);
+        assertThat(plan.cols()).allMatch(c -> c.valueAlign() == Element.ALIGN_LEFT);
     }
 
-    private static Map<String, Integer> alignmentsOf(ColumnPlan plan) {
-        return plan.cols().stream().collect(Collectors.toMap(Col::header, Col::align,
-                (a, b) -> a, java.util.LinkedHashMap::new));
+    private static Map<String, Integer> valueAlignmentsOf(ColumnPlan plan) {
+        return plan.cols().stream().collect(Collectors.toMap(
+                Col::header, Col::valueAlign, (a, b) -> a, LinkedHashMap::new));
     }
 }

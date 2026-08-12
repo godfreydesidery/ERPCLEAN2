@@ -46,6 +46,14 @@ public class DocumentPdfRenderer {
     private static final Font FONT_SMALL    = FontFactory.getFont(FontFactory.HELVETICA, 8);
     /** Body font for wide tables (the 9-column GRN); anything larger wraps every description. */
     private static final Font FONT_TINY     = FontFactory.getFont(FontFactory.HELVETICA, 7.5f);
+
+    /**
+     * Alignment of EVERY column heading, money columns included (owner's call, Kilimanjaro
+     * 2026-08-12): a heading is a column NAME, not a figure. Only the values beneath it align
+     * right. Named and asserted because "make the heading match its figures" is a strong instinct —
+     * it was tried once and rejected.
+     */
+    static final int HEADING_ALIGN = Element.ALIGN_LEFT;
     private static final Font FONT_VOID     = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 36, Color.RED);
     private static final Color COL_HEADER_BG = new Color(52, 73, 94);
     private static final Color COL_HEADER_FG = Color.WHITE;
@@ -238,11 +246,9 @@ public class DocumentPdfRenderer {
         // of bare figures under no headings is unreadable.
         table.setHeaderRows(1);
 
-        // Heading takes the COLUMN's alignment, never a fixed one. A right-aligned figure sitting
-        // under a left-aligned heading drifts to the far edge of its column and reads as belonging
-        // to the next one along — which is exactly how this table looked before.
+        // Headings take HEADING_ALIGN, never c.valueAlign() — see the constant.
         for (Col c : cols) {
-            addHeaderCell(table, c.header(), c.align());
+            addHeaderCell(table, c.header(), HEADING_ALIGN);
         }
 
         // A nine-column GRN at 9 pt wraps every description onto two lines on A4 portrait. Step the
@@ -251,23 +257,25 @@ public class DocumentPdfRenderer {
         for (DocLine l : lines) {
             List<String> values = rowValues(l, plan);
             for (int i = 0; i < values.size(); i++) {
-                addCell(table, values.get(i), body, cols.get(i).align(), false, false, null);
+                addCell(table, values.get(i), body, cols.get(i).valueAlign(), false, false, null);
             }
         }
         doc.add(table);
     }
 
     /**
-     * One column: its heading, its share of the table width, and the alignment BOTH the heading and
-     * every value in it use.
+     * One column: its heading, its share of the table width, and how its VALUES align.
+     *
+     * <p>{@code valueAlign} governs the body cells ONLY. The heading is a column name, not a figure,
+     * so it always reads left even over a money column (owner's call, Kilimanjaro 2026-08-12).
      *
      * <p>Only money is right-aligned — cost, selling price, previous cost, discount and the line
      * amount — so the decimal points stack and the column can be read down. Everything else (code,
-     * description, quantity, unit) is left-aligned, heading included. The margin percentage rides
-     * with the money columns: it carries two decimals and sits between two of them, and a
-     * left-aligned "9.05" next to a right-aligned "416.67" breaks the run of figures.
+     * description, quantity, unit) reads left; a quantity is a count, not an amount. The margin
+     * percentage rides with the money columns: it carries two decimals and sits between two of them,
+     * and a left-aligned "9.05" next to a right-aligned "416.67" breaks the run of figures.
      */
-    record Col(String header, float width, int align) {}
+    record Col(String header, float width, int valueAlign) {}
 
     /** Which columns this document's lines earn, in print order. */
     record ColumnPlan(List<Col> cols, boolean showCode, boolean prices,
@@ -365,12 +373,11 @@ public class DocumentPdfRenderer {
         PdfPTable table = new PdfPTable(4);
         table.setWidthPercentage(50);
         table.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        // Same rule as the line table: the band name reads left, the three figures read right, and
-        // each heading takes its column's alignment.
-        addHeaderCell(table, "Tax Band", Element.ALIGN_LEFT);
-        addHeaderCell(table, "Base",     Element.ALIGN_RIGHT);
-        addHeaderCell(table, "Rate %",   Element.ALIGN_RIGHT);
-        addHeaderCell(table, "VAT",      Element.ALIGN_RIGHT);
+        // Same rule as the line table: headings are column names, figures align right beneath them.
+        addHeaderCell(table, "Tax Band", HEADING_ALIGN);
+        addHeaderCell(table, "Base",     HEADING_ALIGN);
+        addHeaderCell(table, "Rate %",   HEADING_ALIGN);
+        addHeaderCell(table, "VAT",      HEADING_ALIGN);
         for (TaxRow r : rows) {
             addCell(table, r.bandLabel(), FONT_NORMAL, Element.ALIGN_LEFT, false, false, null);
             addCell(table, fmtAmt(r.base()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
