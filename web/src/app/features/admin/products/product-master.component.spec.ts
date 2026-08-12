@@ -27,7 +27,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { delay, of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
@@ -658,6 +658,38 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['addBulkPack']).toHaveBeenCalledOnce();
     expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
   });
+
+  // Regression (Kilimanjaro 2026-08-11): on EDIT the wizard re-POSTed packs it had just loaded from
+  // the server. The first one 409'd on uq_product_bulk_pack_unit and the error branch abandoned the
+  // loop, so a pack the user added in that same session was silently never created — while the
+  // screen kept rendering it from local state. A prime suspect for "1 OUTER deducts a whole CARTON".
+  it('does not re-POST already-saved packs, and a failed row does not strand the rows after it',
+    async () => {
+      const fixture = TestBed.createComponent(ProductMasterComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      const svc = asMock(TestBed.inject(ProductService));
+      svc['addBulkPack'].mockReset();
+      // Row 2 fails; row 3 must still be attempted.
+      svc['addBulkPack']
+        .mockImplementationOnce(() => throwError(() => new Error('boom')))
+        .mockImplementation(() => of({ uid: 'BP-NEW' }));
+
+      comp.bulkPackRows.set([
+        { localId: 1, savedUid: 'BP-EXISTING', unitUid: 'U2', factorToBase: '48' }, // already on server
+        { localId: 2, unitUid: 'U3', factorToBase: '4' },                            // new, fails
+        { localId: 3, unitUid: 'U4', factorToBase: '6' },                            // new, must run
+      ]);
+
+      await comp['runBulkPacks']('PUID1');
+
+      const sentUnits = svc['addBulkPack'].mock.calls.map((c: unknown[]) =>
+        (c[1] as { unitUid: string }).unitUid);
+      expect(sentUnits).toEqual(['U3', 'U4']);       // the persisted row was skipped
+      expect(sentUnits).not.toContain('U2');
+      expect(comp.bulkPackRows().find((r) => r.localId === 3)?.savedUid).toBe('BP-NEW');
+    });
 });
 
 // ── 11. Weighed goods (ADR-0044 D-1b) ─────────────────────────────────────────
@@ -844,5 +876,84 @@ describe('ProductMasterComponent — weighed goods base-unit gate', () => {
     comp.onCompanyChange('10');
     expect(comp.fBaseUnitUid()).toBe('');
     expect(comp.fWeighed()).toBe(false);
+  });
+});
+
+// ── Barcode round-trip: the unit a label is keyed to ──────────────────────────
+// The wizard used to load barcodes with barcodeType: '' and uomUid: '' — discarding the unit that
+// decides what a scan rings up (a label registered against CARTON rings a carton). The wire keys a
+// barcode by NUMERIC uomId; this screen speaks uid, so the id has to be translated, not dropped.
+
+describe('ProductMasterComponent — barcode unit round-trip', () => {
+  // Same units, but with the wire's real shape: numeric id ≠ uid.
+  const WIRE_UNIT_PCS: UnitOfMeasureDto = { ...UNIT_PCS, id: '1' };
+  const WIRE_UNIT_CTN: UnitOfMeasureDto = { ...UNIT_CTN, id: '2' };
+  const BARCODE_CTN = {
+    id: '5', uid: 'BC1', productId: '100', companyId: '10',
+    barcode: '6009876543210', barcodeType: 'EAN_13', uomId: '2', primary: true,
+  };
+
+  const wireUnits = { rows: [WIRE_UNIT_PCS, WIRE_UNIT_CTN], meta: { page: 0, size: 200, totalElements: 2, totalPages: 1, hasNext: false } };
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function loadEdit(overrides: Partial<MockSvc>) {
+    makeBed({ productServiceOverrides: { listUnits: vi.fn(() => of(wireUnits)), ...overrides } });
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    fixture.componentRef.setInput('uid', 'PUID1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('keeps the barcode type and maps the numeric uomId to the unit uid', async () => {
+    const fixture = await loadEdit({ listBarcodes: vi.fn(() => of([BARCODE_CTN])) });
+    const row = fixture.componentInstance.barcodeRows()[0];
+
+    expect(row.barcodeType).toBe('EAN_13');
+    expect(row.uomId).toBe('2');
+    expect(row.uomUid).toBe('U2');
+  });
+
+  it('renders the unit in the barcode table instead of a dash', async () => {
+    const fixture = await loadEdit({ listBarcodes: vi.fn(() => of([BARCODE_CTN])) });
+
+    const cells = Array.from(fixture.nativeElement.querySelectorAll('.erp-table tbody tr td'))
+      .map((td) => (td as HTMLElement).textContent?.trim());
+    expect(cells).toContain('CTN — CTN');
+    expect(cells).toContain('EAN_13');
+  });
+
+  it('still maps the unit when the units land after the barcodes', async () => {
+    // Barcodes and units are fetched in parallel — whichever lands second must do the mapping.
+    const fixture = await loadEdit({
+      listBarcodes: vi.fn(() => of([BARCODE_CTN])),
+      listUnits: vi.fn(() => of(wireUnits).pipe(delay(5))),
+    });
+
+    expect(fixture.componentInstance.barcodeRows()[0].uomUid).toBe('U2');
+  });
+
+  it('names a unit that is no longer in the ACTIVE list rather than blanking it', async () => {
+    const fixture = await loadEdit({
+      listBarcodes: vi.fn(() => of([{ ...BARCODE_CTN, uomId: '99' }])),
+    });
+    const comp = fixture.componentInstance;
+    const row = comp.barcodeRows()[0];
+
+    expect(row.uomUid).toBe('');
+    expect(comp.barcodeUnitLabel(row)).toBe('Unit #99');
+  });
+
+  it('shows a dash only when the barcode genuinely has no unit', async () => {
+    const fixture = await loadEdit({
+      listBarcodes: vi.fn(() => of([{ ...BARCODE_CTN, barcodeType: null, uomId: null }])),
+    });
+    const comp = fixture.componentInstance;
+    const row = comp.barcodeRows()[0];
+
+    expect(row.barcodeType).toBe('');
+    expect(comp.barcodeUnitLabel(row)).toBe('—');
   });
 });
