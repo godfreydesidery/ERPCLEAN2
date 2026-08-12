@@ -111,6 +111,12 @@ body {
   --bs-btn-hover-border-color: var(--erp-primary-hover);
   --bs-btn-active-bg: var(--erp-primary-active);
   --bs-btn-active-border-color: var(--erp-primary-active);
+  /* Without these, a disabled primary falls back to Bootstrap's own $primary at 0.65 opacity —
+     close enough to the brand blue that users read a dead button as a live one and report
+     "the button does nothing". Desaturate so disabled is unmistakably disabled. */
+  --bs-btn-disabled-bg: #94a3b8;
+  --bs-btn-disabled-border-color: #94a3b8;
+  --bs-btn-disabled-color: #fff;
 }
 .btn-outline-primary {
   --bs-btn-color: var(--erp-primary);
