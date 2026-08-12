@@ -17,7 +17,7 @@ import {
 import { PosService } from './pos.service';
 
 /**
- * POS Session detail: header, X-read panel, payout form, close form, reconcile.
+ * POS Session detail: header, shift-report panel, payout form, close form, reconcile.
  * Route: /admin/pos/sessions/uid/:uid
  * Gated per action: POS.SESSION.VIEW / OPEN / CLOSE / RECONCILE.
  */
@@ -38,12 +38,15 @@ export class PosSessionDetailComponent {
   readonly entity = signal<PosSessionDto | null>(null);
   readonly state = signal<'loading' | 'idle' | 'error' | 'forbidden'>('loading');
 
-  // ── X-Read ─────────────────────────────────────────────────────────────────
+  // ── Shift report ───────────────────────────────────────────────────────────
+  // X-read is a mid-shift snapshot the server refuses (409) once the session is RECONCILED;
+  // Z-read is the final report and exists only then. Loading the wrong one is the whole defect:
+  // the page used to always ask for X-read, so a reconciled shift rendered an error and the
+  // manager concluded the till had been zeroed. Ask for the one that matches the status.
   readonly xRead = signal<XReadDto | null>(null);
-  readonly xReadState = signal<'idle' | 'loading' | 'error'>('idle');
-
-  // ── Z-Read (after reconcile) ───────────────────────────────────────────────
   readonly zRead = signal<ZReadDto | null>(null);
+  readonly reportState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly reportKind = computed<'X' | 'Z'>(() => (this.entity()?.status === 'RECONCILED' ? 'Z' : 'X'));
 
   // ── Payout form ────────────────────────────────────────────────────────────
   readonly showPayoutForm = signal(false);
@@ -84,18 +87,26 @@ export class PosSessionDetailComponent {
       next: (s) => {
         this.entity.set(s);
         this.state.set('idle');
-        this.loadXRead(uid);
+        this.loadReport(uid);
       },
       error: (err: unknown) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
     });
   }
 
-  loadXRead(uid: string): void {
-    this.xReadState.set('loading');
+  /** Loads the report the session's status allows — Z-read once RECONCILED, X-read before that. */
+  loadReport(uid: string): void {
+    this.reportState.set('loading');
+    if (this.reportKind() === 'Z') {
+      this.posService.zRead(uid).subscribe({
+        next: (z) => { this.zRead.set(z); this.reportState.set('idle'); },
+        error: () => this.reportState.set('error'),
+      });
+      return;
+    }
     this.posService.xRead(uid).subscribe({
-      next: (x) => { this.xRead.set(x); this.xReadState.set('idle'); },
-      error: () => this.xReadState.set('error'),
+      next: (x) => { this.xRead.set(x); this.reportState.set('idle'); },
+      error: () => this.reportState.set('error'),
     });
   }
 
@@ -127,7 +138,7 @@ export class PosSessionDetailComponent {
         this.payoutReason.set('');
         this.showPayoutForm.set(false);
         this.alerts.success('Payout recorded', `${request.payoutType} — ${amount}`);
-        this.loadXRead(this.uid());
+        this.loadReport(this.uid());
       },
       error: (err: unknown) => {
         this.payoutError.set(this.messageFrom(err, 'Could not record payout.'));
@@ -182,9 +193,10 @@ export class PosSessionDetailComponent {
       next: (z) => {
         this.reconciling.set(false);
         this.zRead.set(z);
+        this.reportState.set('idle');
         this.showReconcileForm.set(false);
         this.alerts.success('Session reconciled');
-        // Refresh entity to get updated status
+        // Refresh entity to get updated status — that flips the panel to the Z-read figures.
         this.posService.getSessionByUid(this.uid()).subscribe({ next: (s) => this.entity.set(s) });
       },
       error: (err: unknown) => {

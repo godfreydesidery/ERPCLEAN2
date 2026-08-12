@@ -7,8 +7,9 @@
  *  3. openSession: POSTs to /pos/sessions.
  *  4. closeSession: POSTs to /pos/sessions/uid/:uid/close.
  *  5. xRead: GETs /pos/sessions/uid/:uid/x-read.
- *  6. reconcileSession: POSTs to /pos/sessions/uid/:uid/reconcile.
- *  7. processSale: POSTs to /pos/sales.
+ *  6. zRead: GETs /pos/sessions/uid/:uid/z-read.
+ *  7. reconcileSession: POSTs to /pos/sessions/uid/:uid/reconcile.
+ *  8. processSale: POSTs to /pos/sales.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -166,6 +167,34 @@ describe('PosService — xRead', () => {
     const req = http.expectOne(`${API}/pos/sessions/uid/SESS1/x-read`);
     expect(req.request.method).toBe('GET');
     req.flush({ sessionUid: 'SESS1', posTillId: '1', cashierId: '99', openedAt: null, openingFloatAmount: '100.00', totalSalesAmount: '500.00', totalPayoutsNetAmount: '0.00', expectedCashAmount: '600.00', invoiceCount: 2 });
+  });
+});
+
+// ── zRead ─────────────────────────────────────────────────────────────────────
+
+describe('PosService — zRead', () => {
+  beforeEach(() => makeBed());
+  afterEach(() => { TestBed.inject(HttpTestingController).verify(); TestBed.resetTestingModule(); });
+
+  it('GETs /pos/sessions/uid/:uid/z-read and returns the final figures', () => {
+    const svc = TestBed.inject(PosService);
+    const http = TestBed.inject(HttpTestingController);
+
+    let result: any;
+    svc.zRead('SESS1').subscribe((z) => (result = z));
+
+    const req = http.expectOne(`${API}/pos/sessions/uid/SESS1/z-read`);
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      sessionUid: 'SESS1', posTillId: '1', cashierId: '99',
+      openedAt: '2025-01-01T08:00:00', closedAt: '2025-01-01T18:00:00', reconciledAt: '2025-01-01T18:05:00',
+      openingFloatAmount: '100.00', totalSalesAmount: '900.00', totalPayoutsNetAmount: '0.00',
+      expectedCashAmount: '750.00', countedCashAmount: '740.00', varianceAmount: '-10.00',
+      varianceJournalId: null, invoiceCount: 4, notes: null,
+    });
+
+    expect(result.countedCashAmount).toBe('740.00');
+    expect(result.varianceAmount).toBe('-10.00');
   });
 });
 

@@ -93,8 +93,18 @@ export class PosService {
     return this.http.post<PosSessionDto>(`${this.sessionBase}/uid/${sessionUid}/close`, request);
   }
 
+  /** Mid-shift snapshot. Server accepts it while OPEN or CLOSED, and 409s once RECONCILED. */
   xRead(sessionUid: string): Observable<XReadDto> {
     return this.http.get<XReadDto>(`${this.sessionBase}/uid/${sessionUid}/x-read`);
+  }
+
+  /**
+   * Final shift report for an already-RECONCILED session, recomputed server-side from persisted
+   * rows. Reconciling is one-shot, so without this read the figures were only ever visible in the
+   * reconcile response body — a manager who closed the shift could never see them again.
+   */
+  zRead(sessionUid: string): Observable<ZReadDto> {
+    return this.http.get<ZReadDto>(`${this.sessionBase}/uid/${sessionUid}/z-read`);
   }
 
   reconcileSession(sessionUid: string, request: ReconcileSessionRequest): Observable<ZReadDto> {
