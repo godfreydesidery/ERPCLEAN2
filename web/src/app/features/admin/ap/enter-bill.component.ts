@@ -25,12 +25,18 @@ import { CurrencySelectComponent } from '../../../shared/currency-select/currenc
 
 /**
  * UI-only line row for the bill line editor.
+ *
+ * `grLineUid` is the goods-receipt line this bill line is claimed against. Without it the 3-way
+ * match cannot check the quantity billed against the quantity received, so the backend holds the
+ * line — and until this field existed the accountant had no way to satisfy that hold except the
+ * audited "accept variance" override.
  */
 interface LineRow {
   description: string;
   billedQty: string;
   unitCostAmount: string;
   poLineUid: string;
+  grLineUid: string;
 }
 
 /**
@@ -40,9 +46,16 @@ interface LineRow {
  * Flow:
  *  1. Pick supplier (typeahead).
  *  2. Enter supplier invoice no, bill date, due date, VAT, currency, optional PO uid.
- *  3. Build line editor (description, qty, unit cost per line).
+ *  3. Build line editor (description, qty, unit cost, order line and goods receipt line per line).
  *  4. Submit → ap.service.enterBill() → run 3-way match → render BillMatchResultDto.
- *  5. Per-line match result: MATCHED/HELD badge, price/qty variance, Accept Variance button.
+ *  5. Per-line match result: human status + the backend's plain-English note, the figures that were
+ *     actually compared (and "—" for the ones that were not), and the override button.
+ *
+ * <p><b>Why the receipt picker exists.</b> The match holds a line whose goods receipt cannot be
+ * found and tells the accountant to attach it. This screen had no way to do that, so the only exit
+ * left was "accept variance" — an audited override on every single bill, which is how override
+ * normalisation starts. Attaching the receipt has to be possible here, at entry, using the numbers
+ * printed on the delivery note.
  */
 @Component({
   selector: 'app-enter-bill',
@@ -66,6 +79,17 @@ export class EnterBillComponent {
   /** True when the PO list could not be loaded (non-fatal; PO matching is optional). */
   readonly poListUnavailable = signal(false);
 
+  // ── Goods receipt line picker ─────────────────────────────────────────────
+  /**
+   * Receipt lines the accountant can attach to a bill line, labelled with the things printed on the
+   * delivery note in their hand — GRN number, product, quantity received. Never a raw uid: the UAT
+   * accountant could not tell that the field wanted an internal id rather than the GRN number.
+   * Loaded from the goods-receipts read endpoint the storekeeper screens already use
+   * (PURCHASE.GOODS_RECEIPT.VIEW).
+   */
+  readonly grLineOptions = signal<UidOption[]>([]);
+  readonly grLookupState = signal<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
   readonly selectedCompanyId = signal('');
@@ -75,7 +99,8 @@ export class EnterBillComponent {
   // ── Supplier picker ────────────────────────────────────────────────────────
   readonly supplierSearchQ = signal('');
   readonly supplierResults = signal<SupplierModel[]>([]);
-  readonly selectedSupplier = signal<{ uid: string; label: string } | null>(null);
+  /** `id` is kept alongside the uid so goods receipts (which carry supplierId) can be narrowed. */
+  readonly selectedSupplier = signal<{ id: string; uid: string; label: string } | null>(null);
 
   // ── Bill header ────────────────────────────────────────────────────────────
   readonly supplierInvoiceNo = signal('');
@@ -176,6 +201,11 @@ export class EnterBillComponent {
   onPoUidChange(uid: string): void {
     this.purchaseOrderUid.set(uid);
     this.poLineOptions.set([]);
+    // A PO line uid picked under the previous order belongs to that order — carrying it over would
+    // silently submit a link the match cannot resolve.
+    this.clearLineLinks({ po: true, gr: false });
+    // Narrow (or re-widen) the receipt list to this order.
+    this.loadGrLineOptions();
     if (!uid) return;
     this.purchasesService.listOrderLines(uid).subscribe({
       next: (lines) => {
@@ -198,6 +228,70 @@ export class EnterBillComponent {
     this.loadPoOptions(id);
   }
 
+  // ── Goods receipt line picker ──────────────────────────────────────────────
+
+  /**
+   * Load the supplier's received goods-receipt lines so they can be attached to a bill line.
+   *
+   * <p>The list endpoint returns each receipt with its lines, so one call is enough. Narrowing is
+   * done here rather than server-side (the endpoint filters by company + free-text only):
+   * RECEIVED receipts, this supplier, and — when an order is selected — that order. If the order
+   * filter would leave nothing to choose from, the supplier's wider list is kept instead: an empty
+   * picker is exactly the dead end this screen is meant to remove.
+   */
+  private loadGrLineOptions(): void {
+    const companyId = this.selectedCompanyId();
+    const supplier = this.selectedSupplier();
+    if (!companyId || !supplier) {
+      this.grLineOptions.set([]);
+      this.grLookupState.set('idle');
+      return;
+    }
+    this.grLookupState.set('loading');
+    this.purchasesService.listReceipts(companyId, undefined, 0, 100).subscribe({
+      next: ({ rows }) => {
+        const poUid = String(this.purchaseOrderUid() ?? '').trim();
+        const forSupplier = rows.filter(
+          (gr) =>
+            gr.status === 'RECEIVED' &&
+            (!supplier.id || String(gr.supplierId ?? '') === String(supplier.id)),
+        );
+        const forOrder = poUid
+          ? forSupplier.filter((gr) => gr.purchaseOrderUid === poUid)
+          : forSupplier;
+        const chosen = forOrder.length > 0 ? forOrder : forSupplier;
+
+        const options: UidOption[] = [];
+        for (const gr of chosen) {
+          for (const l of gr.lines ?? []) {
+            options.push({
+              uid: l.uid,
+              label: `${gr.receiptNumber} — ${l.productName}`,
+              hint: `${l.productCode} · received ${this.fmtQty(l.receivedQty)} ${l.unitName}`,
+            });
+          }
+        }
+        this.grLineOptions.set(options);
+        this.grLookupState.set('ready');
+      },
+      error: () => {
+        this.grLineOptions.set([]);
+        this.grLookupState.set('unavailable');
+      },
+    });
+  }
+
+  /** Drop stale line links after the order or the supplier they belong to has changed. */
+  private clearLineLinks(what: { po: boolean; gr: boolean }): void {
+    this.lines.update((rows) =>
+      rows.map((r) => ({
+        ...r,
+        poLineUid: what.po ? '' : r.poLineUid,
+        grLineUid: what.gr ? '' : r.grLineUid,
+      })),
+    );
+  }
+
   // ── Supplier picker ────────────────────────────────────────────────────────
 
   onSupplierSearchChange(q: string): void {
@@ -212,21 +306,27 @@ export class EnterBillComponent {
   }
 
   selectSupplier(s: SupplierModel): void {
-    this.selectedSupplier.set({ uid: s.uid, label: `${s.code} — ${s.displayName}` });
+    this.selectedSupplier.set({ id: s.id, uid: s.uid, label: `${s.code} — ${s.displayName}` });
     this.supplierSearchQ.set(`${s.code} — ${s.displayName}`);
     this.supplierResults.set([]);
+    // Receipt lines belong to a supplier — anything already picked is now the wrong supplier's.
+    this.clearLineLinks({ po: false, gr: true });
+    this.loadGrLineOptions();
   }
 
   private resetSupplier(): void {
     this.selectedSupplier.set(null);
     this.supplierSearchQ.set('');
     this.supplierResults.set([]);
+    this.grLineOptions.set([]);
+    this.grLookupState.set('idle');
+    this.clearLineLinks({ po: false, gr: true });
   }
 
   // ── Line editor ────────────────────────────────────────────────────────────
 
   private emptyLine(): LineRow {
-    return { description: '', billedQty: '', unitCostAmount: '', poLineUid: '' };
+    return { description: '', billedQty: '', unitCostAmount: '', poLineUid: '', grLineUid: '' };
   }
 
   addLine(): void {
@@ -252,6 +352,25 @@ export class EnterBillComponent {
   get totalNet(): number {
     return this.lines().reduce((sum, l) => sum + this.lineNetAmount(l), 0);
   }
+
+  /**
+   * True when this line will go in with its quantity unchecked: the bill is tied to a purchase (an
+   * order on the header, or an order line on the row) but no goods receipt line is attached, so the
+   * match will hold it. Flagged here, while it is still cheap to fix — once the bill is saved the
+   * only remaining exit is the audited override.
+   *
+   * <p>A genuine service charge has no order anywhere and is deliberately not flagged.
+   */
+  receiptMissing(line: LineRow): boolean {
+    const purchaseLinked =
+      !!String(this.purchaseOrderUid() ?? '').trim() || !!String(line.poLineUid ?? '').trim();
+    return purchaseLinked && !String(line.grLineUid ?? '').trim();
+  }
+
+  /** How many lines would be held for a missing receipt if the bill were submitted now. */
+  readonly linesMissingReceipt = computed(
+    () => this.lines().filter((l) => this.receiptMissing(l)).length,
+  );
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -282,6 +401,7 @@ export class EnterBillComponent {
         billedQty: String(+(String(l.billedQty ?? '').trim() || '0')),
         unitCostAmount: String(+(String(l.unitCostAmount ?? '').trim() || '0')),
         poLineUid: String(l.poLineUid ?? '').trim() || null,
+        grLineUid: String(l.grLineUid ?? '').trim() || null,
       }));
 
     if (lineRequests.length === 0) { this.formError.set('At least one bill line is required.'); return; }
@@ -349,18 +469,104 @@ export class EnterBillComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
+  /** Shown in place of a figure the 3-way match never computed. Must not read as a number. */
+  static readonly NOT_CHECKED = '—';
+
+  /**
+   * True when the backend sent no value for this figure, i.e. the comparison did not run.
+   *
+   * <p>This is the last inch of the fail-closed fix. `+(null ?? 0)` used to turn "never checked"
+   * into `0.00`, which is precisely the reading that let a 149,999,985 bill look reconciled. A
+   * genuine 0 is a *good* result and still renders as `0.00`.
+   */
+  isNotChecked(v: number | string | null | undefined): boolean {
+    if (v === null || v === undefined) return true;
+    if (typeof v === 'string' && v.trim() === '') return true;
+    return !Number.isFinite(+v);
+  }
+
+  /**
+   * True only when the figure was actually computed AND differs from zero — i.e. when highlighting
+   * it as a difference is truthful. A null must never light up as a variance, nor be arithmetic'd.
+   */
+  nonZero(v: number | string | null | undefined): boolean {
+    if (this.isNotChecked(v)) return false;
+    return +(v as number | string) !== 0;
+  }
+
   fmtMoney(v: number | string | null | undefined): string {
-    const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+    if (this.isNotChecked(v)) return EnterBillComponent.NOT_CHECKED;
+    return (+(v as number | string)).toFixed(2);
   }
 
   fmtPct(v: number | string | null | undefined): string {
+    if (this.isNotChecked(v)) return EnterBillComponent.NOT_CHECKED;
+    return (+(v as number | string)).toFixed(2) + '%';
+  }
+
+  /** Quantity for a picker label: plain, no forced decimals ("12", not "12.00"). */
+  private fmtQty(v: number | string | null | undefined): string {
     const n = +(v ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) + '%' : '0.00%';
+    if (!Number.isFinite(n)) return '0';
+    return String(Math.round(n * 1000) / 1000);
   }
 
   isHeld(line: LineMatchDto): boolean {
     return line.matchStatus === 'HELD_PRICE_VARIANCE' || line.matchStatus === 'HELD_QTY_VARIANCE';
+  }
+
+  /** True when the backend states outright that the 3-way control did not run on this line. */
+  notCompared(line: LineMatchDto): boolean {
+    return line.comparisonPerformed === false;
+  }
+
+  /**
+   * The human status shown to the accountant. NEVER the raw enum: `HELD_PRICE_VARIANCE` is both
+   * jargon and, since the fail-closed fix reuses that status for a missing goods receipt, a lie —
+   * there may be no price variance at all.
+   */
+  statusLabel(line: LineMatchDto): string {
+    if (line.matchStatus === 'VARIANCE_ACCEPTED') return 'Variance accepted';
+    if (this.notCompared(line)) {
+      return line.matchStatus === 'MATCHED' ? 'Accepted — not checked' : 'On hold — not checked';
+    }
+    switch (line.matchStatus) {
+      case 'MATCHED':
+        return 'Matched';
+      case 'HELD_PRICE_VARIANCE':
+        return 'On hold — price differs';
+      case 'HELD_QTY_VARIANCE':
+        return 'On hold — quantity differs';
+      default:
+        return 'On hold';
+    }
+  }
+
+  /**
+   * The explanation under the line. The backend writes it in plain English with the next step; we
+   * only supply a fallback for the clean case, where it sends nothing because there is nothing to
+   * explain.
+   */
+  lineNote(line: LineMatchDto): string {
+    const note = String(line.matchNote ?? '').trim();
+    if (note) return note;
+    if (line.matchStatus === 'VARIANCE_ACCEPTED') {
+      return 'The difference on this line was accepted by a reviewer, and that decision is recorded.';
+    }
+    return 'The price and the quantity billed both agree with the order and the goods receipt.';
+  }
+
+  /** Held lines the control never actually ran on — these need a link, not an override. */
+  readonly notCheckedHolds = computed(
+    () => (this.matchResult()?.lineResults ?? []).filter((l) => this.isHeld(l) && this.notCompared(l)).length,
+  );
+
+  /**
+   * The override button's wording follows what actually happened. Calling it "Accept variance" on a
+   * line where nothing was compared invites the habit of clicking it on every bill.
+   */
+  acceptLabel(line: LineMatchDto): string {
+    return this.notCompared(line) ? 'Post without checking' : 'Accept variance';
   }
 
   private messageFrom(err: unknown, fallback: string): string {

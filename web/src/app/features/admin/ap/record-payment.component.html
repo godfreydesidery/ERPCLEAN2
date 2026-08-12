@@ -33,6 +33,18 @@
             ({{ p.tenderType }}
             @if (p.bankReference) { · {{ p.bankReference }} }
             )
+            <!--
+              The account the run actually drew on (UAT 2026-08). The form leaves it to the
+              company default, so the confirmation is the one moment the operator can catch a
+              payment that went out of the wrong account — while it is still fresh.
+            -->
+            @if (p.cashBankAccountName) {
+              <span class="d-block text-muted">
+                Paid from {{ p.cashBankAccountName }}@if (p.cashBankAccountNumber) {
+                  <span class="mono"> · {{ p.cashBankAccountNumber }}</span>
+                }
+              </span>
+            }
           </li>
         }
       </ul>

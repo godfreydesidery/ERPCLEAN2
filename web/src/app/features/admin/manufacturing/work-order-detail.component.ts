@@ -134,6 +134,12 @@ export class WorkOrderDetailComponent {
   readonly canManage = computed(() => this.session.hasPermission('WORKORDER.MANAGE'));
   readonly canRelease = computed(() => this.session.hasPermission('WORKORDER.RELEASE'));
   readonly canClose = computed(() => this.session.hasPermission('WORKORDER.CLOSE'));
+  /**
+   * Gates the "open the bill of materials" signpost shown when no component lines exist.
+   * Both /admin/boms and /admin/boms/uid/:uid are guarded by BOM.VIEW, so without it the
+   * link would only lead to a blocked route — show plain guidance instead.
+   */
+  readonly canViewBom = computed(() => this.session.hasPermission('BOM.VIEW'));
 
   // ── Status helpers ────────────────────────────────────────────────────────
   readonly canEdit = computed(() => {

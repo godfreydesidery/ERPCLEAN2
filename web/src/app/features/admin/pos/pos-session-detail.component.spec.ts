@@ -24,8 +24,10 @@ import { PosService } from './pos.service';
 import { PosSessionDetailComponent } from './pos-session-detail.component';
 
 const stubSession: PosSessionDto = {
-  id: '5', uid: 'SESS1', sessionNumber: 'POS-0001', companyId: '10', branchId: '2', posTillId: '1',
-  cashierId: '99',
+  id: '5', uid: 'SESS1', sessionNumber: 'POS-0001', companyId: '10',
+  branchId: '2', branchName: 'Kilimanjaro',
+  posTillId: '1', tillName: 'Counter 1',
+  cashierId: '99', cashierName: 'Asha Mrema',
   status: 'OPEN', openedAt: '2025-01-01T08:00:00', closedAt: null, reconciledAt: null,
   openingFloatAmount: '100.00', countedCashAmount: null, expectedCashAmount: null,
   varianceAmount: null, varianceJournalId: null, notes: null,
@@ -42,7 +44,11 @@ const reconciledSession: PosSessionDto = {
 };
 
 const stubXRead = {
-  sessionUid: 'SESS1', posTillId: '1', cashierId: '99', openedAt: '2025-01-01T08:00:00',
+  sessionUid: 'SESS1',
+  posTillId: '1', tillName: 'Counter 1',
+  cashierId: '99', cashierName: 'Asha Mrema',
+  branchId: '2', branchName: 'Kilimanjaro',
+  openedAt: '2025-01-01T08:00:00',
   openingFloatAmount: '100.00', totalSalesAmount: '650.00', totalPayoutsNetAmount: '0.00',
   expectedCashAmount: '750.00', invoiceCount: 3,
 };
@@ -195,5 +201,63 @@ describe('PosSessionDetailComponent — shift report matches the session status'
     expect(text).not.toContain('403');
     expect(text).not.toContain('POS.SESSION.VIEW');
     expect(text).not.toContain('Forbidden');
+  });
+});
+
+// ── UAT 2026-08: the shift has to be readable at a glance ─────────────────────
+// The defect: the page carried cashierId "99", posTillId "1" and branchId "2" and no labels,
+// so "whose shift, on which till, at which branch?" needed three cross-reference lookups.
+
+describe('PosSessionDetailComponent — names the cashier, till and branch', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function render(session: PosSessionDto) {
+    makeBed(session);
+    const fixture = TestBed.createComponent(PosSessionDetailComponent);
+    fixture.componentRef.setInput('uid', 'SESS1');
+    await vi.runAllTimersAsync();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const cards = fixture.nativeElement.querySelectorAll('.erp-card') as NodeListOf<HTMLElement>;
+    return {
+      text: fixture.nativeElement.textContent as string,
+      // The Session Overview card — asserted on its own so the shift-report panel below it
+      // (which is fed by its own X/Z-read stub) cannot satisfy an assertion by accident.
+      overview: cards[0].textContent ?? '',
+    };
+  }
+
+  it('shows the names on the session overview, not just the ids', async () => {
+    const { overview } = await render(stubSession);
+
+    expect(overview).toContain('Asha Mrema');
+    expect(overview).toContain('Counter 1');
+    expect(overview).toContain('Kilimanjaro');
+  });
+
+  it('names the shift on the Z-read, which is the document it is signed off on', async () => {
+    const { text } = await render(reconciledSession);
+
+    expect(text).toContain('Z-Read');
+    expect(text).toContain('Asha Mrema');
+    expect(text).toContain('Counter 1');
+    expect(text).toContain('Kilimanjaro');
+  });
+
+  it('renders a dash, never a raw id, when a name could not be resolved', async () => {
+    const { overview } = await render({
+      ...stubSession,
+      cashierName: null,
+      tillName: null,
+      branchName: null,
+    });
+
+    expect(overview).toContain('Cashier—');
+    expect(overview).toContain('Till—');
+    expect(overview).toContain('Branch—');
+    // Never fall back to printing the internal id as a label.
+    expect(overview).not.toContain('99');
+    expect(overview).not.toContain('Asha Mrema');
   });
 });

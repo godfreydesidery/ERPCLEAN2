@@ -18,6 +18,11 @@ import java.util.List;
  * figure — a printed Z that lumps a refund together with a paid-out expense is what K8 fixes. It
  * always sums back to {@code totalPayoutsNetAmount}.
  *
+ * <p><b>{@code tillName} / {@code cashierName} / {@code branchName}</b> (UAT, 2026-08): a Z-read is
+ * the document a shift is signed off on, and with only {@code posTillId: "1"} and
+ * {@code cashierId: "7"} on it nobody could tell whose shift it was without three lookups. The
+ * labels are resolved by the same batch path {@code PosSessionDto} uses; the ids stay alongside.
+ *
  * <p>The Z-read is <em>re-readable</em>: reconciling a session returns this record once, and
  * {@code GET /api/v1/pos/sessions/uid/&#123;uid&#125;/z-read} recomputes the identical record from
  * persisted data for any RECONCILED session, so the report can be reprinted or re-opened after the
@@ -26,7 +31,11 @@ import java.util.List;
 public record ZReadDto(
         String sessionUid,
         Long posTillId,
+        String tillName,
         Long cashierId,
+        String cashierName,
+        Long branchId,
+        String branchName,
         String openedAt,
         String closedAt,
         String reconciledAt,

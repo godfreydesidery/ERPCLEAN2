@@ -102,12 +102,18 @@ public interface PurchaseOrderService {
     /**
      * Permission-gated fallback approve: sets approval_status = APPROVED so placeOrder can proceed.
      * Required permission: {@code PURCHASE.ORDER.APPROVE}.
+     *
+     * <p>Only an order actually awaiting a decision can be approved. Stamping APPROVED on an order
+     * that was never submitted records a review that did not happen, so it is refused.
      */
     PurchaseOrderDto approvePo(String uid, ApprovePoRequest req);
 
     /**
      * Permission-gated fallback reject: sets approval_status = REJECTED.
      * Required permission: {@code PURCHASE.ORDER.REJECT}.
+     *
+     * <p>Same state gate as {@link #approvePo}: only an order awaiting a decision can be rejected.
+     * To stop an order that is not under approval, void it instead.
      */
     PurchaseOrderDto rejectPo(String uid, ApprovePoRequest req);
 
@@ -140,6 +146,12 @@ public interface PurchaseOrderService {
      * Calls {@code PoApprovalGate.submit()} in the same TX; sets approval_status = PENDING
      * (or APPROVED when the engine auto-approves per policy).  The PO remains DRAFT — it is
      * placed (DRAFT→ORDERED) only once approval_status = APPROVED via {@link #placeOrder}.
+     *
+     * <p><b>Idempotent</b>: submitting an order that is already awaiting a decision returns it
+     * unchanged rather than refusing, matching the approvals engine's own per-document contract
+     * (and {@code SalesOrderServiceImpl}). It refuses only where nothing would be submitted at
+     * all — the order is not a draft, its approval is already closed, or the company does not
+     * require approval for it (whose two causes are reported distinctly).
      */
     PurchaseOrderDto submitForApproval(String uid);
 

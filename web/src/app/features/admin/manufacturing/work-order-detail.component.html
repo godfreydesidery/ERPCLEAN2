@@ -212,8 +212,9 @@
               <div>
                 <h3 class="erp-section-title">Release Work Order</h3>
                 <p class="small text-muted mb-2">
-                  Explodes the BOM, materialises component plan lines. No stock/GL effect.
-                  Optionally pin a specific BOM UID.
+                  Pins the bill of materials this order will use and sets the status to RELEASED.
+                  No stock or ledger effect, and no component lines yet — those are created when
+                  you issue components. Optionally pin a specific BOM UID.
                 </p>
                 <div class="d-flex gap-2 align-items-end flex-wrap">
                   <div class="erp-field" style="max-width:280px">
@@ -454,7 +455,25 @@
             @if (w.components.length === 0) {
               <div class="erp-empty">
                 <i class="bi bi-list-ul" aria-hidden="true"></i>
-                No components — release the work order to explode the BOM.
+                <p class="mb-0">
+                  No component lines yet. They are created when components are issued, not when
+                  the work order is released.
+                </p>
+                @if (canViewBom()) {
+                  <p class="mb-0 mt-1">
+                    To check what this order will need before you issue, open
+                    @if (w.bomUid) {
+                      <a [routerLink]="['/admin/boms/uid', w.bomUid]">this order's bill of materials</a>
+                    } @else {
+                      <a routerLink="/admin/boms">Bills of Materials</a>
+                    }
+                    — it lists every component and the quantity per run.
+                  </p>
+                } @else {
+                  <p class="mb-0 mt-1">
+                    The quantity per run for each component is on the product's bill of materials.
+                  </p>
+                }
               </div>
             } @else {
               <div class="erp-table-wrap">

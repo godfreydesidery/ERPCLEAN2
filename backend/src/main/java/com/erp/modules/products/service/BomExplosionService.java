@@ -54,6 +54,27 @@ public interface BomExplosionService {
                                               boolean multiLevel);
 
     /**
+     * Flattened leaf-only explosion of one SPECIFIC BOM version, whatever its status.
+     *
+     * <p>Use this whenever the caller already knows which version it means — a cost roll-up asked
+     * for a named {@code bomUid}, or a work order exploding the version it pinned at release.
+     * Going through {@link #explodeToLeaves(String, BigDecimal, boolean)} instead would resolve the
+     * parent product and re-select the ACTIVE version, silently costing or consuming a different
+     * recipe than the one requested.
+     *
+     * <p>Nested MAKE components still recurse into their children's ACTIVE BOMs: only the top
+     * level is pinned, because only the top level was named.
+     *
+     * @param bomUid     uid of the BOM version to explode (DRAFT, ACTIVE or ARCHIVED)
+     * @param outputQty  the output quantity to scale the explosion to
+     * @param multiLevel true = recurse through MAKE components; false = one level
+     * @return leaf summary; empty when that version has no component lines
+     */
+    List<BomExplosionLeafDto> explodeBomToLeaves(String bomUid,
+                                                 BigDecimal outputQty,
+                                                 boolean multiLevel);
+
+    /**
      * Returns true if the product has an ACTIVE BOM (used by
      * {@code RecipeExplosionResolver.shouldExplodeAtIssue} and make/buy defaulting — D-7, D-3).
      */

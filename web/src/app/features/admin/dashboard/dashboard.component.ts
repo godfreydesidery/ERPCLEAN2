@@ -11,6 +11,7 @@ import { Company } from '../models/company.model';
 import { Branch } from '../models/branch.model';
 import { DashboardService } from './dashboard.service';
 import {
+  BiHeaderDto,
   DashboardDto,
   FinanceSummaryDto,
   WorkingCapitalDto,
@@ -84,6 +85,13 @@ export class DashboardComponent {
 
   // ── Health strip ──────────────────────────────────────────────────────────────
   readonly health = signal<HealthIndicatorDto[]>([]);
+
+  // ── Header (UAT 2026-08) ─────────────────────────────────────────────────────
+  // The SERVER's account of what it just filtered to. Deliberately not the same thing as
+  // selectedBranchLabel() below, which only says what this browser asked for: the point of the
+  // defect was that nothing proved the request had been honoured, and a label rendered from the
+  // picker's own state would prove exactly as little.
+  readonly header = signal<BiHeaderDto | null>(null);
 
   // ── Permissions ───────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('BI.VIEW'));
@@ -218,6 +226,7 @@ export class DashboardComponent {
     this.netProfitTrend.set(null);
     this.salesByBranch.set(null);
     this.health.set([]);
+    this.header.set(null);
 
     const branchId = this.selectedBranchId() || undefined;
     const from = this.fromDate() || undefined;
@@ -231,6 +240,7 @@ export class DashboardComponent {
 
   private applyDto(dto: DashboardDto): void {
     this.health.set(dto.health ?? []);
+    this.header.set(dto.header ?? null);
 
     // Finance panel
     if (dto.finance !== null && dto.finance !== undefined) {

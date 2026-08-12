@@ -128,13 +128,19 @@ public class BomExplosionServiceImpl implements BomExplosionService {
         Bom bom = resolveBom(parentProductUid, null, null);
         // NFR-BOM-06 / D-11: tenant isolation guard on leaf-only explosion path
         scopeGuard.assertCanActIn(RequestContext.get(), bom.getCompanyId());
-        BigDecimal multiplier = outputQty.divide(bom.getOutputQty(), 15, HALF_UP);
-        BigDecimal headerInflate = HUNDRED.divide(bom.getYieldPercent(), 15, HALF_UP);
-        BigDecimal topMultiplier = multiplier.multiply(headerInflate);
+        return explodeFrom(bom, outputQty, multiLevel);
+    }
 
-        Map<Long, LeafAccumulator> leafMap = new LinkedHashMap<>();
-        explodeLevel(bom, topMultiplier, 0, multiLevel, leafMap, bom.getCompanyId());
-        return buildLeafSummary(leafMap);
+    @Override
+    public List<BomExplosionLeafDto> explodeBomToLeaves(String bomUid,
+                                                         BigDecimal outputQty,
+                                                         boolean multiLevel) {
+        // The caller named a version, so no ACTIVE re-resolution happens here — substituting the
+        // active version would hand back a different recipe under the requested label.
+        Bom bom = Lookups.orNotFound(boms.findByUid(bomUid), "Bom", bomUid);
+        // NFR-BOM-06 / D-11: tenant isolation guard on leaf-only explosion path
+        scopeGuard.assertCanActIn(RequestContext.get(), bom.getCompanyId());
+        return explodeFrom(bom, outputQty, multiLevel);
     }
 
     @Override
@@ -147,6 +153,17 @@ public class BomExplosionServiceImpl implements BomExplosionService {
     // -------------------------------------------------------------------------
     // Internal explosion logic
     // -------------------------------------------------------------------------
+
+    /** Shared leaf-only explosion body — the caller has already resolved and guarded {@code bom}. */
+    private List<BomExplosionLeafDto> explodeFrom(Bom bom, BigDecimal outputQty, boolean multiLevel) {
+        BigDecimal multiplier = outputQty.divide(bom.getOutputQty(), 15, HALF_UP);
+        BigDecimal headerInflate = HUNDRED.divide(bom.getYieldPercent(), 15, HALF_UP);
+        BigDecimal topMultiplier = multiplier.multiply(headerInflate);
+
+        Map<Long, LeafAccumulator> leafMap = new LinkedHashMap<>();
+        explodeLevel(bom, topMultiplier, 0, multiLevel, leafMap, bom.getCompanyId());
+        return buildLeafSummary(leafMap);
+    }
 
     private List<BomExplosionNodeDto> explodeLevel(Bom bom,
                                                     BigDecimal levelMultiplier,
@@ -244,7 +261,18 @@ public class BomExplosionServiceImpl implements BomExplosionService {
 
     private Bom resolveBom(String parentProductUid, String bomUid, LocalDate asOfDate) {
         if (bomUid != null) {
-            return Lookups.orNotFound(boms.findByUid(bomUid), "Bom", bomUid);
+            Bom bom = Lookups.orNotFound(boms.findByUid(bomUid), "Bom", bomUid);
+            // A named version wins over any parent hint, but the two must describe the same
+            // product — otherwise the result carries one product's label and another's recipe.
+            if (parentProductUid != null) {
+                var parent = Lookups.orNotFound(
+                        products.findByUid(parentProductUid), "Product", parentProductUid);
+                if (!parent.getId().equals(bom.getParentProductId())) {
+                    throw new IllegalArgumentException(
+                            "The selected bill of materials does not belong to the requested product.");
+                }
+            }
+            return bom;
         }
         if (parentProductUid == null) {
             throw new IllegalArgumentException("Either parentProductUid or bomUid must be supplied.");

@@ -38,22 +38,34 @@ public class BillMatch {
     @Column(name = "supplier_bill_line_id", nullable = false, updatable = false)
     private Long supplierBillLineId;
 
+    /**
+     * PO unit cost the line was compared against. NULL means the order line was never resolved —
+     * i.e. the price leg of the control did not run. Settable because a re-match must overwrite
+     * the previous run's figures; a stale number here is read as evidence a check happened.
+     */
     @Column(name = "po_unit_cost_amount", precision = 19, scale = 4)
+    @Setter
     private BigDecimal poUnitCostAmount;
 
+    /** Received qty compared against. NULL means the receipt line was never resolved. */
     @Column(name = "gr_received_qty", precision = 19, scale = 6)
+    @Setter
     private BigDecimal grReceivedQty;
 
     @Column(name = "billed_qty", nullable = false, precision = 19, scale = 6)
+    @Setter
     private BigDecimal billedQty;
 
     @Column(name = "price_variance_amount", nullable = false, precision = 19, scale = 4)
+    @Setter
     private BigDecimal priceVarianceAmount = BigDecimal.ZERO;
 
     @Column(name = "price_variance_pct", nullable = false, precision = 9, scale = 4)
+    @Setter
     private BigDecimal priceVariancePct = BigDecimal.ZERO;
 
     @Column(name = "qty_variance", nullable = false, precision = 19, scale = 6)
+    @Setter
     private BigDecimal qtyVariance = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)

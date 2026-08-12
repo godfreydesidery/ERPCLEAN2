@@ -24,6 +24,7 @@ import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
 import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
 import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.cashbank.service.CashBankAccountResolver;
 import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
@@ -47,8 +48,11 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -88,6 +92,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     private final GLPostingService              glPosting;
     private final GLConfigResolver              glConfig;
     private final CashBankAccountResolver       cashBankAccountResolver;
+    /**
+     * Reads back the cash/bank account a payment actually posted to so the response can NAME it
+     * (UAT, 2026-08). Read-only, company-scoped, and never used to choose an account — that stays
+     * with {@link CashBankAccountResolver}.
+     */
+    private final CashBankAccountRepository     cashAccounts;
     private final CashTransactionRecorder       cashTxnRecorder;
     private final WhtCaptureService             whtCapture;
     private final CurrencyConversionService     fxConversion;
@@ -110,6 +120,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                                  GLPostingService glPosting,
                                  GLConfigResolver glConfig,
                                  CashBankAccountResolver cashBankAccountResolver,
+                                 CashBankAccountRepository cashAccounts,
                                  CashTransactionRecorder cashTxnRecorder,
                                  WhtCaptureService whtCapture,
                                  CurrencyConversionService fxConversion,
@@ -126,6 +137,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         this.glPosting               = glPosting;
         this.glConfig                = glConfig;
         this.cashBankAccountResolver = cashBankAccountResolver;
+        this.cashAccounts            = cashAccounts;
         this.cashTxnRecorder         = cashTxnRecorder;
         this.whtCapture              = whtCapture;
         this.fxConversion            = fxConversion;
@@ -225,7 +237,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                         "billUid", req.supplierBillUid())));
 
         List<ApPaymentAllocation> allocList = allocations.findByApPaymentId(payment.getId());
-        return toDto(payment, allocList, bills);
+        return toDto(payment, allocList, bills, accountRef(payment));
     }
 
     // -------------------------------------------------------------------------
@@ -391,7 +403,10 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                         // behind them is still unratified — so "why wasn't X paid?" is answerable.
                         "billsHeldAwaitingRatification", String.valueOf(held))));
 
-        return toDto(payment, allocList, bills);
+        // Echo the account the run drew on. cashBankAccountUid is OPTIONAL on the request and
+        // defaults to the company default; without this the posted response never said which one it
+        // had landed on, and a run against the wrong account looked identical to a correct one.
+        return toDto(payment, allocList, bills, accountRef(payment));
     }
 
     // -------------------------------------------------------------------------
@@ -404,23 +419,28 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         ApPayment payment = Lookups.orNotFound(payments.findByUid(uid), "ApPayment", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), payment.getCompanyId());
         List<ApPaymentAllocation> allocList = allocations.findByApPaymentId(payment.getId());
-        return toDto(payment, allocList, bills);
+        return toDto(payment, allocList, bills, accountRef(payment));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ApPaymentDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return payments.findByCompanyId(companyId, pageable)
-                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills));
+        Page<ApPayment> page = payments.findByCompanyId(companyId, pageable);
+        // Accounts resolved once for the page, not once per row.
+        Map<Long, CashAccountRef> accts = accountRefs(page.getContent());
+        return page.map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills,
+                accts.get(p.getCashBankAccountId())));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ApPaymentDto> listBySupplier(Long companyId, Long supplierId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return payments.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
-                .map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills));
+        Page<ApPayment> page = payments.findByCompanyIdAndSupplierId(companyId, supplierId, pageable);
+        Map<Long, CashAccountRef> accts = accountRefs(page.getContent());
+        return page.map(p -> toDto(p, allocations.findByApPaymentId(p.getId()), bills,
+                accts.get(p.getCashBankAccountId())));
     }
 
     // -------------------------------------------------------------------------
@@ -629,8 +649,54 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         return p != null ? p.userId() : null;
     }
 
+    /**
+     * The identity of the cash/bank account a payment drew on, as the response states it
+     * (UAT, 2026-08).
+     *
+     * @param number the bank account number — {@code null} for a pure cash account, which has none
+     */
+    record CashAccountRef(Long id, String uid, String name, String number) {}
+
+    /**
+     * Resolves the accounts behind a set of payments in ONE read, keyed by account id.
+     *
+     * <p>Batched because the list endpoints map a whole page: a lookup per payment would be an N+1
+     * that grows with the page size, for a label. Company-scoped ({@code findByCompanyIdAndId} per
+     * distinct company) rather than a bare {@code findAllById}, because the value becomes a
+     * user-visible account NAME and NUMBER — resolving it unscoped is how one company's page ends up
+     * printing another's bank details. The ids come off already-scoped payment rows either way; the
+     * scoped finder makes that structural instead of incidental.
+     */
+    private Map<Long, CashAccountRef> accountRefs(Collection<ApPayment> paymentRows) {
+        Map<Long, CashAccountRef> refs = new LinkedHashMap<>();
+        paymentRows.stream()
+                .filter(p -> p.getCashBankAccountId() != null && p.getCompanyId() != null)
+                .collect(Collectors.groupingBy(ApPayment::getCompanyId,
+                        Collectors.mapping(ApPayment::getCashBankAccountId, Collectors.toSet())))
+                .forEach((companyId, accountIds) -> accountIds.forEach(accountId ->
+                        cashAccounts.findByCompanyIdAndId(companyId, accountId)
+                                .ifPresent(a -> refs.put(a.getId(), new CashAccountRef(
+                                        a.getId(), a.getUid(), a.getName(), a.getBankAccountNo())))));
+        return refs;
+    }
+
+    /** Single-payment convenience over {@link #accountRefs(Collection)}. */
+    private CashAccountRef accountRef(ApPayment p) {
+        return accountRefs(List.of(p)).get(p.getCashBankAccountId());
+    }
+
+    /**
+     * Back-compat overload: maps a payment whose cash/bank account has not been resolved. Kept so a
+     * caller that genuinely has no account context (and only such a caller) can still map a payment
+     * — the four account fields come back null.
+     */
     static ApPaymentDto toDto(ApPayment p, List<ApPaymentAllocation> allocList,
                                SupplierBillRepository billRepo) {
+        return toDto(p, allocList, billRepo, null);
+    }
+
+    static ApPaymentDto toDto(ApPayment p, List<ApPaymentAllocation> allocList,
+                               SupplierBillRepository billRepo, CashAccountRef account) {
         List<PaymentAllocationDto> dtoAllocs = allocList.stream()
                 .map(a -> {
                     // Company-scoped, taken from the LOADED payment — never a bare findById. A payment
@@ -646,6 +712,13 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getId(), p.getUid(), p.getCompanyId(), p.getBranchId(), p.getSupplierId(),
                 p.getPaymentNumber(), p.getKind(), p.getPaymentDate(), p.getAmount(),
                 p.getCurrency().value(), p.getTenderType(), p.getBankReference(), p.getGlEntryUid(),
+                // The account the cash actually left. Falls back to the id stamped on the row when
+                // the account itself could not be read, so the response is never silent about
+                // WHETHER an account was chosen even if it cannot name it.
+                account != null ? account.id() : p.getCashBankAccountId(),
+                account != null ? account.uid() : null,
+                account != null ? account.name() : null,
+                account != null ? account.number() : null,
                 p.getWhtAmount(), p.getWhtTransactionUid(),
                 p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
                 p.getPaymentRunId(),

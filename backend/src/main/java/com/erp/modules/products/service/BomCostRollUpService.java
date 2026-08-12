@@ -17,8 +17,14 @@ public interface BomCostRollUpService {
     /**
      * Compute the standard-cost roll-up for a parent product (or specific BOM version) at a branch.
      *
-     * @param parentProductUid uid of the parent product (mutually exclusive with bomUid, prefer parentProductUid)
-     * @param bomUid           specific BOM version uid (used when parentProductUid is null)
+     * <p>A supplied {@code bomUid} is authoritative: that exact version is costed whatever its
+     * status, and the returned {@code bomUid}/{@code parentProductUid} describe it. Supplying only
+     * {@code parentProductUid} costs the product's ACTIVE version. A version with no component
+     * lines is refused rather than substituted or reported as zero.
+     *
+     * @param parentProductUid uid of the parent product; when {@code bomUid} is also given the two
+     *                         must describe the same product
+     * @param bomUid           specific BOM version uid; wins over {@code parentProductUid}
      * @param branchUid        the branch whose avg_cost is read (ADR-0020 per-branch)
      * @param outputQty        output quantity to scale the explosion to
      * @return cost roll-up with partial-cost flag and incomplete-leaf list (BR-BOM-09)

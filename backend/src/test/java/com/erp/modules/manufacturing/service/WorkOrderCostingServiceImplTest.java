@@ -24,7 +24,6 @@ import com.erp.modules.manufacturing.repository.WorkOrderComponentRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderOperationRepository;
 import com.erp.modules.manufacturing.repository.WorkOrderRepository;
 import com.erp.modules.manufacturing.service.ManufacturingGlPoster.ComponentCostLeg;
-import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.service.BomExplosionService;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.service.InventoryValuationService;
@@ -67,7 +66,6 @@ class WorkOrderCostingServiceImplTest {
     private WorkOrderRepository          workOrders;
     private WorkOrderComponentRepository components;
     private WorkOrderOperationRepository operations;
-    private ProductRepository            products;
     private BomExplosionService          bomExplosion;
     private StockPostingService          stockPosting;
     private InventoryValuationService    valuation;
@@ -85,7 +83,6 @@ class WorkOrderCostingServiceImplTest {
         workOrders       = mock(WorkOrderRepository.class);
         components       = mock(WorkOrderComponentRepository.class);
         operations       = mock(WorkOrderOperationRepository.class);
-        products         = mock(ProductRepository.class);
         bomExplosion     = mock(BomExplosionService.class);
         stockPosting     = mock(StockPostingService.class);
         valuation        = mock(InventoryValuationService.class);
@@ -96,7 +93,7 @@ class WorkOrderCostingServiceImplTest {
         outbox           = mock(OutboxPublisher.class);
         branches         = mock(BranchRepository.class);
 
-        service = new WorkOrderCostingServiceImpl(workOrders, components, operations, products,
+        service = new WorkOrderCostingServiceImpl(workOrders, components, operations,
                 bomExplosion, stockPosting, valuation, locationResolver, glPoster,
                 scopeGuard, audit, outbox, branches);
 

@@ -24,6 +24,7 @@ import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.purchases.domain.dto.ApprovePoRequest;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
@@ -519,6 +520,201 @@ class PurchaseOrderServiceImplTest {
 
         // Otherwise typing a supplier name leaks the rows the browse page hides.
         verify(orders).search(10L, "acme", EnumSet.of(PurchaseOrderOrigin.MANUAL), page);
+    }
+
+    // -------------------------------------------------------------------------
+    // PO authorisation (UAT wave 1) — every test below runs as a NON-root buyer/approver, because
+    // root short-circuits the permission layer and would mask exactly these holes.
+    //
+    // (b) /approve had no state guard: an order that was never submitted could be stamped APPROVED.
+    // (c) the "not required" message claimed a threshold had been checked when approval was off.
+    // (d) submit-for-approval answered the same situation 409 for one user and 200 for another.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void approvePo_orderThatWasNeverSubmitted_isRefused() {
+        // PO-0004 live: approvalStatus null/NOT_REQUIRED, no approval request behind it — yet it
+        // flipped to APPROVED and returned 200, back-dating a review that never happened.
+        asNonRootApprover();
+        PurchaseOrder po = stubDraftPo(20L, "PO-UID-20", 10L, new BigDecimal("100000000.00"));
+        when(orders.findByUid("PO-UID-20")).thenReturn(Optional.of(po));
+
+        assertThatThrownBy(() -> service.approvePo("PO-UID-20", new ApprovePoRequest("CO-UID-1", null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not awaiting approval");
+
+        verify(po, never()).setApprovalStatus(PoApprovalStatus.APPROVED);
+        verify(audit, never()).record(any());
+    }
+
+    @Test
+    void approvePo_orderGenuinelyAwaitingADecision_isApproved() {
+        asNonRootApprover();
+        PurchaseOrder po = stubPendingApprovalPo(21L, "PO-UID-21", 10L, new BigDecimal("100000000.00"),
+                null);   // no engine request: this IS the permission-gated fallback approve
+        when(orders.findByUid("PO-UID-21")).thenReturn(Optional.of(po));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(21L)).thenReturn(List.of());
+
+        PurchaseOrderDto dto = service.approvePo("PO-UID-21", new ApprovePoRequest("CO-UID-1", null));
+
+        assertThat(dto.approvalStatus()).isEqualTo("APPROVED");
+        verify(po).setApprovalStatus(PoApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void approvePo_orderAlreadyDecided_isRefusedRatherThanOverwritten() {
+        asNonRootApprover();
+        PurchaseOrder po = stubDraftPo(22L, "PO-UID-22", 10L, new BigDecimal("100000000.00"));
+        when(po.getApprovalStatus()).thenReturn(PoApprovalStatus.REJECTED);
+        when(orders.findByUid("PO-UID-22")).thenReturn(Optional.of(po));
+
+        assertThatThrownBy(() -> service.approvePo("PO-UID-22", new ApprovePoRequest("CO-UID-1", null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already been rejected");
+
+        verify(po, never()).setApprovalStatus(PoApprovalStatus.APPROVED);
+    }
+
+    @Test
+    void rejectPo_orderThatWasNeverSubmitted_isRefused() {
+        // A REJECTED badge on an unreviewed order falsifies the record exactly as an APPROVED one does.
+        asNonRootApprover();
+        PurchaseOrder po = stubDraftPo(23L, "PO-UID-23", 10L, new BigDecimal("100000000.00"));
+        when(orders.findByUid("PO-UID-23")).thenReturn(Optional.of(po));
+
+        assertThatThrownBy(() -> service.rejectPo("PO-UID-23",
+                new ApprovePoRequest("CO-UID-1", "Too expensive")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not awaiting approval");
+
+        verify(po, never()).setApprovalStatus(PoApprovalStatus.REJECTED);
+    }
+
+    @Test
+    void submitForApproval_approvalSwitchedOffCompanyWide_saysSo_insteadOfInventingAThreshold() {
+        asNonRootBuyer();
+        PurchaseOrder po = stubDraftPo(24L, "PO-UID-24", 10L, new BigDecimal("100000000.00"));
+        when(orders.findByUid("PO-UID-24")).thenReturn(Optional.of(po));
+        when(approvalGate.evaluate(po)).thenReturn(disabledCompanyWide());
+
+        assertThatThrownBy(() -> service.submitForApproval("PO-UID-24"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("switched off for this company")
+                .hasMessageNotContaining("threshold")
+                .hasMessageNotContaining("below");
+
+        verify(approvalGate, never()).submit(any(), anyString());
+    }
+
+    @Test
+    void submitForApproval_genuinelyBelowTheCeiling_namesTheCeiling_andReadsNothingLikeSwitchedOff() {
+        asNonRootBuyer();
+        PurchaseOrder po = stubDraftPo(25L, "PO-UID-25", 10L, new BigDecimal("100000.00"));
+        when(orders.findByUid("PO-UID-25")).thenReturn(Optional.of(po));
+        when(approvalGate.evaluate(po)).thenReturn(belowThreshold(new BigDecimal("5000000.0000")));
+
+        assertThatThrownBy(() -> service.submitForApproval("PO-UID-25"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("below TZS 5000000.00")
+                .hasMessageNotContaining("switched off");
+    }
+
+    @Test
+    void approvalRefusals_leakNoPermissionCode_statusCode_orInternalName() {
+        asNonRootBuyer();
+        PurchaseOrder off = stubDraftPo(26L, "PO-UID-26", 10L, new BigDecimal("100000000.00"));
+        PurchaseOrder small = stubDraftPo(27L, "PO-UID-27", 10L, new BigDecimal("100000.00"));
+        PurchaseOrder unsubmitted = stubDraftPo(28L, "PO-UID-28", 10L, new BigDecimal("100000000.00"));
+        when(orders.findByUid("PO-UID-26")).thenReturn(Optional.of(off));
+        when(orders.findByUid("PO-UID-27")).thenReturn(Optional.of(small));
+        when(orders.findByUid("PO-UID-28")).thenReturn(Optional.of(unsubmitted));
+        when(approvalGate.evaluate(off)).thenReturn(disabledCompanyWide());
+        when(approvalGate.evaluate(small)).thenReturn(belowThreshold(new BigDecimal("5000000.0000")));
+
+        List<String> messages = List.of(
+                messageOf(() -> service.submitForApproval("PO-UID-26")),
+                messageOf(() -> service.submitForApproval("PO-UID-27")),
+                messageOf(() -> service.approvePo("PO-UID-28", new ApprovePoRequest("CO-UID-1", null))));
+
+        assertThat(messages).allSatisfy(m -> assertThat(m)
+                .doesNotContain("PURCHASE.")        // permission code
+                .doesNotContain("409")              // HTTP status
+                .doesNotContain("NOT_REQUIRED")     // enum constant
+                .doesNotContain("PoApproval")       // internal class name
+                .doesNotContain("approval_status")  // column name
+                .doesNotContain("Exception"));
+        // The two "no approval needed" messages must not be interchangeable — that was the defect.
+        assertThat(messages.get(0)).isNotEqualTo(messages.get(1));
+    }
+
+    @Test
+    void submitForApproval_orderAlreadyAwaitingADecision_isIdempotent_notARefusal() {
+        // Finding (d): the same situation answered 409 (stored status PENDING) or 200 (stored status
+        // stale, engine idempotency absorbed the re-submit). The engine's request row is the truth,
+        // so both users now get the same answer — success, with no second request raised.
+        asNonRootBuyer();
+        // The stale half of the split: the engine holds a live request, the PO's mirror column
+        // still says NOT_REQUIRED. Wiring the mock's setter to its getter makes the correction
+        // observable on the response.
+        PurchaseOrder po = stubDraftPo(29L, "PO-UID-29", 10L, new BigDecimal("100000000.00"));
+        doAnswer(inv -> {
+            when(po.getApprovalStatus()).thenReturn(inv.getArgument(0, PoApprovalStatus.class));
+            return null;
+        }).when(po).setApprovalStatus(any(PoApprovalStatus.class));
+        when(orders.findByUid("PO-UID-29")).thenReturn(Optional.of(po));
+        when(lines.findByPurchaseOrderIdOrderByLineNo(29L)).thenReturn(List.of());
+        when(approvalGate.queryState("PO-UID-29", 10L))
+                .thenReturn(Optional.of(engineState("PO-UID-29", ApprovalRequestStatus.PENDING)));
+
+        PurchaseOrderDto dto = service.submitForApproval("PO-UID-29");
+
+        assertThat(dto.approvalStatus()).isEqualTo("PENDING");
+        verify(approvalGate, never()).submit(any(), anyString());
+        verify(approvalGate, never()).evaluate(any());   // settings can't change the answer here
+    }
+
+    @Test
+    void submitForApproval_approvalAlreadyClosed_isRefusedWithoutRaisingASecondRequest() {
+        asNonRootBuyer();
+        PurchaseOrder po = stubDraftPo(30L, "PO-UID-30", 10L, new BigDecimal("100000000.00"));
+        when(orders.findByUid("PO-UID-30")).thenReturn(Optional.of(po));
+        when(approvalGate.queryState("PO-UID-30", 10L))
+                .thenReturn(Optional.of(engineState("PO-UID-30", ApprovalRequestStatus.REJECTED)));
+
+        assertThatThrownBy(() -> service.submitForApproval("PO-UID-30"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot be reopened");
+
+        verify(approvalGate, never()).submit(any(), anyString());
+    }
+
+    /** The buyer who raises orders — non-root, so every permission gate is really exercised. */
+    private void asNonRootBuyer() {
+        RequestContext.set(new RequestContext.Principal(7L, "buyer", false, 10L, 20L, null));
+    }
+
+    /** The manager who decides on them — also non-root. */
+    private void asNonRootApprover() {
+        RequestContext.set(new RequestContext.Principal(8L, "procurement.manager", false, 10L, 20L, null));
+    }
+
+    private static PoApprovalGate.Decision disabledCompanyWide() {
+        return new PoApprovalGate.Decision(
+                PoApprovalGate.ApprovalRequirement.DISABLED_COMPANY_WIDE, null, null);
+    }
+
+    private static PoApprovalGate.Decision belowThreshold(BigDecimal threshold) {
+        return new PoApprovalGate.Decision(
+                PoApprovalGate.ApprovalRequirement.BELOW_THRESHOLD, threshold, "TZS");
+    }
+
+    private static String messageOf(Runnable call) {
+        try {
+            call.run();
+            throw new AssertionError("Expected the call to be refused, but it succeeded.");
+        } catch (IllegalStateException ex) {
+            return ex.getMessage();
+        }
     }
 
     // -------------------------------------------------------------------------

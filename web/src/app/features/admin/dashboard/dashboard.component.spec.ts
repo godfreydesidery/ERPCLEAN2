@@ -21,6 +21,9 @@ const MOCK_DTO: DashboardDto = {
   header: {
     companyId: '10',
     companyName: 'Acme Ltd',
+    branchUid: null,
+    branchName: null,
+    branchLabel: 'All branches',
     currency: 'TZS',
     periodLabel: 'Jan 2026',
     fromDate: '2026-01-01',
@@ -477,5 +480,41 @@ describe('DashboardComponent', () => {
     thisBranchBadges = Array.from(fixture.nativeElement.querySelectorAll('h2 .status-tag'))
       .filter((b: any) => b.textContent?.trim() === 'This branch');
     expect(thisBranchBadges.length).toBe(2); // CRM + Sales by Branch
+  });
+
+  // ── UAT 2026-08: the header must echo the branch the SERVER filtered to ──────
+  // The badges above are rendered from this browser's own picker state, which proves nothing
+  // about what the server did. This banner is the server's own account of the request's scope.
+
+  // 17. No branch filter → the page says so out loud rather than saying nothing.
+  it('renders the server scope banner as "All branches" when no branch was filtered', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Branch: All branches');
+  });
+
+  // 18. Branch filtered → the header names the branch the server actually used.
+  it('renders the branch the server reports it filtered to', () => {
+    vi.useFakeTimers();
+    const branchDto: DashboardDto = {
+      ...MOCK_DTO,
+      header: {
+        ...MOCK_DTO.header,
+        branchUid: 'BR-UID-KILI',
+        branchName: 'Kilimanjaro',
+        branchLabel: 'Kilimanjaro',
+      },
+    };
+    makeBed(of(branchDto));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Branch: Kilimanjaro');
+    expect(fixture.nativeElement.textContent).not.toContain('Branch: All branches');
   });
 });

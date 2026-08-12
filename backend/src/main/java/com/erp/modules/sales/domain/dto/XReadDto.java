@@ -17,6 +17,11 @@ import java.util.List;
  * drawer drops and till EXPENSES each print as their own line rather than one merged figure. It
  * always sums back to {@code totalPayoutsNetAmount}.
  *
+ * <p><b>{@code tillName} / {@code cashierName} / {@code branchName}</b> (UAT, 2026-08): the same
+ * labels the Z-read carries, for the same reason — a mid-shift snapshot that names only
+ * {@code posTillId: "1"} cannot be read at a glance. Kept identical to the Z-read so the two
+ * reports of one shift never describe it differently.
+ *
  * <p>An X-read is a mid-shift, NON-resetting read and may be taken on an OPEN or a CLOSED session
  * — a shift that has ended can still be re-examined. Once the session is RECONCILED the Z-read is
  * the authoritative report.
@@ -24,7 +29,11 @@ import java.util.List;
 public record XReadDto(
         String sessionUid,
         Long posTillId,
+        String tillName,
         Long cashierId,
+        String cashierName,
+        Long branchId,
+        String branchName,
         String openedAt,
         BigDecimal openingFloatAmount,
         BigDecimal totalSalesAmount,

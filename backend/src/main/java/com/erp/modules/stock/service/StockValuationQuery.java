@@ -1,9 +1,7 @@
 package com.erp.modules.stock.service;
 
-import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.repository.JournalLineRepository;
-import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.stock.domain.dto.StockValuationReconDto;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
@@ -14,6 +12,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,20 +33,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class StockValuationQuery {
 
+    private static final Logger log = LoggerFactory.getLogger(StockValuationQuery.class);
+
     private static final String CURRENCY = "TZS";
+
+    private static final String RECON_LABEL = "Inventory valuation vs GL 1300 Inventory balance";
 
     private final JdbcTemplate          jdbc;
     private final JournalLineRepository journalLines;
-    private final GLConfigResolver      glConfig;
     private final ScopeGuard            scopeGuard;
 
     public StockValuationQuery(JdbcTemplate jdbc,
                                 JournalLineRepository journalLines,
-                                GLConfigResolver glConfig,
                                 ScopeGuard scopeGuard) {
         this.jdbc         = jdbc;
         this.journalLines = journalLines;
-        this.glConfig     = glConfig;
         this.scopeGuard   = scopeGuard;
     }
 
@@ -108,25 +109,74 @@ public class StockValuationQuery {
                 .map(r -> r.value() != null ? r.value() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 3. Recon bar: compare to GL 1300 account balance (BR-INV-06)
-        BigDecimal glBalance = BigDecimal.ZERO;
-        try {
-            ChartOfAccount inventoryAcct = glConfig.resolve(companyId, GlConfigKey.INVENTORY);
-            BigDecimal bal = journalLines.accountBalance(companyId, inventoryAcct.getId());
-            glBalance = bal != null ? bal : BigDecimal.ZERO;
-        } catch (Exception ex) {
-            // GL not configured — recon will show a difference; surfaced on-screen
-        }
-
-        StockValuationReconDto recon = StockValuationReconDto.of(
-                "Inventory valuation vs GL 1300 Inventory balance",
-                totalValue, glBalance);
+        // 3. Recon bar: compare to the GL Inventory account balance (BR-INV-06)
+        StockValuationReconDto recon = reconcileToGl(companyId, totalValue);
 
         return new StockValuationReportDto(companyId, loadCompanyHeader(companyId), rows,
                 totalValue, recon, CURRENCY, Instant.now().toString());
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * Reconciles Σ {@code on_hand_value} to the GL Inventory account balance (BR-INV-06).
+     *
+     * <p>"The Inventory account is not set up" is its own outcome, never a zero balance. It used to
+     * be swallowed by a blanket {@code catch (Exception)} that left {@code glBalance = 0}, so a shop
+     * that had simply never mapped the account was told its GL was out by the entire value of its
+     * stock — an alarm about a discrepancy that did not exist, on a report whose whole job is to
+     * raise that alarm truthfully.
+     *
+     * <p>The mapping is read here with a scalar SQL lookup rather than through
+     * {@code GLConfigResolver}, for two reasons. The resolver signals "not configured" by throwing
+     * from inside its own {@code MANDATORY} transaction boundary, which marks this read-only
+     * transaction rollback-only — so the caught-and-continued path could not deliver its report
+     * anyway. And a missing mapping is a normal, expected state for this screen, not an error: it is
+     * a question to ask, not an exception to catch. Same scalar cross-module read pattern the
+     * product/company joins above already use (no entity import crosses the module line).
+     *
+     * <p>A genuine failure to READ the balance is deliberately not caught: swallowing it would put
+     * an invented number on a finance report, which is the very bug this method exists to fix.
+     */
+    private StockValuationReconDto reconcileToGl(Long companyId, BigDecimal totalValue) {
+        List<Object[]> mapping = jdbc.query(
+                """
+                SELECT coa.id        AS account_id,
+                       coa.is_active AS is_active
+                FROM   gl_configs gc
+                LEFT JOIN chart_of_accounts coa ON coa.id = gc.account_id
+                WHERE  gc.company_id = ?
+                  AND  gc.config_key = ?
+                """,
+                (rs, rowNum) -> new Object[]{
+                        rs.getObject("account_id"),
+                        rs.getBoolean("is_active")
+                },
+                companyId, GlConfigKey.INVENTORY.name());
+
+        if (mapping.isEmpty()) {
+            log.debug("Stock valuation recon: no {} account mapped for company={} — "
+                    + "reporting NOT CONFIGURED rather than a zero GL balance",
+                    GlConfigKey.INVENTORY, companyId);
+            return StockValuationReconDto.glAccountNotMapped(RECON_LABEL, totalValue);
+        }
+
+        Object[] row       = mapping.get(0);
+        Object   accountId = row[0];
+        boolean  active    = (Boolean) row[1];
+        if (accountId == null || !active) {
+            log.warn("Stock valuation recon: {} account mapped for company={} is missing or inactive "
+                    + "— reporting NOT CONFIGURED rather than a zero GL balance",
+                    GlConfigKey.INVENTORY, companyId);
+            return StockValuationReconDto.glAccountNotUsable(RECON_LABEL, totalValue);
+        }
+
+        // A null balance means the account carries no journal lines at all — that is a genuine zero
+        // balance, not an unknown one, and a stock ledger with value against it IS a real break.
+        BigDecimal balance = journalLines.accountBalance(companyId, ((Number) accountId).longValue());
+        return StockValuationReconDto.of(RECON_LABEL, totalValue,
+                balance != null ? balance : BigDecimal.ZERO);
+    }
 
     /**
      * The letterhead the exported PDF prints above the figures — same block as

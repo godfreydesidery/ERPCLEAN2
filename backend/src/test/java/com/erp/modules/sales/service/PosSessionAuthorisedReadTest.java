@@ -16,8 +16,10 @@ import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.dto.AuthorityVerificationDto;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.service.StepUpAuthService;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.sales.domain.dto.AuthorisedReadRequest;
 import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.enums.PosSessionStatus;
@@ -95,10 +97,14 @@ class PosSessionAuthorisedReadTest {
         permissionResolver = mock(PermissionResolver.class);
         stepUpAuth     = mock(StepUpAuthService.class);
 
+        // The label collaborators are stubbed but never asserted on here: this suite is about WHO may
+        // open a report, not what the report says. Mockito's default empty answers give the reads no
+        // names, which is exactly the "cannot be named" fallback path.
         service = new PosSessionServiceImpl(sessions, mock(PosTillRepository.class), payouts,
                 mock(PosExpenseIdempotencyRepository.class), invoices, tenderPayments,
                 mock(GLPostingSafeInvoker.class), mock(GLConfigResolver.class),
-                mock(GLPostingService.class), mock(CompanyRepository.class), scopeGuard, audit,
+                mock(GLPostingService.class), mock(CompanyRepository.class),
+                mock(BranchRepository.class), mock(UserLookupService.class), scopeGuard, audit,
                 mock(SalesDepthNumberGenerator.class), mock(TillExpenseGlSeeder.class),
                 permissionResolver, stepUpAuth);
 

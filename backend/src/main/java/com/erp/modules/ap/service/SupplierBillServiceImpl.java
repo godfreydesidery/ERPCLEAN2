@@ -6,8 +6,10 @@ import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.dto.SupplierBillLineDto;
 import com.erp.modules.ap.domain.entity.SupplierBill;
 import com.erp.modules.ap.domain.entity.SupplierBillLine;
+import com.erp.modules.ap.domain.enums.BillComparisonState;
 import com.erp.modules.ap.domain.enums.DirectReceiptRatificationState;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
+import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
@@ -55,6 +57,8 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     private final PurchaseMatchReader        purchaseMatchReader;
     /** K3 follow-up — surfaces "this receipt still needs ratifying" on every bill read. */
     private final DirectReceiptRatificationGuard ratification;
+    /** UAT 2026-08-12 — surfaces how much of the bill was really checked against order + receipt. */
+    private final BillComparisonReader       comparisons;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
 
@@ -66,6 +70,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                                     ChartOfAccountRepository chartOfAccounts,
                                     PurchaseMatchReader purchaseMatchReader,
                                     DirectReceiptRatificationGuard ratification,
+                                    BillComparisonReader comparisons,
                                     ScopeGuard scopeGuard,
                                     AuditService audit) {
         this.bills               = bills;
@@ -76,6 +81,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         this.chartOfAccounts     = chartOfAccounts;
         this.purchaseMatchReader = purchaseMatchReader;
         this.ratification        = ratification;
+        this.comparisons         = comparisons;
         this.scopeGuard          = scopeGuard;
         this.audit               = audit;
     }
@@ -225,7 +231,10 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         "grossAmount", grossAmount.toPlainString(),
                         "supplierId", String.valueOf(supplierId))));
 
-        return toDto(bill, savedLines, ratification.stateFor(bill.getPurchaseOrderUid()));
+        // A bill just entered cannot have been matched yet — there are no bill_match rows behind it,
+        // and saying so is the honest answer rather than a query that can only return one value.
+        return toDto(bill, savedLines, ratification.stateFor(bill.getPurchaseOrderUid()),
+                BillComparisonState.NEVER_MATCHED);
     }
 
     @Override
@@ -234,21 +243,66 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         SupplierBill bill = Lookups.orNotFound(bills.findByUid(uid), "SupplierBill", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), bill.getCompanyId());
         List<SupplierBillLine> billLines = lines.findBySupplierBillIdOrderByLineNo(bill.getId());
-        return toDto(bill, billLines, ratification.stateFor(bill.getPurchaseOrderUid()));
+        return toDto(bill, billLines, ratification.stateFor(bill.getPurchaseOrderUid()),
+                comparisons.stateFor(bill.getId(), billLines.size()));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SupplierBillDto> listByCompany(Long companyId, Pageable pageable) {
-        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return toDtoPage(bills.findByCompanyId(companyId, pageable));
+        return searchInternal(companyId, null, null, null, false, pageable);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<SupplierBillDto> listBySupplier(Long companyId, Long supplierId, Pageable pageable) {
+        return searchInternal(companyId, supplierId, null, null, false, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SupplierBillDto> search(Long companyId,
+                                        Long supplierId,
+                                        String supplierUid,
+                                        SupplierBillStatus status,
+                                        boolean uncomparedOnly,
+                                        Pageable pageable) {
+        return searchInternal(companyId, supplierId, supplierUid, status, uncomparedOnly, pageable);
+    }
+
+    private Page<SupplierBillDto> searchInternal(Long companyId,
+                                                 Long supplierId,
+                                                 String supplierUid,
+                                                 SupplierBillStatus status,
+                                                 boolean uncomparedOnly,
+                                                 Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return toDtoPage(bills.findByCompanyIdAndSupplierId(companyId, supplierId, pageable));
+        Long resolvedSupplierId = resolveSupplierId(companyId, supplierId, supplierUid);
+        // A supplier uid that resolves to nothing must narrow to nothing, not silently widen to
+        // "every bill in the company" — a filter that quietly stops filtering is how a reviewer
+        // ends up certain they looked at a supplier they never saw.
+        if (resolvedSupplierId == null && supplierUid != null && !supplierUid.isBlank()) {
+            return Page.empty(pageable);
+        }
+        return toDtoPage(bills.search(companyId, resolvedSupplierId, status,
+                uncomparedOnly ? Boolean.TRUE : null, pageable));
+    }
+
+    /**
+     * Resolves which supplier to filter on: an explicit numeric id wins, else the uid is looked up
+     * WITHIN the company (never across it — the company must come from the scope-checked value, not
+     * from whatever the uid happens to belong to). Returns null when neither was supplied.
+     */
+    private Long resolveSupplierId(Long companyId, Long supplierId, String supplierUid) {
+        if (supplierId != null) {
+            return supplierId;
+        }
+        if (supplierUid == null || supplierUid.isBlank()) {
+            return null;
+        }
+        return suppliers.findByCompanyIdAndUid(companyId, supplierUid.trim())
+                .map(Supplier::getId)
+                .orElse(null);
     }
 
     // -------------------------------------------------------------------------
@@ -272,20 +326,35 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                         .filter(uid -> uid != null && !uid.isBlank())
                         .distinct()
                         .toList());
-        return page.map(b -> toDto(b, lines.findBySupplierBillIdOrderByLineNo(b.getId()),
-                ratificationStates.stateFor(b.getPurchaseOrderUid())));
+        // Same discipline for the comparison signal: one query for the page, resolved up front.
+        BillComparisonReader.Snapshot comparisonStates = comparisons.snapshotFor(
+                page.getContent().stream().map(SupplierBill::getId).toList());
+        return page.map(b -> {
+            List<SupplierBillLine> billLines = lines.findBySupplierBillIdOrderByLineNo(b.getId());
+            return toDto(b, billLines,
+                    ratificationStates.stateFor(b.getPurchaseOrderUid()),
+                    comparisonStates.stateFor(b.getId(), billLines.size()));
+        });
     }
 
     /**
-     * Overload for callers with no backing purchase order (AP opening balances), where the
-     * ratification gate cannot apply.
+     * Overload for callers with no backing purchase order and no match run behind the bill — today
+     * that is AP opening balances, which are stamped MATCHED and post their own journal entry
+     * without the match engine ever seeing them.
+     *
+     * <p>{@link BillComparisonState#NEVER_MATCHED} is therefore the literal truth for such a bill,
+     * not a default: no {@code bill_match} row exists, so nothing about it was ever compared against
+     * an order or a receipt. Reporting that plainly is the whole point — an opening balance that
+     * came back "compared" would be the signal certifying exactly the payables nobody checked.
      */
     static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList) {
-        return toDto(b, lineList, DirectReceiptRatificationState.NOT_APPLICABLE);
+        return toDto(b, lineList, DirectReceiptRatificationState.NOT_APPLICABLE,
+                BillComparisonState.NEVER_MATCHED);
     }
 
     static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList,
-                                  DirectReceiptRatificationState ratificationState) {
+                                  DirectReceiptRatificationState ratificationState,
+                                  BillComparisonState comparisonState) {
         List<SupplierBillLineDto> lineDtos = lineList.stream().map(l ->
                 new SupplierBillLineDto(
                         l.getId(), l.getUid(), l.getSupplierBillId(), l.getLineNo(),
@@ -314,6 +383,9 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 // K3 follow-up: derived ratification state of the backing direct receipt
                 ratificationState != null
                         ? ratificationState : DirectReceiptRatificationState.NOT_APPLICABLE,
+                // UAT 2026-08-12: derived comparison state. A missing value falls back to
+                // NEVER_MATCHED, never to "compared" — an unknown must never read as verified.
+                comparisonState != null ? comparisonState : BillComparisonState.NEVER_MATCHED,
                 lineDtos);
     }
 

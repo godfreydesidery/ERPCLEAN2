@@ -18,6 +18,7 @@ import {
   RaiseDebitNoteRequest,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { BillComparisonBadgeComponent } from './bill-comparison-badge.component';
 import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { formatMoney } from '../../../shared/money.util';
@@ -28,6 +29,7 @@ interface LoadTrigger {
   companyId: string;
   supplierUid: string;
   status: string;
+  uncomparedOnly: boolean;
   page: number;
 }
 
@@ -36,10 +38,21 @@ interface LoadTrigger {
  * Company + supplier + status filter; debit-note action gated AP.DEBITNOTE.
  * Row navigation to bill detail (AP.BILL.MATCH / AP.PAYMENT.RUN) and enter bill.
  * Gated AP.VIEW.
+ *
+ * <p>The "Checked" column and its filter exist because a bill can be MATCHED, posted and payable
+ * without anybody having compared it to an order or a delivery (UAT 2026-08-12). Both are read-only:
+ * they change nothing about when a bill matches, holds, posts or pays — they only make the bills
+ * nobody checked findable at period end instead of stumbled upon.
  */
 @Component({
   selector: 'app-supplier-bills-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent, DirectReceiptRatificationComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    PaginatorComponent,
+    DirectReceiptRatificationComponent,
+    BillComparisonBadgeComponent,
+  ],
   templateUrl: './supplier-bills-list.component.html',
   styleUrl: './supplier-bills-list.component.scss',
 })
@@ -64,6 +77,12 @@ export class SupplierBillsListComponent {
 
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly statusFilter = signal('');
+  /**
+   * Period-end review: show only bills whose lines were not ALL checked against a purchase order
+   * and a goods receipt. Applied server-side — filtering the loaded page instead would leave the
+   * paginator claiming a total that no longer matches what is on screen.
+   */
+  readonly uncomparedOnly = signal(false);
 
   // ── Supplier lookup map (id → "code — displayName") ──────────────────────
   readonly supplierMap = signal<Map<string, string>>(new Map());
@@ -97,7 +116,7 @@ export class SupplierBillsListComponent {
   constructor() {
     this.loadTrigger$
       .pipe(
-        switchMap(({ companyId, supplierUid, status, page }) => {
+        switchMap(({ companyId, supplierUid, status, uncomparedOnly, page }) => {
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
@@ -107,6 +126,7 @@ export class SupplierBillsListComponent {
             status || undefined,
             page,
             DEFAULT_SIZE,
+            uncomparedOnly,
           );
         }),
         takeUntilDestroyed(),
@@ -190,6 +210,12 @@ export class SupplierBillsListComponent {
     this.load(0);
   }
 
+  /** Back to page 0: the filter changes which bills exist, so the old page number means nothing. */
+  onUncomparedOnlyChange(only: boolean): void {
+    this.uncomparedOnly.set(only);
+    this.load(0);
+  }
+
   load(page: number): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
@@ -197,6 +223,7 @@ export class SupplierBillsListComponent {
       companyId,
       supplierUid: this.selectedFilterSupplier()?.uid ?? '',
       status: this.statusFilter(),
+      uncomparedOnly: this.uncomparedOnly(),
       page,
     });
   }

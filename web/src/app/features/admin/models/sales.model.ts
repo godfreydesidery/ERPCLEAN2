@@ -157,6 +157,14 @@ export interface AddInvoiceLineRequest {
   productUid: string;
   unitUid: string;
   quantity: string;
+  /**
+   * The unit price the seller states for this line, used ONLY when the catalogue cannot price it (no
+   * price list covers the product in this company) — without it such a company can invoice nothing
+   * at all. Not a discount channel: when a list price exists it wins, and changing a listed price is
+   * permissioned (`POST .../lines/uid/{lineUid}/override-price`, SALES.INVOICE.OVERRIDE). The server
+   * refuses zero or negative. Same field and same meaning as the quotation / sales-order requests.
+   */
+  unitPriceOverride?: string;
   lineDiscountAmount?: string;
   lineDiscountPercent?: string;
   /**

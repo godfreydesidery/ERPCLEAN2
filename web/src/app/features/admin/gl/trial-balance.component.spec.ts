@@ -9,6 +9,10 @@
  *  5. groupedTypes returns only types that have rows.
  *  6. 403 response sets state to 'forbidden'.
  *  7. State goes to 'idle' and tb() is populated on success.
+ *  8. Export (UAT: /gl/trial-balance/export was a 404 — the one statement that could not be
+ *     printed): the buttons are offered only to a holder of REPORT.EXPORT, export() asks for the
+ *     same company + period the screen is showing, and the period filter sends periodId (the uid
+ *     bound nothing server-side and 400'd).
  */
 import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -20,7 +24,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { GlService } from './gl.service';
-import type { TrialBalanceDto } from './models/gl.model';
+import type { FiscalPeriodDto, TrialBalanceDto } from './models/gl.model';
 import { TrialBalanceComponent } from './trial-balance.component';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -43,9 +47,11 @@ const unbalancedTb = (): TrialBalanceDto => ({
   totalCredits: '500.00',
 });
 
-function makeSessionStore(canView = true) {
+/** `has` may be a flat answer or a per-code predicate (GL.VIEW granted, REPORT.EXPORT denied). */
+function makeSessionStore(has: boolean | ((code: string) => boolean) = true) {
+  const answer = typeof has === 'function' ? has : () => has;
   return {
-    hasPermission: vi.fn(() => canView),
+    hasPermission: vi.fn((code: string) => answer(code)),
     isAuthenticated: signal(true),
     user: signal(null),
     permissions: signal([]),
@@ -53,8 +59,26 @@ function makeSessionStore(canView = true) {
   };
 }
 
-function makeBed(opts: { tbImpl?: () => any; canView?: boolean } = {}) {
-  const { tbImpl, canView = true } = opts;
+const PERIODS: FiscalPeriodDto[] = [
+  {
+    id: '77', uid: 'PER-77', companyId: '10', periodNo: 3,
+    startDate: '2026-03-01', endDate: '2026-03-31', status: 'OPEN',
+  },
+];
+
+function makeBed(
+  opts: {
+    // `any` throughout: these stubs deliberately return off-contract shapes (numeric money,
+    // HttpErrorResponse) to reproduce what the wire actually sends.
+    tbImpl?: () => any;
+    canView?: boolean | ((code: string) => boolean);
+    periods?: FiscalPeriodDto[];
+  } = {},
+) {
+  const { tbImpl, canView = true, periods = [] } = opts;
+
+  const forPeriodSpy = vi.fn(() => of(balancedTb()));
+  const exportSpy = vi.fn(() => of(new Blob()));
 
   TestBed.configureTestingModule({
     imports: [TrialBalanceComponent],
@@ -66,8 +90,9 @@ function makeBed(opts: { tbImpl?: () => any; canView?: boolean } = {}) {
         provide: GlService,
         useValue: {
           getTrialBalance: vi.fn(tbImpl ?? (() => of(balancedTb()))),
-          getTrialBalanceForPeriod: vi.fn(() => of(balancedTb())),
-          listPeriods: vi.fn(() => of([])),
+          getTrialBalanceForPeriod: forPeriodSpy,
+          exportTrialBalance: exportSpy,
+          listPeriods: vi.fn(() => of(periods)),
         },
       },
       {
@@ -81,6 +106,16 @@ function makeBed(opts: { tbImpl?: () => any; canView?: boolean } = {}) {
       { provide: SessionStore, useValue: makeSessionStore(canView) },
     ],
   });
+
+  return { forPeriodSpy, exportSpy };
+}
+
+/** jsdom chokes on anchor.click(); stub the whole download side-effect. */
+function stubBrowserDownload(): void {
+  vi.spyOn(document.body, 'appendChild').mockImplementation((n) => n as Node);
+  vi.spyOn(document.body, 'removeChild').mockImplementation((n) => n as Node);
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 }
 
 // ── Rendering ──────────────────────────────────────────────────────────────────
@@ -245,5 +280,115 @@ describe('TrialBalanceComponent — 403 forbidden', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.state()).toBe('forbidden');
+  });
+});
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+// Found live: the Finance Director exported the P&L, balance sheet, cash flow and stock valuation
+// on the same token, but the trial balance — the first page of a period-close pack — had no export
+// at all. These lock down the three ways that can regress: the button vanishing, the download
+// asking for something other than what is on the screen, and it being offered to someone the
+// server will refuse.
+
+describe('TrialBalanceComponent — export', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks(); // undo the document.body / URL spies
+    TestBed.resetTestingModule();
+  });
+
+  it('offers the export buttons to a holder of REPORT.EXPORT', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(TrialBalanceComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canExport()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Export PDF');
+    expect(fixture.nativeElement.textContent).toContain('Export Excel');
+    expect(fixture.nativeElement.textContent).toContain('Export CSV');
+  });
+
+  it('hides them from a caller who may view the trial balance but not export', async () => {
+    makeBed({ canView: (code) => code !== 'REPORT.EXPORT' });
+    const fixture = TestBed.createComponent(TrialBalanceComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canView()).toBe(true);
+    expect(fixture.componentInstance.canExport()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Export PDF');
+  });
+
+  it('export() asks for the company on screen, in the requested format', async () => {
+    const { exportSpy } = makeBed();
+    const comp = TestBed.createComponent(TrialBalanceComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    stubBrowserDownload();
+
+    comp.export('PDF');
+
+    expect(exportSpy).toHaveBeenCalledWith('10', 'PDF', null);
+    expect(comp.exporting()).toBe(false);
+  });
+
+  it('export() carries the selected period, so paper and screen show the same figures', async () => {
+    const { exportSpy } = makeBed({ periods: PERIODS });
+    const comp = TestBed.createComponent(TrialBalanceComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    stubBrowserDownload();
+
+    comp.onPeriodChange('77');
+    comp.export('XLSX');
+
+    expect(exportSpy).toHaveBeenCalledWith('10', 'XLSX', '77');
+  });
+
+  it('a failed download clears the busy flag instead of wedging the buttons', async () => {
+    const { exportSpy } = makeBed();
+    exportSpy.mockReturnValue(
+      throwError(() => new HttpErrorResponse({ status: 500, statusText: 'Server Error' })) as never,
+    );
+    const comp = TestBed.createComponent(TrialBalanceComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.export('CSV');
+
+    expect(comp.exporting()).toBe(false);
+  });
+});
+
+// ── Period filter: periodId, not periodUid ─────────────────────────────────────
+// The endpoint binds `?periodId=` (a numeric id). The screen used to send `periodUid`, which bound
+// nothing: every period-filtered run came back 400 and the user read "Could not load trial
+// balance". The export takes the same id, so the two can never drift apart again.
+
+describe('TrialBalanceComponent — period filter', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends the period id (not the uid) when a period is chosen', async () => {
+    const { forPeriodSpy } = makeBed({ periods: PERIODS });
+    const comp = TestBed.createComponent(TrialBalanceComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.onPeriodChange('77');
+
+    expect(forPeriodSpy).toHaveBeenCalledWith('10', '77');
+    expect(comp.selectedPeriodId()).toBe('77');
+  });
+
+  it('renders the period options keyed by id', async () => {
+    makeBed({ periods: PERIODS });
+    const fixture = TestBed.createComponent(TrialBalanceComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const options: HTMLOptionElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('#periodPicker option'),
+    );
+    expect(options.map((o) => o.value)).toContain('77');
+    expect(options.map((o) => o.value)).not.toContain('PER-77');
   });
 });

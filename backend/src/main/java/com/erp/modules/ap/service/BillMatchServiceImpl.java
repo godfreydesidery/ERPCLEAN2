@@ -54,6 +54,12 @@ import org.springframework.transaction.annotation.Transactional;
  * All lines within tolerance → bill MATCHED, posts DR Purchases / CR AP-control (D-6).
  * Any over-tolerance → bill HELD, nothing posts.
  * GL failure (missing config, closed period) rolls back the whole command (D-4).
+ *
+ * <p><b>The control fails CLOSED.</b> A line that references a purchase order or a goods receipt
+ * but whose order/receipt line cannot be resolved is HELD, never MATCHED — the comparison did not
+ * run, so nothing may post on the strength of it. Only a line with no purchase link at all (a
+ * service charge) passes without a comparison, and it says so: {@code comparisonPerformed=false}
+ * with every variance reported as NULL rather than a reassuring 0.
  */
 @Service
 @Transactional
@@ -124,62 +130,9 @@ public class BillMatchServiceImpl implements BillMatchService {
         boolean anyHeld = false;
 
         for (SupplierBillLine line : billLines) {
-            BillMatchStatus status;
-            BigDecimal priceVar = BigDecimal.ZERO;
-            BigDecimal priceVarPct = BigDecimal.ZERO;
-            BigDecimal qtyVar = BigDecimal.ZERO;
-            BigDecimal poUnitCost = null;
-            BigDecimal grReceivedQty = null;
-
-            if (line.getPoLineUid() != null && line.getGrLineUid() != null
-                    && bill.getPurchaseOrderUid() != null) {
-                // Resolve PO line
-                Optional<PurchaseOrderLineDto> poLineOpt =
-                        purchaseReader.findPoLine(bill.getPurchaseOrderUid(), line.getPoLineUid());
-                // Resolve GR line — we need the GR uid; derive from the GR line's grLineUid
-                // by searching within the PO's GR. Since we only have grLineUid scalar, use a
-                // separate lookup via GR search (we search across all GRs for this company below).
-                Optional<GoodsReceiptLineDto> grLineOpt =
-                        findGrLineByUid(bill.getCompanyId(), line.getGrLineUid());
-
-                if (poLineOpt.isPresent() && grLineOpt.isPresent()) {
-                    poUnitCost   = poLineOpt.get().unitCostAmount();
-                    grReceivedQty = grLineOpt.get().qtyInBase();
-
-                    // Price check
-                    priceVar = line.getUnitCostAmount().subtract(poUnitCost);
-                    BigDecimal absPriceVar = priceVar.abs();
-                    if (poUnitCost.compareTo(BigDecimal.ZERO) > 0) {
-                        priceVarPct = absPriceVar
-                                .divide(poUnitCost, 6, RoundingMode.HALF_UP)
-                                .multiply(HUNDRED);
-                    }
-                    BigDecimal allowedAbs = poUnitCost
-                            .multiply(tolerancePct)
-                            .divide(HUNDRED, 4, RoundingMode.HALF_UP)
-                            .max(toleranceAbs);
-                    boolean priceOk = absPriceVar.compareTo(allowedAbs) <= 0;
-
-                    // Qty check: billed ≤ received (qty exact by default)
-                    qtyVar = line.getBilledQty().subtract(grReceivedQty);
-                    boolean qtyOk = line.getBilledQty().compareTo(grReceivedQty) <= 0;
-
-                    if (!priceOk) {
-                        status = BillMatchStatus.HELD_PRICE_VARIANCE;
-                        anyHeld = true;
-                    } else if (!qtyOk) {
-                        status = BillMatchStatus.HELD_QTY_VARIANCE;
-                        anyHeld = true;
-                    } else {
-                        status = BillMatchStatus.MATCHED;
-                    }
-                } else {
-                    // PO/GR not resolved — treat as MATCHED (service bill or data gap)
-                    status = BillMatchStatus.MATCHED;
-                }
-            } else {
-                // No PO/GR ref — no 3-way match required (service bill / OB)
-                status = BillMatchStatus.MATCHED;
+            LineVerdict verdict = evaluate(bill, line, tolerancePct, toleranceAbs);
+            if (verdict.status() != BillMatchStatus.MATCHED) {
+                anyHeld = true;
             }
 
             // Upsert bill_match row (one per line — uq_bill_match_line)
@@ -192,22 +145,36 @@ public class BillMatchServiceImpl implements BillMatchService {
             if (match == null) {
                 match = new BillMatch(
                         bill.getCompanyId(), bill.getId(), line.getId(),
-                        poUnitCost, grReceivedQty, line.getBilledQty(),
-                        priceVar, priceVarPct, qtyVar,
-                        status, tolerancePct, toleranceAbs, actorId());
+                        verdict.poUnitCost(), verdict.grReceivedQty(), line.getBilledQty(),
+                        verdict.priceVariance(), verdict.priceVariancePct(), verdict.qtyVariance(),
+                        verdict.status(), tolerancePct, toleranceAbs, actorId());
                 match.setMatchType(matchType);
             } else {
-                match.setMatchStatus(status);
+                // Re-match: overwrite the FACTS too, not just the status. Leaving the previous
+                // run's po_unit_cost / variances behind makes the row claim a comparison that
+                // this run did not make (the variance columns are NOT NULL, so an un-compared
+                // leg persists as 0 — the nullable po_unit_cost / gr_received_qty are what tell
+                // a reviewer whether the check actually ran).
+                match.setMatchStatus(verdict.status());
                 match.setMatchType(matchType);
+                match.setPoUnitCostAmount(verdict.poUnitCost());
+                match.setGrReceivedQty(verdict.grReceivedQty());
+                match.setBilledQty(line.getBilledQty());
+                match.setPriceVarianceAmount(zeroIfNull(verdict.priceVariance()));
+                match.setPriceVariancePct(zeroIfNull(verdict.priceVariancePct()));
+                match.setQtyVariance(zeroIfNull(verdict.qtyVariance()));
                 match.setMatchedAt(Instant.now());
             }
+            // Durable evidence of WHY a line is on hold (cleared when a re-run resolves it).
+            match.setVarianceReason(verdict.reason());
             match = matches.save(match);
 
             lineResults.add(new LineMatchDto(
-                    line.getId(), line.getUid(), status,
-                    priceVar, priceVarPct, qtyVar,
-                    poUnitCost, grReceivedQty, line.getBilledQty(),
-                    match.getMatchedAt()));
+                    line.getId(), line.getUid(), verdict.status(),
+                    verdict.priceVariance(), verdict.priceVariancePct(), verdict.qtyVariance(),
+                    verdict.poUnitCost(), verdict.grReceivedQty(), line.getBilledQty(),
+                    match.getMatchedAt(),
+                    verdict.comparisonPerformed(), verdict.note()));
         }
 
         // Update bill status
@@ -290,13 +257,176 @@ public class BillMatchServiceImpl implements BillMatchService {
                     .findByCompanyIdAndId(bill.getCompanyId(), m.getSupplierBillLineId())
                     .orElse(null);
             String lUid = l != null ? l.getUid() : null;
+            // A NULL po_unit_cost / gr_received_qty means that leg never ran, so its stored
+            // variance is a 0 default, not a result — publish NULL rather than a clean-looking 0.
+            boolean priceChecked = m.getPoUnitCostAmount() != null;
+            boolean qtyChecked   = m.getGrReceivedQty() != null;
             return new LineMatchDto(m.getSupplierBillLineId(), lUid, m.getMatchStatus(),
-                    m.getPriceVarianceAmount(), m.getPriceVariancePct(), m.getQtyVariance(),
+                    priceChecked ? m.getPriceVarianceAmount() : null,
+                    priceChecked ? m.getPriceVariancePct() : null,
+                    qtyChecked ? m.getQtyVariance() : null,
                     m.getPoUnitCostAmount(), m.getGrReceivedQty(), m.getBilledQty(),
-                    m.getMatchedAt());
+                    m.getMatchedAt(),
+                    priceChecked && qtyChecked, m.getVarianceReason());
         }).toList();
 
         return new BillMatchResultDto(bill.getUid(), bill.getStatus(), lineResults);
+    }
+
+    // -------------------------------------------------------------------------
+    // The control itself
+    // -------------------------------------------------------------------------
+
+    /**
+     * One line's verdict: the status, the facts that were <em>actually</em> compared, and the
+     * plain-English note for the accountant.
+     *
+     * <p>A variance is NULL when that leg did not run — the caller must never publish a 0 for a
+     * comparison that never happened, and the persisted row keeps po_unit_cost / gr_received_qty
+     * NULL for the same reason. {@code reason} is the short (≤100 char) form stored on the row.
+     */
+    private record LineVerdict(
+            BillMatchStatus status,
+            BigDecimal priceVariance,
+            BigDecimal priceVariancePct,
+            BigDecimal qtyVariance,
+            BigDecimal poUnitCost,
+            BigDecimal grReceivedQty,
+            boolean comparisonPerformed,
+            String note,
+            String reason) {}
+
+    private static final String NO_PURCHASE_LINK_NOTE =
+            "No purchase order or goods receipt is linked to this line, so there was nothing to "
+            + "check it against. It was accepted as a service charge.";
+    private static final String NO_LINKS_NOTE =
+            "This line is not linked to a purchase order line or a goods receipt line, so neither "
+            + "the price nor the quantity billed could be checked. Link it to the order line and "
+            + "the goods receipt line, then run the match again.";
+    private static final String NO_PO_LINE_NOTE =
+            "This line is not linked to a purchase order line, so the price billed could not be "
+            + "checked against the order. Link it to the order line, then run the match again.";
+    private static final String NO_GR_LINE_NOTE =
+            "The goods receipt for this line could not be found, so the quantity billed could not "
+            + "be checked against what was received. Attach the goods receipt line to this bill "
+            + "line, then run the match again.";
+    private static final String PRICE_ALSO_OFF_NOTE =
+            " The price billed also differs from the purchase order price — check the invoice "
+            + "against the order before accepting it.";
+    private static final String PRICE_VARIANCE_NOTE =
+            "The price billed differs from the purchase order price by more than the allowed "
+            + "tolerance. Check the invoice against the order, then either correct the bill or "
+            + "accept the variance.";
+    private static final String QTY_VARIANCE_NOTE =
+            "More is billed than was received on the goods receipt. Check the receipt, then "
+            + "either correct the bill or accept the variance.";
+
+    /**
+     * Decides one line, failing CLOSED.
+     *
+     * <p>Three outcomes, and the difference between the last two is the whole point:
+     * <ul>
+     *   <li><b>No purchase link at all</b> (no order on the bill, no order/receipt line on the
+     *       line) — a genuine service charge. Passes, but flagged as not compared.
+     *   <li><b>Linked to a purchase but the order/receipt line could not be resolved</b> — the
+     *       control did NOT run, so the line is HELD. It used to be stamped MATCHED: live UAT saw
+     *       a 15 × 9,999,999 bill sail through against a 20 × 4,500 order line (both facts NULL,
+     *       both variances 0) and auto-post to the GL.
+     *   <li><b>Fully resolved</b> — the original price/qty comparison, unchanged.
+     * </ul>
+     */
+    private LineVerdict evaluate(SupplierBill bill, SupplierBillLine line,
+                                 BigDecimal tolerancePct, BigDecimal toleranceAbs) {
+        boolean purchaseLinked = bill.getPurchaseOrderUid() != null
+                || line.getPoLineUid() != null
+                || line.getGrLineUid() != null;
+
+        if (!purchaseLinked) {
+            return new LineVerdict(BillMatchStatus.MATCHED, null, null, null, null, null,
+                    false, NO_PURCHASE_LINK_NOTE, null);
+        }
+
+        Optional<PurchaseOrderLineDto> poLineOpt =
+                (bill.getPurchaseOrderUid() != null && line.getPoLineUid() != null)
+                        ? purchaseReader.findPoLine(bill.getPurchaseOrderUid(), line.getPoLineUid())
+                        : Optional.empty();
+        // Resolve the GR line from its uid alone — the bill line carries no GR header ref (D-11).
+        Optional<GoodsReceiptLineDto> grLineOpt =
+                findGrLineByUid(bill.getCompanyId(), line.getGrLineUid());
+
+        BigDecimal poUnitCost    = poLineOpt.map(PurchaseOrderLineDto::unitCostAmount).orElse(null);
+        BigDecimal grReceivedQty = grLineOpt.map(GoodsReceiptLineDto::qtyInBase).orElse(null);
+
+        // Price leg — computable whenever the ORDER line resolved, even if the receipt did not.
+        // Worth computing in that case: it puts the real numbers in front of the reviewer.
+        BigDecimal priceVar = null;
+        BigDecimal priceVarPct = null;
+        boolean priceOverTolerance = false;
+        if (poUnitCost != null) {
+            priceVar = line.getUnitCostAmount().subtract(poUnitCost);
+            BigDecimal absPriceVar = priceVar.abs();
+            priceVarPct = BigDecimal.ZERO;
+            if (poUnitCost.compareTo(BigDecimal.ZERO) > 0) {
+                priceVarPct = absPriceVar
+                        .divide(poUnitCost, 6, RoundingMode.HALF_UP)
+                        .multiply(HUNDRED);
+            }
+            BigDecimal allowedAbs = poUnitCost
+                    .multiply(tolerancePct)
+                    .divide(HUNDRED, 4, RoundingMode.HALF_UP)
+                    .max(toleranceAbs);
+            priceOverTolerance = absPriceVar.compareTo(allowedAbs) > 0;
+        }
+
+        // Qty leg — only the goods receipt can say how much actually arrived.
+        BigDecimal qtyVar = null;
+        boolean overBilled = false;
+        if (grReceivedQty != null) {
+            qtyVar = line.getBilledQty().subtract(grReceivedQty);
+            overBilled = line.getBilledQty().compareTo(grReceivedQty) > 0;
+        }
+
+        if (poUnitCost == null || grReceivedQty == null) {
+            // FAIL CLOSED — a leg of the control could not run. Hold on the leg that is missing
+            // (price when the order is unknown, quantity when the receipt is), and report the leg
+            // that did run so the reviewer sees the real figures.
+            BillMatchStatus status = (poUnitCost == null || priceOverTolerance)
+                    ? BillMatchStatus.HELD_PRICE_VARIANCE
+                    : BillMatchStatus.HELD_QTY_VARIANCE;
+            String note;
+            String reason;
+            if (poUnitCost == null && grReceivedQty == null) {
+                note   = NO_LINKS_NOTE;
+                reason = "Order line and goods receipt line not linked — nothing was checked.";
+            } else if (poUnitCost == null) {
+                note   = NO_PO_LINE_NOTE;
+                reason = "Purchase order line not linked — price not checked.";
+            } else {
+                note   = NO_GR_LINE_NOTE + (priceOverTolerance ? PRICE_ALSO_OFF_NOTE : "");
+                reason = "Goods receipt line not found — quantity received not checked.";
+            }
+            return new LineVerdict(status, priceVar, priceVarPct, qtyVar,
+                    poUnitCost, grReceivedQty, false, note, reason);
+        }
+
+        // Fully resolved — the real 3-way comparison.
+        if (priceOverTolerance) {
+            return new LineVerdict(BillMatchStatus.HELD_PRICE_VARIANCE,
+                    priceVar, priceVarPct, qtyVar, poUnitCost, grReceivedQty,
+                    true, PRICE_VARIANCE_NOTE, "Price above the agreed tolerance.");
+        }
+        if (overBilled) {
+            return new LineVerdict(BillMatchStatus.HELD_QTY_VARIANCE,
+                    priceVar, priceVarPct, qtyVar, poUnitCost, grReceivedQty,
+                    true, QTY_VARIANCE_NOTE, "Billed more than was received.");
+        }
+        return new LineVerdict(BillMatchStatus.MATCHED,
+                priceVar, priceVarPct, qtyVar, poUnitCost, grReceivedQty,
+                true, null, null);
+    }
+
+    private static BigDecimal zeroIfNull(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     // -------------------------------------------------------------------------
@@ -314,6 +444,19 @@ public class BillMatchServiceImpl implements BillMatchService {
      * <p>Finding #15 (bill_number) coexists independently — already handled in {@link #runMatch}.
      */
     private void postMatchedBillToGl(SupplierBill bill) {
+        // Fail closed, independently of the caller: re-read the line verdicts and refuse to post
+        // while any of them is on hold. Both callers already set MATCHED before getting here, so
+        // this is the last line of defence — a bill that skipped the control must never reach the
+        // ledger, and the UAT showed how easily a hole upstream turns into a posted JE.
+        boolean anyUnresolved = matches.findBySupplierBillId(bill.getId()).stream()
+                .anyMatch(m -> m.getMatchStatus() != BillMatchStatus.MATCHED
+                        && m.getMatchStatus() != BillMatchStatus.VARIANCE_ACCEPTED);
+        if (anyUnresolved) {
+            throw new IllegalStateException(
+                    "This bill still has lines on hold, so it cannot be posted. "
+                            + "Resolve or accept each held line first.");
+        }
+
         // FIX H (adversarial review): idempotency guard — if a journal entry already exists for
         // (companyId, AP_BILL, bill.uid) a previous run already posted; re-stamp the GL ref and
         // return without double-posting (the AR/AP precedent — ADR-0020 D-4 NFR-INV-04).

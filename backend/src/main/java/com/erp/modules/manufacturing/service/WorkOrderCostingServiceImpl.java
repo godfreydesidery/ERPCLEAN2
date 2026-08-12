@@ -21,7 +21,6 @@ import com.erp.modules.manufacturing.service.ManufacturingGlPoster.ComponentCost
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.products.domain.dto.BomExplosionLeafDto;
-import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.service.BomExplosionService;
 import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.service.InventoryValuationService;
@@ -65,7 +64,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     private final WorkOrderRepository          workOrders;
     private final WorkOrderComponentRepository components;
     private final WorkOrderOperationRepository operations;
-    private final ProductRepository            products;
     private final BomExplosionService          bomExplosion;
     private final StockPostingService          stockPosting;
     private final InventoryValuationService    valuation;
@@ -79,7 +77,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     public WorkOrderCostingServiceImpl(WorkOrderRepository workOrders,
                                         WorkOrderComponentRepository components,
                                         WorkOrderOperationRepository operations,
-                                        ProductRepository products,
                                         BomExplosionService bomExplosion,
                                         StockPostingService stockPosting,
                                         InventoryValuationService valuation,
@@ -92,7 +89,6 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         this.workOrders      = workOrders;
         this.components      = components;
         this.operations      = operations;
-        this.products        = products;
         this.bomExplosion    = bomExplosion;
         this.stockPosting    = stockPosting;
         this.valuation       = valuation;
@@ -546,15 +542,15 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
             throw new IllegalStateException("Work order has no BOM pinned. Release with a BOM first.");
         }
 
-        List<BomExplosionLeafDto> leaves = bomExplosion.explodeToLeaves(
-                products.findById(wo.getFinishedProductId())
-                        .orElseThrow(() -> new NotFoundException("Product not found for work order FG."))
-                        .getUid(),
-                wo.getPlannedQty(),
-                true);
+        // Explode the version pinned at release — NOT the finished product's currently-ACTIVE BOM.
+        // A version activated between release and first issue must not change what this order
+        // consumes; otherwise the factory builds one recipe while the order records another.
+        List<BomExplosionLeafDto> leaves = bomExplosion.explodeBomToLeaves(
+                wo.getBomUid(), wo.getPlannedQty(), true);
 
         if (leaves.isEmpty()) {
-            throw new IllegalStateException("BOM has no leaf components to issue.");
+            throw new IllegalStateException(
+                    "The bill of materials on this work order has no components to issue.");
         }
 
         List<WorkOrderComponent> result = new ArrayList<>();

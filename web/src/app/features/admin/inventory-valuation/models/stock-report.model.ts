@@ -18,6 +18,15 @@ export interface StockReportRowDto {
 
 export interface StockReportDto {
   company: ReportCompanyHeaderDto;
+  /** Branch the listing was narrowed to; null when it spans the whole company. */
+  branchUid: string | null;
+  branchName: string | null;
+  /**
+   * Never null. The branch's name when one was filtered, "All branches" when none was.
+   * Render this verbatim — the server authors the phrase so the screen, the PDF and any
+   * integration all say the same thing about the report's scope.
+   */
+  branchLabel: string;
   currency: string;
   rows: StockReportRowDto[];
   totalValue: number | string | null;

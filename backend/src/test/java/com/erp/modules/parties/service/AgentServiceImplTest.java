@@ -151,9 +151,12 @@ class AgentServiceImplTest {
             userLookup = mock(UserLookupService.class);
             companies = mock(CompanyRepository.class);
 
+            // The real uniqueness guard over the mocked repository: the rule moved out of this
+            // service so the sale-time provisioner is bound by it too, and these tests still pin
+            // the same behaviour through the same repository stubs.
             service = new AgentServiceImpl(
                     agents, agentBranches, codeGen, branchGuard, scopeGuard, audit,
-                    userLookup, companies);
+                    userLookup, companies, new InternalAgentUniquenessGuard(agents));
 
             Company company = mock(Company.class);
             when(company.getId()).thenReturn(COMPANY_ID);

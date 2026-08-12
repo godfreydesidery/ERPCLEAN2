@@ -98,43 +98,86 @@
                   <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
                     <td class="small text-center">{{ lineIdx + 1 }}</td>
                     <td>
+                      <!-- The human sentence, never the enum: an accountant should not have to
+                           decode HELD_PRICE_VARIANCE, and since the fail-closed fix reuses that
+                           status for a missing receipt it would also be untrue. -->
                       <span class="status-tag"
-                            [class.status-tag--ok]="line.matchStatus === 'MATCHED'"
+                            [class.status-tag--ok]="line.matchStatus === 'MATCHED' && !notCompared(line)"
                             [class.status-tag--danger]="line.matchStatus === 'HELD_PRICE_VARIANCE'"
-                            [class.status-tag--warn]="line.matchStatus === 'HELD_QTY_VARIANCE'"
+                            [class.status-tag--warn]="line.matchStatus === 'HELD_QTY_VARIANCE' || (line.matchStatus === 'MATCHED' && notCompared(line))"
                             [class.status-tag--info]="line.matchStatus === 'VARIANCE_ACCEPTED'">
-                        {{ line.matchStatus }}
+                        {{ statusLabel(line) }}
                       </span>
                     </td>
-                    <td class="num">{{ fmtMoney(line.poUnitCostAmount) }}</td>
+                    <td class="num" [class.text-muted]="isNotChecked(line.poUnitCostAmount)">
+                      {{ fmtMoney(line.poUnitCostAmount) }}
+                      @if (isNotChecked(line.poUnitCostAmount)) {
+                        <span class="visually-hidden">not checked</span>
+                      }
+                    </td>
                     <td class="num"
-                        [class.text-danger]="+(line.priceVarianceAmount) !== 0">
+                        [class.text-muted]="isNotChecked(line.priceVarianceAmount)"
+                        [class.text-danger]="nonZero(line.priceVarianceAmount)">
                       {{ fmtMoney(line.priceVarianceAmount) }}
+                      @if (isNotChecked(line.priceVarianceAmount)) {
+                        <span class="visually-hidden">not checked</span>
+                      }
                     </td>
                     <td class="num"
-                        [class.text-danger]="+(line.priceVariancePct) !== 0">
+                        [class.text-muted]="isNotChecked(line.priceVariancePct)"
+                        [class.text-danger]="nonZero(line.priceVariancePct)">
                       {{ fmtPct(line.priceVariancePct) }}
+                      @if (isNotChecked(line.priceVariancePct)) {
+                        <span class="visually-hidden">not checked</span>
+                      }
                     </td>
-                    <td class="num">{{ fmtMoney(line.grReceivedQty) }}</td>
+                    <td class="num" [class.text-muted]="isNotChecked(line.grReceivedQty)">
+                      {{ fmtMoney(line.grReceivedQty) }}
+                      @if (isNotChecked(line.grReceivedQty)) {
+                        <span class="visually-hidden">not checked</span>
+                      }
+                    </td>
                     <td class="num">{{ fmtMoney(line.billedQty) }}</td>
                     <td class="num"
-                        [class.text-warning]="+(line.qtyVariance) !== 0">
+                        [class.text-muted]="isNotChecked(line.qtyVariance)"
+                        [class.text-warning]="nonZero(line.qtyVariance)">
                       {{ fmtMoney(line.qtyVariance) }}
+                      @if (isNotChecked(line.qtyVariance)) {
+                        <span class="visually-hidden">not checked</span>
+                      }
                     </td>
                     <td>
                       @if (isHeld(line)) {
                         <button type="button" class="btn btn-sm btn-outline-warning"
                                 [disabled]="acceptingLine() === line.billLineUid"
                                 (click)="acceptVariance(line.billLineUid)"
-                                [attr.aria-label]="'Accept variance for line ' + (lineIdx + 1)">
+                                [attr.aria-describedby]="'matchNote_' + lineIdx"
+                                [attr.aria-label]="acceptLabel(line) + ' for line ' + (lineIdx + 1)">
                           @if (acceptingLine() === line.billLineUid) {
                             <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                           } @else {
                             <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
                           }
-                          Accept Variance
+                          {{ acceptLabel(line) }}
                         </button>
                       }
+                    </td>
+                  </tr>
+                  <!-- The explanation and the next step, in the backend's own words. -->
+                  <tr [class]="isHeld(line) ? 'table-danger' : line.matchStatus === 'MATCHED' ? 'table-success' : ''">
+                    <td></td>
+                    <td colspan="8" class="small pt-0">
+                      <span [id]="'matchNote_' + lineIdx" class="d-inline-flex align-items-start gap-2"
+                            [class.text-danger]="isHeld(line)"
+                            [class.text-muted]="!isHeld(line)">
+                        <i class="bi flex-shrink-0 mt-1"
+                           [class.bi-exclamation-triangle-fill]="isHeld(line)"
+                           [class.bi-info-circle]="!isHeld(line)"
+                           aria-hidden="true"></i>
+                        <span>
+                          <span class="visually-hidden">Line {{ lineIdx + 1 }}: </span>{{ lineNote(line) }}
+                        </span>
+                      </span>
                     </td>
                   </tr>
                 }
@@ -149,10 +192,26 @@
               All lines matched — bill is ready for payment.
             </p>
           } @else {
-            <p class="text-danger small mb-0 d-flex align-items-center gap-2">
-              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-              One or more lines are HELD. Accept variances to release the bill for payment.
+            <p class="text-danger small mb-2 d-flex align-items-start gap-2">
+              <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+              <span>
+                This bill is on hold and cannot be paid until every held line is resolved.
+                Read the note under each line for what it needs.
+              </span>
             </p>
+            @if (notCheckedHolds() > 0) {
+              <!-- The honest framing of the override. It posts an unchecked amount in the user's
+                   name; saying so is what stops it becoming the routine way to clear a bill. -->
+              <p class="small text-muted mb-0 d-flex align-items-start gap-2">
+                <i class="bi bi-info-circle flex-shrink-0 mt-1" aria-hidden="true"></i>
+                <span>
+                  {{ notCheckedHolds() }} of these lines were never checked against a goods receipt.
+                  The reliable fix is to enter the bill again with the goods receipt line attached to
+                  each line. Posting without checking is an override: it is recorded against your
+                  name and leaves the amount unverified.
+                </span>
+              </p>
+            }
           }
         </div>
       </div>
@@ -315,6 +374,40 @@
               <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Line
             </button>
           </div>
+          <!-- One notice for the whole table: the receipt lookup has the same state on every row,
+               and repeating it per line would bury the pickers in duplicated prose. -->
+          <div class="erp-card__body pb-0">
+            <p class="form-text mb-0">
+              <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+              Attach the goods receipt line from the delivery note to each line. That is what lets
+              the match check the quantity billed against the quantity actually received — without it
+              the line goes on hold and can only be released by an override.
+            </p>
+            @switch (grLookupState()) {
+              @case ('loading') {
+                <p class="form-text mb-0 d-flex align-items-center gap-2" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  Loading this supplier's goods receipts…
+                </p>
+              }
+              @case ('unavailable') {
+                <p class="form-text text-info mb-0 d-flex align-items-start gap-1" role="note">
+                  <i class="bi bi-info-circle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+                  <span>Goods receipts could not be listed just now, so there is nothing to attach.
+                    Lines entered without one will be held with the quantity unchecked.</span>
+                </p>
+              }
+              @case ('ready') {
+                @if (grLineOptions().length === 0) {
+                  <p class="form-text text-warning mb-0 d-flex align-items-start gap-1" role="note">
+                    <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+                    <span>No received goods receipts were found for this supplier. Ask the store to
+                      receive the delivery first — then the quantity on this bill can be checked.</span>
+                  </p>
+                }
+              }
+            }
+          </div>
           <div class="erp-card__body p-0">
             <div class="erp-table-wrap">
               <table class="erp-table">
@@ -326,6 +419,7 @@
                     <th scope="col" class="num" style="min-width:130px">Unit Cost</th>
                     <th scope="col" class="num" style="min-width:130px">Line Net</th>
                     <th scope="col" style="min-width:180px">PO Line <span class="text-muted small">(opt.)</span></th>
+                    <th scope="col" style="min-width:230px">Goods Receipt Line <span class="text-muted small">(checks the qty)</span></th>
                     <th scope="col"><span class="visually-hidden">Remove</span></th>
                   </tr>
                 </thead>
@@ -369,6 +463,32 @@
                                         [ariaLabelledby]="'poLineLabel_' + i" />
                       </td>
                       <td>
+                        <span [id]="'grLineLabel_' + i" class="visually-hidden">
+                          Goods receipt line for line {{ i + 1 }}
+                        </span>
+                        @if (grLineOptions().length > 0) {
+                          <app-uid-picker [ngModel]="line.grLineUid"
+                                          (ngModelChange)="updateLine(i, 'grLineUid', $event)"
+                                          [options]="grLineOptions()"
+                                          placeholder="Select GRN line"
+                                          [name]="'grline_' + i"
+                                          [ariaLabelledby]="'grLineLabel_' + i" />
+                          @if (receiptMissing(line)) {
+                            <p class="form-text text-warning mb-0 d-flex align-items-start gap-1">
+                              <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+                              <span>Not attached — the quantity billed will not be checked.</span>
+                            </p>
+                          }
+                        } @else if (grLookupState() === 'idle') {
+                          <p class="form-text mb-0">Choose a supplier to list their goods receipts.</p>
+                        } @else {
+                          <p class="form-text mb-0">
+                            <span aria-hidden="true">—</span>
+                            <span class="visually-hidden">Nothing to attach — see the note above the table.</span>
+                          </p>
+                        }
+                      </td>
+                      <td>
                         @if (lines().length > 1) {
                           <button type="button" class="btn btn-sm btn-outline-danger"
                                   (click)="removeLine(i)" [disabled]="submitting()"
@@ -384,13 +504,24 @@
                   <tr>
                     <td colspan="3" class="text-end small fw-semibold">Total Net:</td>
                     <td class="num fw-bold">{{ fmtMoney(totalNet) }}</td>
-                    <td colspan="2"></td>
+                    <td colspan="3"></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </div>
         </div>
+
+        <!-- Say it before the bill is saved, while attaching the receipt is still a click away. -->
+        @if (linesMissingReceipt() > 0) {
+          <p class="text-warning small mb-2 d-flex align-items-start gap-2" role="note">
+            <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+            <span>
+              {{ linesMissingReceipt() }} line(s) have no goods receipt attached. Those lines will be
+              held with the quantity unchecked, and releasing them afterwards needs an override.
+            </span>
+          </p>
+        }
 
         <!-- Error + submit -->
         @if (formError(); as msg) {

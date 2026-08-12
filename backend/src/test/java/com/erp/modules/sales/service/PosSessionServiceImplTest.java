@@ -20,9 +20,12 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.service.StepUpAuthService;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.PayoutSubtotalDto;
 import com.erp.modules.sales.domain.dto.PosExpenseRequest;
@@ -35,6 +38,7 @@ import com.erp.modules.sales.domain.dto.ZReadDto;
 import com.erp.modules.sales.domain.entity.PosExpenseIdempotency;
 import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.entity.PosSessionPayout;
+import com.erp.modules.sales.domain.entity.PosTill;
 import com.erp.modules.sales.domain.enums.PosPayoutType;
 import com.erp.modules.sales.domain.enums.PosSessionStatus;
 import com.erp.modules.sales.domain.enums.TenderType;
@@ -55,11 +59,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 /**
  * Unit tests for {@link PosSessionServiceImpl} covering the adversarial-review findings:
@@ -89,6 +97,8 @@ class PosSessionServiceImplTest {
     private GLConfigResolver           glConfig;
     private GLPostingService           glPosting;
     private CompanyRepository          companies;
+    private BranchRepository           branches;
+    private UserLookupService          userLookup;
     private ScopeGuard                 scopeGuard;
     private AuditService               audit;
     private SalesDepthNumberGenerator  numberGen;
@@ -109,6 +119,8 @@ class PosSessionServiceImplTest {
         glConfig   = mock(GLConfigResolver.class);
         glPosting  = mock(GLPostingService.class);
         companies  = mock(CompanyRepository.class);
+        branches   = mock(BranchRepository.class);
+        userLookup = mock(UserLookupService.class);
         scopeGuard = mock(ScopeGuard.class);
         audit      = mock(AuditService.class);
         numberGen  = mock(SalesDepthNumberGenerator.class);
@@ -120,8 +132,8 @@ class PosSessionServiceImplTest {
         // consult either collaborator. The manager-approval path has its own suite
         // (PosSessionAuthorisedReadTest) where both are stubbed per case.
         service = new PosSessionServiceImpl(sessions, tills, payouts, expenseIdempotency, invoices,
-                tenderPayments, glInvoker, glConfig, glPosting, companies, scopeGuard, audit,
-                numberGen, tillExpenseGl, permissionResolver, stepUpAuth);
+                tenderPayments, glInvoker, glConfig, glPosting, companies, branches, userLookup,
+                scopeGuard, audit, numberGen, tillExpenseGl, permissionResolver, stepUpAuth);
 
         // default: no request context
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 1L, null));
@@ -1514,8 +1526,158 @@ class PosSessionServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // UAT 2026-08 — "which one am I looking at?": a session/X-read/Z-read must NAME
+    // the cashier, the till and the branch, not just carry their ids
+    // -------------------------------------------------------------------------
+
+    /**
+     * The live defect. A session came back as {@code cashierId: "7"}, {@code posTillId: "1"},
+     * {@code branchId: "1"} and nothing else, so a shift review meant three cross-reference lookups
+     * before anyone could say whose shift it even was. The ids stay — other calls are addressed by
+     * them — and the labels now sit beside them.
+     */
+    @Test
+    void getSession_namesTheCashierTheTillAndTheBranch() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("N1")).thenReturn(Optional.of(session));
+        stubLabels();
+
+        var dto = service.getSessionByUid("N1");
+
+        assertThat(dto.cashierName()).isEqualTo("Asha Mrema");
+        assertThat(dto.tillName()).isEqualTo("Counter 1");
+        assertThat(dto.branchName()).isEqualTo("Kilimanjaro");
+        // The ids are still there — the names are additional, not a replacement.
+        assertThat(dto.cashierId()).isEqualTo(99L);
+        assertThat(dto.posTillId()).isEqualTo(5L);
+        assertThat(dto.branchId()).isEqualTo(1L);
+    }
+
+    /** A Z-read is what a shift is signed off on, so it has to be readable without a lookup. */
+    @Test
+    void zRead_namesTheCashierTheTillAndTheBranch() {
+        PosSession session = reconciledSession(1L);
+        when(sessions.findByUid("N2")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(any())).thenReturn(BigDecimal.ZERO);
+        when(invoices.countByPosSession(any())).thenReturn(0L);
+        when(tenderPayments.sumCashTenderByPosSession(any())).thenReturn(BigDecimal.ZERO);
+        when(tenderPayments.sumByPosSessionGroupedByTender(any())).thenReturn(List.of());
+        when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
+        when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
+        stubLabels();
+
+        var zRead = service.zRead("N2");
+
+        assertThat(zRead.cashierName()).isEqualTo("Asha Mrema");
+        assertThat(zRead.tillName()).isEqualTo("Counter 1");
+        assertThat(zRead.branchName()).isEqualTo("Kilimanjaro");
+        assertThat(zRead.branchId()).isEqualTo(1L);
+    }
+
+    /** The X-read is the same shift mid-way through; the two must not describe it differently. */
+    @Test
+    void xRead_carriesTheSameLabelsAsTheZRead() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("N3")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(any())).thenReturn(BigDecimal.ZERO);
+        when(invoices.countByPosSession(any())).thenReturn(0L);
+        when(tenderPayments.sumCashTenderByPosSession(any())).thenReturn(BigDecimal.ZERO);
+        when(tenderPayments.sumByPosSessionGroupedByTender(any())).thenReturn(List.of());
+        when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
+        when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
+        stubLabels();
+
+        var xRead = service.xRead("N3");
+
+        assertThat(xRead.cashierName()).isEqualTo("Asha Mrema");
+        assertThat(xRead.tillName()).isEqualTo("Counter 1");
+        assertThat(xRead.branchName()).isEqualTo("Kilimanjaro");
+    }
+
+    /**
+     * A cashier whose account was removed still ran that shift. The report says so in words — never
+     * by falling back to the internal id, which is the label rule {@code PosTillDto} already sets.
+     */
+    @Test
+    void session_whenTheCashierCanNoLongerBeNamed_readsAsAPhraseNotAnId() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("N4")).thenReturn(Optional.of(session));
+        when(userLookup.displayNamesByIds(any())).thenReturn(Map.of());
+        when(tills.findByCompanyIdAndIdIn(eq(1L), any())).thenReturn(List.of());
+        when(branches.findByCompanyIdOrderByName(1L)).thenReturn(List.of());
+
+        var dto = service.getSessionByUid("N4");
+
+        assertThat(dto.cashierName())
+                .isNotNull()
+                .doesNotContain("99");
+        // A till/branch row that cannot be read stays blank rather than printing an id.
+        assertThat(dto.tillName()).isNull();
+        assertThat(dto.branchName()).isNull();
+    }
+
+    /**
+     * The names must cost a fixed number of reads for a whole page. Resolving them row by row would
+     * be an N+1 that grows with the page size — three extra queries per session listed.
+     */
+    @Test
+    void listSessions_resolvesEveryRowsLabelsInOneBatch() {
+        PosSession first  = openSession(1L, new BigDecimal("1000.00"));
+        PosSession second = openSession(1L, new BigDecimal("2000.00"));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(sessions.findByCompanyId(1L, pageable))
+                .thenReturn(new PageImpl<>(List.of(first, second), pageable, 2));
+        stubLabels();
+
+        var page = service.listSessions(1L, null, pageable);
+
+        assertThat(page.getContent())
+                .as("every row carries the labels, not just the first")
+                .allSatisfy(row -> {
+                    assertThat(row.cashierName()).isEqualTo("Asha Mrema");
+                    assertThat(row.tillName()).isEqualTo("Counter 1");
+                    assertThat(row.branchName()).isEqualTo("Kilimanjaro");
+                });
+        verify(userLookup, times(1)).displayNamesByIds(any());
+        verify(tills, times(1)).findByCompanyIdAndIdIn(eq(1L), any());
+        verify(branches, times(1)).findByCompanyIdOrderByName(1L);
+    }
+
+    /**
+     * The till and branch reads are COMPANY-scoped finders, not bare by-id lookups: the value ends up
+     * on a user's screen as a name, and an unscoped read is how one tenant's page prints another's
+     * till. Scope comes from the loaded session row, never from a caller parameter.
+     */
+    @Test
+    void labelLookupsAreScopedToTheSessionsOwnCompany() {
+        PosSession session = openSession(7L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("N5")).thenReturn(Optional.of(session));
+        when(userLookup.displayNamesByIds(any())).thenReturn(Map.of());
+        when(tills.findByCompanyIdAndIdIn(eq(7L), any())).thenReturn(List.of());
+        when(branches.findByCompanyIdOrderByName(7L)).thenReturn(List.of());
+
+        service.getSessionByUid("N5");
+
+        verify(tills).findByCompanyIdAndIdIn(eq(7L), any());
+        verify(branches).findByCompanyIdOrderByName(7L);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /** Names for the session fixtures: cashier 99, till 5, branch 1 (see {@link #openSession}). */
+    private void stubLabels() {
+        when(userLookup.displayNamesByIds(any())).thenReturn(Map.of(99L, "Asha Mrema"));
+        PosTill till = mock(PosTill.class);
+        when(till.getId()).thenReturn(5L);
+        when(till.getName()).thenReturn("Counter 1");
+        when(tills.findByCompanyIdAndIdIn(anyLong(), any())).thenReturn(List.of(till));
+        Branch branch = mock(Branch.class);
+        when(branch.getId()).thenReturn(1L);
+        when(branch.getName()).thenReturn("Kilimanjaro");
+        when(branches.findByCompanyIdOrderByName(anyLong())).thenReturn(List.of(branch));
+    }
 
     private void stubPayoutGlAccounts() {
         ChartOfAccount cash = mock(ChartOfAccount.class);

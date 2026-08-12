@@ -33,7 +33,9 @@ type LoadState = 'loading' | 'idle' | 'error';
 /**
  * Sales invoice detail + actions screen. Route: /admin/sales-invoices/uid/:uid.
  * Header shows status + number + customer/agent + totals.
- * Lines panel: add/remove lines (DRAFT only, SALES.INVOICE.CREATE); override a line's unit
+ * Lines panel: add/remove lines (DRAFT only, SALES.INVOICE.CREATE) — the add-line form takes an
+ * optional stated unit price, which prices the line when the catalogue cannot (no price list covers
+ * the product in this company), exactly as the quotation and sales-order screens do; override a line's unit
  * price (DRAFT only, SALES.INVOICE.OVERRIDE, FR-SALES-08/BR-SALES-09) — a price >10x or <0.1x
  * the line's list price asks for a window.confirm before applying (soft fat-finger guard, never
  * a hard block: any positive price is allowed once confirmed); shows a rounding note when
@@ -89,6 +91,17 @@ export class SalesInvoiceDetailComponent {
   readonly lineUnitsState = signal<'idle' | 'loading' | 'error'>('idle');
   readonly newLineUnitUid = signal('');
   readonly newLineQty = signal('');
+  /**
+   * The unit price the seller states for this line — the same field the quotation and sales-order
+   * screens send. It stands in for a list price ONLY when the catalogue cannot price the product
+   * (no price list covers it in this company); it is not a discount box. When a list price exists it
+   * wins, and changing it is a permissioned act with its own affordance (the pencil on the line,
+   * gated SALES.INVOICE.OVERRIDE). Left blank on every ordinary line.
+   */
+  readonly newLineUnitPrice = signal('');
+  /** The product's price-list price, fetched on product select so the Co. price is visible up front. */
+  readonly resolvedPrice = signal<string | null>(null);
+  readonly priceState = signal<'idle' | 'loading' | 'ok' | 'missing'>('idle');
   readonly newLineDiscountAmount = signal('');
   readonly newLineDiscountPercent = signal('');
   readonly addingLine = signal(false);
@@ -308,6 +321,8 @@ export class SalesInvoiceDetailComponent {
     this.selectedProduct.set(null);
     this.newLineUnitUid.set('');
     this.lineUnits.set([]);
+    this.resolvedPrice.set(null);
+    this.priceState.set('idle');
     this.productSearch$.next(q);
     this.clearDiscountApproval();
   }
@@ -317,15 +332,44 @@ export class SalesInvoiceDetailComponent {
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
     this.loadUnitsForProduct(product.uid);
+    this.fetchLinePrice(product.uid);
     this.clearDiscountApproval();
   }
 
   /**
-   * Called whenever the quantity or either discount box changes.
+   * Fetch the product's price-list price for this company so the salesperson learns BEFORE pressing
+   * Add Line whether the catalogue can price this product — the UAT's complaint was finding out only
+   * from a refusal. An indicator, never the decision: the server re-resolves the price and stays
+   * authoritative. Gated PRODUCT.VIEW, the same permission the picker above already needs.
+   */
+  private fetchLinePrice(productUid: string): void {
+    const companyId = this.invoice()?.companyId;
+    this.priceState.set('loading');
+    this.resolvedPrice.set(null);
+    this.productService.listPrices(productUid).subscribe({
+      next: (rows) => {
+        const forCompany = rows.filter((p) => p.companyId === companyId);
+        // Prefer this company's base-unit row (unitUid === null) — a pack row would quote a crate
+        // price against an "Each" line and read as wrong.
+        const row = forCompany.find((p) => p.unitUid === null) ?? forCompany[0] ?? rows[0];
+        const amount = row?.price?.amount ?? null;
+        this.resolvedPrice.set(amount);
+        this.priceState.set(amount != null ? 'ok' : 'missing');
+      },
+      // A failed lookup is not evidence that no price exists — say nothing rather than claim there
+      // is none. The user can still state a price, and the server has the last word either way.
+      error: () => { this.resolvedPrice.set(null); this.priceState.set('idle'); },
+    });
+  }
+
+  /**
+   * Called whenever the quantity, the stated unit price, or either discount box changes.
    *
    * A supervisor approved a specific discount on a specific line. Letting that approval survive an
    * edit would mean a signature given for 10% off silently covering 60% off — so any change to what
-   * was approved throws the approval away and the salesperson must ask again.
+   * was approved throws the approval away and the salesperson must ask again. The stated price
+   * counts: the ceiling is judged against the line's value, so re-pricing the line changes the very
+   * figure that was signed for.
    */
   clearDiscountApproval(): void {
     if (this.discountAuthorisedByUid() !== null) {
@@ -352,6 +396,18 @@ export class SalesInvoiceDetailComponent {
       return;
     }
 
+    // A stated price is optional, but a zero or negative one is not a price. The server refuses it
+    // outright (@Positive), and a zero is worse than a refusal: it gives the goods away and, reading
+    // as equal to the resolved price, would slip past the override gate unmarked. Catch it here so
+    // the answer names the way out instead of arriving as a bare rejection.
+    const price = this.newLineUnitPrice().trim();
+    if (price && (isNaN(Number(price)) || Number(price) <= 0)) {
+      this.lineFormError.set(
+        'Enter a unit price greater than zero, or leave it blank to use the catalogue price.',
+      );
+      return;
+    }
+
     this.addingLine.set(true);
     this.lineFormError.set(null);
 
@@ -359,6 +415,9 @@ export class SalesInvoiceDetailComponent {
       productUid: selected.uid,
       unitUid,
       quantity: qty,
+      // Omitted unless typed: an absent field means "price it from the catalogue", which is what
+      // every ordinary line wants.
+      unitPriceOverride: price || undefined,
       lineDiscountAmount: this.newLineDiscountAmount().trim() || undefined,
       lineDiscountPercent: this.newLineDiscountPercent().trim() || undefined,
       // K7: only ever sent when a supervisor actually signed for THIS discount. The server
@@ -374,6 +433,9 @@ export class SalesInvoiceDetailComponent {
         this.productResults.set([]);
         this.newLineUnitUid.set('');
         this.newLineQty.set('');
+        this.newLineUnitPrice.set('');
+        this.resolvedPrice.set(null);
+        this.priceState.set('idle');
         this.newLineDiscountAmount.set('');
         this.newLineDiscountPercent.set('');
         this.discountNeedsApproval.set(false);
