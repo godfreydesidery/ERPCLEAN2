@@ -7,6 +7,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.reporting.domain.enums.ExportFormat;
+import com.erp.modules.reporting.export.TabularExporter;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockValuationQuery;
@@ -39,7 +41,8 @@ class StockValuationControllerAsOfTest {
         valuationQuery = mock(StockValuationQuery.class);
         InventoryValuationService valuationService = mock(InventoryValuationService.class);
         Clock fixed = Clock.fixed(TODAY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
-        controller = new StockValuationController(valuationQuery, valuationService, fixed);
+        controller = new StockValuationController(valuationQuery, valuationService,
+                mock(TabularExporter.class), fixed);
 
         when(valuationQuery.report(anyLong())).thenReturn(mock(StockValuationReportDto.class));
         RequestContext.set(new RequestContext.Principal(1L, "tester", true, 5L, 9L, null));
@@ -74,6 +77,21 @@ class StockValuationControllerAsOfTest {
         assertThat(message).doesNotContain("stock_on_hand").doesNotContain("Exception");
     }
 
+    /**
+     * The export applies the same guard. A file outlives the request that made it, so an export
+     * that honoured a laxer rule would circulate as a printed page claiming a date its figures
+     * never covered.
+     */
+    @Test
+    void export_rejectsTheSameDatesTheScreenRejects() {
+        assertThatThrownBy(() -> controller.exportReport(TODAY.plusDays(1), ExportFormat.PDF))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("current position");
+        assertThatThrownBy(() -> controller.exportReport(TODAY.minusDays(1), ExportFormat.PDF))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Stock Movement report");
+    }
+
     @Test
     void pastAsOf_isStillRejected() {
         assertThatThrownBy(() -> controller.report(TODAY.minusDays(1)))
@@ -100,7 +118,8 @@ class StockValuationControllerAsOfTest {
         Clock stuckInThePast = Clock.fixed(
                 Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC);
         StockValuationController pastController = new StockValuationController(
-                valuationQuery, mock(InventoryValuationService.class), stuckInThePast);
+                valuationQuery, mock(InventoryValuationService.class),
+                mock(TabularExporter.class), stuckInThePast);
 
         // 2020-01-02 is the future for THIS clock even though it is long past in real time.
         assertThatThrownBy(() -> pastController.report(LocalDate.of(2020, 1, 2)))

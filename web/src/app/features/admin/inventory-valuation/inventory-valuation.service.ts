@@ -1,7 +1,8 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
+import { ExportFormat } from '../reporting/models/reporting.model';
 import {
   OpeningValuationResultDto,
   SetOpeningValuationRequest,
@@ -15,8 +16,10 @@ import {
  * The HTTP interceptor unwraps the envelope — feature code receives T directly.
  *
  * Endpoints:
- *   GET  /api/v1/stock/valuation/report   → StockValuationReportDto  (INVENTORY.VALUATION.VIEW)
- *   POST /api/v1/stock/valuation/opening  → OpeningValuationResultDto (INVENTORY.OPENING.SET)
+ *   GET  /api/v1/stock/valuation/report        → StockValuationReportDto  (INVENTORY.VALUATION.VIEW)
+ *   GET  /api/v1/stock/valuation/report/export → raw PDF/XLSX/CSV bytes
+ *                                                (INVENTORY.VALUATION.VIEW + REPORT.EXPORT)
+ *   POST /api/v1/stock/valuation/opening       → OpeningValuationResultDto (INVENTORY.OPENING.SET)
  */
 @Injectable({ providedIn: 'root' })
 export class InventoryValuationService {
@@ -30,6 +33,15 @@ export class InventoryValuationService {
    */
   report(): Observable<StockValuationReportDto> {
     return this.http.get<StockValuationReportDto>(`${this.base}/report`);
+  }
+
+  /**
+   * The same report as a file. Raw bytes — the ApiResponse envelope is bypassed for downloads, so
+   * responseType 'blob' and no unwrapping.
+   */
+  export(format: ExportFormat): Observable<Blob> {
+    const params = new HttpParams().set('format', format);
+    return this.http.get(`${this.base}/report/export`, { params, responseType: 'blob' });
   }
 
   /**
