@@ -52,6 +52,7 @@ import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -756,6 +757,83 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                         "engineStatus", engineStatus.name())));
     }
 
+    /**
+     * Copies a verdict the approvals engine already reached onto the PO's mirror column, without
+     * the audit row {@link #reconcileApprovalStatus} writes — nothing was decided here, the mirror
+     * is merely being brought back in line with the request row that was always the truth.
+     */
+    private void mirrorEngineStatus(PurchaseOrder po, ApprovalRequestStatus engineStatus) {
+        PoApprovalStatus resolved = PoApprovalGate.fromEngineStatus(engineStatus);
+        if (po.getApprovalStatus() == resolved) {
+            return;
+        }
+        po.setApprovalStatus(resolved);
+        po.setUpdatedAt(Instant.now());
+        po.setUpdatedBy(actorId());
+    }
+
+    /**
+     * Refuses a decision on an order that nobody was asked to review (UAT wave 1, finding b).
+     *
+     * <p>The live system let {@code /approve} stamp APPROVED on an order with no approval request
+     * behind it at all, which is worse than having no badge: it back-dates a review that never
+     * happened and the audit trail then testifies to it. A decision is only meaningful while the
+     * order is actually awaiting one.
+     *
+     * @param verb what the caller is trying to do, for the message ("approved" / "rejected")
+     */
+    private void assertAwaitingApprovalDecision(PurchaseOrder po, String verb) {
+        PoApprovalStatus status = po.getApprovalStatus();
+        if (status == PoApprovalStatus.PENDING) {
+            return;
+        }
+        if (status == PoApprovalStatus.APPROVED) {
+            throw new IllegalStateException("This purchase order has already been approved.");
+        }
+        if (status == PoApprovalStatus.REJECTED) {
+            throw new IllegalStateException("This purchase order has already been rejected.");
+        }
+        // NOT_REQUIRED, or null on a row raised before the approval seam existed.
+        throw new IllegalStateException(
+                "This purchase order is not awaiting approval, so it cannot be " + verb
+                        + ". It must be submitted for approval first.");
+    }
+
+    /**
+     * Explains a "this order does not need approval" verdict truthfully (UAT wave 1, finding c).
+     *
+     * <p>The single message this replaces claimed the order was below a threshold even when
+     * approval was switched off entirely and no threshold had ever been set — two managers read it
+     * as proof that a ceiling existed and were satisfied. Whether orders are reviewed, and above
+     * what value, is the owner's configuration decision; all this can do is report it accurately.
+     */
+    private String approvalNotRequiredMessage(PoApprovalGate.Decision decision) {
+        return switch (decision.requirement()) {
+            case DISABLED_COMPANY_WIDE -> "Purchase order approval is switched off for this company, "
+                    + "so no purchase order is reviewed before it is placed. You can place this order "
+                    + "directly. An administrator can switch approval on, and set the value above "
+                    + "which orders must be approved, under Purchase Settings.";
+            case BELOW_THRESHOLD -> "This purchase order is below " + formatThreshold(decision)
+                    + ", the value this company requires approval above, so it does not need "
+                    + "approval. You can place it directly.";
+            case EXEMPT_DIRECT_RECEIPT -> "This order records goods that were received without a "
+                    + "purchase order. It is reviewed after the event from the approvals inbox, "
+                    + "so it cannot be submitted for approval here.";
+            case REQUIRED -> "";   // unreachable: the caller only asks when approval is not required
+        };
+    }
+
+    private String formatThreshold(PoApprovalGate.Decision decision) {
+        BigDecimal amount = decision.thresholdAmount();
+        if (amount == null) {
+            return "the approval limit set for this company";
+        }
+        String formatted = amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+        return decision.thresholdCurrency() != null
+                ? decision.thresholdCurrency() + " " + formatted
+                : formatted;
+    }
+
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();
         return p != null ? p.userId() : null;
@@ -778,9 +856,12 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder po = requireOrder(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
 
-        if (po.getApprovalStatus() == PoApprovalStatus.APPROVED) {
-            throw new IllegalStateException("PO is already approved.");
-        }
+        // A decision may already have been taken in the Approvals inbox, which writes only to the
+        // engine's own request row — reconcile before judging, or a stale mirror lets the same
+        // order be decided twice.
+        reconcileApprovalStatus(po);
+        assertAwaitingApprovalDecision(po, "approved");
+
         po.setApprovalStatus(PoApprovalStatus.APPROVED);
         po.setUpdatedAt(Instant.now());
         po.setUpdatedBy(actorId());
@@ -796,9 +877,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder po = requireOrder(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
 
-        if (po.getApprovalStatus() == PoApprovalStatus.REJECTED) {
-            throw new IllegalStateException("PO is already rejected.");
-        }
+        // Same gate as approve, for the same reason: a REJECTED badge on an order nobody was ever
+        // asked to review is as false a record as an APPROVED one.
+        reconcileApprovalStatus(po);
+        assertAwaitingApprovalDecision(po, "rejected");
+
         String reason = req.reason();
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("Rejection reason is required.");
@@ -814,23 +897,46 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return toDto(po);
     }
 
-    // APPROVALS-047: submit DRAFT PO to the approval engine so approval_request rows are created
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>Idempotent, and decided from the engine — not from the mirror column.</b>
+     * {@code purchase_orders.approval_status} is a copy the approvals engine never writes to, so
+     * judging "already submitted?" from it answered the very same situation with 409 for one user
+     * and 200 for another (UAT wave 1): whoever's copy happened to be stale fell through to the
+     * engine, whose own contract is idempotent per document and quietly returned the existing
+     * request. Reading the engine first makes the answer depend only on the facts, and re-pressing
+     * Submit on an order that is already awaiting a decision now succeeds — the caller's intent is
+     * already satisfied and nothing is created twice. This mirrors
+     * {@code SalesOrderServiceImpl#submitForApproval} exactly.
+     */
     @Override
     public PurchaseOrderDto submitForApproval(String uid) {
         PurchaseOrder po = requireOrder(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
         assertDraft(po, "submit for approval");
 
-        if (!approvalGate.requiresApproval(po, null)) {
-            // ADR-0027 D-6: below threshold or gate disabled — direct placement is correct path
+        // State before policy: an order that is already in the approval chain must be told so,
+        // whatever the settings say today (they may have been changed after it was submitted).
+        Optional<ApprovalRequestDto> existing = approvalGate.queryState(po.getUid(), po.getCompanyId());
+        if (existing.isPresent()) {
+            ApprovalRequestStatus engineStatus = existing.get().status();
+            if (!engineStatus.isTerminal()) {
+                // Already awaiting a decision — no second request, no scolding the user.
+                mirrorEngineStatus(po, engineStatus);
+                return toDto(po);
+            }
+            if (engineStatus == ApprovalRequestStatus.APPROVED) {
+                throw new IllegalStateException("This purchase order has already been approved.");
+            }
             throw new IllegalStateException(
-                    "This purchase order is below the approval threshold and does not require approval. "
-                            + "You can place it directly.");
+                    "The approval for this purchase order is closed and cannot be reopened. "
+                            + "Raise a new purchase order to submit it for approval again.");
         }
-        if (po.getApprovalStatus() == PoApprovalStatus.PENDING) {
-            // approval_request_uid is internal; not exposed to the user
-            throw new IllegalStateException(
-                    "This purchase order has already been submitted for approval and is awaiting a decision.");
+
+        PoApprovalGate.Decision decision = approvalGate.evaluate(po);
+        if (!decision.required()) {
+            throw new IllegalStateException(approvalNotRequiredMessage(decision));
         }
 
         // Resolve branch uid for the engine's policy lookup
