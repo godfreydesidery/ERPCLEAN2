@@ -35,6 +35,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderApprovalSnapshotDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
@@ -251,6 +252,72 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         StockOnHandDto soh = onHand(product.id());
         assertThat(soh.quantity()).isEqualByComparingTo(new BigDecimal("20"));
         assertLedgerMatchesOnHand(product.id());
+    }
+
+    /**
+     * K9 — the printed vendor GRN's read model, against a real database.
+     *
+     * <p>The unit tests cover the margin and VAT arithmetic; what only a database can prove is that
+     * the native SQL behind the derived columns actually resolves. In particular <b>Last CP</b>: the
+     * second delivery of a product must print the FIRST delivery's cost, not its own. Both receipts
+     * land in the same test at effectively the same instant, so this also exercises the id tiebreak
+     * that keeps "the previous receipt" deterministic when two share a timestamp.
+     */
+    @Test
+    void printByUid_carriesTheDerivedColumnsThePrintedNoteNeeds() {
+        ProductDto product = stockableProduct("PrintNote-Widget");
+
+        // First delivery at 100 — this is what the second one's "Last CP" must show.
+        PurchaseOrderDto first = placeOrderWithLine(product.uid(),
+                new BigDecimal("10"), new BigDecimal("100"));
+        grService.createAndReceive(new CreateGoodsReceiptRequest(
+                first.uid(), null,
+                List.of(new GoodsReceiptLineRequest(first.lines().get(0).uid(), new BigDecimal("10")))));
+
+        // Second delivery of the SAME product, at a higher cost.
+        PurchaseOrderDto second = placeOrderWithLine(product.uid(),
+                new BigDecimal("5"), new BigDecimal("120"));
+        GoodsReceiptDto gr2 = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                second.uid(), null,
+                List.of(new GoodsReceiptLineRequest(second.lines().get(0).uid(), new BigDecimal("5")))));
+
+        GoodsReceiptPrintDto printed = grService.printByUid(gr2.uid());
+
+        assertThat(printed.receiptNumber()).isEqualTo(gr2.receiptNumber());
+        assertThat(printed.status()).isEqualTo("RECEIVED");
+        assertThat(printed.supplierName()).isNotBlank();
+        assertThat(printed.branchName()).isNotBlank();
+        assertThat(printed.purchaseOrderNumber()).isEqualTo(second.orderNumber());
+        assertThat(printed.lines()).hasSize(1);
+
+        var line = printed.lines().get(0);
+        assertThat(line.productCode()).isEqualTo(product.code());
+        assertThat(line.costPrice()).isEqualByComparingTo("120");
+        assertThat(line.lastCostPrice()).isEqualByComparingTo("100");
+        assertThat(line.amount()).isEqualByComparingTo("600");
+
+        // Foot ties to the lines, and Total = Net + VAT + Rounding by construction.
+        assertThat(printed.netAmount()).isEqualByComparingTo("600.00");
+        assertThat(printed.totalAmount()).isEqualByComparingTo(
+                printed.netAmount().add(printed.vatAmount()).add(printed.roundingAmount()));
+        assertThat(printed.vatBands()).isNotEmpty();
+    }
+
+    /** A first-ever receipt of a product has no previous cost — the column must be blank, not zero. */
+    @Test
+    void printByUid_leavesLastCostBlankOnAFirstReceipt() {
+        ProductDto product = stockableProduct("FirstEver-Widget");
+
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("3"), new BigDecimal("777"));
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(placed.lines().get(0).uid(), new BigDecimal("3")))));
+
+        GoodsReceiptPrintDto printed = grService.printByUid(gr.uid());
+
+        assertThat(printed.lines()).hasSize(1);
+        assertThat(printed.lines().get(0).lastCostPrice()).isNull();
     }
 
     @Test

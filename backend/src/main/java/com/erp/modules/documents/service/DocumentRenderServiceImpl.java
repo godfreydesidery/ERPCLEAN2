@@ -17,7 +17,7 @@ import com.erp.modules.documents.render.DocumentRenderModel;
 import com.erp.modules.documents.repository.DocumentBrandingRepository;
 import com.erp.modules.documents.repository.DocumentTemplateRepository;
 import com.erp.modules.documents.repository.GeneratedDocumentRepository;
-import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.service.GoodsReceiptService;
@@ -312,9 +312,12 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
             }
             case GOODS_RECEIPT -> {
                 assertSourceUidPresent(req);
-                GoodsReceiptDto gr = goodsReceiptService.getByUid(req.sourceUid());
+                // K9: the printed note's own read model — the receipt plus selling price, previous
+                // cost, margin and VAT bands, all resolved in purchases (BR-DOC-02 / BR-DOC-09).
+                GoodsReceiptPrintDto gr = goodsReceiptService.printByUid(req.sourceUid());
                 assertRenderableGoodsReceipt(gr);
-                DocumentRenderModel model = modelBuilder.buildGoodsReceipt(gr, gr.lines(), branding, title);
+                DocumentRenderModel model = modelBuilder.buildGoodsReceipt(
+                        gr, branding, title, currentUserDisplayName());
                 yield new RenderResult(pdfRenderer.render(model), "GOODS_RECEIPT");
             }
             case DELIVERY_NOTE -> {
@@ -414,11 +417,21 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
         }
     }
 
-    private void assertRenderableGoodsReceipt(GoodsReceiptDto gr) {
+    private void assertRenderableGoodsReceipt(GoodsReceiptPrintDto gr) {
         if (gr.status() == null) return;
-        if (DRAFT.equals(gr.status().name())) {
+        if (DRAFT.equals(gr.status())) {
             throw new IllegalStateException("Goods receipt is DRAFT — receive it first.");
         }
+    }
+
+    /**
+     * The display name for the "Printed By" footprint. The principal carries the username, which is
+     * what the audit trail keys on and therefore the honest answer to "who printed this" — resolving
+     * a prettier full name would mean a user lookup on every render for a line of small print.
+     */
+    private String currentUserDisplayName() {
+        RequestContext.Principal principal = RequestContext.get();
+        return principal != null ? principal.username() : null;
     }
 
     /**
