@@ -2,6 +2,8 @@ package com.erp.modules.iam.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.dto.UserBranchDto;
@@ -13,6 +15,7 @@ import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -47,6 +50,7 @@ class UserBranchServiceImplTest {
 
     private UserBranchRepository userBranchRepo;
     private AppUserRepository    userRepo;
+    private PermissionResolver   permissionResolver;
 
     private UserBranchServiceImpl service;
 
@@ -56,8 +60,9 @@ class UserBranchServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        userBranchRepo = mock(UserBranchRepository.class);
-        userRepo       = mock(AppUserRepository.class);
+        userBranchRepo     = mock(UserBranchRepository.class);
+        userRepo           = mock(AppUserRepository.class);
+        permissionResolver = mock(PermissionResolver.class);
 
         service = new UserBranchServiceImpl(
                 userBranchRepo,
@@ -65,13 +70,15 @@ class UserBranchServiceImplTest {
                 mock(BranchRepository.class),
                 mock(ScopeGuard.class),
                 mock(AuditService.class),
-                mock(UserCompanyService.class));
+                mock(UserCompanyService.class),
+                permissionResolver);
 
         // Target user stub
         AppUser user = mock(AppUser.class);
         when(user.getId()).thenReturn(USER_ID);
         when(user.getUid()).thenReturn(USER_UID);
         when(userRepo.findByUid(USER_UID)).thenReturn(Optional.of(user));
+        when(userRepo.findById(USER_ID)).thenReturn(Optional.of(user));
 
         // Branch + Company stubs for assignment A (company A)
         Company companyA = mock(Company.class);
@@ -88,6 +95,7 @@ class UserBranchServiceImplTest {
         ubA = mock(UserBranch.class);
         when(ubA.getId()).thenReturn(1001L);
         when(ubA.getUid()).thenReturn("ub-uid-a");
+        when(ubA.getUserId()).thenReturn(USER_ID);
         when(ubA.getBranch()).thenReturn(branchA);
         when(ubA.isDefault()).thenReturn(true);
         when(ubA.getAssignedAt()).thenReturn(Instant.EPOCH);
@@ -173,5 +181,38 @@ class UserBranchServiceImplTest {
         List<UserBranchDto> result = service.listForUser(USER_UID);
 
         assertThat(result).isEmpty();
+    }
+
+    // -----------------------------------------------------------------------
+    // Permission-cache invalidation (UAT wave 1)
+    //
+    // Permissions resolve per (user, company, BRANCH) and are cached for ~30 s. This write path
+    // never invalidated at all, so a branch change silently left the affected user on a stale
+    // answer until the TTL happened to lapse. Each mutation must evict THAT user — and only that
+    // user; clearing the whole cache would push every signed-in colleague back to the database.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void setDefault_invalidatesTheAffectedUsersPermissionCache() {
+        RequestContext.set(new RequestContext.Principal(99L, "admin@test.com", false, COMPANY_A_ID, null, null));
+        when(userBranchRepo.findByUid("ub-uid-a")).thenReturn(Optional.of(ubA));
+
+        service.setDefault("ub-uid-a");
+
+        verify(permissionResolver).invalidateUser(USER_ID);
+        verify(permissionResolver, never()).invalidate();
+    }
+
+    @Test
+    void remove_invalidatesTheAffectedUsersPermissionCache() {
+        RequestContext.set(new RequestContext.Principal(99L, "admin@test.com", false, COMPANY_A_ID, null, null));
+        when(userBranchRepo.findByUid("ub-uid-a")).thenReturn(Optional.of(ubA));
+        when(userBranchRepo.findFirstByUserIdAndIdNotOrderByAssignedAtAscIdAsc(USER_ID, 1001L))
+                .thenReturn(Optional.empty());
+
+        service.remove("ub-uid-a");
+
+        verify(permissionResolver).invalidateUser(USER_ID);
+        verify(permissionResolver, never()).invalidate();
     }
 }

@@ -36,6 +36,19 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     List<UserRole> findByUserIdAndRevokedAtIsNull(Long userId);
 
     /**
+     * Distinct users holding an active grant of {@code roleId}, in any company or branch. Used by
+     * {@code PermissionResolver.invalidateRole} to evict exactly the cached permission sets a
+     * role-permission edit invalidates, instead of clearing the cache for the whole tenant.
+     */
+    @Query("""
+            SELECT DISTINCT ur.userId
+            FROM UserRole ur
+            WHERE ur.role.id = :roleId
+              AND ur.revokedAt IS NULL
+            """)
+    List<Long> findUserIdsByRoleId(@Param("roleId") Long roleId);
+
+    /**
      * Branch-agnostic effective permission codes for a user across a whole company — every active
      * grant in the company regardless of branch. Used by the {@code AuthorityCeiling} target-authority
      * check on {@code setPasswordByUid} (ADR-0059): an account takeover lands in the victim's default

@@ -13,6 +13,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.util.HashMap;
@@ -38,19 +39,22 @@ public class UserBranchServiceImpl implements UserBranchService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final UserCompanyService userCompanyService;
+    private final PermissionResolver permissionResolver;
 
     public UserBranchServiceImpl(UserBranchRepository userBranches,
                                  AppUserRepository users,
                                  BranchRepository branches,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
-                                 UserCompanyService userCompanyService) {
+                                 UserCompanyService userCompanyService,
+                                 PermissionResolver permissionResolver) {
         this.userBranches = userBranches;
         this.users = users;
         this.branches = branches;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
         this.userCompanyService = userCompanyService;
+        this.permissionResolver = permissionResolver;
     }
 
     @Override
@@ -78,6 +82,11 @@ public class UserBranchServiceImpl implements UserBranchService {
         }
         UserBranch saved = userBranches.save(assignment);
 
+        // Permissions resolve per (user, company, BRANCH), so gaining a branch changes this user's
+        // effective set. This path never invalidated at all before the UAT wave-1 fix, which left a
+        // freshly assigned user on a stale cached answer until the TTL happened to lapse.
+        permissionResolver.invalidateUser(user.getId());
+
         // ADR-0046: membership is a prerequisite (asserted above), no longer auto-created here.
         audit.record(AuditEvent.of(AuditActions.BRANCH_ASSIGN, "user_branch", saved.getId(), saved.getUid())
                 .detail(Map.of("userUid", user.getUid(), "branchUid", branch.getUid(),
@@ -96,6 +105,9 @@ public class UserBranchServiceImpl implements UserBranchService {
             clearCurrentDefault(target.getUserId());
             target.markDefault();
         }
+        // The default branch decides where the next login lands, i.e. which scope's permissions
+        // apply first — evict so the change is effective immediately, not up to a TTL later.
+        permissionResolver.invalidateUser(target.getUserId());
         audit.record(AuditEvent.of(AuditActions.BRANCH_SET_DEFAULT, "user_branch",
                         target.getId(), target.getUid())
                 .detail(Map.of("userUid", userUidOf(target), "branchUid", target.getBranch().getUid())));
@@ -130,6 +142,10 @@ public class UserBranchServiceImpl implements UserBranchService {
                 fallbackBranchUid = fallback.getBranch().getUid();
             }
         }
+
+        // Losing a branch (and any auto-promoted fallback default) changes this user's effective
+        // scope — a REVOCATION, so leaving a stale positive cached would be the dangerous direction.
+        permissionResolver.invalidateUser(userId);
 
         Map<String, Object> detail = new HashMap<>();
         detail.put("userUid", userUid);

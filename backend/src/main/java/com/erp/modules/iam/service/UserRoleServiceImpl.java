@@ -117,7 +117,10 @@ public class UserRoleServiceImpl implements UserRoleService {
         userRoles.save(ur);
 
         // ADR-0046: membership is a prerequisite (asserted above), no longer auto-created here.
-        permissionResolver.invalidate();
+        // Evict only THIS user's cached permission sets, and again once the transaction commits —
+        // until then the new row is invisible to other connections and a concurrent read would
+        // re-cache the denying answer for another full TTL (UAT wave 1: "granted, still 403").
+        permissionResolver.invalidateUser(user.getId());
 
         String branchUid = branch != null ? branch.getUid() : null;
 
@@ -155,7 +158,7 @@ public class UserRoleServiceImpl implements UserRoleService {
         String roleCode = ur.getRole().getCode();
 
         ur.revoke(Instant.now());
-        permissionResolver.invalidate();
+        permissionResolver.invalidateUser(ur.getUserId());
 
         audit.record(AuditEvent.of(AuditActions.ROLE_REVOKE, "user_role", ur.getId(), ur.getUid())
                 .detail(Map.of("userUid", userUid != null ? userUid : "",
