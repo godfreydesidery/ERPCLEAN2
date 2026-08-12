@@ -59,15 +59,23 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
     @Override
     public BomCostRollUpDto rollUp(String parentProductUid, String bomUid, String branchUid,
                                    BigDecimal outputQty) {
-        // 1. Resolve the parent product uid for the explosion
+        // 1. Resolve the parent product uid for the explosion.
+        // A named bomUid is authoritative: this roll-up must cost THAT version, and the parent uid
+        // echoed back must be the one that version belongs to — never a caller-supplied hint.
+        // The echo is the only way a caller can tell which recipe produced the amount.
         String resolvedParentUid = parentProductUid;
         String resolvedBomUid = bomUid;
 
-        if (resolvedParentUid == null && bomUid != null) {
+        if (bomUid != null) {
             var bom = Lookups.orNotFound(boms.findByUid(bomUid), "Bom", bomUid);
-            resolvedParentUid = products.findById(bom.getParentProductId())
+            String bomParentUid = products.findById(bom.getParentProductId())
                     .map(p -> p.getUid())
                     .orElseThrow(() -> new NotFoundException("Product not found for BOM."));
+            if (resolvedParentUid != null && !resolvedParentUid.equals(bomParentUid)) {
+                throw new IllegalArgumentException(
+                        "The selected bill of materials does not belong to the requested product.");
+            }
+            resolvedParentUid = bomParentUid;
             resolvedBomUid = bom.getUid();
         }
 
@@ -82,11 +90,21 @@ public class BomCostRollUpServiceImpl implements BomCostRollUpService {
         // avg_cost is sensitive inventory data; must match the caller's active company.
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        // 3. Explode to leaves (multi-level = true for cost roll-up)
-        List<BomExplosionLeafDto> leaves = explosion.explodeToLeaves(
-                resolvedParentUid, outputQty, true);
+        // 3. Explode to leaves (multi-level = true for cost roll-up).
+        // When a version was named, explode THAT version; resolving via the parent product would
+        // re-select the ACTIVE one and cost a different recipe under the requested label.
+        List<BomExplosionLeafDto> leaves = resolvedBomUid != null
+                ? explosion.explodeBomToLeaves(resolvedBomUid, outputQty, true)
+                : explosion.explodeToLeaves(resolvedParentUid, outputQty, true);
 
         if (leaves.isEmpty()) {
+            if (resolvedBomUid != null) {
+                // Refuse: a named version with no lines has no cost of its own. Reporting another
+                // version's number — or a bare zero — would be a wrong answer the caller cannot
+                // detect, which is exactly the defect this path is fixing.
+                throw new IllegalArgumentException(
+                        "This bill of materials version has no components, so it cannot be costed.");
+            }
             return new BomCostRollUpDto(
                     resolvedParentUid, resolvedBomUid, branchUid, outputQty,
                     BigDecimal.ZERO, null, true, List.of());
