@@ -7,12 +7,14 @@ import com.erp.modules.documents.domain.entity.DocumentBranding;
 import com.erp.modules.documents.render.DocumentRenderModel;
 import com.erp.modules.documents.render.DocumentRenderModel.BrandingBlock;
 import com.erp.modules.documents.render.DocumentRenderModel.DocLine;
+import com.erp.modules.documents.render.DocumentRenderModel.Layout;
 import com.erp.modules.documents.render.DocumentRenderModel.MetaPair;
 import com.erp.modules.documents.render.DocumentRenderModel.PartyBlock;
 import com.erp.modules.documents.render.DocumentRenderModel.TaxRow;
 import com.erp.modules.documents.render.DocumentRenderModel.TotalRow;
-import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
-import com.erp.modules.purchases.domain.dto.GoodsReceiptLineDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintLineDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.reporting.export.StatementRenderModel;
@@ -90,7 +92,7 @@ public class DocumentModelBuilder {
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
                 taxRows, totals, inv.currency(), Instant.now().toString(),
-                isVoid ? "VOID" : null);
+                isVoid ? "VOID" : null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
@@ -132,70 +134,120 @@ public class DocumentModelBuilder {
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
                 List.of(), totals, po.currency(), Instant.now().toString(),
-                isVoid ? "VOID" : null);
+                isVoid ? "VOID" : null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
-    // GOODS_RECEIPT — priced (ADR-0023 D-5 as amended 2026-08-08 / BR-DOC-07 as amended)
+    // GOODS_RECEIPT — priced (ADR-0023 D-5 as amended 2026-08-12 / BR-DOC-07 as amended)
     //
-    // Kilimanjaro K2: the GRN now prints the per-line cost and the receipt value. The original
-    // qty-only rule assumed a supplier copy; in practice the GRN is the internal receiving document
-    // the storekeeper and the accounts clerk check the delivery and the supplier bill against, and a
-    // GRN with no values cannot be checked against anything.
+    // Kilimanjaro K2: the GRN prints the per-line cost and the receipt value. The original qty-only
+    // rule assumed a supplier copy; in practice the GRN is the internal receiving document the
+    // storekeeper and the accounts clerk check the delivery and the supplier bill against, and a GRN
+    // with no values cannot be checked against anything.
     //
-    // Every figure here is COPIED, never derived (BR-DOC-02 / BR-DOC-09): the unit cost and line
-    // total are persisted columns on goods_receipt_lines, and the receipt total is computed by the
-    // purchases service and handed over on the DTO.
+    // Kilimanjaro K9 (2026-08-12) takes it the rest of the way to the note the client signs: item
+    // code, selling price, previous cost price and the margin between them per line; VAT bands and a
+    // Net / VAT / Rounding / Total foot; and the five-way sign-off row (Prepared / Checked / Auth. /
+    // Accounts / Security). No schema moved for any of it — GoodsReceiptPrintQuery resolves the
+    // derived columns from data the system already keeps.
+    //
+    // Every figure here is COPIED, never derived (BR-DOC-02 / BR-DOC-09). The one arithmetic step
+    // below is scaling a stored VAT RATE fraction to a percentage for display, which is formatting.
     //
     // The DELIVERY_NOTE (below) shares this builder/renderer pair and deliberately stays qty-only —
     // it is a shipment document (ADR-0021 D-7) and must not disclose prices to whoever signs for it.
     // -------------------------------------------------------------------------
 
-    public DocumentRenderModel buildGoodsReceipt(GoodsReceiptDto gr,
-                                                  List<GoodsReceiptLineDto> lines,
+    public DocumentRenderModel buildGoodsReceipt(GoodsReceiptPrintDto gr,
                                                   DocumentBranding branding,
-                                                  String title) {
-        boolean isVoid = "VOID".equalsIgnoreCase(
-                gr.status() != null ? gr.status().name() : "");
+                                                  String title,
+                                                  String printedByName) {
+        boolean isVoid = "VOID".equalsIgnoreCase(gr.status() != null ? gr.status() : "");
 
         BrandingBlock brand = toBrandingBlock(branding);
 
         List<MetaPair> meta = new ArrayList<>();
-        meta.add(new MetaPair("GRN No.", gr.receiptNumber()));
-        if (gr.receivedAt() != null) meta.add(new MetaPair("Received", gr.receivedAt().toString()));
-        if (gr.supplierName() != null) meta.add(new MetaPair("Supplier", gr.supplierName()));
+        meta.add(new MetaPair("G.R.N. No.", gr.receiptNumber()));
+        if (gr.receivedAt() != null) meta.add(new MetaPair("GRN Date", gr.receivedAt().toString()));
+        if (gr.purchaseOrderNumber() != null) meta.add(new MetaPair("Order No.", gr.purchaseOrderNumber()));
         // The renderer never reads model.currency(), so a priced document must state its currency as
         // a meta pair or the printed amounts are unlabelled figures.
         if (gr.currency() != null) meta.add(new MetaPair("Currency", gr.currency()));
+        if (gr.branchName() != null) meta.add(new MetaPair("Branch", gr.branchName()));
         if (gr.notes() != null) meta.add(new MetaPair("Notes", gr.notes()));
 
-        // Supplier name is carried on the DTO from the backing PO snapshot; fall back to blank rather
-        // than printing an internal database id on a document a human reads.
-        String supplierRef = gr.supplierName() != null ? gr.supplierName() : "";
-        PartyBlock party = new PartyBlock(supplierRef, List.of(), null);
+        // Supplier block: name, then whatever address the supplier master actually holds, then TIN.
+        // Fall back to a blank name rather than printing an internal database id on a document a
+        // human reads.
+        PartyBlock party = new PartyBlock(
+                gr.supplierName() != null ? gr.supplierName() : "",
+                gr.supplierAddressLines() != null ? gr.supplierAddressLines() : List.of(),
+                gr.supplierTin());
 
         List<DocLine> docLines = new ArrayList<>();
-        for (GoodsReceiptLineDto l : lines) {
+        for (GoodsReceiptPrintLineDto l : gr.lines()) {
             docLines.add(new DocLine(
                     l.lineNo(), l.productCode(), l.productName(),
                     l.receivedQty(), l.unitName(),
-                    l.unitCostAmount(),
+                    l.costPrice(),
                     // A goods receipt has no discount concept — leaving this null tells the renderer
                     // to drop the Discount column instead of printing an empty one (K2).
                     null,
                     null,
-                    l.lineCostAmount()));
+                    l.amount(),
+                    l.sellingPrice(), l.lastCostPrice(), l.marginPercent()));
         }
 
-        List<TotalRow> totals = new ArrayList<>();
-        if (gr.receiptTotalAmount() != null) {
-            totals.add(new TotalRow("Total Received Value", gr.receiptTotalAmount(), true));
+        // Band table at the foot, one row per VAT status, so the goods value behind the VAT figure
+        // is visible rather than asserted. Rate travels as the stored fraction; the renderer shows a
+        // percentage, so scale it here — the one place that knows it is a rate and not an amount.
+        List<TaxRow> taxRows = new ArrayList<>();
+        for (GoodsReceiptVatBandDto b : gr.vatBands()) {
+            taxRows.add(new TaxRow(
+                    b.vatStatus(), b.goodsValue(),
+                    b.rate() != null ? b.rate().movePointRight(2) : null,
+                    b.vatAmount()));
         }
+
+        // Net / VAT / Rounding / Total — the foot the client reconciles against. Every figure is
+        // copied from the print DTO, which resolved it in the purchases module (BR-DOC-02/09).
+        List<TotalRow> totals = new ArrayList<>();
+        totals.add(new TotalRow("Net Amount", gr.netAmount(), false));
+        totals.add(new TotalRow("Vat Amount", gr.vatAmount(), false));
+        totals.add(new TotalRow("Rounding Amount", gr.roundingAmount(), false));
+        totals.add(new TotalRow("Total Amount", gr.totalAmount(), true));
+
+        // Sign-off row. "Prepared By" is the only one the system knows — it is the user who received
+        // the stock — so it prints their name above the rule; the rest are ruled blanks for wet
+        // signatures, which is exactly what the paper process wants.
+        List<String> signatories = List.of(
+                gr.preparedByName() != null && !gr.preparedByName().isBlank()
+                        ? "Prepared By: " + gr.preparedByName()
+                        : "Prepared By",
+                "Checked By", "Auth. By", "Accounts", "Security");
+
+        Layout layout = new Layout(true, signatories, printFooter(gr, printedByName));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), totals,
+                taxRows, totals,
                 gr.currency(),
-                Instant.now().toString(), isVoid ? "VOID" : null);
+                Instant.now().toString(), isVoid ? "VOID" : null, layout);
+    }
+
+    /**
+     * The print footprint: who printed this copy, when, and from where. A GRN circulates as paper and
+     * gets reprinted; without it, two copies showing different figures (because a price list moved
+     * between prints) are indistinguishable.
+     */
+    private static String printFooter(GoodsReceiptPrintDto gr, String printedByName) {
+        StringBuilder sb = new StringBuilder("Printed On: ").append(Instant.now());
+        if (printedByName != null && !printedByName.isBlank()) {
+            sb.append("    Printed By: ").append(printedByName);
+        }
+        if (gr.branchName() != null && !gr.branchName().isBlank()) {
+            sb.append("    Printed From: ").append(gr.branchName());
+        }
+        return sb.toString();
     }
 
     // -------------------------------------------------------------------------
@@ -228,7 +280,7 @@ public class DocumentModelBuilder {
         }
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), List.of(), null, Instant.now().toString(), null);
+                List.of(), List.of(), null, Instant.now().toString(), null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
@@ -261,7 +313,7 @@ public class DocumentModelBuilder {
         totals.add(new TotalRow("Total Credit", cn.amount(), true));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), totals, cn.currency(), Instant.now().toString(), null);
+                List.of(), totals, cn.currency(), Instant.now().toString(), null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
@@ -324,7 +376,7 @@ public class DocumentModelBuilder {
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
                 quotationTaxRows(lines), totals, q.currency(), Instant.now().toString(),
-                quotationStamp(q.status()));
+                quotationStamp(q.status()), Layout.plain());
     }
 
     /**

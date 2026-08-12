@@ -4,6 +4,7 @@ import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
 import com.erp.modules.purchases.domain.dto.StockReceivedPayload;
@@ -89,6 +90,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final ScopeGuard                       scopeGuard;
     private final AuditService                     audit;
     private final OutboxPublisher                  outbox;
+    private final GoodsReceiptPrintQuery           printQuery;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -102,7 +104,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    PurchaseOrderServiceImpl poService,
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
-                                   OutboxPublisher outbox) {
+                                   OutboxPublisher outbox,
+                                   GoodsReceiptPrintQuery printQuery) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -116,6 +119,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.scopeGuard    = scopeGuard;
         this.audit         = audit;
         this.outbox        = outbox;
+        this.printQuery    = printQuery;
     }
 
     // -------------------------------------------------------------------------
@@ -213,6 +217,17 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         scopeGuard.assertCanActIn(RequestContext.get(), gr.getCompanyId());
         List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
         return toDto(gr, lineList);
+    }
+
+    /**
+     * K9 — the printed note's read model. Delegated whole to {@link GoodsReceiptPrintQuery}, which
+     * resolves the derived columns (selling price, previous cost, margin, VAT bands) in native SQL
+     * and applies its own scope check.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public GoodsReceiptPrintDto printByUid(String uid) {
+        return printQuery.byUid(uid);
     }
 
     @Override

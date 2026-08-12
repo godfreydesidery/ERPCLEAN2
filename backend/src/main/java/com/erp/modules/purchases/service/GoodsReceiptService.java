@@ -2,6 +2,7 @@ package com.erp.modules.purchases.service;
 
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,16 @@ public interface GoodsReceiptService {
 
     /** Get a GR by uid; assertCanActIn on every read path. */
     GoodsReceiptDto getByUid(String uid);
+
+    /**
+     * The printed vendor GRN's own read model (Kilimanjaro K9) — the receipt plus the selling price,
+     * previous cost, margin and expected VAT bands the printed note shows.
+     *
+     * <p>Deliberately NOT folded into {@link #getByUid(String)}: those extra figures include the
+     * shop's margin, and the plain receipt read model is served to everyone who can receive stock.
+     * This one is reached only through the document renderer, which is gated on DOCUMENT.RENDER.
+     */
+    GoodsReceiptPrintDto printByUid(String uid);
 
     /** Paged list for a company. */
     Page<GoodsReceiptDto> list(Long companyId, String q, Pageable pageable);
