@@ -93,6 +93,20 @@ public class DashboardServiceImpl implements DashboardService {
     /** Maximum periods to include in the trend (≤12 round-trips, D-4). */
     private static final int MAX_TREND_PERIODS = 12;
 
+    /** {@code branchLabel} when the caller applied no branch filter (UAT, 2026-08). */
+    private static final String ALL_BRANCHES_LABEL = "All branches";
+
+    /**
+     * {@code branchLabel} when a branch id was supplied that this company does not own.
+     *
+     * <p>Deliberately NOT "All branches": the caller asked for a narrower view and did not get one,
+     * and a header that quietly claimed group scope would hide that. Deliberately not the raw id
+     * either — an internal id is never a label (the {@code PosTillDto} precedent). The panels
+     * themselves already return nothing for such an id, so the request stays a 200 with an honest
+     * header rather than becoming a new error path on a read-only dashboard.
+     */
+    private static final String UNKNOWN_BRANCH_LABEL = "Unknown branch";
+
     private final ScopeGuard               scopeGuard;
     private final PermissionChecks         permChecks;
     private final CompanyRepository        companyRepo;
@@ -180,8 +194,15 @@ public class DashboardServiceImpl implements DashboardService {
         TrendDto            netTrend       = canFinance ? safeNetProfitTrend(companyId, currency) : null;
         SalesByBranchDto    salesPanel     = canFinance ? safeSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency) : null;
 
+        // Echo the branch the request was actually filtered to (UAT, 2026-08). Resolved from the
+        // BRANCH row, scoped to the company already asserted above — never from the caller's
+        // parameter alone, so a foreign branch id cannot name another tenant's branch in the header.
+        BranchScope branchScope = resolveBranchScope(companyId, branchId);
+
         BiHeaderDto header = new BiHeaderDto(
-                companyId, companyName, currency, periodLabel,
+                companyId, companyName,
+                branchScope.uid(), branchScope.name(), branchScope.label(),
+                currency, periodLabel,
                 effectiveFrom, effectiveTo, LocalDate.now(), Instant.now());
 
         return new DashboardDto(header, financePanel, wcPanel, inventoryPanel, crmPanel,
@@ -532,6 +553,39 @@ public class DashboardServiceImpl implements DashboardService {
         return companyRepo.findById(companyId)
                 .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
     }
+
+    /**
+     * Resolves the requested branch filter into the identity the header states (UAT, 2026-08).
+     *
+     * <p>Three outcomes, and the label is never absent for any of them:
+     * <ol>
+     *   <li>no branch id → {@code (null, null, "All branches")};</li>
+     *   <li>a branch id this company owns → {@code (uid, name, name)};</li>
+     *   <li>a branch id it does not own → {@code (null, null, "Unknown branch")}.</li>
+     * </ol>
+     *
+     * <p>Case 3 is deliberately not case 1. The caller asked to narrow the view and the filter
+     * matched nothing, so the panels come back empty; a header claiming "All branches" would make an
+     * empty dashboard look like a company with no trade. It is also deliberately not an error — this
+     * is a read-only dashboard and the panels already degrade gracefully; turning a header field into
+     * a new 404 path would be a behaviour change well beyond stating the scope.
+     *
+     * <p>{@code findByIdAndCompany_Id}, not {@code findById}: the branch id arrives as a request
+     * parameter, so resolving it unscoped is exactly the confused-deputy read
+     * {@code TenantScopingRulesTest} exists to prevent — another company's branch NAME would be
+     * echoed back to this caller.
+     */
+    private BranchScope resolveBranchScope(Long companyId, Long branchId) {
+        if (branchId == null) {
+            return new BranchScope(null, null, ALL_BRANCHES_LABEL);
+        }
+        return branchRepository.findByIdAndCompany_Id(branchId, companyId)
+                .map(b -> new BranchScope(b.getUid(), b.getName(), b.getName()))
+                .orElseGet(() -> new BranchScope(null, null, UNKNOWN_BRANCH_LABEL));
+    }
+
+    /** The branch identity a dashboard header states: uid, name and the never-null display label. */
+    private record BranchScope(String uid, String name, String label) {}
 
     private static BigDecimal[] zero2() {
         return new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};

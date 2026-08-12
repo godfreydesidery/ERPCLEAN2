@@ -10,6 +10,15 @@
 export interface BiHeaderDto {
   companyId: string;
   companyName: string;
+  /** Branch the request was filtered to; null when no branch filter was applied. */
+  branchUid: string | null;
+  branchName: string | null;
+  /**
+   * Never null. The branch's name when one was filtered, "All branches" when none was, and
+   * "Unknown branch" when the supplied branch does not belong to this company. Render verbatim —
+   * the server authors the phrase, and "Unknown branch" must never be softened to "All branches".
+   */
+  branchLabel: string;
   currency: string;
   periodLabel: string;
   fromDate: string;   // LocalDate ISO

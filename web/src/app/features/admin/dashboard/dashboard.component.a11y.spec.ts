@@ -23,7 +23,9 @@ import { assertA11y } from '../../../../testing/a11y.helper';
 
 const FULL_DTO: DashboardDto = {
   header: {
-    companyId: '10', companyName: 'Acme Ltd', currency: 'TZS', periodLabel: 'Jan 2026',
+    companyId: '10', companyName: 'Acme Ltd',
+    branchUid: 'BR-UID-1', branchName: 'Kilimanjaro', branchLabel: 'Kilimanjaro',
+    currency: 'TZS', periodLabel: 'Jan 2026',
     fromDate: '2026-01-01', toDate: '2026-01-31', asOf: '2026-01-31',
     generatedAt: '2026-01-31T10:00:00Z',
   },

@@ -22,6 +22,9 @@ const MOCK_REPORT: StockReportDto = {
     country: 'Tanzania', contactPhone: '+255700000000', contactEmail: 'info@sam.co.tz',
     taxId: 'TIN-999', vrn: 'VRN-888',
   },
+  branchUid: 'BR-UID-KILI',
+  branchName: 'Kilimanjaro',
+  branchLabel: 'Kilimanjaro',
   currency: 'TZS',
   rows: [
     { productCode: 'P001', productName: 'Widget', quantityOnHand: 10, buyingPrice: 1000, sellingPrice: 1500, value: 10000 },

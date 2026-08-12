@@ -99,6 +99,16 @@
           </div>
 
           <h2 class="h5">Stock Report</h2>
+          <!--
+            Which branch these figures cover, stated on the page. The server sends branchLabel
+            already worded ("Kilimanjaro", or "All branches" when nothing was filtered), so the
+            screen and the exported file can never disagree about the report's scope.
+          -->
+          <p class="mb-1">
+            <span class="status-tag status-tag--neutral">
+              <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Branch: {{ r.branchLabel }}
+            </span>
+          </p>
           <p class="text-muted small mb-3">
             Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
             · Quantities are in each product's base unit

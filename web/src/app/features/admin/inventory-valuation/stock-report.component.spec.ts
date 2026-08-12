@@ -25,6 +25,9 @@ const MOCK_REPORT: StockReportDto = {
     addressLine1: null, addressLine2: null, city: null, region: null, country: null,
     contactPhone: null, contactEmail: null, taxId: null, vrn: null,
   },
+  branchUid: null,
+  branchName: null,
+  branchLabel: 'All branches',
   currency: 'TZS',
   rows: [
     { productCode: 'P001', productName: 'Widget', quantityOnHand: 10, buyingPrice: 1000, sellingPrice: 1500, value: 10000 },
@@ -123,5 +126,31 @@ describe('StockReportComponent', () => {
 
     expect(exportSpy).toHaveBeenCalledWith('XLSX');
     expect(comp.exporting()).toBe(false);
+  });
+
+  // ── UAT 2026-08: the page must say which branch these figures cover ─────────
+
+  it('states the branch scope on the page — "All branches" when nothing was filtered', () => {
+    makeBed();
+    const fixture = TestBed.createComponent(StockReportComponent);
+    fixture.detectChanges();
+
+    // Silence is the bug: an absent branch line reads exactly like a branch-filtered report.
+    expect(fixture.nativeElement.textContent).toContain('Branch: All branches');
+  });
+
+  it('names the branch when the report was narrowed to one', () => {
+    const branchReport: StockReportDto = {
+      ...MOCK_REPORT,
+      branchUid: 'BR-UID-KILI',
+      branchName: 'Kilimanjaro',
+      branchLabel: 'Kilimanjaro',
+    };
+    makeBed({ reportSpy: vi.fn(() => of(branchReport)) });
+    const fixture = TestBed.createComponent(StockReportComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Branch: Kilimanjaro');
+    expect(fixture.nativeElement.textContent).not.toContain('All branches');
   });
 });

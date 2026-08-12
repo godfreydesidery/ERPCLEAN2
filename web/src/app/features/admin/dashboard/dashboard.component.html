@@ -75,6 +75,27 @@
 
   @if (selectedCompanyId()) {
 
+    <!--
+      ── Scope banner (UAT 2026-08) ──────────────────────────────────────────────
+      What the SERVER says it just filtered to, not what the picker above asked for. The
+      dashboard used to return only companyId/companyName, so nothing on the page proved the
+      branch filter had been honoured. branchLabel is never null and is already worded
+      ("Kilimanjaro" / "All branches" / "Unknown branch") — print it verbatim.
+    -->
+    @if (header(); as h) {
+      <p class="mb-3 d-flex flex-wrap align-items-center gap-2">
+        <span class="status-tag status-tag--neutral">
+          <i class="bi bi-building me-1" aria-hidden="true"></i>{{ h.companyName }}
+        </span>
+        <span class="status-tag status-tag--neutral">
+          <i class="bi bi-diagram-3 me-1" aria-hidden="true"></i>Branch: {{ h.branchLabel }}
+        </span>
+        <span class="status-tag status-tag--neutral">
+          <i class="bi bi-calendar3 me-1" aria-hidden="true"></i>{{ h.periodLabel }}
+        </span>
+      </p>
+    }
+
     <!-- ── Health strip ──────────────────────────────────────────────────────── -->
     @if (health().length > 0) {
       <output class="mb-4 d-flex flex-wrap gap-2" aria-label="Reconciliation health indicators">

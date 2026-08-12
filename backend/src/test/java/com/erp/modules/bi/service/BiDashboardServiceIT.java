@@ -451,6 +451,65 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // UAT 2026-08 — the header must say which branch the request was filtered to
+    // =========================================================================
+
+    /**
+     * The live defect: a branch manager passed {@code branchId} and got a 200 whose header carried
+     * only companyId/companyName, so nothing proved the filter had been honoured.
+     */
+    @Test
+    void header_echoesTheBranchTheRequestWasFilteredTo() {
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        DashboardDto dto = dashboardService.dashboard(
+                companyA.getId(), LocalDate.now().withDayOfMonth(1), LocalDate.now(),
+                branchA.getId());
+
+        assertThat(dto.header().branchUid()).isEqualTo(branchA.getUid());
+        assertThat(dto.header().branchName()).isEqualTo(branchA.getName());
+        assertThat(dto.header().branchLabel()).isEqualTo(branchA.getName());
+    }
+
+    /** Silence is the bug: a group-wide dashboard states that it is group-wide. */
+    @Test
+    void header_noBranchFilter_saysAllBranches() {
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        DashboardDto dto = dashboardService.dashboard(
+                companyA.getId(), LocalDate.now().withDayOfMonth(1), LocalDate.now(), null);
+
+        assertThat(dto.header().branchUid()).isNull();
+        assertThat(dto.header().branchName()).isNull();
+        assertThat(dto.header().branchLabel()).isEqualTo("All branches");
+    }
+
+    /**
+     * A branch belonging to ANOTHER company must never be named in this company's header, and must
+     * never read as "All branches" either: the filter matched nothing, the panels come back empty,
+     * and a group-wide claim would make an empty dashboard look like a company with no trade.
+     */
+    @Test
+    void header_foreignBranchId_isNeitherNamedNorReportedAsGroupWide() {
+        RequestContext.set(new RequestContext.Principal(
+                rootAId, "bi_root_a", true, companyA.getId(), branchA.getId(), null));
+
+        DashboardDto dto = dashboardService.dashboard(
+                companyA.getId(), LocalDate.now().withDayOfMonth(1), LocalDate.now(),
+                branchB.getId());
+
+        assertThat(dto.header().branchName())
+                .as("another company's branch name must never surface in this header")
+                .isNull();
+        assertThat(dto.header().branchUid()).isNull();
+        assertThat(dto.header().branchLabel())
+                .isEqualTo("Unknown branch")
+                .isNotEqualTo("All branches");
+    }
+
+    // =========================================================================
     // Bar 4: Tenant isolation — company A dashboard never reflects company B data
     // =========================================================================
 
