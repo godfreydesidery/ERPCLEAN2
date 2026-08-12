@@ -291,7 +291,9 @@ public class CustomerServiceImpl implements CustomerService {
     private static void applyDefaults(Customer c, String country, Long defaultPriceListId,
                                       Long defaultAgentId, CustomerSegment segment, Boolean taxExempt,
                                       String taxExemptionRef, String defaultCurrency) {
-        c.setCountry(country);
+        // Same trap the supplier path had: country is VARCHAR(2), so a typed-out country name used
+        // to fail on the DB constraint with a message that named no field at all.
+        c.setCountry(PartyFieldValidator.isoCountryCode(country));
         c.setDefaultPriceListId(defaultPriceListId);
         c.setDefaultAgentId(defaultAgentId);
         if (segment != null) {

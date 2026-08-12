@@ -9,6 +9,12 @@
  *  5. lineUnitsState transitions loading → idle.
  *  6. lineUnitsState set to 'error' when listProductUnits fails.
  *
+ * Suite E — stated unit price on the add-line form (order-to-cash):
+ *  1. The typed price is sent as unitPriceOverride; an ordinary line omits it.
+ *  2. A zero / negative / non-numeric price is refused client-side, naming the way out.
+ *  3. The screen says up front whether the catalogue can price the product.
+ *  4. The server's refusal is shown on the form.
+ *
  * Suite C — Print PDF (mirrors PurchaseOrderDetailComponent's pattern):
  *  1. printPdf() calls DocumentsService.renderBlob('INVOICE', uid).
  *  2. Button hidden on DRAFT (a draft has no rendered document).
@@ -50,6 +56,14 @@ const STUB_UNITS = [
 const STUB_PRODUCT = {
   uid: 'PROD-UID-2', id: '7', code: 'P002', name: 'Beverage',
   status: 'ACTIVE', companyId: '10',
+};
+
+/** A base-unit price row for the invoice's company — the "catalogue can price it" case. */
+const STUB_PRICE = {
+  id: '1', productId: '7', priceListId: '1', priceListUid: 'PL-UID-1',
+  priceListCode: 'STD', priceListName: 'Standard', companyId: '10',
+  price: { amount: '2500.00', currency: 'TZS' },
+  unitUid: null, unitCode: null, unitName: null,
 };
 
 // ── Line stub (FR-SALES-08 price override + weighed-goods requestedQuantity) ───
@@ -104,9 +118,11 @@ function makeBed(overrides: {
   issueFiscalReceiptSpy?: ReturnType<typeof vi.fn>;
   overrideLinePriceSpy?: ReturnType<typeof vi.fn>;
   addLineSpy?: ReturnType<typeof vi.fn>;
+  listPricesSpy?: ReturnType<typeof vi.fn>;
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
+  const listPricesSpy = overrides.listPricesSpy ?? vi.fn(() => of([STUB_PRICE]));
   const invoice = overrides.invoice ?? STUB_INVOICE;
   const lines = overrides.lines ?? [];
   const renderBlobSpy = overrides.renderBlobSpy ?? vi.fn(() => of(new Blob(['%PDF'])));
@@ -146,6 +162,7 @@ function makeBed(overrides: {
         useValue: {
           list: vi.fn(() => of({ rows: [], meta: {} })),
           listProductUnits: listProductUnitsSpy,
+          listPrices: listPricesSpy,
         },
       },
       {
@@ -171,7 +188,7 @@ function makeBed(overrides: {
 
   return {
     listProductUnitsSpy, renderBlobSpy, getFiscalReceiptSpy, issueFiscalReceiptSpy,
-    overrideLinePriceSpy, addLineSpy, alertsSpy,
+    overrideLinePriceSpy, addLineSpy, alertsSpy, listPricesSpy,
   };
 }
 
@@ -996,5 +1013,160 @@ describe('SalesInvoiceDetailComponent — manager-authorised discount', () => {
     const { comp } = await refusedDiscountedLine(addLineSpy);
 
     expect(comp.canRequestDiscountApproval()).toBe(false);
+  });
+});
+
+// ── Suite E — stated unit price on the add-line form (UAT: order-to-cash) ─────
+//
+// A company with no price list — every company on day one — could quote and order an uncatalogued
+// product but never INVOICE it, because this screen alone never sent the price the seller typed
+// (the quotation and sales-order screens both did). Invoicing is the step that bills the customer,
+// so the whole chain was blocked here. These specs pin that the field is sent, that an ordinary
+// line still leaves pricing to the catalogue, that a zero never reaches the server, and that a
+// refusal is readable — the UAT's complaint was messages that do not say what to do.
+
+/** Drives the screen to "a product is selected on a DRAFT invoice", ready to add a line. */
+async function readyToAddLine(overrides: Parameters<typeof makeBed>[0] = {}) {
+  const bed = makeBed(overrides);
+  const fixture = TestBed.createComponent(SalesInvoiceDetailComponent);
+  fixture.componentRef.setInput('uid', 'INV-UID-1');
+  const comp = fixture.componentInstance;
+  await vi.runAllTimersAsync();
+
+  comp.selectProduct(STUB_PRODUCT as any);
+  await vi.runAllTimersAsync();
+  comp.newLineQty.set('3');
+  return { ...bed, fixture, comp };
+}
+
+describe('SalesInvoiceDetailComponent — stated unit price', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends the typed price as unitPriceOverride', async () => {
+    const { comp, addLineSpy } = await readyToAddLine();
+
+    comp.newLineUnitPrice.set('2500');
+    comp.addLine();
+    await vi.runAllTimersAsync();
+
+    expect(addLineSpy).toHaveBeenCalledTimes(1);
+    expect(addLineSpy.mock.calls[0][1].unitPriceOverride).toBe('2500');
+  });
+
+  it('omits unitPriceOverride on an ordinary line so the catalogue prices it', async () => {
+    const { comp, addLineSpy } = await readyToAddLine();
+
+    comp.addLine();
+    await vi.runAllTimersAsync();
+
+    expect(addLineSpy.mock.calls[0][1].unitPriceOverride).toBeUndefined();
+  });
+
+  // A zero would give the goods away AND, reading as equal to the resolved price, would be stamped
+  // as no override at all — so it must never leave the browser.
+  it.each([
+    ['0', 'a zero'],
+    ['-5', 'a negative price'],
+    ['abc', 'a non-numeric price'],
+  ])('refuses %s without calling the server (%s)', async (typed) => {
+    const { comp, addLineSpy } = await readyToAddLine();
+
+    comp.newLineUnitPrice.set(typed);
+    comp.addLine();
+    await vi.runAllTimersAsync();
+
+    expect(addLineSpy).not.toHaveBeenCalled();
+    expect(comp.lineFormError()).toBe(
+      'Enter a unit price greater than zero, or leave it blank to use the catalogue price.',
+    );
+  });
+
+  it('shows the refusal of a zero price on the form, naming the way out', async () => {
+    const { comp, fixture } = await readyToAddLine();
+
+    comp.newLineUnitPrice.set('0');
+    comp.addLine();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const alert = fixture.nativeElement.querySelector('form[aria-label="Add invoice line"] [role="alert"]');
+    expect(alert?.textContent).toContain('greater than zero');
+    expect(alert?.textContent).toContain('leave it blank to use the catalogue price');
+  });
+
+  it('clears the typed price once the line is added', async () => {
+    const { comp } = await readyToAddLine();
+
+    comp.newLineUnitPrice.set('2500');
+    comp.addLine();
+    await vi.runAllTimersAsync();
+
+    expect(comp.newLineUnitPrice()).toBe('');
+    expect(comp.priceState()).toBe('idle');
+  });
+
+  it('tells the user up front when the catalogue cannot price the product', async () => {
+    const { comp, fixture } = await readyToAddLine({ listPricesSpy: vi.fn(() => of([])) });
+    fixture.detectChanges();
+
+    expect(comp.priceState()).toBe('missing');
+    expect(fixture.nativeElement.textContent).toContain('No price set for this product yet');
+    expect(fixture.nativeElement.textContent).toContain('enter a unit price to bill it');
+  });
+
+  it('shows the list price when the catalogue has one', async () => {
+    const { comp, fixture } = await readyToAddLine();
+    fixture.detectChanges();
+
+    expect(comp.priceState()).toBe('ok');
+    expect(comp.resolvedPrice()).toBe('2500.00');
+    expect(fixture.nativeElement.textContent).toContain('List price 2500.00');
+  });
+
+  // A pack row would quote a crate price against an "Each" line, which reads as simply wrong.
+  it('prefers this company base-unit row over a pack row', async () => {
+    const packRow = { ...STUB_PRICE, id: '2', unitUid: 'U-CRATE', price: { amount: '30000.00', currency: 'TZS' } };
+    const { comp } = await readyToAddLine({ listPricesSpy: vi.fn(() => of([packRow, STUB_PRICE])) });
+
+    expect(comp.resolvedPrice()).toBe('2500.00');
+  });
+
+  // Not knowing is not the same as knowing there is no price: claiming "no price set" on a failed
+  // lookup would send the user off to configure a price list they may already have.
+  it('says nothing when the price lookup itself fails', async () => {
+    const { comp, fixture } = await readyToAddLine({
+      listPricesSpy: vi.fn(() => throwError(() => new Error('network'))),
+    });
+    fixture.detectChanges();
+
+    expect(comp.priceState()).toBe('idle');
+    expect(fixture.nativeElement.textContent).not.toContain('No price set for this product yet');
+  });
+
+  it('surfaces the server’s refusal text on the form', async () => {
+    const message =
+      'This product has no price yet — no price list is configured for this company. '
+      + 'Set up a price list, or enter a unit price on the line.';
+    const { comp, fixture } = await readyToAddLine({
+      addLineSpy: vi.fn(() => throwError(() => refusal(400, message))),
+    });
+
+    comp.addLine();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.lineFormError()).toBe(message);
+    expect(fixture.nativeElement.textContent).toContain('enter a unit price on the line');
+  });
+
+  it('clears the price hint when the search box is retyped', async () => {
+    const { comp } = await readyToAddLine();
+    expect(comp.priceState()).toBe('ok');
+
+    comp.onProductSearchChange('other');
+
+    expect(comp.priceState()).toBe('idle');
+    expect(comp.resolvedPrice()).toBeNull();
   });
 });

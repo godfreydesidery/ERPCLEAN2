@@ -10,7 +10,11 @@ import java.util.List;
  * branch-scoped. Writes nothing, posts no GL, emits no event.
  *
  * @param parentProductUid  the product exploded
- * @param bomUid            the BOM version used
+ * @param bomUid            the BOM version whose components produced {@code standardCostAmount};
+ *                          null only when the request named no version and the product's ACTIVE
+ *                          version was used. When non-null it is the version actually costed —
+ *                          callers rely on this to detect a wrong version, so it must never be a
+ *                          bare echo of the request
  * @param branchUid         the branch whose avg_cost was read
  * @param outputQty         the output quantity the explosion was computed for
  * @param standardCostAmount  Σ (leaf totalQuantity × leaf avgCost) for leaves with a cost; null if

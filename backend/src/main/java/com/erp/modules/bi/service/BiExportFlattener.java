@@ -39,6 +39,15 @@ public class BiExportFlattener {
         String companyName = dto.header() != null ? dto.header().companyName() : "";
         String currency    = dto.header() != null ? dto.header().currency()    : "";
         String periodLabel = dto.header() != null ? dto.header().periodLabel() : "";
+        String branchLabel = dto.header() != null ? dto.header().branchLabel() : null;
+
+        // ── Scope banner (UAT, 2026-08) ──────────────────────────────────────
+        // A downloaded dashboard outlives the screen that produced it, so which branch it covers
+        // has to be on the page. branchLabel is never null on a real header and already says
+        // "All branches" when nothing was filtered — no branch line at all was the defect.
+        if (branchLabel != null && !branchLabel.isBlank()) {
+            rows.add(Row.sectionHeader("Branch: " + branchLabel));
+        }
 
         // ── Finance panel ────────────────────────────────────────────────────
         FinanceSummaryDto fs = dto.finance();

@@ -217,6 +217,39 @@ class StockReportQueryIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // UAT 2026-08 — the report must say which branch it covers
+    // =========================================================================
+
+    /**
+     * The live defect: a branch manager passed {@code branchUid}, got a 200, and nothing in the body
+     * said whether the filter had been honoured — on figures signed off every morning.
+     */
+    @Test
+    void branchFilter_isEchoedBackAsUidAndName() {
+        setCtx();
+
+        StockReportDto report = stockReportQuery.report(company.getId(), branch.getUid());
+
+        assertThat(report.branchUid()).isEqualTo(branch.getUid());
+        assertThat(report.branchName()).isEqualTo(branch.getName());
+        assertThat(report.branchLabel())
+                .as("the printable label is the branch's own name when one was filtered")
+                .isEqualTo(branch.getName());
+    }
+
+    /** Silence is the bug: a company-wide listing states that it is company-wide. */
+    @Test
+    void noBranchFilter_saysAllBranchesRatherThanLeavingItBlank() {
+        setCtx();
+
+        StockReportDto report = stockReportQuery.report(company.getId());
+
+        assertThat(report.branchUid()).isNull();
+        assertThat(report.branchName()).isNull();
+        assertThat(report.branchLabel()).isEqualTo("All branches");
+    }
+
+    // =========================================================================
     // Private helpers
     // =========================================================================
 

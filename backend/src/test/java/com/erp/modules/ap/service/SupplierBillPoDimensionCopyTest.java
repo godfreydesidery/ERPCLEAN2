@@ -66,7 +66,9 @@ class SupplierBillPoDimensionCopyTest {
         audit               = mock(AuditService.class);
         service = new SupplierBillServiceImpl(bills, lines, suppliers, paymentTermsRepo,
                 companies, chartOfAccounts, purchaseMatchReader,
-                new DirectReceiptRatificationGuard(purchaseMatchReader), scopeGuard, audit);
+                new DirectReceiptRatificationGuard(purchaseMatchReader),
+                new BillComparisonReader(mock(com.erp.modules.ap.repository.BillMatchRepository.class)),
+                scopeGuard, audit);
 
         RequestContext.set(new RequestContext.Principal(1L, "user", true, COMPANY_ID, 20L, null));
 

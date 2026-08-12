@@ -52,11 +52,11 @@
               </div>
             } @else {
               <select id="periodPicker" name="periodPicker" class="form-select"
-                      [ngModel]="selectedPeriodUid()"
+                      [ngModel]="selectedPeriodId()"
                       (ngModelChange)="onPeriodChange($event)">
                 <option value="">— All periods —</option>
                 @for (p of periods(); track p.uid) {
-                  <option [value]="p.uid">
+                  <option [value]="p.id">
                     P{{ p.periodNo }}: {{ p.startDate }} – {{ p.endDate }}
                     ({{ p.status }})
                   </option>
@@ -124,6 +124,27 @@
             <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
               <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
               <strong>Out of balance</strong> — the books do not balance. Investigate before closing.
+            </div>
+          }
+
+          <!-- Export toolbar — only over figures that are actually on the screen, and only for a
+               caller who holds REPORT.EXPORT (the server requires it on top of GL.VIEW). -->
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
             </div>
           }
 

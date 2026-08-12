@@ -13,6 +13,7 @@ import com.erp.modules.purchases.service.PurchaseCostSuggestionService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -200,19 +201,25 @@ public class PurchaseOrderController {
         return ApiResponse.ok(service.submitForApproval(uid));
     }
 
-    /** Approve a PO that is pending approval (ADR-0027 D-6). */
+    /**
+     * Approve a PO that is pending approval (ADR-0027 D-6). The service refuses an order that is
+     * not actually awaiting a decision — an APPROVED badge on an unreviewed order is a false record.
+     *
+     * <p>{@code @Valid} is load-bearing: {@code ApprovePoRequest.companyUid} is declared
+     * {@code @NotBlank} but without this the declaration was never enforced.
+     */
     @PostMapping("/uid/{uid}/approve")
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.APPROVE')")
     public ApiResponse<PurchaseOrderDto> approvePo(@PathVariable String uid,
-                                                    @RequestBody ApprovePoRequest req) {
+                                                    @Valid @RequestBody ApprovePoRequest req) {
         return ApiResponse.ok(service.approvePo(uid, req));
     }
 
-    /** Reject a PO that is pending approval (ADR-0027 D-6). */
+    /** Reject a PO that is pending approval (ADR-0027 D-6). Same state gate as approve. */
     @PostMapping("/uid/{uid}/reject")
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.APPROVE')")
     public ApiResponse<PurchaseOrderDto> rejectPo(@PathVariable String uid,
-                                                   @RequestBody ApprovePoRequest req) {
+                                                   @Valid @RequestBody ApprovePoRequest req) {
         return ApiResponse.ok(service.rejectPo(uid, req));
     }
 

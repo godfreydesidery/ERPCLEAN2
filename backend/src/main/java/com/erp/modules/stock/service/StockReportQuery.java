@@ -34,6 +34,15 @@ public class StockReportQuery {
 
     private static final String CURRENCY_FALLBACK = "TZS";
 
+    /**
+     * What {@code branchLabel} says when no branch filter was applied (UAT, 2026-08).
+     *
+     * <p>The report used to carry no branch identity at all, so a company-wide listing and a
+     * branch-filtered one were indistinguishable in the body. An absent field is not an answer:
+     * this states the scope in words, on the screen and on the printed page.
+     */
+    private static final String ALL_BRANCHES_LABEL = "All branches";
+
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
 
@@ -123,6 +132,9 @@ public class StockReportQuery {
 
         return new StockReportDto(
                 companyDto,
+                branch != null ? branch.uid() : null,
+                branch != null ? branch.name() : null,
+                branch != null ? branch.name() : ALL_BRANCHES_LABEL,
                 header.baseCurrency() != null ? header.baseCurrency() : CURRENCY_FALLBACK,
                 rows, totalValue, Instant.now().toString());
     }
@@ -138,19 +150,23 @@ public class StockReportQuery {
     }
 
     /**
-     * Resolve an optional uid filter to (id, display name), scoped to the caller's company — so a
-     * branch uid from another tenant reads as "not found" rather than filtering across the boundary.
-     * Same shape as {@code StockMovementReportQuery}/{@code SalesReportQuery}.
+     * Resolve an optional uid filter to (id, uid, display name), scoped to the caller's company — so
+     * a branch uid from another tenant reads as "not found" rather than filtering across the
+     * boundary. Same shape as {@code StockMovementReportQuery}/{@code SalesReportQuery}.
+     *
+     * <p>The uid is selected back out of the row rather than echoed from the parameter: what the
+     * response states is what the filter actually resolved to, not what the caller typed.
      */
     private NamedRef resolveNamedRef(String table, String nameColumn, String uid,
                                       Long companyId, String entityName) {
         if (uid == null || uid.isBlank()) {
             return null;
         }
-        String sql = "SELECT id, " + nameColumn + " AS name FROM " + table
+        String sql = "SELECT id, uid, " + nameColumn + " AS name FROM " + table
                 + " WHERE uid = ? AND company_id = ?";
         List<NamedRef> found = jdbc.query(sql,
-                (rs, rowNum) -> new NamedRef(rs.getLong("id"), rs.getString("name")),
+                (rs, rowNum) -> new NamedRef(
+                        rs.getLong("id"), rs.getString("uid"), rs.getString("name")),
                 uid, companyId);
         if (found.isEmpty()) {
             throw NotFoundException.of(entityName, uid);
@@ -186,7 +202,7 @@ public class StockReportQuery {
         return found.get(0);
     }
 
-    private record NamedRef(Long id, String name) {}
+    private record NamedRef(Long id, String uid, String name) {}
 
     private record CompanyHeader(String name, String legalName, String taxId, String vrn,
                                   String contactPhone, String contactEmail,

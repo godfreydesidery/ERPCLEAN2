@@ -35,8 +35,17 @@ export interface PosSessionDto {
   sessionNumber: string | null;
   companyId: string;
   branchId: string;
+  /**
+   * Human labels for the three ids above (UAT 2026-08). The session used to expose
+   * `cashierId: "7"` / `posTillId: "1"` / `branchId: "1"` and nothing else, so a shift could not
+   * be read without three cross-reference lookups. Null when the row behind the id could not be
+   * resolved — render as "—", never fall back to printing the id.
+   */
+  branchName: string | null;
   posTillId: string;
+  tillName: string | null;
   cashierId: string;
+  cashierName: string | null;
   status: PosSessionStatus;
   openedAt: string | null;
   closedAt: string | null;
@@ -54,7 +63,11 @@ export interface PosSessionDto {
 export interface XReadDto {
   sessionUid: string;
   posTillId: string;
+  tillName: string | null;
   cashierId: string;
+  cashierName: string | null;
+  branchId: string;
+  branchName: string | null;
   openedAt: string | null;
   openingFloatAmount: string;
   totalSalesAmount: string;
@@ -68,7 +81,11 @@ export interface XReadDto {
 export interface ZReadDto {
   sessionUid: string;
   posTillId: string;
+  tillName: string | null;
   cashierId: string;
+  cashierName: string | null;
+  branchId: string;
+  branchName: string | null;
   openedAt: string | null;
   closedAt: string | null;
   reconciledAt: string | null;

@@ -36,6 +36,21 @@ export type DirectReceiptRatificationState =
   | 'RATIFICATION_REFUSED'
   | 'RATIFIED';
 
+/**
+ * How much of a bill was actually checked against a purchase order and a goods receipt
+ * (UAT 2026-08-12). Derived server-side at read time from the per-line match rows; never stored.
+ *
+ * A bill can be MATCHED, posted and payable with no comparison behind it at all — a service charge
+ * carries no purchase link, and an AP opening balance never reaches the match engine. Those answer
+ * NO_LINES_COMPARED and NEVER_MATCHED respectively, never ALL_LINES_COMPARED: an unknown must never
+ * render as verified.
+ */
+export type BillComparisonState =
+  | 'ALL_LINES_COMPARED'
+  | 'SOME_LINES_COMPARED'
+  | 'NO_LINES_COMPARED'
+  | 'NEVER_MATCHED';
+
 export type ApPaymentKind = 'SINGLE' | 'PAYMENT_RUN';
 
 export type AgeingBucket =
@@ -104,6 +119,12 @@ export interface SupplierBillDto {
    * do not care) simply render nothing — treat a missing value as NOT_APPLICABLE.
    */
   directReceiptRatification?: DirectReceiptRatificationState | null;
+  /**
+   * Derived, never stored: how much of this bill was actually checked against a purchase order and
+   * a goods receipt. Optional because older responses and test fixtures may omit it — but a missing
+   * value means "we do not know", NOT "checked". Render it as such.
+   */
+  comparisonState?: BillComparisonState | null;
   lines: SupplierBillLineDto[];
 }
 
@@ -137,23 +158,44 @@ export interface EnterBillRequest {
 
 // ── 3-way match ───────────────────────────────────────────────────────────────
 
+/**
+ * One line's 3-way match outcome — mirrors the backend
+ * `BillMatchResultDto.LineMatchDto` record field for field.
+ *
+ * NULL IS NOT ZERO. Every fact and variance below is null when that leg of the comparison did not
+ * run (no order line resolved, no goods receipt found). A UAT bill of 149,999,985 came back
+ * "MATCHED" with both facts null and every variance rendered as `0.00`, which read as "checked and
+ * equal". The backend now fails closed and sends null; the UI must render null as *not checked* and
+ * never as a number. Only coerce with +v after checking the value is present.
+ */
 export interface LineMatchDto {
   billLineId: string;
   billLineUid: string;
   matchStatus: BillMatchStatus;
-  /** Wire: number — coerce with +v */
-  priceVarianceAmount: number | string;
-  /** Wire: number — coerce with +v */
-  priceVariancePct: number | string;
-  /** Wire: number — coerce with +v */
-  qtyVariance: number | string;
-  /** Wire: number — coerce with +v */
-  poUnitCostAmount: number | string;
-  /** Wire: number — coerce with +v */
-  grReceivedQty: number | string;
-  /** Wire: number — coerce with +v */
+  /** Wire: number, or NULL when the price leg did not run. */
+  priceVarianceAmount: number | string | null;
+  /** Wire: number, or NULL when the price leg did not run. */
+  priceVariancePct: number | string | null;
+  /** Wire: number, or NULL when the quantity leg did not run. */
+  qtyVariance: number | string | null;
+  /** Wire: number, or NULL when the purchase-order line could not be resolved. */
+  poUnitCostAmount: number | string | null;
+  /** Wire: number, or NULL when the goods receipt line could not be resolved. */
+  grReceivedQty: number | string | null;
+  /** Wire: number. Taken from the bill line itself, so it is always present. */
   billedQty: number | string;
   matchedAt: string | null;
+  /**
+   * False when the 3-way control did NOT run on this line — the facts and variances above are then
+   * null and mean nothing. Optional so a response predating the fail-closed fix (and fixtures that
+   * do not care) simply reads as "unknown" rather than asserting a comparison happened.
+   */
+  comparisonPerformed?: boolean;
+  /**
+   * Plain-English explanation and next step, written for an accountant. Null when the line matched
+   * cleanly and there is nothing to explain. Show this instead of the raw match status.
+   */
+  matchNote?: string | null;
 }
 
 export interface BillMatchResultDto {
@@ -191,6 +233,17 @@ export interface ApPaymentDto {
   tenderType: string;
   bankReference: string | null;
   glEntryUid: string | null;
+  /**
+   * Which cash/bank account the money actually left (UAT 2026-08). The request's
+   * `cashBankAccountUid` is optional and falls back to the company default, and the posted
+   * response used to say nothing at all — so a run against the wrong account looked identical to a
+   * correct one until reconciliation. Null on payments that predate the account being stamped.
+   */
+  cashBankAccountId: string | null;
+  cashBankAccountUid: string | null;
+  cashBankAccountName: string | null;
+  /** Bank account number; null for a pure cash account, which has none. */
+  cashBankAccountNumber: string | null;
   allocations: PaymentAllocationDto[];
 }
 

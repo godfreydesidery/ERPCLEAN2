@@ -2,6 +2,7 @@ package com.erp.api;
 
 import com.erp.modules.ap.domain.dto.EnterBillRequest;
 import com.erp.modules.ap.domain.dto.SupplierBillDto;
+import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.service.SupplierBillService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -49,15 +50,27 @@ public class SupplierBillController {
         return service.getByUid(uid);
     }
 
+    /**
+     * Paged bill list. Every filter is optional and every one of them is applied in the database.
+     *
+     * @param uncomparedOnly keeps only bills whose lines were NOT all checked against a purchase
+     *                       order and a goods receipt. A bill can be MATCHED, posted and payable
+     *                       without any comparison having run — a service charge carries no purchase
+     *                       link and an opening balance never reaches the match engine — so this is
+     *                       how a period-end review finds those deliberately instead of by accident.
+     *                       It changes nothing about matching or posting; it is a filter.
+     */
     @GetMapping
     @PreAuthorize("@perm.has('AP.VIEW')")
     public ApiResponse<List<SupplierBillDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String supplierUid,
+            @RequestParam(required = false) SupplierBillStatus status,
+            @RequestParam(required = false, defaultValue = "false") boolean uncomparedOnly,
             Pageable pageable) {
-        Page<SupplierBillDto> page = supplierId != null
-                ? service.listBySupplier(companyId, supplierId, pageable)
-                : service.listByCompany(companyId, pageable);
+        Page<SupplierBillDto> page =
+                service.search(companyId, supplierId, supplierUid, status, uncomparedOnly, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 }

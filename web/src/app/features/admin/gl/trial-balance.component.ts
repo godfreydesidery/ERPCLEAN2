@@ -12,6 +12,8 @@ import {
   TrialBalanceRowDto,
 } from './models/gl.model';
 import { GlService } from './gl.service';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
 import { formatMoney } from '../../../shared/money.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
@@ -19,7 +21,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 const ACCOUNT_TYPE_ORDER: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'INCOME', 'EXPENSE'];
 
 /**
- * Trial balance screen. Gated GL.VIEW.
+ * Trial balance screen. Gated GL.VIEW; the PDF/Excel/CSV export additionally needs REPORT.EXPORT.
  * Company + optional period selector.
  * Rows grouped/sorted by accountType; footer shows totalDebits / totalCredits + "Balanced" indicator.
  */
@@ -41,15 +43,22 @@ export class TrialBalanceComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Period selector ────────────────────────────────────────────────────────
+  // Keyed by the period's numeric id, because that is what both the read and the export endpoints
+  // take (`?periodId=`). Sending the uid bound nothing and 400'd — the filter never worked.
   readonly periods = signal<FiscalPeriodDto[]>([]);
-  readonly selectedPeriodUid = signal('');
+  readonly selectedPeriodId = signal('');
   readonly periodsState = signal<'idle' | 'loading' | 'error'>('idle');
 
   // ── Trial balance data ─────────────────────────────────────────────────────
   readonly tb = signal<TrialBalanceDto | null>(null);
   readonly state = signal<LoadState>('idle');
 
+  // ── Export ─────────────────────────────────────────────────────────────────
+  readonly exporting = signal(false);
+
   readonly canView = computed(() => this.session.hasPermission('GL.VIEW'));
+  /** The export endpoint is gated REPORT.EXPORT on top of GL.VIEW — a distinct permission. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
 
   /** Rows sorted by canonical account type order. */
   readonly sortedRows = computed<TrialBalanceRowDto[]>(() => {
@@ -125,7 +134,7 @@ export class TrialBalanceComponent {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
-    this.selectedPeriodUid.set('');
+    this.selectedPeriodId.set('');
     this.tb.set(null);
     this.periods.set([]);
     if (id) {
@@ -134,8 +143,8 @@ export class TrialBalanceComponent {
     }
   }
 
-  onPeriodChange(periodUid: string): void {
-    this.selectedPeriodUid.set(periodUid);
+  onPeriodChange(periodId: string): void {
+    this.selectedPeriodId.set(periodId);
     this.loadTrialBalance();
   }
 
@@ -144,9 +153,9 @@ export class TrialBalanceComponent {
     if (!companyId) return;
     this.state.set('loading');
 
-    const periodUid = this.selectedPeriodUid();
-    const call$ = periodUid
-      ? this.glService.getTrialBalanceForPeriod(companyId, periodUid)
+    const periodId = this.selectedPeriodId();
+    const call$ = periodId
+      ? this.glService.getTrialBalanceForPeriod(companyId, periodId)
       : this.glService.getTrialBalance(companyId);
 
     call$.subscribe({
@@ -157,6 +166,31 @@ export class TrialBalanceComponent {
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
     });
+  }
+
+  /**
+   * Download the trial balance the screen is showing — same company, same period filter, so the
+   * paper and the screen can never disagree about what was asked for. It is the first page of a
+   * period-close pack, and until now it was the one statement that could not be printed.
+   */
+  export(format: ExportFormat): void {
+    const companyId = this.selectedCompanyId();
+    if (!companyId || this.exporting()) return;
+
+    this.exporting.set(true);
+    this.glService
+      .exportTrialBalance(companyId, format, this.selectedPeriodId() || null)
+      .subscribe({
+        next: (blob) => {
+          downloadBlob(blob, `trial-balance_${this.today()}.${format.toLowerCase()}`);
+          this.exporting.set(false);
+        },
+        error: () => this.exporting.set(false),
+      });
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
   }
 
   rowsForType(type: AccountType): TrialBalanceRowDto[] {

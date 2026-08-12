@@ -427,7 +427,13 @@ SELECT r.id, p.id FROM (VALUES
   ('STOREKEEPER','STOCK.IMPORT'),
   ('STOREKEEPER','STOCK.COUNT.CREATE'),
   ('STOREKEEPER','STOCK.COUNT.VIEW'),
-  ('STOREKEEPER','STOCK.COUNT.POST'),
+  -- UAT 2026-08-12: STOCK.COUNT.POST is intentionally NOT granted — it computes the variance,
+  -- posts the adjusting movements AND books the GL variance journal, so a counter holding it can
+  -- approve their own shrinkage unreviewed. The counter keeps CREATE + VIEW; posting stays with
+  -- BRANCH_MANAGER (line ~642), so the count workflow remains completable.
+  -- NOTE: this file is an additive floor and never revokes. Tenants provisioned before this change
+  -- KEEP the grant and must be revoked per-tenant by an administrator — same situation the
+  -- POS.SESSION.RECONCILE note below describes.
   ('STOREKEEPER','STOCK.LOCATION.MANAGE'),
   ('STOREKEEPER','STOCK.LOCATION.VIEW'),
   ('STOREKEEPER','STOCK.TRANSFER.CREATE'),
@@ -477,6 +483,11 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','AP.VIEW'),
   ('ACCOUNTANT','AP.BILL.ENTER'),
   ('ACCOUNTANT','AP.BILL.MATCH'),
+  -- UAT 2026-08-12: the accountant holds AP.BILL.MATCH but was 403 on the goods receipt she is
+  -- required to match against, so she left the receipt reference blank and the match engine had
+  -- nothing to compare — a 150M bill posted against a 90k order flagged MATCHED. Reading a receipt
+  -- is not the ability to create one, so this is a grant bug, not segregation of duties.
+  ('ACCOUNTANT','PURCHASE.GOODS_RECEIPT.VIEW'),
   ('ACCOUNTANT','AP.PAYMENT.RUN'),
   ('ACCOUNTANT','AP.DEBITNOTE'),
   ('ACCOUNTANT','AP.OPENING.SET'),

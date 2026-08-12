@@ -43,6 +43,23 @@
           </div>
           <div class="erp-card__body">
             <div class="d-flex flex-wrap gap-3">
+              <!--
+                Who and where, first (UAT 2026-08). The page used to open on timestamps and
+                amounts alone, with the cashier, till and branch present only as raw ids in the
+                payload — so "whose shift is this?" needed three separate lookups.
+              -->
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Cashier</span>
+                <span class="erp-kpi__value">{{ s.cashierName ?? '—' }}</span>
+              </div>
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Till</span>
+                <span class="erp-kpi__value">{{ s.tillName ?? '—' }}</span>
+              </div>
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Branch</span>
+                <span class="erp-kpi__value">{{ s.branchName ?? '—' }}</span>
+              </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Opened At</span>
                 <span class="erp-kpi__value">{{ s.openedAt ?? '—' }}</span>
@@ -135,6 +152,13 @@
                 @if (reportKind() === 'Z') {
                   @if (zRead(); as z) {
                     <dl class="row mb-0">
+                      <!-- A Z-read is the document a shift is signed off on: name it. -->
+                      <dt class="col-sm-4 text-muted">Cashier</dt>
+                      <dd class="col-sm-8">{{ z.cashierName ?? '—' }}</dd>
+                      <dt class="col-sm-4 text-muted">Till</dt>
+                      <dd class="col-sm-8">{{ z.tillName ?? '—' }}</dd>
+                      <dt class="col-sm-4 text-muted">Branch</dt>
+                      <dd class="col-sm-8">{{ z.branchName ?? '—' }}</dd>
                       <dt class="col-sm-4 text-muted">Opening Float</dt>
                       <dd class="col-sm-8 font-monospace">{{ +z.openingFloatAmount | number:'1.2-2' }}</dd>
                       <dt class="col-sm-4 text-muted">Sales Total</dt>
@@ -163,6 +187,12 @@
                 } @else {
                   @if (xRead(); as x) {
                     <dl class="row mb-0">
+                      <dt class="col-sm-4 text-muted">Cashier</dt>
+                      <dd class="col-sm-8">{{ x.cashierName ?? '—' }}</dd>
+                      <dt class="col-sm-4 text-muted">Till</dt>
+                      <dd class="col-sm-8">{{ x.tillName ?? '—' }}</dd>
+                      <dt class="col-sm-4 text-muted">Branch</dt>
+                      <dd class="col-sm-8">{{ x.branchName ?? '—' }}</dd>
                       <dt class="col-sm-4 text-muted">Sales Total</dt>
                       <dd class="col-sm-8 font-monospace">{{ +x.totalSalesAmount | number:'1.2-2' }}</dd>
                       <dt class="col-sm-4 text-muted">Payouts</dt>

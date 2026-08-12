@@ -43,32 +43,84 @@ public class PoApprovalGate {
     }
 
     /**
-     * Determines whether the PO needs approval given current settings.
-     * Returns {@code true} if approval is required AND not yet obtained.
+     * Why an order does — or does not — need approval.
+     *
+     * <p>A bare boolean collapsed two completely different worlds into one answer: "the company
+     * checks purchase orders and this one is small enough" and "nothing is being checked at all".
+     * Buyers were told the first when the truth was the second (UAT wave 1), so the caller now gets
+     * the reason and can say which it is.
+     */
+    public enum ApprovalRequirement {
+        /** Approval is switched on for this company and this order is at or above the ceiling. */
+        REQUIRED,
+        /** No settings row, or {@code po_approval_enabled = false} — no order is ever reviewed. */
+        DISABLED_COMPANY_WIDE,
+        /** Approval is switched on, but this order's total is under the configured ceiling. */
+        BELOW_THRESHOLD,
+        /** Goods already received without an LPO — see {@link #isExemptFromPreApproval}. */
+        EXEMPT_DIRECT_RECEIPT
+    }
+
+    /**
+     * The gate's verdict, plus the ceiling it was measured against when there is one
+     * ({@code null} unless the verdict is {@link ApprovalRequirement#BELOW_THRESHOLD}).
+     */
+    public record Decision(ApprovalRequirement requirement,
+                           BigDecimal thresholdAmount,
+                           String thresholdCurrency) {
+
+        public boolean required() {
+            return requirement == ApprovalRequirement.REQUIRED;
+        }
+    }
+
+    /**
+     * Determines whether the PO needs approval given current settings. Says nothing about whether
+     * approval has already been obtained — that is the caller's own state check (see
+     * {@code PurchaseOrderServiceImpl#placeOrder}).
      *
      * @param po        the placed PO
      * @param branchUid uid of the branch for the engine policy lookup
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public boolean requiresApproval(PurchaseOrder po, String branchUid) {
+        return decide(po).required();
+    }
+
+    /**
+     * The same gate as {@link #requiresApproval}, but reporting <em>why</em> — so a caller that has
+     * to explain the verdict to a buyer can tell "switched off company-wide" apart from "below the
+     * ceiling". Read-only: it decides nothing and writes nothing.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Decision evaluate(PurchaseOrder po) {
+        return decide(po);
+    }
+
+    /** The single gate implementation both public entry points delegate to (no self-invocation). */
+    private Decision decide(PurchaseOrder po) {
         if (isExemptFromPreApproval(po)) {
-            return false;
+            return new Decision(ApprovalRequirement.EXEMPT_DIRECT_RECEIPT, null, null);
         }
 
         Optional<PurchaseSettings> cfg = settings.findByCompanyId(po.getCompanyId());
         if (cfg.isEmpty() || !cfg.get().isPoApprovalEnabled()) {
-            return false;
+            // A missing row and an explicit "off" are the same lived experience — nothing is checked
+            // — so they must produce the same answer AND the same explanation.
+            return new Decision(ApprovalRequirement.DISABLED_COMPANY_WIDE, null, null);
         }
 
         PurchaseSettings s = cfg.get();
         BigDecimal threshold = s.getPoApprovalThresholdAmount();
         BigDecimal poTotal   = po.getOrderTotalAmount() != null ? po.getOrderTotalAmount() : BigDecimal.ZERO;
+        String currency      = CurrencyCode.value(s.getCurrency());
 
         if (threshold != null && poTotal.compareTo(threshold) < 0) {
-            return false;   // below threshold — auto-approved
+            return new Decision(ApprovalRequirement.BELOW_THRESHOLD, threshold, currency);
         }
 
-        return true;
+        // NULL threshold = every order is reviewed once the switch is on (see PurchaseSettings).
+        return new Decision(ApprovalRequirement.REQUIRED, threshold, currency);
     }
 
     /**

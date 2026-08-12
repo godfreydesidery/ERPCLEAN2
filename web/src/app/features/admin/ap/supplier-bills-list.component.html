@@ -100,6 +100,28 @@
               <option value="PAID">Paid</option>
             </select>
           </div>
+
+          <!--
+            Period-end review filter. Read-only: it changes which bills are LISTED, never whether a
+            bill matches, holds, posts or pays.
+          -->
+          <div class="erp-field" style="min-width:240px">
+            <span class="form-label small text-muted mb-1 d-block" id="uncomparedOnlyHint"
+                  >Three-way check</span>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox"
+                     id="uncomparedOnly" name="uncomparedOnly"
+                     [ngModel]="uncomparedOnly()"
+                     (ngModelChange)="onUncomparedOnlyChange($event)" />
+              <label class="form-check-label small" for="uncomparedOnly">
+                Only bills not fully checked
+              </label>
+            </div>
+            <p class="form-text small mb-0">
+              Bills where at least one line was never checked against a purchase order and a goods
+              receipt.
+            </p>
+          </div>
         </div>
       }
     }
@@ -143,6 +165,12 @@
                   <th scope="col" class="num">Outstanding</th>
                   <th scope="col">Currency</th>
                   <th scope="col">Status</th>
+                  <th scope="col">
+                    Checked
+                    <span class="visually-hidden">
+                      against the purchase order and the goods receipt
+                    </span>
+                  </th>
                   <th scope="col">Source</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -179,6 +207,14 @@
                       <app-direct-receipt-ratification
                         class="d-block mt-1"
                         [state]="bill.directReceiptRatification" />
+                    </td>
+                    <!--
+                      Every row carries a chip, including the checked ones: a blank cell here would
+                      be indistinguishable from a field the response never sent, and this column
+                      exists precisely so an unchecked bill cannot hide.
+                    -->
+                    <td>
+                      <app-bill-comparison-badge [state]="bill.comparisonState" />
                     </td>
                     <td class="small text-muted">{{ bill.source }}</td>
                     <td class="d-flex gap-1 flex-nowrap">

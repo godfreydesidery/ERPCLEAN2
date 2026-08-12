@@ -21,10 +21,13 @@ import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.sales.domain.dto.AddSalesOrderLineRequest;
 import com.erp.modules.sales.domain.dto.SalesOrderDto;
@@ -704,8 +707,109 @@ class SalesOrderServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // UAT wave 1 — a company with no price list could not raise a sales order. The stated unit
+    // price was accepted by the API and never read: the throwing list-price lookup ran first.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addLine_withStatedPrice_whenCatalogueCannotPriceIt_usesTheStatedPrice() {
+        asSalesRep();
+        SalesOrder order = orderWithId(730L, "SOUID000000000000000040", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000040")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000040", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure baseUnit = unitWithId(970L, "BASEUID0000000000000040", "PCS");
+        Product product = productWithId(920L, "PRODUID00000000000000040", "PROD-0020",
+                "Unpriced Item", baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000040"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000040"))
+                .thenReturn(Optional.of(baseUnit));
+        // No price list exists anywhere in this company — the live UAT condition.
+        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 920L, 970L))
+                .thenReturn(UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(orderLines.findMaxLineNo(730L)).thenReturn(0);
+        when(orderLines.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(730L)).thenReturn(List.of());
+
+        SalesOrderLineDto dto = service.addLine("SOUID000000000000000040",
+                new AddSalesOrderLineRequest("PRODUID00000000000000040", "BASEUID0000000000000040",
+                        BigDecimal.TEN, new BigDecimal("2500.0000"), null, null));
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("2500.0000");
+        assertThat(dto.listPriceAmount()).isEqualByComparingTo("2500.0000");
+    }
+
+    @Test
+    void addLine_withStatedPrice_whenAListPriceExists_stillSnapshotsTheListPrice() {
+        asSalesRep();
+        SalesOrder order = orderWithId(731L, "SOUID000000000000000041", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000041")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000041", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure baseUnit = unitWithId(971L, "BASEUID0000000000000041", "PCS");
+        Product product = productWithId(921L, "PRODUID00000000000000041", "PROD-0021",
+                "Listed Item", baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000041"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000041"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 921L, 971L))
+                .thenReturn(UnitPriceQuoteResult.resolved(
+                        new UnitPriceQuoteDto(new BigDecimal("100.0000"), "TZS", false)));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(orderLines.findMaxLineNo(731L)).thenReturn(0);
+        when(orderLines.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderLines.findBySalesOrderIdOrderByLineNo(731L)).thenReturn(List.of());
+
+        SalesOrderLineDto dto = service.addLine("SOUID000000000000000041",
+                new AddSalesOrderLineRequest("PRODUID00000000000000041", "BASEUID0000000000000041",
+                        BigDecimal.ONE, new BigDecimal("90.0000"), null, null));
+
+        // Negotiated price applies; the list price stays on the line so the discount is visible.
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("90.0000");
+        assertThat(dto.listPriceAmount()).isEqualByComparingTo("100.0000");
+    }
+
+    @Test
+    void addLine_withNegativeStatedPrice_isRefusedBeforeAnyPriceLookup() {
+        asSalesRep();
+        SalesOrder order = orderWithId(732L, "SOUID000000000000000042", CUSTOMER_ID, AGENT_ID);
+        when(orders.findByUid("SOUID000000000000000042")).thenReturn(Optional.of(order));
+        when(approvalEngine.getApprovalState(DOC_TYPE, "SOUID000000000000000042", COMPANY_ID))
+                .thenReturn(Optional.empty());
+
+        UnitOfMeasure baseUnit = unitWithId(972L, "BASEUID0000000000000042", "PCS");
+        Product product = productWithId(922L, "PRODUID00000000000000042", "PROD-0022", "Any Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000042"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000042"))
+                .thenReturn(Optional.of(baseUnit));
+
+        assertThatThrownBy(() -> service.addLine("SOUID000000000000000042",
+                new AddSalesOrderLineRequest("PRODUID00000000000000042", "BASEUID0000000000000042",
+                        BigDecimal.ONE, new BigDecimal("-5"), null, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(orderLines, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /** A NON-root principal: root bypasses permission checks and would hide RBAC regressions. */
+    private static void asSalesRep() {
+        RequestContext.set(new RequestContext.Principal(
+                77L, "salesrep", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
+    }
 
     private static SalesOrder orderWithId(Long id, String uid, Long customerId, Long agentId) {
         SalesOrder order = new SalesOrder(COMPANY_ID, BRANCH_ID, customerId, agentId,

@@ -97,6 +97,12 @@ public class StockReportController {
                 headerLines.add("VRN: " + company.vrn());
             }
         }
+        // Which branch these figures cover, printed on the page itself (UAT, 2026-08). A downloaded
+        // register outlives the screen that produced it, so the scope has to travel with the file —
+        // dto.branchLabel() is never null and says "All branches" when nothing was filtered.
+        if (dto.branchLabel() != null) {
+            headerLines.add("Branch: " + dto.branchLabel());
+        }
 
         List<Column> columns = List.of(
                 new Column("Code", Align.LEFT),

@@ -314,6 +314,66 @@ describe('WorkOrderDetailComponent — release action', () => {
   });
 });
 
+// ── Truthful guidance: release does NOT explode the BOM ──────────────────────
+
+describe('WorkOrderDetailComponent — component-line guidance', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  async function render(wo: WorkOrderDto, perms?: string[]) {
+    makeBed({ getByUid: vi.fn(() => of(wo)) }, perms);
+    const fixture = TestBed.createComponent(WorkOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'wo-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('the Release blurb does not promise a BOM explosion or component plan lines', async () => {
+    const fixture = await render(makeWO({ status: 'PLANNED' }));
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).not.toMatch(/explode|explosion|materialise/i);
+    expect(text).toMatch(/no component lines yet/i);
+  });
+
+  it('the empty component table says lines appear at issue, not at release', async () => {
+    const fixture = await render(makeWO({ status: 'RELEASED', components: [] }));
+    const empty = (fixture.nativeElement as HTMLElement).querySelector('.erp-empty');
+
+    expect(empty?.textContent).toMatch(/created when components are issued/i);
+    expect(empty?.textContent).not.toMatch(/release the work order to explode/i);
+  });
+
+  it('signposts the pinned BOM when the work order has one', async () => {
+    const fixture = await render(
+      makeWO({ status: 'RELEASED', bomUid: 'bom-9', components: [] }),
+      ['WORKORDER.MANAGE', 'WORKORDER.RELEASE', 'WORKORDER.CLOSE', 'BOM.VIEW'],
+    );
+    const link = (fixture.nativeElement as HTMLElement).querySelector('.erp-empty a');
+
+    expect(link?.getAttribute('href')).toBe('/admin/boms/uid/bom-9');
+  });
+
+  it('signposts the BOM list when no BOM is pinned yet', async () => {
+    const fixture = await render(
+      makeWO({ status: 'PLANNED', bomUid: '', components: [] }),
+      ['WORKORDER.MANAGE', 'WORKORDER.RELEASE', 'WORKORDER.CLOSE', 'BOM.VIEW'],
+    );
+    const link = (fixture.nativeElement as HTMLElement).querySelector('.erp-empty a');
+
+    expect(link?.getAttribute('href')).toBe('/admin/boms');
+  });
+
+  it('omits the BOM link (route is BOM.VIEW-guarded) when the user lacks BOM.VIEW', async () => {
+    const fixture = await render(makeWO({ status: 'RELEASED', bomUid: 'bom-9', components: [] }));
+    const empty = (fixture.nativeElement as HTMLElement).querySelector('.erp-empty');
+
+    expect(empty?.querySelector('a')).toBeNull();
+    expect(empty?.textContent).toMatch(/bill of materials/i);
+  });
+});
+
 // ── Number-input coercion (plannedQty) ───────────────────────────────────────
 
 describe('WorkOrderDetailComponent — number-input coercion', () => {

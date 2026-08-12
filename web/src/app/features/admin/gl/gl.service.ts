@@ -4,6 +4,7 @@ import { Observable, map } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
+import { ExportFormat } from '../reporting/models/reporting.model';
 import {
   AccountDto,
   CreateAccountRequest,
@@ -171,9 +172,31 @@ export class GlService {
     });
   }
 
-  getTrialBalanceForPeriod(companyId: string, periodUid: string): Observable<TrialBalanceDto> {
+  /**
+   * The endpoint takes the period's numeric `id` (`?periodId=`), not its uid — see
+   * TrialBalanceController#getForPeriod. Sending `periodUid` produced a 400 with no `periodId`
+   * bound, which the screen showed as "Could not load trial balance": the period filter never
+   * worked. Long ids arrive as JSON strings, hence `string` here.
+   */
+  getTrialBalanceForPeriod(companyId: string, periodId: string): Observable<TrialBalanceDto> {
     return this.http.get<TrialBalanceDto>(`${this.base}/trial-balance/period`, {
-      params: { companyId, periodUid },
+      params: { companyId, periodId },
     });
+  }
+
+  /**
+   * The trial balance as a file. Server-gated GL.VIEW + REPORT.EXPORT (an export discloses more
+   * than one on-screen page, so it needs the screen's own permission as well as the export one).
+   * Raw bytes: responseType 'blob' means the envelope interceptor sees a Blob and passes it
+   * through, so no SKIP_UNWRAP token is needed — same as the ReportingService exports.
+   */
+  exportTrialBalance(
+    companyId: string,
+    format: ExportFormat,
+    periodId?: string | null,
+  ): Observable<Blob> {
+    let params = new HttpParams().set('companyId', companyId).set('format', format);
+    if (periodId) params = params.set('periodId', periodId);
+    return this.http.get(`${this.base}/trial-balance/export`, { params, responseType: 'blob' });
   }
 }

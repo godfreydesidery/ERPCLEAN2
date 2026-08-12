@@ -39,8 +39,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class PriceResolutionServiceImpl implements PriceResolutionService {
 
-    /** Kept verbatim from the pre-refactor throw so callers matching on the text still match. */
-    static final String NO_PRICE_MESSAGE = "Product has no price configured for this company.";
+    /**
+     * Shown when nothing in the catalogue can price the line. The previous wording ("Product has no
+     * price configured for this company.") stated the problem and stopped there — on a company with
+     * no price list at all, which is every company on day one, it was the only thing a salesperson
+     * ever saw and it named no way out. Both ways out are now in the message: configure the
+     * catalogue, or state the price on the line (every sales document takes a unit price).
+     */
+    static final String NO_PRICE_MESSAGE =
+            "This product has no price yet — no price list is configured for this company. "
+                    + "Set up a price list, or enter a unit price on the line.";
 
     static final String UNIT_NOT_APPLICABLE_MESSAGE =
             "This unit is not valid for this product. Use the product's base unit or "

@@ -17,7 +17,6 @@ import com.erp.modules.parties.repository.SupplierBankAccountRepository;
 import com.erp.modules.parties.repository.SupplierBranchRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.tax.repository.WhtTypeRepository;
-import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
@@ -211,6 +210,7 @@ public class SupplierServiceImpl implements SupplierService {
         Supplier s = require(supplierUid);
         scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
         validateBankAccountIdentifiers(req.accountNo(), req.iban());
+        validateBankAccountText(req.bankName(), req.accountName(), req.bankBranch(), req.swiftBic());
 
         if (req.isDefault()) {
             // Clear the existing default and flush before inserting the new default row,
@@ -227,7 +227,7 @@ public class SupplierServiceImpl implements SupplierService {
                 req.bankName(), req.accountName(), req.accountNo(), req.iban(), actorId());
         sba.setBankBranch(req.bankBranch());
         sba.setSwiftBic(req.swiftBic());
-        sba.setCurrency(req.currency() != null ? CurrencyCode.of(req.currency()) : null);
+        sba.setCurrency(PartyFieldValidator.currencyCode(req.currency(), "Bank account currency"));
         sba.setDefault(req.isDefault());
 
         SupplierBankAccount saved = bankAccounts.save(sba);
@@ -244,6 +244,7 @@ public class SupplierServiceImpl implements SupplierService {
         scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
         SupplierBankAccount sba = requireBankAccount(bankAccountUid, s.getId());
         validateBankAccountIdentifiers(req.accountNo(), req.iban());
+        validateBankAccountText(req.bankName(), req.accountName(), req.bankBranch(), req.swiftBic());
 
         sba.setBankName(req.bankName());
         sba.setAccountName(req.accountName());
@@ -251,7 +252,7 @@ public class SupplierServiceImpl implements SupplierService {
         sba.setBankBranch(req.bankBranch());
         sba.setIban(req.iban());
         sba.setSwiftBic(req.swiftBic());
-        sba.setCurrency(req.currency() != null ? CurrencyCode.of(req.currency()) : null);
+        sba.setCurrency(PartyFieldValidator.currencyCode(req.currency(), "Bank account currency"));
         sba.setUpdatedAt(Instant.now());
         sba.setUpdatedBy(actorId());
 
@@ -332,6 +333,19 @@ public class SupplierServiceImpl implements SupplierService {
             throw new IllegalArgumentException(
                     "Please provide at least one of: account number or IBAN.");
         }
+        // Same trap as `country`: SWIFT/BIC and IBAN are short coded columns, so an over-long value
+        // is refused here by name instead of arriving as a nameless data-constraint 400.
+        PartyFieldValidator.maxLength(accountNo, 60, "Account number");
+        PartyFieldValidator.maxLength(iban, 34, "IBAN");
+    }
+
+    /** Length guards for the free-text bank-account fields (widths as declared on the entity). */
+    private static void validateBankAccountText(String bankName, String accountName,
+                                                String bankBranch, String swiftBic) {
+        PartyFieldValidator.maxLength(bankName, 120, "Bank name");
+        PartyFieldValidator.maxLength(accountName, 120, "Account name");
+        PartyFieldValidator.maxLength(bankBranch, 120, "Bank branch");
+        PartyFieldValidator.maxLength(swiftBic, 11, "SWIFT/BIC");
     }
 
     private Supplier require(String uid) {
@@ -371,6 +385,22 @@ public class SupplierServiceImpl implements SupplierService {
                                     String businessRegNo, String mobileMoneyNo, String phone,
                                     String email, String physicalAddress, String postalAddress,
                                     String region, String district) {
+        // Length guards BEFORE any assignment, so an over-long field is refused with its own name
+        // rather than as an anonymous "violates a data constraint" 400 raised by Postgres at flush.
+        // The limits mirror the column widths declared on PartyBase.
+        PartyFieldValidator.maxLength(displayName, 200, "Supplier name");
+        PartyFieldValidator.maxLength(legalName, 200, "Legal name");
+        PartyFieldValidator.maxLength(tin, 20, "TIN");
+        PartyFieldValidator.maxLength(vrn, 20, "VRN");
+        PartyFieldValidator.maxLength(businessRegNo, 40, "Business registration number");
+        PartyFieldValidator.maxLength(mobileMoneyNo, 30, "Mobile money number");
+        PartyFieldValidator.maxLength(phone, 40, "Phone");
+        PartyFieldValidator.maxLength(email, 160, "Email");
+        PartyFieldValidator.maxLength(physicalAddress, 255, "Physical address");
+        PartyFieldValidator.maxLength(postalAddress, 255, "Postal address");
+        PartyFieldValidator.maxLength(region, 80, "Region");
+        PartyFieldValidator.maxLength(district, 80, "District");
+
         s.setPartyType(partyType);
         s.setDisplayName(displayName);
         s.setLegalName(legalName);
@@ -388,14 +418,19 @@ public class SupplierServiceImpl implements SupplierService {
     }
 
     /**
-     * Applies the optional P2 D5 master-data defaults. {@code defaultCurrency} is parsed via
-     * {@link CurrencyCode#ofNullable}; the remaining fields are set as-is (null = clear).
+     * Applies the optional P2 D5 master-data defaults.
+     *
+     * <p>{@code country} and {@code defaultCurrency} are the two short CODED columns on a supplier
+     * ({@code VARCHAR(2)} / {@code VARCHAR(3)}), and both used to dead-end the same way: a plain
+     * country name or currency name reached Postgres and came back as the anonymous "violates a
+     * data constraint" 400. Both now go through {@link PartyFieldValidator}, which normalises case,
+     * names the field and shows the expected form. The remaining fields are set as-is (null = clear).
      */
     private static void applyDefaults(Supplier s, String country, String defaultCurrency,
                                       Integer leadTimeDays, java.math.BigDecimal minOrderValue,
                                       Long defaultWhtTypeId) {
-        s.setCountry(country);
-        s.setDefaultCurrency(CurrencyCode.ofNullable(defaultCurrency));
+        s.setCountry(PartyFieldValidator.isoCountryCode(country));
+        s.setDefaultCurrency(PartyFieldValidator.currencyCode(defaultCurrency, "Default currency"));
         s.setLeadTimeDays(leadTimeDays);
         s.setMinOrderValue(minOrderValue);
         s.setDefaultWhtTypeId(defaultWhtTypeId);

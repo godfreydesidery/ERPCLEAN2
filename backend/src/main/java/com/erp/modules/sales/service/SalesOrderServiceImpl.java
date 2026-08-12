@@ -214,19 +214,21 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         Product product = resolveProduct(order.getCompanyId(), req.productUid());
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(order.getCompanyId(), req.unitUid());
-        // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
-        // line below regardless of whether the price is overridden.
-        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
-                order.getCompanyId(), product.getId(), unit.getId());
-        BigDecimal listPrice = resolvedPrice.amount();
         // Issue #6: unitPriceOverride must not be negative (revenue leakage / silent-zero bug).
         // @PositiveOrZero on the DTO is the first-line guard; this is defence-in-depth for
-        // programmatic callers that bypass bean validation.
+        // programmatic callers that bypass bean validation. Runs BEFORE price resolution now that a
+        // stated price can stand in for a missing list price — a negative number must never do that.
         if (req.unitPriceOverride() != null
                 && req.unitPriceOverride().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException(
                     "unitPriceOverride must be >= 0; got: " + req.unitPriceOverride().toPlainString());
         }
+        // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
+        // line below regardless of whether the price is overridden.
+        UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
+                priceResolutionService, order.getCompanyId(), product.getId(), unit.getId(),
+                req.unitPriceOverride());
+        BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
         BigDecimal vatRate = resolveVatRate(order.getCompanyId(), product);
         BigDecimal qtyInBase = computeQtyInBase(product, unit, req.quantity());

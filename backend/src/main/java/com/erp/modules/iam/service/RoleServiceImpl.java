@@ -111,7 +111,9 @@ public class RoleServiceImpl implements RoleService {
         authorityCeiling.assertCanConfer(RequestContext.get(), requestedCodes);
 
         role.setPermissions(new LinkedHashSet<>(found));
-        permissionResolver.invalidate();
+        // The grants are unchanged but what they confer is not: evict every current holder of this
+        // role (and again after commit), rather than clearing the cache for the whole tenant.
+        permissionResolver.invalidateRole(role.getId());
         return RoleDto.from(role);
     }
 
@@ -122,7 +124,9 @@ public class RoleServiceImpl implements RoleService {
             throw new ConflictException("System role cannot be archived: " + role.getCode());
         }
         role.setStatus(MasterStatus.ARCHIVED);
-        permissionResolver.invalidate();
+        // An archived role resolves to nothing (the resolve query filters on ACTIVE) — every holder
+        // loses whatever it conferred, so every holder's cached set must go.
+        permissionResolver.invalidateRole(role.getId());
     }
 
     @Override

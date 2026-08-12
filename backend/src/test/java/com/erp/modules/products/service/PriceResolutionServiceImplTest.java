@@ -161,14 +161,18 @@ class PriceResolutionServiceImplTest {
     }
 
     @Test
-    void resolveUnitListPrice_noPriceConfigured_rejected() {
+    void resolveUnitListPrice_noPriceConfigured_rejectedAndNamesBothWaysOut() {
+        // UAT wave 1: on a company with no price list — every company on day one — this was the only
+        // thing a salesperson ever saw, and the old wording ("Product has no price configured for
+        // this company.") named no way out of it. Both remedies must be in the message.
         when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.resolveUnitListPrice(
                 COMPANY_ID, product.getId(), baseUnit.getId()))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("no price configured");
+                .hasMessageContaining("Set up a price list")
+                .hasMessageContaining("enter a unit price on the line");
     }
 
     @Test

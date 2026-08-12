@@ -47,12 +47,22 @@ export class ApService {
 
   // ── Supplier bills ────────────────────────────────────────────────────────
 
+  /**
+   * Paged supplier bills.
+   *
+   * @param uncomparedOnly keep only bills whose lines were NOT all checked against a purchase order
+   *   and a goods receipt. Filtered in the database, so paging and totals stay honest — filtering a
+   *   page client-side would silently shrink pages and understate how many bills need a look.
+   *   Last in the list on purpose: every other caller passes positionally, and inserting a
+   *   parameter mid-signature would have silently re-bound their page number to a boolean.
+   */
   listBills(
     companyId: string,
     supplierUid?: string,
     status?: string,
     page = 0,
     size = 20,
+    uncomparedOnly = false,
   ): Observable<SupplierBillPage> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -60,6 +70,7 @@ export class ApService {
       .set('size', String(size));
     if (supplierUid?.trim()) params = params.set('supplierUid', supplierUid.trim());
     if (status?.trim()) params = params.set('status', status.trim());
+    if (uncomparedOnly) params = params.set('uncomparedOnly', 'true');
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
