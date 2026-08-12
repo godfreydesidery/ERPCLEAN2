@@ -46,6 +46,10 @@ function makePayment(n: number): ApPaymentDto {
     tenderType: 'BANK_TRANSFER',
     bankReference: null,
     glEntryUid: null,
+    cashBankAccountId: '77',
+    cashBankAccountUid: 'CBA-UID-077',
+    cashBankAccountName: 'Main NMB Current',
+    cashBankAccountNumber: '011010012345',
     allocations: [],
   };
 }

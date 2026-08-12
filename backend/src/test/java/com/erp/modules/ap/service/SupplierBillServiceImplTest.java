@@ -17,9 +17,12 @@ import com.erp.modules.ap.domain.dto.BillLineRequest;
 import com.erp.modules.ap.domain.dto.EnterBillRequest;
 import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.entity.SupplierBill;
+import com.erp.modules.ap.domain.enums.BillComparisonState;
 import com.erp.modules.ap.domain.enums.DirectReceiptRatificationState;
 import com.erp.modules.ap.domain.enums.SupplierBillSource;
+import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.domain.entity.SupplierBillLine;
+import com.erp.modules.ap.repository.BillMatchRepository;
 import com.erp.modules.ap.repository.SupplierBillLineRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
@@ -36,6 +39,7 @@ import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +51,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * Unit tests for SupplierBillServiceImpl guarding issue #18:
@@ -61,6 +66,7 @@ class SupplierBillServiceImplTest {
     private CompanyRepository          companies;
     private ChartOfAccountRepository   chartOfAccounts;
     private PurchaseMatchReader        purchaseMatchReader;
+    private BillMatchRepository        billMatches;
     private ScopeGuard                 scopeGuard;
     private AuditService               audit;
     private SupplierBillServiceImpl    service;
@@ -80,13 +86,18 @@ class SupplierBillServiceImplTest {
         companies           = mock(CompanyRepository.class);
         chartOfAccounts     = mock(ChartOfAccountRepository.class);
         purchaseMatchReader = mock(PurchaseMatchReader.class);
+        billMatches         = mock(BillMatchRepository.class);
         scopeGuard          = mock(ScopeGuard.class);
         audit               = mock(AuditService.class);
+
+        // No match rows unless a test says otherwise — the shape a bill has before it is matched.
+        when(billMatches.countComparedLinesByBillIds(any())).thenReturn(List.of());
 
         service = new SupplierBillServiceImpl(
                 bills, lines, suppliers, paymentTermsRepo,
                 companies, chartOfAccounts, purchaseMatchReader,
                 new DirectReceiptRatificationGuard(purchaseMatchReader),
+                new BillComparisonReader(billMatches),
                 scopeGuard, audit);
 
         RequestContext.set(new RequestContext.Principal(
@@ -266,7 +277,8 @@ class SupplierBillServiceImplTest {
     @Test
     void listBySupplier_readsThePageTheSameWay() {
         SupplierBill b = bill("INV-L1", PO_UID);
-        when(bills.findByCompanyIdAndSupplierId(eq(COMPANY_ID), eq(SUPPLIER_ID), any()))
+        when(bills.search(eq(COMPANY_ID), eq(SUPPLIER_ID), nullable(SupplierBillStatus.class),
+                nullable(Boolean.class), any()))
                 .thenReturn(new PageImpl<>(List.of(b)));
         givenSnapshots(Map.of(PO_UID, snapshot(PO_UID, PurchaseOrderOrigin.DIRECT_RECEIPT,
                 PoApprovalStatus.REJECTED)));
@@ -308,12 +320,175 @@ class SupplierBillServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // UAT 2026-08-12 — was this bill actually checked against an order and a receipt?
+    // -------------------------------------------------------------------------
+
+    @Test
+    void enterBill_reportsThatNothingHasBeenComparedYet() {
+        // A bill that has only just been entered has no match rows behind it. Saying NEVER_MATCHED
+        // is the literal truth; saying nothing would let a brand-new payable render like a checked one.
+        SupplierBillDto dto = service.enterBill(
+                validBillRequest(LocalDate.of(2026, 6, 18), null));
+
+        assertThat(dto.comparisonState()).isEqualTo(BillComparisonState.NEVER_MATCHED);
+    }
+
+    @Test
+    void list_billWithNoMatchRowsAtAll_readsAsNeverMatched() {
+        // The AP opening-balance shape: stamped MATCHED, posts its own journal entry, and the match
+        // engine never sees it. It must NOT come back looking compared.
+        givenPage(billWithLines(101L, 1));
+
+        Page<SupplierBillDto> page = service.listByCompany(COMPANY_ID, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(SupplierBillDto::comparisonState)
+                .isEqualTo(BillComparisonState.NEVER_MATCHED);
+    }
+
+    @Test
+    void list_matchRanButNothingCouldBeCompared_readsAsNoLinesCompared() {
+        // The service-charge / no-purchase-link shape: the match ran, passed, posted — and compared
+        // nothing, because there was nothing to compare it against.
+        givenPage(billWithLines(102L, 2));
+        givenMatchCounts(102L, 2, 0);
+
+        Page<SupplierBillDto> page = service.listByCompany(COMPANY_ID, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(SupplierBillDto::comparisonState)
+                .isEqualTo(BillComparisonState.NO_LINES_COMPARED);
+    }
+
+    @Test
+    void list_someLinesCompared_readsAsPartial() {
+        givenPage(billWithLines(103L, 3));
+        givenMatchCounts(103L, 3, 2);
+
+        Page<SupplierBillDto> page = service.listByCompany(COMPANY_ID, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(SupplierBillDto::comparisonState)
+                .isEqualTo(BillComparisonState.SOME_LINES_COMPARED);
+    }
+
+    @Test
+    void list_everyLineCompared_readsAsFullyCompared() {
+        givenPage(billWithLines(104L, 2));
+        givenMatchCounts(104L, 2, 2);
+
+        Page<SupplierBillDto> page = service.listByCompany(COMPANY_ID, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).singleElement()
+                .extracting(SupplierBillDto::comparisonState)
+                .isEqualTo(BillComparisonState.ALL_LINES_COMPARED);
+    }
+
+    @Test
+    void list_resolvesTheComparisonStateForTheWholePageInOneQuery() {
+        // Same discipline as the ratification badge: a screen built to be scanned must not cost a
+        // query per row.
+        givenPage(billWithLines(105L, 1), billWithLines(106L, 1), billWithLines(107L, 1));
+
+        service.listByCompany(COMPANY_ID, PageRequest.of(0, 20));
+
+        verify(billMatches, times(1)).countComparedLinesByBillIds(any());
+    }
+
+    @Test
+    void search_uncomparedOnly_asksTheDatabaseToFilter() {
+        // In-memory filtering would shrink pages and mis-state the total, so the flag must reach the
+        // query. TRUE is passed as a set value; unset stays null (the "no filter" idiom).
+        givenPage(billWithLines(108L, 1));
+
+        service.search(COMPANY_ID, null, null, SupplierBillStatus.MATCHED, true,
+                PageRequest.of(0, 20));
+
+        verify(bills).search(eq(COMPANY_ID), nullable(Long.class),
+                eq(SupplierBillStatus.MATCHED), eq(Boolean.TRUE), any());
+    }
+
+    @Test
+    void search_withoutTheFlag_leavesTheComparisonFilterUnset() {
+        givenPage(billWithLines(109L, 1));
+
+        service.search(COMPANY_ID, null, null, null, false, PageRequest.of(0, 20));
+
+        verify(bills).search(eq(COMPANY_ID), nullable(Long.class),
+                nullable(SupplierBillStatus.class), eq((Boolean) null), any());
+    }
+
+    @Test
+    void search_supplierUidThatResolvesToNothing_returnsNothingRatherThanEverything() {
+        // A filter that quietly stops filtering is how a reviewer ends up certain they reviewed a
+        // supplier they never saw.
+        when(suppliers.findByCompanyIdAndUid(COMPANY_ID, "no-such-supplier"))
+                .thenReturn(Optional.empty());
+
+        Page<SupplierBillDto> page = service.search(
+                COMPANY_ID, null, "no-such-supplier", null, false, PageRequest.of(0, 20));
+
+        assertThat(page.getContent()).isEmpty();
+        verify(bills, never()).search(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void search_supplierUid_isResolvedWithinTheCompanyAndFiltersOnIt() {
+        Supplier supplier = mock(Supplier.class);
+        when(supplier.getId()).thenReturn(SUPPLIER_ID);
+        when(suppliers.findByCompanyIdAndUid(COMPANY_ID, SUPP_UID)).thenReturn(Optional.of(supplier));
+        when(bills.search(eq(COMPANY_ID), eq(SUPPLIER_ID), nullable(SupplierBillStatus.class),
+                nullable(Boolean.class), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.search(COMPANY_ID, null, SUPP_UID, null, false, PageRequest.of(0, 20));
+
+        verify(bills).search(eq(COMPANY_ID), eq(SUPPLIER_ID), nullable(SupplierBillStatus.class),
+                nullable(Boolean.class), any());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private void givenPage(SupplierBill... pageBills) {
-        when(bills.findByCompanyId(eq(COMPANY_ID), any()))
+        when(bills.search(eq(COMPANY_ID), nullable(Long.class), nullable(SupplierBillStatus.class),
+                nullable(Boolean.class), any()))
                 .thenReturn(new PageImpl<>(List.of(pageBills)));
+    }
+
+    /**
+     * Stubs the grouped match-count read for one bill id.
+     *
+     * @param matchCount    how many bill_match rows the bill has
+     * @param comparedCount how many of them ran BOTH legs of the comparison
+     */
+    private void givenMatchCounts(Long billId, long matchCount, long comparedCount) {
+        when(billMatches.countComparedLinesByBillIds(any()))
+                .thenReturn(List.of(counts(billId, matchCount, comparedCount)));
+    }
+
+    private static BillMatchRepository.BillComparisonCounts counts(Long billId, long matchCount,
+                                                                    long comparedCount) {
+        return new BillMatchRepository.BillComparisonCounts() {
+            @Override public Long getBillId()        { return billId; }
+            @Override public Long getMatchCount()    { return matchCount; }
+            @Override public Long getComparedCount() { return comparedCount; }
+        };
+    }
+
+    /** A bill with an id and {@code lineCount} lines behind it, so a page read can be exercised. */
+    private SupplierBill billWithLines(Long id, int lineCount) {
+        SupplierBill b = bill("INV-C" + id, null);
+        ReflectionTestUtils.setField(b, "id", id);   // id is DB-generated; fixtures are unsaved
+        List<SupplierBillLine> billLines = new ArrayList<>();
+        for (int i = 0; i < lineCount; i++) {
+            billLines.add(new SupplierBillLine(
+                    id, COMPANY_ID, 20L, (short) (i + 1), null, null, null,
+                    "line", BigDecimal.ONE, new BigDecimal("100.00"), "TZS", 1L));
+        }
+        when(lines.findBySupplierBillIdOrderByLineNo(id)).thenReturn(billLines);
+        return b;
     }
 
     private void givenSnapshots(Map<String, PurchaseOrderApprovalSnapshotDto> snapshots) {

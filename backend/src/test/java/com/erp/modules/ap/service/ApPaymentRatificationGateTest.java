@@ -22,6 +22,7 @@ import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.PaymentRunRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
+import com.erp.modules.cashbank.repository.CashBankAccountRepository;
 import com.erp.modules.cashbank.service.CashBankAccountResolver;
 import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
@@ -115,9 +116,12 @@ class ApPaymentRatificationGateTest {
         scopeGuard              = mock(ScopeGuard.class);
         audit                   = mock(AuditService.class);
 
+        // cashAccounts only ever NAMES the account a payment posted to (UAT, 2026-08); this suite is
+        // about whether cash may leave at all, so the default empty answer is the right stub.
         service = new ApPaymentServiceImpl(
                 bills, payments, allocations, paymentRuns, companies, suppliers, numbers,
-                glPosting, glConfig, cashBankAccountResolver, cashTxnRecorder, whtCapture,
+                glPosting, glConfig, cashBankAccountResolver, mock(CashBankAccountRepository.class),
+                cashTxnRecorder, whtCapture,
                 fxConversion, new DirectReceiptRatificationGuard(purchaseMatchReader),
                 scopeGuard, audit);
 

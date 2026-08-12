@@ -53,6 +53,24 @@
               <dd class="col-sm-9 mono">{{ p.currency }} {{ fmtMoney(p.amount) }}</dd>
               <dt class="col-sm-3">Tender</dt>
               <dd class="col-sm-9">{{ p.tenderType }}</dd>
+              <!--
+                Which account this drew on (UAT 2026-08). The account is optional on the request
+                and defaults to the company default, so it has to be stated on the posted payment
+                or nobody can tell a defaulted run from a deliberate one.
+              -->
+              <dt class="col-sm-3">Paid From</dt>
+              <dd class="col-sm-9">
+                @if (p.cashBankAccountName) {
+                  {{ p.cashBankAccountName }}
+                  @if (p.cashBankAccountNumber) {
+                    <span class="mono text-muted"> · {{ p.cashBankAccountNumber }}</span>
+                  }
+                } @else if (p.cashBankAccountId) {
+                  <span class="text-muted">Recorded, but this account can no longer be read.</span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </dd>
               @if (p.bankReference) {
                 <dt class="col-sm-3">Reference</dt>
                 <dd class="col-sm-9">{{ p.bankReference }}</dd>

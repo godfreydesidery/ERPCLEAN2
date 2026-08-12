@@ -122,4 +122,81 @@ class ApPaymentServiceImplTest {
                 .as("unknown bill id must yield null uid, not throw")
                 .isNull();
     }
+
+    // -------------------------------------------------------------------------
+    // UAT 2026-08: a posted payment must state WHICH cash/bank account it drew on
+    // -------------------------------------------------------------------------
+
+    /**
+     * The live defect. {@code cashBankAccountUid} is optional on a payment run and falls back to the
+     * company default, and the posted response said nothing at all about which account the money left
+     * — so a run against the wrong account looked exactly like a correct one until reconciliation.
+     */
+    @Test
+    void toDto_echoesTheCashBankAccountThePaymentDrewOn() {
+        ApPayment payment = paymentHeader(3L, "PAY-UID-003", "PAY-0003");
+        when(payment.getCashBankAccountId()).thenReturn(77L);
+
+        SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
+        ApPaymentDto dto = ApPaymentServiceImpl.toDto(payment, List.of(), billRepo,
+                new ApPaymentServiceImpl.CashAccountRef(
+                        77L, "CBA-UID-077", "Main NMB Current", "011010012345"));
+
+        assertThat(dto.cashBankAccountId()).isEqualTo(77L);
+        assertThat(dto.cashBankAccountUid()).isEqualTo("CBA-UID-077");
+        assertThat(dto.cashBankAccountName())
+                .as("the human label is what tells a reviewer which account this was")
+                .isEqualTo("Main NMB Current");
+        assertThat(dto.cashBankAccountNumber())
+                .as("the number is what tells two accounts at the same bank apart")
+                .isEqualTo("011010012345");
+    }
+
+    /**
+     * When the account row cannot be read the response still says an account WAS chosen — the id
+     * stamped on the payment row survives, so "which account?" degrades to "this one, unnamed"
+     * rather than back to the original silence.
+     */
+    @Test
+    void toDto_unresolvableAccount_stillReportsTheStampedAccountId() {
+        ApPayment payment = paymentHeader(4L, "PAY-UID-004", "PAY-0004");
+        when(payment.getCashBankAccountId()).thenReturn(77L);
+
+        SupplierBillRepository billRepo = mock(SupplierBillRepository.class);
+        ApPaymentDto dto = ApPaymentServiceImpl.toDto(payment, List.of(), billRepo, null);
+
+        assertThat(dto.cashBankAccountId()).isEqualTo(77L);
+        assertThat(dto.cashBankAccountUid()).isNull();
+        assertThat(dto.cashBankAccountName()).isNull();
+        assertThat(dto.cashBankAccountNumber()).isNull();
+    }
+
+    // -------------------------------------------------------------------------
+
+    /** A minimal payment header — every field {@code toDto} reads, nothing else. */
+    private static ApPayment paymentHeader(Long id, String uid, String number) {
+        ApPayment payment = mock(ApPayment.class);
+        when(payment.getId()).thenReturn(id);
+        when(payment.getUid()).thenReturn(uid);
+        when(payment.getCompanyId()).thenReturn(10L);
+        when(payment.getBranchId()).thenReturn(20L);
+        when(payment.getSupplierId()).thenReturn(5L);
+        when(payment.getPaymentNumber()).thenReturn(number);
+        when(payment.getKind()).thenReturn(ApPaymentKind.PAYMENT_RUN);
+        when(payment.getPaymentDate()).thenReturn(LocalDate.of(2026, 8, 12));
+        when(payment.getAmount()).thenReturn(new BigDecimal("1000.00"));
+        CurrencyCode currency = mock(CurrencyCode.class);
+        when(currency.value()).thenReturn("TZS");
+        when(payment.getCurrency()).thenReturn(currency);
+        when(payment.getTenderType()).thenReturn("BANK_TRANSFER");
+        when(payment.getBankReference()).thenReturn(null);
+        when(payment.getGlEntryUid()).thenReturn("JE-UID-003");
+        when(payment.getWhtAmount()).thenReturn(null);
+        when(payment.getWhtTransactionUid()).thenReturn(null);
+        when(payment.getUnallocatedAmount()).thenReturn(BigDecimal.ZERO);
+        when(payment.getStatus()).thenReturn(ApPaymentStatus.ALLOCATED);
+        when(payment.getChequeUid()).thenReturn(null);
+        when(payment.getPaymentRunId()).thenReturn(9L);
+        return payment;
+    }
 }

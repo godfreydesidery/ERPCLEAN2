@@ -1,6 +1,7 @@
 package com.erp.modules.ap.repository;
 
 import com.erp.modules.ap.domain.entity.SupplierBill;
+import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,6 +36,59 @@ public interface SupplierBillRepository extends JpaRepository<SupplierBill, Long
     Page<SupplierBill> findByCompanyId(Long companyId, Pageable pageable);
 
     Page<SupplierBill> findByCompanyIdAndSupplierId(Long companyId, Long supplierId, Pageable pageable);
+
+    /**
+     * The bill list read, with every filter the screen offers applied in the DATABASE — filtering a
+     * page in memory would silently shrink pages and mis-state the total.
+     *
+     * <p>Each filter is skipped when its parameter is null, the {@code (:p IS NULL OR ...)} idiom
+     * used throughout this codebase. {@code uncomparedOnly} follows the same shape rather than being
+     * a boolean: null means "no filter", TRUE means "only bills that were not fully checked".
+     *
+     * <p><b>The uncompared predicate.</b> A bill qualifies when ANY of its lines lacks a
+     * {@code bill_match} row carrying both a PO unit cost and a received quantity — i.e. at least
+     * one line was never actually compared against the order and the receipt. Bills with no lines at
+     * all qualify too: nothing was checked there either, and the EXISTS above cannot see them.
+     * Bills with no match rows at all (an AP opening balance, an unmatched draft) qualify through
+     * the same NOT EXISTS — silence is not evidence.
+     *
+     * @param uncomparedOnly TRUE to keep only bills that were not fully compared; null for all bills
+     */
+    @Query(value = """
+            SELECT b FROM SupplierBill b
+            WHERE b.companyId = :companyId
+              AND (:supplierId IS NULL OR b.supplierId = :supplierId)
+              AND (:status IS NULL OR b.status = :status)
+              AND (:uncomparedOnly IS NULL
+                   OR EXISTS (SELECT l.id FROM SupplierBillLine l
+                              WHERE l.supplierBillId = b.id
+                                AND NOT EXISTS (SELECT m.id FROM BillMatch m
+                                                WHERE m.supplierBillLineId = l.id
+                                                  AND m.poUnitCostAmount IS NOT NULL
+                                                  AND m.grReceivedQty    IS NOT NULL))
+                   OR NOT EXISTS (SELECT l2.id FROM SupplierBillLine l2
+                                  WHERE l2.supplierBillId = b.id))
+            """,
+            countQuery = """
+            SELECT COUNT(b) FROM SupplierBill b
+            WHERE b.companyId = :companyId
+              AND (:supplierId IS NULL OR b.supplierId = :supplierId)
+              AND (:status IS NULL OR b.status = :status)
+              AND (:uncomparedOnly IS NULL
+                   OR EXISTS (SELECT l.id FROM SupplierBillLine l
+                              WHERE l.supplierBillId = b.id
+                                AND NOT EXISTS (SELECT m.id FROM BillMatch m
+                                                WHERE m.supplierBillLineId = l.id
+                                                  AND m.poUnitCostAmount IS NOT NULL
+                                                  AND m.grReceivedQty    IS NOT NULL))
+                   OR NOT EXISTS (SELECT l2.id FROM SupplierBillLine l2
+                                  WHERE l2.supplierBillId = b.id))
+            """)
+    Page<SupplierBill> search(@Param("companyId") Long companyId,
+                              @Param("supplierId") Long supplierId,
+                              @Param("status") SupplierBillStatus status,
+                              @Param("uncomparedOnly") Boolean uncomparedOnly,
+                              Pageable pageable);
 
     /** Open bills for payment-run selection (locked for update — no-double-pay, NFR-AP-04). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
