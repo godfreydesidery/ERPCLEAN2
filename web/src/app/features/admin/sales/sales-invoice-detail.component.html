@@ -427,6 +427,33 @@
                        [disabled]="addingLine()" autocomplete="off" />
               </div>
 
+              <!--
+                Price Override (optional) — same field, label and meaning as the quotation and
+                sales-order screens. It prices the line when the catalogue cannot; blank means "use
+                the catalogue price". The hint tells the user which of those two they are in BEFORE
+                they press Add Line, so an unpriceable product is not discovered from a refusal.
+                type="text" (not number) to match every other box in this form; addLine() does the
+                numeric check and states the remedy.
+              -->
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="lineUnitPrice">Price Override</label>
+                <input id="lineUnitPrice" name="lineUnitPrice" type="text"
+                       class="form-control form-control-sm"
+                       [placeholder]="priceState() === 'ok' && resolvedPrice() ? resolvedPrice()! : '(list price)'"
+                       [ngModel]="newLineUnitPrice()"
+                       (ngModelChange)="newLineUnitPrice.set($event); clearDiscountApproval()"
+                       [disabled]="addingLine()" autocomplete="off"
+                       aria-describedby="lineUnitPriceHelp" />
+                <!-- Always rendered so the live region exists before the price lands and is announced. -->
+                <small id="lineUnitPriceHelp" class="d-block text-muted mt-1" aria-live="polite">
+                  @switch (priceState()) {
+                    @case ('loading') { Fetching price… }
+                    @case ('ok') { List price {{ resolvedPrice() }} — leave blank to use it. }
+                    @case ('missing') { No price set for this product yet — enter a unit price to bill it. }
+                  }
+                </small>
+              </div>
+
               <!-- Discount amount (optional) -->
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="lineDiscAmt">Disc. amount</label>

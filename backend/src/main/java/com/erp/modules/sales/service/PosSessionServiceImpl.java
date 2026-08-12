@@ -8,8 +8,10 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.service.StepUpAuthService;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.sales.domain.dto.AuthorisedReadRequest;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
@@ -51,9 +53,12 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,6 +135,15 @@ public class PosSessionServiceImpl implements PosSessionService {
      */
     private static final String READ_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
 
+    /**
+     * Stands in for a cashier the IAM lookup can no longer name (account removed).
+     *
+     * <p>Same rule as {@code PosTillServiceImpl.UNNAMED_CASHIER}: a label is a phrase a person can
+     * read, never an internal id. "Unnamed cashier" rather than that class's "Another cashier"
+     * because here the session's own holder is being named, not somebody else's.
+     */
+    private static final String UNNAMED_CASHIER = "Unnamed cashier";
+
     /** Audit outcomes for an X/Z-read attempt. */
     private static final String OUTCOME_SERVED          = "SERVED";
     private static final String OUTCOME_NO_APPROVAL     = "REFUSED_NO_APPROVAL";
@@ -152,6 +166,17 @@ public class PosSessionServiceImpl implements PosSessionService {
      */
     private final GLPostingService           glPosting;
     private final CompanyRepository          companies;
+    /**
+     * Names the branch a session/X-read/Z-read belongs to (UAT, 2026-08). Read-only, and only ever
+     * asked for branches of the session's OWN company.
+     */
+    private final BranchRepository           branches;
+    /**
+     * Names the cashier holding a session (UAT, 2026-08). The same collaborator
+     * {@code PosTillServiceImpl} uses for {@code openSessionCashierName} — one batch lookup, never
+     * a name query per row.
+     */
+    private final UserLookupService          userLookup;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final SalesDepthNumberGenerator  numberGen;
@@ -178,6 +203,8 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   GLConfigResolver glConfig,
                                   GLPostingService glPosting,
                                   CompanyRepository companies,
+                                  BranchRepository branches,
+                                  UserLookupService userLookup,
                                   ScopeGuard scopeGuard,
                                   AuditService audit,
                                   SalesDepthNumberGenerator numberGen,
@@ -194,6 +221,8 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.glConfig       = glConfig;
         this.glPosting      = glPosting;
         this.companies      = companies;
+        this.branches       = branches;
+        this.userLookup     = userLookup;
         this.scopeGuard     = scopeGuard;
         this.audit          = audit;
         this.numberGen      = numberGen;
@@ -247,7 +276,11 @@ public class PosSessionServiceImpl implements PosSessionService {
         var page = (status != null)
                 ? sessions.findByCompanyIdAndStatus(companyId, status, pageable)
                 : sessions.findByCompanyId(companyId, pageable);
-        return page.map(this::toDto);
+        // Labels resolved ONCE for the whole page (UAT, 2026-08). Mapping row by row would ask IAM
+        // for a cashier name and the repositories for a till and a branch per session — an N+1 that
+        // grows with the page size, for what is three small lookups.
+        SessionLabels labels = labelsFor(page.getContent());
+        return page.map(s -> toDto(s, labels));
     }
 
     @Override
@@ -687,8 +720,12 @@ public class PosSessionServiceImpl implements PosSessionService {
         BigDecimal expected         = session.getOpeningFloatAmount()
                 .add(cashTenderTotal).subtract(totalPayouts);
         long invoiceCount           = countPosInvoices(session);
+        SessionLabels labels        = labelsFor(List.of(session));
 
-        return new XReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
+        return new XReadDto(session.getUid(),
+                session.getPosTillId(), labels.tillName(session.getPosTillId()),
+                session.getCashierId(), labels.cashierName(session.getCashierId()),
+                session.getBranchId(), labels.branchName(session.getBranchId()),
                 session.getOpenedAt().toString(), session.getOpeningFloatAmount(),
                 grossTurnover, cashTenderTotal, totalPayouts, expected, invoiceCount,
                 computeTenderSubtotals(session), computePayoutSubtotals(session));
@@ -714,7 +751,11 @@ public class PosSessionServiceImpl implements PosSessionService {
      * aggregate over persisted rows, so the report is reproducible for the life of the session.
      */
     private ZReadDto buildZRead(PosSession session) {
-        return new ZReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
+        SessionLabels labels = labelsFor(List.of(session));
+        return new ZReadDto(session.getUid(),
+                session.getPosTillId(), labels.tillName(session.getPosTillId()),
+                session.getCashierId(), labels.cashierName(session.getCashierId()),
+                session.getBranchId(), labels.branchName(session.getBranchId()),
                 session.getOpenedAt() == null ? null : session.getOpenedAt().toString(),
                 session.getClosedAt() == null ? null : session.getClosedAt().toString(),
                 session.getReconciledAt() == null ? null : session.getReconciledAt().toString(),
@@ -1114,13 +1155,104 @@ public class PosSessionServiceImpl implements PosSessionService {
     }
 
     private PosSessionDto toDto(PosSession s) {
-        return new PosSessionDto(s.getId(), s.getUid(), s.getCompanyId(), s.getBranchId(),
-                s.getPosTillId(), s.getCashierId(), s.getSessionNumber(), s.getStatus(),
+        return toDto(s, labelsFor(List.of(s)));
+    }
+
+    private PosSessionDto toDto(PosSession s, SessionLabels labels) {
+        return new PosSessionDto(s.getId(), s.getUid(), s.getCompanyId(),
+                s.getBranchId(), labels.branchName(s.getBranchId()),
+                s.getPosTillId(), labels.tillName(s.getPosTillId()),
+                s.getCashierId(), labels.cashierName(s.getCashierId()),
+                s.getSessionNumber(), s.getStatus(),
                 s.getOpenedAt() == null ? null : s.getOpenedAt().toString(),
                 s.getClosedAt() == null ? null : s.getClosedAt().toString(),
                 s.getReconciledAt() == null ? null : s.getReconciledAt().toString(),
                 s.getOpeningFloatAmount(), s.getCountedCashAmount(),
                 s.getExpectedCashAmount(), s.getVarianceAmount(),
                 s.getVarianceJournalId(), s.getNotes());
+    }
+
+    // ---- who/where labels (UAT, 2026-08) ---------------------------------------
+
+    /**
+     * Resolves the cashier, till and branch NAMES for a set of sessions in a fixed number of reads.
+     *
+     * <p><b>Why this exists.</b> A session, an X-read and a Z-read used to carry
+     * {@code cashierId: "7"}, {@code posTillId: "1"} and {@code branchId: "1"} and no labels at all,
+     * so nobody could read a shift report at a glance and every review meant three cross-reference
+     * lookups. This is the batch shape {@code PosTillServiceImpl} already uses for
+     * {@code openSessionCashierName}, extended to the till and the branch.
+     *
+     * <p><b>Scoping.</b> Ids are taken off session rows the caller has already passed
+     * {@code assertCanActIn} for, and the till/branch reads are company-scoped finders keyed on each
+     * session's OWN {@code companyId} — never a caller parameter. Grouping by company (rather than
+     * assuming one) costs nothing here and means a mixed set could never borrow a name across the
+     * tenant boundary. Entity PKs are globally unique, so merging the per-company maps cannot
+     * collide.
+     *
+     * <p>Reads nothing when handed an empty collection.
+     */
+    private SessionLabels labelsFor(Collection<PosSession> rows) {
+        if (rows.isEmpty()) {
+            return SessionLabels.EMPTY;
+        }
+
+        // One IAM call for every cashier across the whole set.
+        Map<Long, String> cashierNames = userLookup.displayNamesByIds(
+                rows.stream()
+                        .map(PosSession::getCashierId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet()));
+
+        Map<Long, String> tillNames   = new LinkedHashMap<>();
+        Map<Long, String> branchNames = new LinkedHashMap<>();
+        rows.stream()
+                .filter(s -> s.getCompanyId() != null)
+                .collect(Collectors.groupingBy(PosSession::getCompanyId))
+                .forEach((companyId, companyRows) -> {
+                    Set<Long> tillIds = companyRows.stream()
+                            .map(PosSession::getPosTillId)
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+                    if (!tillIds.isEmpty()) {
+                        tills.findByCompanyIdAndIdIn(companyId, tillIds)
+                                .forEach(t -> tillNames.put(t.getId(), t.getName()));
+                    }
+                    // A company's branch list is a handful of rows and is the only company-scoped
+                    // branch finder that already exists — cheaper than adding another one, and it
+                    // covers every branch the page can mention in a single read.
+                    branches.findByCompanyIdOrderByName(companyId)
+                            .forEach(b -> branchNames.put(b.getId(), b.getName()));
+                });
+
+        return new SessionLabels(cashierNames, tillNames, branchNames);
+    }
+
+    /**
+     * The human labels behind a session's ids.
+     *
+     * <p>An unresolvable cashier falls back to {@value #UNNAMED_CASHIER} — the account was removed
+     * but a person still ran that shift, and a report has to say something rather than nothing. An
+     * unresolvable till or branch stays {@code null} (they are master rows that are archived, never
+     * deleted, so absence means a data anomaly worth showing as "—" rather than papering over).
+     * Neither ever falls back to an internal id.
+     */
+    private record SessionLabels(Map<Long, String> cashierNames,
+                                  Map<Long, String> tillNames,
+                                  Map<Long, String> branchNames) {
+
+        static final SessionLabels EMPTY = new SessionLabels(Map.of(), Map.of(), Map.of());
+
+        String cashierName(Long cashierId) {
+            return cashierId == null ? null : cashierNames.getOrDefault(cashierId, UNNAMED_CASHIER);
+        }
+
+        String tillName(Long tillId) {
+            return tillId == null ? null : tillNames.get(tillId);
+        }
+
+        String branchName(Long branchId) {
+            return branchId == null ? null : branchNames.get(branchId);
+        }
     }
 }

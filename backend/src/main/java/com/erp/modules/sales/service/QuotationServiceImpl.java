@@ -160,10 +160,18 @@ public class QuotationServiceImpl implements QuotationService {
         Product product = resolveProduct(q.getCompanyId(), req.productUid());
         assertSellable(product);
         UnitOfMeasure unit = resolveUnit(q.getCompanyId(), req.unitUid());
+        // A stated price can now stand in for a missing list price, so a negative number must never
+        // reach that path. @PositiveOrZero on the DTO is the first-line guard; this covers
+        // programmatic callers that bypass bean validation (mirrors the sales-order guard).
+        if (req.unitPriceOverride() != null
+                && req.unitPriceOverride().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("The unit price cannot be negative.");
+        }
         // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
         // line below regardless of whether the price is overridden.
-        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
-                q.getCompanyId(), product.getId(), unit.getId());
+        UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
+                priceResolutionService, q.getCompanyId(), product.getId(), unit.getId(),
+                req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
         BigDecimal vatRate = resolveVatRate(q.getCompanyId(), product);
@@ -214,6 +222,15 @@ public class QuotationServiceImpl implements QuotationService {
         scopeGuard.assertCanActIn(RequestContext.get(), q.getCompanyId());
         if (q.getStatus() != QuotationStatus.DRAFT) {
             throw new IllegalStateException("Only DRAFT quotations can be sent; current: " + q.getStatus());
+        }
+        // An empty quotation is not a quotation. Sending one burns a quote number, stamps sentAt and
+        // moves the document to SENT — from which it can only be accepted or rejected, never edited
+        // — so the customer would receive a nil offer and the salesperson would have to start over.
+        // Refuse it while the document is still fixable.
+        if (quotationLines.findByQuotationIdOrderByLineNo(q.getId()).isEmpty()) {
+            throw new IllegalStateException(
+                    "This quotation has no items yet. Add at least one line before sending it "
+                    + "to the customer.");
         }
         // Check validity date not in the past
         if (q.getValidUntil().isBefore(LocalDate.now())) {

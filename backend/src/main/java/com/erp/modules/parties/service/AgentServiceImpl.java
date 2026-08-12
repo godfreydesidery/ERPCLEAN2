@@ -51,6 +51,7 @@ public class AgentServiceImpl implements AgentService {
     private final AuditService audit;
     private final UserLookupService userLookup;
     private final CompanyRepository companies;
+    private final InternalAgentUniquenessGuard uniquenessGuard;
 
     public AgentServiceImpl(AgentRepository agents,
                             AgentBranchRepository agentBranches,
@@ -59,7 +60,8 @@ public class AgentServiceImpl implements AgentService {
                             ScopeGuard scopeGuard,
                             AuditService audit,
                             UserLookupService userLookup,
-                            CompanyRepository companies) {
+                            CompanyRepository companies,
+                            InternalAgentUniquenessGuard uniquenessGuard) {
         this.agents = agents;
         this.agentBranches = agentBranches;
         this.codeGen = codeGen;
@@ -68,6 +70,7 @@ public class AgentServiceImpl implements AgentService {
         this.audit = audit;
         this.userLookup = userLookup;
         this.companies = companies;
+        this.uniquenessGuard = uniquenessGuard;
     }
 
     @Override
@@ -299,23 +302,15 @@ public class AgentServiceImpl implements AgentService {
      * (no DB uniqueness on {@code app_user_id}) and made sale-time agent resolution ambiguous —
      * surfacing as an unhandled 500 on every sale. Guard at write time with a friendly 409.
      *
+     * <p>The rule itself now lives in {@link InternalAgentUniquenessGuard} so the sale-time
+     * provisioner — which also creates internal agents — is bound by the same predicate instead of
+     * writing behind this check's back.
+     *
      * @param selfId the row being changed (update/restore), excluded from the check; {@code null}
      *               on create.
      */
     private void assertNoOtherActiveInternalAgent(Long companyId, Long appUserId, Long selfId) {
-        if (appUserId == null) {
-            return;
-        }
-        boolean duplicate = selfId == null
-                ? agents.existsByCompanyIdAndAppUserIdAndAgentKindAndStatus(
-                        companyId, appUserId, AgentKind.INTERNAL, MasterStatus.ACTIVE)
-                : agents.existsByCompanyIdAndAppUserIdAndAgentKindAndStatusAndIdNot(
-                        companyId, appUserId, AgentKind.INTERNAL, MasterStatus.ACTIVE, selfId);
-        if (duplicate) {
-            throw new ConflictException(
-                    "This user is already linked to an active internal sales agent. "
-                    + "A user can have only one internal sales agent.");
-        }
+        uniquenessGuard.assertNoOtherActiveInternalAgent(companyId, appUserId, selfId);
     }
 
     private static void applyCommon(Agent a, PartyType partyType, String displayName,

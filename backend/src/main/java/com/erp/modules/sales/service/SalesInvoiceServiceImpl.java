@@ -124,6 +124,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final BelowCostGuard belowCostGuard;
     /** K7: manager-authorised discount ceiling. Ships OFF, so no tenant's behaviour changes. */
     private final DiscountAuthorisationGuard discountGuard;
+    /** Makes the mandatory-agent rule satisfiable on a company whose agent master is empty. */
+    private final InternalAgentProvisioner internalAgents;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -150,7 +152,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    JournalEntryRepository journalEntries,
                                    NegativeStockGuard negativeStockGuard,
                                    BelowCostGuard belowCostGuard,
-                                   DiscountAuthorisationGuard discountGuard) {
+                                   DiscountAuthorisationGuard discountGuard,
+                                   InternalAgentProvisioner internalAgents) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -177,6 +180,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.negativeStockGuard = negativeStockGuard;
         this.belowCostGuard = belowCostGuard;
         this.discountGuard = discountGuard;
+        this.internalAgents = internalAgents;
     }
 
     // -------------------------------------------------------------------------
@@ -572,10 +576,28 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         BigDecimal quantity = applyWeighedGoodsRules(product, unit, req.quantity());
 
         // Snapshot price from price list (BR-SALES-03) — carries the VAT-inclusive stance of the
-        // originating list (ADR-0056), threaded onto the line below.
-        UnitListPriceDto resolvedPrice = priceResolutionService.resolveUnitListPrice(
-                inv.getCompanyId(), product.getId(), unit.getId());
+        // originating list (ADR-0056), threaded onto the line below. When the catalogue cannot price
+        // the line, a price stated on the request stands in for the list price (see
+        // LinePriceResolver) — otherwise a company with no price list can invoice nothing at all.
+        BigDecimal statedPrice = req.unitPriceOverride();
+        UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
+                priceResolutionService, inv.getCompanyId(), product.getId(), unit.getId(),
+                statedPrice);
         BigDecimal listPrice = resolvedPrice.amount();
+
+        // A stated price that DIFFERS from the resolved list price is a genuine price override, and
+        // overriding a listed price is permissioned (the dedicated override-price endpoint is gated
+        // on SALES.INVOICE.OVERRIDE). Letting add-line accept any price ungated would have made that
+        // gate decorative. When the catalogue had no price, the resolver returned the stated price
+        // itself, so this is false and no permission is demanded — there was nothing to override.
+        boolean overridesListPrice = statedPrice != null && statedPrice.compareTo(listPrice) != 0;
+        if (overridesListPrice && !permissionResolver.hasPermission(
+                RequestContext.get(), "SALES.INVOICE.OVERRIDE", System.currentTimeMillis())) {
+            throw new IllegalArgumentException(
+                    "This product already has a catalogue price. Add the line at that price, then "
+                    + "ask a supervisor to approve a price change.");
+        }
+        BigDecimal appliedPrice = statedPrice != null ? statedPrice : listPrice;
 
         // Snapshot VAT rate from tax_rates (ADR-0008 D-5b)
         BigDecimal vatRate = resolveVatRate(inv.getCompanyId(), product);
@@ -591,10 +613,16 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 product.getId(), product.getCode(), product.getName(),
                 unit.getId(), unit.getName(),
                 quantity, qtyInBase,
-                listPrice, listPrice,   // applied = list initially
+                listPrice, appliedPrice,   // applied = list unless a permitted override was stated
                 product.getVatStatus(), vatRate,
                 actorId());
         line.setPriceInclusive(resolvedPrice.vatInclusive());
+        // Stamp the override marks exactly as the dedicated override-price endpoint does, so a price
+        // changed at add-line time is as visible on the document as one changed afterwards.
+        if (overridesListPrice) {
+            line.setPriceOverridden(true);
+            line.setOverriddenBy(actorId());
+        }
         // Record what the caller entered so weighed-goods scale-step rounding is visible (D-1b).
         line.setRequestedQuantity(req.quantity());
         DiscountValidator.validateLineDiscount(req.lineDiscountAmount(), req.lineDiscountPercent());
@@ -609,7 +637,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Long discountAuthoriserId = discountGuard.authoriseLineDiscount(
                 new DiscountAuthorisationGuard.DiscountRequest(
                         inv.getCompanyId(), inv.getId(), inv.getUid(), product.getName(),
-                        listPrice.multiply(quantity),
+                        // The line's real value: identical to list unless a price was stated, in
+                        // which case the ceiling must judge the discount against what is charged.
+                        appliedPrice.multiply(quantity),
                         req.lineDiscountAmount(), req.lineDiscountPercent(),
                         req.discountAuthorisedByUid()));
         line.setLineDiscountAmount(req.lineDiscountAmount());
@@ -627,7 +657,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Map<String, Object> lineDetail = new LinkedHashMap<>();
         lineDetail.put("productUid", req.productUid());
         lineDetail.put("quantity", quantity.toPlainString());
-        lineDetail.put("unitPrice", listPrice.toPlainString());
+        lineDetail.put("unitPrice", appliedPrice.toPlainString());
+        lineDetail.put("listPrice", listPrice.toPlainString());
+        lineDetail.put("priceOverridden", String.valueOf(overridesListPrice));
         lineDetail.put("lineDiscountAmount", plainOrEmpty(req.lineDiscountAmount()));
         lineDetail.put("lineDiscountPercent", plainOrEmpty(req.lineDiscountPercent()));
         lineDetail.put("discountAuthorisedBy",
@@ -635,6 +667,24 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_LINE_ADD, "sales_invoice_lines",
                         inv.getId(), inv.getUid())
                 .detail(lineDetail));
+
+        // A price stated here IS a price override — the same act the dedicated override endpoint
+        // performs, just done while the line was being added. Recorded under the override action as
+        // well, because that is the action every compliance query filters on: leaving it only inside
+        // the ADD event's detail made overrides taken on the (now common) add-line path invisible to
+        // anyone reviewing price changes. The ADD event above is kept as-is — "a line was added" is
+        // a separate fact, and the totals/discount trail hangs off it.
+        if (overridesListPrice) {
+            Map<String, Object> overrideDetail = new LinkedHashMap<>();
+            overrideDetail.put("lineUid", saved.getUid());
+            overrideDetail.put("listPrice", listPrice.toPlainString());
+            overrideDetail.put("appliedPrice", appliedPrice.toPlainString());
+            // Tells the two routes apart without needing a second action code.
+            overrideDetail.put("overriddenOn", "LINE_ADD");
+            audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_LINE_OVERRIDE,
+                            "sales_invoice_lines", inv.getId(), inv.getUid())
+                    .detail(overrideDetail));
+        }
 
         return SalesInvoiceLineDto.from(saved);
     }
@@ -1098,12 +1148,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             assertAgentActive(agent);
             return agent.getId();
         }
-        // Auto-default: logged-in user's internal agent (FR-SALES-15)
-        if (ctx != null && ctx.userId() != null) {
-            Optional<Long> auto = agents.findInternalAgentIdByCompanyAndUser(companyId, ctx.userId());
-            if (auto.isPresent()) {
-                return auto.get();
-            }
+        // Auto-default: logged-in user's internal agent (FR-SALES-15), created on first use when the
+        // company has never had one. Before this, a company with an empty agent master could not
+        // invoice at all: the rule below told the user to select an agent or ask an administrator,
+        // and neither was reachable from a sales screen. See InternalAgentProvisioner for why the
+        // rule itself is kept rather than relaxed.
+        Optional<Long> auto = internalAgents.resolveOrProvision(companyId, ctx);
+        if (auto.isPresent()) {
+            return auto.get();
         }
         // Technical context goes to the log only; the user-facing message stays friendly and
         // carries no internal codes/identifiers (error-message hygiene standing rule).

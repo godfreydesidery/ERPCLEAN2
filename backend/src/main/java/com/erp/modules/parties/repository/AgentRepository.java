@@ -80,6 +80,17 @@ public interface AgentRepository extends JpaRepository<Agent, Long> {
             Long companyId, Long appUserId, AgentKind agentKind, MasterStatus status);
 
     /**
+     * Off-switch support: does this user hold an internal agent in this company that is NOT active
+     * (archived or deactivated)? Read together with {@link #findInternalAgentIdByCompanyAndUser}
+     * returning empty, this says "an administrator deliberately took this person off sales" — as
+     * opposed to "this person has never had an agent". The sale-time provisioner must refuse the
+     * first and provision only the second; otherwise archiving an agent merely causes a fresh one to
+     * be minted on the next sale, and the archive means nothing.
+     */
+    boolean existsByCompanyIdAndAppUserIdAndAgentKindAndStatusNot(
+            Long companyId, Long appUserId, AgentKind agentKind, MasterStatus status);
+
+    /**
      * Guard support (update/restore): same as above but excludes the row being changed, so an agent
      * can be re-saved without colliding with itself.
      */

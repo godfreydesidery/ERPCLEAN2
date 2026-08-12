@@ -1,18 +1,26 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
+import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.service.PriceResolutionService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
+import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.TaxRate;
@@ -67,6 +75,9 @@ class SalesInvoiceServiceImplTest {
     // K7: addLine consults the discount guard. Mocked (not null) because @InjectMocks would
     // otherwise pass null and every add-line test would NPE on the guard call.
     @Mock DiscountAuthorisationGuard discountGuard;
+    // UAT wave 1: create() resolves the acting user's own internal agent through this, provisioning
+    // one on first sale. Its own rules are pinned by InternalAgentProvisionerTest.
+    @Mock InternalAgentProvisioner internalAgents;
 
     @InjectMocks SalesInvoiceServiceImpl service;
 
@@ -214,8 +225,222 @@ class SalesInvoiceServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // UAT wave 1 — pricing. A company with no price list could not invoice anything: every line was
+    // refused before the price the seller had typed was ever looked at.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addLine_withStatedPrice_whenCatalogueCannotPriceIt_usesTheStatedPrice() {
+        asCashier();
+        SalesInvoice inv = invoiceWithId(510L, "INVUID0000000000000000030");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+
+        UnitOfMeasure baseUnit = unitWithId(960L, "BASEUID0000000000000030", "PCS");
+        Product product = productWithId(910L, "PRODUID00000000000000030", "PROD-0010",
+                "Unpriced Item", baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000030"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000030"))
+                .thenReturn(Optional.of(baseUnit));
+        // No price list exists anywhere in this company — the live UAT condition.
+        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 910L, 960L))
+                .thenReturn(UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(510L)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        SalesInvoiceLineDto dto = service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000030", "BASEUID0000000000000030", BigDecimal.TEN,
+                null, null, null, new BigDecimal("2500.0000")));
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("2500.0000");
+        assertThat(dto.listPriceAmount()).isEqualByComparingTo("2500.0000");
+        // Nothing was overridden — there was no catalogue price to override — so a cashier without
+        // the price-override grant is never asked for one.
+        assertThat(savedLine().isPriceOverridden()).isFalse();
+    }
+
+    @Test
+    void addLine_withStatedPriceUnderAListPrice_withoutTheOverrideGrant_isRefused() {
+        // The stated price must not become an ungated discount channel: changing a LISTED price is
+        // permissioned, and has its own endpoint. A cashier gets told what to do instead.
+        asCashier();
+        SalesInvoice inv = invoiceWithId(511L, "INVUID0000000000000000031");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+
+        UnitOfMeasure baseUnit = unitWithId(961L, "BASEUID0000000000000031", "PCS");
+        Product product = productWithId(911L, "PRODUID00000000000000031", "PROD-0011", "Listed Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000031"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000031"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 911L, 961L))
+                .thenReturn(UnitPriceQuoteResult.resolved(
+                        new UnitPriceQuoteDto(new BigDecimal("1000.0000"), "TZS", false)));
+        when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.OVERRIDE"), anyLong()))
+                .thenReturn(false);
+
+        assertThatThrownBy(() -> service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000031", "BASEUID0000000000000031", BigDecimal.ONE,
+                null, null, null, new BigDecimal("1.0000"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ask a supervisor");
+        verify(lines, never()).save(any());
+    }
+
+    @Test
+    void addLine_withStatedPriceUnderAListPrice_withTheOverrideGrant_appliesAndMarksTheLine() {
+        asCashier();
+        SalesInvoice inv = invoiceWithId(512L, "INVUID0000000000000000032");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+
+        UnitOfMeasure baseUnit = unitWithId(962L, "BASEUID0000000000000032", "PCS");
+        Product product = productWithId(912L, "PRODUID00000000000000032", "PROD-0012", "Listed Item",
+                baseUnit);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, "PRODUID00000000000000032"))
+                .thenReturn(Optional.of(product));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000032"))
+                .thenReturn(Optional.of(baseUnit));
+        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 912L, 962L))
+                .thenReturn(UnitPriceQuoteResult.resolved(
+                        new UnitPriceQuoteDto(new BigDecimal("1000.0000"), "TZS", false)));
+        when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.OVERRIDE"), anyLong()))
+                .thenReturn(true);
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(512L)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        SalesInvoiceLineDto dto = service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000032", "BASEUID0000000000000032", BigDecimal.ONE,
+                null, null, null, new BigDecimal("900.0000")));
+
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("900.0000");
+        // The list price is still snapshotted, so the discount off list stays visible on the doc.
+        assertThat(dto.listPriceAmount()).isEqualByComparingTo("1000.0000");
+        assertThat(savedLine().isPriceOverridden()).isTrue();
+
+        // ...and it is findable AS an override. Compliance reviews filter on the override action;
+        // recording it only as "line added, priceOverridden=true" hid every override taken on this
+        // path — which, now that add-line can state a price, is the path most of them take.
+        assertThat(auditedActions()).contains("SALES.INVOICE.LINE.OVERRIDE");
+        // The "a line was added" fact is not traded away for it — both are recorded.
+        assertThat(auditedActions()).contains("SALES.INVOICE.LINE.ADD");
+        assertThat(overrideAuditDetail())
+                .containsEntry("listPrice", "1000.0000")
+                .containsEntry("appliedPrice", "900.0000")
+                // Tells the two override routes apart without a second action code.
+                .containsEntry("overriddenOn", "LINE_ADD");
+    }
+
+    @Test
+    void addLine_atTheCataloguePrice_recordsNoOverride() {
+        // The other half of the rule: an ordinary line must not clutter the override trail, or the
+        // action stops meaning anything. Nothing was overridden, so nothing is recorded as one.
+        SalesInvoice inv = givenAddableLine(513L, "INVUID0000000000000000033",
+                913L, "PRODUID00000000000000033", 963L, "BASEUID0000000000000033");
+
+        service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000033", "BASEUID0000000000000033", BigDecimal.ONE, null, null));
+
+        assertThat(auditedActions())
+                .contains("SALES.INVOICE.LINE.ADD")
+                .doesNotContain("SALES.INVOICE.LINE.OVERRIDE");
+    }
+
+    // -------------------------------------------------------------------------
+    // UAT wave 1 — the mandatory sales agent. Zero agents existed company-wide and a cashier could
+    // not even list them, so the "select a sales agent" remedy pointed at a locked door.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_withNoAgentNamed_usesTheAgentProvisionedForTheActingUser() {
+        asCashier();
+        Long provisionedAgentId = 4242L;
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any()))
+                .thenReturn(Optional.of(provisionedAgentId));
+        when(invoices.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        service.create(new CreateSalesInvoiceRequest("COMPUID00000000000000001",
+                "CUSTUID00000000000000001", null, "TZS", null, null));
+
+        ArgumentCaptor<SalesInvoice> captor = ArgumentCaptor.forClass(SalesInvoice.class);
+        verify(invoices).save(captor.capture());
+        assertThat(captor.getValue().getAgentId()).isEqualTo(provisionedAgentId);
+    }
+
+    @Test
+    void create_whenTheActingUserCannotHoldAnAgent_stillRefusesWithAnActionableMessage() {
+        // Root, or anyone who is not company staff: no agent can be provisioned for them, and the
+        // rule (a sale names exactly one agent) is not weakened to let the sale through.
+        asCashier();
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(new CreateSalesInvoiceRequest(
+                "COMPUID00000000000000001", "CUSTUID00000000000000001", null, "TZS", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Select a sales agent");
+        verify(invoices, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /** A NON-root principal: root bypasses every permission check and would mask an RBAC gap. */
+    private static void asCashier() {
+        RequestContext.set(new RequestContext.Principal(
+                77L, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
+    }
+
+    private static com.erp.modules.iam.domain.entity.Company company() {
+        var c = new com.erp.modules.iam.domain.entity.Company(null, "C1", "Acme Ltd");
+        ReflectionTestUtils.setField(c, "id", COMPANY_ID);
+        ReflectionTestUtils.setField(c, "uid", "COMPUID00000000000000001");
+        return c;
+    }
+
+    private static com.erp.modules.parties.domain.entity.Customer customer() {
+        var cust = new com.erp.modules.parties.domain.entity.Customer(COMPANY_ID, "CUST-0001",
+                com.erp.modules.parties.domain.enums.PartyType.BUSINESS, "Walk-in",
+                com.erp.modules.parties.domain.enums.CustomerKind.CASH_WALK_IN, 1L);
+        ReflectionTestUtils.setField(cust, "id", CUSTOMER_ID);
+        ReflectionTestUtils.setField(cust, "uid", "CUSTUID00000000000000001");
+        return cust;
+    }
+
+    /** Every audit action the service recorded during the call, in order. */
+    private List<String> auditedActions() {
+        return recordedAuditEvents().stream()
+                .map(com.erp.platform.audit.AuditEvent::action)
+                .toList();
+    }
+
+    /** The detail map of the price-override event — what a compliance review actually reads. */
+    private java.util.Map<String, Object> overrideAuditDetail() {
+        return recordedAuditEvents().stream()
+                .filter(e -> "SALES.INVOICE.LINE.OVERRIDE".equals(e.action()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no price-override audit event was recorded"))
+                .detail();
+    }
+
+    private List<com.erp.platform.audit.AuditEvent> recordedAuditEvents() {
+        ArgumentCaptor<com.erp.platform.audit.AuditEvent> captor =
+                ArgumentCaptor.forClass(com.erp.platform.audit.AuditEvent.class);
+        verify(audit, org.mockito.Mockito.atLeastOnce()).record(captor.capture());
+        return captor.getAllValues();
+    }
 
     /** The line the service actually persisted. */
     private com.erp.modules.sales.domain.entity.SalesInvoiceLine savedLine() {
