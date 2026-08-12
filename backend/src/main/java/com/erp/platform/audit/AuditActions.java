@@ -395,6 +395,18 @@ public final class AuditActions {
     public static final String POS_SESSION_PAYOUT        = "POS.SESSION.PAYOUT";
     public static final String POS_SESSION_CLOSE         = "POS.SESSION.CLOSE";
     public static final String POS_SESSION_RECONCILE     = "POS.SESSION.RECONCILE";
+    /**
+     * An X-read (non-resetting shift summary) was printed, or refused.
+     *
+     * <p>Recorded on EVERY print, not only on manager-approved ones. An X-read shows a shift's takings
+     * and expected drawer cash, so "who looked at the till figures, when, and on whose authority" is
+     * itself the control — a trail that only fires on overrides cannot tell an approved read from one
+     * nobody ever needed approval for. Detail carries the report, the outcome, the viewer, and the
+     * approving manager when a step-up was involved.
+     */
+    public static final String POS_SESSION_XREAD         = "POS.SESSION.XREAD";
+    /** A Z-read (final end-of-shift report) was printed, or refused. See {@link #POS_SESSION_XREAD}. */
+    public static final String POS_SESSION_ZREAD         = "POS.SESSION.ZREAD";
     // POS sale / refund
     public static final String POS_SALE_RING             = "POS.SALE.RING";
     public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";

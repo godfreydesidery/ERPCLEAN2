@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.sales.domain.dto.AuthorisedReadRequest;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PosExpenseRequest;
@@ -106,6 +107,27 @@ public interface PosSessionService {
      */
     XReadDto xRead(String sessionUid);
 
+    /**
+     * X-read served either on the caller's own {@code POS.SESSION.VIEW} or on a manager's approval.
+     *
+     * <p><b>Why this exists.</b> A shop owner took the X/Z reads off the cashier role; because
+     * permission-denied actions are hidden, the rows vanished from the till and the cashier could no
+     * longer even ask. The owner wants the entries visible and a manager's username/password to open
+     * them — the shop-floor pattern of "call the supervisor over", not a permanent grant.
+     *
+     * <p><b>What the approval is, and is not.</b> {@code authorisedByUid} is not a credential and
+     * grants nothing on its own: no token is minted, issued, or stored anywhere. The uid names a
+     * person, and this method independently re-resolves that person — real, active, not locked, NOT
+     * the caller, and genuinely holding {@code POS.SESSION.RECONCILE} <em>in the company of the
+     * LOADED session</em>, never a company the caller named. Because nothing is issued, the elevation
+     * cannot outlive the request: the next report needs a fresh approval.
+     *
+     * <p>A caller who holds {@code POS.SESSION.VIEW} is served directly and the field is ignored.
+     * Either way the print is audited. The state rules are unchanged — this is
+     * {@link #xRead(String)} with an authorisation step in front of it, not a second report.
+     */
+    XReadDto xReadAuthorised(String sessionUid, AuthorisedReadRequest request);
+
     /** Reconcile a CLOSED session — post variance GL entry, mark RECONCILED, return Z-read. */
     ZReadDto reconcileSession(String sessionUid, ReconcileSessionRequest request);
 
@@ -115,4 +137,12 @@ public interface PosSessionService {
      * reconcile call returned. Byte-identical to what {@link #reconcileSession} returned.
      */
     ZReadDto zRead(String sessionUid);
+
+    /**
+     * Z-read served either on the caller's own {@code POS.SESSION.VIEW} or on a manager's approval —
+     * the Z-read half of {@link #xReadAuthorised(String, AuthorisedReadRequest)}, with the same
+     * tokenless, re-verified-per-request authorisation and the same unchanged state rule (the session
+     * must already be RECONCILED before a Z-read exists at all).
+     */
+    ZReadDto zReadAuthorised(String sessionUid, AuthorisedReadRequest request);
 }

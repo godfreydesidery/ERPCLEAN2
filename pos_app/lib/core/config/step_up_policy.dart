@@ -34,7 +34,9 @@
 /// * the **approver's** code — what this table names — is re-checked server-side
 ///   after the approval travels on the business request (`saleReverse` →
 ///   `PosSaleServiceImpl.REVERSAL_AUTHORITY_PERMISSION`, `discountOverride` →
-///   `DiscountAuthorisationGuard.DISCOUNT_OVERRIDE_PERMISSION`). Naming a
+///   `DiscountAuthorisationGuard.DISCOUNT_OVERRIDE_PERMISSION`, `xRead` /
+///   `zReadPrint` → the approver check behind
+///   `POST /pos/sessions/uid/{uid}/x-read|z-read/authorised`). Naming a
 ///   different code here than the server re-checks means the manager types the
 ///   right password, is told "authorised", and the action is then refused — a
 ///   parity trap that reads to everyone at the till as a broken password.
@@ -54,7 +56,8 @@ library;
 
 /// A till action that can be put behind a manager approval.
 enum GatedAction {
-  /// Mid-shift drawer report. See [kStepUpPolicy] for why this one is open.
+  /// Mid-shift drawer report, for an operator who cannot read it themselves.
+  /// See [kStepUpPolicy] for who is asked and who is not.
   xRead,
 
   /// Printing the end-of-shift Z-read (including a reprint after the fact).
@@ -94,27 +97,47 @@ class StepUpRule {
 
 /// The policy table.
 ///
-/// **Judgement call — X-read is deliberately NOT gated.** A mid-shift X-read is
-/// a cashier's own self-check: "does my drawer agree with the till before I go
-/// on break?". It posts nothing, resets nothing and shows the cashier figures
-/// they can already see by counting the drawer in front of them. Requiring a
-/// manager to walk over for it would turn a five-second sanity check into a
-/// workflow regression, and the predictable result is that nobody does it —
-/// which is worse for cash control, not better. It stays gated on the cashier's
-/// own `POS.SESSION.VIEW`, exactly as today.
+/// **A rule here is only reached by someone who cannot do the thing alone.**
+/// That is the whole shape of the X-read entry below, and it is worth spelling
+/// out because the flag reads as if it were unconditional:
 ///
-/// The **Z-read** is the opposite: it is the shift's closing statement, it is
-/// the document a variance is argued from, and it is now reprintable after the
-/// fact. That one takes a manager.
+/// * An operator who holds `POS.SESSION.VIEW` reads their own X-read with **no
+///   prompt at all** — the drawer calls the plain `GET` exactly as before. A
+///   mid-shift X-read is a cashier's own self-check ("does my drawer agree with
+///   the till before I go on break?"); it posts nothing, resets nothing, and
+///   making a manager walk over for someone already allowed is a workflow
+///   regression whose predictable result is that nobody checks their drawer.
+/// * An operator who does **not** hold it used to see no X-read row whatsoever
+///   (permission-denied rows are hidden), which shop owners read as the till
+///   losing the feature after they deliberately withdrew the permission. For
+///   them the row stays, and a manager's password at the terminal opens the
+///   report for that ONE view — nothing is minted, nothing is cached, and the
+///   next report asks again.
+///
+/// The **Z-read** is the shift's closing statement, the document a variance is
+/// argued from, and reprintable after the fact — printing it takes a manager
+/// regardless, and its reprint reaches the report through the same two doors.
+///
+/// Both drawer reports therefore ask for the SAME approver code, so a manager
+/// who can approve one can approve the other and the prompt never has to
+/// explain a distinction the shop floor cannot see.
 const Map<GatedAction, StepUpRule> kStepUpPolicy = {
   GatedAction.xRead: StepUpRule(
-    requiresApproval: false,
-    permissionCode: 'POS.SESSION.VIEW',
-    title: 'X-read',
-    purpose: 'Print the mid-shift drawer report.',
+    requiresApproval: true,
+    // Must equal the approver code the server re-checks on
+    // POST /pos/sessions/uid/{uid}/x-read/authorised. `POS.SESSION.VIEW` would
+    // be the wrong choice here even though it is what the plain GET wants: the
+    // CASHIER bundle can hold it, so a cashier could approve their own report
+    // by retyping their own password.
+    permissionCode: 'POS.SESSION.RECONCILE',
+    title: 'Manager approval — X-read',
+    purpose: 'Show the mid-shift drawer report for this session.',
   ),
   GatedAction.zReadPrint: StepUpRule(
     requiresApproval: true,
+    // Deliberately the same code as [GatedAction.xRead] — see the note above the
+    // table. Also what the server re-checks on
+    // POST /pos/sessions/uid/{uid}/z-read/authorised.
     permissionCode: 'POS.SESSION.RECONCILE',
     title: 'Manager approval — Z-read',
     purpose: 'Print the end-of-shift Z-read for this session.',
