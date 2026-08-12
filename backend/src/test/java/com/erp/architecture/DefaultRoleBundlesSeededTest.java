@@ -55,7 +55,11 @@ class DefaultRoleBundlesSeededTest {
             Map.entry("SALESPERSON", "SALES.INVOICE.CREATE"),
             Map.entry("CASHIER", "POS.SALE.CREATE"),
             Map.entry("FIELD_SALES_AGENT", "STOCK.VAN_RECON.MANAGE"),
-            Map.entry("STOREKEEPER", "STOCK.COUNT.POST"),
+            // Receiving goods is the storekeeper's signature act. This anchor was STOCK.COUNT.POST
+            // until UAT 2026-08-12 showed that permission also books the GL variance journal, so a
+            // counter could approve their own shrinkage; posting moved to BRANCH_MANAGER and the
+            // storekeeper keeps STOCK.COUNT.CREATE/VIEW.
+            Map.entry("STOREKEEPER", "PURCHASE.RECEIVE"),
             Map.entry("ACCOUNTANT", "GL.POST"),
             Map.entry("SALES_MANAGER", "SALES.INVOICE.VOID"),
             Map.entry("BRANCH_MANAGER", "APPROVALS.DECIDE"),
