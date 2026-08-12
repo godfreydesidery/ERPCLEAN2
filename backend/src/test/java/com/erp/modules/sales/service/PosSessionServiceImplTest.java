@@ -22,6 +22,7 @@ import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.StepUpAuthService;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.PayoutSubtotalDto;
 import com.erp.modules.sales.domain.dto.PosExpenseRequest;
@@ -46,6 +47,7 @@ import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -91,6 +93,8 @@ class PosSessionServiceImplTest {
     private AuditService               audit;
     private SalesDepthNumberGenerator  numberGen;
     private TillExpenseGlSeeder        tillExpenseGl;
+    private PermissionResolver         permissionResolver;
+    private StepUpAuthService          stepUpAuth;
     private PosSessionServiceImpl      service;
 
     @BeforeEach
@@ -109,10 +113,15 @@ class PosSessionServiceImplTest {
         audit      = mock(AuditService.class);
         numberGen  = mock(SalesDepthNumberGenerator.class);
         tillExpenseGl = mock(TillExpenseGlSeeder.class);
+        permissionResolver = mock(PermissionResolver.class);
+        stepUpAuth = mock(StepUpAuthService.class);
         when(numberGen.nextPosSession(anyLong())).thenReturn("POS-0001");
+        // Left unstubbed on purpose: these tests drive the permission-gated GET paths, which never
+        // consult either collaborator. The manager-approval path has its own suite
+        // (PosSessionAuthorisedReadTest) where both are stubbed per case.
         service = new PosSessionServiceImpl(sessions, tills, payouts, expenseIdempotency, invoices,
                 tenderPayments, glInvoker, glConfig, glPosting, companies, scopeGuard, audit,
-                numberGen, tillExpenseGl);
+                numberGen, tillExpenseGl, permissionResolver, stepUpAuth);
 
         // default: no request context
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 1L, null));

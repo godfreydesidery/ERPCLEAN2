@@ -53,6 +53,43 @@ class SessionService {
   Future<ZRead> zRead(String uid) async =>
       ZRead.fromJson(asMap(await _api.get('/pos/sessions/uid/$uid/z-read')));
 
+  /// The X-read for an operator who does **not** hold `POS.SESSION.VIEW`,
+  /// carrying the uid of the manager who approved it at the terminal.
+  ///
+  /// [authorisedByUid] comes from `POST /auth/verify-authority` (the manager
+  /// typed their own username and password) and is **not a credential**: on its
+  /// own it grants nothing. The server re-resolves it from scratch against the
+  /// loaded session and refuses unless it names a real, active, different user
+  /// who genuinely holds `POS.SESSION.RECONCILE` in that session's company. A
+  /// forged or guessed uid buys nothing and is audited.
+  ///
+  /// It authorises exactly this one request — nothing is issued and nothing
+  /// survives it, so the next report needs a fresh approval. Callers must
+  /// therefore pass a uid they are about to throw away; see the note on
+  /// `_approverUid` in `session_menu.dart` before "optimising" that.
+  ///
+  /// The same workflow rules as [xRead] apply: 409 once the session is
+  /// RECONCILED, where the Z-read is the report to ask for.
+  Future<XRead> xReadAuthorised(String uid,
+      {required String authorisedByUid}) async {
+    final data = await _api.post('/pos/sessions/uid/$uid/x-read/authorised',
+        body: {'authorisedByUid': authorisedByUid});
+    return XRead.fromJson(asMap(data));
+  }
+
+  /// The Z-read of a reconciled session for an operator who does not hold
+  /// `POS.SESSION.VIEW`, on a manager's approval.
+  ///
+  /// See [xReadAuthorised] for what [authorisedByUid] is and is not. Read-only
+  /// and repeatable exactly like [zRead]; 409 while the session is not yet
+  /// RECONCILED.
+  Future<ZRead> zReadAuthorised(String uid,
+      {required String authorisedByUid}) async {
+    final data = await _api.post('/pos/sessions/uid/$uid/z-read/authorised',
+        body: {'authorisedByUid': authorisedByUid});
+    return ZRead.fromJson(asMap(data));
+  }
+
   /// Records a drawer payout. Returns the created row (K8) — it carries the GL
   /// journal uid, which is the only place that reference is ever visible.
   ///

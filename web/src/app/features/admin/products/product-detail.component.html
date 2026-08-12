@@ -471,22 +471,59 @@
                       <tr>
                         <td class="mono">{{ bp.unitCode }} — {{ bp.unitName }}</td>
                         <td class="num mono">
-                          {{ bp.factorToBase }}
-                          <span class="d-block small text-muted fw-normal">
-                            1 {{ bp.unitName }} = {{ bp.factorToBase }} {{ baseUnitLabel() }}
-                          </span>
+                          @if (editingBulkPackUid() === bp.uid) {
+                            <input type="number" class="form-control form-control-sm text-end"
+                                   min="0.000001" step="any" inputmode="decimal"
+                                   [attr.aria-label]="'How many ' + baseUnitLabel() + ' make one ' + bp.unitName"
+                                   [ngModel]="editBulkPackFactor()" (ngModelChange)="editBulkPackFactor.set($event)"
+                                   [ngModelOptions]="{ standalone: true }"
+                                   [disabled]="savingBulkPackEdit()" autocomplete="off" />
+                          } @else {
+                            {{ bp.factorToBase }}
+                            <span class="d-block small text-muted fw-normal">
+                              1 {{ bp.unitName }} = {{ bp.factorToBase }} {{ baseUnitLabel() }}
+                            </span>
+                          }
                         </td>
                         @if (canManage()) {
                           <td>
-                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                    [disabled]="rowBusyBulkPackId() !== null"
-                                    (click)="removeBulkPack(bp)"
-                                    [attr.aria-label]="'Remove bulk pack ' + bp.unitCode">
-                              @if (rowBusyBulkPackId() === bp.uid) {
-                                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-                              }
-                              Remove
-                            </button>
+                            @if (editingBulkPackUid() === bp.uid) {
+                              <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-primary"
+                                        [disabled]="savingBulkPackEdit()"
+                                        (click)="saveBulkPackFactor(bp)"
+                                        [attr.aria-label]="'Save pack size for ' + bp.unitCode">
+                                  @if (savingBulkPackEdit()) {
+                                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                  }
+                                  Save
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        [disabled]="savingBulkPackEdit()"
+                                        (click)="cancelEditBulkPack()"
+                                        [attr.aria-label]="'Cancel editing pack size for ' + bp.unitCode">
+                                  Cancel
+                                </button>
+                              </div>
+                            } @else {
+                              <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        [disabled]="rowBusyBulkPackId() !== null || editingBulkPackUid() !== null"
+                                        (click)="startEditBulkPack(bp)"
+                                        [attr.aria-label]="'Edit pack size for ' + bp.unitCode">
+                                  Edit size
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                        [disabled]="rowBusyBulkPackId() !== null || editingBulkPackUid() !== null"
+                                        (click)="removeBulkPack(bp)"
+                                        [attr.aria-label]="'Remove bulk pack ' + bp.unitCode">
+                                  @if (rowBusyBulkPackId() === bp.uid) {
+                                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                  }
+                                  Remove
+                                </button>
+                              </div>
+                            }
                           </td>
                         }
                       </tr>
@@ -494,8 +531,29 @@
                   </tbody>
                 </table>
               </div>
+              <!-- Same read-back as the add form: a correction typed backwards is as bad as the typo. -->
+              @if (editBulkPackSizeInWords(); as summary) {
+                <p class="small text-muted mb-2" aria-live="polite">
+                  <i class="bi bi-box-seam me-1" aria-hidden="true"></i>{{ summary }}
+                </p>
+              }
+              @if (bulkPackEditError(); as msg) {
+                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+              }
             }
           }
+        }
+
+        <!-- Advisory only — the server saved the pack and told us something about it. -->
+        @if (bulkPackEditWarnings().length > 0) {
+          <div class="alert alert-warning d-flex gap-2 py-2 mb-3" aria-live="polite">
+            <i class="bi bi-exclamation-triangle-fill flex-shrink-0" aria-hidden="true"></i>
+            <ul class="small mb-0 ps-3">
+              @for (w of bulkPackEditWarnings(); track w) {
+                <li>{{ w }}</li>
+              }
+            </ul>
+          </div>
         }
 
         @if (canManage()) {

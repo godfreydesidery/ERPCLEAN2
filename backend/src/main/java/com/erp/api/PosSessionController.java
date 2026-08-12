@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.sales.domain.dto.AuthorisedReadRequest;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PosExpenseRequest;
@@ -165,6 +166,40 @@ public class PosSessionController {
         return sessionService.xRead(uid);
     }
 
+    /**
+     * X-read opened on a manager's approval — the same report as {@link #xRead}, for an operator who
+     * does not hold {@code POS.SESSION.VIEW} themselves.
+     *
+     * <p><b>Why the endpoint exists.</b> A shop owner took the X/Z reads off the cashier role. Denied
+     * actions are hidden at the till, so the rows vanished and the cashier could not even ask — the
+     * manager ended up logging in as themselves, which is a worse control than the one it replaced.
+     * The till now keeps the button visible and asks a manager to approve the single press.
+     *
+     * <p><b>Gate.</b> {@code POS.SESSION.VIEW} <em>or</em> {@code POS.SALE.CREATE} — an OR of the
+     * codes that describe a legitimate operator of this till, exactly as {@code reverseSale} composes
+     * its gate. A caller without VIEW must be able to reach the handler; that is the entire point.
+     * Both codes are seeded; neither is new.
+     *
+     * <p><b>Being past this gate is not permission to read the report.</b> It only means the caller
+     * may ask. The service then decides, on data a controller cannot see: it loads the session,
+     * applies the same company-scope assertion as every other session call, and — for a caller
+     * without VIEW — re-resolves {@code authorisedByUid} from scratch against the LOADED session's
+     * company. Nothing is minted or stored, so the approval dies with the request and the next report
+     * needs a fresh one.
+     *
+     * <p>Omit {@code authorisedByUid} (or the body entirely) when the caller holds
+     * {@code POS.SESSION.VIEW}: they are served directly, and the print is audited either way.
+     * State rules are unchanged — a RECONCILED session still answers 409 and points at its Z-read.
+     */
+    @PostMapping("/uid/{uid}/x-read/authorised")
+    @PreAuthorize("@perm.scoped(#uid,'possession','POS.SESSION.VIEW')"
+            + " or @perm.scoped(#uid,'possession','POS.SALE.CREATE')")
+    public XReadDto xReadAuthorised(@PathVariable String uid,
+                                     @Valid @RequestBody(required = false)
+                                     AuthorisedReadRequest request) {
+        return sessionService.xReadAuthorised(uid, request);
+    }
+
     @PostMapping("/uid/{uid}/reconcile")
     @PreAuthorize("@perm.scoped(#uid,'possession','POS.SESSION.RECONCILE')")
     public ZReadDto reconcile(@PathVariable String uid,
@@ -185,5 +220,20 @@ public class PosSessionController {
     @PreAuthorize("@perm.scoped(#uid,'possession','POS.SESSION.VIEW')")
     public ZReadDto zRead(@PathVariable String uid) {
         return sessionService.zRead(uid);
+    }
+
+    /**
+     * Z-read opened on a manager's approval — the Z-read half of {@link #xReadAuthorised}, with the
+     * identical gate, the identical server-side re-verification, and the identical unchanged state
+     * rule (a session that has not been reconciled still answers 409; an approval opens a report that
+     * exists, it never brings one into being early).
+     */
+    @PostMapping("/uid/{uid}/z-read/authorised")
+    @PreAuthorize("@perm.scoped(#uid,'possession','POS.SESSION.VIEW')"
+            + " or @perm.scoped(#uid,'possession','POS.SALE.CREATE')")
+    public ZReadDto zReadAuthorised(@PathVariable String uid,
+                                     @Valid @RequestBody(required = false)
+                                     AuthorisedReadRequest request) {
+        return sessionService.zReadAuthorised(uid, request);
     }
 }

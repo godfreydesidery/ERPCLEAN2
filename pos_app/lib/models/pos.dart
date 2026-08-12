@@ -97,6 +97,7 @@ class PosSession {
     required this.expectedCashAmount,
     required this.varianceAmount,
     required this.notes,
+    this.figuresKnown = true,
   });
 
   final String id;
@@ -113,6 +114,41 @@ class PosSession {
   final double? expectedCashAmount;
   final double? varianceAmount;
   final String? notes;
+
+  /// False only for [PosSession.fromOpenTill] — a shift resumed without ever
+  /// reading the session. The uid and the OPEN status are the till's own facts
+  /// and safe to act on; the money and the session number are not known, so the
+  /// UI must not present them as figures that came from the server. Anything
+  /// parsed from the wire is true, so one successful read clears the condition.
+  final bool figuresKnown;
+
+  /// The resume fallback: a session assembled from the till row when the
+  /// session read itself is refused or the line is down. Without it an occupied
+  /// till is a dead end for the cashier who holds it — the shift is open
+  /// server-side and only a counted cash-up ever ends one.
+  ///
+  /// Nothing is invented. The float sits at zero and the session number prints
+  /// as the same em-dash the UI shows for anything unknown, both hidden behind
+  /// [figuresKnown]; only what the till actually carries is filled in.
+  factory PosSession.fromOpenTill(PosTill till,
+          {required String sessionUid}) =>
+      PosSession(
+        id: '',
+        uid: sessionUid,
+        posTillId: till.id,
+        cashierId: till.openSessionCashierId ?? '',
+        sessionNumber: '—',
+        status: PosSessionStatus.open,
+        openedAt: till.openSessionOpenedAt,
+        closedAt: null,
+        reconciledAt: null,
+        openingFloatAmount: 0,
+        countedCashAmount: null,
+        expectedCashAmount: null,
+        varianceAmount: null,
+        notes: null,
+        figuresKnown: false,
+      );
 
   factory PosSession.fromJson(Map<String, dynamic> j) => PosSession(
         id: asStrOr(j['id']),

@@ -64,6 +64,51 @@ void main() {
     });
   });
 
+  group('PosSession.fromOpenTill', () {
+    final openedAt = DateTime.utc(2026, 8, 11, 6, 15);
+    final till = PosTill.fromJson({
+      'id': '9',
+      'uid': 'tilluid',
+      'companyId': '10',
+      'branchId': '20',
+      'code': 'T1',
+      'name': 'Till 1',
+      'status': 'ACTIVE',
+      'hasOpenSession': true,
+      'openSessionUid': 'SESS1',
+      'openSessionCashierId': '7',
+      'openSessionOpenedAt': openedAt.toIso8601String(),
+    });
+
+    test('carries what the till knows, so the register can be entered', () {
+      final s = PosSession.fromOpenTill(till, sessionUid: 'SESS1');
+      expect(s.uid, 'SESS1');
+      expect(s.status, PosSessionStatus.open);
+      expect(s.openedAt, openedAt);
+      expect(s.posTillId, '9');
+      expect(s.cashierId, '7');
+    });
+
+    test('invents no figure it did not read', () {
+      final s = PosSession.fromOpenTill(till, sessionUid: 'SESS1');
+      // The flag is the contract: whatever the placeholders are, nothing may
+      // print them as a drawer figure.
+      expect(s.figuresKnown, isFalse);
+      expect(s.sessionNumber, '—');
+      expect(s.countedCashAmount, isNull);
+      expect(s.expectedCashAmount, isNull);
+    });
+
+    test('a session parsed from the server is never flagged', () {
+      final s = PosSession.fromJson({
+        'uid': 'SESS1',
+        'status': 'OPEN',
+        'openingFloatAmount': '20000.00',
+      });
+      expect(s.figuresKnown, isTrue);
+    });
+  });
+
   group('XRead tender breakdown (#227)', () {
     test('parses cashTenderAmount and per-tender subtotals', () {
       final x = XRead.fromJson({

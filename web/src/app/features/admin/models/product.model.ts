@@ -219,6 +219,14 @@ export interface ProductBarcodeDto {
   productId: string;
   companyId: string;
   barcode: string;
+  /** Symbology (EAN_13, QR, UPC_A, …). Null when the row was stored without one. */
+  barcodeType?: string | null;
+  /**
+   * Numeric units_of_measure id (wire: string) this label is keyed to — NOT a uid. The POS honours
+   * it when scanning (a label registered against CARTON rings a carton), so a screen that reloads
+   * barcodes must carry it rather than blank it; map it to a uid via the loaded units.
+   */
+  uomId?: string | null;
   primary: boolean;
 }
 
@@ -245,11 +253,21 @@ export interface ProductBulkPackDto {
   unitCode: string;
   unitName: string;
   factorToBase: string;
+  /**
+   * SOFT advisories raised by the write that produced this row (e.g. a factor below 1) — the row
+   * was still saved. Empty/absent on read paths.
+   */
+  warnings?: string[];
 }
 
 export interface CreateBulkPackRequest {
   /** uid of a units_of_measure row scoped to the same company. */
   unitUid: string;
+  factorToBase: string;
+}
+
+/** Corrects a mistyped pack size in place. The unit itself is not re-pointed — only the count. */
+export interface UpdateBulkPackRequest {
   factorToBase: string;
 }
 

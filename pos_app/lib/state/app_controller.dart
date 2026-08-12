@@ -273,20 +273,50 @@ class AppController extends Notifier<AppData> {
   /// Pick up a shift this cashier already has open on a till — the recovery path
   /// after a force-close, where the session is still OPEN server-side because
   /// nothing but a counted cash-up may ever close it.
-  Future<void> resumeShift(String sessionUid, BusinessMode mode) async {
+  ///
+  /// [fallbackTill] is the till row the resume was launched from. Reading the
+  /// session takes POS.SESSION.VIEW, which a cashier may simply not hold (the
+  /// same refusal that raises the "couldn't check for an open shift" notice at
+  /// login), and the power drops mid-shift on a real shop floor. Neither is an
+  /// answer about the shift, so rather than strand the cashier on the picker we
+  /// enter the register on what the till row already carries — the session uid
+  /// the register posts against, and when it was opened.
+  Future<void> resumeShift(String sessionUid, BusinessMode mode,
+      {PosTill? fallbackTill}) async {
     state = state.copyWith(busy: true, clearError: true);
     try {
       final session =
           await ref.read(sessionServiceProvider).getByUid(sessionUid);
-      state = state.copyWith(
-          phase: AppPhase.register,
-          shift: session,
-          mode: mode,
-          busy: false,
-          clearNotice: true);
+      _enterShift(session, mode);
     } on ApiException catch (e) {
+      // A 404/409 IS an answer about the session and must not be papered over;
+      // a refusal or a dead line is not.
+      final unanswered = e.isForbidden || e.isNetwork || e.isTimeout;
+      if (fallbackTill != null && unanswered) {
+        debugPrint('POS resume read failed: ${e.statusCode} ${e.message}');
+        _enterShift(
+            PosSession.fromOpenTill(fallbackTill, sessionUid: sessionUid),
+            mode);
+        return;
+      }
       state = state.copyWith(busy: false, error: e.message);
+    } catch (e) {
+      // Anything that is not an ApiException used to escape this method, and
+      // the app then sat busy forever on a spinner that could never resolve.
+      debugPrint('POS resume failed: $e');
+      state = state.copyWith(busy: false, error: _friendly(e));
     }
+  }
+
+  /// Land in the register on [session], clearing the login-time shift notice —
+  /// whatever it warned about, we are now in the shift it was about.
+  void _enterShift(PosSession session, BusinessMode mode) {
+    state = state.copyWith(
+        phase: AppPhase.register,
+        shift: session,
+        mode: mode,
+        busy: false,
+        clearNotice: true);
   }
 
   /// Replace the current shift snapshot (after payout/close/x-read refresh).

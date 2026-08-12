@@ -91,79 +91,95 @@
           </div>
         </div>
 
-        <!-- X-Read panel -->
+        <!-- Shift report — X-read while the shift is running, Z-read once it is reconciled -->
         <div class="erp-card mb-3">
           <div class="erp-card__head">
-            <h2><i class="bi bi-receipt me-1" aria-hidden="true"></i>X-Read (Live Totals)</h2>
+            @if (reportKind() === 'Z') {
+              <h2><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Z-Read (Final Shift Report)</h2>
+            } @else {
+              <h2><i class="bi bi-receipt me-1" aria-hidden="true"></i>X-Read (Mid-Shift Snapshot)</h2>
+            }
             <span class="spacer"></span>
+            <span class="status-tag"
+                  [class.status-tag--ok]="reportKind() === 'Z'"
+                  [class.status-tag--neutral]="reportKind() === 'X'">
+              {{ reportKind() === 'Z' ? 'Final' : 'Live' }}
+            </span>
             <button type="button" class="btn btn-sm btn-outline-secondary"
-                    (click)="loadXRead(s.uid)" aria-label="Refresh X-read">
+                    (click)="loadReport(s.uid)"
+                    [attr.aria-label]="reportKind() === 'Z' ? 'Refresh Z-read' : 'Refresh X-read'">
               <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
             </button>
           </div>
           <div class="erp-card__body">
-            @switch (xReadState()) {
+            <p class="text-muted small mb-2">
+              @if (reportKind() === 'Z') {
+                Final figures for this shift, recomputed from the recorded sales, payouts and cash count.
+                They stay available after the till is handed over.
+              } @else {
+                Running totals so far — a mid-shift snapshot, not the final shift figures.
+              }
+            </p>
+            @switch (reportState()) {
               @case ('loading') {
                 <output class="text-muted small d-flex gap-2 align-items-center">
                   <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
                 </output>
               }
               @case ('error') {
-                <p class="text-danger small mb-0" role="alert">Could not load X-read.</p>
+                <p class="text-danger small mb-0" role="alert">
+                  We couldn't load this shift's figures. Please try again, or ask an administrator if it keeps failing.
+                </p>
               }
               @default {
-                @if (xRead(); as x) {
-                  <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted">Sales Total</dt>
-                    <dd class="col-sm-8 font-monospace">{{ +x.totalSalesAmount | number:'1.2-2' }}</dd>
-                    <dt class="col-sm-4 text-muted">Payouts</dt>
-                    <dd class="col-sm-8 font-monospace">{{ +x.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
-                    <dt class="col-sm-4 text-muted">Expected Cash</dt>
-                    <dd class="col-sm-8 font-monospace">{{ +x.expectedCashAmount | number:'1.2-2' }}</dd>
-                    <dt class="col-sm-4 text-muted">Invoice Count</dt>
-                    <dd class="col-sm-8">{{ x.invoiceCount }}</dd>
-                  </dl>
+                @if (reportKind() === 'Z') {
+                  @if (zRead(); as z) {
+                    <dl class="row mb-0">
+                      <dt class="col-sm-4 text-muted">Opening Float</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +z.openingFloatAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Sales Total</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +z.totalSalesAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Payouts</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +z.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Expected Cash</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +z.expectedCashAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Counted Cash</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +z.countedCashAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Variance</dt>
+                      <dd class="col-sm-8">
+                        <span class="status-tag"
+                              [class.status-tag--ok]="+z.varianceAmount === 0"
+                              [class.status-tag--info]="+z.varianceAmount > 0"
+                              [class.status-tag--danger]="+z.varianceAmount < 0">
+                          {{ +z.varianceAmount | number:'1.2-2' }}
+                        </span>
+                      </dd>
+                      <dt class="col-sm-4 text-muted">Invoice Count</dt>
+                      <dd class="col-sm-8">{{ z.invoiceCount }}</dd>
+                    </dl>
+                  } @else {
+                    <p class="text-muted small mb-0">No figures to show yet.</p>
+                  }
+                } @else {
+                  @if (xRead(); as x) {
+                    <dl class="row mb-0">
+                      <dt class="col-sm-4 text-muted">Sales Total</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +x.totalSalesAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Payouts</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +x.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Expected Cash</dt>
+                      <dd class="col-sm-8 font-monospace">{{ +x.expectedCashAmount | number:'1.2-2' }}</dd>
+                      <dt class="col-sm-4 text-muted">Invoice Count</dt>
+                      <dd class="col-sm-8">{{ x.invoiceCount }}</dd>
+                    </dl>
+                  } @else {
+                    <p class="text-muted small mb-0">No figures to show yet.</p>
+                  }
                 }
               }
             }
           </div>
         </div>
-
-        <!-- Z-Read panel (shown after reconcile) -->
-        @if (zRead(); as z) {
-          <div class="erp-card mb-3">
-            <div class="erp-card__head">
-              <h2><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Z-Read (Reconciliation)</h2>
-              <span class="spacer"></span>
-              <span class="status-tag status-tag--neutral">Final</span>
-            </div>
-            <div class="erp-card__body">
-              <dl class="row mb-0">
-                <dt class="col-sm-4 text-muted">Opening Float</dt>
-                <dd class="col-sm-8 font-monospace">{{ +z.openingFloatAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-4 text-muted">Sales Total</dt>
-                <dd class="col-sm-8 font-monospace">{{ +z.totalSalesAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-4 text-muted">Payouts</dt>
-                <dd class="col-sm-8 font-monospace">{{ +z.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-4 text-muted">Expected Cash</dt>
-                <dd class="col-sm-8 font-monospace">{{ +z.expectedCashAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-4 text-muted">Counted Cash</dt>
-                <dd class="col-sm-8 font-monospace">{{ +z.countedCashAmount | number:'1.2-2' }}</dd>
-                <dt class="col-sm-4 text-muted">Variance</dt>
-                <dd class="col-sm-8">
-                  <span class="status-tag"
-                        [class.status-tag--ok]="+z.varianceAmount === 0"
-                        [class.status-tag--info]="+z.varianceAmount > 0"
-                        [class.status-tag--danger]="+z.varianceAmount < 0">
-                    {{ +z.varianceAmount | number:'1.2-2' }}
-                  </span>
-                </dd>
-                <dt class="col-sm-4 text-muted">Invoice Count</dt>
-                <dd class="col-sm-8">{{ z.invoiceCount }}</dd>
-              </dl>
-            </div>
-          </div>
-        }
 
         <!-- Action buttons -->
         <div class="d-flex flex-wrap gap-2 mb-3">

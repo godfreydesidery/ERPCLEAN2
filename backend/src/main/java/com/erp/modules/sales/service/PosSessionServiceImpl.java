@@ -9,6 +9,8 @@ import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.StepUpAuthService;
+import com.erp.modules.sales.domain.dto.AuthorisedReadRequest;
 import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PayoutSubtotalDto;
@@ -37,7 +39,9 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -113,6 +117,24 @@ public class PosSessionServiceImpl implements PosSessionService {
      */
     private static final Duration EXPENSE_DUPLICATE_WINDOW = Duration.ofMinutes(2);
 
+    /** The permission that lets a caller open an X/Z-read on their own authority. */
+    private static final String READ_VIEW_PERMISSION = "POS.SESSION.VIEW";
+
+    /**
+     * The authority a manager must genuinely hold to approve someone else's X/Z-read.
+     *
+     * <p>{@code POS.SESSION.RECONCILE} is the segregation-of-duties boundary the seed already draws:
+     * BRANCH_MANAGER holds it and CASHIER deliberately does not. Reusing it means the person who may
+     * approve a shift report is exactly the person who may settle the shift — no new code, no seed
+     * edit, and no way for a cashier to approve their own read.
+     */
+    private static final String READ_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
+
+    /** Audit outcomes for an X/Z-read attempt. */
+    private static final String OUTCOME_SERVED          = "SERVED";
+    private static final String OUTCOME_NO_APPROVAL     = "REFUSED_NO_APPROVAL";
+    private static final String OUTCOME_NOT_AUTHORISED  = "REFUSED_NOT_AUTHORISED";
+
     private final PosSessionRepository       sessions;
     private final PosTillRepository          tills;
     private final PosSessionPayoutRepository payouts;
@@ -138,6 +160,13 @@ public class PosSessionServiceImpl implements PosSessionService {
      * tenant that upgrades mid-shift needs no manual setup step before an expense can post.
      */
     private final TillExpenseGlSeeder        tillExpenseGl;
+    /** Answers "may the CALLER open this report on their own authority?" — root short-circuits true. */
+    private final PermissionResolver         permissionResolver;
+    /**
+     * Re-resolves a claimed manager approval server-side. Deliberately issues nothing: it verifies a
+     * person, it does not establish a session, so an approval cannot outlive the request it rode in on.
+     */
+    private final StepUpAuthService          stepUpAuth;
 
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
@@ -152,7 +181,9 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   ScopeGuard scopeGuard,
                                   AuditService audit,
                                   SalesDepthNumberGenerator numberGen,
-                                  TillExpenseGlSeeder tillExpenseGl) {
+                                  TillExpenseGlSeeder tillExpenseGl,
+                                  PermissionResolver permissionResolver,
+                                  StepUpAuthService stepUpAuth) {
         this.sessions       = sessions;
         this.tills          = tills;
         this.payouts        = payouts;
@@ -167,6 +198,8 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.audit          = audit;
         this.numberGen      = numberGen;
         this.tillExpenseGl  = tillExpenseGl;
+        this.permissionResolver = permissionResolver;
+        this.stepUpAuth     = stepUpAuth;
     }
 
     @Override
@@ -429,19 +462,31 @@ public class PosSessionServiceImpl implements PosSessionService {
     public XReadDto xRead(String sessionUid) {
         var session = requireSession(sessionUid);
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
-        requireOpenOrClosed(session);
 
-        BigDecimal cashTenderTotal  = computeCashTenderTotal(session);
-        BigDecimal grossTurnover    = computeGrossTurnoverTotal(session);
-        BigDecimal totalPayouts     = payouts.totalPayoutsForSession(session.getId());
-        BigDecimal expected         = session.getOpeningFloatAmount()
-                .add(cashTenderTotal).subtract(totalPayouts);
-        long invoiceCount           = countPosInvoices(session);
+        XReadDto report = buildXRead(session);
+        auditReadPrint(session, AuditActions.POS_SESSION_XREAD, null, null);
+        return report;
+    }
 
-        return new XReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
-                session.getOpenedAt().toString(), session.getOpeningFloatAmount(),
-                grossTurnover, cashTenderTotal, totalPayouts, expected, invoiceCount,
-                computeTenderSubtotals(session), computePayoutSubtotals(session));
+    /**
+     * Deliberately NOT {@code readOnly}. The report itself writes nothing, but the step-up
+     * re-verification records its own MANDATORY audit row on success, and a MANDATORY insert inside a
+     * read-only transaction is flushed nowhere — the record of who approved a manager override would
+     * vanish silently, which is the one row this feature exists to leave behind.
+     */
+    @Override
+    @Transactional
+    public XReadDto xReadAuthorised(String sessionUid, AuthorisedReadRequest request) {
+        // Load FIRST: every later decision — tenant scope, whose company the approval must hold in,
+        // what the audit row points at — is resolved from the loaded row, never from a caller
+        // parameter. That ordering is the standing tenant-isolation rule, not a stylistic choice.
+        var session = requireSession(sessionUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
+
+        String approver = requireReadAuthority(session, request, AuditActions.POS_SESSION_XREAD);
+        XReadDto report = buildXRead(session);
+        auditReadPrint(session, AuditActions.POS_SESSION_XREAD, approver, uidOf(request));
+        return report;
     }
 
     @Override
@@ -485,15 +530,182 @@ public class PosSessionServiceImpl implements PosSessionService {
     public ZReadDto zRead(String sessionUid) {
         var session = requireSession(sessionUid);
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
+
+        requireReconciled(session);
+        ZReadDto report = buildZRead(session);
+        auditReadPrint(session, AuditActions.POS_SESSION_ZREAD, null, null);
+        return report;
+    }
+
+    /** Read-write for the same reason as {@link #xReadAuthorised} — see the note there. */
+    @Override
+    @Transactional
+    public ZReadDto zReadAuthorised(String sessionUid, AuthorisedReadRequest request) {
+        var session = requireSession(sessionUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
+
+        String approver = requireReadAuthority(session, request, AuditActions.POS_SESSION_ZREAD);
+        requireReconciled(session);
+        ZReadDto report = buildZRead(session);
+        auditReadPrint(session, AuditActions.POS_SESSION_ZREAD, approver, uidOf(request));
+        return report;
+    }
+
+    // ---- X/Z-read authorisation (owner decision, 2026-08-12) -------------------
+
+    /**
+     * Decides whether this caller may open this session's X/Z-read, and on whose authority.
+     *
+     * <p><b>The problem.</b> A shop owner took the X/Z reads off the cashier role. Because
+     * permission-denied actions are hidden at the till, the rows disappeared and the cashier could no
+     * longer even ask — so the manager was called over to log in as themselves, which is worse than
+     * the control it replaced. The shop-floor answer is the one every till already knows: leave the
+     * button visible, and ask a manager to approve this one press.
+     *
+     * <p><b>Two ways past, and nothing else.</b>
+     * <ol>
+     *   <li>The caller holds {@value #READ_VIEW_PERMISSION} — unchanged behaviour, approval field
+     *       ignored, nothing to escalate to.</li>
+     *   <li>A named manager approved it. The client obtained that name by sending the manager's
+     *       username and password to the step-up endpoint; what came back was a uid, never a token.
+     *       This method re-resolves that uid from scratch: the person must be real, active, unlocked,
+     *       somebody OTHER than the caller, and must genuinely hold
+     *       {@value #READ_APPROVAL_PERMISSION} in {@code session.getCompanyId()} — the company of the
+     *       LOADED session, never one the caller supplied.</li>
+     * </ol>
+     *
+     * <p><b>Why a uid on a request is not a client asserting its own authorisation.</b> The caller
+     * never states what it may do; it names a person, and a name grants nothing. The server does the
+     * deciding, against data the caller cannot influence. A forged or guessed uid resolves to nobody
+     * and is refused; a real user without the authority is refused; the caller's own uid is refused
+     * (self-approval); every refusal is audited with the uid that was tried. The honest limit — the
+     * same one the shipped sale-reversal path carries — is that a uid is not proof the password was
+     * typed seconds ago; what it does guarantee is that the approval names a real, second, genuinely
+     * authorised human, and that the name is on the record.
+     *
+     * <p><b>Nothing is issued, so nothing has to be revoked.</b> The elevation exists only for the
+     * duration of this call: no token is minted, no state is stored, and the next report needs a
+     * fresh approval. "Clears once viewed" is structural here, not a timer someone has to trust.
+     *
+     * @return the approving manager's username, or {@code null} when the caller was served on their
+     *         own authority
+     */
+    private String requireReadAuthority(PosSession session, AuthorisedReadRequest request,
+                                        String auditAction) {
+        RequestContext.Principal caller = RequestContext.get();
+        if (permissionResolver.hasPermission(caller, READ_VIEW_PERMISSION,
+                System.currentTimeMillis())) {
+            return null;
+        }
+
+        String authoriserUid = uidOf(request);
+        if (authoriserUid == null || authoriserUid.isBlank()) {
+            auditReadRefusal(session, auditAction, OUTCOME_NO_APPROVAL, authoriserUid);
+            throw new ForbiddenException(
+                    "This report needs a manager's approval. "
+                    + "Ask a manager to approve it at the till, then try again.");
+        }
+
+        var verdict = stepUpAuth.verifyAuthoriserUid(
+                authoriserUid, READ_APPROVAL_PERMISSION, session.getCompanyId());
+        if (!verdict.authorised()) {
+            auditReadRefusal(session, auditAction, OUTCOME_NOT_AUTHORISED, authoriserUid);
+            throw new ForbiddenException(
+                    "That manager is not authorised to approve this report. "
+                    + "Ask a manager who can settle the till to approve it, then try again.");
+        }
+        return verdict.authoriserUsername();
+    }
+
+    /**
+     * Records a served X/Z-read — every print, self-authorised or manager-approved (owner decision,
+     * 2026-08-12).
+     *
+     * <p>Auditing overrides alone would be the wrong control: an X-read shows a shift's takings and
+     * the cash that should be in the drawer, so "who read the till figures, when, and on whose
+     * authority" is the thing worth knowing — and a trail that only fires on approvals cannot tell an
+     * approved read from one nobody ever needed approval for.
+     *
+     * <p>{@code recordIndependent} because both read paths run under
+     * {@code @Transactional(readOnly = true)}, where a MANDATORY insert would fail.
+     */
+    private void auditReadPrint(PosSession session, String auditAction, String approverUsername,
+                                String approverUid) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("outcome", OUTCOME_SERVED);
+        detail.put("sessionUid", session.getUid());
+        detail.put("viewer", callerUsername());
+        // "" means the viewer opened it on their own POS.SESSION.VIEW — no second person involved.
+        detail.put("authorisedBy", approverUsername == null ? "" : approverUsername);
+        detail.put("authorisedByUid", approverUid == null ? "" : approverUid);
+        audit.recordIndependent(AuditEvent.of(auditAction, "pos_sessions",
+                session.getId(), session.getUid()).detail(detail));
+    }
+
+    /**
+     * Records a refused X/Z-read.
+     *
+     * <p>{@code recordIndependent} for the same reason {@code auditReversalRefusal} uses it: the
+     * {@link ForbiddenException} that follows rolls this transaction back, so a row written inside it
+     * would vanish along with the refusal — and "somebody tried to open the till figures with an
+     * approval that did not check out" is exactly what an investigation is looking for.
+     */
+    private void auditReadRefusal(PosSession session, String auditAction, String outcome,
+                                  String attemptedApproverUid) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("outcome", outcome);
+        detail.put("sessionUid", session.getUid());
+        detail.put("viewer", callerUsername());
+        detail.put("authorisedByUid",
+                attemptedApproverUid == null ? "" : attemptedApproverUid);
+        audit.recordIndependent(AuditEvent.of(auditAction, "pos_sessions",
+                session.getId(), session.getUid()).detail(detail));
+    }
+
+    private static String uidOf(AuthorisedReadRequest request) {
+        return request == null ? null : request.authorisedByUid();
+    }
+
+    private static String callerUsername() {
+        var p = RequestContext.get();
+        return p == null || p.username() == null ? "" : p.username();
+    }
+
+    // ---- helpers ---------------------------------------------------------------
+
+    /**
+     * The X-read record, state rule included — the single body behind both the plain GET and the
+     * manager-authorised POST, so the two can never print different figures or disagree about which
+     * session states are readable.
+     */
+    private XReadDto buildXRead(PosSession session) {
+        requireOpenOrClosed(session);
+
+        BigDecimal cashTenderTotal  = computeCashTenderTotal(session);
+        BigDecimal grossTurnover    = computeGrossTurnoverTotal(session);
+        BigDecimal totalPayouts     = payouts.totalPayoutsForSession(session.getId());
+        BigDecimal expected         = session.getOpeningFloatAmount()
+                .add(cashTenderTotal).subtract(totalPayouts);
+        long invoiceCount           = countPosInvoices(session);
+
+        return new XReadDto(session.getUid(), session.getPosTillId(), session.getCashierId(),
+                session.getOpenedAt().toString(), session.getOpeningFloatAmount(),
+                grossTurnover, cashTenderTotal, totalPayouts, expected, invoiceCount,
+                computeTenderSubtotals(session), computePayoutSubtotals(session));
+    }
+
+    /**
+     * A Z-read is the FINAL end-of-shift report, so it exists only once the shift has been settled.
+     * Unchanged by the authorised path: a manager's approval opens a report that exists, it does not
+     * bring one into being early.
+     */
+    private void requireReconciled(PosSession session) {
         if (session.getStatus() != PosSessionStatus.RECONCILED) {
             throw new ConflictException(
                     "This session has not been reconciled yet, so there is no Z-read for it. "
                             + "Close and reconcile the session first; use the X-read until then.");
         }
-        return buildZRead(session);
     }
-
-    // ---- helpers ---------------------------------------------------------------
 
     /**
      * Single source of the Z-read record — used both by {@link #reconcileSession} (which returns it

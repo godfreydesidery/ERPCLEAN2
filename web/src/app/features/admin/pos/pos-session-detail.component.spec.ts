@@ -1,61 +1,93 @@
 /**
- * PosSessionDetailComponent — regression specs for numeric-input string-op crash class.
+ * PosSessionDetailComponent specs.
  *
- * payoutAmount and countedCash are bound to type="number" inputs.
- * NumberValueAccessor stores a JS number in the signal; recordPayout() and closeSession()
- * previously called .trim() on the raw number (crash). After the fix they coerce first.
+ * 1. Numeric-input string-op crash class: payoutAmount and countedCash are bound to type="number"
+ *    inputs. NumberValueAccessor stores a JS number in the signal; recordPayout() and
+ *    closeSession() previously called .trim() on the raw number (crash) — they coerce first now.
+ * 2. Shift report vs session status: the page used to call x-read unconditionally, which the
+ *    server refuses (409) once a session is RECONCILED — so a manager who closed the shift saw an
+ *    error and concluded the till figures were gone. A reconciled session must read z-read.
+ *
+ * The SessionStore stub is a NON-root manager holding only the POS permissions: root bypasses
+ * every check server-side and would mask a gap.
  */
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import type { PosSessionDto } from './models/pos.model';
 import { PosService } from './pos.service';
 import { PosSessionDetailComponent } from './pos-session-detail.component';
 
-const stubSession = {
-  id: '5', uid: 'SESS1', companyId: '10', branchId: '2', posTillId: '1', cashierId: '99',
-  status: 'OPEN' as const, openedAt: '2025-01-01T08:00:00', closedAt: null, reconciledAt: null,
+const stubSession: PosSessionDto = {
+  id: '5', uid: 'SESS1', sessionNumber: 'POS-0001', companyId: '10', branchId: '2', posTillId: '1',
+  cashierId: '99',
+  status: 'OPEN', openedAt: '2025-01-01T08:00:00', closedAt: null, reconciledAt: null,
   openingFloatAmount: '100.00', countedCashAmount: null, expectedCashAmount: null,
   varianceAmount: null, varianceJournalId: null, notes: null,
 };
 
-const stubXRead = { sessionUid: 'SESS1', salesCount: 0, salesTotal: '0.00', payoutsTotal: '0.00', expectedCash: '100.00' };
+const reconciledSession: PosSessionDto = {
+  ...stubSession,
+  status: 'RECONCILED',
+  closedAt: '2025-01-01T18:00:00',
+  reconciledAt: '2025-01-01T18:05:00',
+  countedCashAmount: '740.00',
+  expectedCashAmount: '750.00',
+  varianceAmount: '-10.00',
+};
 
-function makeSessionStore() {
+const stubXRead = {
+  sessionUid: 'SESS1', posTillId: '1', cashierId: '99', openedAt: '2025-01-01T08:00:00',
+  openingFloatAmount: '100.00', totalSalesAmount: '650.00', totalPayoutsNetAmount: '0.00',
+  expectedCashAmount: '750.00', invoiceCount: 3,
+};
+
+const stubZRead = {
+  ...stubXRead,
+  closedAt: '2025-01-01T18:00:00', reconciledAt: '2025-01-01T18:05:00',
+  totalSalesAmount: '900.00', countedCashAmount: '740.00', varianceAmount: '-10.00',
+  varianceJournalId: null, invoiceCount: 4, notes: null,
+};
+
+/** A non-root manager: permissions come from the granted list, never from an isRoot bypass. */
+function makeSessionStore(granted: string[] = ['POS.SESSION.VIEW', 'POS.SESSION.CLOSE', 'POS.SESSION.RECONCILE']) {
   return {
-    hasPermission: vi.fn(() => true),
+    hasPermission: vi.fn((code: string) => granted.includes(code)),
     isAuthenticated: signal(true),
-    user: signal(null),
-    permissions: signal([]),
+    user: signal({ isRoot: false }),
+    permissions: signal(granted),
     activeBranchUid: signal(null),
   };
 }
 
-function makeBed() {
+function makeBed(session: PosSessionDto = stubSession, svcOverrides: Record<string, unknown> = {}) {
+  const svc = {
+    getSessionByUid: vi.fn(() => of(session)),
+    xRead: vi.fn(() => of(stubXRead)),
+    zRead: vi.fn(() => of(stubZRead)),
+    recordPayout: vi.fn(() => of(undefined)),
+    closeSession: vi.fn(() => of({ ...session, status: 'CLOSED' })),
+    reconcileSession: vi.fn(() => of(stubZRead)),
+    ...svcOverrides,
+  };
+
   TestBed.configureTestingModule({
     imports: [PosSessionDetailComponent],
     providers: [
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter([]),
-      {
-        provide: PosService,
-        useValue: {
-          getSessionByUid: vi.fn(() => of(stubSession)),
-          xRead: vi.fn(() => of(stubXRead)),
-          recordPayout: vi.fn(() => of(undefined)),
-          closeSession: vi.fn(() => of({ ...stubSession, status: 'CLOSED' })),
-          reconcileSession: vi.fn(() => of({ sessionUid: 'SESS1' })),
-        },
-      },
+      { provide: PosService, useValue: svc },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore, useValue: makeSessionStore() },
     ],
   });
+  return svc;
 }
 
 // ── recordPayout numeric coercion ─────────────────────────────────────────────
@@ -100,5 +132,68 @@ describe('PosSessionDetailComponent — closeSession numeric countedCash', () =>
     const svc = TestBed.inject(PosService) as any;
     expect(svc.closeSession).toHaveBeenCalledOnce();
     expect(svc.closeSession.mock.calls[0][1].countedCashAmount).toBe('200');
+  });
+});
+
+// ── shift report follows the session status ───────────────────────────────────
+
+describe('PosSessionDetailComponent — shift report matches the session status', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function renderFor(session: PosSessionDto, svcOverrides: Record<string, unknown> = {}) {
+    const svc = makeBed(session, svcOverrides);
+    const fixture = TestBed.createComponent(PosSessionDetailComponent);
+    fixture.componentRef.setInput('uid', 'SESS1');
+    await vi.runAllTimersAsync();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { svc, fixture, text: fixture.nativeElement.textContent as string };
+  }
+
+  it('a RECONCILED session reads z-read and never fires the x-read the server refuses', async () => {
+    const { svc, text } = await renderFor(reconciledSession);
+
+    expect(svc.zRead).toHaveBeenCalledWith('SESS1');
+    expect(svc.xRead).not.toHaveBeenCalled();
+    // The figures a manager came for survive the shift being closed and the till reset.
+    expect(text).toContain('Z-Read');
+    expect(text).not.toContain('X-Read');
+    expect(text).toContain('900.00');
+  });
+
+  it('an OPEN session reads x-read and labels it as a mid-shift snapshot', async () => {
+    const { svc, text } = await renderFor(stubSession);
+
+    expect(svc.xRead).toHaveBeenCalledWith('SESS1');
+    expect(svc.zRead).not.toHaveBeenCalled();
+    expect(text).toContain('X-Read');
+    expect(text).toContain('Mid-Shift Snapshot');
+    expect(text).not.toContain('Z-Read');
+  });
+
+  it('a CLOSED session still reads x-read (valid until the session is reconciled)', async () => {
+    const { svc } = await renderFor({ ...stubSession, status: 'CLOSED', closedAt: '2025-01-01T18:00:00' });
+
+    expect(svc.xRead).toHaveBeenCalledWith('SESS1');
+    expect(svc.zRead).not.toHaveBeenCalled();
+  });
+
+  it('renders a friendly, detail-free message when the report cannot be loaded', async () => {
+    const { text } = await renderFor(reconciledSession, {
+      zRead: vi.fn(() =>
+        throwError(() => new HttpErrorResponse({
+          status: 403,
+          statusText: 'Forbidden',
+          error: { errors: ['Access denied: POS.SESSION.VIEW'] },
+        })),
+      ),
+    });
+
+    expect(text).toContain("We couldn't load this shift's figures");
+    // Error-hygiene rule: no status code, no permission code, no exception text on screen.
+    expect(text).not.toContain('403');
+    expect(text).not.toContain('POS.SESSION.VIEW');
+    expect(text).not.toContain('Forbidden');
   });
 });

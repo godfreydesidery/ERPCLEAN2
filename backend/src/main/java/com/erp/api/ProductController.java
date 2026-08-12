@@ -15,6 +15,7 @@ import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
+import com.erp.modules.products.domain.dto.UpdateBulkPackRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.service.BomService;
 import com.erp.modules.products.service.ProductService;
@@ -157,6 +158,18 @@ public class ProductController {
     public ProductBulkPackDto addBulkPack(@PathVariable String uid,
                                           @Valid @RequestBody CreateBulkPackRequest request) {
         return productService.addBulkPack(uid, request);
+    }
+
+    /**
+     * Corrects a pack's conversion factor. Without this the only "fix" for a wrong factor was
+     * delete + re-add, and re-adding hit the (product_id, unit_id) UNIQUE constraint.
+     */
+    @PutMapping("/uid/{uid}/bulk-packs/{bulkPackUid}")
+    @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.MANAGE')")
+    public ProductBulkPackDto updateBulkPack(@PathVariable String uid,
+                                             @PathVariable String bulkPackUid,
+                                             @Valid @RequestBody UpdateBulkPackRequest request) {
+        return productService.updateBulkPack(uid, bulkPackUid, request);
     }
 
     @DeleteMapping("/uid/{uid}/bulk-packs/{bulkPackUid}")

@@ -22,6 +22,7 @@ import {
   SetProductPriceRequest,
   SetProductWeighingRequest,
   UnitOfMeasureDto,
+  UpdateBulkPackRequest,
   UpdatePriceListRequest,
   UpdateProductRequest,
   UpdateUnitOfMeasureRequest,
@@ -111,6 +112,16 @@ export class ProductService {
 
   addBulkPack(uid: string, request: CreateBulkPackRequest): Observable<ProductBulkPackDto> {
     return this.http.post<ProductBulkPackDto>(`${this.base}/uid/${uid}/bulk-packs`, request);
+  }
+
+  /**
+   * Corrects a mistyped pack size in place. A dedicated action rather than remove + re-add: the row
+   * keeps its uid, so prices and barcodes keyed to that pack survive the correction. The response
+   * may carry SOFT warnings (e.g. a factor below 1) — the pack is saved either way.
+   */
+  updateBulkPack(uid: string, bulkPackUid: string, factorToBase: string): Observable<ProductBulkPackDto> {
+    const request: UpdateBulkPackRequest = { factorToBase };
+    return this.http.put<ProductBulkPackDto>(`${this.base}/uid/${uid}/bulk-packs/${bulkPackUid}`, request);
   }
 
   removeBulkPack(uid: string, bulkPackUid: string): Observable<void> {

@@ -64,6 +64,13 @@ export interface BarcodeRow {
   barcode: string;
   barcodeType: string;
   uomUid: string;
+  /**
+   * The numeric units_of_measure id exactly as the server sent it. The wire keys a barcode by id
+   * while this row (and the picker) speak uid — holding the id keeps the loaded unit while the
+   * units that translate it are still in flight, and keeps it nameable when it is not in the
+   * ACTIVE list the picker offers.
+   */
+  uomId?: string;
   isPrimary: boolean;
 }
 
@@ -71,6 +78,9 @@ export interface BarcodeRow {
 
 export interface BulkPackRow {
   localId: number;
+  /** Set when the row came back from the server. Rows carrying one are already persisted and must
+   *  NOT be re-POSTed on edit — the (product, unit) unique constraint would 409. */
+  savedUid?: string;
   unitUid: string;
   factorToBase: string;
 }
@@ -393,6 +403,9 @@ export class ProductMasterComponent implements OnInit {
         const active = rows.filter((u) => u.status === 'ACTIVE');
         this.companyUnits.set(active);
         this.unitsState.set('idle');
+        // Barcodes are fetched in parallel with the units that translate their numeric uomId —
+        // whichever lands second has to do the mapping.
+        this.resolveBarcodeUnits();
         // Auto-preselect if exactly one active unit (create mode).
         if (!this.isEdit() && active.length === 1 && !this.fBaseUnitUid()) {
           this.fBaseUnitUid.set(active[0].uid);
@@ -475,13 +488,17 @@ export class ProductMasterComponent implements OnInit {
   private loadProductSubResources(editUid: string): void {
     this.productService.listBarcodes(editUid).subscribe({
       next: (rows) => {
+        // The type and the unit are part of the barcode, not decoration: the POS honours the unit
+        // when scanning (a label registered against CARTON rings a carton), so dropping them here
+        // left the wizard unable to show — or preserve — the field that drives a scan.
         this.barcodeRows.set(
           rows.map((b) => ({
             localId: ++this.barcodeLocalIdSeq,
             savedUid: b.uid,
             barcode: b.barcode,
-            barcodeType: '',
-            uomUid: '',
+            barcodeType: b.barcodeType ?? '',
+            uomId: b.uomId != null ? String(b.uomId) : undefined,
+            uomUid: this.unitUidForId(b.uomId),
             isPrimary: b.primary,
           })),
         );
@@ -494,6 +511,7 @@ export class ProductMasterComponent implements OnInit {
         this.bulkPackRows.set(
           rows.map((bp) => ({
             localId: ++this.bulkLocalIdSeq,
+            savedUid: bp.uid,
             unitUid: bp.unitUid,
             factorToBase: bp.factorToBase,
           })),
@@ -693,6 +711,18 @@ export class ProductMasterComponent implements OnInit {
   }
 
   removeBulkPackRow(localId: number): void {
+    const row = this.bulkPackRows().find((r) => r.localId === localId);
+    const productUid = this.uid();
+    // A row that only ever existed on screen is dropped locally. A persisted one has to be deleted
+    // on the server too — otherwise removing a pack here looked like it worked and changed nothing.
+    if (row?.savedUid && productUid) {
+      this.productService.removeBulkPack(productUid, row.savedUid).subscribe({
+        next: () => this.bulkPackRows.update((rows) => rows.filter((r) => r.localId !== localId)),
+        error: (err) =>
+          this.bulkPackRowError.set(this.messageFrom(err, 'Could not remove this pack unit.')),
+      });
+      return;
+    }
     this.bulkPackRows.update((rows) => rows.filter((r) => r.localId !== localId));
   }
 
@@ -986,16 +1016,21 @@ export class ProductMasterComponent implements OnInit {
   // ── Sub-step: barcodes ────────────────────────────────────────────────────
 
   private runBarcodes(productUid: string): Promise<void> {
-    const rows = this.barcodeRows().filter((r) => r.barcode.trim());
+    // Only rows that are not already on the server. Re-POSTing a persisted barcode 409s on the
+    // unique constraint, and (before this guard) that aborted the loop and silently dropped every
+    // row below it — including one the user had just typed.
+    const rows = this.barcodeRows().filter((r) => r.barcode.trim() && !r.savedUid);
     if (rows.length === 0) {
       this.setSection(2, 'done');
       return Promise.resolve();
     }
     this.setSection(2, 'saving');
     return new Promise((resolve) => {
+      const failures: string[] = [];
       const runNext = (idx: number) => {
         if (idx >= rows.length) {
-          this.setSection(2, 'done');
+          if (failures.length > 0) this.setSection(2, 'failed', failures.join(' '));
+          else this.setSection(2, 'done');
           resolve();
           return;
         }
@@ -1008,10 +1043,15 @@ export class ProductMasterComponent implements OnInit {
           uomUid: row.uomUid || undefined,
         };
         this.productService.addBarcode(productUid, req).subscribe({
-          next: () => runNext(idx + 1),
+          next: (saved) => {
+            // Stamp it so a retry or a second save does not try to create it again.
+            if (saved?.uid) this.markBarcodeSaved(row.localId, saved.uid);
+            runNext(idx + 1);
+          },
           error: (err) => {
-            this.setSection(2, 'failed', this.messageFrom(err, 'Could not add barcode.'));
-            resolve();
+            // Carry on: one bad row must not strand the rest.
+            failures.push(this.messageFrom(err, `Could not add barcode ${row.barcode}.`));
+            runNext(idx + 1);
           },
         });
       };
@@ -1019,19 +1059,34 @@ export class ProductMasterComponent implements OnInit {
     });
   }
 
+  private markBarcodeSaved(localId: number, uid: string): void {
+    this.barcodeRows.update((rows) =>
+      rows.map((r) => (r.localId === localId ? { ...r, savedUid: uid } : r)));
+  }
+
+  private markBulkPackSaved(localId: number, uid: string): void {
+    this.bulkPackRows.update((rows) =>
+      rows.map((r) => (r.localId === localId ? { ...r, savedUid: uid } : r)));
+  }
+
   // ── Sub-step: bulk packs ──────────────────────────────────────────────────
 
   private runBulkPacks(productUid: string): Promise<void> {
-    const rows = this.bulkPackRows();
+    // Same guard as barcodes. Without it, editing a product re-POSTed its existing CARTON row,
+    // hit uq_product_bulk_pack_unit, aborted, and silently never created the OUTER row the user
+    // had just added — while the screen went on rendering it from local state.
+    const rows = this.bulkPackRows().filter((r) => !r.savedUid);
     if (rows.length === 0) {
       this.setSection(3, 'done');
       return Promise.resolve();
     }
     this.setSection(3, 'saving');
     return new Promise((resolve) => {
+      const failures: string[] = [];
       const runNext = (idx: number) => {
         if (idx >= rows.length) {
-          this.setSection(3, 'done');
+          if (failures.length > 0) this.setSection(3, 'failed', failures.join(' '));
+          else this.setSection(3, 'done');
           resolve();
           return;
         }
@@ -1041,10 +1096,13 @@ export class ProductMasterComponent implements OnInit {
           factorToBase: row.factorToBase,
         };
         this.productService.addBulkPack(productUid, req).subscribe({
-          next: () => runNext(idx + 1),
+          next: (saved) => {
+            if (saved?.uid) this.markBulkPackSaved(row.localId, saved.uid);
+            runNext(idx + 1);
+          },
           error: (err) => {
-            this.setSection(3, 'failed', this.messageFrom(err, 'Could not add pack unit.'));
-            resolve();
+            failures.push(this.messageFrom(err, 'Could not add pack unit.'));
+            runNext(idx + 1);
           },
         });
       };
@@ -1217,6 +1275,28 @@ export class ProductMasterComponent implements OnInit {
   unitLabel(uid: string): string {
     const u = this.companyUnits().find((u) => u.uid === uid);
     return u ? `${u.code} — ${u.name}` : uid;
+  }
+
+  /** Translates the numeric unit id a barcode carries on the wire into the uid this screen uses. */
+  private unitUidForId(uomId: string | null | undefined): string {
+    if (uomId == null || uomId === '') return '';
+    return this.companyUnits().find((u) => u.id === String(uomId))?.uid ?? '';
+  }
+
+  private resolveBarcodeUnits(): void {
+    this.barcodeRows.update((rows) =>
+      rows.map((r) => (!r.uomUid && r.uomId ? { ...r, uomUid: this.unitUidForId(r.uomId) } : r)),
+    );
+  }
+
+  /**
+   * The unit a barcode is keyed to. An id that matches no ACTIVE unit (archived, or another
+   * company's) still shows as a unit rather than as a blank — the alternative is the screen
+   * claiming a label has no unit when it has one.
+   */
+  barcodeUnitLabel(row: BarcodeRow): string {
+    if (row.uomUid) return this.unitLabel(row.uomUid);
+    return row.uomId ? `Unit #${row.uomId}` : '—';
   }
 
   /** 12 → "12", 0.5 → "0.5" — a number written the way a person would write it. */

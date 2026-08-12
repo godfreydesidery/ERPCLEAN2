@@ -445,3 +445,142 @@ describe('ProductDetailComponent — Weighed goods base-unit gate', () => {
     expect(comp.fWeighed()).toBe(false);
   });
 });
+
+// ── Bulk packs: correcting a mistyped pack size in place ────────────────────────
+// The client set CARTON = 48 and OUTER = 4 and had no way to fix either from this screen —
+// Remove + re-add was the only route, and it takes the pack's prices with it.
+
+describe('ProductDetailComponent — Bulk pack inline size edit', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  function bedWithUpdate(updateBulkPack: ReturnType<typeof vi.fn>) {
+    makeBed({ updateBulkPack, removeBulkPack: vi.fn(() => of(undefined)) });
+  }
+
+  it('offers an "Edit size" action on every pack row', async () => {
+    bedWithUpdate(vi.fn(() => of({ ...BULK_PACK_CARTON, factorToBase: '48' })));
+    const fixture = await createDetail();
+
+    const labels = Array.from(fixture.nativeElement.querySelectorAll('button'))
+      .map((b) => (b as HTMLButtonElement).textContent?.trim());
+    expect(labels).toContain('Edit size');
+  });
+
+  it('opens the row for editing seeded with the stored factor, and coerces a wire number', async () => {
+    bedWithUpdate(vi.fn(() => of(BULK_PACK_CARTON)));
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    // factorToBase is BigDecimal on the wire ⇒ a JSON number, not a string.
+    comp.startEditBulkPack({ ...BULK_PACK_CARTON, factorToBase: 12 as unknown as string });
+    fixture.detectChanges();
+
+    expect(comp.editingBulkPackUid()).toBe('BP1');
+    expect(comp.editBulkPackFactor()).toBe('12');
+    const input: HTMLInputElement | null = fixture.nativeElement.querySelector(
+      'input[aria-label="How many Pieces make one Carton"]',
+    );
+    expect(input).toBeTruthy();
+  });
+
+  it('reads the typed correction back in words so a reversed entry is obvious', async () => {
+    bedWithUpdate(vi.fn(() => of(BULK_PACK_CARTON)));
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('48');
+    expect(comp.editBulkPackSizeInWords()).toBe('1 Carton = 48 Pieces');
+  });
+
+  it('saves the corrected factor and re-reads the list from the server', async () => {
+    const updateBulkPack = vi.fn(() => of({ ...BULK_PACK_CARTON, factorToBase: '48' }));
+    bedWithUpdate(updateBulkPack);
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+    const svc = asMock(TestBed.inject(ProductService));
+    const readsBefore = svc['listBulkPacks'].mock.calls.length;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('48');
+    comp.saveBulkPackFactor(BULK_PACK_CARTON);
+    await vi.runAllTimersAsync();
+
+    expect(updateBulkPack).toHaveBeenCalledWith('PUID1', 'BP1', '48');
+    expect(svc['listBulkPacks'].mock.calls.length).toBe(readsBefore + 1);
+    expect(comp.editingBulkPackUid()).toBeNull();
+  });
+
+  it('renders the SOFT warnings the save response carries', async () => {
+    bedWithUpdate(
+      vi.fn(() =>
+        of({
+          ...BULK_PACK_CARTON,
+          factorToBase: '0.25',
+          warnings: ['A Carton smaller than one Piece is unusual — check the direction.'],
+        }),
+      ),
+    );
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('0.25');
+    comp.saveBulkPackFactor(BULK_PACK_CARTON);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.bulkPackEditWarnings().length).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('check the direction');
+  });
+
+  it('rejects a zero or non-numeric factor without calling the server', async () => {
+    const updateBulkPack = vi.fn(() => of(BULK_PACK_CARTON));
+    bedWithUpdate(updateBulkPack);
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('0');
+    comp.saveBulkPackFactor(BULK_PACK_CARTON);
+
+    expect(updateBulkPack).not.toHaveBeenCalled();
+    expect(comp.bulkPackEditError()).toBe('The pack size must be a number greater than zero.');
+  });
+
+  it('surfaces a server rejection inline and keeps the row open to retry', async () => {
+    const updateBulkPack = vi.fn(() =>
+      throwError(() => new HttpErrorResponse({
+        status: 400,
+        error: { data: null, errors: ['This pack unit is in use on an unposted document.'] },
+      })),
+    );
+    bedWithUpdate(updateBulkPack);
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('48');
+    comp.saveBulkPackFactor(BULK_PACK_CARTON);
+    await vi.runAllTimersAsync();
+
+    expect(comp.bulkPackEditError()).toBe('This pack unit is in use on an unposted document.');
+    expect(comp.editingBulkPackUid()).toBe('BP1');
+    expect(comp.savingBulkPackEdit()).toBe(false);
+  });
+
+  it('cancel closes the editor without touching the server', async () => {
+    const updateBulkPack = vi.fn(() => of(BULK_PACK_CARTON));
+    bedWithUpdate(updateBulkPack);
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+
+    comp.startEditBulkPack(BULK_PACK_CARTON);
+    comp.editBulkPackFactor.set('999');
+    comp.cancelEditBulkPack();
+
+    expect(comp.editingBulkPackUid()).toBeNull();
+    expect(updateBulkPack).not.toHaveBeenCalled();
+  });
+});

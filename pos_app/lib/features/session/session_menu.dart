@@ -98,17 +98,32 @@ class _SessionDrawer extends ConsumerWidget {
                     physics: const NeverScrollableScrollPhysics(),
                     childAspectRatio: 3.4,
                     children: [
-                      _info('Session', s.sessionNumber),
+                      // A shift resumed without reading the session knows its
+                      // uid and nothing else. Hide-not-dim applies to figures
+                      // we cannot vouch for exactly as it does to actions the
+                      // operator cannot have: a zero float printed here is a
+                      // drawer figure, and it would be read as one.
+                      if (s.figuresKnown) _info('Session', s.sessionNumber),
                       _info('Status', s.status.wire),
                       _info(
                           'Opened',
                           s.openedAt == null
                               ? '—'
                               : df.format(s.openedAt!.toLocal())),
-                      _info('Float',
-                          formatMoneyParts(s.openingFloatAmount, app.currency)),
+                      if (s.figuresKnown)
+                        _info(
+                            'Float',
+                            formatMoneyParts(
+                                s.openingFloatAmount, app.currency)),
                     ],
                   ),
+                ),
+              if (s != null && !s.figuresKnown)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(18, 2, 18, 4),
+                  child: Text(
+                      'Shift figures unavailable — reconnect to refresh.',
+                      style: TextStyle(fontSize: 12, color: AppColors.warn)),
                 ),
               const Divider(),
               Expanded(
@@ -137,12 +152,24 @@ class _SessionDrawer extends ConsumerWidget {
   }
 
   /// Builds the visible action list. A row only exists when the operator holds
-  /// the permission behind it.
+  /// the permission behind it — except the two drawer reports, see below.
   List<Widget> _actions(
       BuildContext context, WidgetRef ref, AppData app, PosSession? s) {
     final out = <Widget>[];
 
-    if (app.can(Perms.sessionView)) {
+    // OWNER-APPROVED EXCEPTION to the hide-not-dim rule documented at the top of
+    // this file. The X-read and Z-read rows stay VISIBLE to whoever is working
+    // this till even without POS.SESSION.VIEW.
+    //
+    // Withdrawing that permission from the cashier role is exactly how a shop
+    // owner says "a drawer report takes a supervisor" — and the rows then
+    // vanished, which reads as the till losing the feature rather than as the
+    // policy they just set. So the row stays and a manager approves it at the
+    // terminal, for that one view (see [_approverUid]). This is not a bypass:
+    // the server re-verifies the approver on every single request.
+    final reportsVisible = _mayAskForAReport(app);
+
+    if (reportsVisible) {
       out.add(_action(Icons.summarize_outlined, 'X-read',
           'Mid-shift drawer report — resets nothing',
           enabled: s != null, onTap: () => _xRead(context, ref)));
@@ -179,11 +206,13 @@ class _SessionDrawer extends ConsumerWidget {
           disabledNote: 'Close the session first',
           onTap: () => _reconcile(context, ref)));
     }
-    // Reprinting the Z-read is a READ (P3 made it repeatable), so it needs only
-    // POS.SESSION.VIEW — a cashier may hold that without POS.SESSION.RECONCILE.
-    // The manager step-up on the print itself is what keeps the closing
-    // statement a supervised document.
-    if (app.can(Perms.sessionView)) {
+    // Reprinting the Z-read is a READ (P3 made it repeatable), so a holder of
+    // POS.SESSION.VIEW reads it on their own rights — a cashier may hold that
+    // without POS.SESSION.RECONCILE. Everyone else reaches the same report
+    // through a manager's approval (same exception as the X-read above). The
+    // manager step-up on the PRINT itself is separate and unchanged: it is what
+    // keeps the closing statement a supervised document.
+    if (reportsVisible) {
       out.add(_action(Icons.print_outlined, 'Z-read (reprint)',
           'The final figures for a reconciled session',
           enabled: s != null && s.status.isReconciled,
@@ -192,6 +221,18 @@ class _SessionDrawer extends ConsumerWidget {
     }
     return out;
   }
+
+  /// **Mirror of the endpoints' own gate** — `POS.SESSION.VIEW` (read it
+  /// yourself) OR `POS.SALE.CREATE` (work this till, and ask a manager). Keep
+  /// the two identical: a row shown on a code the server does not accept sends
+  /// the cashier to fetch a manager, who types a correct password, and the
+  /// report is refused anyway — which reads at the till as a broken password
+  /// rather than as a policy.
+  ///
+  /// It is not a security check and is not trying to be one: it decides whether
+  /// a row is worth showing, and the server decides everything else.
+  bool _mayAskForAReport(AppData app) =>
+      app.can(Perms.sessionView) || app.can(Perms.saleCreate);
 
   Widget _info(String label, String value) => Padding(
         padding: const EdgeInsets.all(6),
@@ -256,41 +297,151 @@ class _SessionDrawer extends ConsumerWidget {
 
   // ---------------------------------------------------------------- actions
 
+  /// Obtains a manager's approval for a drawer report and returns **only** the
+  /// approver's uid — or null when the cashier backed out.
+  ///
+  /// ## The uid is used once and thrown away. On purpose.
+  ///
+  /// Nothing is minted here: `verify-authority` issues no token, and this
+  /// returns a bare uid which by itself grants nothing. That uid rides on ONE
+  /// request, where the server re-resolves it from scratch and refuses unless it
+  /// names a real, active, different user who genuinely holds the approver's
+  /// permission in that session's company.
+  ///
+  /// So it lives in a local variable for the length of one call and no longer:
+  /// it is never put in controller state, never written to shared_preferences or
+  /// the secure store, and never reused for a second report. Viewing another
+  /// report prompts again — that is the requirement ("it clears once viewed"),
+  /// not an oversight. Do not turn this into a cached approval session.
+  /// Returns the approver's uid to send, plus the name to stamp on what follows.
+  Future<({String uid, String? label})?> _approverUid(
+    BuildContext context,
+    WidgetRef ref, {
+    required GatedAction action,
+    required String sessionUid,
+    String? detail,
+  }) async {
+    final outcome = await approveIfRequired(context, ref,
+        action: action, detail: detail, correlationId: sessionUid);
+    // Cancelled, or refused after the manager gave up: the dialog has already
+    // shown the server's own words. Nothing more to say, nothing changed.
+    if (!outcome.allowed) return null;
+    final approver = outcome.approval?.authoriserUid?.trim();
+    if (approver == null || approver.isEmpty) {
+      // Approved, but the server named nobody — there is nothing to send, and
+      // guessing would be worse than stopping.
+      if (context.mounted) {
+        showToast(context, 'Could not confirm that approval. Please try again.');
+      }
+      return null;
+    }
+    return (uid: approver, label: outcome.approverLabel);
+  }
+
+  /// Turns a refused report into a sentence a shop floor can act on.
+  ///
+  /// The generic 403 text ("You do not have permission for this action") is
+  /// right for the operator's own request and actively misleading the moment a
+  /// manager has just typed their password — it reads as though the cashier were
+  /// refused. Prefer the server's own user-safe sentence when it sent one.
+  /// Neither branch ever shows a status code or a permission code.
+  String _reportRefusal(ApiException e, {required bool approved}) {
+    if (!approved || !e.isForbidden) return e.message;
+    final server = e.errors
+        .map((x) => x.message.trim())
+        .where((m) => m.isNotEmpty)
+        .join('; ');
+    return server.isEmpty
+        ? 'That approval was not accepted. Ask a supervisor who can '
+            'reconcile the till.'
+        : server;
+  }
+
+  /// The mid-shift X-read. Two doors into the same report:
+  ///
+  /// * an operator who holds `POS.SESSION.VIEW` reads it themselves, with no
+  ///   prompt — exactly as before;
+  /// * anyone else has a manager approve it at the terminal, and the approver's
+  ///   uid travels on that single request.
+  ///
+  /// The workflow rule is the server's and is untouched: an X-read is valid
+  /// while the session is OPEN or CLOSED and refused once it is RECONCILED,
+  /// where the Z-read is the report to ask for.
   Future<void> _xRead(BuildContext context, WidgetRef ref) async {
     final app = ref.read(appControllerProvider);
     final uid = app.shift?.uid;
     if (uid == null) return;
-    // Policy decision, not a hard-coded one: see kStepUpPolicy. X-read defaults
-    // to no approval — it is a cashier's own drawer self-check.
-    final outcome =
-        await approveIfRequired(context, ref, action: GatedAction.xRead);
-    if (!outcome.allowed || !context.mounted) return;
+
+    ({String uid, String? label})? approver;
+    if (!app.can(Perms.sessionView)) {
+      approver = await _approverUid(context, ref,
+          action: GatedAction.xRead,
+          sessionUid: uid,
+          detail: _sessionDetail(app));
+      if (approver == null || !context.mounted) return;
+    }
     try {
-      final x = await ref.read(sessionServiceProvider).xRead(uid);
+      final sessions = ref.read(sessionServiceProvider);
+      final x = approver == null
+          ? await sessions.xRead(uid)
+          : await sessions.xReadAuthorised(uid, authorisedByUid: approver.uid);
       if (!context.mounted) return;
       showDialog(
         context: context,
         builder: (_) => _XReadDialog(xRead: x),
       );
     } on ApiException catch (e) {
-      if (context.mounted) showToast(context, e.message);
+      if (context.mounted) {
+        showToast(context, _reportRefusal(e, approved: approver != null));
+      }
     }
+    // approver goes out of scope here, and that is the whole of its life.
   }
 
+  /// Re-reads the Z-read of a reconciled session. Same two doors as [_xRead];
+  /// the server's rule that the session must be RECONCILED is untouched.
   Future<void> _zReadReprint(BuildContext context, WidgetRef ref) async {
     final app = ref.read(appControllerProvider);
     final uid = app.shift?.uid;
     if (uid == null) return;
+
+    ({String uid, String? label})? approver;
+    if (!app.can(Perms.sessionView)) {
+      approver = await _approverUid(context, ref,
+          action: GatedAction.zReadPrint,
+          sessionUid: uid,
+          detail: _sessionDetail(app));
+      if (approver == null || !context.mounted) return;
+    }
     try {
-      final z = await ref.read(sessionServiceProvider).zRead(uid);
+      final sessions = ref.read(sessionServiceProvider);
+      final z = approver == null
+          ? await sessions.zRead(uid)
+          : await sessions.zReadAuthorised(uid, authorisedByUid: approver.uid);
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (_) => _ZReadSheet(zRead: z, reprint: true),
+        // Carry the approval into the sheet so printing this copy does not ask again.
+        builder: (_) => _ZReadSheet(
+          zRead: z,
+          reprint: true,
+          approvedBy: approver?.label ?? (approver != null ? 'a manager' : null),
+        ),
       );
     } on ApiException catch (e) {
-      if (context.mounted) showToast(context, e.message);
+      if (context.mounted) {
+        showToast(context, _reportRefusal(e, approved: approver != null));
+      }
     }
+  }
+
+  /// The one line naming what the manager is approving. Omitted entirely for a
+  /// shift resumed without reading the session, where the number is an em-dash
+  /// rather than a fact.
+  String? _sessionDetail(AppData app) {
+    final s = app.shift;
+    if (s == null || !s.figuresKnown || s.sessionNumber.isEmpty) return null;
+    return 'Session ${s.sessionNumber}';
   }
 
   Future<void> _payout(BuildContext context, WidgetRef ref) async {
@@ -480,10 +631,24 @@ class _XReadDialogState extends ConsumerState<_XReadDialog> {
 /// as one — the figures are byte-identical to the original by design, which is
 /// precisely why the paper has to say which copy it is.
 class _ZReadSheet extends ConsumerStatefulWidget {
-  const _ZReadSheet({required this.zRead, this.reprint = false, this.onDone});
+  const _ZReadSheet({
+    required this.zRead,
+    this.reprint = false,
+    this.onDone,
+    this.approvedBy,
+  });
   final ZRead zRead;
   final bool reprint;
   final VoidCallback? onDone;
+
+  /// Set when a manager already approved opening THIS rendering. Viewing and printing are one
+  /// act — the figures are already on screen and the paper shows the same manager the same
+  /// numbers — so asking a second time protects nothing and teaches cashiers to fetch a manager
+  /// twice per report, which is how a control gets worked around rather than followed. The
+  /// server audited that approval on the read, so the print is already on the record.
+  /// Scope is this dialog only: close it and the approval is gone with it.
+  final String? approvedBy;
+
   @override
   ConsumerState<_ZReadSheet> createState() => _ZReadSheetState();
 }
@@ -492,14 +657,20 @@ class _ZReadSheetState extends ConsumerState<_ZReadSheet> {
   bool _printing = false;
 
   Future<void> _print() async {
-    final outcome = await approveIfRequired(
-      context,
-      ref,
-      action: GatedAction.zReadPrint,
-      detail: 'Session ${ref.read(appControllerProvider).shift?.sessionNumber ?? ''}',
-      correlationId: widget.zRead.sessionUid,
-    );
-    if (!outcome.allowed || !mounted) return;
+    // Already approved to open this copy? Then it is approved to print this copy.
+    // Anyone who opened it on their own permission still meets the print gate as before.
+    String? approverLabel = widget.approvedBy;
+    if (approverLabel == null) {
+      final outcome = await approveIfRequired(
+        context,
+        ref,
+        action: GatedAction.zReadPrint,
+        detail: 'Session ${ref.read(appControllerProvider).shift?.sessionNumber ?? ''}',
+        correlationId: widget.zRead.sessionUid,
+      );
+      if (!outcome.allowed || !mounted) return;
+      approverLabel = outcome.approverLabel;
+    }
 
     final app = ref.read(appControllerProvider);
     final cfg = await AppConfig.load();
@@ -514,9 +685,8 @@ class _ZReadSheetState extends ConsumerState<_ZReadSheet> {
     final ok = await _printReport(context, text);
     if (!mounted) return;
     setState(() => _printing = false);
-    final by = outcome.approverLabel;
-    if (ok && by != null && context.mounted) {
-      showToast(context, 'Approved by $by.', ok: true);
+    if (ok && approverLabel != null && context.mounted) {
+      showToast(context, 'Approved by $approverLabel.', ok: true);
     }
   }
 

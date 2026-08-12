@@ -441,6 +441,12 @@ SELECT r.id, p.id FROM (VALUES
   -- auto-raises the backing PO, so the storekeeper never authors spend directly; PO approval
   -- thresholds still apply. Held alongside PURCHASE.RECEIVE, which they already have.
   ('STOREKEEPER','PURCHASE.RECEIVE.DIRECT'),
+  -- Kilimanjaro 2026-08-11: PURCHASE.RECEIVE.DIRECT is granted to STOREKEEPER and to no other role,
+  -- but "Receive Goods Without an Order" opens with a supplier picker backed by GET /suppliers
+  -- (SUPPLIER.VIEW). Without this grant a non-root storekeeper got a search box that returned
+  -- nothing, with no explanation — the screen was unusable by the only role that owns it. Read-only
+  -- lookup of a master they already receive against; it authorises no spend.
+  ('STOREKEEPER','SUPPLIER.VIEW'),
   -- Kilimanjaro 2026-08-08 (K9): the shipped stock + valuation reports were unreachable for the very
   -- role that lives in them — the storekeeper could not open the report they are measured on.
   ('STOREKEEPER','INVENTORY.VALUATION.VIEW'),

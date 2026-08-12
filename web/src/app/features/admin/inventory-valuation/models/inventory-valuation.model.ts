@@ -4,6 +4,8 @@
  * coerce with `+(v ?? 0)` (numeric-money guard) before arithmetic or display.
  */
 
+import { ReportCompanyHeaderDto } from '../../models/report-company-header.model';
+
 /** One row in the stock valuation report: per-product on-hand value. */
 export interface StockValuationRowDto {
   productId: string;
@@ -38,11 +40,18 @@ export interface StockValuationReconDto {
 /** Full stock valuation report + GL reconciliation bar (FR-INV-07). */
 export interface StockValuationReportDto {
   companyId: string;
+  /**
+   * Letterhead for the exported PDF/XLSX/CSV. Null only when the company row could not be read —
+   * the export then prints without a letterhead rather than failing.
+   */
+  company: ReportCompanyHeaderDto | null;
   rows: StockValuationRowDto[];
   /** Σ of all row values. */
   totalValue: number | string | null;
   recon: StockValuationReconDto;
   currency: string;
+  /** ISO instant the server built the report — printed on the export. */
+  generatedAt: string;
 }
 
 /** Request: set the one-time opening cost for an existing on-hand row (FR-INV-06). */

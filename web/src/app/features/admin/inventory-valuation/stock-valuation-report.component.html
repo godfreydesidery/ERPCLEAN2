@@ -36,6 +36,24 @@
           <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
         }
       </button>
+
+      <!-- Export needs REPORT.EXPORT (a second gate server-side), and there is nothing to export
+           until the report has loaded. -->
+      @if (canExport() && report()) {
+        <span class="erp-toolbar__spacer"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('PDF')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('XLSX')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="export('CSV')" [disabled]="exporting()">
+          <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+        </button>
+      }
     </div>
 
     <!-- Load states -->

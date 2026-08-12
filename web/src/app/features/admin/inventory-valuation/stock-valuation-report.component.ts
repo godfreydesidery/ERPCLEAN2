@@ -2,6 +2,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
 import { StockValuationReportDto } from './models/inventory-valuation.model';
 import { InventoryValuationService } from './inventory-valuation.service';
 
@@ -33,9 +35,12 @@ export class StockValuationReportComponent implements OnInit {
   // ── State ──────────────────────────────────────────────────────────────────
   readonly report = signal<StockValuationReportDto | null>(null);
   readonly state = signal<LoadState>('idle');
+  readonly exporting = signal(false);
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('INVENTORY.VALUATION.VIEW'));
+  /** The export endpoint is gated REPORT.EXPORT server-side — distinct from the view permission. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
   readonly canSetOpening = computed(() => this.session.hasPermission('INVENTORY.OPENING.SET'));
 
   readonly isEmpty = computed(() => this.state() === 'idle' && this.report() === null);
@@ -61,6 +66,18 @@ export class StockValuationReportComponent implements OnInit {
     });
   }
 
+  export(format: ExportFormat): void {
+    if (this.exporting()) return;
+    this.exporting.set(true);
+    this.valuationService.export(format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `stock-valuation_${this.today()}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: () => this.exporting.set(false),
+    });
+  }
+
   // ── Display helpers ────────────────────────────────────────────────────────
 
   /** Numeric-money guard — BigDecimal arrives as JSON number; never call string methods on it. */
@@ -82,5 +99,9 @@ export class StockValuationReportComponent implements OnInit {
   /** True when a row has no avg cost (quantity-only, unvalued). */
   isUnvalued(v: number | string | null | undefined): boolean {
     return v === null || v === undefined || +(v) === 0;
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
   }
 }
