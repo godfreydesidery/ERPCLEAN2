@@ -46,6 +46,14 @@
                   <span class="text-muted">—</span>
                 }
               </dd>
+              <dt class="col-sm-3 text-muted fw-normal">Supplier</dt>
+              <dd class="col-sm-9 mb-0">
+                @if (g.supplierName) {
+                  {{ g.supplierName }}
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </dd>
               @if (g.receivedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Received At</dt>
                 <dd class="col-sm-9 mb-0">{{ g.receivedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
@@ -197,6 +205,15 @@
                 </tr>
               }
             </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row" colspan="5" class="num">Total Received Value</th>
+                <td class="num">
+                  <strong>{{ g.currency }} {{ g.receiptTotalAmount | number:'1.2-2' }}</strong>
+                </td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       }

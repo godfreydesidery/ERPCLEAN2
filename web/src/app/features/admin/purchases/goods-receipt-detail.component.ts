@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -24,7 +24,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-goods-receipt-detail',
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
   templateUrl: './goods-receipt-detail.component.html',
   styleUrl: './goods-receipt-detail.component.scss',
 })

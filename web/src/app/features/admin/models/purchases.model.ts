@@ -127,10 +127,20 @@ export interface GoodsReceiptDto {
   receiptNumber: string;
   status: GoodsReceiptStatus;
   supplierId: string;
+  /** Supplier name snapshot from the backing PO; null when it cannot be resolved. */
+  supplierName: string | null;
   receivedAt: string | null;
   voidedAt: string | null;
   voidReason: string | null;
   notes: string | null;
+  /** Document currency (ISO 4217) from the backing PO; null when it cannot be resolved. */
+  currency: string | null;
+  /**
+   * Σ line cost over this receipt's lines, computed by the backend (the client must never re-derive
+   * it). Typed `string` to match the sibling money fields above, but a BigDecimal actually arrives
+   * as a JSON *number* — bind it through a pipe, never call string methods on it.
+   */
+  receiptTotalAmount: string | null;
   createdAt: string | null;
   lines: GoodsReceiptLineDto[] | null;
 }
