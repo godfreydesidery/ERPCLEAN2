@@ -120,3 +120,42 @@ describe('ProductService — weighing', () => {
     req.flush({ uid: 'PUID1', weighed: false, tareWeight: null, scaleStep: null, maxSaleWeight: null });
   });
 });
+
+// ── Bulk packs: correcting a mistyped pack size ───────────────────────────────
+
+describe('ProductService — bulk packs', () => {
+  let service: ProductService;
+  let httpMock: HttpTestingController;
+  const base = `${environment.apiBaseUrl}/products`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    service = TestBed.inject(ProductService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('updateBulkPack PUTs { factorToBase } to /uid/{uid}/bulk-packs/{bulkPackUid}', () => {
+    service.updateBulkPack('PUID1', 'BP1', '48').subscribe();
+    const req = httpMock.expectOne(`${base}/uid/PUID1/bulk-packs/BP1`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ factorToBase: '48' });
+    req.flush({});
+  });
+
+  it('updateBulkPack surfaces the SOFT warnings the response carries', () => {
+    let received: string[] | undefined;
+    service.updateBulkPack('PUID1', 'BP1', '0.25').subscribe((r) => (received = r.warnings));
+    const req = httpMock.expectOne(`${base}/uid/PUID1/bulk-packs/BP1`);
+    // Real wire shape: factorToBase is BigDecimal ⇒ a JSON number, not a string.
+    req.flush({
+      id: '1', uid: 'BP1', productId: '100', unitUid: 'U2', unitCode: 'CTN', unitName: 'Carton',
+      factorToBase: 0.25,
+      warnings: ['A Carton smaller than one Piece is unusual — check the direction.'],
+    });
+    expect(received).toEqual(['A Carton smaller than one Piece is unusual — check the direction.']);
+  });
+});

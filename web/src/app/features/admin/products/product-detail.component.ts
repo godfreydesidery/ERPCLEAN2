@@ -118,6 +118,20 @@ export class ProductDetailComponent {
   readonly bulkPackFormError = signal<string | null>(null);
   readonly rowBusyBulkPackId = signal<string | null>(null);
 
+  // ── Inline pack-size correction ────────────────────────────────────────────
+  // A mistyped factor (CARTON = 4 when it holds 48) mis-values every receipt and mis-deducts every
+  // sale of that pack, and the only remedy on this screen was Remove + re-add — which drops the
+  // pack's prices with it. Editing in place keeps the row's uid and everything hanging off it.
+  /** uid of the pack row currently open for editing; null when no row is. */
+  readonly editingBulkPackUid = signal<string | null>(null);
+  readonly editBulkPackFactor = signal('');
+  /** Unit label of the row being edited — kept so the read-back reads "1 Carton = 48 Pieces". */
+  readonly editingBulkPackUnitLabel = signal('pack');
+  readonly savingBulkPackEdit = signal(false);
+  readonly bulkPackEditError = signal<string | null>(null);
+  /** SOFT advisories returned by the last save — the pack was stored regardless. */
+  readonly bulkPackEditWarnings = signal<string[]>([]);
+
   // ── Pack-factor guardrails (K4) ────────────────────────────────────────────
   // The factor is the single number that decides how a purchase in cartons is valued and how a sale
   // in cartons is taken out of stock. Entered upside-down (1/12 instead of 12) it silently mis-values
@@ -168,6 +182,15 @@ export class ProductDetailComponent {
     const value = this.newBulkPackFactorValue();
     if (value === null || value <= 0) return '';
     return `1 ${this.newBulkPackUnitLabel()} = ${this.trimNumber(value)} ${this.baseUnitLabel()}`;
+  });
+
+  /** The same read-back for the row being corrected — a fix typed backwards is as bad as the typo. */
+  readonly editBulkPackSizeInWords = computed(() => {
+    const raw = String(this.editBulkPackFactor() ?? '').trim();
+    if (!raw) return '';
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    return `1 ${this.editingBulkPackUnitLabel()} = ${this.trimNumber(value)} ${this.baseUnitLabel()}`;
   });
 
   // ── Base-unit change guard (K4) ────────────────────────────────────────────
@@ -486,6 +509,61 @@ export class ProductDetailComponent {
       error: (err) => {
         this.bulkPackFormError.set(this.messageFrom(err, 'Could not add bulk pack.'));
         this.addingBulkPack.set(false);
+      },
+    });
+  }
+
+  /** Opens one row for correction, seeded with what is stored. Only one row edits at a time. */
+  startEditBulkPack(bp: ProductBulkPackDto): void {
+    this.editingBulkPackUid.set(bp.uid);
+    // factorToBase is BigDecimal on the wire (a JSON number) — coerce before it reaches a text signal.
+    this.editBulkPackFactor.set(bp.factorToBase != null ? String(bp.factorToBase) : '');
+    this.editingBulkPackUnitLabel.set(bp.unitName || bp.unitCode || 'pack');
+    this.bulkPackEditError.set(null);
+    this.bulkPackEditWarnings.set([]);
+  }
+
+  cancelEditBulkPack(): void {
+    this.editingBulkPackUid.set(null);
+    this.editBulkPackFactor.set('');
+    this.bulkPackEditError.set(null);
+  }
+
+  /**
+   * Saves the corrected pack size, then re-reads the list — the same read-back-from-the-server
+   * pattern every other mutation on this screen uses, so what is shown is what is stored.
+   */
+  saveBulkPackFactor(bp: ProductBulkPackDto): void {
+    if (this.savingBulkPackEdit()) return;
+    // ngModel on a type="number" input hands back a JS number (or null) — coerce before trimming.
+    const factor = String(this.editBulkPackFactor() ?? '').trim();
+    if (!factor) {
+      this.bulkPackEditError.set(
+        `Enter how many ${this.baseUnitLabel()} make one ${this.editingBulkPackUnitLabel()}.`,
+      );
+      return;
+    }
+    const factorValue = Number(factor);
+    if (!Number.isFinite(factorValue) || factorValue <= 0) {
+      this.bulkPackEditError.set('The pack size must be a number greater than zero.');
+      return;
+    }
+    this.savingBulkPackEdit.set(true);
+    this.bulkPackEditError.set(null);
+    this.bulkPackEditWarnings.set([]);
+    this.productService.updateBulkPack(this.uid(), bp.uid, factor).subscribe({
+      next: (saved) => {
+        this.savingBulkPackEdit.set(false);
+        this.editingBulkPackUid.set(null);
+        this.editBulkPackFactor.set('');
+        // Advisory, not failure: the pack saved — surface anything the server flagged about it.
+        this.bulkPackEditWarnings.set(saved?.warnings ?? []);
+        this.alerts.success('Pack size updated');
+        this.loadBulkPacks();
+      },
+      error: (err) => {
+        this.bulkPackEditError.set(this.messageFrom(err, 'Could not update the pack size.'));
+        this.savingBulkPackEdit.set(false);
       },
     });
   }

@@ -14,6 +14,7 @@ import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
+import com.erp.modules.products.domain.dto.UpdateBulkPackRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -49,6 +50,14 @@ public interface ProductService {
 
     // --- Bulk packs ---
     ProductBulkPackDto addBulkPack(String uid, CreateBulkPackRequest req);
+
+    /**
+     * Corrects an existing pack's conversion factor in place (the only field an operator can get
+     * wrong after the fact). Re-adding the unit cannot serve as the fix: (product_id, unit_id) is
+     * UNIQUE, so it 409s. Returns the same advisory warnings as add, and audits old → new.
+     */
+    ProductBulkPackDto updateBulkPack(String productUid, String bulkPackUid,
+                                      UpdateBulkPackRequest req);
 
     void removeBulkPack(String productUid, String bulkPackUid);
 

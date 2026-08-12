@@ -17,6 +17,7 @@ import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.SetProductWeighingRequest;
+import com.erp.modules.products.domain.dto.UpdateBulkPackRequest;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBarcode;
@@ -362,6 +363,15 @@ public class ProductServiceImpl implements ProductService {
         // Resolve unitUid scoped to the product's company (cross-tenant safe — brief addBulkPack_crossCompanyUnit)
         UnitOfMeasure unit = resolveUnit(p.getCompanyId(), req.unitUid());
 
+        // The base unit is never a pack of itself. Such a row was accepted before, then ignored by
+        // computeQtyInBase, listProductUnits and the till — it looked configured and did nothing.
+        if (p.getBaseUnit() != null && unit.getId().equals(p.getBaseUnit().getId())) {
+            throw new ConflictException(
+                    unit.getName() + " is already the base unit of " + p.getName()
+                            + ", so it can't also be a pack of it. Add a larger unit such as Box or"
+                            + " Carton, and enter how many " + unit.getName() + " it holds.");
+        }
+
         // A pack unit must be dimensionally sensible for the product: a discrete COUNT package
         // (Box/Bag/Carton) or the SAME physical dimension as the base unit (e.g. a KG pack of a
         // GRAM-based product). Reject a cross-dimension unit (e.g. a Litre pack of a weight product).
@@ -375,14 +385,66 @@ public class ProductServiceImpl implements ProductService {
                             + baseDim.name().toLowerCase() + " unit.");
         }
 
-        List<String> warnings = packFactorWarnings(p, unit, req.factorToBase());
+        // (product_id, unit_id) is UNIQUE. Probe it here so the operator is told WHICH unit clashes
+        // and what it currently holds — the DB constraint alone surfaces as an opaque 409, which is
+        // what made a wrong factor feel unfixable (re-adding to correct it looked like a dead end).
+        bulkPacks.findByProductIdAndUnitId(p.getId(), unit.getId()).ifPresent(existing -> {
+            throw new ConflictException(
+                    unit.getName() + " is already a pack unit for this product (currently "
+                            + plain(existing.getFactorToBase()) + ' ' + baseUnitName(p)
+                            + "). Change its size instead of adding it again.");
+        });
+
+        List<String> warnings =
+                packFactorWarnings(p, unit, req.factorToBase(), bulkPacks.findByProductId(p.getId()));
 
         ProductBulkPack bp = bulkPacks.save(new ProductBulkPack(p, unit, req.factorToBase(), actorId()));
-        Map<String, Object> detail = warnings.isEmpty()
-                ? Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid())
-                : Map.of("action", "BULK_PACK_ADD", "unitUid", req.unitUid(),
-                         "factorToBase", req.factorToBase().toPlainString(),
-                         "warnings", warnings);
+        // factorToBase is recorded unconditionally: it used to appear only when a warning fired,
+        // which left a silently-wrong factor untraceable after the fact.
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("action", "BULK_PACK_ADD");
+        detail.put("unitUid", req.unitUid());
+        detail.put("factorToBase", req.factorToBase().toPlainString());
+        if (!warnings.isEmpty()) {
+            detail.put("warnings", warnings);
+        }
+        audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
+                .detail(detail));
+        return ProductBulkPackDto.from(bp, warnings);
+    }
+
+    @Override
+    public ProductBulkPackDto updateBulkPack(String productUid, String bulkPackUid,
+                                             UpdateBulkPackRequest req) {
+        Product p = require(productUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+        // Resolve the child scoped to its parent product (same rule as remove — SR finding F16).
+        ProductBulkPack bp = bulkPacks.findByUidAndProductId(bulkPackUid, p.getId())
+                .orElseThrow(() -> new NotFoundException("BulkPack not found."));
+
+        BigDecimal previous = bp.getFactorToBase();
+        // Warn against the OTHER packs only — comparing a pack with itself is not a clash.
+        List<ProductBulkPack> siblings = bulkPacks.findByProductId(p.getId()).stream()
+                .filter(other -> !bulkPackUid.equals(other.getUid()))
+                .toList();
+        List<String> warnings = packFactorWarnings(p, bp.getUnit(), req.factorToBase(), siblings);
+
+        bp.setFactorToBase(req.factorToBase());
+        bp.setUpdatedAt(Instant.now());
+        bp.setUpdatedBy(actorId());
+
+        // Old AND new: a wrong factor is only diagnosable later if the trail shows what it replaced.
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("action", "BULK_PACK_UPDATE");
+        detail.put("packUid", bulkPackUid);
+        if (bp.getUnit() != null) {
+            detail.put("unitUid", bp.getUnit().getUid());
+        }
+        detail.put("previousFactorToBase", plain(previous));
+        detail.put("factorToBase", req.factorToBase().toPlainString());
+        if (!warnings.isEmpty()) {
+            detail.put("warnings", warnings);
+        }
         audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
                 .detail(detail));
         return ProductBulkPackDto.from(bp, warnings);
@@ -402,35 +464,94 @@ public class ProductServiceImpl implements ProductService {
      * a smaller measure of the same dimension (a 0.5 kg pack of a kg-based product), so a hard
      * {@code >= 1} rule would contradict ratified ADR-0007. The response and the audit trail carry
      * the signal; the pack is saved either way.
+     *
+     * <p>Also compares the factor against the product's OTHER packs ({@code siblings}, the pack
+     * itself excluded on update). The client defect that prompted this — one OUTER deducting a
+     * CARTON's 48 pieces — is invisible to a single-row check: 48 is a perfectly ordinary factor
+     * until you notice the CARTON next to it already holds 48.
      */
     private static List<String> packFactorWarnings(Product p, UnitOfMeasure packUnit,
-                                                   BigDecimal factorToBase) {
-        if (factorToBase == null || factorToBase.signum() <= 0
-                || factorToBase.compareTo(BigDecimal.ONE) >= 0) {
+                                                   BigDecimal factorToBase,
+                                                   List<ProductBulkPack> siblings) {
+        if (factorToBase == null || factorToBase.signum() <= 0) {
             return List.of();
         }
-        String baseUnitName = p.getBaseUnit() != null ? p.getBaseUnit().getName() : "base unit";
-        StringBuilder message = new StringBuilder()
-                .append("A ").append(packUnit.getName()).append(" is being set to ")
-                .append(factorToBase.stripTrailingZeros().toPlainString()).append(' ')
-                .append(baseUnitName).append(" — LESS than one ").append(baseUnitName)
-                .append(". This field means \"how many ").append(baseUnitName)
-                .append(" are in one ").append(packUnit.getName()).append("\".");
-        // The inverse is what the operator almost certainly meant when the factor looks like 1/N.
-        BigDecimal inverse = BigDecimal.ONE.divide(factorToBase, 6, RoundingMode.HALF_UP);
-        message.append(" If one ").append(packUnit.getName()).append(" holds ")
-                .append(inverse.setScale(0, RoundingMode.HALF_UP).toPlainString()).append(' ')
-                .append(baseUnitName).append(", enter that instead.");
-        if (packUnit.getDimensionType() == DimensionType.COUNT
-                && p.getBaseUnit() != null
-                && p.getBaseUnit().getDimensionType() == DimensionType.COUNT) {
-            message.append(" A counted pack smaller than one counted item is almost always a"
-                    + " typo — stock, costs and prices booked in this pack will be out by this"
-                    + " factor.");
-        } else {
-            message.append(" Ignore this if the pack really is a fraction of the base unit.");
+        String baseUnitName = baseUnitName(p);
+        List<String> warnings = new java.util.ArrayList<>();
+
+        if (factorToBase.compareTo(BigDecimal.ONE) < 0) {
+            StringBuilder message = new StringBuilder()
+                    .append("A ").append(packUnit.getName()).append(" is being set to ")
+                    .append(plain(factorToBase)).append(' ')
+                    .append(baseUnitName).append(" — LESS than one ").append(baseUnitName)
+                    .append(". This field means \"how many ").append(baseUnitName)
+                    .append(" are in one ").append(packUnit.getName()).append("\".");
+            // The inverse is what the operator almost certainly meant when the factor looks like 1/N.
+            BigDecimal inverse = BigDecimal.ONE.divide(factorToBase, 6, RoundingMode.HALF_UP);
+            message.append(" If one ").append(packUnit.getName()).append(" holds ")
+                    .append(inverse.setScale(0, RoundingMode.HALF_UP).toPlainString()).append(' ')
+                    .append(baseUnitName).append(", enter that instead.");
+            if (packUnit.getDimensionType() == DimensionType.COUNT
+                    && p.getBaseUnit() != null
+                    && p.getBaseUnit().getDimensionType() == DimensionType.COUNT) {
+                message.append(" A counted pack smaller than one counted item is almost always a"
+                        + " typo — stock, costs and prices booked in this pack will be out by this"
+                        + " factor.");
+            } else {
+                message.append(" Ignore this if the pack really is a fraction of the base unit.");
+            }
+            warnings.add(message.toString());
         }
-        return List.of(message.toString());
+
+        for (ProductBulkPack sibling : siblings) {
+            BigDecimal siblingFactor = sibling.getFactorToBase();
+            if (siblingFactor == null || siblingFactor.signum() <= 0) {
+                continue;
+            }
+            String siblingName = sibling.getUnit() != null
+                    ? sibling.getUnit().getName()
+                    : "another pack";
+            if (siblingFactor.compareTo(factorToBase) == 0) {
+                warnings.add("A " + siblingName + " already holds " + plain(siblingFactor) + ' '
+                        + baseUnitName + " on this product — is a " + packUnit.getName()
+                        + " really " + plain(factorToBase) + ' ' + baseUnitName + " too? Two packs"
+                        + " of the same size usually means one of the two factors is wrong.");
+            } else if (!nests(siblingFactor, factorToBase)) {
+                boolean newIsLarger = factorToBase.compareTo(siblingFactor) > 0;
+                BigDecimal larger = newIsLarger ? factorToBase : siblingFactor;
+                BigDecimal smaller = newIsLarger ? siblingFactor : factorToBase;
+                String largerName = newIsLarger ? packUnit.getName() : siblingName;
+                String smallerName = newIsLarger ? siblingName : packUnit.getName();
+                warnings.add("A " + largerName + " holds " + plain(larger) + ' ' + baseUnitName
+                        + " and a " + smallerName + " holds " + plain(smaller) + ' ' + baseUnitName
+                        + " — so a " + largerName + " is not a whole number of " + smallerName
+                        + " packs. Pack sizes normally nest; check both.");
+            }
+        }
+        return List.copyOf(warnings);
+    }
+
+    /**
+     * True when the two whole-number pack sizes nest (one is an exact multiple of the other).
+     * Restricted to integers >= 1 on purpose: fractional same-dimension packs (0.5 kg / 0.75 kg of
+     * a kg product) are legitimate and would otherwise warn on every combination.
+     */
+    private static boolean nests(BigDecimal a, BigDecimal b) {
+        BigDecimal larger = a.max(b).stripTrailingZeros();
+        BigDecimal smaller = a.min(b).stripTrailingZeros();
+        if (larger.scale() > 0 || smaller.scale() > 0 || smaller.compareTo(BigDecimal.ONE) < 0) {
+            return true;
+        }
+        return larger.remainder(smaller).signum() == 0;
+    }
+
+    private static String baseUnitName(Product p) {
+        return p.getBaseUnit() != null ? p.getBaseUnit().getName() : "base unit";
+    }
+
+    /** Human-facing rendering of a factor: 48.000000 → "48", 0.0208333 → "0.0208333". */
+    private static String plain(BigDecimal value) {
+        return value == null ? "?" : value.stripTrailingZeros().toPlainString();
     }
 
     @Override

@@ -15,5 +15,12 @@ public interface ProductBulkPackRepository extends JpaRepository<ProductBulkPack
      */
     Optional<ProductBulkPack> findByUidAndProductId(String uid, Long productId);
 
+    /**
+     * Duplicate probe for add: {@code (product_id, unit_id)} is UNIQUE, so hitting the DB first
+     * lets the service name the unit and its current size instead of surfacing the generic
+     * "record with the same unique identifier" 409.
+     */
+    Optional<ProductBulkPack> findByProductIdAndUnitId(Long productId, Long unitId);
+
     List<ProductBulkPack> findByProductId(Long productId);
 }
