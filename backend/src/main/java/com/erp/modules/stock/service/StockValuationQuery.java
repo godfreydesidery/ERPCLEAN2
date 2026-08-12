@@ -4,12 +4,14 @@ import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.repository.JournalLineRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
+import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.stock.domain.dto.StockValuationReconDto;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.domain.dto.StockValuationRowDto;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -120,6 +122,39 @@ public class StockValuationQuery {
                 "Inventory valuation vs GL 1300 Inventory balance",
                 totalValue, glBalance);
 
-        return new StockValuationReportDto(companyId, rows, totalValue, recon, CURRENCY);
+        return new StockValuationReportDto(companyId, loadCompanyHeader(companyId), rows,
+                totalValue, recon, CURRENCY, Instant.now().toString());
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * The letterhead the exported PDF prints above the figures — same block as
+     * {@link StockReportQuery}. Returns null rather than throwing when the row cannot be read: the
+     * report itself never needed the company record, so a header lookup must not be able to take it
+     * down.
+     */
+    private ReportCompanyHeaderDto loadCompanyHeader(Long companyId) {
+        List<ReportCompanyHeaderDto> found = jdbc.query(
+                """
+                SELECT name, legal_name, tax_id, vrn, contact_phone, contact_email,
+                       address_line1, address_line2, city, region, country
+                FROM companies
+                WHERE id = ?
+                """,
+                (rs, rowNum) -> new ReportCompanyHeaderDto(
+                        rs.getString("name"),
+                        rs.getString("legal_name"),
+                        rs.getString("address_line1"),
+                        rs.getString("address_line2"),
+                        rs.getString("city"),
+                        rs.getString("region"),
+                        rs.getString("country"),
+                        rs.getString("contact_phone"),
+                        rs.getString("contact_email"),
+                        rs.getString("tax_id"),
+                        rs.getString("vrn")),
+                companyId);
+        return found.isEmpty() ? null : found.get(0);
     }
 }

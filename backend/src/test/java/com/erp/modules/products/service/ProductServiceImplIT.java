@@ -588,14 +588,16 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     void removeBulkPack_otherProductsBulkPack_throwsNotFound() {
         ProductDto owner = productService.create(goodsRequest(companyA.getUid(), "Owner Prod BP"));
         ProductDto other = productService.create(goodsRequest(companyA.getUid(), "Other Prod BP"));
+        UnitOfMeasureDto carton = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN-BP", "Carton BP"));
         ProductBulkPackDto otherPack = productService.addBulkPack(other.uid(),
-                new CreateBulkPackRequest(pcsUid, new BigDecimal("12")));
+                new CreateBulkPackRequest(carton.uid(), new BigDecimal("12")));
 
         assertThatThrownBy(() -> productService.removeBulkPack(owner.uid(), otherPack.uid()))
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
 
         assertThat(productService.listBulkPacks(other.uid()))
-                .extracting(ProductBulkPackDto::unitCode).contains("PCS");
+                .extracting(ProductBulkPackDto::unitCode).contains("CTN-BP");
     }
 
     // -----------------------------------------------------------------------
@@ -656,15 +658,17 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void listProductUnits_baseUnitAlsoAddedAsPack_isNotDuplicated() {
-        // Pathological case: someone adds the base unit as a bulk pack — must de-duplicate.
+    void addBulkPack_baseUnitAsPack_isRejected() {
+        // Was accepted, stored, then ignored by every conversion site and by the till — a row that
+        // looked configured and did nothing. listProductUnits still de-duplicates for legacy rows.
         ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Units-DedupPack"));
-        productService.addBulkPack(prod.uid(),
-                new CreateBulkPackRequest(pcsUid, new BigDecimal("1")));
+
+        assertThatThrownBy(() -> productService.addBulkPack(prod.uid(),
+                new CreateBulkPackRequest(pcsUid, new BigDecimal("1"))))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("already the base unit");
 
         List<UnitOfMeasureDto> units = productService.listProductUnits(prod.uid());
-
-        // pcsUid appears only once.
         assertThat(units).hasSize(1);
         assertThat(units.get(0).uid()).isEqualTo(pcsUid);
     }

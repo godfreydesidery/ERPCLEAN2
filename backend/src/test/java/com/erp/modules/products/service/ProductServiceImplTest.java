@@ -11,7 +11,9 @@ import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.UpdateBulkPackRequest;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
@@ -26,7 +28,10 @@ import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.Money;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
@@ -37,6 +42,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -300,8 +306,121 @@ class ProductServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // Bulk packs: correctable factor + guards against entering a wrong one
+    // (client defect — one OUTER deducting a CARTON's 48 pieces)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addBulkPack_unitAlreadyAPack_namesTheUnitAndItsCurrentSize() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, boxUnit.getUid())).thenReturn(Optional.of(boxUnit));
+        when(bulkPacks.findByProductIdAndUnitId(product.getId(), boxUnit.getId()))
+                .thenReturn(Optional.of(new ProductBulkPack(product, boxUnit, new BigDecimal("4"), 1L)));
+
+        // Re-adding to correct a factor used to hit uq_product_bulk_pack_unit and surface as
+        // "A record with the same unique identifier already exists" — useless to an operator.
+        assertThatThrownBy(() -> service.addBulkPack(product.getUid(),
+                new CreateBulkPackRequest(boxUnit.getUid(), new BigDecimal("48"))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("BOX is already a pack unit for this product (currently 4 PCS)")
+                .hasMessageContaining("Change its size instead of adding it again");
+        verify(bulkPacks, never()).save(any());
+    }
+
+    @Test
+    void addBulkPack_baseUnitAsPack_isRejected() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+
+        assertThatThrownBy(() -> service.addBulkPack(product.getUid(),
+                new CreateBulkPackRequest(baseUnit.getUid(), BigDecimal.ONE)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already the base unit");
+        verify(bulkPacks, never()).save(any());
+    }
+
+    @Test
+    void addBulkPack_factorEqualToAnExistingPack_savesButWarns() {
+        // The product already carries a BOX pack of 12 (see setUp).
+        when(units.findByCompanyIdAndUid(COMPANY_ID, unconfiguredUnit.getUid()))
+                .thenReturn(Optional.of(unconfiguredUnit));
+        when(bulkPacks.findByProductIdAndUnitId(product.getId(), unconfiguredUnit.getId()))
+                .thenReturn(Optional.empty());
+        when(bulkPacks.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var dto = service.addBulkPack(product.getUid(),
+                new CreateBulkPackRequest(unconfiguredUnit.getUid(), new BigDecimal("12")));
+
+        assertThat(dto.warnings()).hasSize(1);
+        assertThat(dto.warnings().get(0))
+                .contains("BOX already holds 12 PCS")
+                .contains("is a BAG really 12 PCS too?");
+        // Advisory only — the pack is still created.
+        assertThat(dto.factorToBase()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void updateBulkPack_correctsTheFactorAndAuditsOldToNew() {
+        ProductBulkPack pack = bulkPackWithUid(boxUnit, new BigDecimal("48"));
+        when(bulkPacks.findByUidAndProductId(pack.getUid(), product.getId()))
+                .thenReturn(Optional.of(pack));
+        when(bulkPacks.findByProductId(product.getId())).thenReturn(List.of(pack));
+
+        var dto = service.updateBulkPack(product.getUid(), pack.getUid(),
+                new UpdateBulkPackRequest(new BigDecimal("4")));
+
+        assertThat(dto.factorToBase()).isEqualByComparingTo("4");
+        assertThat(pack.getFactorToBase()).isEqualByComparingTo("4");
+        // A pack is not a clash with itself — the old 48 must not warn against the new 4.
+        assertThat(dto.warnings()).isEmpty();
+
+        ArgumentCaptor<AuditEvent> event = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(audit).record(event.capture());
+        assertThat(event.getValue().detail())
+                .containsEntry("action", "BULK_PACK_UPDATE")
+                .containsEntry("packUid", pack.getUid())
+                .containsEntry("previousFactorToBase", "48")
+                .containsEntry("factorToBase", "4");
+    }
+
+    @Test
+    void updateBulkPack_toAnotherPacksFactor_warns() {
+        // The exact client shape: a CARTON of 48 already exists; the OUTER is being set to 48 too.
+        ProductBulkPack carton = bulkPackWithUid(unitWithId(4L, "CTNUID00000000000000030", "CTN"),
+                new BigDecimal("48"));
+        ProductBulkPack outer = bulkPackWithUid(boxUnit, new BigDecimal("4"));
+        when(bulkPacks.findByUidAndProductId(outer.getUid(), product.getId()))
+                .thenReturn(Optional.of(outer));
+        when(bulkPacks.findByProductId(product.getId())).thenReturn(List.of(carton, outer));
+
+        var dto = service.updateBulkPack(product.getUid(), outer.getUid(),
+                new UpdateBulkPackRequest(new BigDecimal("48")));
+
+        assertThat(dto.warnings()).hasSize(1);
+        assertThat(dto.warnings().get(0)).contains("CTN already holds 48 PCS");
+        assertThat(dto.factorToBase()).isEqualByComparingTo("48");
+    }
+
+    @Test
+    void updateBulkPack_otherProductsPack_throwsNotFound() {
+        when(bulkPacks.findByUidAndProductId("NOTMINE0000000000000030", product.getId()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateBulkPack(product.getUid(), "NOTMINE0000000000000030",
+                new UpdateBulkPackRequest(new BigDecimal("4"))))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
+
+    private int packSeq = 0;
+
+    /** A pack with a ULID-shaped uid — updateBulkPack resolves and self-excludes by uid. */
+    private ProductBulkPack bulkPackWithUid(UnitOfMeasure unit, BigDecimal factorToBase) {
+        ProductBulkPack pack = new ProductBulkPack(product, unit, factorToBase, 1L);
+        ReflectionTestUtils.setField(pack, "uid", String.format("BPUID%021d", ++packSeq));
+        return pack;
+    }
 
     private static UnitOfMeasure unitWithId(Long id, String uid, String code) {
         UnitOfMeasure unit = new UnitOfMeasure(COMPANY_ID, code, code, 1L);

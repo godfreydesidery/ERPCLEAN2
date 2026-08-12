@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, of, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
@@ -81,6 +81,7 @@ export class DirectGoodsReceiptComponent {
   readonly supplierSearchQ = signal('');
   readonly supplierResults = signal<SupplierModel[]>([]);
   readonly selectedSupplier = signal<{ uid: string; label: string } | null>(null);
+  readonly supplierSearchError = signal<string | null>(null);
   private readonly supplierSearch$ = new Subject<string>();
 
   // ── Item entry ─────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export class DirectGoodsReceiptComponent {
   readonly newLineCost = signal('');
   readonly newLineNote = signal('');
   readonly lineFormError = signal<string | null>(null);
+  readonly productSearchError = signal<string | null>(null);
   private readonly productSearch$ = new Subject<string>();
 
   // ── Staged lines + submit ──────────────────────────────────────────────────
@@ -116,14 +118,20 @@ export class DirectGoodsReceiptComponent {
         switchMap((q) => {
           const companyId = this.selectedCompanyId();
           if (!companyId || !q.trim()) { this.supplierResults.set([]); return []; }
-          return this.supplierService.list(companyId, q.trim(), 0, 10);
+          this.supplierSearchError.set(null);
+          // catchError INSIDE the switchMap: an error escaping to the outer subscribe would
+          // terminate the stream, leaving the search box permanently dead after one failure.
+          return this.supplierService.list(companyId, q.trim(), 0, 10).pipe(
+            catchError((err: unknown) => {
+              this.supplierSearchError.set(this.searchMessage(err, 'suppliers'));
+              return of({ rows: [] as SupplierModel[] });
+            }),
+          );
         }),
         takeUntilDestroyed(),
       )
-      .subscribe({
-        next: ({ rows }) => this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE')),
-        error: () => this.supplierResults.set([]),
-      });
+      .subscribe(({ rows }) =>
+        this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE')));
 
     this.productSearch$
       .pipe(
@@ -132,14 +140,18 @@ export class DirectGoodsReceiptComponent {
         switchMap((q) => {
           const companyId = this.selectedCompanyId();
           if (!companyId || !q.trim()) { this.productResults.set([]); return []; }
-          return this.productService.list(companyId, q.trim(), 0, 10);
+          this.productSearchError.set(null);
+          return this.productService.list(companyId, q.trim(), 0, 10).pipe(
+            catchError((err: unknown) => {
+              this.productSearchError.set(this.searchMessage(err, 'items'));
+              return of({ rows: [] as ProductModel[] });
+            }),
+          );
         }),
         takeUntilDestroyed(),
       )
-      .subscribe({
-        next: ({ rows }) => this.productResults.set(rows.filter((r) => r.status !== 'ARCHIVED')),
-        error: () => this.productResults.set([]),
-      });
+      .subscribe(({ rows }) =>
+        this.productResults.set(rows.filter((r) => r.status !== 'ARCHIVED')));
 
     this.loadCompanies();
   }
@@ -214,20 +226,39 @@ export class DirectGoodsReceiptComponent {
     });
   }
 
+  /** Coerce a number-typed-input signal value to a trimmed string (ngModel on type="number"
+   *  emits a number, so raw .trim() throws; the backend takes qty/cost as strings on the wire). */
+  private asStr(v: string | number | null | undefined): string {
+    return v === null || v === undefined ? '' : String(v).trim();
+  }
+
   addLine(): void {
+    try {
+      this.stageLine();
+    } catch (err) {
+      // A throw here used to escape into Angular's default ErrorHandler, leaving the button looking
+      // completely inert. Never let this handler fail silently again.
+      console.error('Direct goods receipt — could not stage the line', err);
+      this.lineFormError.set('Could not add this item. Check the quantity and unit cost, then try again.');
+    }
+  }
+
+  private stageLine(): void {
     const product = this.selectedProduct();
     const unitUid = this.newLineUnitUid();
-    const qty = Number(this.newLineQty());
-    const cost = Number(this.newLineCost());
-    const note = this.newLineNote().trim();
+    const qtyStr = this.asStr(this.newLineQty());
+    const costStr = this.asStr(this.newLineCost());
+    const qty = Number(qtyStr);
+    const cost = Number(costStr);
+    const note = this.asStr(this.newLineNote());
 
     if (!product) { this.lineFormError.set('Select an item.'); return; }
     if (!unitUid) { this.lineFormError.set('Select the unit it was delivered in.'); return; }
-    if (!this.newLineQty().trim() || !Number.isFinite(qty) || qty <= 0) {
+    if (!qtyStr || !Number.isFinite(qty) || qty <= 0) {
       this.lineFormError.set('Enter a quantity greater than zero.');
       return;
     }
-    if (!this.newLineCost().trim() || !Number.isFinite(cost) || cost < 0) {
+    if (!costStr || !Number.isFinite(cost) || cost < 0) {
       this.lineFormError.set('Enter a unit cost of zero or more.');
       return;
     }
@@ -246,8 +277,8 @@ export class DirectGoodsReceiptComponent {
         productLabel: product.label,
         unitUid,
         unitLabel,
-        qty: this.newLineQty().trim(),
-        unitCost: this.newLineCost().trim(),
+        qty: qtyStr,
+        unitCost: costStr,
         note,
       },
     ]);
@@ -318,6 +349,18 @@ export class DirectGoodsReceiptComponent {
         this.formError.set(this.messageFrom(err, 'Could not record this delivery.'));
       },
     });
+  }
+
+  /**
+   * A search that fails is not a search that found nothing. A 403 here means the signed-in role is
+   * missing the read permission for that master (e.g. STOREKEEPER holds PURCHASE.RECEIVE.DIRECT but
+   * not SUPPLIER.VIEW) — previously that surfaced as a box that silently never returned anything.
+   */
+  private searchMessage(err: unknown, what: string): string {
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      return `You do not have permission to look up ${what}. Ask an administrator for access.`;
+    }
+    return `Could not search ${what}. Check your connection and try again.`;
   }
 
   private messageFrom(err: unknown, fallback: string): string {

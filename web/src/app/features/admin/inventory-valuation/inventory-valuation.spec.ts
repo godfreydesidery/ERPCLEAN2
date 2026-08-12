@@ -8,6 +8,8 @@
  *  3. StockValuationReportComponent — reconciliation badge: ties=true shows "Reconciled to GL".
  *  4. StockValuationReportComponent — reconciliation badge: ties=false alarm shows difference.
  *  5. StockValuationReportComponent — isUnvalued: null and zero avgCost flagged as unvalued.
+ *  5b. StockValuationReportComponent — export() calls the service and clears the exporting flag;
+ *     the export buttons are hidden from a caller without REPORT.EXPORT.
  *  6. OpeningValuationComponent — renders without crashing.
  *  7. OpeningValuationComponent — fmtMoney numeric-money guard (same class of bug).
  *  8. OpeningValuationComponent — submitDisabled: true when no row selected.
@@ -41,9 +43,11 @@ import {
 const MOCK_ORG = { uid: 'ORG1', id: '1', name: 'Acme Org' };
 const MOCK_COMPANY = { uid: 'CO1', id: '10', name: 'Acme Ltd' };
 
-function makeSession() {
+/** `has` may be a flat answer or a per-code predicate (view granted, export denied). */
+function makeSession(has: boolean | ((code: string) => boolean) = true) {
+  const answer = typeof has === 'function' ? has : () => has;
   return {
-    hasPermission: vi.fn(() => true),
+    hasPermission: vi.fn((code: string) => answer(code)),
     isAuthenticated: signal(true),
     user: signal(null),
     permissions: signal([]),
@@ -61,6 +65,11 @@ function reconUntied(): StockValuationReconDto {
 
 const MOCK_REPORT_TIED: StockValuationReportDto = {
   companyId: '10',
+  company: {
+    name: 'Acme Ltd', legalName: null,
+    addressLine1: null, addressLine2: null, city: null, region: null, country: null,
+    contactPhone: null, contactEmail: null, taxId: null, vrn: null,
+  },
   currency: 'TZS',
   totalValue: 150000,
   recon: reconTied(),
@@ -70,6 +79,7 @@ const MOCK_REPORT_TIED: StockValuationReportDto = {
       quantity: 100, avgCost: 1500, value: 150000, currency: 'TZS',
     },
   ],
+  generatedAt: '2026-08-11T12:00:00Z',
 };
 
 const MOCK_REPORT_UNTIED: StockValuationReportDto = {
@@ -88,6 +98,7 @@ const MOCK_REPORT_UNTIED: StockValuationReportDto = {
 function makeValuationService(reportDto: StockValuationReportDto = MOCK_REPORT_TIED) {
   return {
     report: vi.fn(() => of(reportDto)),
+    export: vi.fn(() => of(new Blob())),
     setOpening: vi.fn(() =>
       of({
         productUid: 'PRD-002',
@@ -118,18 +129,27 @@ function makeStockService() {
 // ── StockValuationReportComponent ─────────────────────────────────────────────
 
 describe('StockValuationReportComponent', () => {
-  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks(); // undo the document.body/URL spies from the export() test
+    TestBed.resetTestingModule();
+  });
 
-  function makeBed(reportDto: StockValuationReportDto = MOCK_REPORT_TIED) {
+  function makeBed(
+    reportDto: StockValuationReportDto = MOCK_REPORT_TIED,
+    session: ReturnType<typeof makeSession> = makeSession(),
+  ) {
+    const valuationService = makeValuationService(reportDto);
     TestBed.configureTestingModule({
       imports: [StockValuationReportComponent],
       providers: [
         provideHttpClient(), provideHttpClientTesting(),
         provideRouter([{ path: '**', redirectTo: '' }]),
-        { provide: InventoryValuationService, useValue: makeValuationService(reportDto) },
-        { provide: SessionStore, useValue: makeSession() },
+        { provide: InventoryValuationService, useValue: valuationService },
+        { provide: SessionStore, useValue: session },
       ],
     });
+    return valuationService;
   }
 
   it('renders without crashing', () => {
@@ -184,6 +204,46 @@ describe('StockValuationReportComponent', () => {
     expect(comp.isUnvalued(1500)).toBe(false);
     expect(comp.isUnvalued('0')).toBe(true);
     expect(comp.isUnvalued('1500')).toBe(false);
+  });
+
+  it('export() calls the service with the requested format and clears the exporting flag', () => {
+    const valuationService = makeBed();
+    const comp = TestBed.createComponent(StockValuationReportComponent).componentInstance;
+
+    // Stub the browser download side-effect: jsdom chokes on anchor.click().
+    vi.spyOn(document.body, 'appendChild').mockImplementation((n) => n as Node);
+    vi.spyOn(document.body, 'removeChild').mockImplementation((n) => n as Node);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+    comp.export('PDF');
+
+    expect(valuationService.export).toHaveBeenCalledWith('PDF');
+    expect(comp.exporting()).toBe(false);
+  });
+
+  it('renders the export buttons in the toolbar once the report has loaded', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(StockValuationReportComponent);
+    fixture.detectChanges();
+
+    const toolbar: HTMLElement = fixture.nativeElement.querySelector('.erp-toolbar');
+    expect(fixture.componentInstance.canExport()).toBe(true);
+    expect(toolbar.textContent).toContain('Export PDF');
+    expect(toolbar.textContent).toContain('Export Excel');
+    expect(toolbar.textContent).toContain('Export CSV');
+  });
+
+  it('hides the export buttons from a user who can view but not export', () => {
+    vi.useFakeTimers();
+    makeBed(MOCK_REPORT_TIED, makeSession((code) => code !== 'REPORT.EXPORT'));
+    const fixture = TestBed.createComponent(StockValuationReportComponent);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.canView()).toBe(true);
+    expect(fixture.componentInstance.canExport()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Export PDF');
   });
 });
 

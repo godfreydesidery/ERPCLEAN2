@@ -90,6 +90,9 @@
                   }
                 </ul>
               }
+              @if (supplierSearchError(); as msg) {
+                <p class="text-danger small mb-0 mt-1" role="alert">{{ msg }}</p>
+              }
             </div>
 
             <!-- Currency -->
@@ -157,6 +160,9 @@
                       </li>
                     }
                   </ul>
+                }
+                @if (productSearchError(); as msg) {
+                  <p class="text-danger small mb-0 mt-1" role="alert">{{ msg }}</p>
                 }
               </div>
 
@@ -276,9 +282,11 @@
 
       <!-- Submit -->
       <div class="d-flex gap-2 align-items-center mt-3">
+        <!-- Deliberately NOT disabled on an empty list: submit()'s own guard explains what is
+             missing, whereas a disabled button is silently inert and reads as "it does nothing". -->
         <button type="button" class="btn btn-primary"
                 (click)="submit()"
-                [disabled]="submitting() || stagedLines().length === 0">
+                [disabled]="submitting()">
           @if (submitting()) {
             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
             Recording…

@@ -793,7 +793,7 @@
                       <tr>
                         <td class="mono">{{ row.barcode }}</td>
                         <td>{{ row.barcodeType || '—' }}</td>
-                        <td>{{ row.uomUid ? unitLabel(row.uomUid) : '—' }}</td>
+                        <td>{{ barcodeUnitLabel(row) }}</td>
                         <td>
                           @if (row.isPrimary) {
                             <i role="img" class="bi bi-check-circle-fill text-success" aria-label="Primary"></i>

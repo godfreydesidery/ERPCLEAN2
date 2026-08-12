@@ -93,13 +93,23 @@ function makeBed(overrides: {
   return { receiveDirectSpy };
 }
 
-/** Drives the screen to a submittable state: supplier picked, one line staged. */
-async function stageOneLine(comp: DirectGoodsReceiptComponent, cost = '100'): Promise<void> {
+/**
+ * Drives the screen to a submittable state: supplier picked, one line staged.
+ *
+ * <p>Qty/cost are set as NUMBERS on purpose. Angular's NumberValueAccessor claims
+ * `input[type=number][ngModel]` and parseFloats the DOM value, so at runtime these signals hold
+ * numbers even though they are declared `signal('')`. Setting strings here is what let a
+ * `.trim() is not a function` crash ship green — see the DOM-driven spec below.
+ */
+async function stageOneLine(
+  comp: DirectGoodsReceiptComponent,
+  cost: number | string = 100,
+): Promise<void> {
   comp.selectSupplier(STUB_SUPPLIER as never);
   comp.selectProduct(STUB_PRODUCT as never);
   await vi.runAllTimersAsync();
-  comp.newLineQty.set('20');
-  comp.newLineCost.set(cost);
+  comp.newLineQty.set(20 as unknown as string);
+  comp.newLineCost.set(cost as unknown as string);
   comp.addLine();
 }
 
@@ -174,10 +184,66 @@ describe('DirectGoodsReceiptComponent', () => {
     const comp = fixture.componentInstance;
     await vi.runAllTimersAsync();
 
-    await stageOneLine(comp, '0');
+    await stageOneLine(comp, 0);
 
     expect(comp.stagedLines()).toHaveLength(0);
     expect(comp.lineFormError()).toContain('note');
+  });
+
+  // Regression: the screen shipped with `.trim()` called on signals that hold NUMBERS at runtime,
+  // so "+ Add item" threw a TypeError before any validation message could be set and the button
+  // appeared completely inert. Every existing spec missed it by poking the signals with strings —
+  // the one path Angular's NumberValueAccessor never takes. This one drives the real DOM.
+  it('stages a line when qty and cost are typed into the number inputs', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectSupplier(STUB_SUPPLIER as never);
+    comp.selectProduct(STUB_PRODUCT as never);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const qty = el.querySelector<HTMLInputElement>('input#drQty')!;
+    const cost = el.querySelector<HTMLInputElement>('input#drCost')!;
+    expect(qty).toBeTruthy();
+    expect(cost).toBeTruthy();
+
+    qty.value = '50';
+    qty.dispatchEvent(new Event('input'));
+    cost.value = '5000';
+    cost.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await vi.runAllTimersAsync();
+
+    // What the real screen delivers: numbers, not strings.
+    expect(typeof comp.newLineQty()).toBe('number');
+
+    comp.addLine();
+
+    expect(comp.lineFormError()).toBeNull();
+    expect(comp.stagedLines()).toHaveLength(1);
+    expect(comp.stagedLines()[0]).toMatchObject({ qty: '50', unitCost: '5000' });
+  });
+
+  it('keeps "Receive into stock" clickable with no lines so the guard can explain why', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectSupplier(STUB_SUPPLIER as never);
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const submitBtn = Array.from(el.querySelectorAll<HTMLButtonElement>('button'))
+      .find((b) => b.textContent?.includes('Receive into stock'));
+
+    expect(submitBtn).toBeTruthy();
+    // A disabled button fires no click at all, so the user would get silence instead of a reason.
+    expect(submitBtn!.disabled).toBe(false);
   });
 
   it('surfaces the server message inline when the receipt is rejected', async () => {

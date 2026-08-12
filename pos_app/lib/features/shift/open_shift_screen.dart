@@ -491,14 +491,56 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
     if (!mounted || action == null) return;
 
     if (action == 'resume') {
+      // The till row is handed over as the fallback: the shift is open either
+      // way, so a read we are not allowed to make must not cost the cashier
+      // their till.
       await ref
           .read(appControllerProvider.notifier)
-          .resumeShift(sessionUid, app.mode);
-      final err = ref.read(appControllerProvider).error;
-      if (err != null && mounted) showToast(context, err);
+          .resumeShift(sessionUid, app.mode, fallbackTill: t);
+      if (!mounted) return;
+      if (ref.read(appControllerProvider).error != null) {
+        await _showResumeFailed(t, sessionUid, app);
+      }
       return;
     }
 
+    await _cashUp(t, sessionUid, app);
+  }
+
+  /// Resume did not go through even with the fallback. A toast that fades and
+  /// leaves the cashier on the picker is the dead end the client reported, so
+  /// this says what to DO instead. Why it failed — a permission, a dead line —
+  /// is in the log; a shop screen gets the next step, not the diagnosis.
+  Future<void> _showResumeFailed(
+      PosTill t, String sessionUid, AppData app) async {
+    final cashUp = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        title: const Text("Couldn't reopen your shift"),
+        content: Text(
+          'Your shift on ${t.name} is still open, so nothing has been lost. '
+          'Ask a supervisor for POS session access, or count the drawer and '
+          'close the shift.',
+          style: const TextStyle(color: AppColors.ink2),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Not now')),
+          if (app.can(Perms.sessionClose))
+            OrbixButton(
+                label: 'Close shift',
+                onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    if (cashUp == true && mounted) await _cashUp(t, sessionUid, app);
+  }
+
+  /// The real cash-up on an orphaned shift, reached from the shift dialog and
+  /// from a failed resume — one path so both count the drawer the same way.
+  Future<void> _cashUp(PosTill t, String sessionUid, AppData app) async {
     final closed = await showDialog<bool>(
       context: context,
       builder: (_) => _CashUpDialog(
