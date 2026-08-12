@@ -46,6 +46,14 @@ public class DocumentPdfRenderer {
     private static final Font FONT_SMALL    = FontFactory.getFont(FontFactory.HELVETICA, 8);
     /** Body font for wide tables (the 9-column GRN); anything larger wraps every description. */
     private static final Font FONT_TINY     = FontFactory.getFont(FontFactory.HELVETICA, 7.5f);
+
+    /**
+     * Alignment of EVERY column heading, money columns included (owner's call, Kilimanjaro
+     * 2026-08-12): a heading is a column NAME, not a figure. Only the values beneath it align
+     * right. Named and asserted because "make the heading match its figures" is a strong instinct —
+     * it was tried once and rejected.
+     */
+    static final int HEADING_ALIGN = Element.ALIGN_LEFT;
     private static final Font FONT_VOID     = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 36, Color.RED);
     private static final Color COL_HEADER_BG = new Color(52, 73, 94);
     private static final Color COL_HEADER_FG = Color.WHITE;
@@ -221,11 +229,16 @@ public class DocumentPdfRenderer {
      */
     private void renderLineTable(Document doc, List<DocLine> lines, boolean hasPrices, Layout layout) {
         ColumnPlan plan = planColumns(lines, hasPrices, layout.showItemCode());
+        List<Col> cols = plan.cols();
 
-        PdfPTable table = new PdfPTable(plan.headers().size());
+        PdfPTable table = new PdfPTable(cols.size());
         table.setWidthPercentage(100);
         try {
-            table.setWidths(plan.widths());
+            float[] w = new float[cols.size()];
+            for (int i = 0; i < cols.size(); i++) {
+                w[i] = cols.get(i).width();
+            }
+            table.setWidths(w);
         } catch (Exception ignored) {
             // Width hint rejected (never seen with a matching count) — even columns still print.
         }
@@ -233,85 +246,94 @@ public class DocumentPdfRenderer {
         // of bare figures under no headings is unreadable.
         table.setHeaderRows(1);
 
-        for (String h : plan.headers()) {
-            addHeaderCell(table, h);
+        // Headings take HEADING_ALIGN, never c.valueAlign() — see the constant.
+        for (Col c : cols) {
+            addHeaderCell(table, c.header(), HEADING_ALIGN);
         }
 
         // A nine-column GRN at 9 pt wraps every description onto two lines on A4 portrait. Step the
         // body down a point and a half once the table gets wide; the header stays put.
-        Font body = plan.headers().size() > 7 ? FONT_TINY : FONT_NORMAL;
+        Font body = cols.size() > 7 ? FONT_TINY : FONT_NORMAL;
         for (DocLine l : lines) {
-            addLineRow(table, l, plan, body);
+            List<String> values = rowValues(l, plan);
+            for (int i = 0; i < values.size(); i++) {
+                addCell(table, values.get(i), body, cols.get(i).valueAlign(), false, false, null);
+            }
         }
         doc.add(table);
     }
 
-    /** Which columns this document's lines earn, and how wide each one is. */
-    private record ColumnPlan(List<String> headers, float[] widths, boolean showCode,
-                               boolean prices, boolean discount, boolean selling,
-                               boolean lastCost, boolean margin) {}
+    /**
+     * One column: its heading, its share of the table width, and how its VALUES align.
+     *
+     * <p>{@code valueAlign} governs the body cells ONLY. The heading is a column name, not a figure,
+     * so it always reads left even over a money column (owner's call, Kilimanjaro 2026-08-12).
+     *
+     * <p>Only money is right-aligned — cost, selling price, previous cost, discount and the line
+     * amount — so the decimal points stack and the column can be read down. Everything else (code,
+     * description, quantity, unit) reads left; a quantity is a count, not an amount. The margin
+     * percentage rides with the money columns: it carries two decimals and sits between two of them,
+     * and a left-aligned "9.05" next to a right-aligned "416.67" breaks the run of figures.
+     */
+    record Col(String header, float width, int valueAlign) {}
 
-    private static ColumnPlan planColumns(List<DocLine> lines, boolean hasPrices, boolean showCode) {
+    /** Which columns this document's lines earn, in print order. */
+    record ColumnPlan(List<Col> cols, boolean showCode, boolean prices,
+                       boolean discount, boolean selling, boolean lastCost,
+                       boolean margin) {}
+
+    /** Package-private so the alignment rule can be asserted without parsing a PDF. */
+    static ColumnPlan planColumns(List<DocLine> lines, boolean hasPrices, boolean showCode) {
         boolean discount = hasPrices && lines.stream().anyMatch(l -> l.discount() != null);
         boolean selling  = lines.stream().anyMatch(l -> l.sellingPrice() != null);
         boolean lastCost = lines.stream().anyMatch(l -> l.lastCost() != null);
         boolean margin   = lines.stream().anyMatch(l -> l.marginPercent() != null);
 
-        List<String> headers = new ArrayList<>();
-        List<Float>  widths  = new ArrayList<>();
-        if (showCode) {
-            headers.add("Code");             widths.add(11f);
-        } else {
-            headers.add("#");                widths.add(6f);
-        }
-        headers.add("Product Description");  widths.add(showCode ? 25f : 34f);
-        headers.add("Qty");                  widths.add(7f);
-        headers.add("Unit");                 widths.add(7f);
+        final int left  = Element.ALIGN_LEFT;
+        final int right = Element.ALIGN_RIGHT;
+
+        List<Col> cols = new ArrayList<>();
+        cols.add(showCode ? new Col("Code", 11f, left) : new Col("#", 6f, left));
+        cols.add(new Col("Product Description", showCode ? 25f : 34f, left));
+        cols.add(new Col("Qty",  7f, left));   // a count, not money
+        cols.add(new Col("Unit", 7f, left));
         if (hasPrices) {
             // "CP" only where an "SP" sits beside it to contrast with; on an invoice or a PO the
             // column is just the price and "Unit Price" says so without a glossary.
-            headers.add(selling ? "CP" : "Unit Price"); widths.add(11f);
-            if (discount) { headers.add("Discount");    widths.add(10f); }
-            if (selling)  { headers.add("SP");          widths.add(11f); }
-            if (lastCost) { headers.add("Last CP");     widths.add(11f); }
-            if (margin)   { headers.add("Mar.(%)");     widths.add(8f);  }
-            headers.add("Amount");                      widths.add(12f);
+            cols.add(new Col(selling ? "CP" : "Unit Price", 11f, right));
+            if (discount) cols.add(new Col("Discount", 10f, right));
+            if (selling)  cols.add(new Col("SP",       11f, right));
+            if (lastCost) cols.add(new Col("Last CP",  11f, right));
+            if (margin)   cols.add(new Col("Mar.(%)",   8f, right));
+            cols.add(new Col("Amount", 12f, right));
         }
-
-        float[] w = new float[widths.size()];
-        for (int i = 0; i < widths.size(); i++) {
-            w[i] = widths.get(i);
-        }
-        return new ColumnPlan(List.copyOf(headers), w, showCode,
+        return new ColumnPlan(List.copyOf(cols), showCode,
                 hasPrices, discount, selling, lastCost, margin);
     }
 
-    private void addLineRow(PdfPTable table, DocLine l, ColumnPlan plan, Font body) {
-        if (plan.showCode()) {
-            addCell(table, l.code() != null ? l.code() : "", body, Element.ALIGN_LEFT, false, false, null);
-        } else {
-            addCell(table, String.valueOf(l.lineNo()), body, Element.ALIGN_RIGHT, false, false, null);
+    /**
+     * The printed values for one line, in the same order as {@link #planColumns}'s columns.
+     *
+     * <p>Built as a list rather than emitted cell-by-cell so the values and the columns cannot fall
+     * out of step: a mismatch would shift every figure one column left for the rest of the row.
+     */
+    List<String> rowValues(DocLine l, ColumnPlan plan) {
+        List<String> v = new ArrayList<>();
+        v.add(plan.showCode()
+                ? (l.code() != null ? l.code() : "")
+                : String.valueOf(l.lineNo()));
+        v.add(l.description() != null ? l.description() : "");
+        v.add(fmt(l.qty()));
+        v.add(l.unit() != null ? l.unit() : "");
+        if (plan.prices()) {
+            v.add(fmtAmt(l.unitPrice()));
+            if (plan.discount()) v.add(fmtAmt(l.discount()));
+            if (plan.selling())  v.add(fmtAmt(l.sellingPrice()));
+            if (plan.lastCost()) v.add(fmtAmt(l.lastCost()));
+            if (plan.margin())   v.add(fmtAmt(l.marginPercent()));
+            v.add(fmtAmt(l.lineTotal()));
         }
-        addCell(table, l.description() != null ? l.description() : "", body, Element.ALIGN_LEFT, false, false, null);
-        addCell(table, fmt(l.qty()), body, Element.ALIGN_RIGHT, false, false, null);
-        addCell(table, l.unit() != null ? l.unit() : "", body, Element.ALIGN_LEFT, false, false, null);
-        if (!plan.prices()) {
-            return;
-        }
-        addCell(table, fmtAmt(l.unitPrice()), body, Element.ALIGN_RIGHT, false, false, null);
-        if (plan.discount()) {
-            addCell(table, fmtAmt(l.discount()), body, Element.ALIGN_RIGHT, false, false, null);
-        }
-        if (plan.selling()) {
-            addCell(table, fmtAmt(l.sellingPrice()), body, Element.ALIGN_RIGHT, false, false, null);
-        }
-        if (plan.lastCost()) {
-            addCell(table, fmtAmt(l.lastCost()), body, Element.ALIGN_RIGHT, false, false, null);
-        }
-        if (plan.margin()) {
-            addCell(table, fmtAmt(l.marginPercent()), body, Element.ALIGN_RIGHT, false, false, null);
-        }
-        addCell(table, fmtAmt(l.lineTotal()), body, Element.ALIGN_RIGHT, false, false, null);
+        return v;
     }
 
     /**
@@ -351,10 +373,11 @@ public class DocumentPdfRenderer {
         PdfPTable table = new PdfPTable(4);
         table.setWidthPercentage(50);
         table.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        addHeaderCell(table, "Tax Band");
-        addHeaderCell(table, "Base");
-        addHeaderCell(table, "Rate %");
-        addHeaderCell(table, "VAT");
+        // Same rule as the line table: headings are column names, figures align right beneath them.
+        addHeaderCell(table, "Tax Band", HEADING_ALIGN);
+        addHeaderCell(table, "Base",     HEADING_ALIGN);
+        addHeaderCell(table, "Rate %",   HEADING_ALIGN);
+        addHeaderCell(table, "VAT",      HEADING_ALIGN);
         for (TaxRow r : rows) {
             addCell(table, r.bandLabel(), FONT_NORMAL, Element.ALIGN_LEFT, false, false, null);
             addCell(table, fmtAmt(r.base()), FONT_NORMAL, Element.ALIGN_RIGHT, false, false, null);
@@ -378,10 +401,14 @@ public class DocumentPdfRenderer {
 
     // -------------------------------------------------------------------------
 
-    private void addHeaderCell(PdfPTable table, String text) {
+    /**
+     * A column heading. The alignment is passed in rather than fixed, so a heading always sits over
+     * its own figures — right-aligned above money, left-aligned above text.
+     */
+    private void addHeaderCell(PdfPTable table, String text, int align) {
         PdfPCell cell = new PdfPCell(new Phrase(text, FONT_COL_HEAD));
         cell.setBackgroundColor(COL_HEADER_BG);
-        cell.setHorizontalAlignment(Element.ALIGN_LEFT);
+        cell.setHorizontalAlignment(align);
         cell.setPaddingBottom(4);
         cell.setPaddingTop(4);
         cell.setBorderWidth(0);
