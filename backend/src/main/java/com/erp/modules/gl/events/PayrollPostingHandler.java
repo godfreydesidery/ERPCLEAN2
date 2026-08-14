@@ -102,8 +102,7 @@ public class PayrollPostingHandler implements DomainEventHandler {
         PayrollFinalisedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             postPayrollEntry(event, payload);
         } catch (Exception ex) {

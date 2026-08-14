@@ -135,6 +135,10 @@ public class BootstrapRunner implements ApplicationRunner {
                 passwordEncoder.encode(props.adminPassword()),
                 props.adminDisplayName());
         root.setRoot(true);
+        // A fresh install is otherwise born unattributed: V101's backfill only covers rows that
+        // already exist, so without this the very first user of a new database has no tenant
+        // (ADR-0062 P2-1). The organisation was created a few lines above, in this transaction.
+        root.setOrganisationId(org.getId());
         users.save(root);  // save first so root.getId() is populated
 
         UserBranch defaultAssignment = new UserBranch(root.getId(), branch, root.getId());

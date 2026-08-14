@@ -95,8 +95,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
         StockReceivedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             // Resolve the branch default stock location once — used for batch/serial writes (V76).
             // If none exists the tracking writes are skipped (soft), but qty/GL proceed normally.

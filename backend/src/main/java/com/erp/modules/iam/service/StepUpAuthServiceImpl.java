@@ -187,7 +187,11 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                 authoriser.isRoot(),
                 caller.companyId(),
                 caller.branchId(),
-                caller.ip());
+                caller.ip(),
+                // The AUTHORISER's own tenant, not the caller's. P2-3 will compare the two and
+                // refuse when they differ; today it is recorded so that check has something to
+                // compare. Taking the caller's here would make the comparison vacuous.
+                authoriser.getOrganisationId());
         boolean holds = permissionResolver.hasPermission(
                 authoriserInCallerScope, code, now.toEpochMilli());
 
@@ -258,7 +262,8 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                 authoriser.isRoot(),
                 companyId != null ? companyId : caller.companyId(),
                 caller.branchId(),
-                caller.ip());
+                caller.ip(),
+                authoriser.getOrganisationId());  // the authoriser's tenant — see above
         if (!permissionResolver.hasPermission(authoriserInScope, code, now.toEpochMilli())) {
             return refuseUid(code, authoriser, "NO_AUTHORITY");
         }

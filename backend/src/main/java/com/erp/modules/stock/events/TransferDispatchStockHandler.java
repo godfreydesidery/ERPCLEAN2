@@ -78,8 +78,7 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
         final MovementSourceKeys inKeys  = MovementSourceKeys.forLeg(event.getUid(), 'd');
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             for (TransferDispatchedPayload.LineItem line : payload.lines()) {
                 final String legOutKey = outKeys.nextFor(line.productId());

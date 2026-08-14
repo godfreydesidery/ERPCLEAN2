@@ -54,8 +54,7 @@ public class PayrollReversalHandler implements DomainEventHandler {
         PayrollReversedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             if (payload.originalGlEntryUid() != null) {
                 safeInvoker.postReversalInNewTx(
