@@ -340,8 +340,16 @@ backup is the only way to return to your previous version.
 
 ## Changes in this release
 
-_To be completed for each release._
 EOF
+
+  # The body comes from dist/RELEASE-NOTES-NEXT.md so it can be written and reviewed as
+  # part of the change it describes, rather than being hardcoded here. This file is the
+  # vendor's only outbound channel into an offline estate; it had never carried a sentence.
+  if [ -s "$SCRIPT_DIR/RELEASE-NOTES-NEXT.md" ]; then
+    cat "$SCRIPT_DIR/RELEASE-NOTES-NEXT.md" >> "$out/RELEASE-NOTES.md"
+  else
+    printf '_To be completed for each release._\n' >> "$out/RELEASE-NOTES.md"
+  fi
 }
 
 write_checksums() {
