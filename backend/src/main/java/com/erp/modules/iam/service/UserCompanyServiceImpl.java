@@ -128,6 +128,9 @@ public class UserCompanyServiceImpl implements UserCompanyService {
 
     @Override
     public UserCompanyDto assign(AssignUserCompanyRequest request) {
+        // P3-3 (ADR-0062, G1): asserted before any membership lookup — see
+        // UserServiceImpl.requireInScope for why the ordering matters.
+        assertSameTenantAsCaller(request.userUid());
         AppUser user    = Lookups.orNotFound(users.findByUid(request.userUid()), "User", request.userUid());
         Company company = Lookups.orNotFound(companies.findByUid(request.companyUid()), "Company", request.companyUid());
 
@@ -220,5 +223,23 @@ public class UserCompanyServiceImpl implements UserCompanyService {
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();
         return p != null ? p.userId() : null;
+    }
+
+    /**
+     * P3-3: refuses when the target user belongs to another tenant. NOT FOUND, not FORBIDDEN: a
+     * distinct refusal confirms the uid names a real user in some other organisation.
+     */
+    private void assertSameTenantAsCaller(String userUid) {
+        com.erp.platform.security.RequestContext.Principal principal =
+                com.erp.platform.security.RequestContext.get();
+        if (principal == null || principal.organisationId() == null || userUid == null) {
+            return;
+        }
+        users.findByUid(userUid)
+                .filter(u -> u.getOrganisationId() != null
+                        && !principal.organisationId().equals(u.getOrganisationId()))
+                .ifPresent(u -> {
+                    throw com.erp.platform.common.api.NotFoundException.of("User", userUid);
+                });
     }
 }

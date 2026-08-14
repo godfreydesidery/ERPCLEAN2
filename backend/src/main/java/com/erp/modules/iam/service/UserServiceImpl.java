@@ -191,10 +191,21 @@ public class UserServiceImpl implements UserService {
     public List<UserDto> listOrgWide() {
         // Root sees the full org list; non-root callers see org-wide but without root users.
         RequestContext.Principal principal = RequestContext.get();
-        if (principal != null && principal.root()) {
-            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+        // P3-4 (ADR-0062): confined to the caller's tenant, ROOT INCLUDED. The root exemption here
+        // was the whole hole: `is_root` is deployment-global, so an unscoped root list returns every
+        // non-root user in the DATABASE - a complete cross-tenant directory, and under the @alias
+        // convention the tenant list with it. D-2 re-bounds root to "full authority inside my own
+        // organisation", and this is one of the places that has to mean something.
+        Long org = principal == null ? null : principal.organisationId();
+        if (org == null) {
+            // No tenant context (bootstrap, async). Preserve the pre-tenancy behaviour rather than
+            // returning an empty list to a legitimate caller mid-transition.
+            return principal != null && principal.root()
+                    ? users.findAllByOrderByUsername().stream().map(UserDto::from).toList()
+                    : users.findByRootFalseOrderByUsername().stream().map(UserDto::from).toList();
         }
-        return users.findByRootFalseOrderByUsername().stream().map(UserDto::from).toList();
+        return users.findByRootFalseAndOrganisationIdOrderByUsername(org).stream()
+                .map(UserDto::from).toList();
     }
 
     @Override
@@ -285,6 +296,16 @@ public class UserServiceImpl implements UserService {
     private AppUser requireInScope(String uid) {
         AppUser user = requireByUid(uid);
         RequestContext.Principal principal = RequestContext.get();
+
+        // P3-3 (ADR-0062, G1/G12): the ORGANISATION check comes FIRST, before the company-membership
+        // oracle below. That ordering is the whole point: the membership row is precisely what the
+        // G1 takeover chain creates, so consulting it first means the attacker is asked to vouch for
+        // themselves. Organisation membership cannot be granted by the caller.
+        if (principal != null && principal.organisationId() != null
+                && user.getOrganisationId() != null
+                && !principal.organisationId().equals(user.getOrganisationId())) {
+            throw NotFoundException.of("User", uid);
+        }
         if (principal == null || !principal.root()) {
             if (user.isRoot()) {
                 throw NotFoundException.of("User", uid);
