@@ -41,6 +41,15 @@ public class Role extends UidEntity {
     @Column(name = "is_system", nullable = false)
     private boolean system = false;
 
+    /**
+     * The tenant that authored this role, or NULL for the thirteen shipped roles, which are global
+     * (ADR-0062 D-3). V100's uq_role_code_global partial index requires the shipped ones to stay
+     * NULL, so this must never be stamped for them.
+     */
+    @Column(name = "organisation_id")
+    @Setter
+    private Long organisationId;
+
     /** Scope-typing field (P3). Roles are org-wide by ADR-0001 D-A; NULL = the default org scope. */
     @Column(name = "role_scope", length = 20)
     private String roleScope;
