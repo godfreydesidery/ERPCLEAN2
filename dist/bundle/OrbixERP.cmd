@@ -16,7 +16,7 @@ REM Double-clicking can start in a different folder, so move to this file's own
 REM folder before doing anything.
 cd /d "%~dp0"
 
-if not exist "%~dp0erp.ps1" (
+if not exist "%~dp0orbixerp.ps1" (
     echo.
     echo   PROBLEM: orbixerp.ps1 was not found next to this file.
     echo   This folder looks incomplete. Unpack the bundle again.
@@ -99,7 +99,7 @@ goto menu
 :run
 cls
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0erp.ps1" %1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0orbixerp.ps1" %1
 echo.
 if not "%ERRORLEVEL%"=="0" (
     echo   That did not work. The message above says why;
