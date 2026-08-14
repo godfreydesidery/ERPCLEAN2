@@ -5,8 +5,18 @@ and backfills against real data before they touch anything a customer uses.
 
 Required by [MULTITENANCY-PLAN.md](../../MULTITENANCY-PLAN.md) §12.2, and the answer to §11 G-B
 ("nothing has ever been executed"). Every schema step in the multi-tenancy programme rehearses here
-first — **twice**, because `R__seed_permissions.sql` re-runs on every deploy and a repeatable-migration
-failure only appears on the second boot.
+first.
+
+> **⬤ Corrected 2026-08-14.** This used to say "rehearse twice, because `R__seed_permissions.sql`
+> re-runs on every deploy and a repeatable-migration failure only appears on the second boot."
+> **That premise is wrong.** Flyway re-applies a repeatable migration only when its **checksum
+> changes** — when the file is edited, not when you deploy. Measured on the live customer's own
+> `flyway_schema_history`, the seed has run **three times ever** (2026-08-02, 2026-08-10, 2026-08-12),
+> and it did not re-run across three consecutive boots during the P1-8 proof.
+>
+> **To test the seed, edit it the way the release will, then boot.** Booting an unchanged release
+> twice proves the versioned migrations are not re-applied and the app restarts cleanly — worth
+> doing, but it is not a seed test.
 
 > ## ⚠ This holds a real customer's live business data
 >

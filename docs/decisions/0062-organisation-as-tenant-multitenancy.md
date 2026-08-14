@@ -164,9 +164,14 @@ Two rules follow from the classification:
 > **R-2 · Platform capabilities must never be ordinary permission rows.**
 > `R__seed_permissions.sql:267-274` grants `ORG_ADMIN` every row in `permissions` via a `CROSS JOIN`,
 > and says so: *"ORG_ADMIN always holds every permission, including ones added above later."* It is a
-> **repeatable** migration re-running on every deploy, so the moment `ORG.*` codes are added, every
-> tenant's `ORG_ADMIN` silently gains them. Either exclude a platform module from the join or keep
-> platform capability out of `permissions` entirely.
+> **repeatable** migration, so the moment `ORG.*` codes are added, every tenant's `ORG_ADMIN` silently
+> gains them. Either exclude a platform module from the join or keep platform capability out of
+> `permissions` entirely.
+>
+> *(Mechanism corrected 2026-08-14: Flyway re-applies a repeatable migration when its **checksum
+> changes**, not on every deploy — measured, this seed has run three times ever on the live customer.
+> The rule is unaffected, because adding `ORG.*` codes **is** an edit to that file, and the edit is
+> what triggers the re-run.)*
 
 ### D-7 · Username convention
 
