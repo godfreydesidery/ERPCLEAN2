@@ -371,13 +371,13 @@ function Invoke-Restore {
 
     # Empty the schema, then restore into it. This replaces `pg_restore --clean --if-exists`,
     # which drops objects one by one in the dump's own order and fails whenever the live
-    # database holds an object the backup does not know about — a constraint from a newer
-    # release, say — because the dependent object blocks the drop. The restore then
+    # database holds an object the backup does not know about - a constraint from a newer
+    # release, say - because the dependent object blocks the drop. The restore then
     # half-succeeded, and the old code downgraded that to a warning and printed
     # "Restore complete" over a database that had only partly been rolled back.
     #
     # DROP SCHEMA ... CASCADE clears everything regardless of the backup's contents and
-    # needs only the owning role — not a superuser, and not CREATEDB.
+    # needs only the owning role - not a superuser, and not CREATEDB.
     Write-Step 'Clearing the current database'
     $code = Invoke-PgTool @('psql', '-h', (Get-DbHost), '-p', (Get-DbPort),
                             '-U', $dbUser, '-d', $dbName, '-v', 'ON_ERROR_STOP=1', '-q',
@@ -390,7 +390,7 @@ function Invoke-Restore {
     }
 
     Write-Step 'Restoring'
-    # No --clean: the schema is already empty. Errors are now FATAL — a partly-restored
+    # No --clean: the schema is already empty. Errors are now FATAL - a partly-restored
     # database that reports success is worse than a failure you can see.
     $code = Invoke-PgTool @('pg_restore', '-h', (Get-DbHost), '-p', (Get-DbPort),
                             '-U', $dbUser, '-d', $dbName,
