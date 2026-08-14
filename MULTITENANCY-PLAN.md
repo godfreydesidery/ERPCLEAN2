@@ -1327,10 +1327,18 @@ that a composite key would otherwise have had to.
         Generic message, per D-7.
 - [ ] **P2-4** Login must consult organisation status once D-6 lands (`AuthServiceImpl` currently
       checks only the user's own active flag).
-- [ ] **P2-5** Implement the D-7 credential standards. Decide here whether `must_change_password`
-      and `password_expires_at` — present as columns, never read on the login path — become live.
-      **`mfa_enabled` is no longer a "decide later": it is required for tier-2 and tier-3 roles**
-      (§1.2, P4-2b). General-population MFA stays deferred; privileged-account MFA does not.
+- [x] **P2-5** D-7 credential standards — **RESOLVED 2026-08-14, mostly by finding it already done.**
+      The strong-password half is **already enforced and has been all along**: `PasswordPolicy`
+      requires the configured minimum length, at least one letter, at least one digit, and rejects a
+      blocklist of common passwords. `UserServiceImpl.create` and every password-set path call it.
+      Nothing to build.
+      - `must_change_password` and `password_expires_at` remain **unread on the login path**; they
+        surface only in `UserDto`. Making them live means a forced-rotation flow, which is a feature
+        in its own right and is **not** part of tenancy. Deferred deliberately, not by oversight.
+      - `mfa_enabled` is read nowhere at all. It stays deferred for the general population and
+        becomes **required for tier-2 and tier-3 roles** at **P4-2b**, which is where the grant path
+        it protects actually changes. Building MFA here would be speculative: nothing in Phase 2
+        confers privileged authority.
 
 ### Phase 2.5 — Scope enforcer and parity harness *(new 2026-08-14; gates all of Phase 3)*
 
