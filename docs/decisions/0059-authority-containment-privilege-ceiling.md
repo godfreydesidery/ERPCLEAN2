@@ -1,6 +1,6 @@
 # 0059 — Authority-containment: a privilege ceiling on every conferral boundary
 
-- **Status:** Accepted
+- **Status:** Accepted — **amended 2026-08-14 by [ADR-0062](0062-organisation-as-tenant-multitenancy.md)**
 - **Date:** 2026-07-09
 - **Deciders:** Owner (godfrey.desidery), Claude (security review)
 - **Context source:** Security audit 2026-07-09 (vertical privilege-escalation finding); owner report ("a user without org-admin can create an org-admin and log in as them; a user can assign himself a privileged role")
@@ -67,7 +67,9 @@ Call sites (all service-layer, after the existing scope/membership checks):
 
 - `UserRoleServiceImpl.grant()` — load the role *with* its permissions; a non-root caller may not
   grant a **system** role at all (blocks `ORG_ADMIN`), else subset + reserved floor over the role's
-  permission codes. This one check also collapses the puppet-admin chain transitively: a puppet can
+  permission codes. **⚠ AMENDED 2026-08-14 by ADR-0062 — the blanket "no system role for non-root
+  callers" clause is replaced under multi-tenancy. The subset + reserved floor is unchanged. See the
+  amendment at the end of this document.** This one check also collapses the puppet-admin chain transitively: a puppet can
   only ever receive a role the creator already holds. Self-elevation is blocked as an *emergent*
   property (you cannot grant yourself what you lack) — no separate "no self-grant" rule is needed.
 - `RoleServiceImpl.setPermissions()` — subset + reserved floor over the requested codes (strict
@@ -122,3 +124,83 @@ a negative seed-fence assertion that no shipped operational bundle carries a res
   subset rule is the correct default now.
 - **Two-person / approval-engine gate on privileged grants.** Real segregation of duties, but adds a
   pending-grant state machine and workflow latency. Deferred; not required to close the hole.
+
+---
+
+## Amendment — 2026-08-14 (ADR-0062, organisation-as-tenant multi-tenancy)
+
+**What changes:** the clause in `assertCanConferRole` that refuses *any* `is_system` role to *any*
+non-root caller.
+
+**What does not change:** the subset invariant and the reserved-permission floor. They are untouched,
+and they remain the load-bearing control.
+
+### Why the original clause has to go
+
+Under one organisation the rule was nearly free: only `ORG_ADMIN`/root held the conferring
+capabilities, so almost nobody hit it. Under organisation-as-tenant it becomes the reason the product
+does not work.
+
+All **13** shipped roles are `is_system` — `ORG_ADMIN` plus the twelve ADR-0057 operational bundles
+(SALESPERSON, CASHIER, STOREKEEPER, ACCOUNTANT, …). They are also **global**
+(`organisation_id IS NULL`), and they must be: `R__seed_permissions.sql:287` inserts roles without an
+`organisation_id`, and Postgres evaluates `NOT NULL` before the `ON CONFLICT` arbiter, so making the
+column mandatory would fail the repeatable seed on every boot of every environment.
+
+So a tenant administrator who is not root **cannot grant CASHIER to their own cashier.** A
+platform-wide role that nobody inside the organisation can confer is decorative.
+
+The dangerous part is what happens next: whoever writes tenant provisioning hits *"the new admin
+can't grant any roles"*, and the one-line fix is `setRoot(true)` — which `BootstrapRunner.java:137`
+already does today. That makes every customer's administrator a deployment-wide superuser, with no
+error, no failing test, and rows that look native in every report.
+
+### Why this does not weaken ADR-0059
+
+This ADR already says so. Under *Alternatives considered*:
+
+> **Block `is_system` roles only (the naive fix).** Would stop the direct `grant(ORG_ADMIN)` path but
+> miss the build-your-own-superrole variant… **The subset invariant is what closes both**; the
+> `is_system` block is kept **only as a clearer, defence-in-depth failure** for the `ORG_ADMIN` case.
+
+The clause was never the control. It was a friendlier error message for a case the subset rule
+already covers. Rule 2 below preserves the subset rule exactly, so both escalation paths identified
+in the 2026-07-09 audit — direct grant and build-your-own-superrole — remain closed.
+
+### The replacement rule
+
+Roles are classified into four tiers (ADR-0062 §D-3). `assertCanConferRole` becomes:
+
+1. **The grantee must be in the caller's own organisation** — asserted *before* the membership oracle
+   is consulted, since the membership row is precisely what an attacker would create first.
+2. **A tier-1 or tier-2 role may be conferred by a caller who holds it themselves**, or who holds a
+   strict superset of its permissions. **Subset + reserved floor apply unchanged.**
+3. **A tier-3 role (`PLATFORM_OPERATOR`) is never conferrable by a tenant caller** at any authority
+   level — a flat refusal, not a ceiling comparison.
+4. **Tier-2 and tier-3 grants require MFA on the caller** and write a high-severity audit row.
+   (This un-defers the privileged-account half of the MFA decision; general-population MFA stays
+   deferred.)
+
+### Two prerequisites this amendment depends on
+
+- **The ceiling must be resolved from the caller's *home* organisation, not their current request
+  scope.** `AuthorityCeiling.java:113-114` resolves it from `principal.companyId()` — the scope the
+  caller has just switched into — so a successful horizontal escape silently resets the vertical
+  ceiling. This ADR's own closing note anticipated it: *"a future 'grant into another company'
+  feature must re-derive the ceiling in the target scope."* Multi-tenancy is that feature.
+- **`is_root` must be organisation-bounded first** (ADR-0062 §D-2 stage 1, work items P3-1 and P3-2).
+  Until that lands, root exemption still crosses tenants and this amendment would widen the blast
+  radius rather than contain it.
+
+### Compensating controls
+
+Because the guard now does real work rather than refusing outright: MFA on tier-2/tier-3 grants; a
+**never-zero-admins** invariant (the last `ORG_ADMIN` in an organisation cannot be removed, demoted or
+deactivated); high-severity audit rows on every privileged grant and revoke, visible to the tenant's
+own administrator.
+
+### If you are reading only this ADR
+
+Do not "fix" the code back to `if (roleIsSystem) throw`. It reads like a hardening change and it is
+not: it locks out every tenant administrator on the shared instance and recreates the pressure toward
+`setRoot(true)`. Read ADR-0062 §D-3 first.
