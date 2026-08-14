@@ -55,6 +55,10 @@ class DiscountAuthorisationGuardTest {
     @Mock AppUserRepository users;
     @Mock PermissionResolver permissionResolver;
     @Mock AuditService audit;
+    // A real instance, not a mock: the tenant rule is behaviour under test here, and a mocked
+    // isSameTenant would return false by default and refuse every approval.
+    @org.mockito.Spy com.erp.platform.security.TenancyScopeEnforcer tenancy =
+            new com.erp.platform.security.TenancyScopeEnforcer();
 
     @InjectMocks DiscountAuthorisationGuard guard;
 

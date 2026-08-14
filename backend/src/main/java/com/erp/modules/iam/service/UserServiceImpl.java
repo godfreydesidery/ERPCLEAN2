@@ -6,9 +6,11 @@ import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
@@ -16,6 +18,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.AuthorityCeiling;
@@ -51,6 +54,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
     private final AuthorityCeiling authorityCeiling;
+    private final OrganisationRepository organisations;
 
     public UserServiceImpl(AppUserRepository users,
                            UserCompanyRepository userCompanies,
@@ -59,7 +63,9 @@ public class UserServiceImpl implements UserService {
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
                            AuditService audit,
-                           AuthorityCeiling authorityCeiling) {
+                           AuthorityCeiling authorityCeiling,
+                           OrganisationRepository organisations) {
+        this.organisations = organisations;
         this.users = users;
         this.userCompanies = userCompanies;
         this.userRoles = userRoles;
@@ -72,7 +78,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto create(CreateUserRequest request) {
-        String username = request.username().toLowerCase();
+        RequestContext.Principal creator = RequestContext.get();
+        String username = composeUsername(request.username(), creator);
         if (users.existsByUsername(username)) {
             throw new ConflictException("Username already exists: " + username);
         }
@@ -88,7 +95,6 @@ public class UserServiceImpl implements UserService {
         // authenticated principal, never from the request body: accepting a tenant from input is
         // exactly the caller-supplied scope this design exists to remove, and it would let an
         // administrator mint an account inside somebody else's organisation.
-        RequestContext.Principal creator = RequestContext.get();
         user.setOrganisationId(creator != null ? creator.organisationId() : null);
         AppUser saved = users.save(user);
 
@@ -289,5 +295,34 @@ public class UserServiceImpl implements UserService {
             }
         }
         return user;
+    }
+
+    /**
+     * Builds the stored username from the LOCAL PART the caller supplied (ADR-0062 P2-2c).
+     *
+     * <p>The tenant half is never taken from input. It is resolved from the creator's own
+     * {@code organisation_id} and appended here, so an administrator cannot mint an account that
+     * reads as another customer's — {@code smith@othertenant} is not a username a client can ask
+     * for. That is why any {@code @} in the local part is rejected outright rather than trimmed:
+     * left alone, {@code smith@evil} would compose to {@code smith@evil@jambobora}.
+     *
+     * <p>An organisation with no alias keeps BARE usernames, unchanged. Every installation that
+     * predates multi-tenancy is in that state and stays there: legacy usernames are never
+     * rewritten (ADR-0062 D-7), so this is a no-op on the existing estate and only starts composing
+     * for tenants that have been given an alias.
+     */
+    private String composeUsername(String requested, RequestContext.Principal creator) {
+        String local = requested == null ? "" : requested.trim().toLowerCase();
+        if (local.indexOf('@') >= 0) {
+            throw new IllegalArgumentException("The username must not contain '@'.");
+        }
+        if (creator == null || creator.organisationId() == null) {
+            return local;   // no tenant context (bootstrap, tests) — behave exactly as before
+        }
+        String alias = organisations.findScopedById(creator.organisationId())
+                .map(Organisation::getAlias)
+                .filter(a -> a != null && !a.isBlank())
+                .orElse(null);
+        return alias == null ? local : local + "@" + alias;
     }
 }
