@@ -62,7 +62,11 @@ public class RoleServiceImpl implements RoleService {
     public List<RoleDto> list() {
         // findAllByOrderByName returns lazy permissions; each is fetched on DTO mapping.
         // For a catalogue list we return without permissions loaded — callers use getByUid for detail.
-        return roles.findAllByOrderByName().stream()
+        // P3-5 (ADR-0062) + invariant I-2: the caller's own roles PLUS the global ones. The
+        // NULL-tolerance is not defensive coding - organisation_id IS NULL is what marks the
+        // thirteen shipped roles, and a plain equality would hide ORG_ADMIN and every operational
+        // bundle from every tenant.
+        return roles.findVisibleTo(callerOrganisationId()).stream()
                 .map(RoleDto::from)
                 .toList();
     }
@@ -140,7 +144,15 @@ public class RoleServiceImpl implements RoleService {
     // --- private helpers ---
 
     private Role requireByUid(String uid) {
-        return Lookups.orNotFound(roles.findByUid(uid), "Role", uid);
+        // Another tenant's role is NOT FOUND, not FORBIDDEN: a distinct refusal would confirm the
+        // uid exists somewhere, across a tenant boundary.
+        return Lookups.orNotFound(roles.findVisibleByUid(uid, callerOrganisationId()), "Role", uid);
+    }
+
+    /** The caller's tenant, or null outside a request (bootstrap, async) - see findVisibleTo. */
+    private Long callerOrganisationId() {
+        RequestContext.Principal p = RequestContext.get();
+        return p == null ? null : p.organisationId();
     }
 
     private Role requireWithPermissions(String uid) {

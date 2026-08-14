@@ -28,4 +28,15 @@ public interface OrganisationRepository extends JpaRepository<Organisation, Long
      */
     @org.springframework.data.jpa.repository.Query("SELECT o FROM Organisation o WHERE o.id = :id")
     Optional<Organisation> findScopedById(@org.springframework.data.repository.query.Param("id") Long id);
+
+    /**
+     * P3-7 (ADR-0062, G5). {@code current()} used to return {@code findFirstByOrderByIdAsc} — i.e.
+     * organisation #1 — to everybody, which on a shared instance means every tenant but the
+     * lowest-id one is shown somebody else's organisation, and 146 Angular components bootstrap
+     * their company picker from it.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT o FROM Organisation o WHERE o.id = :organisationId")
+    java.util.List<Organisation> findAllVisibleTo(
+            @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
 }

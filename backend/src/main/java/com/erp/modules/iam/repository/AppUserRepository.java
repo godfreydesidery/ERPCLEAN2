@@ -80,6 +80,17 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findByRootFalseOrderByUsername();
 
     /**
+     * P3-4 (ADR-0062): the org-wide user list, confined to one tenant. The unscoped
+     * {@code findByRootFalseOrderByUsername} above returned every non-root user in the DATABASE —
+     * on a shared instance that is a complete cross-tenant directory, and under the {@code @alias}
+     * convention it hands over the tenant list too.
+     *
+     * <p>Strict equality, not NULL-tolerant: unlike roles, a user is never "global". A user with no
+     * organisation is invisible here, which is the fail-closed direction.
+     */
+    List<AppUser> findByRootFalseAndOrganisationIdOrderByUsername(Long organisationId);
+
+    /**
      * Membership check for the {@code getByUid} tenant-isolation guard. Returns {@code true} iff
      * {@code userId} belongs to {@code companyId} via an active role grant OR a branch assignment
      * OR an explicit active user_company row (V77 additive oracle).
