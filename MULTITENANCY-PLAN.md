@@ -309,7 +309,10 @@ caller when `roleIsSystem`. The last row is `G2` — role lookup has no organisa
 > **R-2 · Platform capabilities must never be ordinary permission rows.**
 > `R__seed_permissions.sql:267-274` grants `ORG_ADMIN` every row in `permissions` via a `CROSS JOIN`,
 > and says so: *"ORG_ADMIN always holds every permission, including ones added above later."* It is a
-> **repeatable** migration, so it re-runs on every deploy in every environment. The moment P3-10 adds
+> **repeatable** migration. *(Correction 2026-08-14: it re-runs when its **checksum changes**, not on
+> every deploy — measured, it has run three times ever on the live customer. That does not weaken this
+> rule: adding `ORG.*` codes **means editing the seed**, which changes the checksum and re-runs the
+> CROSS JOIN. The trigger is the edit, and the edit is exactly what P3-10 is.)* The moment P3-10 adds
 > `ORG.*` codes, **every tenant's ORG_ADMIN silently gains them on the next deploy** — including
 > anything meaning "create a tenant". Either exclude a platform module from the join
 > (`WHERE p.module <> 'platform'`) or keep platform capability out of `permissions` entirely.
@@ -422,10 +425,16 @@ Nothing in Phase 1 should start until all eight are closed. Record the answer in
 
 | Resolved | Still open |
 |---|---|
-| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>` | **D-4** RLS backstop · **D-5** per-tenant restore · **D-6** tenant lifecycle · **D-8** per-tenant fiscalisation · **P0-1b** `uq_app_users_email` scope · **P0-1c** `SELECT count(*) FROM organisations` on prod and QA |
+| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>` · **D-9** aggregate-root hedge · **D-10** email scoped to `(organisation_id, email)` | **D-4** RLS backstop · **D-5** per-tenant restore · **D-6** tenant lifecycle · **D-8** per-tenant fiscalisation |
 
-Four of eight closed. **D-5 is the day-one operational blocker** and **D-8 is a legal gate on
-onboarding tenant #2 in Tanzania** — those two are the critical path, not D-4.
+**Six of ten closed, and every decision that gates Phase 1 is now closed** — D-9 and D-10 were the
+last two. D-4, D-5, D-6 and D-8 gate Phase 8 and tenant #2, not the schema.
+
+**D-5 is the day-one operational blocker** and **D-8 is a legal gate on onboarding tenant #2 in
+Tanzania** — those two are the critical path, not D-4.
+
+Still outstanding as *measurements* rather than decisions: **P0-1c** and **P1-0**, both covered by
+[`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
 
 ### D-1 · What happens to the existing customers? — **RESOLVED 2026-08-14: (a) new customers only**
 
@@ -608,20 +617,53 @@ breaks under multi-tenancy. **Open.**
 > Raised 2026-08-14. §9 currently rejects this **by omission**, which is precisely the standard this
 > plan rightly refuses to accept for D-4. Reject it deliberately or accept it — but decide it.
 
-`organisation_id` exists on **exactly one table**: `companies` (`V1__baseline.sql:44`). Not one of the
-182 company-scoped tables carries it. Behind them: **204 tables, 608 foreign keys, zero composite
-FKs, zero `ON DELETE CASCADE`.** So every per-tenant operation — extract, export, restore, delete,
-relocate — is a 204-table topological traversal joining through `companies`. **No such traversal
-exists in the codebase and there is no place it would live.**
+`organisation_id` exists on **exactly one table**: `companies` (`V1__baseline.sql:44`). Behind it:
+205 tables, 608 foreign keys, **zero composite FKs, zero `ON DELETE CASCADE`.**
 
-The consequence is not a missing feature; it is a permanent shape:
+> #### ⚠ RATIONALE CORRECTED 2026-08-14 — the original justification was wrong
+>
+> This section previously claimed that without the hedge, every per-tenant operation is *"a 204-table
+> topological traversal"* and that per-tenant restore, export and deletion are *"permanently
+> bespoke"*. **Measured against the restored production copy, that is false:**
+>
+> ```
+> total tables                : 205
+> with company_id             : 182
+> WITHOUT company_id          :  23
+> ```
+>
+> and `companies.organisation_id` is `NOT NULL`. So **182 of 205 tables are already ONE JOIN from
+> their organisation** — `... JOIN companies c ON c.id = t.company_id WHERE c.organisation_id = :org`.
+> Per-tenant export, restore and delete are *awkward* today, not impossible.
+>
+> The 23 exceptions are the tenant tree itself, the global vocabularies (`permissions`, `currencies`,
+> `processed_events`, `flyway_schema_history`) and children of company-scoped parents
+> (`product_branch`, `product_components`, `cash_count_denominations`, the `*_branch` link tables,
+> `van_reconciliation_lines`). **None of them is an aggregate root, so none is on the D-9 list** —
+> the hedge does not address them, and does not need to: they are reachable via their parent.
+>
+> **What the columns therefore buy is one saved join.** For extraction, that is all.
 
-- **D-5** (restore one tenant) and **D-6** (export/delete a departing tenant) have no implementable
-  answer without it. `fk_audit_log_actor` (`V1__baseline.sql:313`) also pins a departing tenant's
-  users behind an append-only audit table.
-- Data residency, and "this customer now wants their own database", become bespoke projects.
-- **Adding it later means backfilling 204 tables on a durable database in three environments** —
-  exactly what §9 excludes, so "later" is doing a lot of work in that sentence.
+**What D-9 is actually worth, stated honestly.** Two things, both real:
+
+1. **RLS without a correlated subquery — the significant one, and it couples to D-4.** Without a
+   local `organisation_id`, every policy becomes
+   `company_id IN (SELECT id FROM companies WHERE organisation_id = current_setting(...))`: a
+   subquery on every row-scan of every protected table. This is precisely the cost that makes D-4
+   expensive, and the D-9 columns are what removes it.
+2. **A partition key**, should tenant-partitioning ever be wanted.
+
+**And the decision still stands, on cost asymmetry rather than on capability:**
+
+- **Now:** metadata-only `ADD COLUMN`, and a backfill measured at **163 ms** for all 31 tables on a
+  copy of the live customer's database.
+- **Later:** the same backfill is an `UPDATE` touching every row, which **rewrites the heap**. Trivial
+  at today's 38 MB; a genuine maintenance window on a three-year-old database, on a system with no
+  rollback worth the name.
+
+That asymmetry is why the hedge is still right, and it is a much narrower claim than the one this
+section used to make. Do not restate the traversal argument; it will not survive contact with anyone
+who runs the query above.
 
 - **(a) Do nothing.** Accept that per-tenant recovery, export and relocation are permanently manual.
   Legitimate — but it must be said out loud to whoever signs the hosted contract.
@@ -633,9 +675,85 @@ The consequence is not a missing feature; it is a permanent shape:
   one organisation.
 - **(c) All 182 tables.** Contradicts §2.1's headline finding and turns Phase 1 from S–M into L.
 
-**Recommendation: (b), decided now rather than after V101** — the marginal cost while we are already
-authoring V99–V101 is small, and it is the only remaining decision that cannot be revisited.
-**Open.**
+**RESOLVED 2026-08-14: (b) the aggregate-root hedge — but DEFERRED out of Phase 1, to be decided with D-4.**
+
+> **⚠ CUT FROM THE PHASE 1 RELEASE 2026-08-14**, on the v2 review's measured evidence. Two reasons:
+> **(1) The cost-asymmetry argument does not survive.** It said "backfill 163 ms now, or rewrite the
+> heap later" — but nothing populates the columns for new rows until P2-1, so the backfill must be
+> re-run later anyway on larger tables. Doing it now adds a second heap rewrite rather than avoiding
+> one. **(2) The 31-table boundary is the wrong shape for the surviving rationale.** With extraction
+> withdrawn, what remains is an RLS predicate without a correlated subquery plus a partition key —
+> both need the column on the relation being scanned. Measured: the 31 chosen tables hold **3,839
+> rows / 960 kB**; the excluded company-scoped tables hold **12,373 rows / 3,120 kB**. `journal_lines`
+> (1,742 rows) is larger than every included table and is exactly what a GL report row-scans.
+>
+> Backfilling them would also have made all 31 read "100% attributed" while decaying immediately —
+> ~1,150 invoices and ~3,600 stock movements NULL within 30 days at the customer's measured rate,
+> with nothing reporting it. **An honestly-empty column beats a falsely-full one.**
+>
+> The 31 tables were verified sound (all exist, `company_id NOT NULL` on every one, each with a
+> validated FK to `companies`) — this is a sequencing and boundary call, not a correctness one.
+> **Decide D-9 with D-4 (RLS), the only thing that needs the columns.**
+
+> **Boundary settled 2026-08-14 after attempting to derive it.** "Aggregate root" is **not** a schema
+> property: **169 of 205 tables** carry both `company_id NOT NULL` and a `uid`, line tables such as
+> `journal_lines` and `sales_invoice_lines` included. The list is therefore a judgement call, made
+> once and recorded here: **23 transactional document roots + 8 master-data roots = 31.** Everything
+> excluded remains reachable in one further hop through its parent's foreign key. The full list is in
+> [`docs/ops/multitenancy-v99-v101-ddl-draft.sql`](docs/ops/multitenancy-v99-v101-ddl-draft.sql), and
+> the backfill was verified total on real production data (461/461 invoices, 1,449/1,449 stock
+> movements, 601/601 products).
+
+Columns are added **nullable in V99 and left unconstrained in Phase 1**. They are populated going
+forward by application code from Phase 2, and existing rows are backfilled by a **bounded background
+pass**, exactly like `audit_logs`. They are *not* added to V101's `NOT NULL` set — the entire point of
+cutting `audit_logs` out of Phase 1 was to keep the migration window to seconds, and backfilling
+twenty transactional tables would give it straight back.
+
+Aggregate roots only — never line tables. Verified against the shipped schema (204 tables):
+
+```
+sales_invoices      purchase_orders   goods_receipts    journal_batches
+ar_invoices         ar_receipts       ar_credit_notes   ar_write_offs
+ap_payments         ap_debit_notes    supplier_bills    supplier_quotes
+stock_movements     payroll_runs      products          customers
+suppliers           journal_entries
+```
+
+> **Naming correction:** the table is `stock_movements`, not `stock_move` as §9's hedge paragraph and
+> CLAUDE.md invariant 9 both say. Trust the shipped SQL — see the DB-naming note in the project
+> memory. Confirm the POS sales root's real name before authoring; the only POS table matching a
+> `pos_*` prefix in the migration line is `pos_sale_idempotency`.
+
+### D-10 · `uq_app_users_email` — **RESOLVED 2026-08-14: scope it to `(organisation_id, email)`**
+
+*(Formerly the unnumbered P0-1b.)* `V69__unique_identifiers.sql:25-27` makes `email` unique across the
+whole deployment. Under multi-tenancy that stops one person — a shared bookkeeper, an outsourced
+accountant, a group IT admin — from holding an account in two tenants, which is the normal case in
+this market, and it leaves the 409 on `POST /users` as a working cross-tenant email-existence oracle.
+
+**Consequence, stated plainly: `app_users` is no longer "purely additive".** §5.1's headline payoff is
+reduced — `uq_app_user_username` still stands untouched, but the email unique is now swapped.
+
+**Sequencing, and why it is safe:** the swap must come *after* `organisation_id` is `NOT NULL`, or a
+composite unique would permit duplicates while the column is still nullable. So it lands in **V101,
+after the `SET NOT NULL`**, in the same transaction:
+
+```sql
+DROP INDEX  uq_app_users_email;
+CREATE UNIQUE INDEX uq_app_users_org_email
+    ON app_users (organisation_id, email) WHERE email IS NOT NULL;
+```
+
+**Inert at one organisation** — with a single organisation, `(organisation_id, email)` is equivalent
+to `(email)`, so no live install sees any behaviour change. That is the same property the rest of
+Phase 1 relies on.
+
+> **⬤ MEASURED 2026-08-14: it is not merely inert, it is a literal no-op.** **Zero users have an
+> email** on QA *or* production (`users_with_email = 0` on both). The partial index
+> `WHERE email IS NOT NULL` therefore covers no rows at all today, and `uq_app_users_email` is
+> currently constraining nothing. Zero risk to apply; the decision is about the shape of the
+> namespace going forward, not about existing data.
 
 ---
 
@@ -667,14 +785,46 @@ Phases 3 and 6 dominate. **Phase 6 is the single largest item and was invisible 
 
 ### Phase 0 — Decisions and ADR
 
-- [ ] **P0-1** Close D-1 … **D-8** (§3). D-1 is resolved; D-3 is effectively forced; D-8 is new.
-- [ ] **P0-1b** Decide `uq_app_users_email` — global, or scoped to `(organisation_id, email)`. It is
-      the one thing that would make `app_users` non-additive, so it cannot be discovered in Phase 3.
-- [ ] **P0-1c** Run `SELECT count(*) FROM organisations;` on the production box and on QA, and record
-      the answers here. Several arguments in this plan are predicated on the count being 1 and
-      nothing in the repo establishes it. One query.
+- [x] **P0-1** Close the decisions that gate Phase 1 (§3). **Done 2026-08-14** — D-9 and D-10 were the
+      last two. D-4, D-5, D-6 and D-8 remain open but gate Phase 8 and tenant #2, not the schema.
+- [x] **P0-1b** → renumbered **D-10**, resolved: scope email to `(organisation_id, email)`.
+- [x] **P0-1c / P1-0** — **RUN 2026-08-14 on both environments, 19 blocks, zero errors.**
+      Script: [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
+      A fresh backup was taken on each box first (QA via `pg_dump`; production via the supported
+      `orbixerp.sh backup`, which also pruned to its 14-day retention).
+
+| Measurement | QA | **Production — "Kilimanjaro"** | Reading |
+|---|---|---|---|
+| **`organisations`** | 1 | **1** | ✅ the go/no-go gate passes; the single-organisation invariant holds |
+| `companies` (orphans) | 4 (0) | 1 (0) | — |
+| Flyway | 98 / 98, 0 failed | 98 / 98, 0 failed | both estates on the same schema |
+| Postgres | 15.18 | 15.18 | — |
+| Database size | 34 MB | 38 MB | Phase 1's window is milliseconds, not minutes |
+| `app_users` (root) | 13 (1) | 12 (1) | — |
+| **users with an email** | **0** | **0** | **D-10's index swap is a literal no-op** |
+| `roles` | 21 = 13 sys + 8 custom | 15 = 13 sys + 2 custom | exactly the 13 shipped system roles on both |
+| **`is_system` rows with a non-seed uid** | **0** | **0** | ✅ the seed has adopted nothing yet — nothing to clean up |
+| `audit_logs` | 4,162 / 2.3 MB | 6,265 / 3.4 MB | small on both |
+| **`ROOT.BYPASS` share** | **1,161 = 28%** | **not in the top 15** | see the correction in §5.1 |
+| audit rows unattributable | 25 | **36** | NULL-tolerance is a live requirement, not theoretical |
+| **rows COALESCE adds over actor-only** | +86 | **+545 (8.7%)** | validates the §5.1 step-3 key correction |
+| derivation pass (a) / (b) / (c) / (d) | 12 / 0 / 0 / **1** | 12 / 0 / 0 / **0** | on production the sole-org fallback carries **nobody** |
+| conflicting-org users | 0 | 0 | — |
+| `user_branch` revoked / inactive | 0 / 0 | 0 / 0 | ✅ **H-5 is safe to ship** — nobody is working through a revoked row |
+| **app role holds UPDATE+DELETE on `audit_logs`** | **yes** | **yes** | ❌ the append-only invariant was never applied — **P8-9 confirmed on a live client** |
+| Phase 1 write volume | 13 users / 21 roles / 1 org | 12 / 15 / 1 | trivial |
+
+> **Production topology, discovered while measuring and worth recording:** the live client runs
+> **`orbixerp-api:1.6.1` from a `dist/` bundle with NATIVE HOST Postgres** (`ERP_DB_MODE=host`),
+> installed at `/opt/orbixerp` — *not* the `infra/prod` compose topology. **So the offline-estate
+> analysis in §5.1 and §10 applies to a real paying customer, not hypothetically:** `cmd_update`'s
+> missing version-ordering check, the absent repair path, and H-12/H-13 are all live concerns for
+> this box. (H-11's broken `OrbixERP.cmd` is Windows-only, so it does not affect this Linux install.)
+> Automated backups are running there daily and retained 14 days.
 - [ ] **P0-2** Write the ADR. It **supersedes ADR-0001 D-A** (roles org-wide), which was correct
-      when there was one organisation. Next free number is ADR-0060+. It must carry §1.2's four-tier
+      when there was one organisation. **Next free number is ADR-0062** — 0060
+      (`sale-at-or-below-cost-policy`) and 0061 (`pos-tls-trust-private-ca`) are already taken, so the
+      plan's earlier "ADR-0060+" was stale. It must carry §1.2's four-tier
       classification and the two rules R-1 / R-2 verbatim — they are the part most likely to be
       re-derived incorrectly from memory.
 - [ ] **P0-3** Record the D-2 root model in the ADR explicitly, **including that P3-1 and P3-2 are
@@ -694,6 +844,23 @@ Phases 3 and 6 dominate. **Phase 6 is the single largest item and was invisible 
 > environment.
 
 #### 5.1 Proposed DDL — **requires owner approval before authoring**
+
+> ## ⚠ SUPERSEDED 2026-08-14 — approve the draft file, not this section
+>
+> **The statements below are the v1 shape and are NOT what would be authored.**
+> The approvable artefact is
+> **[`docs/ops/multitenancy-v99-v101-ddl-draft.sql`](docs/ops/multitenancy-v99-v101-ddl-draft.sql)**,
+> revised after two adversarial reviews and tested against a restored copy of the live customer's
+> database. Approving this section would approve one set of statements while a different set ships.
+>
+> **What the draft changes versus everything written below:** the two foreign keys are removed (they
+> broke `pg_restore --clean`); every statement is replay-safe; `SET NOT NULL`, the column DEFAULT and
+> the stored function are all gone (the release is expand + backfill only, constraining moves to
+> P2-1); `SET LOCAL lock_timeout` opens each file; the D-9 list is **31 tables, backfilled in V101**;
+> `ix_audit_logs_org_at` is dropped and the company index renamed; and the V101 tripwire is a
+> `RAISE WARNING` preceded by an unconditional summary.
+>
+> The text below is retained only as the record of how the design got here.
 
 > **Simplified 2026-08-13 by the global-username decision (§1).** `app_users` is now **purely
 > additive** — no unique constraint on it is dropped or replaced. Only `roles` needs a uniqueness
@@ -728,15 +895,29 @@ ALTER TABLE organisations ADD CONSTRAINT ck_organisation_alias
 -- metadata-only and free.
 ```
 
-> #### ⚠ `audit_logs` is OUT of Phase 1 — added 2026-08-14, and this is the highest-value change here
+> #### ⚠ `audit_logs` is OUT of Phase 1 — **but the urgency was overstated; see the measured note below**
 >
 > Phase 1's unbounded work was never V101. It was **two `CREATE INDEX` on `audit_logs` plus reconciler
 > step 3's whole-table `UPDATE`** — all of it inside the window a health check is judging.
 >
-> `audit_logs` is the fastest-growing, never-purged table in the schema, and it is inflated well
-> beyond ordinary audit volume: `ScopeGuard.java:677` writes a `ROOT_BYPASS` row on **every** root
-> scope assertion across 763 `assertCanActIn` sites — and on a client box the shop owner **is** the
-> root admin (`BootstrapRunner.java:137`). There is no purge path anywhere.
+> `audit_logs` is the fastest-growing, never-purged table in the schema, and the concern was that it
+> is inflated well beyond ordinary audit volume: `ScopeGuard.java:677` writes a `ROOT_BYPASS` row on
+> **every** root scope assertion across 763 `assertCanActIn` sites — and on a client box the shop
+> owner **is** the root admin (`BootstrapRunner.java:137`). There is no purge path anywhere.
+>
+> > **⬤ MEASURED 2026-08-14 — the inflation is a QA artefact, not a production reality.**
+> > QA's audit log is **28% `ROOT.BYPASS`** (1,161 of 4,162). **Production has none in its top 15
+> > actions** — it is dominated by real business activity (`SALES.INVOICE.LINE.ADD` 816,
+> > `PRODUCT.PRICE.SET` 663, `GL.JOURNAL.POST` 555, `POS.SALE.FINALISE` 460). At **6,265 rows /
+> > 3.4 MB**, both indexes build in milliseconds and the whole table would rewrite in seconds.
+> >
+> > **So this cut is no longer justified by evidence — it is hygiene, not necessity, and the two
+> > indexes could safely ride in V99 after all.** Keeping them out is still defensible (it keeps the
+> > migration minimal and the index is a live win worth shipping on its own as H-8), but the
+> > reasoning must not be restated as "the table is huge". It is not, on this client, today.
+> >
+> > **What would change that:** a box where the customer's admin is root *and* transacts heavily.
+> > Kilimanjaro's single root user evidently does not. Re-measure before assuming it holds elsewhere.
 >
 > On the offline estate every escape from a long boot is missing: `wait_healthy` is called with no
 > argument so the timeout is a hard-coded 900s (`orbixerp.sh:143`, `:377`); no health knob exists in
@@ -933,6 +1114,13 @@ ALTER TABLE roles         VALIDATE CONSTRAINT fk_role_organisation;
 -- D-2 resolved: the platform operator belongs to the sentinel organisation, not to NULL,
 -- so this is safe and every org predicate stays total (no null-org wildcard — §0.1).
 ALTER TABLE app_users     ALTER COLUMN organisation_id SET NOT NULL;
+
+-- D-10. MUST come after the SET NOT NULL above: a composite unique would permit
+-- duplicates for every row whose organisation_id is still NULL. Inert at one
+-- organisation, where (organisation_id, email) is equivalent to (email).
+DROP INDEX  uq_app_users_email;
+CREATE UNIQUE INDEX uq_app_users_org_email
+    ON app_users (organisation_id, email) WHERE email IS NOT NULL;
 ```
 
 **The single-organisation invariant this rests on was verified independently, twice:**
@@ -1085,7 +1273,12 @@ that a composite key would otherwise have had to.
       before estimating the rest**; the figure has never been converted from a grep count to
       engineer-time (§11 G-A).
 - [ ] **P1-8** **Three things to prove on the restored dump before authoring**, all currently
-      inferred: that the DEFAULT function sees the IDENTITY-flushed `Organisation` inside
+      inferred. ⬤ **The stack is ready** — [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md),
+      restored from Kilimanjaro production, 205 tables, Flyway v98, `organisations = 1`, all objects
+      owned by the `erp` app role so migrations run with the privileges they really have. The third
+      item below is **already answered by Stage A**: the append-only grant was never applied on either
+      estate, and the rehearsal stack reproduces that, so there is no `permission denied` risk.
+      Remaining to prove: that the DEFAULT function sees the IDENTITY-flushed `Organisation` inside
       `BootstrapRunner`'s own transaction (`UidEntity.java:24-25` is `GenerationType.IDENTITY`, so the
       INSERT is issued immediately — verify, don't assume); that Flyway's parser handles the first
       `DO $$ … $$` body in a 98-migration line; and that no deployment has ever applied the
@@ -1392,10 +1585,14 @@ make it true, and they must land before any predicate in Phase 3 is written.
       — `organisations.status` exists with zero readers, so "suspend tenant X while we fix their bug"
       is not a lever until P5-3. Write the incident-comms procedure for telling N customers at once;
       nothing in this plan covers it.
-- [ ] **P8-9** **Enforce the append-only audit invariant.** CLAUDE.md invariant 7 says the app DB role
-      is denied UPDATE/DELETE on `audit_log`, but there is **no `GRANT` or `REVOKE` anywhere** in the
-      migrations, `infra/` or `scripts/`. Documented, not implemented — and it becomes load-bearing
-      when D-6 needs to prove one tenant's rows were deleted and no others.
+- [ ] **P8-9** **Enforce the append-only audit invariant. ⬤ CONFIRMED ON A LIVE CLIENT 2026-08-14.**
+      CLAUDE.md invariant 7 and ADR-0004 D-5 say the app DB role is denied UPDATE/DELETE on the audit
+      table. Measured on **production and QA**: the `erp` role holds
+      `INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` on `audit_logs`. **The control
+      does not exist** — it is prose in three documents and a grant in none of them. Two consequences:
+      P1-8's "an audit backfill might fail `permission denied`" is **resolved, there is no such risk**;
+      and the audit trail of a live paying customer is presently mutable by the application role.
+      Becomes load-bearing when D-6 must prove one tenant's rows were deleted and no others.
 - [ ] **P8-10** **Capacity floor.** `application-prod.yml` deliberately omits Hikari sizing, so
       production runs on the **default of 10 connections deployment-wide**; and
       `spring.task.scheduling.pool.size` is unset everywhere, so Boot's default of **1 thread** is
@@ -1439,9 +1636,22 @@ Facts to plan around, not discover:
 > organisation, one company — not anything resembling a real install with 98 versions of accumulated
 > data. `infra/prod/backup.sh` already produces the dump; the gap is procedural, not technical.
 >
-> Run the release **twice** in the rehearsal. `R__seed_permissions.sql` re-runs on every deploy, so a
-> repeatable-migration failure only appears on the *second* boot — which is the deploy after the one
-> that passed QA.
+> #### ⬤ CORRECTED 2026-08-14 — "run it twice" does not test what it was meant to test
+>
+> This previously said: *run the release twice, because `R__seed_permissions.sql` re-runs on every
+> deploy and a repeatable-migration failure only appears on the second boot.* **The premise is false.**
+> Flyway re-applies a repeatable migration **only when its checksum changes** — i.e. when the file is
+> edited, not when you deploy.
+>
+> Measured on the live customer's own history: the seed has run **three times ever** — 2026-08-02,
+> 2026-08-10, 2026-08-12 — and it did not re-run on any of three consecutive application boots during
+> the P1-8 proof.
+>
+> **The correct test is: edit `R__seed_permissions.sql` the way P1-6 will, then boot.** A second boot
+> of an unchanged release exercises nothing.
+>
+> Booting twice is still worth doing — it proves the versioned migrations are not re-applied and that
+> the app restarts cleanly — but it is not the seed test, and it must not be recorded as one.
 
 Add, in this order: a two-org fixture builder; the P2.5-4 parity harness; the P7-2 non-root probe as
 a failing test *first*; then the P3 fixes; then the ArchUnit extension so CI holds the new line.
@@ -1587,7 +1797,7 @@ follows. Ship them on their own branches, ahead of Phase 1.
 | **H-2** | Login lockout is keyed on the **target account** with **no IP throttle, no per-source limiter and no CAPTCHA anywhere** (`LoginAttemptService.java:53-72`). Any host can hold a known account locked at 6 requests per 15 minutes. Under `@alias`, usernames become publicly derivable. | — | S |
 | **H-3** | **Username-existence oracle.** The unknown-user path is correctly timing-equalised and generic, but the *locked* path returns a distinguishable message (`AuthServiceImpl.java:96-99`). Six requests confirm an account exists — and lock it. Return the generic string; the lockout still works. | — | XS |
 | **H-4** | Read `is_root` from the DB, not the JWT claim → see **P3-13**. | `JwtRequestContextFilter.java:132` | XS |
-| **H-5** | Honour `revokedAt`/`active` on the branch-assignment check → see **P3-14**. **Query prod first.** | `:148` | XS |
+| **H-5** | Honour `revokedAt`/`active` on the branch-assignment check → see **P3-14**. ~~Query prod first.~~ **✅ CLEARED 2026-08-14** — measured on both estates: `user_branch` holds **0 revoked and 0 inactive** rows (QA 11 assignments, production 12), and no user's assignments are all-revoked. Nobody is working through a revoked row, so this ships without locking anyone out. | `:148` | XS |
 | **H-6** | No Hikari max-pool setting in `application-prod.yml` → production runs on the **default 10 connections**. | deliberate omission, documented | one line |
 | **H-7** | `spring.task.scheduling.pool.size` unset everywhere → **one scheduler thread** shared by the outbox poller, metrics, the hourly notification scan and the midnight sweep. | `OutboxSchedulingConfig.java:19` is a bare `@EnableScheduling` | one line |
 | **H-8** | `audit_logs` has **no index leading with `company_id`** (`V1__baseline.sql:317-319`) while `AuditReadService` pages with a `count(*)`. **Already folded into V99** — listed here because it is a live problem, not a tenancy one. | — | in V99 |
@@ -1637,7 +1847,10 @@ Recording these honestly is the point; do not read their absence elsewhere as co
   hosted or who can be compelled to produce it.
 - **G-F · The 182-table premise is unverified** — see the warning in §9. It decides whether tenancy is
   a ~10-site IAM job or an estate-wide one, and it should be re-verified before Phase 3 is sized.
-- **G-G · Per-tenant recovery does not exist and is gated on D-9.** This is the programme's true
+- **G-G · Per-tenant recovery does not exist.** ~~Gated on D-9.~~ **Corrected 2026-08-14:** it is not
+  gated on D-9 — 182 of 205 tables are already one join from their organisation (see D-9), so the
+  blocker is that **nobody has written the extract/restore tooling**, not that the schema prevents it.
+  This is the programme's true
   operational blocker; D-5 cannot be answered while `organisation_id` lives on one table.
 - **G-H · The existing paying customers are treated as a risk surface, not as stakeholders.** Every
   phase ships migrations and security tightenings into live customer databases that will **never host
@@ -1673,7 +1886,7 @@ Recording these honestly is the point; do not read their absence elsewhere as co
 | Environment | Role | Tenancy |
 |---|---|---|
 | **QA** (`infra/qa`, one host, one durable volume) | Validates the **next increment**. Mirrors what the live customer runs. One batch ahead of production, never eight. | **Single-tenant, permanently** |
-| **Rehearsal stack** (new — a scratch container restored from a production dump, recreated per test, thrown away) | Migration rehearsal on real data; the two-organisation probe for Phases 4–7. | Disposable; may hold two orgs |
+| **Rehearsal stack** — ✅ **built 2026-08-14**, see [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md) | Migration rehearsal on real data; the two-organisation probe for Phases 4–7. | Disposable; may hold two orgs |
 | **Production** | Continuously updated with completed, verified batches. | Single-tenant until tenant #2 |
 
 > **Why the rehearsal stack is not optional, and why the two-org work must not run on QA.**
@@ -1724,7 +1937,7 @@ brief outage, so a daily deploy is fine and a daily 10 a.m. deploy is not.
 |---|---|---|---|
 | **A · Facts and decisions** | P0-1c org-count query · stand up the rehearsal stack · P1-0 measurements · close Phase 0 · ADR + ADR-0059 amendment | none | nothing |
 | **B · Hardening (§10)** | H-1 Swagger · H-2/H-3 throttle + oracle · H-6 Hikari · H-7 scheduler pool · H-4 `is_root` from DB · H-5 revocation *(query prod first)* · H-11/12/13 if bundles are in the field | 2–3 | restarts only |
-| **C · Phase 1 schema** | Rehearse on the dump, **run it twice** · QA → verify → prod in a window | **1** | a restart |
+| **C · Phase 1 schema** | Rehearse on the dump; boot twice, **and separately test an edited `R__` seed** (§6) · QA → verify → prod in a window | **1** | a restart |
 | **D · Phases 2 + 2.5** | Principal + JWT · enforcer + parity harness. Derive `organisationId` from the user row, not the claim, or live tokens break. Confirm POS contract first. | 2 | nothing |
 | **E · Phases 3 + 6 IN PARALLEL** | Phase 3 in shadow batches, weeks apart, flipped when clean. Phase 6 on its own branch, kept green and mergeable. | many | **Phase 6 is the first visible change** |
 | **F · Phases 4 + 5** | P1-6 → P4-1c → drop `uq_role_code` → P4-1b/1d. P4-1e before P3-10. **P3-1 + P3-2 enforcing before P5-1.** | 2–3 | admins gain role-granting |
@@ -1762,7 +1975,10 @@ reversed: legacy usernames are never rewritten, and the POS stores only a host.
 | 2026-08-14 | **§1.2's recommendations RATIFIED; D-2 and D-3 closed.** Four of eight decisions now resolved. **D-2:** sentinel platform organisation + tier-3 `PLATFORM_OPERATOR` role + `is_root` re-bounded (not removed) to "full authority inside my own organisation", in three stages. Consequence: `app_users.organisation_id` **can** be `NOT NULL` in V101, and every predicate stays total. **D-3:** bundles stay global and `assertCanConferRole`'s blanket "non-root ⇒ refuse" is replaced by a four-part rule — grantee in the caller's own organisation, tier-1/2 conferrable only by a caller who holds it (ADR-0059's subset checks intact), tier-3 never conferrable by a tenant, tier-2/3 requiring MFA and a high-severity audit row. **§8's sharpest risk is now resolved structurally**: organisation-bounded root makes `setRoot(true)` harmless, so the trap dissolves rather than being guarded — *conditional on P3-1 and P3-2 landing before P5-1*, now recorded as a hard prerequisite. P2-5 amended (privileged-account MFA un-deferred; general MFA still deferred). `G4` closed. New **P0-4**: the ceiling change must also amend ADR-0059, or an implementer reading it alone will restore the old refusal. Remaining open: D-4, D-5, D-6, D-8, P0-1b, P0-1c — with **D-5 the day-one operational blocker** and **D-8 a legal gate on tenant #2**. | owner |
 | 2026-08-14 | **Verified findings folded in; the plan's own gaps named.** New **D-9** — `organisation_id` on aggregate roots, the last one-way door, previously rejected by omission (204 tables, 608 FKs, zero composite FKs, zero cascades; recommendation (b), the ~20-table hedge). Phase 3 gains **P3-11** (the org check belongs inside `canActIn` — 130 controllers take `@RequestParam companyId`, so P3-1 alone closes one door and leaves 130 open; the largest under-scoping in the plan), **P3-12** (re-triage the 207-entry ArchUnit freeze store as a Phase 3 gate, not P7-4's single `existsById`), **P3-13** (`is_root` from DB not JWT claim), **P3-14** (branch check must honour `revokedAt`/`active`), **P3-15** (the vertical ceiling is resolved in the *current* request scope, so a horizontal escape resets it — ADR-0059 is not an independent layer, which matters now that D-3 builds on it). Phase 5 gains **P5-5** (`leave_types` has no Java provisioning path — every new tenant opens HR→Leave empty) and **P5-6** (`code_sequence` lazy-create races on a new tenant's first busy morning). Phase 8 gains **P8-7** JWT key custody, **P8-8** blast radius + incident comms, **P8-9** the unenforced append-only audit invariant, **P8-10** the capacity floor (Hikari default 10; **one** scheduler thread). §9 records that D-1 = (a) makes `dist/` permanently dual-track. New **§10** — ten live-production items to ship ahead of the programme, independent of tenancy (Swagger open in prod, no IP throttle, the locked-account oracle, …). New **§11** — eight named gaps this plan does *not* fill: no schedule or engineer-time estimate, nothing ever executed, no production deploy runbook, no SLA or incident model, no data-residency answer, the unverified 182-table premise, no per-tenant recovery, and existing customers treated as a risk surface rather than stakeholders. Change log renumbered §10 → §12. | owner |
 | 2026-08-14 | **The two-release split WITHDRAWN; Phase 1 is one self-sufficient release.** A 7-agent workflow put both the deployment design and the backfill semantics to adversarial refutation; **both skeptics returned refuted at high confidence.** Four reasons, the first of which applies even on two vendor-controlled deployments: (1) the R1→R2 window **manufactures the NULLs the gate checks for** — `AppUser` has no organisation field until P2-1, so users created between the releases have none and R2's `SET NOT NULL` fails; (2) `cmd_restore` reverts `flyway_schema_history`, so **every pre-R1 backup becomes permanently unrestorable** once a box is on R2; (3) `cmd_update` has **no version-ordering, minimum-version or monotonicity check** (sole guard is CPU arch) and any gate would ship in the *installed* script, which is replaced last — protecting nobody in the field; (4) no telemetry egress and no version register, so "verify in every environment" is unexecutable. V101 now carries its own convergent backfill plus a temporary column DEFAULT (to be dropped in P2-1's migration, named explicitly rather than by omission); the standing-rule tension with *provisioning over data migrations* is recorded as a deliberate exception. **`audit_logs` cut out of Phase 1 entirely** — the two indexes and the whole-table UPDATE were the real unbounded work, inside a hard-coded 900s `wait_healthy` window, on a table inflated by `ROOT_BYPASS` rows with no purge path; the `ADD COLUMN` stays, the rest defers to a post-readiness background pass. Backfill semantics corrected: **do not classify roles by `is_system`** (the seed's `ON CONFLICT … SET is_system = true` has already adopted customer roles, and `Role.createdBy` is never set, so no discriminator survives) — **P1-6 becomes a prerequisite, not a follow-up**; the audit key becomes `COALESCE(company→org, actor→org)`; `pg_advisory_xact_lock` replaces the session-scoped `pg_try_advisory_lock`; no clean-skip; not gated on `ERP_BOOTSTRAP_ENABLED`; log residual NULL counts. V100's role indexes flagged **inert** while `uq_role_code` is retained — resolved by sequencing behind P4-1c. New **P1-0** (measure before authoring), **P1-8** (three inferred claims to prove on a restored dump), **P1-9** (CI: `OrganisationController` has no write mapping — the one surviving ordering rule). §10 gains **H-11** — `OrbixERP.cmd` references `erp.ps1` while every bundle ships `orbixerp.ps1`, **broken in all 11 shipped bundles**, leaving Windows customers with no working self-service surface — plus **H-12** and **H-13**. | owner |
+| 2026-08-14 | **P1-8 CLOSED — proven with real Flyway and a real application boot.** Three files placed in `db/migration` on a scratch branch against a clone of the live customer's database: the migration-hygiene gate passes, **Flyway applied V99/V100/V101 in 173 ms** (the `DO $$` block — the first dollar-quoted body in 98 migrations — parsed correctly), a second boot reported *"Schema up to date"* having validated 104 migrations, and a third boot **started the application fully** (`Started ErpApplication in 18.383 seconds`) with **`ddl-auto: validate` raising no schema-validation error against the 35 new columns**. 12/12 users attributed, 0 failed migrations. Scratch branch deleted; `db/migration` is back at V98. **One claim corrected across three documents:** the plan, ADR-0062 and the rehearsal runbook all said `R__seed_permissions.sql` *"re-runs on every deploy, in every environment"*. It does not — Flyway re-applies a repeatable migration only when its **checksum changes**. Measured on the live customer's own `flyway_schema_history`, the seed has run **three times ever** (2026-08-02, 2026-08-10, 2026-08-12) and did not re-run across three consecutive boots. G8's conclusion and R-2 both survive, because the triggering edit is exactly what P1-6 and P3-10 are — but **§6's "run the release twice" test is invalid as written** and has been replaced: to test the seed, edit it the way the release will, then boot. | owner |
 | 2026-08-14 | **New §12 — release strategy.** Answers two questions the phase list never did: deploy per phase or once at the end, and when the customer is told. Records the deployment fact that constrains everything: **web and API are ONE artefact** (`infra/prod/Dockerfile` compiles the Angular SPA into the Spring Boot jar's static resources), so every deploy ships both and the SPA updates itself — the **POS is the only separately-deployed client and on current scope needs no change at all**, to be confirmed before P2-2c. **Three environments, not two:** QA stays permanently single-tenant and mirrors production, one batch ahead; a new **disposable rehearsal stack** restored from a production dump carries the migration rehearsals and the two-org probe; production is continuously updated. Rationale: QA has one durable never-wiped volume, so giving it a second organisation would permanently disqualify it from validating the single-tenant releases the live customer actually runs. **"All 8 phases on QA, then one production update" evaluated and rejected**, with five reasons — QA's synthetic data cannot exercise the real risk (migration lock time, `audit_logs` volume, already-adopted `is_system` roles); it concentrates all risk into the one deploy with the worst rollback; **shadow mode becomes theatre** without real traffic; QA cannot be single- and multi-tenant at once; and production would sit unpatched for months while `develop` drifts. **Replaced by: stream the invisible work, batch the visible work** — so the customer perceives *one* change (Phase 6), while the technical risk stays spread across many small revertible deploys. Adds the **A–H stage sequence** with deploy counts and what the client sees at each, and records the key scheduling call: **Phase 6 is gated only on Phase 2, so run it in parallel with Phase 3** rather than after it — Phase 3's pace is set by observation windows, which the web work can absorb for free. §12.5 notes the single customer-facing communication is Phase 6 and is about screens, not credentials — the payoff of never rewriting usernames. Change log renumbered §12 → §13. | owner |
+| 2026-08-14 | **Implementation started — Stage A opened on `feat/multitenancy-phase-0`.** Two decisions closed, both of which gated Phase 1's DDL. **D-9 resolved (b)**: the ~20 aggregate-root hedge, with columns added **nullable in V99 and left unconstrained** — populated forward by app code from Phase 2 and backfilled by a bounded background pass, deliberately *not* in V101's `NOT NULL` set, since backfilling twenty transactional tables would give back exactly the migration window that cutting `audit_logs` bought. Root list verified against the shipped schema, with a naming correction: the table is **`stock_movements`**, not `stock_move` as §9 and CLAUDE.md invariant 9 both say. **P0-1b promoted to D-10 and resolved**: email scoped to `(organisation_id, email)`, swapped in V101 *after* the `SET NOT NULL` (a composite unique would otherwise permit duplicates while the column is nullable) — inert at one organisation, and it costs §5.1 its "purely additive `app_users`" claim, which is now stated plainly rather than implied. Adds [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql), a read-only script closing P0-1c and P1-0 across prod and QA. **ADR numbering corrected: next free is ADR-0062**, not 0060 — both 0060 and 0061 are taken. Six of ten decisions now closed; every decision gating Phase 1 is closed. | owner |
+| 2026-08-14 | **P0-1c / P1-0 MEASURED on QA and on the live production client.** 19 read-only blocks, zero errors on both; a fresh backup taken on each box first (production via the supported `orbixerp.sh backup`). **The go/no-go gate passes: `organisations = 1` on both** — QA "ERP QA", production "Kilimanjaro" — so §5.1's self-sufficient V101 is valid as written. Full results recorded against P0-1c. **One plan claim is refuted by the data:** the `ROOT_BYPASS` inflation behind the `audit_logs` cut is a **QA artefact** — QA is 28% `ROOT.BYPASS`, production has none in its top 15 and is dominated by real business actions, at 6,265 rows / 3.4 MB. The cut is now hygiene rather than necessity and the §5.1 box says so; the reasoning must not be restated as "the table is huge". **Three findings strengthen the design:** COALESCE beats actor-only by **545 rows (8.7%)** on production versus 86 on QA, validating the step-3 key correction; `pass_d = 0` on production, so the sole-organisation fallback carries **nobody** and the V101 derivation is robust on real data; and **zero users have an email on either estate**, making D-10's index swap a literal no-op. **Two items cleared:** H-5 ships safely (0 revoked, 0 inactive `user_branch` rows on both), and P1-8's `permission denied` risk is resolved. **One item confirmed on a live client:** the append-only audit invariant **was never applied** — the `erp` role holds UPDATE, DELETE and TRUNCATE on `audit_logs` in production (**P8-9**). **Production topology recorded:** the client runs `orbixerp-api:1.6.1` from a `dist/` bundle with native host Postgres at `/opt/orbixerp`, not the `infra/prod` compose topology — so §5.1's and §10's offline-estate analysis applies to a real paying customer. | owner |
 
 ---
 
