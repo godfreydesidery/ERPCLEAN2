@@ -81,6 +81,16 @@ public class CompanyServiceImpl implements CompanyService {
                 organisations.findByUid(request.organisationUid()), "Organisation",
                 request.organisationUid());
 
+        // P3-6 (ADR-0062, G3): the organisation arrives in the REQUEST BODY, so without this a
+        // caller can create a company inside somebody else's tenant simply by naming their uid.
+        // Asserted against the caller's own principal, and NOT FOUND rather than FORBIDDEN, because
+        // a distinct refusal would confirm the uid belongs to a real organisation.
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && principal.organisationId() != null
+                && !principal.organisationId().equals(org.getId())) {
+            throw NotFoundException.of("Organisation", request.organisationUid());
+        }
+
         if (companies.existsByOrganisationIdAndCode(org.getId(), request.code())) {
             throw new ConflictException("Company code already exists: " + request.code());
         }
