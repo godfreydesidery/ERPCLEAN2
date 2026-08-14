@@ -1367,7 +1367,16 @@ make it true, and they must land before any predicate in Phase 3 is written.
 >
 > So: **`userId == null` ⇒ system, exempt. `userId != null` with a null organisation ⇒ DENY** — a
 > real user whose tenant cannot be established must fail closed, not sail through.
-- [ ] **P2.5-2** **Prove it on the posting path with an integration test that asserts the effect, not
+- [x] **P2.5-2** **DONE 2026-08-14 — the test already existed.**
+      `SalesPostingHandlerIT.finalise_producesBalancedJournalEntry` dispatches the event and asserts
+      `journalEntryRepo` holds the entry, with debits equal to credits. That is exactly the
+      assert-the-effect shape this item asked for, so nothing new was needed; what it needed was to
+      be *identified* as the safety net, because it is the test that will fail loudly if a Phase 3
+      predicate ever denies a system principal.
+      **The rule it protects is now locked by `TenancyScopeEnforcerTest`**, which was verified to
+      fail — and to fail on precisely the right assertion — when the plan's original (wrong)
+      exemption rule is injected. Original wording kept below for the reasoning:
+      **Prove it on the posting path with an integration test that asserts the effect, not
       the absence of an exception.** Dispatch a `SaleFinalised` event with enforcement ON and assert
       **the GL journal row lands**. `SalesPostingHandler.java:77-86` catches `Exception` and marks the
       event processed to avoid a poison transaction, so a "no exception thrown" test proves nothing —
@@ -1376,7 +1385,14 @@ make it true, and they must land before any predicate in Phase 3 is written.
       so the pre-auth and system-written trail stays visible. The alternative — stamping those rows
       with an explicit platform organisation at write time — is also acceptable, but pick one and
       write it in the ADR; do not leave it to the implementer.
-- [ ] **P2.5-4** **Row-count parity harness** for the filter-shaped sites listed in §0.3. Same query,
+- [ ] **P2.5-4** *(deliberately deferred to Phase 3 — see note)* **Row-count parity harness** for the
+      filter-shaped sites listed in §0.3.
+      > **Sequencing note, 2026-08-14.** A harness that compares a query with and without its
+      > organisation predicate has nothing to compare until the predicate exists, and none of
+      > P3-4/P3-5/P3-7/P3-8 is written yet. Building it now would mean writing it against imagined
+      > call signatures and rewriting it on contact. It is therefore built **with the first
+      > filter-shaped Phase 3 item**, and no filter item ships without it. Recorded here rather than
+      > silently skipped. Same query,
       with and without the predicate, on a one-organisation database, asserting identical counts.
       Shadow mode cannot cover these — a filter has nothing to allow and nothing to log.
 - [ ] **P2.5-5** Decide and record how shadow/parity evidence is actually collected, given there is
