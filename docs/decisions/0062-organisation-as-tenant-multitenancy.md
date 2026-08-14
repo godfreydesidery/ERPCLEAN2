@@ -189,8 +189,14 @@ have broken every saved login on web and on every POS till simultaneously.
 
 ### D-9 · `organisation_id` on aggregate roots
 
-Added **nullable in V99 and left unconstrained in Phase 1**, populated forward by application code
-from Phase 2 and backfilled by a bounded background pass. Aggregate roots only — never line tables:
+**AMENDED 2026-08-14 — cut from the Phase 1 release; decide with D-4 (RLS).** The cost-asymmetry
+argument that justified acting now does not survive: nothing populates the columns for new rows until
+P2-1, so the backfill must be re-run later on larger tables — a second heap rewrite, not an avoided
+one. And the boundary is the wrong shape for the surviving rationale (RLS predicate + partition key,
+both of which need the column on the scanned relation): the 31 chosen tables hold 3,839 rows / 960 kB
+against 12,373 rows / 3,120 kB excluded, with `journal_lines` — larger than every included table —
+among the exclusions. The tables themselves were verified sound; this is sequencing, not correctness.
+The list, retained for whenever D-4 is decided:
 
 ```
 sales_invoices  purchase_orders  goods_receipts   journal_batches   journal_entries

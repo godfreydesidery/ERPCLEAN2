@@ -675,7 +675,25 @@ who runs the query above.
   one organisation.
 - **(c) All 182 tables.** Contradicts §2.1's headline finding and turns Phase 1 from S–M into L.
 
-**RESOLVED 2026-08-14: (b) — the aggregate-root hedge, 31 tables.**
+**RESOLVED 2026-08-14: (b) the aggregate-root hedge — but DEFERRED out of Phase 1, to be decided with D-4.**
+
+> **⚠ CUT FROM THE PHASE 1 RELEASE 2026-08-14**, on the v2 review's measured evidence. Two reasons:
+> **(1) The cost-asymmetry argument does not survive.** It said "backfill 163 ms now, or rewrite the
+> heap later" — but nothing populates the columns for new rows until P2-1, so the backfill must be
+> re-run later anyway on larger tables. Doing it now adds a second heap rewrite rather than avoiding
+> one. **(2) The 31-table boundary is the wrong shape for the surviving rationale.** With extraction
+> withdrawn, what remains is an RLS predicate without a correlated subquery plus a partition key —
+> both need the column on the relation being scanned. Measured: the 31 chosen tables hold **3,839
+> rows / 960 kB**; the excluded company-scoped tables hold **12,373 rows / 3,120 kB**. `journal_lines`
+> (1,742 rows) is larger than every included table and is exactly what a GL report row-scans.
+>
+> Backfilling them would also have made all 31 read "100% attributed" while decaying immediately —
+> ~1,150 invoices and ~3,600 stock movements NULL within 30 days at the customer's measured rate,
+> with nothing reporting it. **An honestly-empty column beats a falsely-full one.**
+>
+> The 31 tables were verified sound (all exist, `company_id NOT NULL` on every one, each with a
+> validated FK to `companies`) — this is a sequencing and boundary call, not a correctness one.
+> **Decide D-9 with D-4 (RLS), the only thing that needs the columns.**
 
 > **Boundary settled 2026-08-14 after attempting to derive it.** "Aggregate root" is **not** a schema
 > property: **169 of 205 tables** carry both `company_id NOT NULL` and a `uid`, line tables such as
@@ -826,6 +844,23 @@ Phases 3 and 6 dominate. **Phase 6 is the single largest item and was invisible 
 > environment.
 
 #### 5.1 Proposed DDL — **requires owner approval before authoring**
+
+> ## ⚠ SUPERSEDED 2026-08-14 — approve the draft file, not this section
+>
+> **The statements below are the v1 shape and are NOT what would be authored.**
+> The approvable artefact is
+> **[`docs/ops/multitenancy-v99-v101-ddl-draft.sql`](docs/ops/multitenancy-v99-v101-ddl-draft.sql)**,
+> revised after two adversarial reviews and tested against a restored copy of the live customer's
+> database. Approving this section would approve one set of statements while a different set ships.
+>
+> **What the draft changes versus everything written below:** the two foreign keys are removed (they
+> broke `pg_restore --clean`); every statement is replay-safe; `SET NOT NULL`, the column DEFAULT and
+> the stored function are all gone (the release is expand + backfill only, constraining moves to
+> P2-1); `SET LOCAL lock_timeout` opens each file; the D-9 list is **31 tables, backfilled in V101**;
+> `ix_audit_logs_org_at` is dropped and the company index renamed; and the V101 tripwire is a
+> `RAISE WARNING` preceded by an unconditional summary.
+>
+> The text below is retained only as the record of how the design got here.
 
 > **Simplified 2026-08-13 by the global-username decision (§1).** `app_users` is now **purely
 > additive** — no unique constraint on it is dropped or replaced. Only `roles` needs a uniqueness
