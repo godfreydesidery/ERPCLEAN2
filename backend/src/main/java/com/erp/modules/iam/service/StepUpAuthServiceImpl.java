@@ -9,6 +9,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.TenancyScopeEnforcer;
 import com.erp.platform.security.auth.AuthenticationException;
 import com.erp.platform.security.config.SecurityProperties;
 import java.time.Duration;
@@ -93,6 +94,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
     private final PermissionResolver permissionResolver;
     private final AuditService audit;
     private final SecurityProperties props;
+    private final TenancyScopeEnforcer tenancy;
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(StepUpAuthServiceImpl.class);
 
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path. */
     private final String dummyHash;
@@ -105,7 +109,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                                  PasswordEncoder passwordEncoder,
                                  PermissionResolver permissionResolver,
                                  AuditService audit,
-                                 SecurityProperties props) {
+                                 SecurityProperties props,
+                                 TenancyScopeEnforcer tenancy) {
+        this.tenancy = tenancy;
         this.users = users;
         this.permissions = permissions;
         this.passwordEncoder = passwordEncoder;
@@ -132,6 +138,17 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         }
 
         AppUser authoriser = users.findByUsername(attemptedUsername).orElse(null);
+
+        // P2-3 (ADR-0062): findByUsername is a GLOBAL lookup, so without this a supervisor in one
+        // tenant could authorise a till override in another. Collapsed to the unknown-user path
+        // deliberately - same message, same dummy-hash timing, same throttle accounting. Refusing
+        // differently would tell a cashier that an account exists in some other organisation, which
+        // is exactly the enumeration this endpoint is otherwise careful to prevent.
+        if (authoriser != null && !tenancy.isSameTenant(caller, authoriser.getOrganisationId())) {
+            log.warn("Cross-tenant step-up refused: caller user={} org={} authoriser org={}",
+                    caller.userId(), caller.organisationId(), authoriser.getOrganisationId());
+            authoriser = null;
+        }
 
         if (authoriser == null) {
             // Equalise timing with the wrong-password path so response time can't enumerate users.
@@ -240,6 +257,13 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         }
 
         AppUser authoriser = users.findByUid(uid).orElse(null);
+        // P2-3: same reasoning as the username path - a uid belonging to another tenant is
+        // indistinguishable from a uid the client invented.
+        if (authoriser != null && !tenancy.isSameTenant(caller, authoriser.getOrganisationId())) {
+            log.warn("Cross-tenant step-up (uid) refused: caller user={} org={} authoriser org={}",
+                    caller.userId(), caller.organisationId(), authoriser.getOrganisationId());
+            authoriser = null;
+        }
         if (authoriser == null || !authoriser.isActive() || authoriser.isLocked(now)) {
             // A uid the client invented, a leaver's account, a locked account — one answer for all
             // three. A till is not a place to enumerate who exists or who is suspended.

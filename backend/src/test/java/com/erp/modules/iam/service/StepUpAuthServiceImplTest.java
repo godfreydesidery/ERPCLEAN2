@@ -54,6 +54,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  */
 class StepUpAuthServiceImplTest {
 
+    private static final Long   ORG_ID      = 9L;
     private static final Long   CALLER_ID   = 7L;
     private static final Long   COMPANY_ID  = 10L;
     private static final Long   BRANCH_ID   = 100L;
@@ -84,7 +85,8 @@ class StepUpAuthServiceImplTest {
                 audit,
                 new SecurityProperties(
                         new SecurityProperties.Lockout(MAX_ATTEMPTS, 15),
-                        new SecurityProperties.Password(12)));
+                        new SecurityProperties.Password(12)),
+                new com.erp.platform.security.TenancyScopeEnforcer());
         RequestContext.set(cashier());
     }
 
@@ -99,12 +101,15 @@ class StepUpAuthServiceImplTest {
 
     private RequestContext.Principal cashier() {
         return new RequestContext.Principal(
-                CALLER_ID, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1");
+                CALLER_ID, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1", ORG_ID);
     }
 
     /** An ACTIVE, unlocked manager account whose password hash is {@code "hash"}. */
     private AppUser manager() {
         AppUser u = mock(AppUser.class);
+        // Same tenant as the caller. Must be stubbed: Mockito returns 0L, not null, for an
+        // unstubbed Long-returning method, which would read as a DIFFERENT organisation.
+        when(u.getOrganisationId()).thenReturn(ORG_ID);
         when(u.getId()).thenReturn(MANAGER_ID);
         when(u.getUid()).thenReturn(MANAGER_UID);
         when(u.getUsername()).thenReturn("manager");
@@ -405,9 +410,40 @@ class StepUpAuthServiceImplTest {
     // the step-up was introduced to protect was the one action it did not protect.
     // =======================================================================
 
+    // =======================================================================
+    // P2-3 (ADR-0062) — a manager from ANOTHER tenant cannot approve here.
+    //
+    // findByUsername and findByUid are global lookups, so before this the only thing standing
+    // between a supermarket's till and a supervisor at a different customer was that nobody had
+    // tried. The refusal is deliberately identical to the unknown-user one: a distinct message or
+    // a different response time would confirm that the account exists somewhere else, which is the
+    // enumeration this endpoint is otherwise careful to prevent.
+    // =======================================================================
+
+    @Test
+    void anAuthoriserFromAnotherTenantIsRefused_andIndistinguishableFromAnUnknownUser() {
+        AppUser foreign = manager();
+        when(foreign.getOrganisationId()).thenReturn(ORG_ID + 1);   // a different customer
+        givenManagerExists(foreign);
+        givenPasswordMatches(true);
+        givenPermissionSeeded();
+        givenAuthoriserHoldsPermission(true);
+
+        AuthorityVerificationDto foreignTenant = service.verifyAuthority("Manager", "secret", CODE);
+
+        // Same outcome, and the SAME MESSAGE, as a username that does not exist at all.
+        when(users.findByUsername("ghost")).thenReturn(Optional.empty());
+        AuthorityVerificationDto unknownUser = service.verifyAuthority("ghost", "secret", CODE);
+
+        assertThat(foreignTenant.authorised()).isFalse();
+        assertThat(foreignTenant.message()).isEqualTo(unknownUser.message());
+        assertThat(foreignTenant.authoriserUid()).isNull();
+    }
+
     /** The caller's own account, as the step-up would resolve it from their own username. */
     private AppUser self() {
         AppUser u = mock(AppUser.class);
+        when(u.getOrganisationId()).thenReturn(ORG_ID);   // same tenant as the caller
         when(u.getId()).thenReturn(CALLER_ID);
         when(u.getUid()).thenReturn("uid-cashier-001");
         when(u.getUsername()).thenReturn("cashier");

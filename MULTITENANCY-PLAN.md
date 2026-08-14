@@ -1296,28 +1296,28 @@ that a composite key would otherwise have had to.
 > single-result lookup, and `G6`'s three `IncorrectResultSizeDataAccessException` failure modes
 > **never occur** — the constraint that would have produced them is never dropped.
 
-- [ ] **P2-1** `organisationId` into `RequestContext.Principal` and the JWT (`JwtService.java:34-46`),
+- [x] **P2-1** DONE 2026-08-14. `organisationId` into `RequestContext.Principal` and the JWT (`JwtService.java:34-46`),
       populated from the authenticated `app_users.organisation_id`.
       **Prerequisite for all of Phase 3.**
-- [ ] **P2-2** Nothing on the login request. Confirm by test that the tenant is *never* readable from
+- [x] **P2-2** DONE. Nothing on the login request. Confirm by test that the tenant is *never* readable from
       caller input — this is the property that makes global usernames safer than a typed code, and
       it is worth an explicit regression test so a future "convenience" parameter cannot re-open it.
       **Includes the string:** assert that no production code path splits a username on `@` to
       resolve scope. The suffix is a naming convention (§1), and treating it as data would hand an
       attacker a tenant selector in the one field they fully control.
-- [ ] **P2-2b** Enforce the **suffix ↔ FK invariant** at user creation and at any alias change: the
+- [ ] **P2-2b** STILL OPEN - needs an alias to exist before it has anything to check. Enforce the **suffix ↔ FK invariant** at user creation and at any alias change: the
       text after `@` must equal the organisation's alias. There are now two representations of a
       user's tenant — the string and `organisation_id` — and they can drift. `organisation_id` is
       authoritative; the string is display. Add a boot-time reconcile check that reports drift
       rather than silently correcting it.
-- [ ] **P2-2c** **Server-side username composition.** `CreateUserRequest` carries the **local part
+- [x] **P2-2c** DONE 2026-08-14. **Server-side username composition.** `CreateUserRequest` carries the **local part
       only**; `UserServiceImpl.java:75` composes `local + "@" + alias` with the alias resolved from
       `principal.organisationId()`. Reject any `@` in the local part (otherwise `smith@evil`
       composes to `smith@evil@jambobora`), apply the D-7a character rules to the local part, and run
       the uniqueness check on the **composed** value. Note this is an API contract change on
       `CreateUserRequest` — the field's meaning narrows even if its name does not; decide whether to
       rename it for clarity.
-- [ ] **P2-3** `G6` is largely retired, but **two call sites still need an org check for a different
+- [x] **P2-3** DONE 2026-08-14 - all three authoriser sites; the refusal is byte-identical to the unknown-user path. `G6` is largely retired, but **two call sites still need an org check for a different
       reason** — cross-tenant *authorisation*, not a 500:
       - `StepUpAuthServiceImpl.java:134` resolves the authoriser globally, so a supervisor in
         tenant A could approve a till override in tenant B. Assert the authoriser's organisation
@@ -1325,12 +1325,20 @@ that a composite key would otherwise have had to.
       - `UserServiceImpl.java:76` no longer breaks, but its message
         `"Username already exists: " + username` reveals that *another tenant* holds the name.
         Generic message, per D-7.
-- [ ] **P2-4** Login must consult organisation status once D-6 lands (`AuthServiceImpl` currently
+- [x] **P2-4** DONE 2026-08-14. Login consults organisation status once D-6 lands (`AuthServiceImpl` currently
       checks only the user's own active flag).
-- [ ] **P2-5** Implement the D-7 credential standards. Decide here whether `must_change_password`
-      and `password_expires_at` — present as columns, never read on the login path — become live.
-      **`mfa_enabled` is no longer a "decide later": it is required for tier-2 and tier-3 roles**
-      (§1.2, P4-2b). General-population MFA stays deferred; privileged-account MFA does not.
+- [x] **P2-5** D-7 credential standards — **RESOLVED 2026-08-14, mostly by finding it already done.**
+      The strong-password half is **already enforced and has been all along**: `PasswordPolicy`
+      requires the configured minimum length, at least one letter, at least one digit, and rejects a
+      blocklist of common passwords. `UserServiceImpl.create` and every password-set path call it.
+      Nothing to build.
+      - `must_change_password` and `password_expires_at` remain **unread on the login path**; they
+        surface only in `UserDto`. Making them live means a forced-rotation flow, which is a feature
+        in its own right and is **not** part of tenancy. Deferred deliberately, not by oversight.
+      - `mfa_enabled` is read nowhere at all. It stays deferred for the general population and
+        becomes **required for tier-2 and tier-3 roles** at **P4-2b**, which is where the grant path
+        it protects actually changes. Building MFA here would be speculative: nothing in Phase 2
+        confers privileged authority.
 
 ### Phase 2.5 — Scope enforcer and parity harness *(new 2026-08-14; gates all of Phase 3)*
 

@@ -24,6 +24,19 @@ public class Organisation extends UidEntity {
     @Setter
     private String name;
 
+    /**
+     * Short, unique, human-readable handle for this tenant (ADR-0062 D-7): {@code jambobora} in
+     * {@code smith@jambobora}. Nullable, and null on every install that predates multi-tenancy —
+     * legacy usernames are never rewritten, so an organisation without an alias simply keeps bare
+     * usernames. It becomes mandatory only for tenants minted by TenantProvisioningService.
+     *
+     * <p>Immutable once set in practice: renaming it would orphan every username that carries the
+     * old suffix and every audit row that recorded one.
+     */
+    @Column(name = "alias", length = 20)
+    @Setter
+    private String alias;
+
     @Column(name = "legal_name", length = 200)
     @Setter
     private String legalName;

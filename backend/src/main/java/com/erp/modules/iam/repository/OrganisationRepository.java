@@ -17,4 +17,15 @@ public interface OrganisationRepository extends JpaRepository<Organisation, Long
      * exists, rather than a non-deterministic {@code findAll().get(0)}.
      */
     Optional<Organisation> findFirstByOrderByIdAsc();
+
+    /**
+     * Load the organisation whose id came from the CALLER'S OWN principal, never from request
+     * input — a self-scope lookup. Named (not the inherited {@code findById}) to mirror
+     * {@code CompanyRepository.findScopedById}: the confused-deputy gate in
+     * {@code TenantScopingRulesTest} flags bare {@code findById} in services because it cannot tell
+     * a self-scope read from an attacker-supplied one, and the naming is how that distinction is
+     * declared in this codebase.
+     */
+    @org.springframework.data.jpa.repository.Query("SELECT o FROM Organisation o WHERE o.id = :id")
+    Optional<Organisation> findScopedById(@org.springframework.data.repository.query.Param("id") Long id);
 }
