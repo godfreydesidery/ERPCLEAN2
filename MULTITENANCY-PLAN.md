@@ -1193,7 +1193,12 @@ that a composite key would otherwise have had to.
       before estimating the rest**; the figure has never been converted from a grep count to
       engineer-time (§11 G-A).
 - [ ] **P1-8** **Three things to prove on the restored dump before authoring**, all currently
-      inferred: that the DEFAULT function sees the IDENTITY-flushed `Organisation` inside
+      inferred. ⬤ **The stack is ready** — [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md),
+      restored from Kilimanjaro production, 205 tables, Flyway v98, `organisations = 1`, all objects
+      owned by the `erp` app role so migrations run with the privileges they really have. The third
+      item below is **already answered by Stage A**: the append-only grant was never applied on either
+      estate, and the rehearsal stack reproduces that, so there is no `permission denied` risk.
+      Remaining to prove: that the DEFAULT function sees the IDENTITY-flushed `Organisation` inside
       `BootstrapRunner`'s own transaction (`UidEntity.java:24-25` is `GenerationType.IDENTITY`, so the
       INSERT is issued immediately — verify, don't assume); that Flyway's parser handles the first
       `DO $$ … $$` body in a 98-migration line; and that no deployment has ever applied the
@@ -1785,7 +1790,7 @@ Recording these honestly is the point; do not read their absence elsewhere as co
 | Environment | Role | Tenancy |
 |---|---|---|
 | **QA** (`infra/qa`, one host, one durable volume) | Validates the **next increment**. Mirrors what the live customer runs. One batch ahead of production, never eight. | **Single-tenant, permanently** |
-| **Rehearsal stack** (new — a scratch container restored from a production dump, recreated per test, thrown away) | Migration rehearsal on real data; the two-organisation probe for Phases 4–7. | Disposable; may hold two orgs |
+| **Rehearsal stack** — ✅ **built 2026-08-14**, see [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md) | Migration rehearsal on real data; the two-organisation probe for Phases 4–7. | Disposable; may hold two orgs |
 | **Production** | Continuously updated with completed, verified batches. | Single-tenant until tenant #2 |
 
 > **Why the rehearsal stack is not optional, and why the two-org work must not run on QA.**
