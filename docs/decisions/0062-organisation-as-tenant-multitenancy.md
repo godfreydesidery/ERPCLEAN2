@@ -194,11 +194,29 @@ ap_payments     ap_debit_notes   supplier_bills   supplier_quotes
 stock_movements payroll_runs     products         customers          suppliers
 ```
 
-Rationale: `organisation_id` exists on exactly one table today (`companies`), behind 204 tables, 608
-foreign keys, **zero composite FKs and zero cascades**. Without the hedge, per-tenant restore, export,
-deletion, data residency and "this customer wants their own database" are permanently bespoke; adding
-it later means backfilling 204 tables on a durable database in three environments. Rejecting it was a
-legitimate option — **rejecting it by omission was not.**
+**Rationale — corrected 2026-08-14, after measurement.** An earlier draft of this ADR justified the
+hedge by claiming that per-tenant extraction is otherwise "a 204-table topological traversal" and that
+restore, export and deletion are "permanently bespoke". **That is false and must not be repeated.**
+Measured on a restored copy of the live customer's database: of 205 tables, **182 carry `company_id`**
+and `companies.organisation_id` is `NOT NULL`, so those 182 are already **one join** from their
+organisation. The 23 exceptions are the tenant tree, the global vocabularies and children of
+company-scoped parents — none of which is an aggregate root, so the hedge does not cover them anyway.
+
+For extraction, the columns buy **one saved join**. The decision stands on two other grounds:
+
+1. **Row-level security without a correlated subquery** — the material one, and it couples directly to
+   the still-open **D-4**. Without a local `organisation_id`, every policy is
+   `company_id IN (SELECT id FROM companies WHERE organisation_id = current_setting(...))`, evaluated
+   on every row-scan of every protected table.
+2. **A partition key**, if tenant-partitioning is ever wanted.
+
+3. **Cost asymmetry, which is what actually decides it.** Adding the columns now is a metadata-only
+   `ADD COLUMN` plus a backfill measured at **163 ms** across all 31 tables. Adding them later is an
+   `UPDATE` over every row, which rewrites the heap — trivial at today's 38 MB, a real maintenance
+   window on a mature database, on a product with no rollback worth the name.
+
+Rejecting the hedge was a legitimate option — **rejecting it by omission was not**, and neither is
+keeping it for a reason that does not survive a `SELECT count(*)`.
 
 ### D-10 · Email uniqueness scoped to the organisation
 

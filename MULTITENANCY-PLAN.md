@@ -614,20 +614,53 @@ breaks under multi-tenancy. **Open.**
 > Raised 2026-08-14. §9 currently rejects this **by omission**, which is precisely the standard this
 > plan rightly refuses to accept for D-4. Reject it deliberately or accept it — but decide it.
 
-`organisation_id` exists on **exactly one table**: `companies` (`V1__baseline.sql:44`). Not one of the
-182 company-scoped tables carries it. Behind them: **204 tables, 608 foreign keys, zero composite
-FKs, zero `ON DELETE CASCADE`.** So every per-tenant operation — extract, export, restore, delete,
-relocate — is a 204-table topological traversal joining through `companies`. **No such traversal
-exists in the codebase and there is no place it would live.**
+`organisation_id` exists on **exactly one table**: `companies` (`V1__baseline.sql:44`). Behind it:
+205 tables, 608 foreign keys, **zero composite FKs, zero `ON DELETE CASCADE`.**
 
-The consequence is not a missing feature; it is a permanent shape:
+> #### ⚠ RATIONALE CORRECTED 2026-08-14 — the original justification was wrong
+>
+> This section previously claimed that without the hedge, every per-tenant operation is *"a 204-table
+> topological traversal"* and that per-tenant restore, export and deletion are *"permanently
+> bespoke"*. **Measured against the restored production copy, that is false:**
+>
+> ```
+> total tables                : 205
+> with company_id             : 182
+> WITHOUT company_id          :  23
+> ```
+>
+> and `companies.organisation_id` is `NOT NULL`. So **182 of 205 tables are already ONE JOIN from
+> their organisation** — `... JOIN companies c ON c.id = t.company_id WHERE c.organisation_id = :org`.
+> Per-tenant export, restore and delete are *awkward* today, not impossible.
+>
+> The 23 exceptions are the tenant tree itself, the global vocabularies (`permissions`, `currencies`,
+> `processed_events`, `flyway_schema_history`) and children of company-scoped parents
+> (`product_branch`, `product_components`, `cash_count_denominations`, the `*_branch` link tables,
+> `van_reconciliation_lines`). **None of them is an aggregate root, so none is on the D-9 list** —
+> the hedge does not address them, and does not need to: they are reachable via their parent.
+>
+> **What the columns therefore buy is one saved join.** For extraction, that is all.
 
-- **D-5** (restore one tenant) and **D-6** (export/delete a departing tenant) have no implementable
-  answer without it. `fk_audit_log_actor` (`V1__baseline.sql:313`) also pins a departing tenant's
-  users behind an append-only audit table.
-- Data residency, and "this customer now wants their own database", become bespoke projects.
-- **Adding it later means backfilling 204 tables on a durable database in three environments** —
-  exactly what §9 excludes, so "later" is doing a lot of work in that sentence.
+**What D-9 is actually worth, stated honestly.** Two things, both real:
+
+1. **RLS without a correlated subquery — the significant one, and it couples to D-4.** Without a
+   local `organisation_id`, every policy becomes
+   `company_id IN (SELECT id FROM companies WHERE organisation_id = current_setting(...))`: a
+   subquery on every row-scan of every protected table. This is precisely the cost that makes D-4
+   expensive, and the D-9 columns are what removes it.
+2. **A partition key**, should tenant-partitioning ever be wanted.
+
+**And the decision still stands, on cost asymmetry rather than on capability:**
+
+- **Now:** metadata-only `ADD COLUMN`, and a backfill measured at **163 ms** for all 31 tables on a
+  copy of the live customer's database.
+- **Later:** the same backfill is an `UPDATE` touching every row, which **rewrites the heap**. Trivial
+  at today's 38 MB; a genuine maintenance window on a three-year-old database, on a system with no
+  rollback worth the name.
+
+That asymmetry is why the hedge is still right, and it is a much narrower claim than the one this
+section used to make. Do not restate the traversal argument; it will not survive contact with anyone
+who runs the query above.
 
 - **(a) Do nothing.** Accept that per-tenant recovery, export and relocation are permanently manual.
   Legitimate — but it must be said out loud to whoever signs the hosted contract.
@@ -639,7 +672,16 @@ The consequence is not a missing feature; it is a permanent shape:
   one organisation.
 - **(c) All 182 tables.** Contradicts §2.1's headline finding and turns Phase 1 from S–M into L.
 
-**RESOLVED 2026-08-14: (b) — the ~20 aggregate-root hedge.**
+**RESOLVED 2026-08-14: (b) — the aggregate-root hedge, 31 tables.**
+
+> **Boundary settled 2026-08-14 after attempting to derive it.** "Aggregate root" is **not** a schema
+> property: **169 of 205 tables** carry both `company_id NOT NULL` and a `uid`, line tables such as
+> `journal_lines` and `sales_invoice_lines` included. The list is therefore a judgement call, made
+> once and recorded here: **23 transactional document roots + 8 master-data roots = 31.** Everything
+> excluded remains reachable in one further hop through its parent's foreign key. The full list is in
+> [`docs/ops/multitenancy-v99-v101-ddl-draft.sql`](docs/ops/multitenancy-v99-v101-ddl-draft.sql), and
+> the backfill was verified total on real production data (461/461 invoices, 1,449/1,449 stock
+> movements, 601/601 products).
 
 Columns are added **nullable in V99 and left unconstrained in Phase 1**. They are populated going
 forward by application code from Phase 2, and existing rows are backfilled by a **bounded background
@@ -1754,7 +1796,10 @@ Recording these honestly is the point; do not read their absence elsewhere as co
   hosted or who can be compelled to produce it.
 - **G-F · The 182-table premise is unverified** — see the warning in §9. It decides whether tenancy is
   a ~10-site IAM job or an estate-wide one, and it should be re-verified before Phase 3 is sized.
-- **G-G · Per-tenant recovery does not exist and is gated on D-9.** This is the programme's true
+- **G-G · Per-tenant recovery does not exist.** ~~Gated on D-9.~~ **Corrected 2026-08-14:** it is not
+  gated on D-9 — 182 of 205 tables are already one join from their organisation (see D-9), so the
+  blocker is that **nobody has written the extract/restore tooling**, not that the schema prevents it.
+  This is the programme's true
   operational blocker; D-5 cannot be answered while `organisation_id` lives on one table.
 - **G-H · The existing paying customers are treated as a risk surface, not as stakeholders.** Every
   phase ships migrations and security tightenings into live customer databases that will **never host
