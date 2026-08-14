@@ -1338,10 +1338,27 @@ The premise that Phase 3 is inert on a one-organisation install is false (§0.1)
 make it true, and they must land before any predicate in Phase 3 is written.
 
 - [ ] **P2.5-1** **One `TenancyScopeEnforcer`, one call site.** Every org comparison in Phase 3 goes
-      through it. It treats a principal whose organisation is **NULL as SYSTEM/UNSCOPED and exempt**
-      — mirroring today's synthetic principal (`root = false`, `companyId = event.companyId`) rather
-      than denying it. A single implementation means the exemption cannot be forgotten at one of
-      seventeen sites, and it is one place to audit.
+      through it, so the exemption cannot be forgotten at one of eighteen sites and there is one
+      place to audit.
+
+> #### ⚠ CORRECTED 2026-08-14 — exempt on a NULL **userId**, never on a NULL **organisation**
+>
+> This item previously said to treat *"a principal whose **organisation** is NULL as SYSTEM/UNSCOPED
+> and exempt"*. **That is a privilege-escalation hole, and it must not be built.**
+>
+> A real user can have a NULL organisation — every user created between V101 and the constraining
+> migration does, by design (V101's own notice says so). Exempting on a null organisation would make
+> each of those users **unscoped**: exempt from every tenant check in Phase 3, through a *data gap*
+> rather than an authorisation decision. The newer the account, the more privileged it would be.
+>
+> **The correct discriminator is `userId == null`.** Verified against the code: all **18** outbox
+> handlers construct `Principal(null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(),
+> null)` — a null `userId` in every one, and no handler passes a real user id. It is structural,
+> it cannot be produced by missing data, and it cannot be reached from a request, because the filter
+> always sets a `userId` from the authenticated subject.
+>
+> So: **`userId == null` ⇒ system, exempt. `userId != null` with a null organisation ⇒ DENY** — a
+> real user whose tenant cannot be established must fail closed, not sail through.
 - [ ] **P2.5-2** **Prove it on the posting path with an integration test that asserts the effect, not
       the absence of an exception.** Dispatch a `SaleFinalised` event with enforcement ON and assert
       **the GL journal row lands**. `SalesPostingHandler.java:77-86` catches `Exception` and marks the

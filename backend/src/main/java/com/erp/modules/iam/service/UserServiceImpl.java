@@ -83,6 +83,13 @@ public class UserServiceImpl implements UserService {
         user.setEmail(request.email());
         user.setPhone(request.phone());
         // is_root stays false by default — never settable via the API.
+
+        // The new user belongs to the CREATOR's tenant (ADR-0062 P2-1). Taken from the
+        // authenticated principal, never from the request body: accepting a tenant from input is
+        // exactly the caller-supplied scope this design exists to remove, and it would let an
+        // administrator mint an account inside somebody else's organisation.
+        RequestContext.Principal creator = RequestContext.get();
+        user.setOrganisationId(creator != null ? creator.organisationId() : null);
         AppUser saved = users.save(user);
 
         audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_users", saved.getId(), saved.getUid())

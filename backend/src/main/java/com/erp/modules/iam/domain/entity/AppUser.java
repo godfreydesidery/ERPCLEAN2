@@ -45,6 +45,20 @@ public class AppUser extends UidEntity {
     @Setter
     private boolean root = false;
 
+    /**
+     * The tenant this user belongs to (ADR-0062). Nullable for now: V101 backfilled every existing
+     * row, but the column is not constrained until the P2-1 follow-up migration, and rows created
+     * between the two releases can still be null.
+     *
+     * <p>This is the ONLY authoritative source of a caller's tenant. Scope is derived from it after
+     * authentication — never from caller input, and never by parsing the {@code user@alias} suffix
+     * off the username, which is a display convention and would hand an attacker a tenant selector
+     * in the one field they control.
+     */
+    @Column(name = "organisation_id")
+    @Setter
+    private Long organisationId;
+
     @Column(name = "failed_login_count", nullable = false)
     private int failedLoginCount = 0;
 

@@ -98,8 +98,7 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
         }
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, companyId, event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(companyId, event.getBranchId()));
         try {
             reverseReceipt(payload, companyId, event.getUid());
         } catch (Exception ex) {

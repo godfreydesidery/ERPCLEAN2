@@ -103,8 +103,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
         DeliveryConfirmedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             List<CogsLeg> cogsLegs = new ArrayList<>();
             MovementSourceKeys keys = MovementSourceKeys.forEvent(event.getUid());

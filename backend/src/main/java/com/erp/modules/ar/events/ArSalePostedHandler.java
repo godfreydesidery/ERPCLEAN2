@@ -100,8 +100,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         // 2. System RequestContext (mirrors SalesPostingHandler pattern)
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, companyId, branchId, null));
+        RequestContext.set(RequestContext.Principal.system(companyId, branchId));
         try {
             createOpenItemIfCredit(event, payload, companyId, branchId);
         } catch (Exception ex) {

@@ -4,7 +4,7 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
-import com.erp.platform.common.domain.MasterStatus;
+
 import com.erp.platform.security.config.SecurityErrorResponder;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -86,24 +86,32 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                 // ExceptionTranslationFilter in the chain, so a thrown exception would otherwise
                 // escape the chain uncaught and never reach the accessDeniedHandler (ADR-0003 D-2
                 // erratum). We render the same ApiResponse 403 envelope directly.
-                RequestContext.Principal principal;
-                try {
-                    principal = resolvePrincipal(jwt, request.getHeader(BRANCH_OVERRIDE_HEADER),
-                            request.getRemoteAddr());
-                } catch (AccessDeniedException denied) {
-                    errorResponder.handle(request, response, denied);
-                    return; // do NOT continue the chain — the 403 envelope is already written
-                }
-
                 // F9 (ADR-0004 D-8): re-check the user is still ACTIVE on every request — a
                 // disabled user is rejected (401) immediately rather than after the JWT TTL.
-                // One PK lookup — same order as ADR-0002's accepted per-request read.
-                if (!appUsers.existsByIdAndStatus(principal.userId(),
-                        com.erp.platform.common.domain.MasterStatus.ACTIVE)) {
+                // One PK lookup — same order as ADR-0002's accepted per-request read — and it now
+                // returns the caller's tenant too (ADR-0062 P2-1), so the organisation costs no
+                // extra query.
+                //
+                // The organisation is read from the DATABASE, not from a JWT claim. Two reasons:
+                // tokens minted before this release carry no such claim, so reading the claim would
+                // log every live session out; and a claim is a snapshot, while the row is current.
+                Long userId = parseLong(jwt.getSubject());
+                var scope = appUsers.findActiveScope(userId,
+                        com.erp.platform.common.domain.MasterStatus.ACTIVE);
+                if (scope.isEmpty()) {
                     errorResponder.commence(request, response,
                             new org.springframework.security.core.AuthenticationException(
                                     "User account is no longer active.") {});
                     return;
+                }
+
+                RequestContext.Principal principal;
+                try {
+                    principal = resolvePrincipal(jwt, request.getHeader(BRANCH_OVERRIDE_HEADER),
+                            request.getRemoteAddr(), scope.get().getOrganisationId());
+                } catch (AccessDeniedException denied) {
+                    errorResponder.handle(request, response, denied);
+                    return; // do NOT continue the chain — the 403 envelope is already written
                 }
 
                 RequestContext.set(principal);
@@ -113,6 +121,8 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                 MDC.put("username",  principal.username());
                 MDC.put("companyId", String.valueOf(principal.companyId()));
                 MDC.put("branchId",  String.valueOf(principal.branchId()));
+                // P8-3: without this, support cannot filter a log stream to one customer.
+                MDC.put("organisationId", String.valueOf(principal.organisationId()));
             }
             chain.doFilter(request, response);
         } finally {
@@ -126,7 +136,8 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
      * Build the principal, applying the X-Branch-Uid override when present (else the JWT default).
      * IP is threaded in from the request for audit trail population (ADR-0004 D-4).
      */
-    private RequestContext.Principal resolvePrincipal(Jwt jwt, String overrideUid, String ip) {
+    private RequestContext.Principal resolvePrincipal(Jwt jwt, String overrideUid, String ip,
+                                                      Long organisationId) {
         Long userId = parseLong(jwt.getSubject());
         String username = jwt.getClaimAsString("username");
         boolean root = Boolean.TRUE.equals(jwt.getClaim("isRoot"));
@@ -136,7 +147,7 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
             return new RequestContext.Principal(userId, username, root,
                     parseLong(jwt.getClaimAsString("companyId")),
                     parseLong(jwt.getClaimAsString("branchId")),
-                    ip);
+                    ip, organisationId);
         }
 
         // Override present: resolve + validate. Fail closed (403) on any defect.
@@ -150,8 +161,11 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
             throw new AccessDeniedException("You are not assigned to that branch.");
         }
 
+        // The organisation follows the USER, not the branch they switched into. A branch override
+        // changes the active company/branch; it must never change which tenant the caller is.
         return new RequestContext.Principal(
-                userId, username, root, branch.getCompany().getId(), branch.getId(), ip);
+                userId, username, root, branch.getCompany().getId(), branch.getId(), ip,
+                organisationId);
     }
 
     private static Long parseLong(String s) {

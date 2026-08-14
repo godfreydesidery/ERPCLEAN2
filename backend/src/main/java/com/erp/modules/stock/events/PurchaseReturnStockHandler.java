@@ -70,8 +70,7 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
         PurchaseReturnedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             BigDecimal totalReturnValue = BigDecimal.ZERO;
             String currency = payload.currency() != null ? payload.currency() : "TZS";

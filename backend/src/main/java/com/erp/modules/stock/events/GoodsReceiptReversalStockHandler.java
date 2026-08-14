@@ -130,8 +130,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
         }
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             BigDecimal totalOriginalValue = BigDecimal.ZERO;
             boolean anyCostNull = false;

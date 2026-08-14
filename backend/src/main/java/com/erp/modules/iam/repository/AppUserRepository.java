@@ -125,4 +125,22 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      */
     @Query("SELECT u FROM AppUser u WHERE u.id = :id")
     Optional<AppUser> findScopedById(@Param("id") Long id);
+
+    /**
+     * The per-request active-user check, returning the caller's tenant in the same lookup
+     * (ADR-0062, P2-1). Replaces a bare {@code existsByIdAndStatus} in
+     * {@code JwtRequestContextFilter}: the filter needs both answers on every request, and one PK
+     * lookup answering both is cheaper than an exists() followed by a second read.
+     *
+     * <p>Returned as a projection rather than {@code Optional<Long>} deliberately. The organisation
+     * is nullable, and an {@code Optional<Long>} of a null value is empty — indistinguishable from
+     * "this user is not active". A projection is present whenever the row is, and carries a null
+     * organisation as a null field, which is the distinction the filter has to make.
+     */
+    interface ActiveUserScope {
+        Long getOrganisationId();
+    }
+
+    @Query("SELECT u.organisationId AS organisationId FROM AppUser u WHERE u.id = :id AND u.status = :status")
+    Optional<ActiveUserScope> findActiveScope(@Param("id") Long id, @Param("status") MasterStatus status);
 }

@@ -224,7 +224,9 @@ public class DiscountAuthorisationGuard {
                 authoriser.isRoot(),
                 req.companyId(),
                 caller != null ? caller.branchId() : null,
-                caller != null ? caller.ip() : null);
+                caller != null ? caller.ip() : null,
+                // The AUTHORISER's own tenant, so P2-3 can refuse a cross-tenant approval.
+                authoriser.getOrganisationId());
 
         boolean holds = permissionResolver.hasPermission(
                 authoriserInInvoiceScope, DISCOUNT_OVERRIDE_PERMISSION, System.currentTimeMillis());
