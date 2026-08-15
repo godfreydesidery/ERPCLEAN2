@@ -1,3 +1,21 @@
+### Fixes a problem introduced in 1.8.0
+
+If you installed 1.8.0 and the system would not start, this release contains the fix. A check added
+in 1.8.0 to keep role names tidy was too strict and rejected the system's own start-up housekeeping,
+so the application restarted over and over instead of coming up.
+
+If we applied a correction directly to your database to get you running again, this release makes
+that correction permanent — installing it changes nothing further for you.
+
+Two related problems were fixed at the same time. Neither has affected you, but both could have:
+
+- If one of your own role names happened to match one of the standard role names supplied with
+  OrbixERP, the same housekeeping would have stopped the system starting. It now leaves that role
+  alone, writes a note in the log naming it, and starts normally. Rename the role and it is picked
+  up automatically on the next start.
+- The check itself has been corrected so it compares a role against *other* roles, rather than
+  against itself.
+
 ### Your administrator can now hand out the standard job roles
 
 The twelve standard roles that ship with OrbixERP — Cashier, Salesperson, Accountant, Storekeeper,
