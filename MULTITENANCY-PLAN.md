@@ -421,17 +421,22 @@ column adds no predicate to a `findByUid`, to a derived query, or to a `root ||`
 
 Nothing in Phase 1 should start until all eight are closed. Record the answer inline and date it.
 
-**Status as of 2026-08-14:**
+**Status as of 2026-08-15:**
 
-| Resolved | Still open |
-|---|---|
-| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>` · **D-9** aggregate-root hedge · **D-10** email scoped to `(organisation_id, email)` | **D-4** RLS backstop · **D-5** per-tenant restore · **D-6** tenant lifecycle · **D-8** per-tenant fiscalisation |
+| Resolved | Recommended, owner to confirm | Still open |
+|---|---|---|
+| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>` · **D-9** aggregate-root hedge · **D-10** email scoped to `(organisation_id, email)` | **D-11** own stack per customer · **D-4** reject RLS · **D-6** suspension built, departure by topology | **D-5** per-tenant restore · **D-8** per-tenant fiscalisation |
 
-**Six of ten closed, and every decision that gates Phase 1 is now closed** — D-9 and D-10 were the
-last two. D-4, D-5, D-6 and D-8 gate Phase 8 and tenant #2, not the schema.
+**Every decision that gates Phase 1 is closed**, and the schema is not waiting on any of the rest.
 
-**D-5 is the day-one operational blocker** and **D-8 is a legal gate on onboarding tenant #2 in
-Tanzania** — those two are the critical path, not D-4.
+**The three that looked open were one decision.** D-4, D-5 and D-6 all turn on whether a single
+database holds two customers — see **D-11**, added 2026-08-15. Under the recommended own-stack
+topology D-4 and D-6 resolve as recorded below and **D-5 stops being a day-one blocker**, because
+whole-database backup and restore is then per-tenant by construction. Under a shared instance all
+three come back at once, before customer #2's first day.
+
+**D-8 (per-tenant fiscalisation) is unaffected by topology** — it is a legal gate on onboarding a
+second Tanzanian customer either way, and is now the critical path.
 
 Still outstanding as *measurements* rather than decisions: **P0-1c** and **P1-0**, both covered by
 [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
@@ -530,7 +535,30 @@ Zero hits for `ROW LEVEL SECURITY` / `CREATE POLICY` / `current_setting` across 
 Every one of the 182 predicates is application-side only, with **no composite FKs** behind them.
 Today a missed predicate leaks inside one client's own installation; afterwards it is a
 cross-customer breach. RLS keyed on a session GUC is the standard shared-schema backstop.
-Rejecting it is fine — rejecting it by omission is not. **Open.**
+Rejecting it is fine — rejecting it by omission is not.
+
+**RECOMMENDED REJECT — 2026-08-15. Owner confirmation outstanding; recorded so it is a decision
+rather than an omission.**
+
+RLS is worth exactly as much as the number of tenants sharing a database. That number is **one**,
+in every environment that exists: the live customer has one organisation, QA has one, and the
+tenant-#2 readiness assessment recommends customer #2 gets its own stack (§D-11). A policy keyed on
+a session GUC, on a database holding one organisation, filters a table to itself.
+
+It is also not free, and its failure mode is worse than the thing it guards. Every connection would
+have to set the GUC on checkout — including the ones the application does not own: Flyway, the
+outbox poller, scheduled jobs, `psql` during an incident. A **missed `SET` does not leak; it
+returns nothing**, so the symptom is an empty screen or a report that silently omits rows, on a
+live system, with no error. Against one tenant per database that is a new class of outage bought to
+mitigate nothing.
+
+What guards the boundary meanwhile is not nothing: 182 application-side predicates, the 16 probes
+in `TwoOrganisationIsolationIT`, the non-frozen `existsById` rule (P7-3), and `ScopeGuard`'s
+tenant check ahead of the root short-circuit.
+
+**What reopens it, unambiguously: the first database that holds two organisations.** Nothing here
+is schema-dependent, so rejecting now costs nothing then — this is a deferral with a named trigger,
+not a door closed.
 
 ### D-5 · Per-tenant backup and restore
 
@@ -545,7 +573,28 @@ DB-per-client; a day-one operational blocker and a contract question under a sha
 `organisations` already has `status`, `subscription_plan` and `subscription_status` columns with
 **zero readers** outside the entity. What are the rules for suspending a non-paying tenant, and
 what happens on departure — export, retain, or delete? There is no export path and no cascade;
-deletion today means hand-deleting from 204 tables in FK order. **Open.**
+deletion today means hand-deleting from 204 tables in FK order.
+
+**PARTLY RESOLVED 2026-08-15 — it was three questions, and two are already answered.**
+
+- **Suspension — BUILT (P5-2/P5-3).** `organisations.status` is no longer a column with zero
+  readers: `AuthServiceImpl.assertTenantIsOpen` consults it at login, root is exempt so a suspension
+  cannot lock the platform out of its own recovery lever, and `OrganisationServiceImpl.setStatus`
+  refuses to suspend the organisation the caller is signed in to. That last guard exists because the
+  first version of this shipped without it and one POST locked out everybody, `rootadmin` included.
+- **`subscription_plan` / `subscription_status` — leave unread.** Still zero readers, and that is
+  the recommendation, not an oversight. Billing state that the application enforces is a product
+  decision nobody has made; inventing semantics for two columns because they exist is how a
+  half-meant field becomes load-bearing. `status` is the enforcement point; these two are notes.
+- **Departure — answered by topology, not by code.** Under one organisation per database (§D-11)
+  the export path is `pg_dump` and the deletion is dropping the database. Both exist, both are
+  drilled by `backup.sh`/`restore.sh`. **No per-tenant extract or 204-table cascade should be
+  built**: it would be a large, dangerous, untested piece of machinery whose only purpose is to
+  emulate what dropping a database does perfectly.
+
+**Reopens with the same trigger as D-4 — the first database holding two organisations.** At that
+point departure becomes a genuine engineering problem and D-5 (per-tenant restore) becomes a
+day-one blocker rather than a not-applicable.
 
 ### D-7 · Username convention — **RESOLVED 2026-08-13**: `<user>@<org-alias>`
 
@@ -754,6 +803,50 @@ Phase 1 relies on.
 > `WHERE email IS NOT NULL` therefore covers no rows at all today, and `uq_app_users_email` is
 > currently constraining nothing. Zero risk to apply; the decision is about the shape of the
 > namespace going forward, not about existing data.
+
+### D-11 · Deployment topology for customer #2 — **the decision D-4, D-5 and D-6 were waiting on**
+
+Added 2026-08-15 after a 12-agent readiness assessment against the shipped code and `infra/`.
+**Owner decision. Recommendation: give customer #2 their own stack — own database, own JWT keypair,
+own organisation — and revisit the shared instance around customer #4–5.**
+
+Three of the four decisions still marked open are not independent. **D-4 (RLS), D-5 (per-tenant
+restore) and D-6 (departure) are all consequences of one question: does one database hold two
+customers?** Answer "no" and all three become not-applicable at zero cost. Answer "yes" and all
+three become mandatory, together, before the second customer's first day. Deciding them one at a
+time was always going to produce an incoherent answer.
+
+What the assessment found, checked against the tree rather than the plan:
+
+- **The shared instance does not exist as infrastructure.** `infra/` holds `prod/` and `qa/` only;
+  `infra/prod/docker-compose.yml` opens by disclaiming itself as reference-only; there is no
+  shared-instance or multi-tenant deployment path anywhere in `infra/` or `dist/bundle/`. Choosing
+  shared means building a deployment model from nothing, in a month, alongside a live customer.
+- **Restore is still whole-database.** `dist/bundle/orbixerp.sh` runs `DROP SCHEMA public CASCADE`
+  and `infra/prod/restore.sh` is `pg_restore --clean`. On a shared box, rolling customer B back to
+  yesterday costs customer A a trading day and re-issues their invoice numbers. That is D-5, and it
+  is unbuilt.
+- **There is no platform tier yet.** `TenantProvisioningService` sets `setRoot(true)` on every
+  tenant's admin and `PermissionResolver` short-circuits root past every permission check, so on a
+  shared instance customer #2's own administrator would satisfy `ORG.SUSPEND`. `PLATFORM_OPERATOR`
+  is presently a name in `AuthorityCeiling` with no seeded row. **On own-box this is contained;
+  shared makes it a live cross-customer authority hole.**
+- **One JVM carries one identity** — a single fiscal provider, a single mail `From`, and a
+  standing-order sweep whose own comment says single-node "must be solved before a second node is
+  ever run".
+- **Blast radius.** [`docs/ops/release-staging-and-rollback.md`](docs/ops/release-staging-and-rollback.md)
+  exists because two releases took the live installation down in one day. Shared turns the next such
+  release into a two-customer outage and throws away the only canary available — ship to one box,
+  watch it, then ship to the other.
+
+The honest cost of own-box is two `update` runs and two backup routines per release. Note that the
+"permanently dual-track `dist/`" cost recorded in §12 is the price of **shared**, not of D-1:
+own-box keeps a single track, because every install is then the same shape.
+
+**None of the Phase 0–6 tenancy work is wasted under this recommendation.** It closed real
+cross-company leaks inside the one customer's own multi-company installation, and it is the
+precondition for shared later. What own-box does is remove the deadline: the tenancy spine ships
+because it is right, not because customer #2 arrives in a month.
 
 ---
 
@@ -1274,10 +1367,46 @@ that a composite key would otherwise have had to.
       upsert stops setting `is_system = true` on conflict, and log already-adopted customer roles for
       owner review. No longer a "ship it whenever": without it the reconciler has no reliable
       discriminator and can publish a customer's role to every tenant. Migration-approval applies.
-- [ ] **P1-7** ~140 test files call `new Organisation(...)` (174 sites). Only `app_users` gains a
-      `NOT NULL`, so the break is smaller than first budgeted — but **convert one representative file
-      before estimating the rest**; the figure has never been converted from a grep count to
-      engineer-time (§11 G-A).
+- [x] **P1-7 MEASURED 2026-08-15** — one representative file converted and run green, so the figure
+      is now engineer-time rather than a grep count (§11 G-A).
+
+      **The real numbers:** 193 `new AppUser(...)` sites across **122** files (not ~140). Of those,
+      **118 already create an `Organisation` in the same file** and 98 of them call it `org`. Only
+      **one IT** constructs an `AppUser` with no organisation anywhere in scope; the other three are
+      unit tests that never persist, so the `NOT NULL` does not apply to them at all.
+
+      **The break is therefore mostly mechanical, and that is a finding, not an assumption.** The
+      cost driver was never the count — it was whether each file has a tenant to point at. It does.
+
+      **What made it cheap** is `TenantFixtures.inOrganisation(user, orgId)`, which returns the same
+      instance so it wraps the existing constructor *in place*:
+
+      ```java
+      users.save(inOrganisation(new AppUser("clerk", hash, "Clerk"), org.getId()))
+      ```
+
+      No hoisting a one-line save into three statements, no builder, no restructuring — a regex
+      substitution per file plus an import. The rejected alternative was defaulting the organisation
+      inside `AppUser`, which would have fixed 122 files and destroyed the guarantee: a production
+      path that forgot to stamp the tenant would get a plausible one instead of failing.
+
+      **Estimate: the edit is roughly a day** — scripted per file, reviewed by eye, with the ~20
+      files whose organisation variable is not called `org` (`orgA`, `orgB`, `apOrg`, `o`, …) done by
+      hand, plus one IT that needs an `Organisation` created.
+
+      **The verification is the larger half and cannot be skipped**: 118 of these are integration
+      tests, so proving the conversion means a full `mvn verify`, not the PR gate. The representative
+      file alone took **231 s**. Budget the conversion and the verification separately.
+
+      **Do it in the same PR as V104, not before.** Converted fixtures pass either way, so landing
+      them early buys nothing and leaves a large mechanical diff sitting in front of the migration
+      that gives it its meaning.
+
+      > **A pre-existing IT failure fell out of this**, unrelated to tenancy: `SalesInvoiceServiceImplIT`
+      > asserted on `"no price configured"`, a message reworded by `e7cc963d` on 2026-08-12. It had
+      > been failing for three days. **ITs are not in the PR gate** (`mvn test` is; these need
+      > `verify` + Docker), so nothing said so. Worth remembering before trusting a green PR to mean
+      > the integration suite is green.
 - [x] **P1-8** **Three things to prove on the restored dump before authoring**, all currently
       **DONE 2026-08-14** — closed with real Flyway and a real application boot against a clone of the live customer's database.
       inferred. ⬤ **The stack is ready** — [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md),
@@ -1895,9 +2024,10 @@ Facts to plan around, not discover:
    reference `ScopeGuard` at all** — e.g. `DocumentTemplateServiceImpl`, `GLPostingServiceImpl`,
    `DirectGoodsReceiptServiceImpl`, `BomWhereUsedServiceImpl:51-55` (resolves a product by uid with
    no company check).
-4. **~140 test files call `new Organisation(...)`** (174 sites). Now that only `app_users` gains a
-   `NOT NULL`, the break is smaller than first budgeted — but it has never been measured. **Convert
-   one file before estimating the rest** (P1-7).
+4. ~~**~140 test files call `new Organisation(...)`** (174 sites) — never measured.~~ **MEASURED
+   2026-08-15 (P1-7): 193 sites across 122 files, 118 of which already have an organisation in
+   scope.** Roughly a day to convert, plus a full `mvn verify` to prove it — the verification is the
+   larger half. Do it in V104's PR, not before.
 
 > ### The single cheapest decision-changing step, and nobody had proposed it
 >
