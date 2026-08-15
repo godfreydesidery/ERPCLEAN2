@@ -14,6 +14,21 @@ public interface UserBranchRepository extends JpaRepository<UserBranch, Long> {
 
     Optional<UserBranch> findByUserIdAndBranchId(Long userId, Long branchId);
 
+    /**
+     * The same lookup, but only for an assignment that is still live (ADR-0062 P3-14).
+     *
+     * <p>{@link #findByUserIdAndBranchId} filters on neither {@code revokedAt} nor {@code active},
+     * although {@code UserBranch} carries both — so a revoked user could still switch session scope
+     * by header. The codebase already documented the consequence in a javadoc at
+     * {@code ProductStockReportQuery}: they switch successfully and are then refused the
+     * branch-filtered report, which reads as a broken screen rather than as a revoked assignment.
+     *
+     * <p>Verified before shipping, as the plan required: zero revoked or inactive rows exist on
+     * either QA (11 assignments) or the live client (12), so this locks nobody out.
+     */
+    Optional<UserBranch> findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue(
+            Long userId, Long branchId);
+
     /** The user's current default assignment, if one is set (BR-1, ADR-0001 D-B). */
     Optional<UserBranch> findByUserIdAndIsDefaultTrue(Long userId);
 

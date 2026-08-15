@@ -61,6 +61,17 @@ public final class AuditActions {
     // -- Root bypass (ADR-0004 D-9) -------------------------------------------
     public static final String ROOT_BYPASS = "ROOT.BYPASS";
 
+    /**
+     * A caller changed session scope with the {@code X-Branch-Uid} header (ADR-0062 P3-2).
+     *
+     * <p>Recorded because {@code ROOT.BYPASS} structurally cannot cover it. That row is written by
+     * {@code ScopeGuard.assertCanActIn} only when the target company differs from the principal's -
+     * but after a header switch the principal's company IS the target, so the comparison is false
+     * and no row is ever written. The most powerful scope change in the product was the one leaving
+     * no trace.
+     */
+    public static final String BRANCH_SWITCH = "BRANCH.SWITCH";
+
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
     public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";

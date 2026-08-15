@@ -150,8 +150,17 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      */
     interface ActiveUserScope {
         Long getOrganisationId();
+
+        /**
+         * Root status as the DATABASE currently has it (ADR-0062 P3-13) - not as the token claimed
+         * it fifteen minutes ago. Demoting a compromised root has to take effect on the next
+         * request, not when their access token happens to expire, because the window you are trying
+         * to close is exactly the incident during which you revoked them.
+         */
+        boolean getRoot();
     }
 
-    @Query("SELECT u.organisationId AS organisationId FROM AppUser u WHERE u.id = :id AND u.status = :status")
+    @Query("SELECT u.organisationId AS organisationId, u.root AS root "
+            + "FROM AppUser u WHERE u.id = :id AND u.status = :status")
     Optional<ActiveUserScope> findActiveScope(@Param("id") Long id, @Param("status") MasterStatus status);
 }
