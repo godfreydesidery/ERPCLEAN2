@@ -25,7 +25,10 @@ public class OrganisationController {
     }
 
     @GetMapping
-    @PreAuthorize("@perm.has('COMPANY.VIEW')")
+    // P3-10 (ADR-0062): was COMPANY.VIEW, borrowed because no ORG.* code existed. Safe to switch —
+    // the web client has no caller for this endpoint at all (149 components inject
+    // OrganisationService and every one of them calls current(), not list()).
+    @PreAuthorize("@perm.has('ORG.VIEW')")
     public List<OrganisationDto> list() {
         return organisations.list();
     }

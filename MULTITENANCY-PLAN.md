@@ -1487,7 +1487,15 @@ make it true, and they must land before any predicate in Phase 3 is written.
         out by guessing at them. Proven by
         `repeatedRightPasswordNoAuthorityAttempts_alsoThrottle_closingTheG11Oracle`, verified to fail
         on the pre-fix behaviour.
-- [ ] **P3-10** Add `ORG.*` permission codes — the seed file contains **not one**, and the
+- [x] **P3-10** DONE 2026-08-15, **after P4-1e in the same reviewed edit** (owner-approved). Three
+      codes: `ORG.VIEW` (`module = 'iam'`, tenant-level) plus `ORG.CREATE` and `ORG.SUSPEND`
+      (`module = 'platform'`). `OrganisationController.list()` moves off its borrowed `COMPANY.VIEW`;
+      `/current` stays `isAuthenticated()` because **149 components call it before any
+      permission-scoped screen loads** — and the same measurement showed the *list* endpoint has
+      **zero web callers**, which is why re-gating it cannot break a screen.
+      Export/deletion codes were **deliberately not added**: they belong to **D-6, still open**, and
+      seeding codes for an undecided policy is how phantom codes are born.
+      Original text follows. ~~Add `ORG.*` permission codes — the seed file contains **not one**, and the
       organisation endpoints currently reuse `COMPANY.VIEW`. Needed to express the D-2 split.
       Touches `R__seed_permissions.sql` → migration-approval rule applies.
       **Do P4-1e first** (R-2), or these codes flow into every tenant's `ORG_ADMIN` on the next deploy.
@@ -1620,9 +1628,21 @@ make it true, and they must land before any predicate in Phase 3 is written.
       `(2,'CASHIER')` can coexist once `uq_role_code` drops — the exact ambiguity P4-1c is fixing.
       Needs a service check **and** a trigger (a seeder must not be able to bypass it); no index pair
       can express it.
-- [ ] **P4-1e** **Enforce R-2 (§1.2): narrow the `ORG_ADMIN` CROSS JOIN** so platform-level permission
-      codes cannot flow into every tenant's admin role on the next deploy. Do this **before** P3-10
-      adds `ORG.*`, not after. Touches `R__seed_permissions.sql` → migration-approval rule applies.
+- [x] **P4-1e** DONE 2026-08-15 (owner-approved). `AND p.module <> 'platform'` added to the
+      `ORG_ADMIN` CROSS JOIN. **Zero-risk on live data**: the statement is
+      `INSERT ... ON CONFLICT DO NOTHING`, so it grants but never revokes — narrowing stops *future*
+      grants and removes nothing. That same property is why the ordering was non-negotiable rather
+      than stylistic: a code that flows in once stays in, and taking it back would need a separate
+      revoking migration against every deployed database.
+      `module` is reused as the discriminator rather than adding a column — no DDL, and `platform`
+      was unused across all 25 modules. The failure direction is safe: mis-marking a tenant
+      capability as `platform` withholds it (a support ticket); the reverse would hand every tenant a
+      platform capability.
+      Guarded by `PlatformPermissionBoundaryTest`, which reads the SQL in the **fast** suite (the
+      grant only happens at Flyway time, so a DB assertion would sit outside the PR gate) and which
+      **asserts the platform module is non-empty** — `<> 'platform'` over an empty module is a no-op,
+      and a test of it would pass while proving nothing, the same vacuous-pass that made the tenancy
+      parity harness green against two empty result sets. Verified against two mutations.
 - [ ] **P4-2b** **MFA on tiers 2 and 3** (§1.2 recommendation). Un-defers the privileged-account half
       of P2-5 only; `mfa_enabled` already exists as a column and is never read.
 - [ ] **P4-2c** **Never-zero-admins invariant** — the last `ORG_ADMIN` in an organisation cannot be
@@ -1712,6 +1732,13 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 - [ ] **P8-1** Per-tenant backup/restore (D-5).
 - [ ] **P8-2** RLS backstop, or a recorded rejection (D-4).
+> **Owner decision 2026-08-15: LOGIN audit rows stay unattributed.** `LOGIN.SUCCESS` / `LOGIN.FAIL`
+> are written through the unauthenticated `record(event, actor, ip)` path, which has no established
+> tenant, so they carry a NULL `organisation_id`. It was raised that the user *is* known by the time
+> login succeeds and could therefore be stamped; the owner chose to leave it. **Consequence to accept
+> knowingly: login history cannot be filtered per customer**, which is a partial limit on P8-3's goal.
+> Every other audit row is stamped.
+
 - [ ] **P8-3** Add the organisation to the logging MDC — currently request, user, company, branch.
       Support cannot filter a log stream to one customer.
 - [ ] **P8-4** Tag metrics by tenant — they are untagged global gauges, so "whose outbox is stuck"
