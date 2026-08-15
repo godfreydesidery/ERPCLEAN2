@@ -55,7 +55,10 @@ class EmployeeServiceImplPayeeMaskingTest {
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
         permissions     = mock(PermissionResolver.class);
+        // P7-4: EmployeeServiceImpl now validates userId against the caller's company, so it takes
+        // AppUserRepository. Mocked to reject everything by default — these tests pass no userId.
         service = new EmployeeServiceImpl(employeeRepo, departmentRepo, branchRepo,
+                mock(com.erp.modules.iam.repository.AppUserRepository.class),
                 numberGenerator, scopeGuard, audit, permissions);
 
         Employee emp = new Employee(COMPANY_ID, 2L, "EMP-000001",

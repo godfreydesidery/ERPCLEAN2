@@ -8,6 +8,7 @@ import com.erp.modules.hr.domain.enums.EmploymentStatus;
 import com.erp.modules.hr.domain.enums.PaymentMethod;
 import com.erp.modules.hr.repository.DepartmentRepository;
 import com.erp.modules.hr.repository.EmployeeRepository;
+import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -32,6 +33,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final EmployeeRepository   employees;
     private final DepartmentRepository departments;
     private final BranchRepository     branches;
+    private final AppUserRepository    users;
     private final HrNumberGenerator    numberGenerator;
     private final ScopeGuard           scopeGuard;
     private final AuditService         audit;
@@ -40,6 +42,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     public EmployeeServiceImpl(EmployeeRepository employees,
                                 DepartmentRepository departments,
                                 BranchRepository branches,
+                                AppUserRepository users,
                                 HrNumberGenerator numberGenerator,
                                 ScopeGuard scopeGuard,
                                 AuditService audit,
@@ -47,6 +50,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         this.employees       = employees;
         this.departments     = departments;
         this.branches        = branches;
+        this.users           = users;
         this.numberGenerator = numberGenerator;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
@@ -125,9 +129,20 @@ public class EmployeeServiceImpl implements EmployeeService {
                 && !departments.existsByIdAndCompanyId(req.departmentId(), companyId)) {
             throw NotFoundException.of("Department", String.valueOf(req.departmentId()));
         }
+        // P7-4 (ADR-0062). Was a BARE existsById: it proved the branch exists SOMEWHERE, not that it
+        // belongs to this employee's company. Scope inheritance is a convention here, not a
+        // guarantee — the department two lines up is checked company-scoped, and this one was not.
         if (req.branchId() != null
-                && !branches.existsById(req.branchId())) {
+                && !branches.existsByIdAndCompany_Id(req.branchId(), companyId)) {
             throw NotFoundException.of("Branch", String.valueOf(req.branchId()));
+        }
+        // ...and userId was never validated AT ALL before being written to a column with a real FK
+        // to app_users. A tenant-A employee could reference tenant-B's user and Postgres would
+        // accept it, because the FK only asks whether the row exists. NotFound rather than
+        // Forbidden: naming the difference would confirm the id exists in another tenant.
+        if (req.userId() != null
+                && !users.existsUserInCompany(req.userId(), companyId)) {
+            throw NotFoundException.of("User", String.valueOf(req.userId()));
         }
     }
 

@@ -100,8 +100,10 @@ class HrCrossCompanyIsolationTest {
         permissions     = mock(PermissionResolver.class);
         glAccountRepo   = mock(ChartOfAccountRepository.class);
 
+        // P7-4: userId is now company-validated, so the service takes AppUserRepository.
         employeeService = new EmployeeServiceImpl(
-                empRepo, deptRepo, branchRepo, numberGenerator, scopeGuard, audit, permissions);
+                empRepo, deptRepo, branchRepo, mock(com.erp.modules.iam.repository.AppUserRepository.class),
+                numberGenerator, scopeGuard, audit, permissions);
 
         leaveTypeRepo     = mock(LeaveTypeRepository.class);
         leaveRequestRepo  = mock(LeaveRequestRepository.class);
@@ -146,7 +148,10 @@ class HrCrossCompanyIsolationTest {
     void createEmployee_withOwnCompanyDepartment_succeeds() {
         Long ownDeptId = 7L;
         when(deptRepo.existsByIdAndCompanyId(ownDeptId, COMPANY_A)).thenReturn(true);
-        when(branchRepo.existsById(2L)).thenReturn(true);
+        // P7-4: the branch is now validated COMPANY-SCOPED, not by bare existence. Stubbing the old
+        // finder would leave the service seeing no branch at all — which is exactly the leak the
+        // change closes: before, a branch belonging to another company satisfied this check.
+        when(branchRepo.existsByIdAndCompany_Id(2L, COMPANY_A)).thenReturn(true);
         when(numberGenerator.nextLoan(any())).thenReturn("LN-00001"); // not called here; just safe
         when(empRepo.countByCompanyId(COMPANY_A)).thenReturn(0L);
         when(empRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
