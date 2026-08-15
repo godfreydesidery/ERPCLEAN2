@@ -1,5 +1,6 @@
 package com.erp.platform.bootstrap;
 
+import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
@@ -168,14 +169,26 @@ public class TenancyReconciler implements ApplicationRunner {
      * database half-expanded.
      */
     private void reportResiduals() {
-        long usersNull = users.findAll().stream().filter(u -> u.getOrganisationId() == null).count();
+        // Named, not just counted (P3-11). An unattributed account is the one population that takes
+        // the permissive branch in TenancyScopeEnforcer.isForeignTenant, so "how many" is not enough
+        // — someone has to be able to go and fix them. The hot path stays silent because this line
+        // already says everything it would have said, once per boot instead of once per request.
+        List<String> unattributedUsers = users.findAll().stream()
+                .filter(u -> u.getOrganisationId() == null)
+                .map(AppUser::getUsername)
+                .sorted()
+                .toList();
+        long usersNull = unattributedUsers.size();
         long rolesNull = roles.findAll().stream()
                 .filter(r -> r.getOrganisationId() == null && !SEED_ROLE_UIDS.contains(r.getUid()))
                 .count();
         if (usersNull > 0 || rolesNull > 0) {
             log.warn("Tenancy reconcile residual: {} user(s) and {} customer role(s) still have no "
                     + "organisation. P2-1's follow-up migration will refuse to apply NOT NULL until "
-                    + "the user count is zero.", usersNull, rolesNull);
+                    + "the user count is zero. Unattributed users: {}",
+                    usersNull, rolesNull,
+                    // Truncated: a residual in the thousands is a failed backfill, not a list to read.
+                    usersNull <= 25 ? unattributedUsers : unattributedUsers.subList(0, 25) + " ...");
         } else {
             log.info("Tenancy reconcile: all users and customer roles are attributed.");
         }

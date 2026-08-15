@@ -58,6 +58,45 @@ public class TenancyScopeEnforcer {
     }
 
     /**
+     * True only for a <b>positive</b> tenant mismatch: both sides are known, and they differ.
+     *
+     * <p>This is deliberately NOT {@code !isSameTenant(...)}, and the difference is the whole point.
+     * {@code isSameTenant} answers "may this caller touch that row?", so an unknown organisation on
+     * either side must answer no. This one answers a narrower question - "is this demonstrably
+     * another tenant's?" - and an unknown organisation is not evidence of anything.
+     *
+     * <p>It exists for {@link ScopeGuard#canActIn}, which is the one place the distinction is
+     * load-bearing. {@code canActIn} guards the entire application: 698 call sites, and every
+     * authenticated request passes through several. Deny there on missing data and an account with a
+     * null {@code organisation_id} does not lose one screen, it loses the product - and it would be
+     * denied by a NOT NULL column that has not landed yet rather than by any authorisation decision.
+     * {@code companies.organisation_id} is already NOT NULL, so on the single-organisation estate
+     * that every environment currently is, a null caller organisation is the ONLY way the strict
+     * rule could fire. It would be a lockout with no security to show for it.
+     *
+     * <p>What it gives up is nothing that is reachable: a caller cannot null their own organisation,
+     * so the permissive branch is a data gap, not an input. A caller sitting in it gets exactly the
+     * pre-P3-11 behaviour - still confined to their own company unless root - so this is never worse
+     * than the status quo, while a real cross-tenant attempt (both sides known, different) is
+     * refused from the first deploy rather than after a shadow-mode soak.
+     *
+     * <p>The branch is self-liquidating: it becomes unreachable the moment
+     * {@code app_users.organisation_id} is constrained NOT NULL (P2-1's follow-up), and should be
+     * deleted then. Until it is, {@code TenancyReconciler} names the unattributed accounts on every
+     * boot - that is the operational signal, and it is why this hot path stays silent.
+     */
+    public boolean isForeignTenant(RequestContext.Principal caller, Long targetOrganisationId) {
+        if (caller == null || caller.system()) {
+            return false;
+        }
+        Long callerOrganisationId = caller.organisationId();
+        if (callerOrganisationId == null || targetOrganisationId == null) {
+            return false;
+        }
+        return !callerOrganisationId.equals(targetOrganisationId);
+    }
+
+    /**
      * Refuses unless {@code target} is inside the caller's tenant.
      *
      * <p>The message deliberately says nothing about organisations. Telling a caller that a thing
