@@ -39,4 +39,22 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
     java.util.Optional<Role> findVisibleByUid(
             @org.springframework.data.repository.query.Param("uid") String uid,
             @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
+
+    /**
+     * {@link #findVisibleByUid} with permissions eagerly fetched (ADR-0062 P4-1).
+     *
+     * <p>Exists because {@link #findWithPermissionsByUid} has <b>no</b> tenant predicate, and the
+     * role DETAIL read used it. P3-5 scoped the list and the by-uid lookup used by the write paths,
+     * but the detail read reached straight past both — so a caller could read another tenant's role
+     * together with its full permission set, which is the most revealing thing a role has.
+     * Same NULL-tolerance as its sibling: the thirteen shipped roles are global and must resolve for
+     * everyone.
+     */
+    @EntityGraph(attributePaths = "permissions")
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT r FROM Role r WHERE r.uid = :uid "
+          + "AND (r.organisationId IS NULL OR r.organisationId = :organisationId)")
+    java.util.Optional<Role> findWithPermissionsVisibleByUid(
+            @org.springframework.data.repository.query.Param("uid") String uid,
+            @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
 }

@@ -48,6 +48,17 @@ public class RoleServiceImpl implements RoleService {
         }
         Role role = new Role(request.code(), request.name());
         role.setDescription(request.description());
+
+        // P4-1 (ADR-0062). Without this the role is saved with organisation_id = NULL - and NULL is
+        // not "unset", it is the marker for a GLOBAL role. Every role a customer authored would have
+        // been published to every tenant through the NULL-tolerant visibility predicate, appearing in
+        // strangers' role lists and grantable by them. A tenant's own role belongs to that tenant.
+        //
+        // A null caller organisation leaves it global, which is correct rather than a fallback: the
+        // only paths with no request context are bootstrap and the permission seed, and those are
+        // exactly the paths that legitimately author the shipped global roles.
+        role.setOrganisationId(callerOrganisationId());
+
         return RoleDto.from(roles.save(role));
     }
 
@@ -156,6 +167,10 @@ public class RoleServiceImpl implements RoleService {
     }
 
     private Role requireWithPermissions(String uid) {
-        return Lookups.orNotFound(roles.findWithPermissionsByUid(uid), "Role", uid);
+        // Scoped since P4-1: this used findWithPermissionsByUid, which has no tenant predicate at
+        // all, so the role DETAIL read - the one that returns the full permission list - reached past
+        // the scoping P3-5 had added to the list and to requireByUid.
+        return Lookups.orNotFound(
+                roles.findWithPermissionsVisibleByUid(uid, callerOrganisationId()), "Role", uid);
     }
 }

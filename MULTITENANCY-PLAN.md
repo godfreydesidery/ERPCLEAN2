@@ -1600,9 +1600,23 @@ make it true, and they must land before any predicate in Phase 3 is written.
 > and can change neither the globals nor another tenant's. The V99/V100 DDL already expresses this;
 > the four items below are the code that makes it true.
 
-- [ ] **P4-1** Role CRUD scoped to the caller's organisation (the code half of `G2`; the column alone
-      does nothing). Reads are NULL-tolerant (P3-5 / I-2); writes are org-equality **plus** the
-      existing `isSystem()` immutability guard (I-1), which must not regress.
+- [x] **P4-1** DONE 2026-08-15 (the parts needing no migration). Two real defects, both found by
+      reading the write paths against the two-organisation harness:
+      - **`create()` never stamped `organisationId`.** A role authored by a tenant was saved with
+        `organisation_id = NULL` — and NULL is not "unset", it is the marker for a GLOBAL role. Every
+        role a customer authored would have been published to **every** tenant through the
+        NULL-tolerant visibility predicate: visible in strangers' role lists and grantable there. Now
+        stamped from the caller. A null caller organisation still yields a global role, which is
+        correct rather than a fallback — the only context-free paths are bootstrap and the permission
+        seed, and those are exactly the ones that legitimately author the shipped global roles.
+      - **The role DETAIL read was unscoped.** `getByUid` went through
+        `findWithPermissionsByUid`, which has no tenant predicate at all, so it reached past the
+        scoping P3-5 had added to `list()` and to `requireByUid` — and the detail read is the one
+        that returns the full permission set, the most revealing thing a role has. Now
+        `findWithPermissionsVisibleByUid`, NULL-tolerant like its sibling.
+      Both probed by `TwoOrganisationIsolationIT` and verified to fail on the defect.
+      **Still open and gated on the migration:** P4-1b (`existsByCode` is global) and P4-1d (R-1),
+      which cannot be built until `uq_role_code` goes — see P4-1c.
 - [ ] **P4-1b** **`create()`'s uniqueness check is global today** — `RoleServiceImpl:45`
       `roles.existsByCode(request.code())`. Under scoped roles it must become
       `existsByOrganisationIdAndCode`, or tenant B can never use a code tenant A already took, which
