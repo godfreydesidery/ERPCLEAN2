@@ -229,6 +229,34 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("P4-1 · a role authored by one tenant belongs to that tenant, not to everybody")
+    void aCreatedRoleIsStampedWithTheAuthorsTenant() {
+        actingAsA(adminA);
+        var created = roleService.create(new com.erp.modules.iam.domain.dto.CreateRoleRequest(
+                "A_OWN_ROLE_" + UUID.randomUUID().toString().substring(0, 6),
+                "A's own role", "authored inside tenant A"));
+
+        // organisation_id NULL is not "unset" - it is the marker for a GLOBAL role. Left unstamped,
+        // every role a customer authored would have been published to every tenant through the
+        // NULL-tolerant visibility predicate: visible in strangers' role lists, and grantable there.
+        Role stored = roles.findById(created.id()).orElseThrow();
+        assertThat(stored.getOrganisationId())
+                .as("a role created by a member of tenant A must belong to tenant A")
+                .isEqualTo(orgA.getId());
+    }
+
+    @Test
+    @DisplayName("P4-1 · the role DETAIL read is scoped too, not just the list")
+    void anotherTenantsRoleDetailIsNotReadable() {
+        actingAsA(adminA);
+        // The detail read returns the full permission list, which is the most revealing thing a role
+        // has. P3-5 scoped list() and the by-uid lookup behind the write paths; getByUid reached
+        // past both via findWithPermissionsByUid, which has no tenant predicate at all.
+        assertThatThrownBy(() -> roleService.getByUid(roleB.getUid()))
+                .isInstanceOf(NotFoundException.class);
+    }
+
     // ---------------------------------------------------------------------
     // The control that guards the guard
     // ---------------------------------------------------------------------
