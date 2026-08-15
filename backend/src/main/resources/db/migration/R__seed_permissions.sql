@@ -260,17 +260,39 @@ INSERT INTO permissions (code, module, description) VALUES
     ('WORKORDER.QC', 'manufacturing', 'RESERVED — no workflow in v1; hook for future QC workflow'),
     ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)'),
     ('PAYMENTTERMS.VIEW', 'parties', 'View payment terms masters'),
-    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters')
+    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters'),
+    -- Organisation codes (ADR-0062 P3-10). Until now the organisation endpoints borrowed
+    -- COMPANY.VIEW, which cannot express the D-2 split between "my own tenant" and "the platform".
+    ('ORG.VIEW', 'iam', 'View the organisation this user belongs to'),
+    -- module = 'platform' is a SECURITY DISCRIMINATOR, not a label: the ORG_ADMIN CROSS JOIN below
+    -- excludes it, so nothing in this module ever auto-flows into a tenant's admin role (R-2).
+    -- Anything added here must be a capability the PLATFORM operator holds and a customer must not.
+    -- Note the failure direction is safe: mis-marking a tenant capability as 'platform' withholds
+    -- it (a support ticket), while the reverse would hand every tenant a platform capability.
+    ('ORG.CREATE', 'platform', 'Provision a new tenant organisation (platform operator only)'),
+    ('ORG.SUSPEND', 'platform', 'Suspend or resume a tenant organisation (platform operator only)')
 ON CONFLICT (code) DO UPDATE
     SET module = EXCLUDED.module, description = EXCLUDED.description;
 
--- Grant the entire catalogue to the global ORG_ADMIN role (created in V1). CROSS JOIN over the
--- permissions table => ORG_ADMIN always holds every permission, including ones added above later.
+-- Grant the catalogue to the global ORG_ADMIN role (created in V1). CROSS JOIN over the permissions
+-- table => ORG_ADMIN always holds every permission, including ones added above later.
+--
+-- EXCEPT the 'platform' module (R-2, ADR-0062 P4-1e). ORG_ADMIN is a TENANT role: it is the
+-- customer's own administrator, and this CROSS JOIN hands it every code that exists, forever,
+-- automatically. Without the exclusion, adding a platform capability such as ORG.SUSPEND would give
+-- every customer's admin the power to suspend organisations on the next deploy - no review, no
+-- migration, just a checksum change.
+--
+-- The exclusion must be in place BEFORE any platform code is added, and that ordering is not
+-- stylistic: this statement is INSERT ... ON CONFLICT DO NOTHING, so it grants but never revokes.
+-- A code that flows in once stays in, and taking it back would need a separate revoking migration
+-- against every deployed database.
 INSERT INTO role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM   roles r
 CROSS JOIN permissions p
 WHERE  r.code = 'ORG_ADMIN'
+  AND  p.module <> 'platform'
 ON CONFLICT DO NOTHING;
 
 
