@@ -1293,6 +1293,7 @@ that a composite key would otherwise have had to.
       backfill fails `permission denied` on every boot. *(No `GRANT`/`REVOKE` was found anywhere in
       `infra/`, `dist/` or the migrations — see §10 H-9 — but "not in the repo" is not "not applied".)*
 - [ ] **P1-9** **CI assertion:** `OrganisationController` has no write mapping. That is the one
+      **RE-SPECIFY, do not build (audit 2026-08-15).** The accident class is already CI-enforced: `EndpointAuthorizationTest` fails the build on any `com.erp.api` handler without `@PreAuthorize`, and `PlatformPermissionBoundaryTest` pins the platform module to exactly {ORG.CREATE, ORG.SUSPEND}. Rewrite as an allowlist — "no write mapping except create/suspend/resume, each requiring a platform-module code".
       **NEEDS RE-SPECIFYING (2026-08-15):** P5-2 deliberately adds a write mapping to `OrganisationController`. The assertion was right for its moment - while no tenant could be created, a write mapping could only be a mistake - and should become "no write mapping EXCEPT the platform-gated create/suspend/resume", not be deleted.
       ordering rule that survives the withdrawal of the two-release split, and it is enforceable in
       the build rather than by procedure.
@@ -1314,6 +1315,7 @@ that a composite key would otherwise have had to.
       resolve scope. The suffix is a naming convention (§1), and treating it as data would hand an
       attacker a tenant selector in the one field they fully control.
 - [ ] **P2-2b** STILL OPEN - needs an alias to exist before it has anything to check. Enforce the **suffix ↔ FK invariant** at user creation and at any alias change: the
+      **ENFORCEMENT HALF ALREADY IMPOSSIBLE TO BREAK (audit 2026-08-15).** No `setUsername(` exists anywhere in `backend/src/main`, `UpdateUserRequest` has no username field, and the alias is set-once. Only a boot-time drift REPORT is missing (XS).
       text after `@` must equal the organisation's alias. There are now two representations of a
       user's tenant — the string and `organisation_id` — and they can drift. `organisation_id` is
       authoritative; the string is display. Add a boot-time reconcile check that reports drift
@@ -1406,6 +1408,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       with and without the predicate, on a one-organisation database, asserting identical counts.
       Shadow mode cannot cover these — a filter has nothing to allow and nothing to log.
 - [ ] **P2.5-5** Decide and record how shadow/parity evidence is actually collected, given there is
+      **DECIDED BY SHIPPED CODE (audit 2026-08-15).** Enforce-from-first-deploy replaced shadow mode; no `WOULD_DENY` path exists. What remains is recording the decision and fixing stale prose in `TenancyParityHarnessIT` and ADR-0062.
       **no telemetry egress from a customer box** (§0.3). Either a minimal opt-in counter export is in
       scope, or the rollout's confidence is re-stated honestly as "verified on the two boxes we own".
 
@@ -1693,11 +1696,13 @@ make it true, and they must land before any predicate in Phase 3 is written.
       and a test of it would pass while proving nothing, the same vacuous-pass that made the tenancy
       parity harness green against two empty result sets. Verified against two mutations.
 - [ ] **P4-2b** **MFA on tiers 2 and 3** (§1.2 recommendation). Un-defers the privileged-account half
+      **AUDIT HALF ALREADY LIVE (audit 2026-08-15)** — `UserRoleServiceImpl` writes a high-severity `ROLE_GRANT_PRIVILEGED` row. Only the MFA condition is unbuilt.
       of P2-5 only; `mfa_enabled` already exists as a column and is never read.
 - [x] **P4-2c** **Never-zero-admins invariant** — the last `ORG_ADMIN` in an organisation cannot be
       **DONE 2026-08-15.** `revoke()` refuses to remove the last `ORG_ADMIN` of an organisation. Counts DISTINCT ACTIVE users, so one admin holding it in three companies is still one admin. Root is exempt - that is the vendor deliberately dismantling a tenant. Without this, one revoke locks a tenant out of its own administration with no repair but vendor SQL.
       removed, demoted or deactivated.
 - [ ] **P4-3** Custom-role provisioning path for a new tenant.
+      **AUTHORING HALF DONE (audit 2026-08-15)** — role CRUD is scoped and V102/V103 landed. Only the per-tenant provisioning path is missing.
 - [x] **P4-4** Test as a **non-root** tenant admin: they can see the twelve bundles, grant one, and
       **DONE 2026-08-15** - `TwoOrganisationIsolationIT` asserts a tenant admin sees the shipped bundles (I-2 keeps them visible) and that they remain GLOBAL, so D-3 changed who may confer them and not what they are.
       are refused on editing one, on touching another tenant's role, and on conferring authority they
@@ -1718,6 +1723,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
 - [x] **P5-3** Suspend / resume via `organisations.status`, enforced at login.
       **DONE 2026-08-15.** `POST /organisations/uid/{uid}/suspend` and `/resume`, gated on `ORG.SUSPEND`. The login half already existed (`AuthServiceImpl.assertTenantIsOpen`). Enforced **at login, not per request** - an issued token stays valid for its remaining minutes. Deliberate: suspension is a commercial action, not incident response, and tearing a cashier's session out mid-sale is the wrong tool; use user deactivation for incidents. Verified: suspended -> login refused with the generic message, resumed -> login works again.
 - [ ] **P5-4** Per-tenant export and deletion policy (D-6). **Gated on D-9** — without an
+      **UNGATE (audit 2026-08-15).** "Gated on D-9" is stale twice: D-9's columns were never shipped (V99 touches only app_users/roles/audit_logs), and 182/205 tables are one join from `companies`, whose `organisation_id` has been NOT NULL since V1. The work itself stays deferred behind D-6.
       `organisation_id` on aggregate roots there is no traversal to build this on.
       Recommend **logical delete** (status + retention) as the default and physical erasure only
       where a contract demands it: "we hand-deleted from 204 tables in FK order" is not a provable
@@ -1796,7 +1802,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       out of scope, delegated to the e2e harness — **and every cross-org finding above is
       `findByUid`-shaped**. Also add `existsById`, which the predicate does not currently match
       (see P7-4).
-- [ ] **P7-4** Fix the one bare `existsById` in `modules/`: `EmployeeServiceImpl` validates the
+- [x] **P7-4** Fix the one bare `existsById` in `modules/`: `EmployeeServiceImpl` validates the
+      **DONE 2026-08-15.** Branch was validated estate-wide with a bare `existsById` while the department beside it was company-scoped; `userId` was never validated at all before being written to a real FK. Both now company-scoped, answering NotFound. Audit correction: no new derived query was needed — `BranchRepository.existsByIdAndCompany_Id` and `AppUserRepository.existsUserInCompany` already existed.
       department company-scoped but the branch with a bare `existsById`, and never validates
       `userId` at all before writing it to a column with a real FK to `app_users`. A tenant-A
       employee can reference tenant-B's branch and user, and Postgres accepts it. Scope inheritance
@@ -1805,6 +1812,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
 ### Phase 8 — Operations
 
 - [ ] **P8-1** Per-tenant backup/restore (D-5).
+      **NOT LIVE (audit 2026-08-15)** — a whole-database restore IS this tenant's restore while there is one tenant. Becomes real with tenant #2 (D-5).
 - [ ] **P8-2** RLS backstop, or a recorded rejection (D-4).
 > **Owner decision 2026-08-15: LOGIN audit rows stay unattributed.** `LOGIN.SUCCESS` / `LOGIN.FAIL`
 > are written through the unauthenticated `record(event, actor, ip)` path, which has no established
@@ -1813,14 +1821,18 @@ make it true, and they must land before any predicate in Phase 3 is written.
 > knowingly: login history cannot be filtered per customer**, which is a partial limit on P8-3's goal.
 > Every other audit row is stamped.
 
-- [ ] **P8-3** Add the organisation to the logging MDC — currently request, user, company, branch.
+- [x] **P8-3** Add the organisation to the logging MDC — currently request, user, company, branch.
+      **DONE 2026-08-15.** `organisationId` added to `logback-spring.xml`'s `includeMdcKeyName`. It had been in the MDC since Phase 2 but was never rendered. **Verified only as far as "the prod logback config loads"** — MDC fields appear on log lines emitted during a request, and none were emitted on the probed paths.
       Support cannot filter a log stream to one customer.
 - [ ] **P8-4** Tag metrics by tenant — they are untagged global gauges, so "whose outbox is stuck"
+      **NOT LIVE (audit 2026-08-15)** — single-tenant global gauges still answer "whose outbox is stuck", because there is one tenant.
       and "who is generating the load" are unanswerable.
 - [ ] **P8-5** Per-tenant mail identity. A single global sender with no per-tenant from-address
+      **NOT LIVE (audit 2026-08-15)** — mail is unconfigured on every estate; the `EmailSender` bean is never created.
       means every customer's notifications leave under the platform's identity, and a misdirected
       email carries no clue whose it was.
-- [ ] **P8-6** `StandingOrderServiceImpl`'s scheduled sweep asserts scope against a **null**
+- [x] **P8-6** `StandingOrderServiceImpl`'s scheduled sweep asserts scope against a **null**
+      **DONE 2026-08-15.** A per-standing-order `Principal.system(companyId, branchId)`, cleared in a `finally`. Standing orders had **never generated anything on any installation** — the scheduler thread had no principal, `assertCanActIn` denied, and the exception was swallowed. Regression test verified to fail on the pre-fix behaviour. **Multi-node hazard deliberately NOT fixed** and documented in place: the sweep takes no lock and creates sales orders.
       principal on the scheduler thread, is denied, and has the exception swallowed —
       **standing orders have never generated anything**. No leak today because it creates nothing,
       but do not repair it with a global system principal (`G14`). **Note the multi-node hazard when
@@ -1831,11 +1843,13 @@ make it true, and they must land before any predicate in Phase 3 is written.
       customer to **every** customer. Move it to a real secret store before the shared instance takes
       a second tenant, and update the blast-radius framing in that document.
 - [ ] **P8-8** **Deploy blast radius and rollback.** There is no canary or staged path (the CI jobs are
+      **PREMISE STALE (audit 2026-08-15)** — "organisations.status has zero readers" is no longer true; P5-3 shipped. **And 1.8.2 is now the worked example this item exists for**: a one-line config change with no migration still took the live customer down, because `application-prod.yml` is parsed by no environment except theirs. `ApplicationYamlParsesTest` closes that specific hole; the staged-rollout question this item asks is still open.
       all pre-merge), one Flyway run touches every tenant, and **per-tenant rollback is not expressible**
       — `organisations.status` exists with zero readers, so "suspend tenant X while we fix their bug"
       is not a lever until P5-3. Write the incident-comms procedure for telling N customers at once;
       nothing in this plan covers it.
 - [ ] **P8-9** **Enforce the append-only audit invariant. ⬤ CONFIRMED ON A LIVE CLIENT 2026-08-14.**
+      **NOT A LIVE CONTROL GAP (audit 2026-08-15, refuted my own framing).** US-IAM-010 AC2 is "cannot be edited or deleted **through the application**", and that holds: `AuditService` declares no update or delete, `AuditLog` is `@Getter`-only, and the impl does a single `save` on a transient entity. The exposure delta of the missing REVOKE is **zero** — the runtime role is superuser or schema owner in every shipped topology. What is actually open is an overstatement in CLAUDE.md/ARCHITECTURE.md, not a control.
       CLAUDE.md invariant 7 and ADR-0004 D-5 say the app DB role is denied UPDATE/DELETE on the audit
       table. Measured on **production and QA**: the `erp` role holds
       `INSERT, SELECT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` on `audit_logs`. **The control
@@ -1843,7 +1857,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       P1-8's "an audit backfill might fail `permission denied`" is **resolved, there is no such risk**;
       and the audit trail of a live paying customer is presently mutable by the application role.
       Becomes load-bearing when D-6 must prove one tenant's rows were deleted and no others.
-- [ ] **P8-10** **Capacity floor.** `application-prod.yml` deliberately omits Hikari sizing, so
+- [x] **P8-10** **Capacity floor.** `application-prod.yml` deliberately omits Hikari sizing, so
+      **DONE 2026-08-15.** `spring.task.scheduling.pool.size` defaults to 4 in the prod profile. Boot's default is ONE thread shared by the outbox dispatcher, the standing-order run, the notification scan and the metrics sweep — and the notification scan walks every company serially, blocking the sweep. **This edit shipped as 1.8.2 with a duplicate top-level `spring:` key and took the live customer down**; see the note at P8-8.
       production runs on the **default of 10 connections deployment-wide**; and
       `spring.task.scheduling.pool.size` is unset everywhere, so Boot's default of **1 thread** is
       shared by the 1-second outbox poller, the 30-second metrics job, the hourly notification scan
