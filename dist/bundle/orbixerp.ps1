@@ -354,21 +354,57 @@ function Invoke-Restore {
     Write-Step 'Stopping the application (the database keeps running)'
     [void](Invoke-Compose @('stop', 'api'))
 
-    Write-Step 'Restoring'
-    # --clean --if-exists drops existing objects first; --no-owner tolerates a restore
-    # into a database owned by a differently-named role.
-    $code = Invoke-PgTool @('pg_restore', '-h', (Get-DbHost), '-p', (Get-DbPort),
-                            '-U', (Get-EnvValue 'ERP_DB_USER' 'erp'),
-                            '-d', (Get-EnvValue 'ERP_DB_NAME' 'erp'),
-                            '--clean', '--if-exists', '--no-owner', "/backups/$base")
+    $dbUser = Get-EnvValue 'ERP_DB_USER' 'erp'
+    $dbName = Get-EnvValue 'ERP_DB_NAME' 'erp'
+    $safety = "safety-before-restore-$(Get-Date -Format 'yyyyMMdd-HHmmss').dump"
+
+    # A restore is the one irreversible command in this script, and until now it took no
+    # safety copy: restoring the wrong file destroyed the current database with nothing to
+    # go back to. Take one first, and refuse to continue if it fails.
+    Write-Step 'Taking a safety copy of the CURRENT database first'
+    $code = Invoke-PgTool @('pg_dump', '-h', (Get-DbHost), '-p', (Get-DbPort),
+                            '-U', $dbUser, '-d', $dbName, '-Fc', '-f', "/backups/$safety")
     if ($code -ne 0) {
-        Write-Warn 'pg_restore reported errors. Some are normal on a clean restore (objects that did not exist). Review the output above.'
+        Stop-WithError "Could not back up the current database, so the restore has been cancelled.`nNothing was changed. Check that the database is running:  .\orbixerp.ps1 status"
+    }
+    Write-Ok "Safety copy saved: backups/$safety"
+
+    # Empty the schema, then restore into it. This replaces `pg_restore --clean --if-exists`,
+    # which drops objects one by one in the dump's own order and fails whenever the live
+    # database holds an object the backup does not know about - a constraint from a newer
+    # release, say - because the dependent object blocks the drop. The restore then
+    # half-succeeded, and the old code downgraded that to a warning and printed
+    # "Restore complete" over a database that had only partly been rolled back.
+    #
+    # DROP SCHEMA ... CASCADE clears everything regardless of the backup's contents and
+    # needs only the owning role - not a superuser, and not CREATEDB.
+    Write-Step 'Clearing the current database'
+    $code = Invoke-PgTool @('psql', '-h', (Get-DbHost), '-p', (Get-DbPort),
+                            '-U', $dbUser, '-d', $dbName, '-v', 'ON_ERROR_STOP=1', '-q',
+                            '-c', 'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();',
+                            '-c', 'DROP SCHEMA IF EXISTS public CASCADE;',
+                            '-c', "CREATE SCHEMA public AUTHORIZATION ""$dbUser"";",
+                            '-c', "GRANT ALL ON SCHEMA public TO ""$dbUser"";")
+    if ($code -ne 0) {
+        Stop-WithError "Could not clear the database, so nothing has been restored.`nYour data is untouched and a safety copy is at backups/$safety`nStart the system again with:  .\orbixerp.ps1 start"
+    }
+
+    Write-Step 'Restoring'
+    # No --clean: the schema is already empty. Errors are now FATAL - a partly-restored
+    # database that reports success is worse than a failure you can see.
+    $code = Invoke-PgTool @('pg_restore', '-h', (Get-DbHost), '-p', (Get-DbPort),
+                            '-U', $dbUser, '-d', $dbName,
+                            '--no-owner', '--exit-on-error', "/backups/$base")
+    if ($code -ne 0) {
+        Stop-WithError "The restore FAILED and the database is now incomplete. Do not start the system.`nRestore the safety copy taken a moment ago:`n    .\orbixerp.ps1 restore backups/$safety`nIf that also fails, contact support and quote both file names."
     }
 
     Write-Step 'Restarting the application'
     [void](Invoke-Compose @('up', '-d'))
     Wait-Healthy
     Write-Ok 'Restore complete.'
+    Write-Host "  The safety copy of the database as it was before this restore is kept at"
+    Write-Host "  backups/$safety in case you need to undo this."
 }
 
 function Invoke-Update {

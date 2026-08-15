@@ -10,6 +10,7 @@ public interface LeaveTypeRepository extends JpaRepository<LeaveType, Long> {
 
     Optional<LeaveType> findByUid(String uid);
 
+
     @Query("SELECT l.companyId FROM LeaveType l WHERE l.uid = :uid")
     Optional<Long> findCompanyIdByUid(String uid);
 

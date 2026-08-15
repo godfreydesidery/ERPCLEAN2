@@ -41,26 +41,30 @@ class AuditServiceImpl implements AuditService {
         Long actorUserId = null;
         Long companyId   = null;
         Long branchId    = null;
+        Long organisationId = null;
 
         String ip = null;
         if (ctx != null) {
             actorUserId = ctx.userId();
             companyId   = ctx.companyId();
             branchId    = ctx.branchId();
+            organisationId = ctx.organisationId();
             ip          = ctx.ip();
         }
 
-        persist(event, actorUserId, companyId, branchId, ip);
+        persist(event, actorUserId, companyId, branchId, ip, organisationId);
     }
 
     /**
      * Unauthenticated path (login/lockout): explicit actor + IP; company/branch are null because
-     * there is no authenticated scope at this point (ADR-0004 D-3).
+     * there is no authenticated scope at this point (ADR-0004 D-3). The organisation is null for the
+     * same reason — there is no established tenant yet, and guessing one would write a fabricated
+     * attribution into an append-only table.
      */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(AuditEvent event, Long actorUserId, String ip) {
-        persist(event, actorUserId, null, null, ip);
+        persist(event, actorUserId, null, null, ip, null);
     }
 
     /**
@@ -76,8 +80,9 @@ class AuditServiceImpl implements AuditService {
         Long actorUserId = ctx != null ? ctx.userId() : null;
         Long companyId   = ctx != null ? ctx.companyId() : null;
         Long branchId    = ctx != null ? ctx.branchId() : null;
+        Long organisationId = ctx != null ? ctx.organisationId() : null;
         String ip        = ctx != null ? ctx.ip() : null;
-        persist(event, actorUserId, companyId, branchId, ip);
+        persist(event, actorUserId, companyId, branchId, ip, organisationId);
     }
 
     // -------------------------------------------------------------------------
@@ -88,7 +93,8 @@ class AuditServiceImpl implements AuditService {
                          Long actorUserId,
                          Long companyId,
                          Long branchId,
-                         String ip) {
+                         String ip,
+                         Long organisationId) {
         String detailJson = serializeDetail(event.detail());
         AuditLog log = new AuditLog(
                 actorUserId,
@@ -100,7 +106,8 @@ class AuditServiceImpl implements AuditService {
                 branchId,
                 detailJson,
                 Instant.now(),
-                ip);
+                ip,
+                organisationId);
         auditRepository.save(log);
     }
 

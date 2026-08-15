@@ -37,6 +37,15 @@ public class AuthorityCeiling {
      * {@code R__seed_permissions.sql}. See {@code DefaultRoleBundlesSeededTest} — no shipped
      * operational bundle may carry any of these.
      */
+    /**
+     * Tier 3 (§1.2): the vendor's own roles. Never conferrable by a tenant, whatever they hold.
+     *
+     * <p>Named by code rather than derived from {@code is_system}, because every shipped bundle is
+     * also {@code is_system} — that flag says "we ship it", not "only we may grant it". The two were
+     * conflated before D-3, which is exactly what made the bundles ungrantable.
+     */
+    static final Set<String> PLATFORM_TIER_3 = Set.of("PLATFORM_OPERATOR");
+
     static final Set<String> RESERVED = Set.of(
             "USER.MANAGE",          // create/update/disable/unlock users; set passwords
             "USER.COMPANY.MANAGE",  // assign/remove company memberships (a grant prerequisite)
@@ -97,11 +106,42 @@ public class AuthorityCeiling {
      */
     public void assertCanConferRole(RequestContext.Principal principal, boolean roleIsSystem,
                                     Collection<String> roleCodes) {
+        assertCanConferRole(principal, roleIsSystem, roleCodes, null);
+    }
+
+    /**
+     * D-3 (ADR-0062 P4-2). Replaces the blanket "non-root may never confer an {@code is_system} role".
+     *
+     * <p>That rule made the twelve shipped bundles <b>decorative</b>: they are all {@code is_system},
+     * so a tenant's own administrator could not grant a single one of them to their own staff. A
+     * platform-wide role nobody in the organisation can confer is not a role, it is a decoration —
+     * and the workaround people reach for is {@code setRoot(true)}, which is the sharpest risk in the
+     * whole design.
+     *
+     * <p>The replacement is a tier rule, not a relaxation:
+     * <ol>
+     *   <li><b>Tier 3</b> ({@code PLATFORM_OPERATOR}) is never conferrable by a tenant, at any
+     *       authority. It is the vendor's own role and it does not belong to a customer's ladder.
+     *       Listed by code because the role does not exist yet (D-2 stage 2) and this must already
+     *       refuse it on the day it does.</li>
+     *   <li><b>Tiers 1 and 2</b> (the bundles, and {@code ORG_ADMIN}) go through the ordinary ceiling:
+     *       you may confer only what you already hold, and the reserved floor still applies. ADR-0059's
+     *       escalation guard is therefore <b>intact</b> — it is the only thing standing between
+     *       {@code ROLE.MANAGE} and self-elevation, and this change does not touch it.</li>
+     * </ol>
+     *
+     * <p>The grantee being inside the caller's own organisation is enforced by the caller
+     * ({@code UserRoleServiceImpl}, P3-3) before this is reached, so it is not re-checked here.
+     *
+     * @param roleCode the role's code, used only for the tier-3 test; null skips it
+     */
+    public void assertCanConferRole(RequestContext.Principal principal, boolean roleIsSystem,
+                                    Collection<String> roleCodes, String roleCode) {
         if (principal != null && principal.root()) {
             return;
         }
-        if (roleIsSystem) {
-            throw ForbiddenException.notPermitted(); // only root may grant a system role (e.g. ORG_ADMIN)
+        if (roleCode != null && PLATFORM_TIER_3.contains(roleCode)) {
+            throw ForbiddenException.notPermitted();
         }
         assertCanConfer(principal, roleCodes);
     }

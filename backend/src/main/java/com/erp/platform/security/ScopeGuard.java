@@ -141,6 +141,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ScopeGuard {
 
+    private final TenancyScopeEnforcer     tenancy;
+    private final CompanyTenantIndex       companyTenants;
     private final CompanyRepository        companies;
     private final BranchRepository         branches;
     private final CustomerRepository       customers;
@@ -266,7 +268,9 @@ public class ScopeGuard {
     private final WorkOrderOperationRepository  workOrderOperationsRepo;
     private final AuditService             audit;
 
-    public ScopeGuard(CompanyRepository companies,
+    public ScopeGuard(TenancyScopeEnforcer tenancy,
+                      CompanyTenantIndex companyTenants,
+                      CompanyRepository companies,
                       BranchRepository branches,
                       CustomerRepository customers,
                       SupplierRepository suppliers,
@@ -381,6 +385,8 @@ public class ScopeGuard {
                       PettyCashFundRepository pettyCashFunds,
                       PettyCashTransactionRepository pettyCashTransactions,
                       AuditService audit) {
+        this.tenancy        = tenancy;
+        this.companyTenants = companyTenants;
         this.companies      = companies;
         this.branches       = branches;
         this.customers      = customers;
@@ -643,6 +649,29 @@ public class ScopeGuard {
         if (principal == null || companyId == null) {
             return false;
         }
+
+        // P3-11 (ADR-0062). THE TENANT CHECK COMES FIRST, AND IT APPLIES TO ROOT.
+        //
+        // The `root ||` below short-circuits the company comparison, and `is_root` is
+        // deployment-global. Guarding only the X-Branch-Uid header - as the plan originally framed
+        // this - leaves the far larger surface open: 89 controllers take `@RequestParam Long
+        // companyId` straight from the caller, and every one of them reaches here. One is_root row
+        // would otherwise turn a query parameter into a read/write API over every tenant's ledger,
+        // with no header and no exploit, writing rows that carry the victim's company_id and so look
+        // native in every report.
+        //
+        // D-2 re-bounds root to "full authority inside my own organisation". This line is where that
+        // sentence becomes true.
+        //
+        // isForeignTenant, not !isSameTenant: it fires only on a POSITIVE mismatch (both sides known
+        // and different). A null organisation on either side is a data gap, not evidence, and denying
+        // on it here would lock an unattributed account out of the entire product. See the method's
+        // javadoc for why that trade costs nothing reachable. SYSTEM principals (null userId - the
+        // eighteen outbox handlers) are exempt inside it, so replaying a committed event still works.
+        if (tenancy.isForeignTenant(principal, companyTenants.organisationOf(companyId))) {
+            return false;
+        }
+
         return principal.root() || companyId.equals(principal.companyId());
     }
 
@@ -651,10 +680,26 @@ public class ScopeGuard {
      * unresolvable target denies — never "allow because unknown".
      */
     public boolean canActOn(RequestContext.Principal principal, String targetType, String uid) {
+        var targetCompany = companyIdOf(targetType, uid);
+
         if (principal != null && principal.root()) {
-            return true;
+            // P3-11 (ADR-0062). Root's short-circuit used to return true before canActIn was ever
+            // reached, which would have made the tenant check there dead code for every uid-addressed
+            // operation - the larger half of the API. Root keeps exactly what it had inside its own
+            // organisation, including acting across companies; what it loses is reach into another
+            // tenant's row.
+            //
+            // An unresolvable target (a targetType companyIdOf does not know) still returns true, as
+            // before. That is deliberate: making it deny would 403 root on endpoints that have
+            // nothing to do with tenancy, and a target that cannot be resolved to a company cannot be
+            // shown to belong to another tenant either.
+            return targetCompany
+                    .map(companyId ->
+                            !tenancy.isForeignTenant(principal, companyTenants.organisationOf(companyId)))
+                    .orElse(true);
         }
-        return companyIdOf(targetType, uid)
+
+        return targetCompany
                 .map(companyId -> canActIn(principal, companyId))
                 .orElse(false);
     }

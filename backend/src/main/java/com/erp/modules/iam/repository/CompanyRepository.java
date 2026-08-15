@@ -24,4 +24,17 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
      */
     @Query("SELECT c FROM Company c WHERE c.id = :id")
     Optional<Company> findScopedById(@Param("id") Long id);
+
+    /**
+     * The organisation owning a company, without hydrating the company (ADR-0062 P3-11).
+     *
+     * <p>Feeds {@code CompanyTenantIndex}, which sits under every one of {@code ScopeGuard}'s 698
+     * call sites. Unlike {@link #findScopedById} the id here CAN be attacker-controlled - it arrives
+     * as {@code @RequestParam companyId} on 89 controllers - and that is precisely why it is
+     * queried: this is the lookup that decides whether the caller may touch that company at all.
+     * Nothing about the row is returned to the caller, only the id used for the comparison, so it is
+     * not a confused-deputy read.
+     */
+    @Query("SELECT c.organisation.id FROM Company c WHERE c.id = :id")
+    Optional<Long> findOrganisationIdById(@Param("id") Long id);
 }

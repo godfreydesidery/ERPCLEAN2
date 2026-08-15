@@ -6,9 +6,11 @@ import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.platform.audit.AuditActions;
@@ -16,6 +18,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.AuthorityCeiling;
@@ -43,6 +46,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UserServiceImpl implements UserService {
 
+    /**
+     * The sentinel platform organisation's alias (ADR-0062 D-2). Users created inside it keep BARE
+     * usernames — see {@code composeUsername}.
+     *
+     * <p>The organisation itself does not exist yet (D-2 stage 2), so this is currently unreachable.
+     * It is here rather than added later because the day that organisation is created is the day the
+     * rule has to already hold: a platform operator issued as {@code ops@platform} would have to be
+     * renamed afterwards, and usernames are never rewritten (§0.2).
+     */
+    private static final String PLATFORM_ORGANISATION_ALIAS = "platform";
+
     private final AppUserRepository users;
     private final UserCompanyRepository userCompanies;
     private final UserRoleRepository userRoles;
@@ -51,6 +65,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
     private final AuthorityCeiling authorityCeiling;
+    private final OrganisationRepository organisations;
 
     public UserServiceImpl(AppUserRepository users,
                            UserCompanyRepository userCompanies,
@@ -59,7 +74,9 @@ public class UserServiceImpl implements UserService {
                            PasswordEncoder passwordEncoder,
                            PasswordPolicy passwordPolicy,
                            AuditService audit,
-                           AuthorityCeiling authorityCeiling) {
+                           AuthorityCeiling authorityCeiling,
+                           OrganisationRepository organisations) {
+        this.organisations = organisations;
         this.users = users;
         this.userCompanies = userCompanies;
         this.userRoles = userRoles;
@@ -72,7 +89,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto create(CreateUserRequest request) {
-        String username = request.username().toLowerCase();
+        RequestContext.Principal creator = RequestContext.get();
+        String username = composeUsername(request.username(), creator);
         if (users.existsByUsername(username)) {
             throw new ConflictException("Username already exists: " + username);
         }
@@ -83,6 +101,12 @@ public class UserServiceImpl implements UserService {
         user.setEmail(request.email());
         user.setPhone(request.phone());
         // is_root stays false by default — never settable via the API.
+
+        // The new user belongs to the CREATOR's tenant (ADR-0062 P2-1). Taken from the
+        // authenticated principal, never from the request body: accepting a tenant from input is
+        // exactly the caller-supplied scope this design exists to remove, and it would let an
+        // administrator mint an account inside somebody else's organisation.
+        user.setOrganisationId(creator != null ? creator.organisationId() : null);
         AppUser saved = users.save(user);
 
         audit.record(AuditEvent.of(AuditActions.USER_CREATE, "app_users", saved.getId(), saved.getUid())
@@ -143,6 +167,15 @@ public class UserServiceImpl implements UserService {
         // Root always resolves; non-root callers are subject to two guards:
         //   1. Root user → 404 (don't reveal existence — security hardening 2026-06-25).
         //   2. Out-of-company → 404 (tenant-isolation fix, security audit 2026-06-25).
+        // P3-8: applies to root as well, and BEFORE the root branch below - resolving a user by uid
+        // across a tenant boundary is the confused-deputy shape this whole phase exists to close.
+        // NotFound, never Forbidden: "exists but is not yours" is an existence oracle.
+        if (principal != null && principal.root()
+                && principal.organisationId() != null
+                && user.getOrganisationId() != null
+                && !principal.organisationId().equals(user.getOrganisationId())) {
+            throw NotFoundException.of("User", uid);
+        }
         if (principal == null || !principal.root()) {
             if (user.isRoot()) {
                 throw NotFoundException.of("User", uid);
@@ -163,7 +196,15 @@ public class UserServiceImpl implements UserService {
         // company; null company → fail-closed empty list.
         RequestContext.Principal principal = RequestContext.get();
         if (principal != null && principal.root()) {
-            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+            // P3-8 (ADR-0062): "org-wide" used to mean the whole DATABASE — on a shared instance one
+            // is_root row would list every customer's staff, by name. Root now sees its own tenant.
+            // NULL-tolerant: an unattributed account must stay visible to the screen an admin would
+            // use to spot and fix it. A root with no organisation of its own falls back to the old
+            // behaviour rather than seeing nothing — a data gap must not blank the admin console.
+            Long org = principal.organisationId();
+            return (org == null ? users.findAllByOrderByUsername()
+                                : users.findVisibleToOrganisationOrderByUsername(org))
+                    .stream().map(UserDto::from).toList();
         }
         Long companyId = (principal != null) ? principal.companyId() : null;
         if (companyId == null) {
@@ -178,10 +219,21 @@ public class UserServiceImpl implements UserService {
     public List<UserDto> listOrgWide() {
         // Root sees the full org list; non-root callers see org-wide but without root users.
         RequestContext.Principal principal = RequestContext.get();
-        if (principal != null && principal.root()) {
-            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+        // P3-4 (ADR-0062): confined to the caller's tenant, ROOT INCLUDED. The root exemption here
+        // was the whole hole: `is_root` is deployment-global, so an unscoped root list returns every
+        // non-root user in the DATABASE - a complete cross-tenant directory, and under the @alias
+        // convention the tenant list with it. D-2 re-bounds root to "full authority inside my own
+        // organisation", and this is one of the places that has to mean something.
+        Long org = principal == null ? null : principal.organisationId();
+        if (org == null) {
+            // No tenant context (bootstrap, async). Preserve the pre-tenancy behaviour rather than
+            // returning an empty list to a legitimate caller mid-transition.
+            return principal != null && principal.root()
+                    ? users.findAllByOrderByUsername().stream().map(UserDto::from).toList()
+                    : users.findByRootFalseOrderByUsername().stream().map(UserDto::from).toList();
         }
-        return users.findByRootFalseOrderByUsername().stream().map(UserDto::from).toList();
+        return users.findByRootFalseAndOrganisationIdOrderByUsername(org).stream()
+                .map(UserDto::from).toList();
     }
 
     @Override
@@ -272,6 +324,16 @@ public class UserServiceImpl implements UserService {
     private AppUser requireInScope(String uid) {
         AppUser user = requireByUid(uid);
         RequestContext.Principal principal = RequestContext.get();
+
+        // P3-3 (ADR-0062, G1/G12): the ORGANISATION check comes FIRST, before the company-membership
+        // oracle below. That ordering is the whole point: the membership row is precisely what the
+        // G1 takeover chain creates, so consulting it first means the attacker is asked to vouch for
+        // themselves. Organisation membership cannot be granted by the caller.
+        if (principal != null && principal.organisationId() != null
+                && user.getOrganisationId() != null
+                && !principal.organisationId().equals(user.getOrganisationId())) {
+            throw NotFoundException.of("User", uid);
+        }
         if (principal == null || !principal.root()) {
             if (user.isRoot()) {
                 throw NotFoundException.of("User", uid);
@@ -282,5 +344,52 @@ public class UserServiceImpl implements UserService {
             }
         }
         return user;
+    }
+
+    /**
+     * Builds the stored username from the LOCAL PART the caller supplied (ADR-0062 P2-2c).
+     *
+     * <p>The tenant half is never taken from input. It is resolved from the creator's own
+     * {@code organisation_id} and appended here, so an administrator cannot mint an account that
+     * reads as another customer's — {@code smith@othertenant} is not a username a client can ask
+     * for. That is why any {@code @} in the local part is rejected outright rather than trimmed:
+     * left alone, {@code smith@evil} would compose to {@code smith@evil@jambobora}.
+     *
+     * <p>D-7, as the owner stated it: <b>at login the user types the WHOLE username; at registration
+     * the administrator types only the local part and the system appends the rest.</b> The tenant
+     * half is therefore never typed by anyone — it is resolved here from the creator's own
+     * organisation.
+     *
+     * <p>An organisation with no alias keeps BARE usernames. Note that
+     * {@code TenancyReconciler} assigns an alias to EVERY organisation on boot, so on a live
+     * installation this composes from the moment 1.8.0 lands — it is not dormant. That is why the
+     * creation form must show the suffix and the composed result before saving (P6-2b): an
+     * administrator who types {@code john}, is shown nothing, and tells the new starter to sign in
+     * as {@code john} has been set up to fail. Names already issued are never rewritten (§0.2), so
+     * an estate that predates this keeps its bare names alongside newly composed ones.
+     */
+    private String composeUsername(String requested, RequestContext.Principal creator) {
+        String local = requested == null ? "" : requested.trim().toLowerCase();
+        if (local.indexOf('@') >= 0) {
+            throw new IllegalArgumentException("The username must not contain '@'.");
+        }
+        if (creator == null || creator.organisationId() == null) {
+            return local;   // no tenant context (bootstrap, tests) — behave exactly as before
+        }
+        String alias = organisations.findScopedById(creator.organisationId())
+                .map(Organisation::getAlias)
+                .filter(a -> a != null && !a.isBlank())
+                .orElse(null);
+
+        // PLATFORM users stay PLAIN (owner, 2026-08-15). The suffix exists to keep usernames unique
+        // ACROSS TENANTS so every customer can use the names their staff actually prefer - two
+        // organisations can each have a `godfrey`. A platform operator belongs to no customer, there
+        // is a handful of them, and they are unique among themselves already, so the suffix would be
+        // noise on the accounts that most often get typed under pressure.
+        if (PLATFORM_ORGANISATION_ALIAS.equals(alias)) {
+            return local;
+        }
+
+        return alias == null ? local : local + "@" + alias;
     }
 }

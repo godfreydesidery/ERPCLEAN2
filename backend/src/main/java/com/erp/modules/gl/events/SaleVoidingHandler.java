@@ -88,8 +88,7 @@ public class SaleVoidingHandler implements DomainEventHandler {
 
         // Establish system RequestContext for the posting engine's ScopeGuard checks
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, companyId, event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(companyId, event.getBranchId()));
         try {
             LocalDate reversalDate = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
             safeInvoker.postReversalInNewTx(

@@ -260,17 +260,39 @@ INSERT INTO permissions (code, module, description) VALUES
     ('WORKORDER.QC', 'manufacturing', 'RESERVED — no workflow in v1; hook for future QC workflow'),
     ('WORKORDER.RELEASE', 'manufacturing', 'Release a planned work order (BOM explosion + component plan)'),
     ('PAYMENTTERMS.VIEW', 'parties', 'View payment terms masters'),
-    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters')
+    ('PAYMENTTERMS.MANAGE', 'parties', 'Create, update and archive payment terms masters'),
+    -- Organisation codes (ADR-0062 P3-10). Until now the organisation endpoints borrowed
+    -- COMPANY.VIEW, which cannot express the D-2 split between "my own tenant" and "the platform".
+    ('ORG.VIEW', 'iam', 'View the organisation this user belongs to'),
+    -- module = 'platform' is a SECURITY DISCRIMINATOR, not a label: the ORG_ADMIN CROSS JOIN below
+    -- excludes it, so nothing in this module ever auto-flows into a tenant's admin role (R-2).
+    -- Anything added here must be a capability the PLATFORM operator holds and a customer must not.
+    -- Note the failure direction is safe: mis-marking a tenant capability as 'platform' withholds
+    -- it (a support ticket), while the reverse would hand every tenant a platform capability.
+    ('ORG.CREATE', 'platform', 'Provision a new tenant organisation (platform operator only)'),
+    ('ORG.SUSPEND', 'platform', 'Suspend or resume a tenant organisation (platform operator only)')
 ON CONFLICT (code) DO UPDATE
     SET module = EXCLUDED.module, description = EXCLUDED.description;
 
--- Grant the entire catalogue to the global ORG_ADMIN role (created in V1). CROSS JOIN over the
--- permissions table => ORG_ADMIN always holds every permission, including ones added above later.
+-- Grant the catalogue to the global ORG_ADMIN role (created in V1). CROSS JOIN over the permissions
+-- table => ORG_ADMIN always holds every permission, including ones added above later.
+--
+-- EXCEPT the 'platform' module (R-2, ADR-0062 P4-1e). ORG_ADMIN is a TENANT role: it is the
+-- customer's own administrator, and this CROSS JOIN hands it every code that exists, forever,
+-- automatically. Without the exclusion, adding a platform capability such as ORG.SUSPEND would give
+-- every customer's admin the power to suspend organisations on the next deploy - no review, no
+-- migration, just a checksum change.
+--
+-- The exclusion must be in place BEFORE any platform code is added, and that ordering is not
+-- stylistic: this statement is INSERT ... ON CONFLICT DO NOTHING, so it grants but never revokes.
+-- A code that flows in once stays in, and taking it back would need a separate revoking migration
+-- against every deployed database.
 INSERT INTO role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM   roles r
 CROSS JOIN permissions p
 WHERE  r.code = 'ORG_ADMIN'
+  AND  p.module <> 'platform'
 ON CONFLICT DO NOTHING;
 
 
@@ -297,7 +319,17 @@ INSERT INTO roles (uid, code, name, description, is_system) VALUES
   ('0000000000000000000000000A', 'HR_PAYROLL_MANAGER', 'HR and Payroll Manager', 'Employees, leave, payroll run/approve/post/disburse.', true),
   ('0000000000000000000000000B', 'FINANCE_DIRECTOR', 'Finance Director', 'Accountant plus GL close, VAT file, FA, budgeting, policy.', true),
   ('0000000000000000000000000C', 'PRODUCTION_MANAGER', 'Production Manager', 'Work orders, BOMs, material movements, WIP costing.', true)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_system = true;
+-- ON CONFLICT needs an index it can INFER. V102 replaced the global uq_role_code with two partial
+-- indexes, so a bare `ON CONFLICT (code)` no longer matches anything and this statement fails with
+-- "there is no unique or exclusion constraint matching the ON CONFLICT specification". The predicate
+-- below points Postgres at uq_role_code_global.
+--
+-- It also FIXES a real bug. Without the predicate this clause matched a TENANT's role of the same
+-- code and flipped it to is_system = true - silently adopting a customer's own role as a shipped
+-- one, which is the case TenancyReconciler logs and refuses to guess about. Restricted to the global
+-- partition, the seed can no longer see a tenant's roles at all.
+ON CONFLICT (code) WHERE organisation_id IS NULL
+DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_system = true;
 
 INSERT INTO role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM (VALUES

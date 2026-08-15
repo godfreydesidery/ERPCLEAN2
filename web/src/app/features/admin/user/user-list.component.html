@@ -13,9 +13,28 @@
     <div class="row g-2 align-items-end">
       <div class="col-sm-3">
         <label class="form-label small text-muted mb-1" for="newUsername">Username</label>
-        <input id="newUsername" name="newUsername" type="text" class="form-control"
-               [ngModel]="newUsername()" (ngModelChange)="newUsername.set($event)"
-               required [disabled]="saving()" autocomplete="off" />
+        <!-- P6-2b (ADR-0062 D-7): the administrator types only the local part; the server appends
+             the organisation's alias. The suffix is shown as a fixed, non-editable adornment - it is
+             never a picker, because the tenant half is resolved from the signed-in admin's own
+             organisation and cannot be chosen. -->
+        <div class="input-group">
+          <input id="newUsername" name="newUsername" type="text" class="form-control"
+                 [ngModel]="newUsername()" (ngModelChange)="newUsername.set($event)"
+                 required [disabled]="saving()" autocomplete="off"
+                 [attr.aria-describedby]="usernameSuffix() ? 'newUsernameSuffix newUsernameHint' : null" />
+          @if (usernameSuffix(); as suffix) {
+            <span class="input-group-text mono" id="newUsernameSuffix">{{ suffix }}</span>
+          }
+        </div>
+        @if (composedUsername(); as composed) {
+          <!-- Shown BEFORE saving, because the person who types this is not the person who will
+               later type it at login. Without it an admin creates `john`, tells the new starter to
+               sign in as `john`, and the login fails. -->
+          <p class="form-text small mb-0" id="newUsernameHint">
+            Will be created as <strong class="mono">{{ composed }}</strong> — give the new user the
+            full name to sign in with.
+          </p>
+        }
       </div>
       <div class="col-sm-3">
         <label class="form-label small text-muted mb-1" for="newDisplayName">Display name</label>

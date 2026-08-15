@@ -9,6 +9,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.TenancyScopeEnforcer;
 import com.erp.platform.security.auth.AuthenticationException;
 import com.erp.platform.security.config.SecurityProperties;
 import java.time.Duration;
@@ -93,6 +94,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
     private final PermissionResolver permissionResolver;
     private final AuditService audit;
     private final SecurityProperties props;
+    private final TenancyScopeEnforcer tenancy;
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(StepUpAuthServiceImpl.class);
 
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path. */
     private final String dummyHash;
@@ -105,7 +109,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                                  PasswordEncoder passwordEncoder,
                                  PermissionResolver permissionResolver,
                                  AuditService audit,
-                                 SecurityProperties props) {
+                                 SecurityProperties props,
+                                 TenancyScopeEnforcer tenancy) {
+        this.tenancy = tenancy;
         this.users = users;
         this.permissions = permissions;
         this.passwordEncoder = passwordEncoder;
@@ -132,6 +138,17 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         }
 
         AppUser authoriser = users.findByUsername(attemptedUsername).orElse(null);
+
+        // P2-3 (ADR-0062): findByUsername is a GLOBAL lookup, so without this a supervisor in one
+        // tenant could authorise a till override in another. Collapsed to the unknown-user path
+        // deliberately - same message, same dummy-hash timing, same throttle accounting. Refusing
+        // differently would tell a cashier that an account exists in some other organisation, which
+        // is exactly the enumeration this endpoint is otherwise careful to prevent.
+        if (authoriser != null && !tenancy.isSameTenant(caller, authoriser.getOrganisationId())) {
+            log.warn("Cross-tenant step-up refused: caller user={} org={} authoriser org={}",
+                    caller.userId(), caller.organisationId(), authoriser.getOrganisationId());
+            authoriser = null;
+        }
 
         if (authoriser == null) {
             // Equalise timing with the wrong-password path so response time can't enumerate users.
@@ -166,6 +183,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         // throttle, and it reuses the post-password message — a fumbled self-approval must look
         // exactly like "that user may not approve this", never like a hint to try someone else.
         if (authoriser.getId() != null && authoriser.getId().equals(caller.userId())) {
+            // Deliberately NOT counted, unlike the two post-password refusals below: the authoriser
+            // IS the caller, so a fumbled self-approval teaches them only their own password. There
+            // is no oracle here, and throttling an operator for a mis-tap would be pure friction.
             return refuse(code, attemptedUsername, authoriser, "SELF_APPROVAL",
                     NOT_AUTHORISED_MESSAGE, false);
         }
@@ -173,8 +193,10 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         if (code.isEmpty() || permissions.findByCode(code).isEmpty()) {
             // An unseeded/typo'd code must never read as "approved" — including for root, whose
             // permission short-circuit would otherwise wave anything through.
+            // Counted: see the NO_AUTHORITY note below. This is reached only once the password is
+            // proven, so it carries the same "that password was right" signal.
             return refuse(code, attemptedUsername, authoriser, "UNKNOWN_PERMISSION",
-                    NOT_AUTHORISED_MESSAGE, false);
+                    NOT_AUTHORISED_MESSAGE, countAgainst(caller.userId(), now));
         }
 
         // Resolve the AUTHORISER's authority in the CALLER's active scope: the override happens at
@@ -187,14 +209,32 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                 authoriser.isRoot(),
                 caller.companyId(),
                 caller.branchId(),
-                caller.ip());
+                caller.ip(),
+                // The AUTHORISER's own tenant, not the caller's. P2-3 will compare the two and
+                // refuse when they differ; today it is recorded so that check has something to
+                // compare. Taking the caller's here would make the comparison vacuous.
+                authoriser.getOrganisationId());
         boolean holds = permissionResolver.hasPermission(
                 authoriserInCallerScope, code, now.toEpochMilli());
 
         if (!holds) {
-            // Not a credential failure — the password was right — so it does not feed the throttle.
+            // G11 (ADR-0062 P3-9). This USED to be uncounted, on the reasoning that the password was
+            // right so it is not a credential failure. That reasoning is what made it an oracle: an
+            // operator could sit at the till trying a colleague's password against a permission that
+            // colleague does not hold, and every correct guess came back distinguishable from a wrong
+            // one, against no counter and no lockout — then be reused at the main login, where the
+            // real throttle lives.
+            //
+            // Counted now. The MESSAGE deliberately stays distinct: the screen has to be able to say
+            // "that user may not approve this", or a manager who genuinely lacks the permission is
+            // told their password is wrong and goes to reset it. What is removed is the *unlimited*
+            // guessing, which is the part that mattered — the caller's own throttle now advances,
+            // and the caller is an account they cannot rotate away from.
+            //
+            // Note the throttle counts against the CALLER, never the authoriser (see the class
+            // comment): a cashier still cannot lock a manager out by guessing at them.
             return refuse(code, attemptedUsername, authoriser, "NO_AUTHORITY", NOT_AUTHORISED_MESSAGE,
-                    false);
+                    countAgainst(caller.userId(), now));
         }
 
         throttles.remove(caller.userId());
@@ -236,6 +276,13 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         }
 
         AppUser authoriser = users.findByUid(uid).orElse(null);
+        // P2-3: same reasoning as the username path - a uid belonging to another tenant is
+        // indistinguishable from a uid the client invented.
+        if (authoriser != null && !tenancy.isSameTenant(caller, authoriser.getOrganisationId())) {
+            log.warn("Cross-tenant step-up (uid) refused: caller user={} org={} authoriser org={}",
+                    caller.userId(), caller.organisationId(), authoriser.getOrganisationId());
+            authoriser = null;
+        }
         if (authoriser == null || !authoriser.isActive() || authoriser.isLocked(now)) {
             // A uid the client invented, a leaver's account, a locked account — one answer for all
             // three. A till is not a place to enumerate who exists or who is suspended.
@@ -258,7 +305,8 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                 authoriser.isRoot(),
                 companyId != null ? companyId : caller.companyId(),
                 caller.branchId(),
-                caller.ip());
+                caller.ip(),
+                authoriser.getOrganisationId());  // the authoriser's tenant — see above
         if (!permissionResolver.hasPermission(authoriserInScope, code, now.toEpochMilli())) {
             return refuseUid(code, authoriser, "NO_AUTHORITY");
         }

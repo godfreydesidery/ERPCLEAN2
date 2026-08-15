@@ -64,8 +64,7 @@ public class LandedCostStockHandler implements DomainEventHandler {
         LandedCostAllocatedPayload payload = deserialise(event.getPayload());
 
         RequestContext.Principal previous = RequestContext.get();
-        RequestContext.set(new RequestContext.Principal(
-                null, "SYSTEM", false, event.getCompanyId(), event.getBranchId(), null));
+        RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
         try {
             // Sum allocation lines as the authoritative GL amount (ADR-0027 D-5 / adversarial fix).
             // Using payload.totalAmount() is unsafe: if the field is null, zero, or corrupted during

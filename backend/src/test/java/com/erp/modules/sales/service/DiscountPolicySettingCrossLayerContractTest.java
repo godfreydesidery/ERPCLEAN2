@@ -215,7 +215,8 @@ class DiscountPolicySettingCrossLayerContractTest {
         RequestContext.set(new RequestContext.Principal(
                 CASHIER_ID, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
         DiscountAuthorisationGuard guard = new DiscountAuthorisationGuard(
-                new DiscountPolicyProvider(settings), users, permissionResolver, audit);
+                new DiscountPolicyProvider(settings), users, permissionResolver, audit,
+                new com.erp.platform.security.TenancyScopeEnforcer());
         try {
             guard.authoriseLineDiscount(new DiscountAuthorisationGuard.DiscountRequest(
                     COMPANY_ID, INVOICE_ID, INVOICE_UID, "Sugar 1kg",

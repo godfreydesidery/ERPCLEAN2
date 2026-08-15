@@ -39,9 +39,11 @@ public class PermissionChecks {
         if (!permissionResolver.hasPermission(principal, code, System.currentTimeMillis())) {
             return false;
         }
-        // Root is already granted by hasPermission's short-circuit above, but ScopeGuard.canActOn
-        // also short-circuits for root, so calling it is safe and keeps the logic centralised.
-        return principal != null && (principal.root() || scopeGuard.canActOn(principal, targetType, uid));
+        // canActOn handles root itself, so the disjunct that used to sit here is not just redundant
+        // but harmful: `principal.root() ||` short-circuited BEFORE canActOn ran, which skipped the
+        // tenant check P3-11 put inside it. Root's company-level bypass still lives in canActOn,
+        // unchanged; only the cross-tenant reach is gone (ADR-0062).
+        return principal != null && scopeGuard.canActOn(principal, targetType, uid);
     }
 
     /**
@@ -82,7 +84,8 @@ public class PermissionChecks {
         if (!permissionResolver.isMember(principal, now)) {
             return false;
         }
-        // Member, but still must resolve to the caller's OWN company (root short-circuits inside).
-        return principal != null && (principal.root() || scopeGuard.canActOn(principal, targetType, uid));
+        // Member, but still must resolve to the caller's OWN company. Root's bypass lives inside
+        // canActOn; short-circuiting on it here would skip P3-11's tenant check (ADR-0062).
+        return principal != null && scopeGuard.canActOn(principal, targetType, uid);
     }
 }

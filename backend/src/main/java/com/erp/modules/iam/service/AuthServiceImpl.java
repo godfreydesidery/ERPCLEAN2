@@ -10,6 +10,8 @@ import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.repository.OrganisationRepository;
+import com.erp.platform.common.domain.MasterStatus;
 import com.erp.modules.iam.repository.RefreshTokenRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.platform.security.PermissionResolver;
@@ -46,6 +48,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtProperties jwtProps;
     private final LoginAttemptService loginAttempts;
     private final PermissionResolver permissionResolver;
+    private final OrganisationRepository organisations;
 
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path (G3). */
     private final String dummyHash;
@@ -59,7 +62,9 @@ public class AuthServiceImpl implements AuthService {
                            JwtService jwtService,
                            JwtProperties jwtProps,
                            LoginAttemptService loginAttempts,
-                           PermissionResolver permissionResolver) {
+                           PermissionResolver permissionResolver,
+                           OrganisationRepository organisations) {
+        this.organisations = organisations;
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.branches = branches;
@@ -97,6 +102,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AuthenticationException(
                     "Account is locked. Try again later or contact an administrator.");
         }
+        assertTenantIsOpen(user);
 
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             // Persist the failed-attempt/lockout bookkeeping in a SEPARATE transaction so it
@@ -228,5 +234,33 @@ public class AuthServiceImpl implements AuthService {
                 access.expiresAt().getEpochSecond(),
                 rawRefresh,
                 authUser);
+    }
+
+    /**
+     * P2-4 (ADR-0062): a user whose ORGANISATION is not active cannot log in, however good their
+     * password is. Without this, suspending a tenant would mean disabling their accounts one by
+     * one, and re-enabling them would mean remembering which ones were already disabled.
+     *
+     * <p>The message is deliberately distinct from a credential failure. A generic "invalid
+     * username or password" here would send a cashier to reset a password that is perfectly good,
+     * and their own office is the only place that can actually help them. It still says nothing
+     * about plans, billing or amounts - that is between the vendor and whoever signs the invoice,
+     * not something to render on a till.
+     *
+     * <p>A user with no organisation is let through: on a single-tenant install that is simply a
+     * row the backfill has not reached, and refusing there would lock people out of a system that
+     * has no tenancy to enforce yet.
+     */
+    private void assertTenantIsOpen(AppUser user) {
+        if (user.getOrganisationId() == null) {
+            return;
+        }
+        organisations.findScopedById(user.getOrganisationId())
+                .filter(o -> o.getStatus() != MasterStatus.ACTIVE)
+                .ifPresent(o -> {
+                    throw new AuthenticationException(
+                            "This account is not available at the moment. "
+                            + "Please contact your administrator.");
+                });
     }
 }

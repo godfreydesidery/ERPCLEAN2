@@ -1,6 +1,8 @@
 package com.erp.modules.approvals.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
@@ -96,8 +98,11 @@ class ApprovalEngineImplTest {
         when(userRepo.findById(RESOLVER_ID))
                 .thenReturn(Optional.of(userOf(RESOLVER_ID, "pm1", "")));
 
-        when(roleRepo.findByCode("PURCHASING_MANAGER"))
-                .thenReturn(Optional.of(new Role("PURCHASING_MANAGER", "Purchasing Manager")));
+        // P4-1c (ADR-0062): the engine resolves role codes through findVisibleByCode, which is
+        // scoped to the caller's tenant and returns a LIST — a derived findByCode returning Optional
+        // would throw IncorrectResultSizeDataAccessException once two tenants share a code.
+        when(roleRepo.findVisibleByCode(eq("PURCHASING_MANAGER"), any()))
+                .thenReturn(List.of(new Role("PURCHASING_MANAGER", "Purchasing Manager")));
 
         ApprovalRequestDto dto = engine.toDto(request);
 
@@ -142,8 +147,11 @@ class ApprovalEngineImplTest {
                 .thenReturn(Optional.of(userOf(SUBMITTER_ID, "buyer1", "Jane Buyer")));
         when(userRepo.findById(RESOLVER_ID))
                 .thenReturn(Optional.of(userOf(RESOLVER_ID, "pm1", "Peter Manager")));
-        when(roleRepo.findByCode("PURCHASING_MANAGER"))
-                .thenReturn(Optional.of(new Role("PURCHASING_MANAGER", "Purchasing Manager")));
+        // P4-1c (ADR-0062): the engine resolves role codes through findVisibleByCode, which is
+        // scoped to the caller's tenant and returns a LIST — a derived findByCode returning Optional
+        // would throw IncorrectResultSizeDataAccessException once two tenants share a code.
+        when(roleRepo.findVisibleByCode(eq("PURCHASING_MANAGER"), any()))
+                .thenReturn(List.of(new Role("PURCHASING_MANAGER", "Purchasing Manager")));
 
         ApprovalRequestDto dto = engine.toDto(request);
 
@@ -180,7 +188,7 @@ class ApprovalEngineImplTest {
         when(branchRepo.findById(BRANCH_ID)).thenReturn(Optional.empty());
         when(userRepo.findById(SUBMITTER_ID)).thenReturn(Optional.empty());
         when(userRepo.findById(ghostUserId)).thenReturn(Optional.empty());
-        when(roleRepo.findByCode("PURCHASING_MANAGER")).thenReturn(Optional.empty());
+        when(roleRepo.findVisibleByCode(eq("PURCHASING_MANAGER"), any())).thenReturn(List.of());
 
         ApprovalRequestDto dto = engine.toDto(request);
 
@@ -207,7 +215,7 @@ class ApprovalEngineImplTest {
         when(decisionRepo.findByApprovalRequestStepIdOrderByDecidedAt(901L)).thenReturn(List.of());
         when(branchRepo.findById(BRANCH_ID)).thenReturn(Optional.empty());
         when(userRepo.findById(SUBMITTER_ID)).thenReturn(Optional.empty());
-        when(roleRepo.findByCode("GHOST_ROLE")).thenReturn(Optional.empty());
+        when(roleRepo.findVisibleByCode(eq("GHOST_ROLE"), any())).thenReturn(List.of());
 
         ApprovalRequestDto dto = engine.toDto(request);
 

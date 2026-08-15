@@ -74,7 +74,8 @@ class UserServiceImplTest {
                 passwordEncoder,
                 passwordPolicy,
                 mock(AuditService.class),
-                mock(AuthorityCeiling.class));
+                mock(AuthorityCeiling.class),
+                mock(com.erp.modules.iam.repository.OrganisationRepository.class));
     }
 
     @AfterEach

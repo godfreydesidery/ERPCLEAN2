@@ -61,7 +61,11 @@ class RoleServiceImplTest {
             when(role.getStatus()).thenReturn(MasterStatus.ACTIVE);
             when(role.getPermissions()).thenReturn(Set.of());
         }
-        when(roleRepo.findByUid(ROLE_UID)).thenReturn(Optional.of(role));
+        // requireByUid now goes through the tenancy-visible finder (P3-5). No RequestContext is
+        // set in this unit test, so the caller organisation is null - which is the outside-a-request
+        // path the finder tolerates.
+        when(roleRepo.findVisibleByUid(org.mockito.ArgumentMatchers.eq(ROLE_UID),
+                org.mockito.ArgumentMatchers.any())).thenReturn(Optional.of(role));
         return role;
     }
 

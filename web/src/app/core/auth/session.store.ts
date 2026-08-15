@@ -38,6 +38,22 @@ export class SessionStore {
 
   /** Store a full session after login/refresh. */
   setSession(accessToken: string, refreshToken: string, user: AuthUser): void {
+    // P6-3 (ADR-0062). The sessionStorage keys are fixed strings, so anything left by a PREVIOUS
+    // session in this tab survives into the next one. The sharp case is `erp.activeBranchUid`: sign
+    // in as someone from another tenant without a clean logout — expiry, a crash, a closed dialog —
+    // and the stale branch uid is sent as X-Branch-Uid on the new session's very first request.
+    // Since P3-1 that is refused rather than leaked, but a 403 on every screen reads to the user as
+    // a broken product, not as a boundary.
+    //
+    // Keyed on the session OWNER rather than on the tenant: the uid is already here at this point,
+    // whereas the organisation is not on AuthUser, and a different user is the superset of the case
+    // we care about — it catches a tenant switch AND a colleague signing in at the same terminal.
+    const previousOwner = sessionStorage.getItem('erp.sessionOwner');
+    if (previousOwner && previousOwner !== user.uid) {
+      this.clear();
+    }
+    sessionStorage.setItem('erp.sessionOwner', user.uid);
+
     this.setAccessToken(accessToken);
     this.setItem('erp.refreshToken', refreshToken, this.refreshTokenSig);
     this.userSig.set(user);
@@ -71,6 +87,7 @@ export class SessionStore {
       'erp.activeBranchUid',
       'erp.user',
       'erp.permissions',
+      'erp.sessionOwner',
     ].forEach((k) => sessionStorage.removeItem(k));
   }
 

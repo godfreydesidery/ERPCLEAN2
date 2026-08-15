@@ -12,6 +12,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.TenancyScopeEnforcer;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -85,11 +86,14 @@ public class DiscountAuthorisationGuard {
     private final AppUserRepository users;
     private final PermissionResolver permissionResolver;
     private final AuditService audit;
+    private final TenancyScopeEnforcer tenancy;
 
     public DiscountAuthorisationGuard(DiscountPolicyProvider policies,
                                       AppUserRepository users,
                                       PermissionResolver permissionResolver,
-                                      AuditService audit) {
+                                      AuditService audit,
+                                      TenancyScopeEnforcer tenancy) {
+        this.tenancy = tenancy;
         this.policies = policies;
         this.users = users;
         this.permissionResolver = permissionResolver;
@@ -187,6 +191,15 @@ public class DiscountAuthorisationGuard {
         }
 
         AppUser authoriser = users.findByUid(uid.trim()).orElse(null);
+        // P2-3 (ADR-0062): findByUid is a GLOBAL lookup, so a manager in another tenant could
+        // otherwise approve a discount here. Collapsed into the unknown-authoriser path so the
+        // refusal is byte-identical - a distinct message would confirm that the uid exists
+        // somewhere, across a tenant boundary.
+        if (authoriser != null && !tenancy.isSameTenant(RequestContext.get(), authoriser.getOrganisationId())) {
+            log.warn("Cross-tenant discount approval refused on invoice {}: authoriser org={}",
+                    req.invoiceUid(), authoriser.getOrganisationId());
+            authoriser = null;
+        }
         if (authoriser == null || !authoriser.isActive()) {
             log.warn("Discount approval rejected on invoice {} (company {}): the supplied authoriser "
                     + "is unknown or inactive.", req.invoiceUid(), req.companyId());
@@ -224,7 +237,9 @@ public class DiscountAuthorisationGuard {
                 authoriser.isRoot(),
                 req.companyId(),
                 caller != null ? caller.branchId() : null,
-                caller != null ? caller.ip() : null);
+                caller != null ? caller.ip() : null,
+                // The AUTHORISER's own tenant, so P2-3 can refuse a cross-tenant approval.
+                authoriser.getOrganisationId());
 
         boolean holds = permissionResolver.hasPermission(
                 authoriserInInvoiceScope, DISCOUNT_OVERRIDE_PERMISSION, System.currentTimeMillis());

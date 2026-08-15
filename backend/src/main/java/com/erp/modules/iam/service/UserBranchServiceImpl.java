@@ -59,6 +59,9 @@ public class UserBranchServiceImpl implements UserBranchService {
 
     @Override
     public UserBranchDto assign(AssignBranchRequest request) {
+        // P3-3 (ADR-0062, G1): asserted before any membership lookup — see
+        // UserServiceImpl.requireInScope for why the ordering matters.
+        assertSameTenantAsCaller(request.userUid());
         AppUser user = Lookups.orNotFound(users.findByUid(request.userUid()), "User", request.userUid());
         Branch branch = Lookups.orNotFound(
                 branches.findByUid(request.branchUid()), "Branch", request.branchUid());
@@ -203,5 +206,23 @@ public class UserBranchServiceImpl implements UserBranchService {
     private Long actorId() {
         RequestContext.Principal principal = RequestContext.get();
         return principal != null ? principal.userId() : null;
+    }
+
+    /**
+     * P3-3: refuses when the target user belongs to another tenant. NOT FOUND, not FORBIDDEN: a
+     * distinct refusal confirms the uid names a real user in some other organisation.
+     */
+    private void assertSameTenantAsCaller(String userUid) {
+        com.erp.platform.security.RequestContext.Principal principal =
+                com.erp.platform.security.RequestContext.get();
+        if (principal == null || principal.organisationId() == null || userUid == null) {
+            return;
+        }
+        users.findByUid(userUid)
+                .filter(u -> u.getOrganisationId() != null
+                        && !principal.organisationId().equals(u.getOrganisationId()))
+                .ifPresent(u -> {
+                    throw com.erp.platform.common.api.NotFoundException.of("User", userUid);
+                });
     }
 }

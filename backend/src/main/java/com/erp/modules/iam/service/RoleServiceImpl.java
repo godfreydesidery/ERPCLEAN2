@@ -43,11 +43,40 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public RoleDto create(CreateRoleRequest request) {
-        if (roles.existsByCode(request.code())) {
+        Long organisationId = callerOrganisationId();
+
+        // R-1 (ADR-0062 P4-1d). A tenant may not reuse a code that a GLOBAL role already holds.
+        // V102's two partial indexes sit on different partitions, so the database will happily accept
+        // (NULL,'CASHIER') alongside (2,'CASHIER') — and that ambiguity is precisely what makes
+        // role-code resolution pick a winner rather than an answer. Checked here for a friendly
+        // refusal; V102's trigger enforces the same rule against paths that never reach this service.
+        if (organisationId != null && roles.existsByOrganisationIdIsNullAndCode(request.code())) {
+            throw new ConflictException("Role code already exists: " + request.code());
+        }
+
+        // P4-1b. This was a GLOBAL existsByCode, which would have made per-tenant role codes
+        // pointless the moment V102 allowed them: tenant B could never use a code tenant A had taken.
+        // Scoped to the caller's tenant; a null organisation is the seed/bootstrap path authoring a
+        // global role, where global uniqueness is still exactly the right rule.
+        boolean taken = organisationId == null
+                ? roles.existsByOrganisationIdIsNullAndCode(request.code())
+                : roles.existsByOrganisationIdAndCode(organisationId, request.code());
+        if (taken) {
             throw new ConflictException("Role code already exists: " + request.code());
         }
         Role role = new Role(request.code(), request.name());
         role.setDescription(request.description());
+
+        // P4-1 (ADR-0062). Without this the role is saved with organisation_id = NULL - and NULL is
+        // not "unset", it is the marker for a GLOBAL role. Every role a customer authored would have
+        // been published to every tenant through the NULL-tolerant visibility predicate, appearing in
+        // strangers' role lists and grantable by them. A tenant's own role belongs to that tenant.
+        //
+        // A null caller organisation leaves it global, which is correct rather than a fallback: the
+        // only paths with no request context are bootstrap and the permission seed, and those are
+        // exactly the paths that legitimately author the shipped global roles.
+        role.setOrganisationId(organisationId);
+
         return RoleDto.from(roles.save(role));
     }
 
@@ -62,7 +91,11 @@ public class RoleServiceImpl implements RoleService {
     public List<RoleDto> list() {
         // findAllByOrderByName returns lazy permissions; each is fetched on DTO mapping.
         // For a catalogue list we return without permissions loaded — callers use getByUid for detail.
-        return roles.findAllByOrderByName().stream()
+        // P3-5 (ADR-0062) + invariant I-2: the caller's own roles PLUS the global ones. The
+        // NULL-tolerance is not defensive coding - organisation_id IS NULL is what marks the
+        // thirteen shipped roles, and a plain equality would hide ORG_ADMIN and every operational
+        // bundle from every tenant.
+        return roles.findVisibleTo(callerOrganisationId()).stream()
                 .map(RoleDto::from)
                 .toList();
     }
@@ -140,10 +173,22 @@ public class RoleServiceImpl implements RoleService {
     // --- private helpers ---
 
     private Role requireByUid(String uid) {
-        return Lookups.orNotFound(roles.findByUid(uid), "Role", uid);
+        // Another tenant's role is NOT FOUND, not FORBIDDEN: a distinct refusal would confirm the
+        // uid exists somewhere, across a tenant boundary.
+        return Lookups.orNotFound(roles.findVisibleByUid(uid, callerOrganisationId()), "Role", uid);
+    }
+
+    /** The caller's tenant, or null outside a request (bootstrap, async) - see findVisibleTo. */
+    private Long callerOrganisationId() {
+        RequestContext.Principal p = RequestContext.get();
+        return p == null ? null : p.organisationId();
     }
 
     private Role requireWithPermissions(String uid) {
-        return Lookups.orNotFound(roles.findWithPermissionsByUid(uid), "Role", uid);
+        // Scoped since P4-1: this used findWithPermissionsByUid, which has no tenant predicate at
+        // all, so the role DETAIL read - the one that returns the full permission list - reached past
+        // the scoping P3-5 had added to the list and to requireByUid.
+        return Lookups.orNotFound(
+                roles.findWithPermissionsVisibleByUid(uid, callerOrganisationId()), "Role", uid);
     }
 }

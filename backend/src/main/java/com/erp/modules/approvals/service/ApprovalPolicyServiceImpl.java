@@ -186,7 +186,12 @@ public class ApprovalPolicyServiceImpl implements ApprovalPolicyService {
             throw new ConflictException("A policy must have at least one approval step.");
         }
         for (PolicyStepInputDto step : steps) {
-            if (!roleRepo.existsByCode(step.approverRoleCode())) {
+            // P4-1c: a GLOBAL existsByCode would answer "yes" because SOME tenant holds that code,
+            // letting one tenant build an approval policy around a role only another tenant has —
+            // a step that can then never be satisfied. Scoped, with global roles still visible.
+            RequestContext.Principal caller = RequestContext.get();
+            if (roleRepo.findVisibleByCode(step.approverRoleCode(),
+                    caller == null ? null : caller.organisationId()).isEmpty()) {
                 throw new NotFoundException("Role code not found: " + step.approverRoleCode());
             }
         }
