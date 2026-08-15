@@ -206,7 +206,16 @@ class RolePermissionClosureTest {
     private static Method findListHandler(Class<?> controller) {
         Method best = null;
         int bestLen = Integer.MAX_VALUE;
-        for (Method m : controller.getDeclaredMethods()) {
+
+        // Sorted by name, because Class.getDeclaredMethods() has NO specified order and HotSpot's
+        // actual order varies between runs of the same build. Without this the tie-break below is
+        // decided by whatever order reflection happened to hand back, which makes this gate flaky —
+        // and a CI gate that fails one run in several is worse than no gate, because it teaches
+        // everyone to press retry instead of reading it.
+        Method[] declared = controller.getDeclaredMethods().clone();
+        java.util.Arrays.sort(declared, java.util.Comparator.comparing(Method::getName));
+
+        for (Method m : declared) {
             GetMapping gm = m.getAnnotation(GetMapping.class);
             if (gm == null) {
                 continue;
@@ -214,10 +223,15 @@ class RolePermissionClosureTest {
             // Collect all mapped paths (value() and path() are aliases)
             String[] paths = gm.value().length > 0 ? gm.value() : gm.path();
             if (paths.length == 0) {
-                // No path attribute — maps to controller root
-                if (best == null) {
-                    best = m;
+                // No path attribute — maps to the controller root, so it is the shortest path there
+                // is and must beat every sub-path. It previously won only when reflection happened
+                // to return it FIRST (`best == null`); seen second it was discarded and a sub-path
+                // handler was assessed instead. That is what made ProductController alternate
+                // between its root list endpoint (hasOrMember) and a sub-path one (has), reporting
+                // a gate mismatch against the manifest on some runs and not others.
+                if (bestLen > 0) {
                     bestLen = 0;
+                    best = m;
                 }
                 continue;
             }

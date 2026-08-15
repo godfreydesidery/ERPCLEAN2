@@ -22,6 +22,7 @@ import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.hr.service.LeaveTypeSeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
@@ -64,6 +65,7 @@ class CompanyProvisioningServiceImplTest {
     @Mock CrmStageSeeder         crmStageSeeder;
     @Mock HrGlSeeder             hrGlSeeder;
     @Mock HrStatutorySeeder      hrStatutorySeeder;
+    @Mock LeaveTypeSeeder        leaveTypeSeeder;
     @Mock NotificationTypeSeeder notificationTypeSeeder;
     @Mock ManufacturingGlSeeder  manufacturingGlSeeder;
     @Mock CurrencyEnablementSeeder currencyEnablementSeeder;
@@ -77,7 +79,10 @@ class CompanyProvisioningServiceImplTest {
                 unitSeeder, taxRateSeeder, salesSettingsSeeder, chartOfAccountService, fiscalCalendarService,
                 glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
                 inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
-                crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
+                crmStageSeeder, hrGlSeeder, hrStatutorySeeder,
+                // P5-5: moved here from TenantProvisioningService, which covered a tenant's
+                // FIRST company only — a second company got no leave types at all.
+                leaveTypeSeeder, notificationTypeSeeder,
                 manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder,
                 // P5-6: provisioning now seeds the document-number sequences up front.
                 codeSequenceSeeder);
@@ -107,6 +112,7 @@ class CompanyProvisioningServiceImplTest {
         verify(crmStageSeeder, times(1)).seedDefaults(companyId);
         verify(hrGlSeeder, times(1)).seedDefaults(companyId);
         verify(hrStatutorySeeder, times(1)).seedDefaults(companyId);
+        verify(leaveTypeSeeder, times(1)).seedDefaults(companyId);
         verify(notificationTypeSeeder, times(1)).seedDefaults(companyId);
         verify(manufacturingGlSeeder, times(1)).seedDefaults(companyId);
         verify(currencyEnablementSeeder, times(1))

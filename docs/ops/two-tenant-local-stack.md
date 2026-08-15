@@ -40,9 +40,25 @@ stack, or with whatever else is on 4200 — see the local-e2e-stack notes.
 
 ## 3 · Seed tenant B
 
-There is **no organisation-create endpoint yet** (Phase 5, P5-2), so tenant B goes in by SQL. The
-password hash is copied from `rootadmin`, so both accounts share one password and you do not need to
-generate a bcrypt hash.
+> **⚠ Read this before using the SQL below — corrected 2026-08-15.**
+>
+> **The organisation-create endpoint shipped** (P5-2): `POST /api/v1/organisations`, gated on
+> `ORG.CREATE`. This section predates it and the sentence that used to open it — "there is no
+> organisation-create endpoint yet" — was wrong from the moment P5-2 merged.
+>
+> **For anything except probing the boundary, use the endpoint.** The SQL below inserts four rows
+> and stops. `TenantProvisioningService` runs twenty-three company-scoped seeders: chart of
+> accounts, fiscal calendar, GL config, AR/AP, tax rates, units, document branding, stock locations,
+> leave types, document-number sequences. **A tenant seeded by this SQL has none of them** — it can
+> be logged into and can post almost nothing, and the failures it produces are not the ones you are
+> testing for.
+>
+> The SQL is kept because it is still the right tool for **one** job: making a second tenant exist
+> as cheaply as possible in order to probe the isolation boundary (§4), where the seeded defaults
+> are irrelevant and skipping them makes the stack quicker to build.
+
+Tenant B goes in by SQL. The password hash is copied from `rootadmin`, so both accounts share one
+password and you do not need to generate a bcrypt hash.
 
 ```bash
 docker exec -i erp-twoorg-db psql -U erp -d erp -v ON_ERROR_STOP=1 <<'SQL'

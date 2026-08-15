@@ -1,6 +1,5 @@
 package com.erp.platform.bootstrap;
 
-import com.erp.modules.hr.service.LeaveTypeSeeder;
 import com.erp.modules.cashbank.service.PettyCashFundSeeder;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
@@ -61,7 +60,6 @@ public class TenantProvisioningService {
     private final CompanyProvisioningService companyProvisioning;
     private final StockLocationSeeder stockLocationSeeder;
     private final PettyCashFundSeeder pettyCashFundSeeder;
-    private final LeaveTypeSeeder leaveTypeSeeder;
     private final com.erp.modules.iam.repository.RoleRepository roles;
     private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
 
@@ -77,7 +75,6 @@ public class TenantProvisioningService {
                                      CompanyProvisioningService companyProvisioning,
                                      StockLocationSeeder stockLocationSeeder,
                                      PettyCashFundSeeder pettyCashFundSeeder,
-                                     LeaveTypeSeeder leaveTypeSeeder,
                                      com.erp.modules.iam.repository.RoleRepository roles,
                                      com.erp.modules.iam.repository.UserRoleRepository userRoles) {
         this.organisations = organisations;
@@ -89,7 +86,6 @@ public class TenantProvisioningService {
         this.companyProvisioning = companyProvisioning;
         this.stockLocationSeeder = stockLocationSeeder;
         this.pettyCashFundSeeder = pettyCashFundSeeder;
-        this.leaveTypeSeeder = leaveTypeSeeder;
         this.roles = roles;
         this.userRoles = userRoles;
     }
@@ -150,12 +146,28 @@ public class TenantProvisioningService {
 
         Company company = new Company(org, request.companyCode(), request.companyName());
         company.setTimeZone(request.timeZone());
+
+        // The ledger currency has to land on the COMPANY ROW, not just travel to the currency
+        // seeder. Company.baseCurrency initialises to "TZS", and roughly forty read paths resolve
+        // the posting currency as companies.findById(id).map(Company::getBaseCurrency) — so without
+        // this a tenant provisioned as KES gets KES enablement rows and posts its entire ledger in
+        // TZS. Nothing would fail: the numbers are simply relabelled, on every document, from the
+        // first day, and the only way to notice is to know what the total should have been.
+        //
+        // CompanyServiceImpl.create has always taken the base FROM the saved company for exactly
+        // this reason. This is the tenant path being made to agree with it.
+        if (request.baseCurrency() != null && !request.baseCurrency().isBlank()) {
+            company.setBaseCurrency(request.baseCurrency().strip().toUpperCase(Locale.ROOT));
+        }
         companies.save(company);
 
         // Company-scoped defaults: UoM, tax rates, GL, AR/AP, cash/bank, inventory GL, documents,
         // fixed assets, costing dimensions, CRM stages, HR GL + statutory, notifications,
         // manufacturing GL, currency enablement (ADR-0013..0039).
-        companyProvisioning.provisionDefaults(company.getId(), request.baseCurrency(),
+        //
+        // Read back from the entity rather than re-using the request, so the enablement rows and
+        // the company row cannot disagree even if the normalisation above changes.
+        companyProvisioning.provisionDefaults(company.getId(), company.getBaseCurrency(),
                 request.defaultCurrency(), request.enabledCurrencies());
 
         Branch branch = new Branch(company, request.branchCode(), request.branchName());
@@ -169,11 +181,6 @@ public class TenantProvisioningService {
         // Petty-cash fund: the provisionDefaults call above was a no-op until a branch existed
         // (ADR-0050 D-7 PR-B).
         pettyCashFundSeeder.seedDefaults(company.getId());
-
-        // P5-5. V52 seeded leave_types with CROSS JOIN companies, which covers only the companies
-        // that existed when that migration ran. Without this a new tenant opens HR -> Leave empty
-        // and cannot record a single day of leave.
-        leaveTypeSeeder.seedDefaults(company.getId());
 
         // The tenant's first administrator is a TENANT user, so their username composes like every
         // other one (D-7): the caller supplies the local part and the alias is appended here. Without
