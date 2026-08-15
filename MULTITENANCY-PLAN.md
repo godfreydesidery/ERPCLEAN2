@@ -821,17 +821,20 @@ Phases 3 and 6 dominate. **Phase 6 is the single largest item and was invisible 
 > missing version-ordering check, the absent repair path, and H-12/H-13 are all live concerns for
 > this box. (H-11's broken `OrbixERP.cmd` is Windows-only, so it does not affect this Linux install.)
 > Automated backups are running there daily and retained 14 days.
-- [ ] **P0-2** Write the ADR. It **supersedes ADR-0001 D-A** (roles org-wide), which was correct
+- [x] **P0-2** Write the ADR. It **supersedes ADR-0001 D-A** (roles org-wide), which was correct
+      **DONE** — `docs/decisions/0062-organisation-as-tenant-multitenancy.md`.
       when there was one organisation. **Next free number is ADR-0062** — 0060
       (`sale-at-or-below-cost-policy`) and 0061 (`pos-tls-trust-private-ca`) are already taken, so the
       plan's earlier "ADR-0060+" was stale. It must carry §1.2's four-tier
       classification and the two rules R-1 / R-2 verbatim — they are the part most likely to be
       re-derived incorrectly from memory.
-- [ ] **P0-3** Record the D-2 root model in the ADR explicitly, **including that P3-1 and P3-2 are
+- [x] **P0-3** Record the D-2 root model in the ADR explicitly, **including that P3-1 and P3-2 are
+      **DONE** — recorded in ADR-0062, including the `setRoot(true)` warning.
       prerequisites of P5-1**. §8's resolution is conditional on those having landed; until then
       `setRoot(true)` is exactly as dangerous as §8 originally described. This is the decision most
       likely to be silently reversed later by an implementation shortcut.
-- [ ] **P0-4** Record the D-3 ceiling rule as an amendment to **ADR-0059** (grant ceiling), not only
+- [x] **P0-4** Record the D-3 ceiling rule as an amendment to **ADR-0059** (grant ceiling), not only
+      **DONE 2026-08-14** — ADR-0059 amended (status line, inline flag at the call-site bullet, appended amendment section).
       in the new ADR — an implementer reading ADR-0059 alone would restore the blanket
       "non-root ⇒ refuse" behaviour and break every tenant admin.
 
@@ -1255,16 +1258,19 @@ that a composite key would otherwise have had to.
 > so a tenant's custom role whose code collides with a shipped one is silently adopted as a system
 > role and has the shipped grants unioned onto it — widening their users' authority.
 
-- [ ] **P1-0** **Measure first, author second.** On a restored production dump:
+- [x] **P1-0** **Measure first, author second.** On a restored production dump:
+      **DONE 2026-08-14** — 19 read-only blocks run on QA *and* the live client; results recorded in the change log.
       `SELECT count(*), pg_total_relation_size('audit_logs')`; the row counts each derivation pass
       (a)–(d) would carry; the count of `is_system = true` roles whose uid is not a seed uid; and the
       count of audit rows with `company_id` non-null vs actor non-null. Three of this section's
       decisions rest on numbers nobody has looked at.
-- [ ] **P1-1** Get §5.1 approved (migration-approval rule). **P1-2** Author V99. **P1-3** Backfill
+- [x] **P1-1** Get §5.1 approved (migration-approval rule). **P1-2** Author V99. **P1-3** Backfill
+      **DONE 2026-08-14** — §5.1 approved, V99/V100/V101 authored, applied on QA and on the live client (1.7.0), and `TenancyReconciler` built for the backfill half.
       reconciler, hardened per the corrected box above. **P1-4** Author V100 — alias index now, role
       indexes with the `uq_role_code` drop (see the inert-index box). **P1-5** Author V101,
       self-sufficient, **same release as P1-2/P1-4**.
-- [ ] **P1-6** **PREREQUISITE of P1-3's role stamping** — fix `R__seed_permissions.sql:301` so the
+- [x] **P1-6** **PREREQUISITE of P1-3's role stamping** — fix `R__seed_permissions.sql:301` so the
+      **DONE 2026-08-15, by a different mechanism than proposed.** V102 Part B restricts the upsert to `ON CONFLICT (code) WHERE organisation_id IS NULL`, so the seed can no longer see - let alone adopt - a tenant's role. `is_system = true` still applies inside the global partition, which is correct: those really are shipped roles. The "log already-adopted roles" half is `TenancyReconciler`, which warns on any `is_system` role that is not a seed uid.
       upsert stops setting `is_system = true` on conflict, and log already-adopted customer roles for
       owner review. No longer a "ship it whenever": without it the reconciler has no reliable
       discriminator and can publish a customer's role to every tenant. Migration-approval applies.
@@ -1272,7 +1278,8 @@ that a composite key would otherwise have had to.
       `NOT NULL`, so the break is smaller than first budgeted — but **convert one representative file
       before estimating the rest**; the figure has never been converted from a grep count to
       engineer-time (§11 G-A).
-- [ ] **P1-8** **Three things to prove on the restored dump before authoring**, all currently
+- [x] **P1-8** **Three things to prove on the restored dump before authoring**, all currently
+      **DONE 2026-08-14** — closed with real Flyway and a real application boot against a clone of the live customer's database.
       inferred. ⬤ **The stack is ready** — [`docs/ops/rehearsal-stack.md`](docs/ops/rehearsal-stack.md),
       restored from Kilimanjaro production, 205 tables, Flyway v98, `organisations = 1`, all objects
       owned by the `erp` app role so migrations run with the privileges they really have. The third
@@ -1381,11 +1388,13 @@ make it true, and they must land before any predicate in Phase 3 is written.
       **the GL journal row lands**. `SalesPostingHandler.java:77-86` catches `Exception` and marks the
       event processed to avoid a poison transaction, so a "no exception thrown" test proves nothing —
       it is exactly how `G14` stayed invisible.
-- [ ] **P2.5-3** **Audit read tolerates NULL:** `organisation_id = :org OR organisation_id IS NULL`,
+- [x] **P2.5-3** **Audit read tolerates NULL:** `organisation_id = :org OR organisation_id IS NULL`,
+      **DONE 2026-08-15** with the P3-8 read half — and it proved load-bearing: all 4,244 QA audit rows are unattributed, so a strict predicate would have blanked the screen.
       so the pre-auth and system-written trail stays visible. The alternative — stamping those rows
       with an explicit platform organisation at write time — is also acceptable, but pick one and
       write it in the ADR; do not leave it to the implementer.
-- [ ] **P2.5-4** *(deliberately deferred to Phase 3 — see note)* **Row-count parity harness** for the
+- [x] **P2.5-4** *(deliberately deferred to Phase 3 — see note)* **Row-count parity harness** for the
+      **DONE 2026-08-14** — `TenancyParityHarnessIT`, seeding its own tenant so it cannot pass against two empty result sets.
       filter-shaped sites listed in §0.3.
       > **Sequencing note, 2026-08-14.** A harness that compares a query with and without its
       > organisation predicate has nothing to compare until the predicate exists, and none of
@@ -1635,7 +1644,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
 > and detection-not-blocking for direction 2, because a trigger there turns a name clash into a boot
 > failure on a live customer. Note: **zero triggers exist in this schema across 101 migrations.**
 
-- [ ] **P4-1c** **Prerequisite, and the real gate on per-tenant role codes.** `uq_role_code` is
+- [x] **P4-1c** **Prerequisite, and the real gate on per-tenant role codes.** `uq_role_code` is
+      **DONE 2026-08-15** — `V102__role_code_per_tenant.sql`, owner-approved. See the note above and `docs/ops/multitenancy-v102-proposal.md`.
       retained for now because dropping it breaks approvals at one organisation (§5.1). Two tenants
       cannot both have a `SUPERVISOR` until it goes — so make role-code resolution **org-aware first**
       at `ApprovalEngineImpl.java:301` (`findByCode` → 500 on a duplicate),
@@ -1764,7 +1774,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       Original text follows. ~~Rewrite the isolation harness for **two organisations**. All eight `*Isolation*` ITs
       are currently *two companies inside one organisation* — they will pass unchanged after the
       migration while proving nothing about the new boundary.
-- [ ] **P7-2** Probe as a **non-root ORG_ADMIN of org A against org B**. Root passes everything by
+- [x] **P7-2** Probe as a **non-root ORG_ADMIN of org A against org B**. Root passes everything by
+      **DONE 2026-08-15** — `TwoOrganisationIsolationIT` probes as non-root `adminA` of org A against org B across scope, users, companies, organisations and roles.
       construction; root-only probing is exactly what would let all of this survive.
       Must include: the `G1` four-call chain; a `POST /companies` carrying B's organisation uid;
       an archive of one of B's roles; an `X-Branch-Uid` pointing at a B branch.
