@@ -156,6 +156,15 @@ public class UserServiceImpl implements UserService {
         // Root always resolves; non-root callers are subject to two guards:
         //   1. Root user → 404 (don't reveal existence — security hardening 2026-06-25).
         //   2. Out-of-company → 404 (tenant-isolation fix, security audit 2026-06-25).
+        // P3-8: applies to root as well, and BEFORE the root branch below - resolving a user by uid
+        // across a tenant boundary is the confused-deputy shape this whole phase exists to close.
+        // NotFound, never Forbidden: "exists but is not yours" is an existence oracle.
+        if (principal != null && principal.root()
+                && principal.organisationId() != null
+                && user.getOrganisationId() != null
+                && !principal.organisationId().equals(user.getOrganisationId())) {
+            throw NotFoundException.of("User", uid);
+        }
         if (principal == null || !principal.root()) {
             if (user.isRoot()) {
                 throw NotFoundException.of("User", uid);
@@ -176,7 +185,15 @@ public class UserServiceImpl implements UserService {
         // company; null company → fail-closed empty list.
         RequestContext.Principal principal = RequestContext.get();
         if (principal != null && principal.root()) {
-            return users.findAllByOrderByUsername().stream().map(UserDto::from).toList();
+            // P3-8 (ADR-0062): "org-wide" used to mean the whole DATABASE — on a shared instance one
+            // is_root row would list every customer's staff, by name. Root now sees its own tenant.
+            // NULL-tolerant: an unattributed account must stay visible to the screen an admin would
+            // use to spot and fix it. A root with no organisation of its own falls back to the old
+            // behaviour rather than seeing nothing — a data gap must not blank the admin console.
+            Long org = principal.organisationId();
+            return (org == null ? users.findAllByOrderByUsername()
+                                : users.findVisibleToOrganisationOrderByUsername(org))
+                    .stream().map(UserDto::from).toList();
         }
         Long companyId = (principal != null) ? principal.companyId() : null;
         if (companyId == null) {

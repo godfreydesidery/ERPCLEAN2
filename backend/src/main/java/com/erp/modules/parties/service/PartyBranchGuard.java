@@ -1,6 +1,9 @@
 package com.erp.modules.parties.service;
 
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.platform.security.CompanyTenantIndex;
+import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.TenancyScopeEnforcer;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import org.springframework.stereotype.Component;
@@ -23,9 +26,14 @@ import org.springframework.stereotype.Component;
 public class PartyBranchGuard {
 
     private final BranchRepository branches;
+    private final TenancyScopeEnforcer tenancy;
+    private final CompanyTenantIndex companyTenants;
 
-    public PartyBranchGuard(BranchRepository branches) {
+    public PartyBranchGuard(BranchRepository branches, TenancyScopeEnforcer tenancy,
+                            CompanyTenantIndex companyTenants) {
         this.branches = branches;
+        this.tenancy = tenancy;
+        this.companyTenants = companyTenants;
     }
 
     /**
@@ -37,9 +45,27 @@ public class PartyBranchGuard {
      * @throws ForbiddenException if the branch belongs to a different company (BR-PARTY-01)
      */
     public void assertSameCompany(Long partyCompanyId, Long branchId) {
-        var branch = branches.findById(branchId)
-                .orElseThrow(() -> new NotFoundException("Branch not found."));
+        var branch = branches.findById(branchId).orElse(null);
+
+        // Found in the P3-12 freeze-store triage: splitting "no such branch" from "belongs to another
+        // company" tells the caller that a branch id exists somewhere in the estate. Harmless while
+        // the estate was one customer; an existence oracle once it is not - and branchId here is a
+        // sequential NUMBER, the one identifier in this codebase an outsider could actually guess
+        // (everything caller-facing is addressed by ULID uid).
+        //
+        // Collapsed onto not-found ONLY when the branch is another TENANT's. A branch of a sibling
+        // company inside the caller's own organisation keeps the explicit message: that is a
+        // legitimate mistake by someone who owns both companies, they are entitled to know which
+        // rule they broke, and there is no boundary to leak across. Flattening that case too would
+        // have traded a real error message for no security at all.
+        if (branch == null) {
+            throw new NotFoundException("Branch not found.");
+        }
         Long branchCompanyId = branch.getCompany().getId();
+        if (tenancy.isForeignTenant(RequestContext.get(),
+                companyTenants.organisationOf(branchCompanyId))) {
+            throw new NotFoundException("Branch not found.");
+        }
         if (!branchCompanyId.equals(partyCompanyId)) {
             // BR-PARTY-01: branch must belong to the same company as the party
             throw new ForbiddenException(

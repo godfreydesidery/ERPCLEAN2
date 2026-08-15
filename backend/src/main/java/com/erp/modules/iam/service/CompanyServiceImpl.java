@@ -52,6 +52,7 @@ public class CompanyServiceImpl implements CompanyService {
     private final UserBranchRepository       userBranches;
     private final UserCompanyRepository      userCompanies;
     private final CompanyProvisioningService provisioner;
+    private final com.erp.platform.security.TenancyScopeEnforcer tenancy;
 
     public CompanyServiceImpl(CompanyRepository          companies,
                                OrganisationRepository     organisations,
@@ -62,7 +63,8 @@ public class CompanyServiceImpl implements CompanyService {
                                UserRoleRepository         userRoles,
                                UserBranchRepository       userBranches,
                                UserCompanyRepository      userCompanies,
-                               CompanyProvisioningService provisioner) {
+                               CompanyProvisioningService provisioner,
+                               com.erp.platform.security.TenancyScopeEnforcer tenancy) {
         this.companies        = companies;
         this.organisations    = organisations;
         this.journalEntries   = journalEntries;
@@ -73,6 +75,7 @@ public class CompanyServiceImpl implements CompanyService {
         this.userBranches     = userBranches;
         this.userCompanies    = userCompanies;
         this.provisioner      = provisioner;
+        this.tenancy          = tenancy;
     }
 
     @Override
@@ -154,9 +157,21 @@ public class CompanyServiceImpl implements CompanyService {
     private List<CompanyDto> resolveAccessibleByOrganisationUid(String organisationUid) {
         Organisation org = Lookups.orNotFound(
                 organisations.findByUid(organisationUid), "Organisation", organisationUid);
-        List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
 
         RequestContext.Principal principal = RequestContext.get();
+
+        // P3-8 / P3-6 (ADR-0062). The organisation uid arrives FROM THE CALLER, and this endpoint is
+        // only `isAuthenticated()`. For a non-root caller the assignment filter below made that
+        // harmless; for root the predicate was dropped entirely, so naming another tenant's uid
+        // returned their whole company list. NotFound rather than Forbidden: confirming that an
+        // organisation exists but belongs to someone else is an existence oracle across the boundary,
+        // and this uid is the one thing an outsider could plausibly obtain.
+        if (tenancy.isForeignTenant(principal, org.getId())) {
+            throw NotFoundException.of("Organisation", organisationUid);
+        }
+
+        List<Company> all = companies.findByOrganisationIdOrderByName(org.getId());
+
         if (principal != null && principal.root()) {
             return all.stream().map(CompanyDto::from).toList();
         }

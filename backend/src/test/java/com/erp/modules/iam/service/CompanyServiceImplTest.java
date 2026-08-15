@@ -69,7 +69,10 @@ class CompanyServiceImplTest {
                 userRoleRepo,
                 userBranchRepo,
                 userCompanyRepo,
-                mock(CompanyProvisioningService.class));
+                mock(CompanyProvisioningService.class),
+                // The REAL enforcer, not a mock: a mock returns false for isForeignTenant, which
+                // happens to mean "allow" — the tenant gate would look present while doing nothing.
+                new com.erp.platform.security.TenancyScopeEnforcer());
 
         org = mock(Organisation.class);
         when(org.getId()).thenReturn(ORG_ID);

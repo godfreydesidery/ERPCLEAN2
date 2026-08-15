@@ -74,6 +74,19 @@ public class AuditLog {
     @Column(name = "ip", length = 45)
     private String ip;
 
+    /**
+     * Owning tenant (ADR-0062). V99 created this column and V101 backfilled the rows that existed
+     * then — but nothing has WRITTEN it since, because the entity had no field for it. Every audit
+     * row created after V99 is therefore unattributed, which is why
+     * {@code AuditReadService}'s tenant predicate has to stay NULL-tolerant: a strict one would hide
+     * the entire recent history from the very people who need to read it.
+     *
+     * <p>Nullable, and stays nullable: unauthenticated events (login, lockout) have no tenant to
+     * record, and inventing one would be a guess written into an append-only table.
+     */
+    @Column(name = "organisation_id")
+    private Long organisationId;
+
     /** For JPA only — no direct use in application code. */
     protected AuditLog() {
     }
@@ -88,7 +101,8 @@ public class AuditLog {
                     Long branchId,
                     String detail,
                     Instant at,
-                    String ip) {
+                    String ip,
+                    Long organisationId) {
         this.actorUserId = actorUserId;
         this.action      = action;
         this.targetType  = targetType;
@@ -96,6 +110,7 @@ public class AuditLog {
         this.targetUid   = targetUid;
         this.companyId   = companyId;
         this.branchId    = branchId;
+        this.organisationId = organisationId;
         this.detail      = detail;
         this.at          = at;
         this.ip          = ip;
