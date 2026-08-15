@@ -1406,9 +1406,17 @@ make it true, and they must land before any predicate in Phase 3 is written.
 > production. **Filter-shaped items (P3-4, P3-5, P3-7, P3-8) cannot use shadow mode** and ship
 > behind the P2.5-4 parity harness instead.
 
-- [ ] **P3-1** Org predicate on the `X-Branch-Uid` lookup (`JwtRequestContextFilter.java:144`),
-      applied **unconditionally, root included** (`B2`).
-- [ ] **P3-2** Move the `ROOT_BYPASS` audit onto the branch switch. Today `ScopeGuard.java:675`
+- [x] **P3-1** DONE 2026-08-15, root included. The branch override now refuses a branch whose company
+      is in another organisation, **before** the assignment check and before the principal is built.
+      Refusal reuses the *unavailable branch* message verbatim: a distinct one would confirm that a
+      branch uid exists in some other tenant. Without this a cross-tenant switch would build a session
+      on a foreign company and P3-11 would then refuse every action inside it — a broken session that
+      reads as a bug rather than as a boundary. Same positive-mismatch rule as `canActIn`.
+- [x] **P3-2** DONE 2026-08-15. New `BRANCH.SWITCH` audit action, written in the filter where the
+      switch actually happens, whenever the override leaves the company minted at login (a move
+      between branches of one's own company is ordinary navigation and would drown the signal).
+      `recordIndependent` because the filter runs outside any business transaction, wrapped so a
+      failure to audit can never take the request down. Original text: move the `ROOT_BYPASS` audit onto the branch switch. Today `ScopeGuard.java:675`
       fires it only when the target company differs from the principal's — after a header switch it
       does not differ, so **the row is never written**. That line is the only writer of
       `ROOT_BYPASS` in the backend and there is no `BRANCH_SWITCH` action at all (`G4`).
@@ -1433,10 +1441,23 @@ make it true, and they must land before any predicate in Phase 3 is written.
       its company-level bypass; only cross-tenant reach is gone. Still open, and all read-shaped:
       `AuditReadService.java:52`, `CompanyServiceImpl.java:160`, `UserServiceImpl.java:166`/`:181`,
       `ProductStockReportQuery.java:393`, `StockLocationServiceImpl.java:222`.
-- [ ] **P3-9** `StepUpAuthServiceImpl` rebuilds the authoriser with `isRoot()`, so a root user of any
-      tenant can approve any till override anywhere. Also close the credential oracle at
-      `POST /auth/verify-authority` (`G11`): a *correct* password with insufficient authority
-      returns a distinguishable message and deliberately does not count against the throttle.
+- [~] **P3-9** **First half already closed; second half is an OWNER DECISION, not an oversight.**
+      Verified 2026-08-15.
+      - *Root of another tenant approving a till override* — **already shut in Phase 2.** Both
+        step-up paths (`StepUpAuthServiceImpl:147` and `:262`) compare the authoriser's organisation
+        to the caller's and collapse a mismatch onto the unknown-user path — same message, same
+        dummy-hash timing, same throttle accounting. A root authoriser from another tenant is refused
+        there, before `isRoot()` is ever read. The item's premise no longer holds.
+      - *The `G11` credential oracle* — **real, but the current behaviour is a documented deliberate
+        choice, so changing it is the owner's call.** Today a wrong password returns
+        `CREDENTIALS_MESSAGE` and counts against the throttle, while a correct password with
+        insufficient authority returns `NOT_AUTHORISED_MESSAGE` and counts against nothing. The
+        consequence: a cashier can confirm a colleague's password without ever tripping a lockout,
+        then use it at the main login. The fix (one message, always counted) is three lines, and the
+        cost is real: a legitimate "wrong manager" attempt would then read as bad credentials and
+        push the operator toward a cooldown at a till with a customer waiting. **Recommendation:**
+        count it against the throttle but keep the distinct message — that removes the *unlimited*
+        guessing, which is the part that matters, and keeps the screen honest. Needs a decision.
 - [ ] **P3-10** Add `ORG.*` permission codes — the seed file contains **not one**, and the
       organisation endpoints currently reuse `COMPANY.VIEW`. Needed to express the D-2 split.
       Touches `R__seed_permissions.sql` → migration-approval rule applies.
@@ -1487,12 +1508,21 @@ make it true, and they must land before any predicate in Phase 3 is written.
       invisible to CI **and** pre-blessed, so nothing will re-open them. Any entry that resolves a
       company-owned entity from request input moves to a scoped finder **before cutover**. The plan
       budgets P7-4 for one bare `existsById`; the real number is 207 + 1.
-- [ ] **P3-13** **Read `is_root` from the database, not the JWT claim.**
+- [x] **P3-13** DONE 2026-08-15. `ActiveUserScope` gained `getRoot()`; the filter's per-request read
+      already existed for the organisation, so this costs **no extra query** — the projection simply
+      returns one more column and the `isRoot` claim is no longer consulted. Demotion now takes effect
+      on the next request instead of at token expiry. Original text follows.
+      ~~**Read `is_root` from the database, not the JWT claim.**~~
       `JwtRequestContextFilter.java:132` is `Boolean.TRUE.equals(jwt.getClaim("isRoot"))`, while the
       filter already performs a per-request DB read four lines later (`:101` `existsByIdAndStatus`).
       Demoting a compromised root leaves them superuser until the 15-minute token expires, with no
       revocation list — during exactly the incident you are trying to contain. ~3 lines.
-- [ ] **P3-14** **The branch-override check must honour revocation.**
+- [x] **P3-14** DONE 2026-08-15, **precondition discharged with real data**. New
+      `findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue`. The plan required querying production
+      first, because the fix locks out anyone currently working through a revoked row: measured
+      **zero revoked and zero inactive assignments on both estates** (QA 11 rows, live client 12), so
+      nobody is affected. Original text follows.
+      ~~**The branch-override check must honour revocation.**~~
       `JwtRequestContextFilter.java:148` calls `userBranches.findByUserIdAndBranchId(...)`, which
       filters on neither `revokedAt` nor `active` although `UserBranch` carries both
       (`UserBranch.java:50-55`). The codebase already documents the consequence in a javadoc at
@@ -1500,7 +1530,21 @@ make it true, and they must land before any predicate in Phase 3 is written.
       header yet is refused the branch-filtered report."* **Query production for live revoked-but-used
       assignments before shipping** — the fix is correct, but it will lock out anyone currently
       working through such a row.
-- [ ] **P3-15** **The vertical guard is evaluated in the horizontal scope.**
+- [~] **P3-15** **Severity collapsed by P3-1; the prescribed fix is now the riskier option.**
+      Reassessed 2026-08-15. The item's mechanism is real — `AuthorityCeiling` resolves the caller's
+      ceiling from `principal.companyId()`, the scope they have just switched into — but its premise
+      was "a successful horizontal escape". **P3-1 removes the cross-tenant escape at the door**, so
+      what remains is a switch between companies *inside one organisation*, which is exactly the
+      model ADR-0001 D-E and ADR-0059 already describe and accept.
+      The prescribed fix ("resolve the ceiling from the caller's home organisation") does not map
+      onto the existing API: `PermissionResolver.resolve` takes `(userId, companyId, branchId)`, and
+      permissions are company/branch-scoped **by design**. Resolving from a "home" scope would judge
+      an administrator working legitimately in branch B against branch A's permissions and break
+      real cross-branch administration; resolving from a union would be strictly more permissive,
+      which is the wrong direction for a ceiling. **Recommendation:** keep as-is and close the item,
+      or re-specify it against a concrete cross-branch admin scenario first. Needs a decision.
+      Original text follows.
+      ~~**The vertical guard is evaluated in the horizontal scope.**~~
       `AuthorityCeiling.java:113-114` resolves the caller's ceiling from `principal.companyId()` — the
       scope they have just switched into. **A successful horizontal escape silently resets the
       vertical ceiling**, so ADR-0059's containment is conditional on tenant isolation holding rather
@@ -2044,6 +2088,7 @@ reversed: legacy usernames are never rewritten, and the POS stores only a host.
 | 2026-08-14 | **Production constraints promoted to §0 and the inertness premise REFUTED.** Adds §0 (live production, strictly one codebase, no tenancy-mode flag, D-1 = (a), no username rewrite, rehearse on a prod dump), §0.1 (seventeen outbox handlers + the pre-auth audit path run with a principal that has no user, so Phase 3 is *not* inert at one organisation), §0.2 (legacy bare usernames never rewritten) and §0.3 (shadow mode covers guards only; four filter-shaped sites need a row-count parity harness, and there is no telemetry egress from a customer box). New **Phase 2.5** gating Phase 3. **D-1 resolved (a)**; **D-3 forced to "bundles stay global"**, which closes the per-tenant-clone escape and makes §8's pincer sharper; new **D-8** on per-tenant fiscalisation (one JVM-wide TRA provider vs per-customer TIN/VRN/device — a legal defect on a shared instance). §5.1 revised: FKs `NOT VALID`, `audit_logs` indexes added, `CONCURRENTLY` removed (no wiring exists; five migrations say so), backfill hardened and step 4 deleted, backfill now skips `is_system` roles, **V101 split into a second release**, and **two items removed for breaking live single-tenant production** — `roles.organisation_id SET NOT NULL` (incompatible with `R__seed_permissions.sql:287`) and the `uq_role_code` drop (breaks `ApprovalEngineImpl:301` and widens `StepApproverResolver:78-84`). `G8` retired. §6 rewritten around a production-dump rehearsal. §9 caveated: the 182-table claim is the plan's most load-bearing unverified premise. | owner + 14-agent workflow |
 | 2026-08-14 | **Global vs tenant-scoped stated as a rule (§1.1)**, on the owner's point that some things are platform-wide. Adds the classification register and two invariants: **I-1** a global row is readable by all tenants and writable by none (already shipped for roles via the `isSystem()` guard — must not regress), and **I-2** every scoping predicate is NULL-tolerant or it hides the global rows. Three mechanics were found missing and are now work items: **P3-5** reworded (a plain equality would hide all twelve bundles from every tenant — `list()` has no predicate at all today); **P4-1b** `create()`'s global `existsByCode` must become org-scoped; **P4-1c** per-tenant role codes are blocked until the three approvals call sites are org-aware and `uq_role_code` can be dropped; **P4-2** given teeth — `assertCanConferRole` hard-refuses any non-root caller conferring an `is_system` role, so today a tenant admin cannot grant one of the twelve bundles at all. Plus **P4-4**, a non-root tenant-admin test. | owner |
 | 2026-08-14 | **Implementation: Phases 1, 2, 2.5 and Phase 3 batch 1 built, merged to `develop`, verified on QA.** V99/V100/V101 authored and live on QA **and on the live client (1.7.0)**. `TenancyReconciler` (P1-3) fills the alias and stamps customer roles, leaving the thirteen shipped roles global - verified on a restored copy of production (alias `kilimanjaro`, 2 custom roles) and on QA (`erp-qa`, 8 custom roles). Phase 2 complete: the tenant is on the principal, derived from the DB not the JWT claim; the cross-tenant authoriser hole is shut at all three step-up paths with a refusal byte-identical to the unknown-user one; organisation status gates login. **P2.5-1's rule was corrected before it was built** - exempt on a null `userId`, never on a null organisation, which would have handed unscoped sessions to every user created between V101 and the constraining migration; `TenancyScopeEnforcerTest` was verified to fail on the wrong version and only on the right assertion. Phase 3 batch 1 (P3-3, P3-4, P3-5, P3-6, P3-7) scopes the resolution paths, with the **parity harness** that filter-shaped items need because shadow mode cannot observe a query that silently returns fewer rows. Remaining: Phase 3 batch 2 (P3-11 `canActIn` + 130 controllers, P3-12 the 207-entry freeze store, P3-8) and batch 3 (P3-1, P3-2, P3-9, P3-13, P3-14, P3-15). | owner |
+| 2026-08-15 | **Phase 3 batch 3: P3-1, P3-2, P3-13, P3-14 built; P3-9 and P3-15 reassessed and returned as decisions.** All four built items land in `JwtRequestContextFilter`, which turned out to be the right place for three of them at once. **P3-1** refuses a branch override whose company is in another organisation - root included - reusing the *unavailable branch* message verbatim so the refusal cannot confirm that a uid exists elsewhere. **P3-13** reads `is_root` from the row the filter was already fetching, so demotion takes effect on the next request rather than at token expiry, at **no extra query**. **P3-14** honours `revokedAt`/`active`; the plan required checking production first because the fix locks out anyone working through a revoked row - measured **zero revoked and zero inactive on both estates** (QA 11, live client 12), so nobody is affected. **P3-2** adds a `BRANCH.SWITCH` audit written where the switch happens: `ROOT.BYPASS` structurally could not cover it, because after a header switch the principal's company IS the target and its "target differs" test is false - the most powerful scope change in the product left no trace. Two items came back as decisions rather than code. **P3-9's first half was already closed in Phase 2** (both step-up paths compare the authoriser's organisation and collapse a mismatch onto the unknown-user path), and its second half - the `G11` credential oracle - is a *documented deliberate* trade-off, so changing it is the owner's call. **P3-15's severity collapsed once P3-1 landed**: its premise was a successful horizontal escape, which no longer exists, and the prescribed fix does not map onto `PermissionResolver`'s company/branch-scoped API without breaking legitimate cross-branch administration. New `BranchOverrideTenancyTest` (4 tests) was verified against two separate mutations, each failing exactly its own assertions and no others. | owner |
 | 2026-08-15 | **Phase 3 batch 2 built: P3-11, P3-12, and the half of P3-8 that was in the authorisation spine.** The organisation comparison now sits **inside** `ScopeGuard.canActIn`, ahead of the `root ||` disjunct - 698 call sites and 89 `@RequestParam companyId` controllers close at one method. Two further root short-circuits were found and shut *because* P3-11 would otherwise have been dead code: `canActOn` returned true for root before ever calling `canActIn`, and `PermissionChecks.scoped`/`scopedOrMember` short-circuited before calling `canActOn`. Root keeps its company-level bypass inside its own organisation; only cross-tenant reach is gone. **P3-11's wording was corrected in the building**: applying the equality *unconditionally*, as written, would lock out any account whose `organisation_id` is still NULL - and since `companies.organisation_id` is already NOT NULL, that is the only way the strict rule could fire on today's estate, so it would be a total lockout with nothing bought. The rule shipped fires on a **positive** mismatch only; the permissive branch is a data gap, not an input, and self-liquidates at P2-1's follow-up. **P3-12 refuted its own premise**: all 207 frozen entries were classified (119 guarded, ~61 loaded-row FK navigation, 13 SYSTEM, 13 read by hand) and **none is exploitable across a tenant boundary** - because URLs address by uid, so caller-supplied numeric ids barely exist. The blessing now rests on two properties of the code rather than on one customer per database. 1,353 tests green; the new rule was verified to fail on the naive `!isSameTenant` form. | owner |
 | 2026-08-14 | **§1.2 role classification added, with recommendations.** Corrects the count: **13** shipped `is_system` roles, not 12 — `ORG_ADMIN` is seeded separately at `V1__baseline.sql:289-292`. Separates the two axes that were being conflated: *who owns a role* (global vs scoped) and *who may confer it* (four tiers). Adds worked sample data for two tenants. Two rules fall out: **R-1** a tenant role code may not collide with a global one (V100's partial indexes sit on different partitions, so they permit exactly the ambiguity P4-1c is fixing) → **P4-1d**; **R-2** platform capabilities must never be ordinary permission rows, because `R__seed_permissions.sql:267-274`'s CROSS JOIN gives `ORG_ADMIN` every permission on every deploy → **P4-1e**, which must land *before* P3-10. Recommendations recorded: **ORG_ADMIN stays tier 2** (matching AWS/Azure/Google practice) with MFA on privileged roles (**P4-2b**, un-defers that half of P2-5), a never-zero-admins invariant (**P4-2c**) and a narrowed CROSS JOIN; **`PLATFORM_OPERATOR` becomes a real tier-3 role** and `is_root` is **re-bounded rather than removed** — organisation-bounded root dissolves §8's sharpest risk, since `setRoot(true)` then only makes someone powerful inside their own tenant. D-2 updated with the staged recommendation. | owner |
 | 2026-08-14 | **§1.2's recommendations RATIFIED; D-2 and D-3 closed.** Four of eight decisions now resolved. **D-2:** sentinel platform organisation + tier-3 `PLATFORM_OPERATOR` role + `is_root` re-bounded (not removed) to "full authority inside my own organisation", in three stages. Consequence: `app_users.organisation_id` **can** be `NOT NULL` in V101, and every predicate stays total. **D-3:** bundles stay global and `assertCanConferRole`'s blanket "non-root ⇒ refuse" is replaced by a four-part rule — grantee in the caller's own organisation, tier-1/2 conferrable only by a caller who holds it (ADR-0059's subset checks intact), tier-3 never conferrable by a tenant, tier-2/3 requiring MFA and a high-severity audit row. **§8's sharpest risk is now resolved structurally**: organisation-bounded root makes `setRoot(true)` harmless, so the trap dissolves rather than being guarded — *conditional on P3-1 and P3-2 landing before P5-1*, now recorded as a hard prerequisite. P2-5 amended (privileged-account MFA un-deferred; general MFA still deferred). `G4` closed. New **P0-4**: the ceiling change must also amend ADR-0059, or an implementer reading it alone will restore the old refusal. Remaining open: D-4, D-5, D-6, D-8, P0-1b, P0-1c — with **D-5 the day-one operational blocker** and **D-8 a legal gate on tenant #2**. | owner |
