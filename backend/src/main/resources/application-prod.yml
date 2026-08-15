@@ -17,6 +17,22 @@ spring:
   config:
     activate:
       on-profile: prod
+  # P8-10 (ADR-0062): capacity floor for scheduled work.
+  #
+  # Spring Boot's default scheduler pool is ONE thread, shared by every @Scheduled job: the outbox
+  # dispatcher, the midnight standing-order run, the hourly notification scan and the metrics sweep.
+  # On one thread a slow job blocks the rest - the notification scan iterates every company serially,
+  # and while it runs the standing-order sweep cannot start.
+  #
+  # NOTE: this MUST live inside the single top-level `spring:` key. Appending a second `spring:`
+  # block at the end of the file is a duplicate-key parse error, and Spring's YAML loader rejects it
+  # before reading any property - the application dies at startup. That shipped as 1.8.2 and took the
+  # live customer down, because this file is loaded by the `prod` profile ONLY: local runs use `dev`
+  # and QA uses `qa`, so no environment except the customer's ever parses it.
+  task:
+    scheduling:
+      pool:
+        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:4}
 
 management:
   endpoint:
@@ -38,16 +54,3 @@ logging:
     org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql: WARN
     org.springframework.security: WARN
-
-# P8-10 (ADR-0062): capacity floor for the scheduled work.
-#
-# Spring Boot's default scheduler pool is ONE thread, shared by every @Scheduled job:
-# the outbox dispatcher, the midnight standing-order run, the hourly notification scan
-# and the metrics sweep. On one thread a slow job blocks the rest - the notification
-# scan iterates every company serially, and while it runs the standing-order sweep
-# cannot start. Overridable per install with SPRING_TASK_SCHEDULING_POOL_SIZE.
-spring:
-  task:
-    scheduling:
-      pool:
-        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:4}
