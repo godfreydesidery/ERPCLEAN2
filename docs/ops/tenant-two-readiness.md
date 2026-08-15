@@ -7,20 +7,37 @@ The one-line answer: **the tenancy spine is built, and it is not what stands bet
 customer #2.** What stands there is provisioning, identity data, and a deployment story — none of
 which needs a schema change, and most of which is small.
 
-## 1 · The decision to make first
+## 1 · The decision — made 2026-08-15: **SHARED INSTANCE**
 
-**Does one database hold two customers?** Recommendation: **no** — customer #2 gets their own
-stack (own database, own JWT keypair, own organisation). Recorded as **D-11** in
-[MULTITENANCY-PLAN.md](../../MULTITENANCY-PLAN.md), with the evidence.
+**Does one database hold two customers? The owner's answer is yes.** Both customers live in one
+database, one application, separated by `organisation_id`. Recorded as **D-11** in
+[MULTITENANCY-PLAN.md](../../MULTITENANCY-PLAN.md), together with the own-stack case that was
+overruled — kept because the risks it named did not disappear, they became work items.
 
-It is worth making this decision before the rest, because it decides three others at once (D-4 RLS,
-D-5 per-tenant restore, D-6 departure) and it decides how much of the list below matters.
+This section originally recommended separate stacks. That recommendation was not taken, and the
+honest consequence is that **the list below gets longer, not shorter**:
 
-The single most load-bearing fact: **`TenantProvisioningService` sets `setRoot(true)` on every
-tenant's administrator, and `PermissionResolver` short-circuits root past every permission check.**
-On separate stacks that is contained. On a shared instance, customer #2's own administrator would
-satisfy `ORG.SUSPEND` — against customer #1. `PLATFORM_OPERATOR` is currently a name in
-`AuthorityCeiling` with no seeded row behind it.
+| Now required | Why it was not, before |
+|---|---|
+| **Fix the root/platform tier — first, before anything else** | contained when each customer has their own box |
+| **D-5 per-tenant restore** | dropping the database *was* the per-tenant restore |
+| **D-4 RLS backstop** (re-decide) | rejected because one database held one tenant |
+| **D-6 departure** — per-tenant extract and delete | `pg_dump` and dropping the database |
+| **D-8 per-tenant fiscalisation** | a legal gate either way; now a technical one too |
+| **Per-tenant mail identity** (P8-5) | one `From` address was one customer's address |
+
+**The item to do first, ahead of everything else on this page.**
+`TenantProvisioningService` sets `setRoot(true)` on **every** tenant's administrator, and
+`PermissionResolver` short-circuits root past every permission check. On separate stacks that is
+contained. **On a shared instance it means customer #2's own administrator satisfies `ORG.SUSPEND` —
+against customer #1.** `PLATFORM_OPERATOR` is currently a name in `AuthorityCeiling` with no seeded
+row behind it. This is not a decision to weigh; it is a hole to close before customer #2 exists.
+
+And one thing no amount of engineering removes: with both customers in one instance, **the next bad
+release is a two-customer outage**, and there is no canary — no shipping to one box, watching it, then
+shipping to the other. The five gates in
+[release-staging-and-rollback.md](release-staging-and-rollback.md) stop being good practice and become
+the only defence there is.
 
 ## 2 · Blockers, in the order they bite
 

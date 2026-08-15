@@ -423,20 +423,25 @@ Nothing in Phase 1 should start until all eight are closed. Record the answer in
 
 **Status as of 2026-08-15:**
 
-| Resolved | Recommended, owner to confirm | Still open |
+| Resolved | Reopened by D-11 (shared instance) | Still open |
 |---|---|---|
-| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>` · **D-9** aggregate-root hedge · **D-10** email scoped to `(organisation_id, email)` | **D-11** own stack per customer · **D-4** reject RLS · **D-6** suspension built, departure by topology | **D-5** per-tenant restore · **D-8** per-tenant fiscalisation |
+| **D-1** (a) new customers only · **D-2** sentinel org + tier-3 role + re-bounded `is_root` · **D-3** bundles stay global, ceiling rule replaced · **D-7** `<user>@<org-alias>`, **D-7b alias immutable** · **D-9** aggregate-root hedge · **D-10** email scoped to `(organisation_id, email)` · **D-11 SHARED INSTANCE** · **D-8 per-tenant fiscalisation: YES** | **D-4** RLS · **D-5** per-tenant restore · **D-6** departure | (none — all decided; what remains is build work) |
 
-**Every decision that gates Phase 1 is closed**, and the schema is not waiting on any of the rest.
+**Every decision is now taken.** What remains is build work, not deliberation.
 
-**The three that looked open were one decision.** D-4, D-5 and D-6 all turn on whether a single
-database holds two customers — see **D-11**, added 2026-08-15. Under the recommended own-stack
-topology D-4 and D-6 resolve as recorded below and **D-5 stops being a day-one blocker**, because
-whole-database backup and restore is then per-tenant by construction. Under a shared instance all
-three come back at once, before customer #2's first day.
+**The owner chose the SHARED INSTANCE (D-11) on 2026-08-15.** That single answer settles the three
+that looked open — by making all of them REQUIRED rather than not-applicable. D-4 (RLS), D-5
+(per-tenant restore) and D-6 (departure) all turn on whether one database holds two customers, and it
+now does. They were closed hours earlier on the opposite premise and are reopened above, each with
+the reason.
 
-**D-8 (per-tenant fiscalisation) is unaffected by topology** — it is a legal gate on onboarding a
-second Tanzanian customer either way, and is now the critical path.
+**D-8: YES — fiscalisation is per-tenant.** It was always a legal gate on onboarding a second
+Tanzanian customer regardless of topology; under a shared instance it is also a technical one,
+because `FiscalisationProperties` is a single global provider config in one JVM.
+
+**The first item is not on this list.** Every tenant administrator is created with `is_root`, and
+root short-circuits every permission check — harmless on separate stacks, a cross-customer authority
+hole on a shared one. **That is fixed before customer #2 exists**, ahead of D-4, D-5 and D-6.
 
 Still outstanding as *measurements* rather than decisions: **P0-1c** and **P1-0**, both covered by
 [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
@@ -537,8 +542,20 @@ Today a missed predicate leaks inside one client's own installation; afterwards 
 cross-customer breach. RLS keyed on a session GUC is the standard shared-schema backstop.
 Rejecting it is fine — rejecting it by omission is not.
 
-**RECOMMENDED REJECT — 2026-08-15. Owner confirmation outstanding; recorded so it is a decision
-rather than an omission.**
+> **⚠ REOPENED the same day, 2026-08-15.** The rejection below rests entirely on "one tenant per
+> database". **D-11 resolved to a SHARED INSTANCE**, so that premise is false and the rejection with
+> it. Everything below is retained because the *reasoning* is still the reasoning you need — but read
+> it as the case that must now be re-answered on the true premise, not as a decision in force.
+>
+> What actually changes: a missed application predicate stops being a leak inside one customer's own
+> installation and becomes a **breach between two paying customers**. The objection about the failure
+> mode still holds and is still the hard part — a missed session GUC does not leak, it returns
+> nothing, so the symptom is a silently empty screen or a report quietly missing rows on a live
+> system. That argues for care in how RLS is introduced, not against introducing it. **Open.**
+
+*The now-superseded rejection follows.*
+
+**RECOMMENDED REJECT — 2026-08-15, on the one-tenant-per-database premise. SUPERSEDED by D-11.**
 
 RLS is worth exactly as much as the number of tenants sharing a database. That number is **one**,
 in every environment that exists: the live customer has one organisation, QA has one, and the
@@ -586,6 +603,10 @@ deletion today means hand-deleting from 204 tables in FK order.
   the recommendation, not an oversight. Billing state that the application enforces is a product
   decision nobody has made; inventing semantics for two columns because they exist is how a
   half-meant field becomes load-bearing. `status` is the enforcement point; these two are notes.
+- **Departure — ⚠ REOPENED by D-11.** The answer below assumed one organisation per database. Under
+  a shared instance, departure is a real engineering problem again: a per-tenant extract that does not
+  hand over another customer's rows, and a deletion across 204 tables in FK order. **Open**, and
+  contractually relevant before customer #2 signs. *The superseded answer:*
 - **Departure — answered by topology, not by code.** Under one organisation per database (§D-11)
   the export path is `pg_dump` and the deletion is dropping the database. Both exist, both are
   drilled by `backup.sh`/`restore.sh`. **No per-tenant extract or 204-table cascade should be
@@ -606,8 +627,13 @@ Four sub-questions remain, all small but none safe to leave to the implementer:
   `CHECK` constraint (§5.1) *and* in the service, so a seeder cannot bypass it. **Open.**
 - **D-7b · Is the alias immutable?** If a customer rebrands, does `jambobora` become `jambo`?
   Renaming rewrites **every username in that tenant**, invalidates saved credentials on every till
-  and browser, and orphans the audit trail's readability. **Recommendation: immutable once set**,
-  with a display name (`organisations.name`) free to change. **Open.**
+  and browser, and orphans the audit trail's readability. **RESOLVED 2026-08-15: IMMUTABLE once set**,
+  with the display name (`organisations.name`) free to change. A rebrand changes what the customer is
+  called, never what their people type to log in. The alias therefore has no setter path: it is
+  derived once by `OrganisationAlias.derive` at provisioning and back-filled once by
+  `TenancyReconciler` for the pre-tenancy organisation. Enforcing it needs no migration — there is no
+  update path to remove. If one is ever added, it must be refused at the service, not merely omitted
+  from the UI.
 - **D-7c · Separator.** `@` reads naturally and matches a well-understood pattern (Windows UPN,
   Azure AD). The cost: `smith@jambobora` *looks* like an email while `app_users.email` is a
   separate column with its own global unique. Two consequences to accept deliberately —
@@ -804,11 +830,45 @@ Phase 1 relies on.
 > currently constraining nothing. Zero risk to apply; the decision is about the shape of the
 > namespace going forward, not about existing data.
 
-### D-11 · Deployment topology for customer #2 — **the decision D-4, D-5 and D-6 were waiting on**
+### D-11 · Deployment topology for customer #2 — **RESOLVED 2026-08-15: SHARED INSTANCE**
+
+> **⬤ OWNER DECISION 2026-08-15: one shared instance.** Both customers in one database, one
+> application, separated by `organisation_id`. This is the opposite of the recommendation recorded
+> below, which is kept in full because the risks it names did not go away by being overruled — they
+> became **work items**. The decision stands; what follows it is the bill.
+>
+> **What this decision switches back ON.** D-4, D-5 and D-6 were closed hours earlier on the explicit
+> premise that one database holds one tenant. **That premise is now false, so all three reopen:**
+>
+> | Reopened | Was closed because | Now |
+> |---|---|---|
+> | **D-4** RLS backstop | "RLS is worth what the tenant-per-database count is, and that is one" | The count is two. A missed application predicate is now a **cross-customer breach**, not an internal one. Re-decide on the true premise. |
+> | **D-5** per-tenant restore | not applicable — dropping the database *is* the deletion | **Day-one blocker.** `orbixerp.sh` restore runs `DROP SCHEMA public CASCADE`; `infra/prod/restore.sh` is `pg_restore --clean`. Rolling customer B back to yesterday **costs customer A a trading day** and re-issues their invoice numbers. |
+> | **D-6** departure | `pg_dump` and dropping the database | A real engineering problem again: per-tenant extract, and deletion across 204 tables in FK order. |
+>
+> **And one that is not a decision but a defect.** `TenantProvisioningService` sets `setRoot(true)`
+> on **every** tenant's administrator, and `PermissionResolver` short-circuits root past every
+> permission check. On separate stacks that is contained. **On a shared instance it is a live
+> cross-customer authority hole** — customer #2's own administrator would satisfy `ORG.SUSPEND`,
+> against customer #1. `PLATFORM_OPERATOR` is presently a name in `AuthorityCeiling` with no seeded
+> row. **This must be fixed before customer #2 is created on the shared box**, and it is the first
+> item on the shared-instance checklist, ahead of everything else in this plan.
+>
+> Also now per-tenant problems, all single-valued in one JVM today: fiscalisation provider config
+> (**D-8**), the mail `From` address (**P8-5**), and the standing-order sweep's single-node
+> assumption. **`dist/` becomes permanently dual-track** (§12) — that cost is the price of shared,
+> and it is now being paid deliberately.
+>
+> The blast-radius point also stands and cannot be engineered away: one shared instance means the
+> next bad release is a **two-customer outage**, and there is no canary — no shipping to one box,
+> watching, then the other. [`release-staging-and-rollback.md`](docs/ops/release-staging-and-rollback.md)'s
+> five gates become the only defence, so none of them is optional now.
+
+*The original assessment and recommendation follow, unchanged.*
 
 Added 2026-08-15 after a 12-agent readiness assessment against the shipped code and `infra/`.
-**Owner decision. Recommendation: give customer #2 their own stack — own database, own JWT keypair,
-own organisation — and revisit the shared instance around customer #4–5.**
+**Recommendation (OVERRULED — see the decision above): give customer #2 their own stack — own
+database, own JWT keypair, own organisation — and revisit the shared instance around customer #4–5.**
 
 Three of the four decisions still marked open are not independent. **D-4 (RLS), D-5 (per-tenant
 restore) and D-6 (departure) are all consequences of one question: does one database hold two
