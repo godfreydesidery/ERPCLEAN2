@@ -1621,6 +1621,20 @@ make it true, and they must land before any predicate in Phase 3 is written.
       `roles.existsByCode(request.code())`. Under scoped roles it must become
       `existsByOrganisationIdAndCode`, or tenant B can never use a code tenant A already took, which
       defeats the whole point. **Blocked by the `uq_role_code` prerequisite below.**
+> **P4-1c is written up and awaiting approval (2026-08-15):**
+> [`docs/ops/multitenancy-v102-proposal.md`](docs/ops/multitenancy-v102-proposal.md). Rehearsed on the
+> client's database copy, and it is a **three**-part change, not two. The finding: dropping
+> `uq_role_code` **breaks `R__seed_permissions.sql`** — line 322 upserts roles with
+> `ON CONFLICT (code)`, which needs a unique index on `(code)` alone (`ERROR: there is no unique or
+> exclusion constraint matching the ON CONFLICT specification`). It fails **late**: V102 does not
+> change the seed's checksum, so nothing breaks on the deploy — it breaks on the next seed edit, as a
+> boot failure on every deployment. Fix verified: `ON CONFLICT (code) WHERE organisation_id IS NULL`.
+> The same change also **fixes an existing bug** — today's clause silently adopts a customer's role
+> and flips it to `is_system`; afterwards the seed cannot see the tenant partition at all.
+> R-1 enforcement is proposed **asymmetrically**: service check + a tenant-side trigger for direction 1,
+> and detection-not-blocking for direction 2, because a trigger there turns a name clash into a boot
+> failure on a live customer. Note: **zero triggers exist in this schema across 101 migrations.**
+
 - [ ] **P4-1c** **Prerequisite, and the real gate on per-tenant role codes.** `uq_role_code` is
       retained for now because dropping it breaks approvals at one organisation (§5.1). Two tenants
       cannot both have a `SUPERVISOR` until it goes — so make role-code resolution **org-aware first**
