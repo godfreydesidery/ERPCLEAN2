@@ -35,6 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UserRoleServiceImpl implements UserRoleService {
 
+    /** The tenant administrator bundle (V1__baseline.sql). Guarded by P4-2c's never-zero rule. */
+    private static final String ORG_ADMIN_CODE = "ORG_ADMIN";
+
     private final UserRoleRepository userRoles;
     private final AppUserRepository users;
     private final RoleRepository roles;
@@ -110,7 +113,11 @@ public class UserRoleServiceImpl implements UserRoleService {
         Set<String> roleCodes = role.getPermissions().stream()
                 .map(Permission::getCode)
                 .collect(Collectors.toSet());
-        authorityCeiling.assertCanConferRole(RequestContext.get(), role.isSystem(), roleCodes);
+        // D-3 (P4-2): the code is passed so the ceiling can refuse tier-3 roles outright. Tiers 1
+        // and 2 - the twelve bundles and ORG_ADMIN - now go through the ordinary subset check, so a
+        // tenant admin can finally grant the bundles to their own staff.
+        authorityCeiling.assertCanConferRole(
+                RequestContext.get(), role.isSystem(), roleCodes, role.getCode());
 
         Long grantedBy = RequestContext.get().userId();
         UserRole ur = new UserRole(user.getId(), role, company.getId(), branchId, grantedBy);
@@ -156,6 +163,19 @@ public class UserRoleServiceImpl implements UserRoleService {
         AppUser user = users.findById(ur.getUserId()).orElse(null);
         String userUid = user != null ? user.getUid() : null;
         String roleCode = ur.getRole().getCode();
+
+        // P4-2c (ADR-0062): never-zero-admins. Revoking the last ORG_ADMIN of an organisation locks
+        // that tenant out of its own administration - nobody left who can grant a role, add a user or
+        // undo the mistake - and the only repair is vendor intervention against the database. Counts
+        // DISTINCT active users, so one administrator holding ORG_ADMIN in three companies is still
+        // one administrator. Root is exempt: it is the vendor deliberately dismantling a tenant.
+        if (ORG_ADMIN_CODE.equals(roleCode) && user != null && user.getOrganisationId() != null
+                && (RequestContext.get() == null || !RequestContext.get().root())
+                && userRoles.countActiveHoldersInOrganisation(
+                        ORG_ADMIN_CODE, user.getOrganisationId()) <= 1) {
+            throw new ConflictException(
+                    "This is the last administrator. Give someone else the administrator role first.");
+        }
 
         ur.revoke(Instant.now());
         permissionResolver.invalidateUser(ur.getUserId());

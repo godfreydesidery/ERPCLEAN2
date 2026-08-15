@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.platform.common.api.ForbiddenException;
+import org.junit.jupiter.api.DisplayName;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -105,11 +106,36 @@ class AuthorityCeilingTest {
     // ---- role conferral (system-role block) --------------------------------
 
     @Test
-    void conferRole_systemRole_nonRootCaller_throwsForbidden() {
-        // A system role (e.g. ORG_ADMIN) is refused outright for a non-root caller — resolver not consulted.
-        assertThatThrownBy(() -> ceiling.assertCanConferRole(nonRoot(), true, List.of("STOCK.VIEW")))
+    @DisplayName("D-3 · a non-root caller CAN confer an is_system bundle they hold themselves")
+    void systemRoleIsConferrableWithinTheCeiling_sinceD3() {
+        // REVERSED BY D-3 (ADR-0062 P4-2). This asserted that a non-root caller may never confer an
+        // is_system role. Every one of the twelve shipped bundles is is_system, so that rule made
+        // them decorative: a tenant's own administrator could not grant CASHIER to a cashier. The
+        // workaround people reach for is setRoot(true), which is the sharpest risk in the design.
+        //
+        // What replaces it is NOT a relaxation of ADR-0059: the subset check still applies, so the
+        // caller may confer only what they already hold. Only the blanket is_system refusal is gone.
+        callerHolds("STOCK.VIEW");
+        assertThatCode(() -> ceiling.assertCanConferRole(nonRoot(), true, List.of("STOCK.VIEW")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("D-3 · but a tier-3 platform role is never conferrable by a tenant")
+    void tier3IsNeverConferrableByATenant() {
+        // PLATFORM_OPERATOR does not exist yet (D-2 stage 2). It is refused by CODE, so the guard is
+        // already in place on the day the role is seeded rather than added afterwards.
+        assertThatThrownBy(() -> ceiling.assertCanConferRole(
+                nonRoot(), true, List.of("STOCK.VIEW"), "PLATFORM_OPERATOR"))
                 .isInstanceOf(ForbiddenException.class);
-        verify(resolver, never()).resolve(anyLong(), anyLong(), any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("D-3 · the subset invariant still bites — you cannot confer what you do not hold")
+    void subsetInvariantSurvivesD3() {
+        // The load-bearing half. If this ever passes, D-3 has been turned into privilege escalation.
+        assertThatThrownBy(() -> ceiling.assertCanConferRole(nonRoot(), true, List.of("GL.POST")))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test

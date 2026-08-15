@@ -36,6 +36,22 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
     List<UserRole> findByUserIdAndRevokedAtIsNull(Long userId);
 
     /**
+     * How many people still hold {@code roleCode} inside one organisation (ADR-0062 P4-2c).
+     *
+     * <p>Backs the never-zero-admins invariant. Counts DISTINCT users, not grants: the same person
+     * may hold ORG_ADMIN in several companies of the tenant, and three grants held by one leaver is
+     * still one administrator.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(DISTINCT ur.userId) FROM UserRole ur "
+          + "JOIN AppUser u ON u.id = ur.userId "
+          + "WHERE ur.revokedAt IS NULL AND ur.role.code = :roleCode "
+          + "AND u.organisationId = :organisationId AND u.status = com.erp.platform.common.domain.MasterStatus.ACTIVE")
+    long countActiveHoldersInOrganisation(
+            @org.springframework.data.repository.query.Param("roleCode") String roleCode,
+            @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
+
+    /**
      * Distinct users holding an active grant of {@code roleId}, in any company or branch. Used by
      * {@code PermissionResolver.invalidateRole} to evict exactly the cached permission sets a
      * role-permission edit invalidates, instead of clearing the cache for the whole tenant.

@@ -339,6 +339,31 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
+    @Test
+    @DisplayName("P4-4/D-3 · a tenant admin can grant a shipped bundle to their own staff")
+    void aTenantAdminCanGrantAShippedBundle() {
+        // Before D-3 this was impossible, and that was the whole problem: every one of the twelve
+        // bundles is is_system, and assertCanConferRole refused every is_system role to any non-root
+        // caller. A platform-wide role nobody in the organisation can confer is decorative — and the
+        // workaround people reach for is setRoot(true), the sharpest risk in the design.
+        Role bundle = roles.findAll().stream()
+                .filter(r -> r.getOrganisationId() == null && r.isSystem()
+                        && !"ORG_ADMIN".equals(r.getCode()))
+                .findFirst().orElseThrow(() ->
+                        new IllegalStateException("no shipped bundle seeded — this would be vacuous"));
+
+        assertThat(bundle.isSystem()).isTrue();
+        assertThat(bundle.getOrganisationId())
+                .as("the bundles must still be GLOBAL — D-3 keeps them platform-wide and changes only "
+                        + "who may confer them")
+                .isNull();
+
+        // Visible to the tenant through the NULL-tolerant predicate (I-2), which is the other half
+        // of making them usable: you cannot grant what you cannot see.
+        actingAsA(adminA);
+        assertThat(roleService.list().stream().map(r -> r.code())).contains(bundle.getCode());
+    }
+
     // ---------------------------------------------------------------------
     // The control that guards the guard
     // ---------------------------------------------------------------------

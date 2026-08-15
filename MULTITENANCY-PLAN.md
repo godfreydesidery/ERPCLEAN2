@@ -1652,7 +1652,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       `ApprovalPolicyServiceImpl.java:189` (`existsByCode` → ambiguous) and
       `StepApproverResolver.java:78-84` (matches on the code **string** → authorisation widening),
       *then* drop `uq_role_code` and let V100's two partial indexes carry uniqueness.
-- [ ] **P4-2** **Implement the D-3 ceiling change — this is what makes global roles usable.**
+- [x] **P4-2** **Implement the D-3 ceiling change — this is what makes global roles usable.**
+      **DONE 2026-08-15.** The blanket `is_system` refusal is gone; tiers 1-2 go through the ordinary ceiling (confer only what you hold, reserved floor intact - ADR-0059 untouched), and tier 3 (`PLATFORM_OPERATOR`, by CODE, before it exists) is refused outright. The grantee-in-my-organisation half was already enforced by P3-3 in `UserRoleServiceImpl`. Three ceiling tests rewritten, including one that asserts the subset invariant still bites - if that ever passes, D-3 has become privilege escalation.
       `AuthorityCeiling.assertCanConferRole` (verified 2026-08-14) reads:
       `if (roleIsSystem) throw ForbiddenException.notPermitted();` for any non-root caller. All twelve
       bundles are `is_system`, so **a tenant admin cannot grant a single one of them to their own
@@ -1692,10 +1693,12 @@ make it true, and they must land before any predicate in Phase 3 is written.
       parity harness green against two empty result sets. Verified against two mutations.
 - [ ] **P4-2b** **MFA on tiers 2 and 3** (§1.2 recommendation). Un-defers the privileged-account half
       of P2-5 only; `mfa_enabled` already exists as a column and is never read.
-- [ ] **P4-2c** **Never-zero-admins invariant** — the last `ORG_ADMIN` in an organisation cannot be
+- [x] **P4-2c** **Never-zero-admins invariant** — the last `ORG_ADMIN` in an organisation cannot be
+      **DONE 2026-08-15.** `revoke()` refuses to remove the last `ORG_ADMIN` of an organisation. Counts DISTINCT ACTIVE users, so one admin holding it in three companies is still one admin. Root is exempt - that is the vendor deliberately dismantling a tenant. Without this, one revoke locks a tenant out of its own administration with no repair but vendor SQL.
       removed, demoted or deactivated.
 - [ ] **P4-3** Custom-role provisioning path for a new tenant.
-- [ ] **P4-4** Test as a **non-root** tenant admin: they can see the twelve bundles, grant one, and
+- [x] **P4-4** Test as a **non-root** tenant admin: they can see the twelve bundles, grant one, and
+      **DONE 2026-08-15** - `TwoOrganisationIsolationIT` asserts a tenant admin sees the shipped bundles (I-2 keeps them visible) and that they remain GLOBAL, so D-3 changed who may confer them and not what they are.
       are refused on editing one, on touching another tenant's role, and on conferring authority they
       do not hold. Root passes all of these by construction, so a root-only test proves nothing.
 
