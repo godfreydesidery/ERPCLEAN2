@@ -1,35 +1,56 @@
-### Restoring a backup is now safe
+### Your administrator can now hand out the standard job roles
 
-The `restore` command has been rewritten. Three things were wrong with it, and all three
-could leave you with a database that was only partly rolled back while the screen said
-**Restore complete**.
+The twelve standard roles that ship with OrbixERP — Cashier, Salesperson, Accountant, Storekeeper,
+Procurement Officer and the rest — could not previously be given to anyone by your own
+administrator. Only we could. In practice that meant either waiting for us, or someone being made a
+full system owner just so they could get on with their work.
 
-- **It now takes a safety copy of your current database before it starts.** Previously it did
-  not, so restoring the wrong file destroyed what you had with no way back. If that safety copy
-  cannot be made, the restore stops and nothing is changed.
-- **It now clears the database properly before restoring.** The old method removed things one at
-  a time in the order the backup listed them, which failed whenever your live database contained
-  something newer than the backup.
-- **It now stops and tells you if anything goes wrong**, instead of reporting success. If a
-  restore does fail, the message names the safety copy so you can return to where you were.
+Your administrator can now assign any of those roles to your staff directly, with one limit that
+matters: **they can only give away what they hold themselves.** Someone who cannot post to the
+general ledger cannot grant that ability to anybody else. Nobody can promote themselves.
 
-The safety copy is kept in `backups/` alongside your normal backups.
+### The last administrator can no longer be removed by accident
 
-### The desktop shortcut works again
+Removing the administrator role from the only person who has it used to be allowed. It left nobody
+able to add a user, grant a role or undo the mistake — and the only way back was for us to repair it
+directly in the database.
 
-`OrbixERP.cmd` — the icon on the desktop, and the file the guides tell you to use — looked for a
-file under the wrong name. Opening it printed *"This folder looks incomplete. Unpack the bundle
-again."* and closed, on every version from 1.1.0 onwards. It now opens correctly.
+That is now refused, with a message explaining why. Give someone else the administrator role first,
+then remove it from the original person.
 
-If you have been running commands by hand because the icon did not work, you no longer need to.
+### Approval attempts at the till
+
+When a cashier asks a supervisor to approve something — a discount, a price override — and the
+supervisor's password is correct but they are **not allowed** to approve that particular action,
+that attempt now counts towards the same short cool-down as a wrong password.
+
+This closes a gap. Previously those attempts were unlimited, which meant someone could stand at a
+till and check a colleague's password over and over without ever being locked out.
+
+The message on screen is unchanged and still tells the operator plainly that the person is not
+allowed to approve the action — it does not pretend the password was wrong.
+
+### Withdrawn branch access now takes effect properly
+
+If a user's access to a branch is withdrawn, they could still switch their session into that branch.
+They were then refused the branch's reports, which looked like a broken screen rather than a
+withdrawn permission. Withdrawn access is now honoured at the point of switching.
+
+We checked your live system before making this change: **no branch access has been withdrawn on your
+installation**, so nobody currently working is affected.
+
+### Branch switching appears in the audit trail
+
+Moving between branches was not recorded anywhere. Where the move crosses from one company to
+another it is now written to the audit trail, with who did it and when.
+
+### Removing a system owner now takes effect immediately
+
+If someone's system-owner status is removed, it previously stayed in force until their existing
+sign-in expired — up to fifteen minutes. It now applies on their next action.
 
 ### Groundwork you will not see
 
-This release adds some new, empty columns to the database in preparation for future work. Nothing
-in the system behaves differently because of them, and no screen changes. They are listed here only
-so the update log makes sense if you look at it.
-
-### Nothing to do after updating
-
-There is no configuration change, no new setting, and no action required from you or your staff.
-Log in and carry on as normal.
+Most of this release is preparation for running several separate businesses on one installation.
+None of it changes anything on a single installation like yours: the same screens, the same data,
+the same numbers. It is mentioned only so the update log makes sense if you look at it.
