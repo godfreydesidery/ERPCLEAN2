@@ -1741,7 +1741,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       empty list and cannot record a leave request. One class, added to P5-1's chain. *(All 21 other
       per-company SQL seeders are already covered by `CompanyProvisioningServiceImpl.provisionDefaults`
       — this is the only gap.)*
-- [ ] **P5-6** **Pre-seed `code_sequence` and `party_code_sequence` rows during provisioning.**
+- [x] **P5-6** **Pre-seed `code_sequence` and `party_code_sequence` rows during provisioning.**
+      **DONE 2026-08-15** (commit `0202d044`) — `CodeSequenceSeeder` creates all 30 kinds during provisioning, hooked into `CompanyProvisioningService`. `CodeSequenceSeederCoversAllKindsTest` re-derives the true set from source and fails on divergence in both directions, verified against a dropped kind. Note: `party_code_sequence` is NOT covered — only `code_sequence`. That half remains open.
       Every number generator does `findByCompanyIdAndEntityKindForUpdate(...).orElseGet(save(new ...))`
       — e.g. `ApBillNumberGenerator.java:31-32` and three more in the same file. `PESSIMISTIC_WRITE`
       on a row that does not exist locks nothing, so two clerks raising the first document of a kind
@@ -1804,6 +1805,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       Must include: the `G1` four-call chain; a `POST /companies` carrying B's organisation uid;
       an archive of one of B's roles; an `X-Branch-Uid` pointing at a B branch.
 - [ ] **P7-3** Extend `TenantScopingRulesTest`. Note its own comment: `findByUid` is *intentionally*
+      **STILL OPEN — was wrongly listed as done in PR #313.** The commit message and PR body both claim it; `TenantScopingRulesTest` was in fact untouched (last changed in `db57357f`, predating that work). Corrected 2026-08-15.
       out of scope, delegated to the e2e harness — **and every cross-org finding above is
       `findByUid`-shaped**. Also add `existsById`, which the predicate does not currently match
       (see P7-4).
