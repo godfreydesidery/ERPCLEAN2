@@ -1711,7 +1711,20 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 ### Phase 7 — Verification
 
-- [ ] **P7-1** Rewrite the isolation harness for **two organisations**. All eight `*Isolation*` ITs
+- [x] **P7-1 / P7-2** DONE 2026-08-15 — `TwoOrganisationIsolationIT`, the first test in this codebase
+      to put **two organisations in one database**. 8 probes, one per control Phases 2-3 added, each
+      phrased as the attack it prevents; the caller is always a member of org A, the target always
+      belongs to org B, and root is included in the scope probes because `is_root` is
+      deployment-global.
+      **The finding that justified doing this before Phase 4:** all eight existing `*TenantIsolation*`
+      ITs create a SINGLE organisation with two companies inside it (`new Organisation("Isolation Test
+      Org")` then `ISO-A` / `ISO-B`). They are cross-**company** tests. Their names implied coverage
+      that did not exist, which is worse than no tests — it is why nobody had noticed that the whole
+      Phase 2/3 security spine had **never once been observed denying anything**.
+      Verified against two mutations: removing the tenant boundary failed exactly the 3 probes that
+      depend on it (plus 4 unit tests), while the 5 using independent predicates still passed;
+      reverting root's user list to `findAllByOrderByUsername()` failed exactly 1.
+      Original text follows. ~~Rewrite the isolation harness for **two organisations**. All eight `*Isolation*` ITs
       are currently *two companies inside one organisation* — they will pass unchanged after the
       migration while proving nothing about the new boundary.
 - [ ] **P7-2** Probe as a **non-root ORG_ADMIN of org A against org B**. Root passes everything by
