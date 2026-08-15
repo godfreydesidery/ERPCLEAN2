@@ -46,6 +46,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CompanyProvisioningServiceImplTest {
 
+    @Mock CodeSequenceSeeder     codeSequenceSeeder;
     @Mock UnitOfMeasureSeeder    unitSeeder;
     @Mock TaxRateSeeder          taxRateSeeder;
     @Mock SalesSettingsSeeder    salesSettingsSeeder;
@@ -77,7 +78,9 @@ class CompanyProvisioningServiceImplTest {
                 glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
                 inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
                 crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
-                manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder);
+                manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder,
+                // P5-6: provisioning now seeds the document-number sequences up front.
+                codeSequenceSeeder);
     }
 
     @Test

@@ -118,7 +118,12 @@ These are enforced by code/tests and cut across every module. Violating one is a
    (`ERP_JWT_SIGNING_MODE=file`) — a release-gating item.
 
 7. **Audit is written by an aspect**, not calling code (so it can't be forgotten). `audit_log` is
-   **append-only** — the deploy grants the app DB role no UPDATE/DELETE on it.
+   **append-only** — enforced by the application, not by database grants. `AuditService` declares no
+   update or delete, `AuditLog` exposes getters only, and the impl persists a transient entity once,
+   which is what US-IAM-010 AC2 actually requires ("cannot be edited or deleted *through the
+   application*"). The `REVOKE` this line used to claim was never applied on any estate — and it
+   would change nothing if it were, because the runtime role is superuser or schema owner in every
+   shipped topology (verified on the live client 2026-08-14, corrected 2026-08-15).
 
 8. **Cross-module side effects = transactional outbox.** Write a `domain_event` row in the same TX
    as the business write; a poller dispatches it. Never call into another module's service for a

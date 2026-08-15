@@ -83,6 +83,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     // never posts drawer spend to the cash-SHORTAGE variance account; the POS expense path also
     // self-heals an existing company on first use, so an upgrade needs no manual step.
     private final TillExpenseGlSeeder    tillExpenseGlSeeder;
+    private final CodeSequenceSeeder     codeSequenceSeeder;
 
     CompanyProvisioningServiceImpl(
             UnitOfMeasureSeeder    unitSeeder,
@@ -105,7 +106,8 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             NotificationTypeSeeder notificationTypeSeeder,
             ManufacturingGlSeeder  manufacturingGlSeeder,
             CurrencyEnablementSeeder currencyEnablementSeeder,
-            TillExpenseGlSeeder    tillExpenseGlSeeder) {
+            TillExpenseGlSeeder    tillExpenseGlSeeder,
+            CodeSequenceSeeder     codeSequenceSeeder) {
         this.unitSeeder               = unitSeeder;
         this.taxRateSeeder            = taxRateSeeder;
         this.salesSettingsSeeder      = salesSettingsSeeder;
@@ -127,6 +129,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         this.manufacturingGlSeeder    = manufacturingGlSeeder;
         this.currencyEnablementSeeder = currencyEnablementSeeder;
         this.tillExpenseGlSeeder      = tillExpenseGlSeeder;
+        this.codeSequenceSeeder       = codeSequenceSeeder;
     }
 
     /**
@@ -143,6 +146,12 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
                                   List<String> enabledCurrencies) {
         log.info("Provisioning defaults for company {} (base={}, default={}, enabled={}).",
                 companyId, baseCurrency, defaultCurrency, enabledCurrencies);
+
+        // Document-number sequences (ADR-0062 P5-6). Created up front so the PESSIMISTIC_WRITE in
+        // findByCompanyIdAndEntityKindForUpdate has a row to lock. Without them the first two
+        // clerks to raise the same kind of document race, both insert, and one gets a misleading
+        // 409 — most likely on a new tenant's first busy morning, when all thirty kinds are unused.
+        codeSequenceSeeder.seedDefaults(companyId);
 
         // Units of measure
         unitSeeder.seedDefaults(companyId);
