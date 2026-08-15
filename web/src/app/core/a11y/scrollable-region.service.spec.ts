@@ -17,6 +17,29 @@ function stubOverflow(el: HTMLElement, scrollWidth: number, clientWidth: number)
   Object.defineProperty(el, 'clientWidth', { value: clientWidth, configurable: true });
 }
 
+/**
+ * Waits for `predicate` to hold, polling until `timeoutMs`.
+ *
+ * The service coalesces mutations behind a 50ms debounce, so a test that asserts on the result has
+ * to wait for wall-clock time — microtask flushing will not do it. Waiting a fixed multiple of the
+ * debounce is the obvious approach and is what this file did; it is also load-dependent, and it
+ * produced a spec that failed in a full suite run and passed alone seconds later.
+ *
+ * Polling keeps the fast path fast (it returns on the first tick after the debounce fires) while
+ * tolerating a machine that is busy, which is the normal condition in CI.
+ */
+async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      // Fall through and let the assertion that follows report the real mismatch — a bare timeout
+      // error here would hide WHICH attribute was wrong.
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function buildWrap(innerHtml: string): HTMLDivElement {
   const wrap = document.createElement('div');
   wrap.className = 'erp-table-wrap';
@@ -152,8 +175,16 @@ describe('ScrollableRegionService (app-wide scan)', () => {
     const late = document.getElementById('late')!;
     stubOverflow(late, 900, 400);
 
-    // MutationObserver callbacks + our debounce fire on the macrotask queue.
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // MutationObserver callbacks + our 50ms debounce both fire on the macrotask queue, so this has
+    // to wait for a real delay rather than flushing microtasks. It used to wait a flat 100ms —
+    // twice the debounce, which is fine on an idle machine and not fine on a loaded one. It failed
+    // in a full run while the machine was busy and passed on its own moments later, which is the
+    // worst way for a gate to behave: it trains everyone to press retry, and the day it catches a
+    // real a11y regression nobody will believe it.
+    //
+    // Polling for the outcome instead is still fast in the normal case (one or two ticks) and
+    // survives a starved CPU, which is exactly the condition CI runs under.
+    await waitFor(() => late.getAttribute('tabindex') === '0');
 
     expect(late.getAttribute('tabindex')).toBe('0');
     expect(late.getAttribute('role')).toBe('region');
