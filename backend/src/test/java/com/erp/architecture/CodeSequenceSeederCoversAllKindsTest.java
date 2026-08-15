@@ -104,6 +104,47 @@ class CodeSequenceSeederCoversAllKindsTest {
                 .containsAll(used);
     }
 
+    /**
+     * {@code PartyCodeGenerator.prefix}'s switch is the authoritative list of party kinds: a kind
+     * missing from it cannot be allocated at all — the default arm throws. So the switch, not a
+     * comment or an enum, is what this reads.
+     */
+    private static final Path PARTY_GENERATOR = Path.of(
+            "src", "main", "java", "com", "erp", "modules", "parties", "service",
+            "PartyCodeGenerator.java");
+
+    private static final Pattern PARTY_KIND =
+            Pattern.compile("case\\s+\"([A-Z_]+)\"\\s*->\\s*\"[A-Z]+\"");
+
+    @Test
+    @DisplayName("party kinds are seeded too — they use a separate table and the same race")
+    void seederCoversEveryPartyKind() throws IOException {
+        String src = Files.readString(PARTY_GENERATOR, StandardCharsets.UTF_8);
+
+        Set<String> used = new TreeSet<>();
+        Matcher m = PARTY_KIND.matcher(src);
+        while (m.find()) {
+            used.add(m.group(1));
+        }
+
+        assertThat(used)
+                .as("no party kinds found in %s — the prefix switch has changed shape and this test "
+                        + "is checking an empty set", PARTY_GENERATOR)
+                .isNotEmpty();
+
+        assertThat(CodeSequenceSeeder.PARTY_KINDS)
+                .as("PartyCodeGenerator can allocate a kind that provisioning does not seed. Parties "
+                        + "have their own sequence table, so it is easy to add a kind there and miss "
+                        + "this list — and CUSTOMER/SUPPLIER are among the first rows a new tenant "
+                        + "ever creates, which is exactly when two people race.")
+                .containsAll(used);
+
+        assertThat(used)
+                .as("CodeSequenceSeeder.PARTY_KINDS names a kind PartyCodeGenerator would reject "
+                        + "with IllegalArgumentException — seeding it creates a row nothing can use")
+                .containsAll(CodeSequenceSeeder.PARTY_KINDS);
+    }
+
     @Test
     @DisplayName("the seeder does not seed kinds nothing allocates")
     void seederHasNoPhantomKinds() throws IOException {

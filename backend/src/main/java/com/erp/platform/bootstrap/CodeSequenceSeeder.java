@@ -1,5 +1,7 @@
 package com.erp.platform.bootstrap;
 
+import com.erp.modules.parties.domain.entity.PartyCodeSequence;
+import com.erp.modules.parties.repository.PartyCodeSequenceRepository;
 import com.erp.modules.products.domain.entity.CodeSequence;
 import com.erp.modules.products.repository.CodeSequenceRepository;
 import java.util.List;
@@ -56,10 +58,30 @@ public class CodeSequenceSeeder {
             "PROJECT", "PROJECT_ISSUE", "ROUTE", "SALES_INVOICE", "VAT_RETURN", "WHT",
             "WORK_ORDER");
 
-    private final CodeSequenceRepository sequences;
+    /**
+     * Party kinds allocated through the separate {@code party_code_sequence} table.
+     *
+     * <p>Parties keep their own sequence table and their own generator ({@code PartyCodeGenerator},
+     * ADR-0006 D-7) rather than sharing {@code code_sequence}. The race is identical — the same
+     * {@code findForUpdate(...).orElseGet(insert)} with nothing to lock the first time — so leaving
+     * it out would have fixed the numbering race for thirty kinds and left it armed for the four
+     * that a brand-new tenant hits first: registering a customer and a supplier is close to the
+     * first thing anyone does.
+     *
+     * <p>Kept in sync with {@code PartyCodeGenerator.prefix} by
+     * {@code CodeSequenceSeederCoversAllKindsTest}, which reads that switch as the authoritative
+     * list — a kind missing from it cannot be allocated at all, it throws.
+     */
+    public static final List<String> PARTY_KINDS =
+            List.of("AGENT", "CUSTOMER", "OTHER", "SUPPLIER");
 
-    public CodeSequenceSeeder(CodeSequenceRepository sequences) {
+    private final CodeSequenceRepository sequences;
+    private final PartyCodeSequenceRepository partySequences;
+
+    public CodeSequenceSeeder(CodeSequenceRepository sequences,
+                              PartyCodeSequenceRepository partySequences) {
         this.sequences = sequences;
+        this.partySequences = partySequences;
     }
 
     /**
@@ -77,6 +99,13 @@ public class CodeSequenceSeeder {
                 continue;
             }
             sequences.save(new CodeSequence(companyId, kind));
+            created++;
+        }
+        for (String kind : PARTY_KINDS) {
+            if (partySequences.existsByCompanyIdAndPartyKind(companyId, kind)) {
+                continue;
+            }
+            partySequences.save(new PartyCodeSequence(companyId, kind));
             created++;
         }
         if (created > 0) {
