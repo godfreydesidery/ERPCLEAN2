@@ -1617,11 +1617,11 @@ make it true, and they must land before any predicate in Phase 3 is written.
       Both probed by `TwoOrganisationIsolationIT` and verified to fail on the defect.
       **Still open and gated on the migration:** P4-1b (`existsByCode` is global) and P4-1d (R-1),
       which cannot be built until `uq_role_code` goes — see P4-1c.
-- [ ] **P4-1b** **`create()`'s uniqueness check is global today** — `RoleServiceImpl:45`
+- [x] **P4-1b** DONE 2026-08-15 with V102 — `existsByOrganisationIdAndCode`, with the null-organisation (seed/bootstrap) path keeping global uniqueness, which is the right rule for a global role. ~~**`create()`'s uniqueness check is global today** — `RoleServiceImpl:45`
       `roles.existsByCode(request.code())`. Under scoped roles it must become
       `existsByOrganisationIdAndCode`, or tenant B can never use a code tenant A already took, which
       defeats the whole point. **Blocked by the `uq_role_code` prerequisite below.**
-> **P4-1c is written up and awaiting approval (2026-08-15):**
+> **P4-1c APPROVED AND BUILT 2026-08-15 as `V102__role_code_per_tenant.sql`.** Proposal retained at
 > [`docs/ops/multitenancy-v102-proposal.md`](docs/ops/multitenancy-v102-proposal.md). Rehearsed on the
 > client's database copy, and it is a **three**-part change, not two. The finding: dropping
 > `uq_role_code` **breaks `R__seed_permissions.sql`** — line 322 upserts roles with
@@ -1651,7 +1651,16 @@ make it true, and they must land before any predicate in Phase 3 is written.
       organisation**, bounded by what the caller holds themselves — ADR-0059's escalation guard has to
       survive intact, since it is the only thing standing between `ROLE.MANAGE` and self-elevation.
       **Do not solve this with `setRoot(true)`** — that is §8's sharpest risk, verbatim.
-- [ ] **P4-1d** **Enforce R-1 (§1.2): a tenant role code may not collide with a global role code.**
+- [x] **P4-1d** DONE 2026-08-15 with V102, **asymmetrically** — and the asymmetry is the point.
+      *Direction 1* (a tenant reaching for a global code) is blocked twice: a service check in
+      `RoleServiceImpl.create()` for a friendly 409, and V102's trigger for the paths that never reach
+      the service. *Direction 2* (a release shipping a global bundle whose code a tenant already uses)
+      is **detected, not blocked** — a trigger there would abort the seed, the migration and the boot
+      on a live customer's system over a name clash caused by a release they did not ask for;
+      `TenancyReconciler` warns at boot instead, naming the colliding codes.
+      **This is the first trigger in the schema** (101 migrations, zero triggers) — a constraint
+      invisible to the ORM, accepted deliberately because the rule must bind non-service paths.
+      Both directions proven on a fresh full-chain database. ~~**Enforce R-1 (§1.2): a tenant role code may not collide with a global role code.**
       V100's two partial indexes sit on different partitions, so `(NULL,'CASHIER')` and
       `(2,'CASHIER')` can coexist once `uq_role_code` drops — the exact ambiguity P4-1c is fixing.
       Needs a service check **and** a trigger (a seeder must not be able to bypass it); no index pair

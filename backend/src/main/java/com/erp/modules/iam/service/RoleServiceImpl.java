@@ -43,7 +43,25 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     public RoleDto create(CreateRoleRequest request) {
-        if (roles.existsByCode(request.code())) {
+        Long organisationId = callerOrganisationId();
+
+        // R-1 (ADR-0062 P4-1d). A tenant may not reuse a code that a GLOBAL role already holds.
+        // V102's two partial indexes sit on different partitions, so the database will happily accept
+        // (NULL,'CASHIER') alongside (2,'CASHIER') — and that ambiguity is precisely what makes
+        // role-code resolution pick a winner rather than an answer. Checked here for a friendly
+        // refusal; V102's trigger enforces the same rule against paths that never reach this service.
+        if (organisationId != null && roles.existsByOrganisationIdIsNullAndCode(request.code())) {
+            throw new ConflictException("Role code already exists: " + request.code());
+        }
+
+        // P4-1b. This was a GLOBAL existsByCode, which would have made per-tenant role codes
+        // pointless the moment V102 allowed them: tenant B could never use a code tenant A had taken.
+        // Scoped to the caller's tenant; a null organisation is the seed/bootstrap path authoring a
+        // global role, where global uniqueness is still exactly the right rule.
+        boolean taken = organisationId == null
+                ? roles.existsByOrganisationIdIsNullAndCode(request.code())
+                : roles.existsByOrganisationIdAndCode(organisationId, request.code());
+        if (taken) {
             throw new ConflictException("Role code already exists: " + request.code());
         }
         Role role = new Role(request.code(), request.name());
@@ -57,7 +75,7 @@ public class RoleServiceImpl implements RoleService {
         // A null caller organisation leaves it global, which is correct rather than a fallback: the
         // only paths with no request context are bootstrap and the permission seed, and those are
         // exactly the paths that legitimately author the shipped global roles.
-        role.setOrganisationId(callerOrganisationId());
+        role.setOrganisationId(organisationId);
 
         return RoleDto.from(roles.save(role));
     }

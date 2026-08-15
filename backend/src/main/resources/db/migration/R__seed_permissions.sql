@@ -319,7 +319,17 @@ INSERT INTO roles (uid, code, name, description, is_system) VALUES
   ('0000000000000000000000000A', 'HR_PAYROLL_MANAGER', 'HR and Payroll Manager', 'Employees, leave, payroll run/approve/post/disburse.', true),
   ('0000000000000000000000000B', 'FINANCE_DIRECTOR', 'Finance Director', 'Accountant plus GL close, VAT file, FA, budgeting, policy.', true),
   ('0000000000000000000000000C', 'PRODUCTION_MANAGER', 'Production Manager', 'Work orders, BOMs, material movements, WIP costing.', true)
-ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_system = true;
+-- ON CONFLICT needs an index it can INFER. V102 replaced the global uq_role_code with two partial
+-- indexes, so a bare `ON CONFLICT (code)` no longer matches anything and this statement fails with
+-- "there is no unique or exclusion constraint matching the ON CONFLICT specification". The predicate
+-- below points Postgres at uq_role_code_global.
+--
+-- It also FIXES a real bug. Without the predicate this clause matched a TENANT's role of the same
+-- code and flipped it to is_system = true - silently adopting a customer's own role as a shipped
+-- one, which is the case TenancyReconciler logs and refuses to guess about. Restricted to the global
+-- partition, the seed can no longer see a tenant's roles at all.
+ON CONFLICT (code) WHERE organisation_id IS NULL
+DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, is_system = true;
 
 INSERT INTO role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM (VALUES

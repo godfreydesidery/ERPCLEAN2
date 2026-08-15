@@ -182,6 +182,18 @@ public class TenancyReconciler implements ApplicationRunner {
         long rolesNull = roles.findAll().stream()
                 .filter(r -> r.getOrganisationId() == null && !SEED_ROLE_UIDS.contains(r.getUid()))
                 .count();
+        // R-1 direction 2 (ADR-0062 P4-1d): a tenant role whose code a GLOBAL role also holds.
+        // Reported, never blocked. This breach can be created by US - a release that ships a new
+        // global bundle whose code a customer already used - and aborting there would fail the seed,
+        // the migration and the boot on a live customer's system over a name clash. V102's trigger
+        // blocks the direction a tenant controls; this names the direction we control.
+        List<String> r1Collisions = roles.findTenantCodesCollidingWithGlobal();
+        if (!r1Collisions.isEmpty()) {
+            log.warn("R-1 breach: {} tenant role code(s) collide with a global role and must be "
+                    + "renamed - role-code resolution will prefer the tenant's own role, but the "
+                    + "ambiguity is real: {}", r1Collisions.size(), r1Collisions);
+        }
+
         if (usersNull > 0 || rolesNull > 0) {
             log.warn("Tenancy reconcile residual: {} user(s) and {} customer role(s) still have no "
                     + "organisation. P2-1's follow-up migration will refuse to apply NOT NULL until "
