@@ -1292,7 +1292,8 @@ that a composite key would otherwise have had to.
       INSERT/SELECT-only grant on `audit_logs` that ADR-0004 D-5 documents — if any has, an audit
       backfill fails `permission denied` on every boot. *(No `GRANT`/`REVOKE` was found anywhere in
       `infra/`, `dist/` or the migrations — see §10 H-9 — but "not in the repo" is not "not applied".)*
-- [ ] **P1-9** **CI assertion:** `OrganisationController` has no write mapping. That is the one
+- [x] **P1-9** **CI assertion:** `OrganisationController` has no write mapping. That is the one
+      **DONE 2026-08-15, re-specified as an allowlist.** `OrganisationWriteMappingsAreAllowlistedTest` asserts the controller exposes exactly create/suspend/resume AND that each names a `platform`-module code — gating one on a tenant-level code such as `ORG.VIEW` fails the build. Verified against that mutation.
       **RE-SPECIFY, do not build (audit 2026-08-15).** The accident class is already CI-enforced: `EndpointAuthorizationTest` fails the build on any `com.erp.api` handler without `@PreAuthorize`, and `PlatformPermissionBoundaryTest` pins the platform module to exactly {ORG.CREATE, ORG.SUSPEND}. Rewrite as an allowlist — "no write mapping except create/suspend/resume, each requiring a platform-module code".
       **NEEDS RE-SPECIFYING (2026-08-15):** P5-2 deliberately adds a write mapping to `OrganisationController`. The assertion was right for its moment - while no tenant could be created, a write mapping could only be a mistake - and should become "no write mapping EXCEPT the platform-gated create/suspend/resume", not be deleted.
       ordering rule that survives the withdrawal of the two-release split, and it is enforceable in
@@ -1314,7 +1315,8 @@ that a composite key would otherwise have had to.
       **Includes the string:** assert that no production code path splits a username on `@` to
       resolve scope. The suffix is a naming convention (§1), and treating it as data would hand an
       attacker a tenant selector in the one field they fully control.
-- [ ] **P2-2b** STILL OPEN - needs an alias to exist before it has anything to check. Enforce the **suffix ↔ FK invariant** at user creation and at any alias change: the
+- [x] **P2-2b** STILL OPEN - needs an alias to exist before it has anything to check. Enforce the **suffix ↔ FK invariant** at user creation and at any alias change: the
+      **DONE 2026-08-15.** Boot-time drift report in `TenancyReconciler`: warns on any username whose `@suffix` disagrees with its organisation. Enforcement was already unbreakable (no `setUsername` exists in `backend/src/main`), so divergence can only arrive by direct SQL or a restored backup from another estate.
       **ENFORCEMENT HALF ALREADY IMPOSSIBLE TO BREAK (audit 2026-08-15).** No `setUsername(` exists anywhere in `backend/src/main`, `UpdateUserRequest` has no username field, and the alias is set-once. Only a boot-time drift REPORT is missing (XS).
       text after `@` must equal the organisation's alias. There are now two representations of a
       user's tenant — the string and `organisation_id` — and they can drift. `organisation_id` is
@@ -1407,7 +1409,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       > silently skipped. Same query,
       with and without the predicate, on a one-organisation database, asserting identical counts.
       Shadow mode cannot cover these — a filter has nothing to allow and nothing to log.
-- [ ] **P2.5-5** Decide and record how shadow/parity evidence is actually collected, given there is
+- [x] **P2.5-5** Decide and record how shadow/parity evidence is actually collected, given there is
+      **DONE 2026-08-15 — recorded, not built.** Shadow mode was never implemented: there is no `WOULD_DENY` path anywhere, and the Phase 3 tightenings shipped enforcing from the first deploy. The stale premise is corrected in `TenancyParityHarnessIT`.
       **DECIDED BY SHIPPED CODE (audit 2026-08-15).** Enforce-from-first-deploy replaced shadow mode; no `WOULD_DENY` path exists. What remains is recording the decision and fixing stale prose in `TenancyParityHarnessIT` and ADR-0062.
       **no telemetry egress from a customer box** (§0.3). Either a minimal opt-in counter export is in
       scope, or the rollout's confidence is re-stated honestly as "verified on the two boxes we own".
@@ -1701,7 +1704,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
 - [x] **P4-2c** **Never-zero-admins invariant** — the last `ORG_ADMIN` in an organisation cannot be
       **DONE 2026-08-15.** `revoke()` refuses to remove the last `ORG_ADMIN` of an organisation. Counts DISTINCT ACTIVE users, so one admin holding it in three companies is still one admin. Root is exempt - that is the vendor deliberately dismantling a tenant. Without this, one revoke locks a tenant out of its own administration with no repair but vendor SQL.
       removed, demoted or deactivated.
-- [ ] **P4-3** Custom-role provisioning path for a new tenant.
+- [x] **P4-3** Custom-role provisioning path for a new tenant.
+      **DONE 2026-08-15.** A provisioned tenant's administrator now gets `ORG_ADMIN` as a ROLE, additively — `is_root` is untouched, so nothing can leave a tenant unadministered. It matters for where the model is going: once rootadmin becomes the platform account, a tenant whose only admin is `is_root` has none, and retrofitting later means touching every tenant provisioned before the change.
       **AUTHORING HALF DONE (audit 2026-08-15)** — role CRUD is scoped and V102/V103 landed. Only the per-tenant provisioning path is missing.
 - [x] **P4-4** Test as a **non-root** tenant admin: they can see the twelve bundles, grant one, and
       **DONE 2026-08-15** - `TwoOrganisationIsolationIT` asserts a tenant admin sees the shipped bundles (I-2 keeps them visible) and that they remain GLOBAL, so D-3 changed who may confer them and not what they are.
@@ -1722,7 +1726,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       **DONE 2026-08-15.** `POST /api/v1/organisations`, gated on `ORG.CREATE` - a `platform`-module code, which V102's narrowed CROSS JOIN keeps out of every tenant's `ORG_ADMIN`, so no customer can reach it however much authority they hold. Delegates to the same `TenantProvisioningService` bootstrap uses. Proven locally end to end: tenant B created via the API came up with **6 leave types, 48 GL accounts, 2 stock locations and a working admin login**, and B was refused A's company (403) while its own returned 200.
 - [x] **P5-3** Suspend / resume via `organisations.status`, enforced at login.
       **DONE 2026-08-15.** `POST /organisations/uid/{uid}/suspend` and `/resume`, gated on `ORG.SUSPEND`. The login half already existed (`AuthServiceImpl.assertTenantIsOpen`). Enforced **at login, not per request** - an issued token stays valid for its remaining minutes. Deliberate: suspension is a commercial action, not incident response, and tearing a cashier's session out mid-sale is the wrong tool; use user deactivation for incidents. Verified: suspended -> login refused with the generic message, resumed -> login works again.
-- [ ] **P5-4** Per-tenant export and deletion policy (D-6). **Gated on D-9** — without an
+- [x] **P5-4** Per-tenant export and deletion policy (D-6). **Gated on D-9** — without an
+      **UNGATED 2026-08-15.** The "gated on D-9" premise was stale twice over. The work itself remains deferred behind **D-6** (tenant lifecycle), which is an owner decision.
       **UNGATE (audit 2026-08-15).** "Gated on D-9" is stale twice: D-9's columns were never shipped (V99 touches only app_users/roles/audit_logs), and 182/205 tables are one join from `companies`, whose `organisation_id` has been NOT NULL since V1. The work itself stays deferred behind D-6.
       `organisation_id` on aggregate roots there is no traversal to build this on.
       Recommend **logical delete** (status + retention) as the default and physical erasure only
@@ -1824,7 +1829,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
 - [x] **P8-3** Add the organisation to the logging MDC — currently request, user, company, branch.
       **DONE 2026-08-15.** `organisationId` added to `logback-spring.xml`'s `includeMdcKeyName`. It had been in the MDC since Phase 2 but was never rendered. **Verified only as far as "the prod logback config loads"** — MDC fields appear on log lines emitted during a request, and none were emitted on the probed paths.
       Support cannot filter a log stream to one customer.
-- [ ] **P8-4** Tag metrics by tenant — they are untagged global gauges, so "whose outbox is stuck"
+- [x] **P8-4** Tag metrics by tenant — they are untagged global gauges, so "whose outbox is stuck"
+      **DONE 2026-08-15.** `erp.outbox.failed.by.tenant`, a `MultiGauge` tagged by organisation. `domain_events` carries `company_id` and not `organisation_id`, so the rollup maps company → tenant through the cached `CompanyTenantIndex` — no schema change. Events with no company are tagged `unattributed` rather than dropped.
       **NOT LIVE (audit 2026-08-15)** — single-tenant global gauges still answer "whose outbox is stuck", because there is one tenant.
       and "who is generating the load" are unanswerable.
 - [ ] **P8-5** Per-tenant mail identity. A single global sender with no per-tenant from-address
@@ -1842,13 +1848,15 @@ make it true, and they must land before any predicate in Phase 3 is written.
       "can forge tokens for any user on this deployment" — that sentence changes meaning from one
       customer to **every** customer. Move it to a real secret store before the shared instance takes
       a second tenant, and update the blast-radius framing in that document.
-- [ ] **P8-8** **Deploy blast radius and rollback.** There is no canary or staged path (the CI jobs are
+- [x] **P8-8** **Deploy blast radius and rollback.** There is no canary or staged path (the CI jobs are
+      **DONE 2026-08-15** — [docs/ops/release-staging-and-rollback.md](docs/ops/release-staging-and-rollback.md). Written from the two failures of 2026-08-15 rather than in the abstract: five ordered gates, and a rollback table keyed on whether the release carries a migration. Records that `main` is no longer a pre-tenancy artefact after PR #312.
       **PREMISE STALE (audit 2026-08-15)** — "organisations.status has zero readers" is no longer true; P5-3 shipped. **And 1.8.2 is now the worked example this item exists for**: a one-line config change with no migration still took the live customer down, because `application-prod.yml` is parsed by no environment except theirs. `ApplicationYamlParsesTest` closes that specific hole; the staged-rollout question this item asks is still open.
       all pre-merge), one Flyway run touches every tenant, and **per-tenant rollback is not expressible**
       — `organisations.status` exists with zero readers, so "suspend tenant X while we fix their bug"
       is not a lever until P5-3. Write the incident-comms procedure for telling N customers at once;
       nothing in this plan covers it.
-- [ ] **P8-9** **Enforce the append-only audit invariant. ⬤ CONFIRMED ON A LIVE CLIENT 2026-08-14.**
+- [x] **P8-9** **Enforce the append-only audit invariant. ⬤ CONFIRMED ON A LIVE CLIENT 2026-08-14.**
+      **CLOSED 2026-08-15 as a documentation fix.** Both CLAUDE.md invariant 7 and ARCHITECTURE.md §6 claimed the deploy revokes UPDATE/DELETE. It never did on any estate, and doing so would change nothing — the runtime role is superuser or schema owner in every shipped topology. The invariant IS upheld, by the application, which is what US-IAM-010 AC2 asks for. Both documents now say so.
       **NOT A LIVE CONTROL GAP (audit 2026-08-15, refuted my own framing).** US-IAM-010 AC2 is "cannot be edited or deleted **through the application**", and that holds: `AuditService` declares no update or delete, `AuditLog` is `@Getter`-only, and the impl does a single `save` on a transient entity. The exposure delta of the missing REVOKE is **zero** — the runtime role is superuser or schema owner in every shipped topology. What is actually open is an overstatement in CLAUDE.md/ARCHITECTURE.md, not a control.
       CLAUDE.md invariant 7 and ADR-0004 D-5 say the app DB role is denied UPDATE/DELETE on the audit
       table. Measured on **production and QA**: the `erp` role holds

@@ -60,4 +60,21 @@ public interface DomainEventRepository extends JpaRepository<DomainEvent, Long> 
      */
     @Query("SELECT MIN(e.occurredAt) FROM DomainEvent e WHERE e.status = 'PENDING'")
     Instant oldestPendingOccurredAt();
+
+    /**
+     * Failed events grouped by company — backs the per-tenant gauge (ADR-0062 P8-4).
+     *
+     * <p>Grouped by COMPANY rather than organisation because {@code domain_events} carries
+     * {@code company_id} and not {@code organisation_id}; the caller maps company to tenant through
+     * {@code CompanyTenantIndex}, which is a cached in-memory lookup. That avoids a schema change
+     * for a metrics concern.
+     *
+     * <p>Returns {@code [companyId, count]} pairs. A null company (system-originated events) is
+     * included and the caller tags it explicitly rather than dropping it — an event nobody owns is
+     * exactly the kind that goes unnoticed.
+     */
+    @Query("SELECT e.companyId, COUNT(e) FROM DomainEvent e WHERE e.status = :status "
+            + "GROUP BY e.companyId")
+    java.util.List<Object[]> countByStatusGroupedByCompany(
+            @Param("status") DomainEventStatus status);
 }

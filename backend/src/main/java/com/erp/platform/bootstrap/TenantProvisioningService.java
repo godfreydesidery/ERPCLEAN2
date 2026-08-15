@@ -7,6 +7,7 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserBranch;
+import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
@@ -61,6 +62,11 @@ public class TenantProvisioningService {
     private final StockLocationSeeder stockLocationSeeder;
     private final PettyCashFundSeeder pettyCashFundSeeder;
     private final LeaveTypeSeeder leaveTypeSeeder;
+    private final com.erp.modules.iam.repository.RoleRepository roles;
+    private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
+
+    /** Seeded by V1__baseline.sql; the tenant administrator bundle. */
+    private static final String ORG_ADMIN_CODE = "ORG_ADMIN";
 
     public TenantProvisioningService(OrganisationRepository organisations,
                                      CompanyRepository companies,
@@ -71,7 +77,9 @@ public class TenantProvisioningService {
                                      CompanyProvisioningService companyProvisioning,
                                      StockLocationSeeder stockLocationSeeder,
                                      PettyCashFundSeeder pettyCashFundSeeder,
-                                     LeaveTypeSeeder leaveTypeSeeder) {
+                                     LeaveTypeSeeder leaveTypeSeeder,
+                                     com.erp.modules.iam.repository.RoleRepository roles,
+                                     com.erp.modules.iam.repository.UserRoleRepository userRoles) {
         this.organisations = organisations;
         this.companies = companies;
         this.branches = branches;
@@ -82,6 +90,8 @@ public class TenantProvisioningService {
         this.stockLocationSeeder = stockLocationSeeder;
         this.pettyCashFundSeeder = pettyCashFundSeeder;
         this.leaveTypeSeeder = leaveTypeSeeder;
+        this.roles = roles;
+        this.userRoles = userRoles;
     }
 
     /** Everything a caller needs back after provisioning, without exposing the entities. */
@@ -192,6 +202,26 @@ public class TenantProvisioningService {
         UserBranch defaultAssignment = new UserBranch(admin.getId(), branch, admin.getId());
         defaultAssignment.markDefault();
         userBranches.save(defaultAssignment);
+
+        // P4-3 (ADR-0062): give the tenant's administrator ORG_ADMIN as a ROLE, not only the
+        // is_root flag. Additive on purpose - is_root is left exactly as it was, so nothing this
+        // release does can leave a tenant with nobody able to administer it.
+        //
+        // It matters because of where the model is going: rootadmin becomes the PLATFORM account,
+        // and each tenant gets its own orgadmin. A tenant whose only administrator is is_root has
+        // no administrator at all once that lands, and usernames are never rewritten, so retro-
+        // fitting the grant later means touching every tenant provisioned before the change.
+        // Granting it now costs one row and makes that transition a flag flip.
+        //
+        // A missing ORG_ADMIN row is logged rather than thrown: it is seeded by V1 and cannot be
+        // absent in practice, but failing tenant creation over a missing grant would trade a
+        // complete tenant for none at all.
+        roles.findByCode(ORG_ADMIN_CODE).ifPresentOrElse(
+                orgAdmin -> userRoles.save(new UserRole(
+                        admin.getId(), orgAdmin, company.getId(), branch.getId(), admin.getId())),
+                () -> log.warn("Provisioned tenant {} without an ORG_ADMIN grant: the role is not "
+                        + "seeded. The administrator still has is_root, so the tenant is usable, "
+                        + "but grant it once the seed is repaired.", org.getName()));
 
         log.info("Provisioned tenant: organisation '{}', company '{}', branch '{}', admin '{}'.",
                 org.getName(), company.getCode(), branch.getCode(), admin.getUsername());
