@@ -183,6 +183,9 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         // throttle, and it reuses the post-password message — a fumbled self-approval must look
         // exactly like "that user may not approve this", never like a hint to try someone else.
         if (authoriser.getId() != null && authoriser.getId().equals(caller.userId())) {
+            // Deliberately NOT counted, unlike the two post-password refusals below: the authoriser
+            // IS the caller, so a fumbled self-approval teaches them only their own password. There
+            // is no oracle here, and throttling an operator for a mis-tap would be pure friction.
             return refuse(code, attemptedUsername, authoriser, "SELF_APPROVAL",
                     NOT_AUTHORISED_MESSAGE, false);
         }
@@ -190,8 +193,10 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
         if (code.isEmpty() || permissions.findByCode(code).isEmpty()) {
             // An unseeded/typo'd code must never read as "approved" — including for root, whose
             // permission short-circuit would otherwise wave anything through.
+            // Counted: see the NO_AUTHORITY note below. This is reached only once the password is
+            // proven, so it carries the same "that password was right" signal.
             return refuse(code, attemptedUsername, authoriser, "UNKNOWN_PERMISSION",
-                    NOT_AUTHORISED_MESSAGE, false);
+                    NOT_AUTHORISED_MESSAGE, countAgainst(caller.userId(), now));
         }
 
         // Resolve the AUTHORISER's authority in the CALLER's active scope: the override happens at
@@ -213,9 +218,23 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
                 authoriserInCallerScope, code, now.toEpochMilli());
 
         if (!holds) {
-            // Not a credential failure — the password was right — so it does not feed the throttle.
+            // G11 (ADR-0062 P3-9). This USED to be uncounted, on the reasoning that the password was
+            // right so it is not a credential failure. That reasoning is what made it an oracle: an
+            // operator could sit at the till trying a colleague's password against a permission that
+            // colleague does not hold, and every correct guess came back distinguishable from a wrong
+            // one, against no counter and no lockout — then be reused at the main login, where the
+            // real throttle lives.
+            //
+            // Counted now. The MESSAGE deliberately stays distinct: the screen has to be able to say
+            // "that user may not approve this", or a manager who genuinely lacks the permission is
+            // told their password is wrong and goes to reset it. What is removed is the *unlimited*
+            // guessing, which is the part that mattered — the caller's own throttle now advances,
+            // and the caller is an account they cannot rotate away from.
+            //
+            // Note the throttle counts against the CALLER, never the authoriser (see the class
+            // comment): a cashier still cannot lock a manager out by guessing at them.
             return refuse(code, attemptedUsername, authoriser, "NO_AUTHORITY", NOT_AUTHORISED_MESSAGE,
-                    false);
+                    countAgainst(caller.userId(), now));
         }
 
         throttles.remove(caller.userId());

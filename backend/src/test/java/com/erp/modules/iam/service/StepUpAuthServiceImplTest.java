@@ -212,8 +212,13 @@ class StepUpAuthServiceImplTest {
         AuditEvent event = capturedAudit();
         assertThat(event.action()).isEqualTo(AuditActions.AUTH_STEP_UP_FAIL);
         assertThat(event.detail()).containsEntry("outcome", "NO_AUTHORITY");
-        // A right-password refusal is not a guess, so it must not feed the brute-force throttle.
-        assertThat(event.detail()).containsEntry("throttleCounted", false);
+        // G11 (ADR-0062 P3-9) REVERSED THIS. It used to assert false, on the reasoning that a
+        // right-password refusal is not a guess. That reasoning was the oracle: an operator could
+        // try a colleague's password against a permission that colleague does not hold, and every
+        // correct guess came back distinguishable from a wrong one against no counter at all — then
+        // be reused at the main login. The message stays distinct so a manager who genuinely lacks
+        // the permission is not told their password is wrong; only the unlimited guessing is gone.
+        assertThat(event.detail()).containsEntry("throttleCounted", true);
     }
 
     @Test
@@ -300,6 +305,38 @@ class StepUpAuthServiceImplTest {
         // The authoriser's own lockout bookkeeping is untouched and nothing is written back.
         verify(m, never()).registerFailedLogin(anyInt(), anyInt(), any(Instant.class));
         verify(users, never()).save(any(AppUser.class));
+    }
+
+    @Test
+    void repeatedRightPasswordNoAuthorityAttempts_alsoThrottle_closingTheG11Oracle() {
+        // THE POINT OF P3-9. Before this, these attempts were free: the password was proven, so the
+        // refusal was classified as "not a credential failure" and fed no counter. An operator could
+        // therefore stand at the till and confirm a colleague's password an unlimited number of
+        // times — every correct guess visibly different from a wrong one — and then use it at the
+        // main login, where the only real throttle lives. Unlimited verification of a credential is
+        // a credential oracle whatever the endpoint calls it.
+        AppUser m = manager();
+        givenManagerExists(m);
+        givenPasswordMatches(true);          // the password is RIGHT every single time
+        givenPermissionSeeded();
+        givenAuthoriserHoldsPermission(false);
+
+        for (int i = 0; i < MAX_ATTEMPTS; i++) {
+            assertThat(service.verifyAuthority("manager", "secret", CODE).authorised()).isFalse();
+        }
+
+        // Threshold reached on right-password attempts alone. If this ever reads NO_AUTHORITY again,
+        // the oracle is back.
+        AuthorityVerificationDto throttled = service.verifyAuthority("manager", "secret", CODE);
+
+        assertThat(throttled.authorised()).isFalse();
+        assertThat(throttled.message())
+                .isEqualTo("Too many failed approval attempts. Please wait a moment and try again.");
+        assertThat(capturedAudit().detail()).containsEntry("outcome", "THROTTLED");
+
+        // The throttle counts against the CALLER, never the authoriser: a cashier still cannot lock
+        // a manager out of the product by guessing at them.
+        verify(m, never()).registerFailedLogin(anyInt(), anyInt(), any(Instant.class));
     }
 
     @Test
@@ -489,7 +526,10 @@ class StepUpAuthServiceImplTest {
         AuditEvent event = capturedAudit();
         assertThat(event.action()).isEqualTo(AuditActions.AUTH_STEP_UP_FAIL);
         assertThat(event.detail()).containsEntry("outcome", "SELF_APPROVAL");
-        // The password was right, so this is not a guess: it must not feed the caller throttle...
+        // Still uncounted, unlike NO_AUTHORITY and UNKNOWN_PERMISSION since P3-9 — and the reason is
+        // not "the password was right" but "the authoriser IS the caller". A fumbled self-approval
+        // teaches them only their own password, so there is no oracle to close, and throttling an
+        // operator for a mis-tap would be pure friction at a till...
         assertThat(event.detail()).containsEntry("throttleCounted", false);
         // ...and it must not touch anybody's lockout counter.
         verify(me, never()).registerFailedLogin(anyInt(), anyInt(), any(Instant.class));
