@@ -2,6 +2,7 @@ package com.erp.platform.bootstrap;
 
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Organisation;
+import com.erp.modules.iam.domain.entity.Role;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.RoleRepository;
@@ -141,6 +142,17 @@ public class TenancyReconciler implements ApplicationRunner {
      */
     private void reconcileRoles(Organisation org) {
         int stamped = 0;
+        // Codes that will REMAIN global: the shipped seed roles, and anything the seed has adopted
+        // as is_system. NOT "every role with a null organisation" - that set includes the customer
+        // roles this method is about to stamp, so each of them would match ITSELF and be skipped.
+        // That is the same self-match defect V103 fixes in the trigger, and writing it here first
+        // proves the shape is easy to get wrong: the question is never "is this code global right
+        // now", it is "is this code held by a DIFFERENT role that stays global".
+        java.util.Set<String> globalRoleCodes = roles.findAll().stream()
+                .filter(r -> SEED_ROLE_UIDS.contains(r.getUid()) || r.isSystem())
+                .map(Role::getCode)
+                .collect(java.util.stream.Collectors.toSet());
+        List<String> collidingWithGlobal = new java.util.ArrayList<>();
         for (var role : roles.findAll()) {
             if (SEED_ROLE_UIDS.contains(role.getUid())) {
                 continue;                       // shipped: must stay NULL (V100's partial index)
@@ -153,6 +165,16 @@ public class TenancyReconciler implements ApplicationRunner {
                 continue;
             }
             if (role.getOrganisationId() == null) {
+                // A customer role whose code a GLOBAL role also holds cannot be stamped: V102's
+                // R-1 trigger refuses it, correctly. Skipping is not a nicety - letting that
+                // exception escape kills the boot, because this runner is @Transactional and the
+                // failure propagates out of it. A NAME CLASH MUST NEVER TAKE A CUSTOMER OFFLINE;
+                // that was the entire basis for making R-1 one-directional in the first place, and
+                // 1.8.0 shipped without honouring it here.
+                if (globalRoleCodes.contains(role.getCode())) {
+                    collidingWithGlobal.add(role.getCode());
+                    continue;
+                }
                 role.setOrganisationId(org.getId());
                 stamped++;
             }
@@ -160,6 +182,12 @@ public class TenancyReconciler implements ApplicationRunner {
         if (stamped > 0) {
             log.info("Tenancy reconcile: stamped {} customer role(s) with organisation {}.",
                     stamped, org.getId());
+        }
+        if (!collidingWithGlobal.isEmpty()) {
+            log.warn("Tenancy reconcile: {} customer role(s) could not be attributed because their "
+                    + "code is already held by a global role - rename them and they will be stamped "
+                    + "on the next start. Left as-is rather than failing the start: {}",
+                    collidingWithGlobal.size(), collidingWithGlobal);
         }
     }
 

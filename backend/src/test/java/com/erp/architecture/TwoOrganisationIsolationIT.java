@@ -364,6 +364,30 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
         assertThat(roleService.list().stream().map(r -> r.code())).contains(bundle.getCode());
     }
 
+    @Test
+    @DisplayName("V103 · a GLOBAL role can be stamped into a tenant — the reconciler's own operation")
+    void aGlobalRoleCanBeStampedIntoATenant() {
+        // THE 1.8.0 REGRESSION, and the reason this test exists. V102's trigger asked "does a global
+        // role already hold this code?" - and in a BEFORE UPDATE the table still holds the OLD row,
+        // so a role moving from global to tenant-scoped matched ITSELF and was refused.
+        //
+        // That is exactly what TenancyReconciler does on every boot. On a customer database whose
+        // roles were not yet stamped, the reconciler threw, the exception escaped the @Transactional
+        // runner, and the application would not start. It shipped, and it crash-looped a live system.
+        //
+        // Nothing caught it because every existing probe INSERTED a role; none UPDATED a global one
+        // into a tenant one. This is that operation.
+        Role unstamped = roles.save(new Role("LEGACY_" + UUID.randomUUID().toString().substring(0, 6),
+                "A customer role the reconciler has not reached yet"));
+        assertThat(unstamped.getOrganisationId()).as("starts global, like an unreconciled row").isNull();
+
+        unstamped.setOrganisationId(orgA.getId());
+        roles.saveAndFlush(unstamped);          // must NOT throw
+
+        assertThat(roles.findById(unstamped.getId()).orElseThrow().getOrganisationId())
+                .isEqualTo(orgA.getId());
+    }
+
     // ---------------------------------------------------------------------
     // The control that guards the guard
     // ---------------------------------------------------------------------
