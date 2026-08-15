@@ -746,6 +746,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   fontWeight: FontWeight.w800,
                   fontFeatures: kTabular),
               decoration: const InputDecoration(
+                // The global inputDecorationTheme is `filled: true` with a WHITE fillColor
+                // (AppColors.panel). This field paints white text at 28pt on a dark box, so
+                // inheriting that fill covers the box in white and the cashier's typed tender
+                // amount becomes invisible. Opting out is the whole fix.
+                filled: false,
+                fillColor: Colors.transparent,
                 isDense: true,
                 contentPadding: EdgeInsets.zero,
                 border: InputBorder.none,
