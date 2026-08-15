@@ -1904,7 +1904,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       **DONE 2026-08-15.** The session store is keyed on its owner and wipes on change. The hazard was a stale `erp.activeBranchUid` surviving into a different user's session in the same tab - since P3-1 that is refused rather than leaked, but a 403 on every screen reads as a broken product.
       branch uid survives a tenant switch in the same tab (`G13`). **Still required**: the hazard is
       a stale branch, not a stale tenant code.
-- [ ] **P6-4** ~~POS tenant code at install time~~ — **retired.** The till continues to persist only
+- [x] **P6-4** ~~POS tenant code at install time~~ — **retired.** The till continues to persist only
       a host.
 - [x] **P6-5** POS step-up approval still needs the P2-3 org check on the server side; no client
       **ALREADY SATISFIED by P2-3** - `StepUpAuthServiceImpl:147` and `:281` compare the authoriser's organisation to the caller's.
@@ -1933,8 +1933,13 @@ make it true, and they must land before any predicate in Phase 3 is written.
       construction; root-only probing is exactly what would let all of this survive.
       Must include: the `G1` four-call chain; a `POST /companies` carrying B's organisation uid;
       an archive of one of B's roles; an `X-Branch-Uid` pointing at a B branch.
-- [ ] **P7-3** Extend `TenantScopingRulesTest`. Note its own comment: `findByUid` is *intentionally*
-      **STILL OPEN — was wrongly listed as done in PR #313.** The commit message and PR body both claim it; `TenantScopingRulesTest` was in fact untouched (last changed in `db57357f`, predating that work). Corrected 2026-08-15.
+- [x] **P7-3 DONE 2026-08-15** (`8d1eda17`). A non-frozen `existsById` rule now fails the build on
+      a bare foreign-key existence check in a service — deliberately not frozen, so a fresh violation
+      fails on the day it is written rather than being absorbed into the grandfathered `findById`
+      baseline. **Verified by mutation, not by observing green**: reverting P7-4's fix makes the rule
+      fail and name `EmployeeServiceImpl`. A rule never seen to fail is not known to work.
+      *(Was wrongly listed as done in PR #313 — the commit message and PR body both claimed it while
+      `TenantScopingRulesTest` was untouched. Corrected 2026-08-15, then actually done.)* `findByUid` is *intentionally*
       out of scope, delegated to the e2e harness — **and every cross-org finding above is
       `findByUid`-shaped**. Also add `existsById`, which the predicate does not currently match
       (see P7-4).
@@ -1949,7 +1954,11 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 - [ ] **P8-1** Per-tenant backup/restore (D-5).
       **NOT LIVE (audit 2026-08-15)** — a whole-database restore IS this tenant's restore while there is one tenant. Becomes real with tenant #2 (D-5).
-- [ ] **P8-2** RLS backstop, or a recorded rejection (D-4).
+- [x] **P8-2 DONE 2026-08-15 — the rejection is recorded**, which is what this item asked for
+      ("or a recorded rejection"). See **D-4**: rejected with a named trigger (the first database
+      holding two organisations), on the grounds that RLS is worth what the tenant-per-database count
+      is, and that its failure mode is the wrong way round — a missed session GUC does not leak, it
+      returns nothing, so the symptom is a silently empty report on a live system.
 > **Owner decision 2026-08-15: LOGIN audit rows stay unattributed.** `LOGIN.SUCCESS` / `LOGIN.FAIL`
 > are written through the unauthenticated `record(event, actor, ip)` path, which has no established
 > tenant, so they carry a NULL `organisation_id`. It was raised that the user *is* known by the time
