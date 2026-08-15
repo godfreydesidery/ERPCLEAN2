@@ -120,17 +120,9 @@ public class TenancyReconciler implements ApplicationRunner {
         if (org.getAlias() != null && !org.getAlias().isBlank()) {
             return;
         }
-        String slug = org.getName() == null ? "" : org.getName().toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("^-+|-+$", "");
-        if (slug.length() > 20) {
-            slug = slug.substring(0, 20).replaceAll("-+$", "");
-        }
-        // ck_organisation_alias demands 2..20 chars, no leading or trailing hyphen. A name of "A"
-        // or "!!!" would fail all of that, so fall back to something that cannot.
-        if (slug.length() < 2) {
-            slug = "org-" + org.getId();
-        }
+        // Shared with TenantProvisioningService: if the two derived differently, an organisation's
+        // alias would change on the next boot - and it is baked into every username issued under it.
+        String slug = OrganisationAlias.derive(org.getName(), org.getId());
         org.setAlias(slug);
         organisations.save(org);
         log.info("Tenancy reconcile: organisation {} given alias '{}'.", org.getId(), slug);

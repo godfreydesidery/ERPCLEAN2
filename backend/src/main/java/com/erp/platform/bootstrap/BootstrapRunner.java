@@ -87,7 +87,8 @@ public class BootstrapRunner implements ApplicationRunner {
                 props.companyCode(), props.companyName(),
                 props.branchCode(), props.branchName(),
                 props.adminUsername(), props.adminPassword(), props.adminDisplayName(),
-                ccy.effectiveBase(), ccy.effectiveDefault(), ccy.effectiveEnabled()));
+                ccy.effectiveBase(), ccy.effectiveDefault(), ccy.effectiveEnabled(),
+                false));   // bootstrap admin stays PLAIN — INSTALL.md promises 'always rootadmin'
 
         log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",
                 provisioned.organisationName(), provisioned.companyCode(),

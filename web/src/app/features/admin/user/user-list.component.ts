@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { User } from '../models/user.model';
 import { UserService } from './user.service';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { OrganisationService } from '../organisation/organisation.service';
 
 /**
  * Lists all users and provides an inline create form (username, displayName, temp password).
@@ -21,6 +22,26 @@ import { AlertService } from '../../../core/feedback/alert.service';
 export class UserListComponent {
   private readonly userService = inject(UserService);
   private readonly alerts = inject(AlertService);
+  private readonly organisations = inject(OrganisationService);
+
+  /**
+   * The signed-in administrator's own organisation alias, rendered as the fixed `@alias` adornment
+   * (P6-2b). Sourced from organisations/current, which since P3-7 returns the CALLER's organisation
+   * rather than the lowest-id one — so on a shared instance each admin sees their own suffix.
+   *
+   * Null on an organisation with no alias: those installations keep bare usernames, and the form
+   * then shows neither an adornment nor a preview, exactly as before.
+   */
+  readonly organisationAlias = signal<string | null>(null);
+  readonly usernameSuffix = computed(() =>
+    this.organisationAlias() ? '@' + this.organisationAlias() : null,
+  );
+  /** The name the server will actually store. Empty until something is typed, to avoid a bare '@x'. */
+  readonly composedUsername = computed(() => {
+    const local = this.newUsername().trim();
+    const suffix = this.usernameSuffix();
+    return local && suffix ? local + suffix : null;
+  });
 
   readonly users = signal<User[]>([]);
   readonly state = signal<'loading' | 'idle' | 'error'>('loading');
@@ -48,6 +69,13 @@ export class UserListComponent {
 
   constructor() {
     this.load();
+    // The suffix comes from the signed-in admin's OWN organisation, never from a picker: the tenant
+    // half of a username is not something an administrator may choose (P6-2b). A failure here is
+    // silent on purpose - the form still works, it simply shows no suffix.
+    this.organisations.current().subscribe({
+      next: (org) => this.organisationAlias.set(org.alias ?? null),
+      error: () => this.organisationAlias.set(null),
+    });
   }
 
   load(): void {

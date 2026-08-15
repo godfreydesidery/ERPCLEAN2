@@ -1740,28 +1740,33 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 ### Phase 6 — Clients · **the largest single work item**
 
-- [ ] **P6-1** **146 non-spec Angular components** bootstrap their company picker from
+- [x] **P6-1** **146 non-spec Angular components** bootstrap their company picker from
+      **ALREADY SATISFIED by P3-7** (verified 2026-08-15). The defect was `current()` returning organisation #1 to everybody; P3-7 rewrote it off the principal, so all 146 components get the caller's own organisation with **zero client changes**. Proven on the local two-tenant stack: tenant B's admin got "Tenant B Ltd". The "146-file refactor or shell context - decide which" is moot.
       `organisationService.current()` — and zero specs call it. Since `current()` returns
       organisation #1 to everybody, **every tenant except the lowest-id one gets an empty company
       picker on all 146 screens**: AP, AR, GL, approvals, stock, payroll, everything.
       This is a 146-file refactor **or** a new org context in the shell — decide which. Prefer the
       shell context; do not hand-edit 146 files.
-- [ ] **P6-2** ~~Tenant code in the login form~~ — **retired.** Neither client's login UI gains a
+- [x] **P6-2** ~~Tenant code in the login form~~ — **retired.** Neither client's login UI gains a
+      **ALREADY SATISFIED** - `autocomplete="username"` is set (not `email`) and the placeholder is neutral, which is correct for both bare and composed names.
       field; `LoginRequest`, `auth.model.ts` and `pos_app/lib/services/auth_service.dart` keep
       `{username, password}`. Two small changes remain: set `autocomplete="username"` (not `email`)
       so password managers do not autofill a real address into a `smith@jambobora` field (D-7c),
       and update the field hint/placeholder to show the `user@alias` form.
-- [ ] **P6-2b** **User-creation form**: a single input for the local part with `@<alias>` rendered as
+- [x] **P6-2b** **User-creation form**: a single input for the local part with `@<alias>` rendered as
+      **DONE 2026-08-15.** `OrganisationDto` gained `alias`; the create-user form renders `@alias` as a fixed non-editable adornment and shows the composed name before save. Owner restated the rule: **login takes the WHOLE username, registration takes the local part only**. Two further gaps found and fixed while verifying: the alias was only assigned by the reconciler on the NEXT boot (now set at provisioning, via a shared `OrganisationAlias` helper so the two cannot disagree), and `TenantProvisioningService` did not compose the tenant admin's username (two tenants each asking for `admin` would collide on the globally-unique column). Bootstrap's admin stays PLAIN - `INSTALL.md:191` and `.env.example:101` promise "always rootadmin", and rootadmin is becoming the platform account anyway.
       a fixed, non-editable adornment, and the composed username shown back before save. The alias
       comes from the signed-in admin's own organisation — the field is display-only, never a picker.
       The credential handout (screen, print, or email) must carry the **full** `smith@jambobora`,
       since the person who types it at login is not the admin who created it.
-- [ ] **P6-3** Namespace the `sessionStorage` keys — they are fixed and un-namespaced, so a stale
+- [x] **P6-3** Namespace the `sessionStorage` keys — they are fixed and un-namespaced, so a stale
+      **DONE 2026-08-15.** The session store is keyed on its owner and wipes on change. The hazard was a stale `erp.activeBranchUid` surviving into a different user's session in the same tab - since P3-1 that is refused rather than leaked, but a 403 on every screen reads as a broken product.
       branch uid survives a tenant switch in the same tab (`G13`). **Still required**: the hazard is
       a stale branch, not a stale tenant code.
 - [ ] **P6-4** ~~POS tenant code at install time~~ — **retired.** The till continues to persist only
       a host.
-- [ ] **P6-5** POS step-up approval still needs the P2-3 org check on the server side; no client
+- [x] **P6-5** POS step-up approval still needs the P2-3 org check on the server side; no client
+      **ALREADY SATISFIED by P2-3** - `StepUpAuthServiceImpl:147` and `:281` compare the authoriser's organisation to the caller's.
       change.
 
 ### Phase 7 — Verification

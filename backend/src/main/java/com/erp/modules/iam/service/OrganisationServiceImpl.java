@@ -62,7 +62,8 @@ public class OrganisationServiceImpl implements OrganisationService {
                         blankToNull(request.baseCurrency(), "TZS"),
                         blankToNull(request.defaultCurrency(), "TZS"),
                         request.enabledCurrencies() == null || request.enabledCurrencies().isEmpty()
-                                ? List.of("TZS") : request.enabledCurrencies()));
+                                ? List.of("TZS") : request.enabledCurrencies(),
+                        true));   // API-provisioned tenant: the admin's name composes (D-7)
 
         // High-severity by nature: this is the vendor creating a customer. The admin password is
         // never part of the event - only who was created, and under what name.

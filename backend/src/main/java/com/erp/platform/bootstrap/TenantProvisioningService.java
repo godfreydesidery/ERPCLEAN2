@@ -97,7 +97,23 @@ public class TenantProvisioningService {
                                    String adminUsername, String rawAdminPassword,
                                    String adminDisplayName,
                                    String baseCurrency, String defaultCurrency,
-                                   java.util.List<String> enabledCurrencies) {
+                                   java.util.List<String> enabledCurrencies,
+                                   /**
+                                    * Whether the administrator's username gets the {@code @alias}
+                                    * suffix (D-7).
+                                    *
+                                    * <p>TRUE for a tenant provisioned through the API: two customers
+                                    * each asking for an {@code admin} would otherwise collide on the
+                                    * globally-unique username column.
+                                    *
+                                    * <p>FALSE for bootstrap. {@code dist/bundle/.env.example:101} and
+                                    * {@code INSTALL.md:191} both promise the first administrator is
+                                    * "always rootadmin", and a new customer follows those to their
+                                    * first login. Composing it would break that promise on every
+                                    * fresh install, for a uniqueness problem a deployment's founding
+                                    * account does not have.
+                                    */
+                                   boolean composeAdminUsername) {
     }
 
     /**
@@ -111,6 +127,15 @@ public class TenantProvisioningService {
     public ProvisionedTenant provision(NewTenantRequest request) {
         Organisation org = new Organisation(request.organisationName());
         org.setDefaultTimeZone(request.timeZone());
+        organisations.save(org);
+
+        // The alias must exist the moment the tenant does. TenancyReconciler back-fills it on the
+        // NEXT boot, which is too late: the alias is the `@alias` half of every username created
+        // under this organisation (D-7), so a tenant provisioned at 09:00 and given staff at 09:05
+        // would issue BARE usernames until someone restarted the application - and those names are
+        // never rewritten (§0.2), leaving one tenant permanently split across two formats.
+        // Derived through the shared helper so provisioning and the reconciler cannot disagree.
+        org.setAlias(OrganisationAlias.derive(org.getName(), org.getId()));
         organisations.save(org);
 
         Company company = new Company(org, request.companyCode(), request.companyName());
@@ -140,8 +165,22 @@ public class TenantProvisioningService {
         // and cannot record a single day of leave.
         leaveTypeSeeder.seedDefaults(company.getId());
 
+        // The tenant's first administrator is a TENANT user, so their username composes like every
+        // other one (D-7): the caller supplies the local part and the alias is appended here. Without
+        // this, two tenants each provisioning an `admin` would collide on the globally-unique
+        // username column - and the second provisioning would fail on a constraint rather than on
+        // anything the platform operator did wrong.
+        String adminLocal = request.adminUsername().toLowerCase(Locale.ROOT).trim();
+        if (adminLocal.indexOf('@') >= 0) {
+            throw new IllegalArgumentException("The administrator username must not contain '@'.");
+        }
+        String adminUsername =
+                !request.composeAdminUsername() || org.getAlias() == null || org.getAlias().isBlank()
+                        ? adminLocal
+                        : adminLocal + "@" + org.getAlias();
+
         AppUser admin = new AppUser(
-                request.adminUsername().toLowerCase(Locale.ROOT),
+                adminUsername,
                 passwordEncoder.encode(request.rawAdminPassword()),
                 request.adminDisplayName());
         admin.setRoot(true);

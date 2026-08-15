@@ -46,6 +46,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UserServiceImpl implements UserService {
 
+    /**
+     * The sentinel platform organisation's alias (ADR-0062 D-2). Users created inside it keep BARE
+     * usernames — see {@code composeUsername}.
+     *
+     * <p>The organisation itself does not exist yet (D-2 stage 2), so this is currently unreachable.
+     * It is here rather than added later because the day that organisation is created is the day the
+     * rule has to already hold: a platform operator issued as {@code ops@platform} would have to be
+     * renamed afterwards, and usernames are never rewritten (§0.2).
+     */
+    private static final String PLATFORM_ORGANISATION_ALIAS = "platform";
+
     private final AppUserRepository users;
     private final UserCompanyRepository userCompanies;
     private final UserRoleRepository userRoles;
@@ -344,10 +355,18 @@ public class UserServiceImpl implements UserService {
      * for. That is why any {@code @} in the local part is rejected outright rather than trimmed:
      * left alone, {@code smith@evil} would compose to {@code smith@evil@jambobora}.
      *
-     * <p>An organisation with no alias keeps BARE usernames, unchanged. Every installation that
-     * predates multi-tenancy is in that state and stays there: legacy usernames are never
-     * rewritten (ADR-0062 D-7), so this is a no-op on the existing estate and only starts composing
-     * for tenants that have been given an alias.
+     * <p>D-7, as the owner stated it: <b>at login the user types the WHOLE username; at registration
+     * the administrator types only the local part and the system appends the rest.</b> The tenant
+     * half is therefore never typed by anyone — it is resolved here from the creator's own
+     * organisation.
+     *
+     * <p>An organisation with no alias keeps BARE usernames. Note that
+     * {@code TenancyReconciler} assigns an alias to EVERY organisation on boot, so on a live
+     * installation this composes from the moment 1.8.0 lands — it is not dormant. That is why the
+     * creation form must show the suffix and the composed result before saving (P6-2b): an
+     * administrator who types {@code john}, is shown nothing, and tells the new starter to sign in
+     * as {@code john} has been set up to fail. Names already issued are never rewritten (§0.2), so
+     * an estate that predates this keeps its bare names alongside newly composed ones.
      */
     private String composeUsername(String requested, RequestContext.Principal creator) {
         String local = requested == null ? "" : requested.trim().toLowerCase();
@@ -361,6 +380,16 @@ public class UserServiceImpl implements UserService {
                 .map(Organisation::getAlias)
                 .filter(a -> a != null && !a.isBlank())
                 .orElse(null);
+
+        // PLATFORM users stay PLAIN (owner, 2026-08-15). The suffix exists to keep usernames unique
+        // ACROSS TENANTS so every customer can use the names their staff actually prefer - two
+        // organisations can each have a `godfrey`. A platform operator belongs to no customer, there
+        // is a handful of them, and they are unique among themselves already, so the suffix would be
+        // noise on the accounts that most often get typed under pressure.
+        if (PLATFORM_ORGANISATION_ALIAS.equals(alias)) {
+            return local;
+        }
+
         return alias == null ? local : local + "@" + alias;
     }
 }
