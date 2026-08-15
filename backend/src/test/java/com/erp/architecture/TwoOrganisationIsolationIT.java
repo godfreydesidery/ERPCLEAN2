@@ -17,6 +17,7 @@ import com.erp.modules.iam.service.CompanyService;
 import com.erp.modules.iam.service.OrganisationService;
 import com.erp.modules.iam.service.RoleService;
 import com.erp.modules.iam.service.UserService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -121,6 +122,13 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
         RequestContext.set(new RequestContext.Principal(
                 who.getId(), who.getUsername(), who.isRoot(),
                 companyA.getId(), branchA.getId(), "127.0.0.1", orgA.getId()));
+    }
+
+    /** Act as a member of organisation B. */
+    private void actingAsB(AppUser who) {
+        RequestContext.set(new RequestContext.Principal(
+                who.getId(), who.getUsername(), who.isRoot(),
+                companyB.getId(), branchB.getId(), "127.0.0.1", orgB.getId()));
     }
 
     @AfterEach
@@ -255,6 +263,80 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
         // past both via findWithPermissionsByUid, which has no tenant predicate at all.
         assertThatThrownBy(() -> roleService.getByUid(roleB.getUid()))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    // ---------------------------------------------------------------------
+    // P4-1b / P4-1c / R-1 — role codes after V102
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("P4-1b · both tenants may hold the same role code — the point of V102")
+    void bothTenantsMayHoldTheSameRoleCode() {
+        String code = "SUPERVISOR_" + UUID.randomUUID().toString().substring(0, 6);
+
+        actingAsA(adminA);
+        var a = roleService.create(new com.erp.modules.iam.domain.dto.CreateRoleRequest(
+                code, "A's supervisor", "authored in tenant A"));
+
+        actingAsB(userB);
+        var b = roleService.create(new com.erp.modules.iam.domain.dto.CreateRoleRequest(
+                code, "B's supervisor", "authored in tenant B"));
+
+        // Impossible before V102: uq_role_code was global, so the second create hit a 409 and
+        // per-tenant roles were a fiction. create()'s uniqueness check had to become org-scoped in
+        // the same change, or tenant B could still never use a code tenant A had taken.
+        assertThat(a.id()).isNotEqualTo(b.id());
+        assertThat(roles.findById(a.id()).orElseThrow().getOrganisationId()).isEqualTo(orgA.getId());
+        assertThat(roles.findById(b.id()).orElseThrow().getOrganisationId()).isEqualTo(orgB.getId());
+    }
+
+    @Test
+    @DisplayName("P4-1b · the same code twice in ONE tenant is still refused")
+    void oneTenantMayNotReuseItsOwnRoleCode() {
+        String code = "DUPE_" + UUID.randomUUID().toString().substring(0, 6);
+        actingAsA(adminA);
+        roleService.create(new com.erp.modules.iam.domain.dto.CreateRoleRequest(code, "first", null));
+
+        assertThatThrownBy(() -> roleService.create(
+                new com.erp.modules.iam.domain.dto.CreateRoleRequest(code, "second", null)))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("R-1 · a tenant may not reuse a GLOBAL role code")
+    void aTenantMayNotReuseAGlobalRoleCode() {
+        // The shipped bundles survive IamTestData.clearAll() (it deletes only non-system roles), so
+        // this collides with something real rather than passing vacuously.
+        Role global = roles.findAll().stream()
+                .filter(r -> r.getOrganisationId() == null && r.isSystem())
+                .findFirst().orElseThrow(() ->
+                        new IllegalStateException("no global role seeded — this test would be vacuous"));
+
+        actingAsA(adminA);
+        assertThatThrownBy(() -> roleService.create(
+                new com.erp.modules.iam.domain.dto.CreateRoleRequest(
+                        global.getCode(), "A's own " + global.getCode(), null)))
+                .as("V102's two partial indexes sit on different partitions, so the DATABASE would "
+                        + "accept this; R-1 is what stops role-code resolution having to pick a "
+                        + "winner instead of an answer")
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("R-1 · the trigger holds even when the service is bypassed")
+    void theTriggerEnforcesR1WithoutTheService() {
+        Role global = roles.findAll().stream()
+                .filter(r -> r.getOrganisationId() == null && r.isSystem())
+                .findFirst().orElseThrow();
+
+        Role sneaky = new Role(global.getCode(), "bypassing the service");
+        sneaky.setOrganisationId(orgA.getId());
+
+        // Straight at the repository, past RoleServiceImpl entirely. This is the "a seeder cannot
+        // bypass it" half of R-1, and the only reason V102 introduces the first trigger in this
+        // schema: a service check cannot bind a migration, a direct SQL fix, or a future seeder.
+        assertThatThrownBy(() -> roles.saveAndFlush(sneaky))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     // ---------------------------------------------------------------------

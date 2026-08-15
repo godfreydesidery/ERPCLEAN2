@@ -50,6 +50,47 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
      * Same NULL-tolerance as its sibling: the thirteen shipped roles are global and must resolve for
      * everyone.
      */
+    /**
+     * Resolve a role BY CODE within the caller's tenant, global roles included (ADR-0062 P4-1c).
+     *
+     * <p>Returns a LIST, not an Optional, and that is deliberate. Once {@code uq_role_code} is gone
+     * (V102) a derived {@code findByCode} returning {@code Optional} throws
+     * {@code IncorrectResultSizeDataAccessException} — an HTTP 500 — the moment two rows share a
+     * code. R-1 forbids the tenant/global overlap that would produce two rows here, but a lookup on
+     * the approvals path must not depend on an invariant enforced elsewhere staying true: if R-1 is
+     * ever breached the approval inbox should pick deterministically, not crash.
+     *
+     * <p>Ordered tenant-first ({@code NULLS LAST}), so a tenant's own role wins over a global one of
+     * the same code. That is the right precedence: the tenant authored theirs deliberately.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT r FROM Role r WHERE r.code = :code "
+          + "AND (r.organisationId IS NULL OR r.organisationId = :organisationId) "
+          + "ORDER BY r.organisationId NULLS LAST")
+    java.util.List<Role> findVisibleByCode(
+            @org.springframework.data.repository.query.Param("code") String code,
+            @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
+
+    /** Does a GLOBAL role hold this code? Backs the R-1 service check (ADR-0062 P4-1d). */
+    boolean existsByOrganisationIdIsNullAndCode(String code);
+
+    /** Does THIS tenant already use this code? Replaces the global existsByCode on create (P4-1b). */
+    boolean existsByOrganisationIdAndCode(Long organisationId, String code);
+
+    /**
+     * Tenant roles whose code collides with a global one — the R-1 breach that no index can prevent.
+     *
+     * <p>Reported at boot rather than blocked, because the breach can be created by US: a release
+     * that ships a new global bundle whose code a customer already used. Aborting there would turn a
+     * name clash into a failed migration and a failed boot on a live customer's system, caused by a
+     * release they did not ask for. Direction 1 — a tenant reaching for a global code — IS blocked,
+     * by the service check and V102's trigger.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT t.code FROM Role t WHERE t.organisationId IS NOT NULL AND EXISTS "
+          + "(SELECT 1 FROM Role g WHERE g.organisationId IS NULL AND g.code = t.code)")
+    java.util.List<String> findTenantCodesCollidingWithGlobal();
+
     @EntityGraph(attributePaths = "permissions")
     @org.springframework.data.jpa.repository.Query(
             "SELECT r FROM Role r WHERE r.uid = :uid "

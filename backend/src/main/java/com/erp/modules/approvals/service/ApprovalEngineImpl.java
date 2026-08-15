@@ -298,6 +298,13 @@ public class ApprovalEngineImpl implements ApprovalEngine {
         if (approverRoleCode == null) {
             return null;
         }
-        return roleRepo.findByCode(approverRoleCode).map(Role::getName).orElse(null);
+        // P4-1c (ADR-0062). This was a derived findByCode returning Optional. Once V102 allows two
+        // tenants to share a role code, that call throws IncorrectResultSizeDataAccessException on
+        // the second row — an HTTP 500 in the approval inbox. Scoped to the caller's tenant, global
+        // roles included, and tenant-first so a tenant's own role wins over a global namesake.
+        RequestContext.Principal caller = RequestContext.get();
+        return roleRepo.findVisibleByCode(
+                        approverRoleCode, caller == null ? null : caller.organisationId())
+                .stream().findFirst().map(Role::getName).orElse(null);
     }
 }
