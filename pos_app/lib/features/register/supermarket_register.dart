@@ -1242,6 +1242,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         onSubmitted: (_) => _applyNumpad(),
         style: numStyle(size: 26, weight: FontWeight.w800),
         decoration: const InputDecoration(
+          // Same inherited `filled: true` from the global theme. The text here is dark, so this is
+          // cosmetic - a wrong-coloured box, not a value you cannot read - but it is the same defect
+          // and it is fixed the same way.
+          filled: false,
+          fillColor: Colors.transparent,
           isDense: true,
           contentPadding: EdgeInsets.symmetric(vertical: 6),
           border: InputBorder.none,
