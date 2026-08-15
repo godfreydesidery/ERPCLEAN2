@@ -91,6 +91,21 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     List<AppUser> findByRootFalseAndOrganisationIdOrderByUsername(Long organisationId);
 
     /**
+     * Every user of one tenant, root users included, plus any not yet attributed (ADR-0062 P3-8).
+     *
+     * <p>Backs the root-facing {@code UserServiceImpl.list()}, which previously called
+     * {@link #findAllByOrderByUsername()} — every user in the database, of every customer.
+     *
+     * <p>NULL-tolerant on purpose. An account created before P2-1 stamped organisations, or through
+     * a path that missed it, has a null organisation; a strict predicate would make it invisible to
+     * the exact screen an administrator would use to notice and fix it. The population shrinks to
+     * empty once the column is constrained NOT NULL.
+     */
+    @Query("SELECT u FROM AppUser u WHERE u.organisationId = :organisationId "
+            + "OR u.organisationId IS NULL ORDER BY u.username")
+    List<AppUser> findVisibleToOrganisationOrderByUsername(@Param("organisationId") Long organisationId);
+
+    /**
      * Membership check for the {@code getByUid} tenant-isolation guard. Returns {@code true} iff
      * {@code userId} belongs to {@code companyId} via an active role grant OR a branch assignment
      * OR an explicit active user_company row (V77 additive oracle).

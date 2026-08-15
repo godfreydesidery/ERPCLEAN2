@@ -219,8 +219,12 @@ public class StockLocationServiceImpl implements StockLocationService {
 
         // Non-root callers may only list a branch they are actively assigned to — same rule the
         // request-scope branch override enforces.
+        // Revocation-aware since P3-14 (ADR-0062). This used to call findByUserIdAndBranchId, which
+        // filters on neither revokedAt nor active - so revoking someone's branch left them still able
+        // to list its locations. The header path was narrowed at the same time, so the two now agree.
         if (!principal.root()
-                && userBranches.findByUserIdAndBranchId(principal.userId(), branch.getId()).isEmpty()) {
+                && userBranches.findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue(
+                        principal.userId(), branch.getId()).isEmpty()) {
             throw com.erp.platform.common.api.ForbiddenException.notPermitted();
         }
         return branch.getId();

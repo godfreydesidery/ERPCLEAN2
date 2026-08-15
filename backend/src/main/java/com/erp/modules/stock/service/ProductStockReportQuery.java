@@ -376,12 +376,13 @@ public class ProductStockReportQuery {
      *
      * <p>Root is exempt (ScopeGuard already audits its cross-scope reads). Anything else fails closed.
      *
-     * <p>This is the STRICTER of the two paths, not a mirror of it: the header path checks only that
-     * an assignment row exists, while this one additionally requires it to still be live (not
-     * deactivated, not revoked). So a revoked user can still switch session scope by header yet is
-     * refused the branch-filtered report. Narrowing the header path is an IAM change and would move
-     * the shell's branch switcher with it — see {@link #branchNotAssigned()} on why the wording here
-     * stays about the assignment rather than about permissions.
+     * <p>This USED to be the stricter of the two paths: the header path checked only that an
+     * assignment row existed, so a revoked user could still switch session scope by header and was
+     * then refused the branch-filtered report — a revoked assignment reading as a broken screen.
+     * P3-14 (ADR-0062) narrowed the header path to require a live assignment too, so the two now
+     * agree and the asymmetry this paragraph used to warn about is gone. See
+     * {@link #branchNotAssigned()} on why the wording here stays about the assignment rather than
+     * about permissions.
      *
      * <p>Read with raw SQL rather than IAM's {@code UserBranchRepository}: this class is scalar-SQL
      * throughout and importing another module's repository would breach the module boundary.

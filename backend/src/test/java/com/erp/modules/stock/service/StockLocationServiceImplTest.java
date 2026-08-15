@@ -225,8 +225,11 @@ class StockLocationServiceImplTest {
         when(other.getId()).thenReturn(OTHER_BRANCH_ID);
         when(other.getCompany()).thenReturn(company);
         when(branches.findByUid("OTHER-BRANCH-UID")).thenReturn(Optional.of(other));
-        // Non-root caller is actively assigned to the requested branch.
-        when(userBranches.findByUserIdAndBranchId(USER_ID, OTHER_BRANCH_ID))
+        // Non-root caller is actively assigned to the requested branch. Since P3-14 (ADR-0062) the
+        // service consults the REVOCATION-AWARE finder, so stubbing the old one would leave the
+        // service seeing no assignment at all — the failure this stub used to hide.
+        when(userBranches.findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue(
+                USER_ID, OTHER_BRANCH_ID))
                 .thenReturn(Optional.of(mock(UserBranch.class)));
         when(locations.findByCompanyIdAndBranchId(COMPANY_ID, OTHER_BRANCH_ID, PAGEABLE))
                 .thenReturn(Page.empty(PAGEABLE));
@@ -245,8 +248,10 @@ class StockLocationServiceImplTest {
         when(other.getId()).thenReturn(OTHER_BRANCH_ID);
         when(other.getCompany()).thenReturn(company);
         when(branches.findByUid("OTHER-BRANCH-UID")).thenReturn(Optional.of(other));
-        // Same company (assertCanActIn passes) but NOT assigned to the branch.
-        when(userBranches.findByUserIdAndBranchId(USER_ID, OTHER_BRANCH_ID))
+        // Same company (assertCanActIn passes) but NOT assigned to the branch — expressed against
+        // the revocation-aware finder, which is what the service now calls (P3-14).
+        when(userBranches.findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue(
+                USER_ID, OTHER_BRANCH_ID))
                 .thenReturn(Optional.empty());
 
         org.junit.jupiter.api.Assertions.assertThrows(ForbiddenException.class,
