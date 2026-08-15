@@ -3,8 +3,10 @@
 # OrbixERP — installer (Linux / macOS).
 # Windows users: use install.ps1 instead.
 #
-#   ./install.sh              guided install — asks a few questions
-#   ./install.sh --defaults   unattended install using the values already in .env
+#   ./install.sh                      guided install — asks a few questions
+#   ./install.sh --defaults           unattended install using the values already in .env
+#   ./install.sh --backup-time 03:30  run the nightly backup at this time (default 02:00)
+#   ./install.sh --no-schedule        do NOT schedule the nightly backup
 #
 # Safe to run more than once: an existing .env is never overwritten, existing signing
 # keys are never regenerated, and an existing database is never touched.
@@ -16,6 +18,7 @@
 #   4. checks the network port is free and, in `host` database mode, that your
 #      database is reachable, the credentials work, and it is safe to install into
 #   5. starts everything and waits until it is genuinely ready
+#   6. schedules a nightly database backup, so you do not have to remember to take one
 #
 # Everything is inside functions and dispatched from main() at the bottom, so the file
 # is fully parsed before any of it runs.
@@ -33,6 +36,8 @@ ENV_TEMPLATE="$SCRIPT_DIR/.env.example"
 VERSION_FILE="$SCRIPT_DIR/VERSION"
 POSTGRES_IMAGE="postgres:15-alpine"
 ASSUME_DEFAULTS=0
+SCHEDULE_BACKUPS=1
+BACKUP_TIME="02:00"
 
 if [ -t 1 ]; then
   C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'; C_BLD=$'\033[1m'; C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
@@ -489,6 +494,116 @@ start_system() {
   "$INSTALL_DIR/orbixerp.sh" start
 }
 
+# ---------------------------------------------------------------------------
+# 6. Automatic backups
+#
+# The installer schedules them. Until now the guides asked the client to set this up
+# themselves in cron or Task Scheduler — and an instruction is not a backup.
+#
+# cron rather than a systemd timer, on purpose. This installer's whole contract is that
+# OrbixERP lives in a directory its own user owns and needs root for nothing afterwards
+# (see is_system_dir above). A systemd SYSTEM timer needs root to install; a systemd USER
+# timer needs `loginctl enable-linger`, which is also root, and silently stops firing at
+# logout when it is missing. A schedule that quietly never runs is the exact failure this
+# is meant to remove. `crontab -` needs neither.
+#
+# Every step here fails SOFT. A machine with no crontab must still finish with a working
+# installation — it just prints the line to add by hand.
+# ---------------------------------------------------------------------------
+schedule_backups() {
+  step "Automatic backups"
+
+  if [ "$SCHEDULE_BACKUPS" != "1" ]; then
+    warn "Not scheduled, because --no-schedule was given."
+    info "  Your only backups will be the ones you remember to type. To schedule one later,"
+    info "  run the installer again without --no-schedule."
+    return 0
+  fi
+
+  if ! printf '%s' "$BACKUP_TIME" | grep -qE '^([01][0-9]|2[0-3]):[0-5][0-9]$'; then
+    warn "--backup-time should look like 02:00 — '$BACKUP_TIME' does not. Using 02:00."
+    BACKUP_TIME="02:00"
+  fi
+  # 10# forces base ten: cron wants 2, and bash would read a bare 08 as invalid octal.
+  local hh mm
+  hh=$((10#${BACKUP_TIME%%:*}))
+  mm=$((10#${BACKUP_TIME##*:}))
+
+  if ! command -v crontab >/dev/null 2>&1; then
+    warn "This machine has no 'crontab' command, so the nightly backup was not scheduled."
+    info "  Install cron (on Debian/Ubuntu:  sudo apt install cron), then run the installer"
+    info "  again — or arrange a nightly run of this command yourself:"
+    info "      cd $INSTALL_DIR && ./orbixerp.sh backup"
+    return 0
+  fi
+
+  # The install directory may be owned by someone else — /opt/orbixerp created with sudo,
+  # say. The backup must run as its owner, or it cannot write into backups/.
+  local me owner
+  me="$(id -un)"
+  owner="$(stat -c %U "$INSTALL_DIR" 2>/dev/null || stat -f %Su "$INSTALL_DIR" 2>/dev/null || printf '%s' "$me")"
+  local -a crontab_read=(crontab -l) crontab_write=(crontab -)
+  if [ "$owner" != "$me" ] && [ "$(id -u)" = "0" ]; then
+    crontab_read=(crontab -u "$owner" -l)
+    crontab_write=(crontab -u "$owner" -)
+  else
+    owner="$me"
+  fi
+
+  # The block is keyed on the install directory, so a second instance in another folder
+  # (a training system, say) gets its own entry rather than fighting over one.
+  # Deliberately plain ASCII: this line has to survive every crontab editor and locale.
+  local marker="# >>> orbixerp backup [$INSTALL_DIR] - managed by install.sh, do not edit inside >>>"
+  local endmark="# <<< orbixerp backup [$INSTALL_DIR] <<<"
+  local job="${mm} ${hh} * * * cd '$INSTALL_DIR' && ./orbixerp.sh backup >> '$INSTALL_DIR/backups/backup.log' 2>&1"
+
+  local current kept tmp
+  current="$("${crontab_read[@]}" 2>/dev/null || true)"
+  # Drop any previous block with the SAME marker first, so running the installer twice
+  # replaces the entry instead of adding a second one.
+  kept="$(printf '%s\n' "$current" | awk -v s="$marker" -v e="$endmark" '
+    $0 == s { skip = 1; next }
+    $0 == e { skip = 0; next }
+    !skip   { print }
+  ')"
+
+  tmp="$(mktemp)"
+  {
+    printf '%s\n' "$kept"
+    printf '%s\n' "$marker"
+    # cron's own PATH is minimal and often has no /usr/local/bin, so `docker` may not
+    # resolve. Without this line the job runs, fails, and leaves only a log nobody reads.
+    printf '%s\n' "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    printf '%s\n' "$job"
+    printf '%s\n' "$endmark"
+  } > "$tmp"
+
+  if ! "${crontab_write[@]}" < "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    warn "Could not write to ${owner}'s crontab, so the nightly backup was not scheduled."
+    info "  The installation is fine and is running. To schedule it by hand, run 'crontab -e'"
+    info "  and add this one line:"
+    info "      $job"
+    return 0
+  fi
+  rm -f "$tmp"
+
+  # Read it back. A schedule that was written but cannot be read is not a schedule.
+  local found; found="$("${crontab_read[@]}" 2>/dev/null | grep -cF "$marker" || true)"
+  if [ "${found:-0}" -lt 1 ]; then
+    warn "The backup schedule was written but could not be read back. Check it with: crontab -l"
+    return 0
+  fi
+
+  ok "Nightly backup scheduled for ${BACKUP_TIME}, as user ${owner}"
+  info "  Backups are written to $INSTALL_DIR/backups and pruned automatically."
+  info "  Check it any time with:  crontab -l    (and read backups/backup.log)"
+  if [ "$(env_get ERP_DB_MODE docker)" = "docker" ]; then
+    info "  Note: the backup reads the database through the running system, so it is skipped"
+    info "  on any night the machine is off or the system is stopped."
+  fi
+}
+
 print_summary() {
   local user pass port host
   user="rootadmin"
@@ -510,11 +625,21 @@ print_summary() {
   printf '  It is also saved in .env, which you should keep private.\n\n'
   printf '  Everyday commands, from %s\n' "$INSTALL_DIR"
   printf '      ./orbixerp.sh status       is it running?\n'
-  printf '      ./orbixerp.sh backup       back up the database\n'
+  printf '      ./orbixerp.sh backup       back up the database now\n'
   printf '      ./orbixerp.sh stop         shut down (your data is kept)\n'
   printf '      ./orbixerp.sh start        start again\n\n'
-  printf '  Back up these three things together — a database backup alone\n'
-  printf '  cannot be signed into without them:\n'
+  if [ "$SCHEDULE_BACKUPS" = "1" ]; then
+    printf '  Backups\n'
+    printf '      Taken automatically every day at %s, into %s/backups\n' "$BACKUP_TIME" "$INSTALL_DIR"
+    printf '      Kept for %s days, then removed to bound the disk\n' "$(env_get ERP_BACKUP_RETAIN_DAYS 14)"
+    printf '      See the schedule with  crontab -l   |   log: backups/backup.log\n\n'
+  else
+    printf '  %sNo automatic backup was scheduled (--no-schedule).%s\n' "$C_YEL" "$C_OFF"
+    printf '      You must arrange one, or your only backups are the ones you type.\n\n'
+  fi
+  printf '  %sBackups stay on this machine. Copy them off it as well%s — a backup on the\n' "$C_YEL" "$C_OFF"
+  printf '  machine that failed is not a backup. Take these three together; a database\n'
+  printf '  backup alone cannot be signed into without them:\n'
   printf '      backups/   .env   secrets/\n\n'
   printf '  Guides in docs/ : INSTALL, OPERATIONS, HOST-DB-SETUP, TROUBLESHOOTING\n'
   printf '  Each one comes as .md and as plain .txt — open whichever your machine reads.\n\n'
@@ -522,13 +647,17 @@ print_summary() {
 
 # ---------------------------------------------------------------------------
 main() {
-  for arg in "$@"; do
-    case "$arg" in
+  while [ $# -gt 0 ]; do
+    case "$1" in
       --defaults|--yes|-y) ASSUME_DEFAULTS=1 ;;
+      --no-schedule)       SCHEDULE_BACKUPS=0 ;;
+      --backup-time)       shift; BACKUP_TIME="${1:-}" ;;
+      --backup-time=*)     BACKUP_TIME="${1#*=}" ;;
       # The client-facing part of this file's header (stops before the maintainer notes).
-      -h|--help) sed -n '3,18p' "$SCRIPT_PATH" | sed 's/^# \{0,1\}//'; exit 0 ;;
-      *) die "Unknown option '$arg'. Run ./install.sh --help" ;;
+      -h|--help) sed -n '3,21p' "$SCRIPT_PATH" | sed 's/^# \{0,1\}//'; exit 0 ;;
+      *) die "Unknown option '$1'. Run ./install.sh --help" ;;
     esac
+    shift || break
   done
 
   printf '\n%s  OrbixERP — installation%s\n' "$C_BLD" "$C_OFF"
@@ -554,6 +683,10 @@ main() {
   # and must not run again. Doing this earlier would leave a failed install unable to
   # create its administrator on the next attempt.
   env_set ERP_BOOTSTRAP_ENABLED "false"
+
+  # After the system is up, so the schedule is only promised once there is something to
+  # back up — and it never aborts the install if the machine has no cron.
+  schedule_backups
 
   print_summary
 }

@@ -56,6 +56,26 @@ stack, or with whatever else is on 4200 — see the local-e2e-stack notes.
 > The SQL is kept because it is still the right tool for **one** job: making a second tenant exist
 > as cheaply as possible in order to probe the isolation boundary (§4), where the seeded defaults
 > are irrelevant and skipping them makes the stack quicker to build.
+>
+> **To ONBOARD a tenant rather than probe the boundary, follow
+> [tenant-onboarding.md](tenant-onboarding.md)** — the request body, the alias trap, what
+> provisioning covers, and what is left to do by hand.
+
+> **⚠ The identity below is not the identity the product creates — corrected 2026-08-15.**
+>
+> The `adminb` row inserted by this SQL has **`is_root = false`**. Every tenant administrator the
+> product actually provisions has **`is_root = true`** (`TenantProvisioningService` calls
+> `admin.setRoot(true)` unconditionally), and root is precisely the identity for which the boundary
+> is hardest to hold — it short-circuits every permission check.
+>
+> So the §4 probes below, as originally measured, were collected against **an identity the product
+> does not produce**. They have since been re-measured with a root, API-provisioned tenant admin —
+> the reads all still hold, and the results are in
+> [tenant-onboarding.md §8.1](tenant-onboarding.md#81--reads--these-hold). **Two write paths do
+> not hold**; see §4.1 below.
+>
+> If you are using this SQL to probe rather than to onboard, set `is_root = true` on `adminb` — or
+> the probe understates what a real tenant admin can reach.
 
 Tenant B goes in by SQL. The password hash is copied from `rootadmin`, so both accounts share one
 password and you do not need to generate a bcrypt hash.
@@ -112,6 +132,28 @@ returns *Tenant B Ltd*, and every reach into A's company, organisation or branch
 One reading note: `adminb` gets **403** rather than 404 on the company list, because the permission
 gate fires before the tenancy check — the outer layer catches it first. Both are refusals; they just
 come from different layers.
+
+## 4.1 · The probes this table is missing: writes
+
+**Every probe above is a read.** `POST /organisations` and `POST /organisations/uid/{uid}/suspend`
+appear nowhere in this table, and neither does any write case in `TwoOrganisationIsolationIT`. That
+gap is not cosmetic — measured 2026-08-15 on a two-organisation stack with a root, API-provisioned
+tenant admin:
+
+| Request as root admin of B | Result | Why |
+|---|---|---|
+| `POST /organisations/uid/<A>/suspend` | **200 — A is suspended**, status `INACTIVE` | `OrganisationServiceImpl.setStatus` loads the target with a bare `findByUid`, no tenant predicate; the only guard refuses suspending your *own* organisation |
+| `POST /organisations` | **gate passed** — the request reaches body validation (`400`/`409`), never `403` | same shape: `@perm.has('ORG.CREATE')`, and root bypasses every code |
+
+*Precision on the second row: what was measured is that a tenant admin's request is **authorised** —
+four attempts returned validation and constraint errors, none returned `403`. A successful third
+tenant was not created, because the point was the authorisation boundary, not the row.*
+
+Both endpoints are gated with `@perm.has` rather than `@perm.scoped`, so `ScopeGuard` — where the
+P3-11 tenant check lives — is never reached. The consequence and the operational response are
+written up in
+[tenant-onboarding.md §8.2](tenant-onboarding.md#82--the-known-hole--do-not-record-this-as-a-pass).
+**Add these two cases when the platform tier lands; their expected result becomes 403.**
 
 ## 5 · Tear it down
 

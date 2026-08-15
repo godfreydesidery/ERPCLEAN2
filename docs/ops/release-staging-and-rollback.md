@@ -58,6 +58,26 @@ roles, no unattributed rows, and none of the shape that has actually broken. Run
 copy is not enough either: 1.8.0's defect was in what the *application* does at startup, and the DDL
 rehearsal passed.
 
+### 3b · Boot against an EMPTY database, through the shipped installer
+
+Gate 3 and this one hide **different** defects, so neither substitutes for the other. A populated
+database has legacy roles for the reconciler to stamp and a trigger that fires; an empty one has
+neither — every seeded role is global, so V102/V103's trigger short-circuits and the stamping loop
+has nothing to do. V103's own header records the converse mistake: the 1.8.0 crash-loop reached the
+customer *because the local rehearsal used a fresh database.*
+
+Conversely, only the empty path runs `BootstrapRunner` and first-install provisioning at all.
+
+```bash
+wsl -e bash -lc 'bash scripts/rehearse-fresh-install.sh up dist/release/orbixerp-<version>-amd64'
+wsl -e bash -lc 'bash scripts/rehearse-fresh-install.sh verify'
+wsl -e bash -lc 'bash scripts/rehearse-fresh-install.sh down'
+```
+
+Ten minutes on a throwaway stack. First run 2026-08-15 —
+[fresh-install-rehearsal.md](fresh-install-rehearsal.md) records the method, the measured timings,
+and the two defects it found.
+
 ### 4 · Boot the shipped artefact
 
 Load the image from the bundle and run it, rather than the source tree:

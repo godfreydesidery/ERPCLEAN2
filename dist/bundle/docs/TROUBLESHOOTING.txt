@@ -285,6 +285,92 @@ Everything is slow
 
 ------------------------------------------------------------------------------
 
+Backups
+=======
+
+The nightly backup is not running
+---------------------------------
+
+  The installer schedules one at 02:00. If backups/ has no recent file, work
+  down this list.
+
+  First, read the log. Every scheduled run appends to backups/backup.log. If
+  it is empty or missing, the schedule never ran at all - go to the next step.
+  If it has entries ending in an error, the schedule is fine and the backup
+  itself is failing; read the message.
+
+  Does the schedule exist?
+
+      crontab -l                                   # Linux / macOS - look for the OrbixERP block
+      Get-ScheduledTask -TaskPath '\OrbixERP\'     # Windows
+
+  Nothing there? The installer could not create it. On Windows that is usually
+  because it was not run as an administrator - right-click Setup.cmd, choose
+  "Run as administrator", and install again. It recognises the existing
+  installation and only adds the schedule. On Linux, install cron (sudo apt
+  install cron) and run ./install.sh again.
+
+  Windows - did it run, and what did it return?
+
+      Get-ScheduledTaskInfo -TaskPath '\OrbixERP\' -TaskName 'Backup (OrbixERP)' |
+        Select-Object LastRunTime, LastTaskResult
+
+  LastTaskResult 0 means success. If LastRunTime is old or empty, the task did
+  not fire:
+
+  - Was anyone signed in? The task runs as the person who installed, and only
+    while that Windows user is signed in. A machine sitting at the lock screen
+    is fine; one signed out, or restarted and left at the sign-in screen, is
+    not
+  - Was Docker Desktop running? The backup talks to the database through
+    Docker. If Docker Desktop is not started, it cannot
+  - Set Docker Desktop to start with Windows, and leave the machine signed in
+
+  Was the system running? The backup reads the database through the running
+  system, so a night when the machine was off, or OrbixERP was stopped, has no
+  backup. It does not catch up later. Check with orbixerp status.
+
+  Linux - is cron itself running? systemctl status cron (or crond). Its own
+  log, /var/log/syslog or journalctl -u cron, shows whether it tried.
+
+"There is not enough free disk space to take a backup safely"
+-------------------------------------------------------------
+
+  Deliberate: it refuses to start a dump it cannot finish, because a dump that
+  runs out of disk leaves a truncated file behind that looks exactly like a
+  good backup.
+
+  - Free space on the disk - old backups elsewhere, logs, other applications
+  - Or lower ERP_BACKUP_KEEP_MAX / ERP_BACKUP_DIR_MAX_MB in .env so
+    housekeeping keeps fewer files (see How long backups are kept in
+    OPERATIONS.txt)
+
+The backups/ folder is filling the disk
+---------------------------------------
+
+  It should not: files are pruned after every backup, and there are limits on
+  both the number of files and the total size. If it is still growing, check
+  for these:
+
+  - ERP_BACKUP_DIR_MAX_MB set too high for the disk, or ERP_BACKUP_KEEP_MAX
+    too large
+  - A very large database, where even seven backups (ERP_BACKUP_KEEP_MIN) is a
+    lot. That floor is never crossed, on purpose - if seven copies will not
+    fit, the disk is too small
+  - Files that are not backups, sitting in the folder because somebody copied
+    them there. Only orbixerp_*, orbixerp-preupdate_* and
+    safety-before-restore-* are managed
+
+"The system is not running, so its database cannot be reached"
+--------------------------------------------------------------
+
+  backup and restore reach the database through the running system, so it must
+  be started: orbixerp start. This is also why, when moving to another
+  machine, you must back up first and stop afterwards - not the other way
+  round.
+
+------------------------------------------------------------------------------
+
 Odd Windows-specific problems
 =============================
 

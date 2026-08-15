@@ -24,7 +24,7 @@ a backup, updating, switching database mode — has to be typed.
 | `orbixerp restart` | Stop then start — use after editing `.env` |
 | `orbixerp status` | Whether it is running, healthy, and on which address |
 | `orbixerp logs` | The last 200 lines of application log |
-| `orbixerp backup` | Writes a database backup into `backups/` |
+| `orbixerp backup` | Writes a database backup into `backups/` — one runs automatically every night, so this is for taking an extra one |
 | `orbixerp restore <file>` | **Replaces** the database from a backup |
 | `orbixerp update <folder>` | Upgrades to a newer release |
 | `orbixerp version` | What is installed |
@@ -33,17 +33,87 @@ a backup, updating, switching database mode — has to be typed.
 
 ## Backups
 
-### Taking one
+### It is already set up
+
+**The installer schedules a backup every night at 02:00.** You do not have to arrange it,
+and you should not have to remember it. Everything in this section is about checking that
+it is working and knowing what to do when you need it.
+
+To change the time, or to turn it off, see [Changing the backup
+schedule](#changing-the-backup-schedule) below.
+
+### Checking it is running — do this monthly
+
+A schedule that stopped running six weeks ago looks exactly like one that is working, until
+the day you need it. Two things to look at:
+
+**1. Are there recent files?**
+
+```
+ls -lh backups/           # Linux / macOS
+dir backups\              # Windows
+```
+
+You should see a `orbixerp_<date>_<time>.dump` for each of the last several days, and the
+newest one should be from last night.
+
+**2. What does the log say?**
+
+Each scheduled run appends to `backups/backup.log`. The last entry should end with
+`Backup complete`. The file is trimmed automatically, so it cannot grow without limit.
+
+On Windows you can also ask Task Scheduler directly:
+
+```powershell
+Get-ScheduledTaskInfo -TaskPath '\OrbixERP\' -TaskName 'Backup (OrbixERP)' |
+  Select-Object LastRunTime, LastTaskResult
+```
+
+`LastTaskResult` of `0` means the last run succeeded. Anything else means it did not — and
+that is the only thing that tells "scheduled" apart from "working".
+
+### Taking one yourself
 
 ```
 orbixerp backup
 ```
 
-Writes `backups/orbixerp_20260801_143022.dump` and deletes backups older than
-`ERP_BACKUP_RETAIN_DAYS` (14 by default).
+Writes `backups/orbixerp_20260801_143022.dump`. Take one before anything you would want to
+undo — a big price change, a stock adjustment, an import.
 
-If it fails, it says so and writes nothing. It refuses to leave behind an empty file,
-because a zero-byte backup that *looks* successful is worse than no backup at all.
+If it fails, it says so and **deletes the part-written file**, so a broken backup can never
+be mistaken for a good one. It also refuses to start at all if the disk is too full to
+finish safely.
+
+### How long backups are kept
+
+Three different kinds of file end up in `backups/`, and they are deliberately kept for three
+different lengths of time:
+
+| File | Taken by | Kept for | Setting |
+|---|---|---|---|
+| `orbixerp_...` | the nightly schedule, and `orbixerp backup` | 14 days | `ERP_BACKUP_RETAIN_DAYS` |
+| `orbixerp-preupdate_...` | `orbixerp update`, before it upgrades | 90 days | `ERP_BACKUP_PREUPDATE_RETAIN_DAYS` |
+| `safety-before-restore-...` | `orbixerp restore`, before it overwrites | 30 days | `ERP_BACKUP_SAFETY_RETAIN_DAYS` |
+
+The pre-update file is kept longest on purpose: **it is the only way to undo an upgrade**
+(see [Going back](#going-back)), and a fortnight is not long enough to be confident in a new
+version.
+
+Underneath those, three limits stop the folder from either emptying itself or filling the
+disk:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `ERP_BACKUP_KEEP_MIN` | 7 | Always keep this many of the newest, **whatever their age**. Checked first; it always wins |
+| `ERP_BACKUP_KEEP_MAX` | 90 | Never keep more files than this |
+| `ERP_BACKUP_DIR_MAX_MB` | 2048 | Never let `backups/` grow past this many megabytes |
+
+`KEEP_MIN` is what stops a machine that was switched off for a month from deleting every
+backup it has the next time it takes one. The two ceilings only ever bind on a very small
+disk or a very large database; when they do, the oldest files go first — including, if it
+comes to it, a pre-update file. If you have a rollback you must not lose, copy it somewhere
+else, which you should be doing anyway.
 
 ### Three things to keep together
 
@@ -58,30 +128,50 @@ A database backup on its own is not enough to recover. Keep all three:
 Without `secrets/`, a restored system cannot validate anyone's sign-in and every user is
 logged out. Without `.env`, the application cannot open its own database.
 
-### Getting them off the machine
+### Getting them off the machine — this part is still yours
 
-A backup stored only on the machine it came from protects you from mistakes, not from that
-machine failing. Copy the three items to another computer, an external drive, or cloud
-storage.
+**The schedule writes backups to this machine's own disk. Nothing copies them off it.** A
+backup that only exists on the computer that failed is not a backup — it is the same disk,
+the same power supply, the same room, and the same fire.
 
-### Automating it
+Arrange one of these, and check it as often as you check the backups themselves:
 
-**Linux** — `crontab -e`, then a 2 a.m. daily backup:
+- a scheduled copy of `backups/`, `.env` and `secrets/` to another computer or a NAS
+- a cloud sync folder or object storage
+- an external drive that is physically taken away, rotated between at least two
 
-```cron
-0 2 * * * cd /opt/orbixerp && ./orbixerp.sh backup >> /var/log/orbixerp-backup.log 2>&1
+> If your OrbixERP is a **shared instance** — one system used by more than one organisation
+> — do not do this yourself. See [When the system is shared by more than one
+> organisation](#when-the-system-is-shared-by-more-than-one-organisation).
+
+### Changing the backup schedule
+
+**Change the time** — run the installer again with the time you want. It replaces the
+existing schedule rather than adding a second one, and it does not reinstall anything:
+
+```
+./install.sh --backup-time 03:30              # Linux / macOS
+.\install.ps1 -BackupTime 03:30               # Windows
 ```
 
-**Windows** — Task Scheduler → Create Task:
+**Turn it off** — `--no-schedule` / `-NoSchedule` on the same command. Only do this if
+something else is backing the database up.
 
-- *Trigger*: Daily, 02:00
-- *Action*: Start a program
-  - Program: `powershell.exe`
-  - Arguments: `-NoProfile -ExecutionPolicy Bypass -File C:\OrbixERP\orbixerp.ps1 backup`
-  - Start in: `C:\OrbixERP`
-- Tick **Run whether user is logged on or not**
+**See it** — `crontab -l` on Linux; on Windows, Task Scheduler → Task Scheduler Library →
+OrbixERP.
 
-Then add whatever your organisation uses to copy `C:\OrbixERP\backups` off the machine.
+**Change how long backups are kept** — edit the settings in `.env` (table above). No restart
+is needed; the next backup uses the new values.
+
+Two things worth knowing about the schedule:
+
+- **On Linux** the backup runs through the running system, so it is skipped on any night the
+  machine is off or OrbixERP is stopped. It does not queue.
+- **On Windows** the task runs as the person who installed, and only while that person is
+  signed in with Docker Desktop running — which is what a back-office or till PC is doing
+  anyway. If Windows refused to create the task during installation (it often will not let a
+  standard user), the installer says so and prints exactly what to do; see
+  [TROUBLESHOOTING.md](TROUBLESHOOTING.md#the-nightly-backup-is-not-running).
 
 ### Restoring
 
@@ -90,10 +180,16 @@ orbixerp restore backups/orbixerp_20260801_143022.dump
 ```
 
 This **replaces** the current database. Everything recorded since that backup is lost, so
-the command makes you type `RESTORE` to confirm.
+the command makes you type `RESTORE` to confirm. Add `--yes` (Linux) or `-Yes` (Windows)
+only when a script is driving it and there is nobody to type.
 
-**Practise this once, on purpose, before you ever need it.** A backup you have never
-restored is an assumption.
+Before it overwrites anything it takes a `safety-before-restore-...` copy of the database as
+it is right now, so a restore of the wrong file can itself be undone.
+
+**Practise this once, on purpose, before you ever need it.** A backup you have never restored
+is an assumption, and the middle of an emergency is the wrong time to find out how long it
+takes. Your supplier can give you the written drill — it is `docs/ops/restore-drill.md` in
+the OrbixERP source — and the measured time it took there.
 
 ---
 
@@ -287,17 +383,71 @@ Commonly changed:
 | `ERP_HTTP_PORT` | The port users browse to |
 | `ERP_BIND_ADDR` | `0.0.0.0` for network access, `127.0.0.1` for this machine only |
 | `ERP_TIME_ZONE` | Timezone for displayed dates and times |
-| `ERP_BACKUP_RETAIN_DAYS` | How long `orbixerp backup` keeps old files |
+| `ERP_BACKUP_RETAIN_DAYS` | How long nightly backups are kept — see [How long backups are kept](#how-long-backups-are-kept) |
 | `JAVA_OPTS` | Memory tuning — raise only if you also gave Docker more memory |
+
+Changing the **time** the nightly backup runs is not a `.env` setting — see [Changing the
+backup schedule](#changing-the-backup-schedule).
 
 Settings whose names start with `ERP_BOOTSTRAP_` are read **only** when the database is
 first created. Changing them later has no effect; use the application's own screens.
 
 ---
 
+## When the system is shared by more than one organisation
+
+Some OrbixERP installations are **shared**: one system, one database, used by more than one
+organisation, kept apart inside the application. If yours is one of those — your supplier
+will have told you — this section replaces the backup advice above, and it is not optional.
+
+### One backup file holds every organisation's data
+
+A backup is a copy of the whole database. It is not "your data" — it is every organisation
+on that system: their sales, their customers, their prices, their payroll. There is no
+per-organisation backup, and no way to take one.
+
+Two things follow, and they are the whole of it:
+
+**1. You cannot take, hold or restore a backup of a shared system.** Not to a USB drive, not
+to your own cloud storage, not to your IT provider. A copy of that folder is a copy of
+another organisation's books, and handing it on would be a data-protection incident whatever
+the intention.
+
+**2. Backups are your supplier's responsibility, and they should have told you in writing**
+what they do and what you are entitled to expect:
+
+- how often a backup is taken, and how much work you could lose (your **RPO**)
+- how long it takes to get you running again (your **RTO**), measured, not estimated
+- where backups are held, for how long, and who can read them
+- who is told, and how, when a restore happens
+
+If you do not have those four answers, ask for them. They are the service, not the software.
+
+### A restore affects everybody, so it is never a routine request
+
+Restoring goes back to the moment the backup was taken **for every organisation on the
+system**, not just the one that asked. Another organisation's day of trading disappears, and
+the invoice numbers they already issued get issued again.
+
+So on a shared system a restore is a decision your supplier makes, with everyone affected
+told beforehand — not something you can ask for as a matter of course. If you have lost data,
+say so immediately; there are often ways to put a specific mistake right that do not involve
+rolling the whole system backwards.
+
+### Nobody outside your supplier gets access to the machine
+
+The installation folder holds the backups, the database password and the sign-in keys for
+everyone using the system. Access to the machine, that folder, or those files is limited to
+your supplier's named staff — which means an IT provider working for one organisation cannot
+be given it.
+
+---
+
 ## Moving to a different machine
 
-1. On the old machine: `orbixerp stop`, then `orbixerp backup`
+1. On the old machine: `orbixerp backup`, **then** `orbixerp stop` — in that order. The
+   backup reads the database through the running system, so it cannot run once you have
+   stopped it
 2. Copy the whole installation folder — including `backups/`, `.env` and `secrets/`
 3. On the new machine: install Docker, then run the installer. It finds the existing `.env`
    and keeps your settings and keys

@@ -2,8 +2,10 @@
     OrbixERP - installer (Windows).
     Linux / macOS users: use install.sh instead.
 
-      .\install.ps1              guided install - asks a few questions
-      .\install.ps1 -Defaults    unattended install using the values already in .env
+      .\install.ps1                    guided install - asks a few questions
+      .\install.ps1 -Defaults          unattended install using the values already in .env
+      .\install.ps1 -BackupTime 03:30  run the nightly backup at this time (default 02:00)
+      .\install.ps1 -NoSchedule        do NOT schedule the nightly backup
 
     If Windows refuses to run this file, start it like this:
       powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -18,10 +20,15 @@
       4. checks the network port is free and, in `host` database mode, that your
          database is reachable, the credentials work, and it is safe to install into
       5. starts everything and waits until it is genuinely ready
+      6. schedules a nightly database backup, so nobody has to remember to take one
 #>
 
 [CmdletBinding()]
-param([switch] $Defaults)
+param(
+    [switch] $Defaults,
+    [switch] $NoSchedule,
+    [string] $BackupTime = '02:00'
+)
 
 $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -299,6 +306,16 @@ function Set-Secrets {
     }
 }
 
+# backups\ was created by install.sh on Linux but never here, so on Windows the folder
+# existed only because the bundle happened to ship one. The scheduled task writes its log
+# into it before the first backup runs, so it has to exist by now.
+function New-WorkingFolders {
+    foreach ($name in @('backups', 'secrets\jwt')) {
+        $path = Join-Path $ScriptDir $name
+        if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+    }
+}
+
 function Set-JwtKeys {
     Write-Step 'Security keys'
     $dir = Join-Path $ScriptDir 'secrets\jwt'
@@ -437,6 +454,29 @@ function Start-System {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# ---------------------------------------------------------------------------
+# 6. Automatic backups
+#
+# The installer schedules them. Until now the guides asked the client to build a task in
+# Task Scheduler themselves - and an instruction is not a backup.
+#
+# The registration itself lives in orbixerp.ps1, and is called from here. There are TWO
+# Windows install paths - this file, and the Setup.cmd wizard, which does its own work and
+# never calls this file. One copy, called twice, is the only way both of them get it.
+# ---------------------------------------------------------------------------
+function Register-BackupTask {
+    if ($NoSchedule) {
+        Write-Step 'Automatic backups'
+        Write-Warn 'Not scheduled, because -NoSchedule was given.'
+        Write-Host '  Your only backups will be the ones you remember to take. To schedule one'
+        Write-Host '  later, run the installer again without -NoSchedule.'
+        return
+    }
+    # Never fatal: a Task Scheduler policy must not turn a working installation into a
+    # failed one. orbixerp.ps1 prints the manual instructions if it cannot register.
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ScriptDir 'orbixerp.ps1') schedule $BackupTime
+}
+
 function Show-Summary {
     $pass = Get-EnvValue 'ERP_BOOTSTRAP_ADMIN_PASSWORD'
     $port = Get-EnvValue 'ERP_HTTP_PORT' '8080'
@@ -464,12 +504,24 @@ function Show-Summary {
     Write-Host ''
     Write-Host '  Or type, if you prefer:'
     Write-Host '      .\orbixerp.ps1 status       is it running?'
-    Write-Host '      .\orbixerp.ps1 backup       back up the database'
+    Write-Host '      .\orbixerp.ps1 backup       back up the database now'
     Write-Host '      .\orbixerp.ps1 stop         shut down (your data is kept)'
     Write-Host '      .\orbixerp.ps1 start        start again'
     Write-Host ''
-    Write-Host '  Back up these three things together - a database backup alone'
-    Write-Host '  cannot be signed into without them:'
+    if ($NoSchedule) {
+        Write-Host '  No automatic backup was scheduled (-NoSchedule).' -ForegroundColor Yellow
+        Write-Host '      You must arrange one, or your only backups are the ones you take by hand.'
+    } else {
+        Write-Host '  Backups'
+        Write-Host "      Taken automatically every day at $BackupTime, into $ScriptDir\backups"
+        Write-Host "      Kept for $(Get-EnvValue 'ERP_BACKUP_RETAIN_DAYS' '14') days, then removed to bound the disk"
+        Write-Host '      Task Scheduler -> Task Scheduler Library -> OrbixERP   |   log: backups\backup.log'
+    }
+    Write-Host ''
+    Write-Host '  Backups stay on this machine. Copy them off it as well' -ForegroundColor Yellow -NoNewline
+    Write-Host ' - a backup on the'
+    Write-Host '  machine that failed is not a backup. Take these three together; a database'
+    Write-Host '  backup alone cannot be signed into without them:'
     Write-Host '      backups\   .env   secrets\'
     Write-Host ''
     Write-Host '  Guides in docs\ : INSTALL, OPERATIONS, HOST-DB-SETUP, TROUBLESHOOTING'
@@ -487,6 +539,7 @@ Test-Architecture
 Test-Docker
 
 Import-Images
+New-WorkingFolders
 New-EnvFile
 Set-Secrets
 Set-JwtKeys
@@ -501,5 +554,9 @@ Start-System
 # must not run again. Doing this earlier would leave a failed install unable to create
 # its administrator on the next attempt.
 Set-EnvValue 'ERP_BOOTSTRAP_ENABLED' 'false'
+
+# After the system is up, so the schedule is only promised once there is something to back
+# up - and it never aborts the install if Task Scheduler refuses.
+Register-BackupTask
 
 Show-Summary

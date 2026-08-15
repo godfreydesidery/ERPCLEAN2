@@ -1191,6 +1191,17 @@ function Start-Install {
         $code = Invoke-Tracked 'powershell' "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $S.InstallDir 'orbixerp.ps1')`" start" $S.InstallDir
         if ($code -ne 0) { throw 'The system did not start. The messages above explain why.' }
 
+        # Nightly backup. This wizard does its own installation and never runs install.ps1,
+        # so without this line a client who used Setup.cmd - the route the guides tell them
+        # to use - would end up with no schedule at all.
+        #
+        # Deliberately NOT fatal, and deliberately re-run on every install: the task is
+        # registered with -Force, so running it again replaces the schedule rather than
+        # adding a second one. If Windows refuses (it usually does unless Setup was run as
+        # administrator) orbixerp.ps1 prints what to do, and it lands in the log below.
+        $bar.Value = 5; $lblStep.Text = 'Setting up the nightly backup...'
+        [void](Invoke-Tracked 'powershell' "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $S.InstallDir 'orbixerp.ps1')`" schedule 02:00" $S.InstallDir)
+
         # 7. shortcut + first-run flag
         $bar.Value = 6; $lblStep.Text = 'Finishing...'
         if ($S.Shortcut) {

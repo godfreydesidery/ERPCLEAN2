@@ -45,6 +45,14 @@ fi
 
 echo "[restore] Restoring ${DUMP_FILE} → ${PGDATABASE}@${PGHOST}:${PGPORT}"
 echo "[restore] This will DROP and recreate all objects in ${PGDATABASE}."
+echo "[restore] ============================================================"
+echo "[restore] THIS IS A WHOLE-DATABASE RESTORE. There is no tenant filter."
+echo "[restore] If this database holds more than one organisation, EVERY"
+echo "[restore] organisation is taken back to the moment of this dump - they"
+echo "[restore] lose a trading day and re-issue invoice numbers already used."
+echo "[restore] On a shared instance this needs named vendor sign-off and both"
+echo "[restore] customers told first. See docs/ops/backup-restore.md."
+echo "[restore] ============================================================"
 echo "[restore] Proceeding in 5 seconds — Ctrl-C to abort."
 sleep 5
 
