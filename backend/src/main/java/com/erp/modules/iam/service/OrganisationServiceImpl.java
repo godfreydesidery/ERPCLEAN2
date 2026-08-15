@@ -50,13 +50,21 @@ public class OrganisationServiceImpl implements OrganisationService {
     @Override
     @Transactional
     public OrganisationDto createTenant(CreateTenantRequest request) {
-        // P5-2 (ADR-0062). Delegates to the SAME service bootstrap uses, so a tenant created here is
-        // identical to the one a fresh install produces - no second seeding path to drift.
+        // P5-2 (ADR-0062). Delegates to the SAME service bootstrap uses, so there is one seeding path
+        // and no second copy to drift. The two tenants are no longer IDENTICAL, and deliberately so:
+        // an operator is present here, so this path can carry a tax identity, a price list, a
+        // counter customer and a till, while bootstrap - which runs unattended on an empty database,
+        // with nobody to ask - passes null for every one of them and creates none.
         var provisioned = provisioning.provision(
                 new com.erp.platform.bootstrap.TenantProvisioningService.NewTenantRequest(
                         request.organisationName(),
                         blankToNull(request.timeZone(), "Africa/Dar_es_Salaam"),
                         request.companyCode(), request.companyName(),
+                        // Tax identity: NO fallback. Blank means the operator did not know it, and
+                        // the answer is to record nothing rather than a value invented here.
+                        blankToNull(request.companyLegalName()),
+                        blankToNull(request.companyTaxId()),
+                        blankToNull(request.companyVrn()),
                         request.branchCode(), request.branchName(),
                         request.adminUsername(), request.adminPassword(),
                         blankToNull(request.adminDisplayName(), request.adminUsername()),
@@ -64,6 +72,17 @@ public class OrganisationServiceImpl implements OrganisationService {
                         blankToNull(request.defaultCurrency(), "TZS"),
                         request.enabledCurrencies() == null || request.enabledCurrencies().isEmpty()
                                 ? List.of("TZS") : request.enabledCurrencies(),
+                        // Price list, walk-in customer, till: also no fallback. Each blank one
+                        // creates nothing, which is the whole point — a price list named "Standard"
+                        // that nobody asked for is worse than none at all.
+                        blankToNull(request.priceListCode()),
+                        blankToNull(request.priceListName()),
+                        // Not blankToNull'd and not defaulted: null here means "the operator did not
+                        // state a VAT stance", which the provisioner answers by leaving the entity
+                        // default alone rather than picking one.
+                        request.priceListIncludesVat(),
+                        blankToNull(request.walkInCustomerName()),
+                        blankToNull(request.posTillName()),
                         true));   // API-provisioned tenant: the admin's name composes (D-7)
 
         // High-severity by nature: this is the vendor creating a customer. The admin password is
@@ -115,6 +134,19 @@ public class OrganisationServiceImpl implements OrganisationService {
 
     private static String blankToNull(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * The no-fallback half of the pair above: an absent key, {@code ""} and {@code "   "} all become
+     * null, and null means "create nothing".
+     *
+     * <p>It exists as its own method rather than as {@code blankToNull(value, null)} because the
+     * two-argument helper is really blank-to-FALLBACK — it is what turns a blank time zone into
+     * Africa/Dar_es_Salaam — so passing a literal null there reads at the call site like an
+     * oversight rather than the decision it is.
+     */
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
     }
 
     @Override

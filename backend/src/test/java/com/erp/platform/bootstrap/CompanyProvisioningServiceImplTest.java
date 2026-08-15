@@ -147,6 +147,34 @@ class CompanyProvisioningServiceImplTest {
         verify(currencyEnablementSeeder).seedDefaults(7L, "KES", "KES", enabled);
     }
 
+    /**
+     * The heal path creates no price list, no walk-in customer and no POS till — and it cannot,
+     * because it holds no collaborator that could.
+     *
+     * <p>{@code provisionDefaults} is reached from {@code CompanyServiceImpl.reprovisionDefaults},
+     * the {@code POST .../provision-defaults} endpoint, which runs against companies that have
+     * traded for years. Those three are built from values a human supplies on the tenant-creation
+     * request, so there is nothing here for a heal to seed; keeping them out means a live company
+     * has no row to be idempotent about. {@code TenantOnlyProvisionersTest} enforces the same thing
+     * across the whole codebase — this asserts it at the one place someone would be tempted to add
+     * them.
+     */
+    @Test
+    void provisionDefaults_holdsNoRequestDrivenProvisioner() {
+        var collaborators = java.util.Arrays.stream(
+                        CompanyProvisioningServiceImpl.class.getDeclaredConstructors()[0]
+                                .getParameterTypes())
+                .map(Class::getSimpleName)
+                .toList();
+
+        org.assertj.core.api.Assertions.assertThat(collaborators)
+                .as("a price-list / walk-in-customer / till provisioner wired in here would fire on "
+                        + "the heal endpoint, against a live customer's companies. Create them on "
+                        + "the tenant path instead.")
+                .doesNotContain("DefaultPriceListProvisioner", "WalkInCustomerProvisioner",
+                        "PosTillProvisioner");
+    }
+
     @Test
     void provisionDefaults_calledTwice_delegatesToSeedersWithoutGuard() {
         // The service itself has no duplicate guard — each seeder is individually idempotent.

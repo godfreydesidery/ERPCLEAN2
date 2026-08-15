@@ -12,6 +12,8 @@ import com.erp.modules.documents.render.DocumentRenderModel.MetaPair;
 import com.erp.modules.documents.render.DocumentRenderModel.PartyBlock;
 import com.erp.modules.documents.render.DocumentRenderModel.TaxRow;
 import com.erp.modules.documents.render.DocumentRenderModel.TotalRow;
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintLineDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
@@ -44,9 +46,11 @@ import org.springframework.stereotype.Component;
 public class DocumentModelBuilder {
 
     private final ObjectMapper objectMapper;
+    private final CompanyRepository companies;
 
-    public DocumentModelBuilder(ObjectMapper objectMapper) {
+    public DocumentModelBuilder(ObjectMapper objectMapper, CompanyRepository companies) {
         this.objectMapper = objectMapper;
+        this.companies = companies;
     }
 
     // -------------------------------------------------------------------------
@@ -471,10 +475,60 @@ public class DocumentModelBuilder {
                     .stream().filter(s -> !s.isEmpty()).reduce((a, c) -> a + " | " + c).orElse(null);
         }
 
+        // Loaded once, and only when one of the two identity snapshots was never written — a branding
+        // row that carries both costs no extra query per rendered document. Keyed on the BRANDING
+        // ROW's company, never a caller-supplied id, and read through findScopedById, the named
+        // self-scope finder rather than a bare findById.
+        Company source = b.getCompanyId() != null && (b.getLegalName() == null || b.getTaxId() == null)
+                ? companies.findScopedById(b.getCompanyId()).orElse(null)
+                : null;
+
         return new BrandingBlock(
-                b.getDisplayName(), b.getLegalName(), b.getTaxId(),
+                b.getDisplayName(),
+                identityOrCompany(b.getLegalName(), source == null ? null : source.getLegalName()),
+                identityOrCompany(b.getTaxId(), source == null ? null : source.getTaxId()),
                 addr, contactLine, b.getLogoRef(), b.getLogoDataUri(),
                 b.getFooterTerms(), b.getBankDetails());
+    }
+
+    /**
+     * A printed identity value — legal name or TIN — taking the branding snapshot when the row has
+     * one and the company's when the row has never had one.
+     *
+     * <p><b>Why the fallback exists.</b> {@code DocumentBrandingSeeder} copies
+     * {@code companies.legal_name} and {@code companies.tax_id} into the branding row ONCE, on the
+     * pass that creates it, and never again. A tenant that filled either in afterwards — on the
+     * Company screen, or any tenant provisioned before the create path captured them — has the value
+     * in every standard report header and on no printed document at all: the page prints "TAX
+     * INVOICE" with the TIN line silently omitted, which is not a valid Tanzanian tax invoice. Both
+     * are healed, not just the TIN: a tax invoice must name the registered supplier as well as
+     * identify it. {@code DocumentBrandingServiceImpl.fallbackFromCompany} (BR-DOC-06) already treats
+     * the pair together for the branding screen; this is the same pair on the printed page.
+     *
+     * <p><b>Why null and blank are NOT the same thing here.</b> Null means the column was never
+     * written, so the company row is the better source. Blank means somebody SAVED the Document
+     * Branding screen with the field empty — {@code document-branding.component.ts} sends {@code ""}
+     * for every empty field and {@code DocumentBrandingServiceImpl.update} stores it — and that is
+     * the only way an administrator can keep a superseded {@code companies.tax_id} off the face of a
+     * tax document. Falling back on blank too would make an explicit clear indistinguishable from
+     * never-set: the screen would show the field empty while every invoice, GRN, purchase order,
+     * delivery note, credit note and proforma went on printing the old number, and the only remaining
+     * way to stop it would be to clear {@code companies.tax_id} — which simultaneously blanks it from
+     * the Company screen and all six standard report headers. <b>Do not widen this to
+     * {@code isBlank()}.</b>
+     *
+     * <p>Either source is normalised to null when empty, because
+     * {@code DocumentPdfRenderer.renderBranding} guards on null: a blank string would print a bare
+     * "TIN/VAT:" label with nothing after it.
+     *
+     * <p>Read-side and lazy on purpose. Nothing is written, so there is no row to be idempotent about
+     * and no way for the repair to corrupt a company that has traded for years. It must NOT be done
+     * by setting the field on the loaded {@code DocumentBranding} either — render() is read-write and
+     * download() is readOnly, so a dirty check would persist on one path and not the other.
+     */
+    private static String identityOrCompany(String snapshot, String companyValue) {
+        String value = snapshot != null ? snapshot : companyValue;
+        return value == null || value.isBlank() ? null : value;
     }
 
     private String nonNull(String s) { return s != null ? s : ""; }

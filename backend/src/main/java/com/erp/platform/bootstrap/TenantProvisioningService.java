@@ -12,6 +12,9 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.parties.service.WalkInCustomerProvisioner;
+import com.erp.modules.products.service.DefaultPriceListProvisioner;
+import com.erp.modules.sales.service.PosTillProvisioner;
 import com.erp.modules.stock.service.StockLocationSeeder;
 import java.util.Locale;
 import org.slf4j.Logger;
@@ -45,6 +48,20 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Bootstrap now delegates here, so the path a brand-new tenant takes is the same path the very
  * first one took — the only way to keep them from diverging.
+ *
+ * <h2>What this service creates that {@code provisionDefaults} does not</h2>
+ *
+ * The tax identity, the first price list, the counter customer and the first POS till. All four are
+ * built from values the OPERATOR supplied on the request, and a blank one creates nothing at all —
+ * there is no default, because a price list named "Standard" or a TIN chosen in Java is a wrong
+ * answer nobody can tell from a right one.
+ *
+ * <p>They are here rather than in {@code CompanyProvisioningServiceImpl.provisionDefaults} because
+ * that method is also the HEAL path: {@code POST /api/v1/companies/uid/{uid}/provision-defaults}
+ * runs it against companies that have traded for years. Nothing in this block is reachable from
+ * there, so re-provisioning a live company writes none of them — the risk is designed out rather
+ * than guarded against, and the "did the idempotency guard hold?" question never has to be answered.
+ * {@code TenantOnlyProvisionersTest} keeps it that way.
  */
 @Service
 public class TenantProvisioningService {
@@ -60,6 +77,11 @@ public class TenantProvisioningService {
     private final CompanyProvisioningService companyProvisioning;
     private final StockLocationSeeder stockLocationSeeder;
     private final PettyCashFundSeeder pettyCashFundSeeder;
+    // The three request-driven creations. NOT seeders, and deliberately not in the seeder chain —
+    // see the class javadoc's "What this service creates that provisionDefaults does not".
+    private final DefaultPriceListProvisioner priceListProvisioner;
+    private final WalkInCustomerProvisioner walkInCustomerProvisioner;
+    private final PosTillProvisioner posTillProvisioner;
     private final com.erp.modules.iam.repository.RoleRepository roles;
     private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
 
@@ -75,6 +97,9 @@ public class TenantProvisioningService {
                                      CompanyProvisioningService companyProvisioning,
                                      StockLocationSeeder stockLocationSeeder,
                                      PettyCashFundSeeder pettyCashFundSeeder,
+                                     DefaultPriceListProvisioner priceListProvisioner,
+                                     WalkInCustomerProvisioner walkInCustomerProvisioner,
+                                     PosTillProvisioner posTillProvisioner,
                                      com.erp.modules.iam.repository.RoleRepository roles,
                                      com.erp.modules.iam.repository.UserRoleRepository userRoles) {
         this.organisations = organisations;
@@ -86,6 +111,9 @@ public class TenantProvisioningService {
         this.companyProvisioning = companyProvisioning;
         this.stockLocationSeeder = stockLocationSeeder;
         this.pettyCashFundSeeder = pettyCashFundSeeder;
+        this.priceListProvisioner = priceListProvisioner;
+        this.walkInCustomerProvisioner = walkInCustomerProvisioner;
+        this.posTillProvisioner = posTillProvisioner;
         this.roles = roles;
         this.userRoles = userRoles;
     }
@@ -96,14 +124,34 @@ public class TenantProvisioningService {
                                     String branchCode, String adminUsername) {
     }
 
-    /** What a tenant is created from. Deliberately flat — no entity may cross this boundary. */
+    /**
+     * What a tenant is created from. Deliberately flat — no entity may cross this boundary.
+     *
+     * <h2>Why there is no shorter convenience constructor</h2>
+     *
+     * Widening this record breaks its two call sites, and that break is the safety property, not a
+     * cost to engineer away. A secondary constructor that fills the newer components with null is
+     * precisely the defect commit 964e467b had to fix: {@code baseCurrency} was captured on
+     * {@code CreateTenantRequest} in P5-2, silently never applied, and every tenant provisioned as
+     * KES posted its whole ledger in TZS with nothing anywhere going red. Two lines of compile
+     * error, once, is the cheaper half of that trade.
+     *
+     * <p>The trailing group — price list, walk-in customer, till, and the three tax-identity
+     * components — is OPTIONAL in the strict sense: a null or blank one creates <b>nothing</b>.
+     * There is no fallback and no default. {@code BootstrapRunner} passes null for every one of
+     * them, so a fresh install produces exactly what it produced before they existed.
+     */
     public record NewTenantRequest(String organisationName, String timeZone,
                                    String companyCode, String companyName,
+                                   String companyLegalName, String companyTaxId, String companyVrn,
                                    String branchCode, String branchName,
                                    String adminUsername, String rawAdminPassword,
                                    String adminDisplayName,
                                    String baseCurrency, String defaultCurrency,
                                    java.util.List<String> enabledCurrencies,
+                                   String priceListCode, String priceListName,
+                                   Boolean priceListIncludesVat,
+                                   String walkInCustomerName, String posTillName,
                                    /**
                                     * Whether the administrator's username gets the {@code @alias}
                                     * suffix (D-7).
@@ -159,6 +207,28 @@ public class TenantProvisioningService {
         if (request.baseCurrency() != null && !request.baseCurrency().isBlank()) {
             company.setBaseCurrency(request.baseCurrency().strip().toUpperCase(Locale.ROOT));
         }
+
+        // TAX IDENTITY MUST LAND HERE, BEFORE provisionDefaults BELOW. That call reaches
+        // DocumentBrandingSeeder, which copies company.legalName and company.taxId into the
+        // document_branding row ONCE, on the only pass where the row is absent, and never again for
+        // the life of the company. Set these after it and the branding row is written with nulls
+        // permanently: the Company screen would show the TIN while every printed invoice, GRN,
+        // purchase order, delivery note, credit note and proforma omitted it, repairable only from
+        // the Document Branding screen or by hand.
+        //
+        // Blank means the operator did not know it, and the answer to that is to record nothing —
+        // never a placeholder. All three columns are nullable, and every reader guards on null, so
+        // an unset TIN prints no TIN line rather than an empty label. Stripped but NOT case-folded:
+        // a TIN is digits and hyphens and a VRN can end in a letter.
+        if (request.companyLegalName() != null && !request.companyLegalName().isBlank()) {
+            company.setLegalName(request.companyLegalName().strip());
+        }
+        if (request.companyTaxId() != null && !request.companyTaxId().isBlank()) {
+            company.setTaxId(request.companyTaxId().strip());
+        }
+        if (request.companyVrn() != null && !request.companyVrn().isBlank()) {
+            company.setVrn(request.companyVrn().strip());
+        }
         companies.save(company);
 
         // Company-scoped defaults: UoM, tax rates, GL, AR/AP, cash/bank, inventory GL, documents,
@@ -181,6 +251,20 @@ public class TenantProvisioningService {
         // Petty-cash fund: the provisionDefaults call above was a no-op until a branch existed
         // (ADR-0050 D-7 PR-B).
         pettyCashFundSeeder.seedDefaults(company.getId());
+
+        // The three things a tenant cannot trade without, from values the operator supplied; a blank
+        // one creates nothing (see the class javadoc for why none of this is a seeder).
+        //
+        // Ordering is load-bearing: after provisionDefaults, which creates the party/code sequences
+        // these allocate from and the cash account the till's NOT NULL drawer FK points at; after
+        // the branch, because pos_tills.branch_id is NOT NULL; and price list before till, which
+        // records its id.
+        Long priceListId = priceListProvisioner.createIfNamed(
+                company.getId(), request.priceListCode(), request.priceListName(),
+                request.priceListIncludesVat());
+        walkInCustomerProvisioner.createIfNamed(company.getId(), request.walkInCustomerName());
+        posTillProvisioner.createIfNamed(
+                company.getId(), branch.getId(), request.posTillName(), priceListId);
 
         // The tenant's first administrator is a TENANT user, so their username composes like every
         // other one (D-7): the caller supplies the local part and the alias is appended here. Without
