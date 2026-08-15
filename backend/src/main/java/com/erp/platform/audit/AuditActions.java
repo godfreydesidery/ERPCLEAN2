@@ -72,6 +72,15 @@ public final class AuditActions {
      */
     public static final String BRANCH_SWITCH = "BRANCH.SWITCH";
 
+    /** A tenant was provisioned by the platform operator (ADR-0062 P5-2). */
+    public static final String ORG_CREATE = "ORG.CREATE";
+
+    /** A tenant was suspended - it can no longer log in (P5-3). */
+    public static final String ORG_SUSPEND = "ORG.SUSPEND";
+
+    /** A suspended tenant was restored (P5-3). */
+    public static final String ORG_RESUME = "ORG.RESUME";
+
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
     public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";

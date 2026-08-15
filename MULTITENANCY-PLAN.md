@@ -1293,6 +1293,7 @@ that a composite key would otherwise have had to.
       backfill fails `permission denied` on every boot. *(No `GRANT`/`REVOKE` was found anywhere in
       `infra/`, `dist/` or the migrations — see §10 H-9 — but "not in the repo" is not "not applied".)*
 - [ ] **P1-9** **CI assertion:** `OrganisationController` has no write mapping. That is the one
+      **NEEDS RE-SPECIFYING (2026-08-15):** P5-2 deliberately adds a write mapping to `OrganisationController`. The assertion was right for its moment - while no tenant could be created, a write mapping could only be a mistake - and should become "no write mapping EXCEPT the platform-gated create/suspend/resume", not be deleted.
       ordering rule that survives the withdrawal of the two-release split, and it is enforceable in
       the build rather than by procedure.
 
@@ -1712,8 +1713,10 @@ make it true, and they must land before any predicate in Phase 3 is written.
       **Omit that last row and the new tenant's admin logs in with a null company and is effectively
       read-only** (`AuthServiceImpl` needs `findByUserIdAndIsDefaultTrue`). Keep the existing
       one-shot guard for install #1. (`G7`)
-- [ ] **P5-2** Platform-operator-only create-tenant endpoint (gated on the D-2 outcome).
-- [ ] **P5-3** Suspend / resume via `organisations.status`, enforced at login.
+- [x] **P5-2** Platform-operator-only create-tenant endpoint (gated on the D-2 outcome).
+      **DONE 2026-08-15.** `POST /api/v1/organisations`, gated on `ORG.CREATE` - a `platform`-module code, which V102's narrowed CROSS JOIN keeps out of every tenant's `ORG_ADMIN`, so no customer can reach it however much authority they hold. Delegates to the same `TenantProvisioningService` bootstrap uses. Proven locally end to end: tenant B created via the API came up with **6 leave types, 48 GL accounts, 2 stock locations and a working admin login**, and B was refused A's company (403) while its own returned 200.
+- [x] **P5-3** Suspend / resume via `organisations.status`, enforced at login.
+      **DONE 2026-08-15.** `POST /organisations/uid/{uid}/suspend` and `/resume`, gated on `ORG.SUSPEND`. The login half already existed (`AuthServiceImpl.assertTenantIsOpen`). Enforced **at login, not per request** - an issued token stays valid for its remaining minutes. Deliberate: suspension is a commercial action, not incident response, and tearing a cashier's session out mid-sale is the wrong tool; use user deactivation for incidents. Verified: suspended -> login refused with the generic message, resumed -> login works again.
 - [ ] **P5-4** Per-tenant export and deletion policy (D-6). **Gated on D-9** — without an
       `organisation_id` on aggregate roots there is no traversal to build this on.
       Recommend **logical delete** (status + retention) as the default and physical erasure only
