@@ -19,7 +19,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  *
  * <h2>Why this exists, and why shadow mode cannot replace it</h2>
  *
- * Every Phase 3 tightening ships in shadow mode — log "would deny", allow, observe, then enforce.
+ * **Shadow mode was never built** (P2.5-5, recorded 2026-08-15). The plan called for every Phase 3
+ * tightening to log "would deny", allow, observe, then enforce — but there is no {@code WOULD_DENY}
+ * path anywhere in the codebase, and the tightenings shipped enforcing from the first deploy. The
+ * reasoning below is why that was the right call, and why this harness exists regardless.
  * That works for a <b>guard</b>, which has a decision to intercept. Four Phase 3 items are not
  * guards but <b>filters</b>: {@code listOrgWide}, {@code RoleServiceImpl.list}, the organisation
  * reads, and the audit search. A filter that is wrong does not deny anything — it silently returns

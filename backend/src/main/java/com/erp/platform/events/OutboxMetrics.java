@@ -1,5 +1,12 @@
 package com.erp.platform.events;
 
+import io.micrometer.core.instrument.MultiGauge;
+import io.micrometer.core.instrument.Tags;
+import com.erp.platform.security.CompanyTenantIndex;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
@@ -33,11 +40,31 @@ import org.springframework.stereotype.Component;
 class OutboxMetrics {
 
     private final DomainEventRepository repository;
+    private final CompanyTenantIndex companyTenants;
     private final AtomicLong failedCount = new AtomicLong(0);
     private final AtomicLong oldestPendingAgeSeconds = new AtomicLong(0);
 
-    OutboxMetrics(DomainEventRepository repository, MeterRegistry registry) {
+    /**
+     * Per-tenant failed counts (ADR-0062 P8-4).
+     *
+     * <p>The two gauges above are estate-wide totals, which answer "is anything stuck" but not
+     * "whose". At one organisation those are the same question; with several they are not, and an
+     * outbox backlog belonging to one customer would be invisible inside a global number that looks
+     * unremarkable.
+     *
+     * <p>A {@link MultiGauge} rather than a fixed gauge because the tag set is not known at startup —
+     * tenants are provisioned at runtime. Cardinality is bounded by the number of organisations,
+     * which is small by construction.
+     */
+    private final MultiGauge failedByTenant;
+
+    OutboxMetrics(DomainEventRepository repository, CompanyTenantIndex companyTenants,
+                  MeterRegistry registry) {
         this.repository = repository;
+        this.companyTenants = companyTenants;
+        this.failedByTenant = MultiGauge.builder("erp.outbox.failed.by.tenant")
+                .description("Domain events parked in FAILED status, per owning organisation")
+                .register(registry);
         Gauge.builder("erp.outbox.failed", failedCount, AtomicLong::get)
                 .description("Domain events parked in FAILED status — require manual replay")
                 .register(registry);
@@ -50,8 +77,31 @@ class OutboxMetrics {
     @Scheduled(fixedDelayString = "${erp.outbox.metrics-refresh-ms:30000}")
     void refresh() {
         failedCount.set(repository.countByStatus(DomainEventStatus.FAILED));
+        refreshPerTenantFailures();
         Instant oldest = repository.oldestPendingOccurredAt();
         oldestPendingAgeSeconds.set(
                 oldest == null ? 0L : Math.max(0L, Duration.between(oldest, Instant.now()).getSeconds()));
+    }
+
+    /**
+     * Rolls the per-company failed counts up to the owning organisation.
+     *
+     * <p>An event with no company is tagged {@code unattributed} rather than dropped: an event
+     * nobody owns is precisely the kind that goes unnoticed, and a silently discarded row would make
+     * the per-tenant totals disagree with {@code erp.outbox.failed} for no visible reason.
+     */
+    private void refreshPerTenantFailures() {
+        Map<String, Long> byTenant = new HashMap<>();
+        for (Object[] row : repository.countByStatusGroupedByCompany(DomainEventStatus.FAILED)) {
+            Long companyId = (Long) row[0];
+            long count = ((Number) row[1]).longValue();
+            Long organisationId = companyId == null ? null : companyTenants.organisationOf(companyId);
+            String tag = organisationId == null ? "unattributed" : String.valueOf(organisationId);
+            byTenant.merge(tag, count, Long::sum);
+        }
+        List<MultiGauge.Row<?>> rows = new ArrayList<>();
+        byTenant.forEach((tenant, count) ->
+                rows.add(MultiGauge.Row.of(Tags.of("organisation", tenant), count)));
+        failedByTenant.register(rows, true);
     }
 }
