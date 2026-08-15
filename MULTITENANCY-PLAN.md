@@ -1704,7 +1704,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 ### Phase 5 — Tenant provisioning and lifecycle
 
-- [ ] **P5-1** Extract `BootstrapRunner.java:101-142` into a reusable `TenantProvisioningService`.
+- [x] **P5-1** Extract `BootstrapRunner.java:101-142` into a reusable `TenantProvisioningService`.
+      **DONE 2026-08-15.** `TenantProvisioningService.provision(...)` creates organisation + company + branch + admin + every company-scoped default in ONE transaction; `BootstrapRunner` now delegates to it, so a create-tenant endpoint (P5-2) cannot drift from the path the first tenant took. **Verified by booting against an EMPTY database** - the only place bootstrap runs at all, and therefore something QA structurally cannot test (`organisations.count() > 0` there, so bootstrap never fires).
       **Preserve the order verbatim**: validate password → organisation → company →
       `provisionDefaults` → branch with `setDefault(true)` → stock-location and petty-cash seeders →
       user → default `UserBranch` + `markDefault()`.
@@ -1718,7 +1719,8 @@ make it true, and they must land before any predicate in Phase 3 is written.
       Recommend **logical delete** (status + retention) as the default and physical erasure only
       where a contract demands it: "we hand-deleted from 204 tables in FK order" is not a provable
       answer to a customer or a regulator.
-- [ ] **P5-5** **Seed `leave_types` for a new tenant.** `V52__hr_leave_loans.sql:179-195` seeds
+- [x] **P5-5** **Seed `leave_types` for a new tenant.** `V52__hr_leave_loans.sql:179-195` seeds
+      **DONE 2026-08-15** - `LeaveTypeSeeder`, called from `TenantProvisioningService`. V52 seeded via `CROSS JOIN companies`, which covers only companies existing when the migration ran; a company created afterwards opened HR -> Leave empty with no error. The six defaults mirror V52 exactly (Tanzanian statutory minima: 28 annual, 84 maternity, 3 paternity) - diverging would give tenants different entitlements depending on how they were created. Idempotent, mirroring V52's `ON CONFLICT DO NOTHING`. Confirmed on a fresh boot: 6 rows seeded.
       ANNUAL/SICK/MATERNITY/PATERNITY/COMPASSION/UNPAID per company **in SQL**, and there is no
       `LeaveTypeSeeder` — the only `new LeaveType(...)` in `src/main/java` is the interactive create
       at `LeaveTypeServiceImpl.java:43`. Every tenant onboarded after go-live opens HR → Leave to an

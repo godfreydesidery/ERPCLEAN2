@@ -6,12 +6,8 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
-import com.erp.modules.iam.repository.BranchRepository;
-import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
-import com.erp.modules.iam.repository.UserBranchRepository;
-import com.erp.modules.cashbank.service.PettyCashFundSeeder;
-import com.erp.modules.stock.service.StockLocationSeeder;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.platform.security.password.PasswordPolicy;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -19,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,44 +42,26 @@ public class BootstrapRunner implements ApplicationRunner {
             Set.of("changeme", "password", "admin", "rootadmin", "secret", "changeme123");
 
     private final BootstrapProperties        props;
-    private final OrganisationRepository     organisations;
-    private final CompanyRepository          companies;
-    private final BranchRepository           branches;
+    private final OrganisationRepository     organisations;   // the empty-database guard
     private final AppUserRepository          users;
-    private final UserBranchRepository       userBranches;
-    private final PasswordEncoder            passwordEncoder;
     private final PasswordPolicy             passwordPolicy;
+    private final TenantProvisioningService   tenantProvisioning;
     // Stock location seeder — seeds WAREHOUSE + in-transit per branch (ADR-0028 D-4/D-5).
     // Branch-scoped: stays here (needs branchId), not moved into CompanyProvisioningService.
-    private final StockLocationSeeder        stockLocationSeeder;
     // Petty cash default fund seeder (ADR-0050 D-7 PR-B): CompanyProvisioningService.provisionDefaults
     // (below) runs BEFORE the bootstrap branch exists, so it is a no-op there; this branch-scoped
     // call completes the seed once the branch is created, mirroring stockLocationSeeder above.
-    private final PettyCashFundSeeder        pettyCashFundSeeder;
-    private final CompanyProvisioningService companyProvisioningService;
 
-    public BootstrapRunner(BootstrapProperties        props,
-                           OrganisationRepository     organisations,
-                           CompanyRepository          companies,
-                           BranchRepository           branches,
-                           AppUserRepository          users,
-                           UserBranchRepository       userBranches,
-                           PasswordEncoder            passwordEncoder,
-                           PasswordPolicy             passwordPolicy,
-                           StockLocationSeeder        stockLocationSeeder,
-                           PettyCashFundSeeder        pettyCashFundSeeder,
-                           CompanyProvisioningService companyProvisioningService) {
-        this.props                    = props;
-        this.organisations            = organisations;
-        this.companies                = companies;
-        this.branches                 = branches;
-        this.users                    = users;
-        this.userBranches             = userBranches;
-        this.passwordEncoder          = passwordEncoder;
-        this.passwordPolicy           = passwordPolicy;
-        this.stockLocationSeeder      = stockLocationSeeder;
-        this.pettyCashFundSeeder      = pettyCashFundSeeder;
-        this.companyProvisioningService = companyProvisioningService;
+    public BootstrapRunner(BootstrapProperties       props,
+                           OrganisationRepository    organisations,
+                           AppUserRepository         users,
+                           PasswordPolicy            passwordPolicy,
+                           TenantProvisioningService tenantProvisioning) {
+        this.props              = props;
+        this.organisations      = organisations;
+        this.users              = users;
+        this.passwordPolicy     = passwordPolicy;
+        this.tenantProvisioning = tenantProvisioning;
     }
 
     @Override
@@ -100,53 +77,21 @@ public class BootstrapRunner implements ApplicationRunner {
 
         validateAdminPassword(props.adminPassword());
 
-        Organisation org = new Organisation(props.organisationName());
-        org.setDefaultTimeZone(props.timeZone());
-        organisations.save(org);
-
-        Company company = new Company(org, props.companyCode(), props.companyName());
-        company.setTimeZone(props.timeZone());
-        companies.save(company);
-
-        // Provision all company-scoped defaults (UoM, tax rates, GL, AR/AP, cash/bank,
-        // inventory GL, documents, fixed assets, costing dimensions, CRM stages, HR GL +
-        // statutory, notifications, manufacturing GL, currency enablement — ADR-0013..0039).
+        // P5-1 (ADR-0062): delegated, not inlined. A create-tenant endpoint has to produce exactly
+        // this - organisation, company, branch, admin, and every company-scoped default beneath them
+        // - and two copies of forty lines of seeding drift. Drift here means a tenant that boots into
+        // half-configured screens, so bootstrap now takes the same path the second tenant will.
         BootstrapProperties.CurrencyConfig ccy = props.effectiveCurrency();
-        companyProvisioningService.provisionDefaults(
-                company.getId(),
-                ccy.effectiveBase(),
-                ccy.effectiveDefault(),
-                ccy.effectiveEnabled());
-
-        Branch branch = new Branch(company, props.branchCode(), props.branchName());
-        branch.setTimeZone(props.timeZone());
-        branch.setDefault(true);
-        branches.save(branch);
-
-        // Seed WAREHOUSE default + in-transit OTHER locations for the bootstrap branch (ADR-0028 D-4/D-5).
-        stockLocationSeeder.seedDefaults(company.getId(), branch.getId(), branch.getCode());
-
-        // Complete the default petty-cash fund seed now that the bootstrap branch exists (ADR-0050
-        // D-7 PR-B) — the earlier companyProvisioningService.provisionDefaults call was a no-op.
-        pettyCashFundSeeder.seedDefaults(company.getId());
-
-        AppUser root = new AppUser(
-                props.adminUsername().toLowerCase(),
-                passwordEncoder.encode(props.adminPassword()),
-                props.adminDisplayName());
-        root.setRoot(true);
-        // A fresh install is otherwise born unattributed: V101's backfill only covers rows that
-        // already exist, so without this the very first user of a new database has no tenant
-        // (ADR-0062 P2-1). The organisation was created a few lines above, in this transaction.
-        root.setOrganisationId(org.getId());
-        users.save(root);  // save first so root.getId() is populated
-
-        UserBranch defaultAssignment = new UserBranch(root.getId(), branch, root.getId());
-        defaultAssignment.markDefault();
-        userBranches.save(defaultAssignment);
+        var provisioned = tenantProvisioning.provision(new TenantProvisioningService.NewTenantRequest(
+                props.organisationName(), props.timeZone(),
+                props.companyCode(), props.companyName(),
+                props.branchCode(), props.branchName(),
+                props.adminUsername(), props.adminPassword(), props.adminDisplayName(),
+                ccy.effectiveBase(), ccy.effectiveDefault(), ccy.effectiveEnabled()));
 
         log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",
-                org.getName(), company.getCode(), branch.getCode(), root.getUsername());
+                provisioned.organisationName(), provisioned.companyCode(),
+                provisioned.branchCode(), provisioned.adminUsername());
     }
 
     /** Fail-closed: refuse to start with a missing, too-short, or placeholder root password. */
