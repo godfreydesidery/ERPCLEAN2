@@ -3,6 +3,7 @@ package com.erp.modules.iam.service;
 import com.erp.modules.iam.domain.dto.OrganisationDto;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.security.RequestContext;
 import com.erp.modules.iam.domain.dto.CreateTenantRequest;
 import com.erp.platform.audit.AuditActions;
@@ -89,6 +90,20 @@ public class OrganisationServiceImpl implements OrganisationService {
         // incidents.
         var org = organisations.findByUid(uid)
                 .orElseThrow(() -> new NotFoundException("Organisation not found."));
+
+        // A CALLER MAY NOT SUSPEND THEIR OWN TENANT. Suspension is enforced at login, so suspending
+        // the organisation you are signed in to locks you out - and `resume` requires being signed
+        // in. On a single-organisation install that is a hard brick recoverable only by direct SQL
+        // against the customer's database. The codebase already states this invariant elsewhere:
+        // UserServiceImpl refuses to disable a root admin precisely so somebody can still get back
+        // in. Root is NOT exempt here: root is exactly the account that can reach this endpoint.
+        RequestContext.Principal caller = RequestContext.get();
+        if (!active && caller != null && caller.organisationId() != null
+                && caller.organisationId().equals(org.getId())) {
+            throw new ConflictException(
+                    "You cannot suspend the organisation you are signed in to.");
+        }
+
         org.setStatus(active ? MasterStatus.ACTIVE : MasterStatus.INACTIVE);
         organisations.save(org);
 

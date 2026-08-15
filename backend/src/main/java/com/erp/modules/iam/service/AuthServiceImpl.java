@@ -255,6 +255,15 @@ public class AuthServiceImpl implements AuthService {
         if (user.getOrganisationId() == null) {
             return;
         }
+        // Root is exempt, and this is a recovery lever rather than a loophole. Suspension is a
+        // commercial control over a CUSTOMER's staff; if it also locked out root there would be
+        // nobody left who could resume the tenant, because `resume` itself requires a signed-in
+        // caller. Independent of the self-suspend guard in OrganisationServiceImpl - that one stops
+        // the mistake, this one survives it however it was made (a direct UPDATE, a restored
+        // backup, a future admin screen).
+        if (user.isRoot()) {
+            return;
+        }
         organisations.findScopedById(user.getOrganisationId())
                 .filter(o -> o.getStatus() != MasterStatus.ACTIVE)
                 .ifPresent(o -> {

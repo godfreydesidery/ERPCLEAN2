@@ -38,3 +38,16 @@ logging:
     org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql: WARN
     org.springframework.security: WARN
+
+# P8-10 (ADR-0062): capacity floor for the scheduled work.
+#
+# Spring Boot's default scheduler pool is ONE thread, shared by every @Scheduled job:
+# the outbox dispatcher, the midnight standing-order run, the hourly notification scan
+# and the metrics sweep. On one thread a slow job blocks the rest - the notification
+# scan iterates every company serially, and while it runs the standing-order sweep
+# cannot start. Overridable per install with SPRING_TASK_SCHEDULING_POOL_SIZE.
+spring:
+  task:
+    scheduling:
+      pool:
+        size: ${SPRING_TASK_SCHEDULING_POOL_SIZE:4}
