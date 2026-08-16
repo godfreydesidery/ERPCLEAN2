@@ -57,10 +57,11 @@ class SupplierServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "sup_root", passwordEncoder.encode("RootPass1!"), "Supplier Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
 
         RequestContext.set(new RequestContext.Principal(
-                root.getId(), "sup_root", true, companyA.getId(), branchA.getId(), null));
+                root.getId(), "sup_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         // Seed a real WhtType in companyA so D5-defaults tests can reference a real id.
         WhtType wht = whtTypeRepository.save(

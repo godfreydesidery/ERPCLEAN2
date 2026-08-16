@@ -55,6 +55,7 @@ class PriceListServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "pl_root", passwordEncoder.encode("RootPass1!"), "PL Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
@@ -104,6 +105,7 @@ class PriceListServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "pl_user_a", passwordEncoder.encode("Pass1!"), "PL User A");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
         RequestContext.set(new RequestContext.Principal(
                 userA.getId(), "pl_user_a", false, companyA.getId(), branchA.getId(), null));

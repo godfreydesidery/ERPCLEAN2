@@ -84,6 +84,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     private AppUser aAdmin;   // principal: Company A only
     private AppUser bVictim;  // belongs to Company B only — must be unreachable by aAdmin
     private AppUser abUser;   // belongs to both A and B — must be reachable by aAdmin
+    private Organisation org; // the single tenant every user and principal below belongs to
     private Company companyA;
     private Company companyB;
     private Branch branchA;
@@ -93,7 +94,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     void setUp() {
         testData.clearAll();
 
-        Organisation org = organisations.save(new Organisation("Isolation Corp"));
+        org = organisations.save(new Organisation("Isolation Corp"));
         companyA = companies.save(new Company(org, "CA", "Company A"));
         companyB = companies.save(new Company(org, "CB", "Company B"));
         branchA  = branches.save(new Branch(companyA, "A1", "Branch A1"));
@@ -123,7 +124,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
 
         // Default context: aAdmin active in Company A (non-root)
         RequestContext.set(new RequestContext.Principal(
-                aAdmin.getId(), "a_admin", false, companyA.getId(), branchA.getId(), null));
+                aAdmin.getId(), "a_admin", false, companyA.getId(), branchA.getId(), null, org.getId()));
     }
 
     @AfterEach
@@ -187,12 +188,12 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     void enableByUid_crossTenant_throwsNotFound() {
         // First disable bVictim as B's own admin (root context) so the enable is meaningful
         RequestContext.set(new RequestContext.Principal(
-                bVictim.getId(), "b_victim", false, companyB.getId(), branchB.getId(), null));
+                bVictim.getId(), "b_victim", false, companyB.getId(), branchB.getId(), null, org.getId()));
         userService.disableByUid(bVictim.getUid());
 
         // Switch back to aAdmin (Company A) and try to enable
         RequestContext.set(new RequestContext.Principal(
-                aAdmin.getId(), "a_admin", false, companyA.getId(), branchA.getId(), null));
+                aAdmin.getId(), "a_admin", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> userService.enableByUid(bVictim.getUid()))
                 .isInstanceOf(NotFoundException.class);
@@ -281,7 +282,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     @Test
     void setPasswordByUid_rootPrincipal_succeedsOnAnyCompanyUser() {
         RequestContext.set(new RequestContext.Principal(
-                aAdmin.getId(), "root", true, null, null, null));
+                aAdmin.getId(), "root", true, null, null, null, org.getId()));
 
         userService.setPasswordByUid(bVictim.getUid(), new SetPasswordRequest("RootCanDo9!"));
 
@@ -292,7 +293,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     @Test
     void updateByUid_rootPrincipal_succeedsOnAnyCompanyUser() {
         RequestContext.set(new RequestContext.Principal(
-                aAdmin.getId(), "root", true, null, null, null));
+                aAdmin.getId(), "root", true, null, null, null, org.getId()));
 
         userService.updateByUid(bVictim.getUid(),
                 new UpdateUserRequest("Root Updated", null, null));
@@ -341,7 +342,7 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
     @Test
     void create_rootPrincipal_leavesUserUnassigned() {
         RequestContext.set(new RequestContext.Principal(
-                aAdmin.getId(), "root", true, null, null, null));
+                aAdmin.getId(), "root", true, null, null, null, org.getId()));
 
         UserDto created = userService.create(new CreateUserRequest(
                 "root_made", "Root Made", "ValidPass1", null, null));

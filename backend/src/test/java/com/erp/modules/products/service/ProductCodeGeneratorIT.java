@@ -57,11 +57,12 @@ class ProductCodeGeneratorIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "cg_root", passwordEncoder.encode("RootPass1!"), "CG Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "cg_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "cg_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         // Seed a unit for companyA (UoM cutover)
         UnitOfMeasureDto pcs = unitService.create(
@@ -92,9 +93,10 @@ class ProductCodeGeneratorIT extends PostgresIntegrationTest {
 
         ProductDto prodA = productService.create(goods(companyA.getUid(), "A Item", pcsUidA));
 
-        // Switch to companyB, seed its own unit
+        // Switch to companyB, seed its own unit. companyB is created in the SAME organisation as
+        // companyA above, so the principal's tenant is unchanged — only the company scope moves.
         RequestContext.set(new RequestContext.Principal(
-                rootId, "cg_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "cg_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(goods(companyB.getUid(), "B Item", pcsB.uid()));

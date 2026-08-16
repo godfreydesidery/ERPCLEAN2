@@ -130,7 +130,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
         // Root principal active in company A — all service calls pass ScopeGuard from here.
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                companyA.getId(), branchInA.getId(), "10.0.0.1"));
+                companyA.getId(), branchInA.getId(), "10.0.0.1", org.getId()));
     }
 
     @AfterEach
@@ -316,7 +316,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
         // Need to set root context to branchInB's company so ScopeGuard passes.
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                companyB.getId(), branchInB.getId(), "10.0.0.1"));
+                companyB.getId(), branchInB.getId(), "10.0.0.1", rootUser.getOrganisationId()));
         userBranchService.setDefault(branchBAssign.uid());
 
         List<AuditLog> rows = auditRepo.findAll();

@@ -70,6 +70,7 @@ class PartyBranchGuardIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "gb_root", passwordEncoder.encode("RootPass1!"), "Guard Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 

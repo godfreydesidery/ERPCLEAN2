@@ -84,6 +84,7 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     @Autowired private CustomerRepository customerRepository;
     @Autowired private SupplierRepository supplierRepository;
 
+    private Organisation org;   // single tenant: companies A and B are two companies of ONE organisation
     private Company companyA;
     private Branch branchA;
     private Company companyB;
@@ -106,7 +107,7 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     void setUp() {
         testData.clearAll();
 
-        Organisation org = organisations.save(new Organisation("Isolation Test Org"));
+        org = organisations.save(new Organisation("Isolation Test Org"));
         companyA = companies.save(new Company(org, "ISO-A", "Isolation Co A"));
         branchA = branches.save(new Branch(companyA, "ISO-A1", "Isolation Branch A1"));
         companyB = companies.save(new Company(org, "ISO-B", "Isolation Co B"));
@@ -116,12 +117,13 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "iso_root", passwordEncoder.encode("RootPass1!"), "Isolation Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         // Root context — needed to seed FK rows in both companies.
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         // Seed Company-A FK masters
         ptAId = paymentTermsRepository.save(
@@ -151,7 +153,7 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
 
         // Switch to non-root Company-A context for the actual assertions
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null, org.getId()));
     }
 
     @AfterEach
@@ -209,12 +211,12 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     void updateCustomer_withCrossCompanyPaymentTermsId_throwsNotFound() {
         // Root creates a valid customer first
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         CustomerDto created = customerService.create(minimalCustomerRequest(null, null, null));
 
         // Switch to non-root A context and attempt cross-company FK on update
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() ->
                 customerService.updateByUid(created.uid(), minimalCustomerUpdate(ptBId, null, null)))
@@ -229,7 +231,7 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     void createCustomer_withOwnCompanyFkIds_succeeds() {
         // Root context to bypass non-root restriction for positive control
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         CustomerDto dto = customerService.create(minimalCustomerRequest(ptAId, plAId, agAId));
 
@@ -273,11 +275,11 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     @Test
     void updateSupplier_withCrossCompanyWhtTypeId_throwsNotFound() {
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         SupplierDto created = supplierService.create(minimalSupplierRequest(null, null));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() ->
                 supplierService.updateByUid(created.uid(), minimalSupplierUpdate(null, whtBId)))
@@ -291,7 +293,7 @@ class PartyFkTenantIsolationIT extends PostgresIntegrationTest {
     @Test
     void createSupplier_withOwnCompanyFkIds_succeeds() {
         RequestContext.set(new RequestContext.Principal(
-                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "iso_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         SupplierDto dto = supplierService.create(minimalSupplierRequest(ptAId, whtAId));
 
