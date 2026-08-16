@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -64,10 +65,12 @@ class SetPasswordAuthorityCeilingIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("pw_root", passwordEncoder.encode(VALID_PASSWORD), "Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
 
-        caller = users.save(new AppUser("pw_caller", passwordEncoder.encode(VALID_PASSWORD), "Caller"));
-        target = users.save(new AppUser("pw_target", passwordEncoder.encode(VALID_PASSWORD), "Target"));
+        caller = users.save(inOrganisation(
+                new AppUser("pw_caller", passwordEncoder.encode(VALID_PASSWORD), "Caller"), org.getId()));
+        target = users.save(inOrganisation(
+                new AppUser("pw_target", passwordEncoder.encode(VALID_PASSWORD), "Target"), org.getId()));
 
         var glPost = permissionRepo.findByCode("GL.POST")
                 .orElseThrow(() -> new IllegalStateException("GL.POST must be seeded"));

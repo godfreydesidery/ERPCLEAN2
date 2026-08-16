@@ -148,6 +148,7 @@ class FxArSaleOpenItemIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxsale_root", passwordEncoder.encode("FxSaleR00t!"), "FxSale Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

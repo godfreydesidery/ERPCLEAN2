@@ -116,6 +116,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
         // ROOT user — is_root=true, active scope = company A / branch A
         rootUser = new AppUser("rbac_root", passwordEncoder.encode(ROOT_PASS), "Rbac Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssignment = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         rootAssignment.markDefault();
@@ -123,6 +124,7 @@ class RbacEnforcementHttpIT extends PostgresIntegrationTest {
 
         // NON-ROOT user — no roles yet, active scope = company A / branch A
         nonRootUser = new AppUser("rbac_user", passwordEncoder.encode(USER_PASS), "Rbac User");
+        nonRootUser.setOrganisationId(org.getId());
         nonRootUser = users.save(nonRootUser);
         UserBranch nonRootAssignment = new UserBranch(nonRootUser.getId(), branchA, nonRootUser.getId());
         nonRootAssignment.markDefault();

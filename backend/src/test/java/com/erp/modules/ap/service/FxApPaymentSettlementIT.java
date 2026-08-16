@@ -1,5 +1,6 @@
 package com.erp.modules.ap.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.ap.domain.dto.ApPaymentDto;
@@ -121,7 +122,7 @@ class FxApPaymentSettlementIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxap_root", passwordEncoder.encode("FxApR00t!Xx"), "FX AP Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

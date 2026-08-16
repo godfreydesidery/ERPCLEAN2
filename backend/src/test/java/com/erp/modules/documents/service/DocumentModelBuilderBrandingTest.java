@@ -3,7 +3,6 @@ package com.erp.modules.documents.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.documents.domain.entity.DocumentBranding;
@@ -53,16 +52,29 @@ class DocumentModelBuilderBrandingTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("branding's own legal name and TIN are printed as-is and the company is never read")
+    @DisplayName("branding's own legal name and TIN win over the company's, which is now always read")
     void brandingSnapshotWins() {
+        // The company deliberately offers DIFFERENT values, and the snapshot must still win.
+        //
+        // This used to assert verifyNoInteractions(companies) instead — the fallback was lazy, so a
+        // branding row carrying both values cost no extra query. That guarantee ended when the VRN
+        // began printing: document_branding has no vrn column, so companies.vrn is the ONLY source
+        // and the row must be read on every render regardless of what the snapshot holds. One
+        // findScopedById on a small table, against generating a PDF, is the price of putting a
+        // legally required number on a tax invoice.
+        //
+        // Asserting competing values is the stronger test anyway. The old one proved the repository
+        // was not called; with the mock unstubbed it would have passed even if the fallback had been
+        // backwards, because an empty Optional and a lazy skip are indistinguishable from here.
+        when(companies.findScopedById(COMPANY_ID))
+                .thenReturn(Optional.of(company("A DIFFERENT LEGAL NAME", "999-999-999")));
+
         var model = builder().buildGoodsReceipt(
                 receipt(), branding("Kilimanjaro Supermarket Limited", "100-200-300"),
                 "GOODS RECEIVED NOTE", "operator");
 
         assertThat(model.branding().legalName()).isEqualTo("Kilimanjaro Supermarket Limited");
         assertThat(model.branding().taxId()).isEqualTo("100-200-300");
-        // The fallback is lazy: a company whose snapshot is intact costs no extra query per render.
-        verifyNoInteractions(companies);
     }
 
     // -------------------------------------------------------------------------
@@ -125,24 +137,35 @@ class DocumentModelBuilderBrandingTest {
     @ParameterizedTest(name = "a cleared branding TIN [{0}] prints nothing, not the company's")
     @ValueSource(strings = {"", "   "})
     void aClearedTaxIdIsNotResurrectedFromTheCompany(String cleared) {
+        // The company HAS a TIN, and the cleared branding value must still win. That is the whole
+        // point: an administrator who removed a superseded number must be able to make it stay
+        // removed. Previously this asserted verifyNoInteractions(companies), which proved the
+        // repository was not called — but the mock was unstubbed, so the company had no TIN to
+        // resurrect and the test would have passed even with the guard inverted.
+        when(companies.findScopedById(COMPANY_ID))
+                .thenReturn(Optional.of(company("Kilimanjaro Supermarket Limited", "123-456-789")));
+
         var model = builder().buildGoodsReceipt(
                 receipt(), branding("Kilimanjaro Supermarket Limited", cleared),
                 "GOODS RECEIVED NOTE", "operator");
 
         // Null and not the blank itself: DocumentPdfRenderer guards on null, so an empty string would
-        // print a bare "TIN/VAT:" with nothing after it.
+        // print a bare "TIN:" with nothing after it.
         assertThat(model.branding().taxId()).isNull();
-        verifyNoInteractions(companies);
     }
 
     @ParameterizedTest(name = "a cleared branding legal name [{0}] prints nothing either")
     @ValueSource(strings = {"", "   "})
     void aClearedLegalNameIsNotResurrectedFromTheCompany(String cleared) {
+        // Same shape as the TIN case above: the company HAS a legal name, and the cleared branding
+        // value must still win.
+        when(companies.findScopedById(COMPANY_ID))
+                .thenReturn(Optional.of(company("Kilimanjaro Supermarket Limited", "123-456-789")));
+
         var model = builder().buildGoodsReceipt(
                 receipt(), branding(cleared, "100-200-300"), "GOODS RECEIVED NOTE", "operator");
 
         assertThat(model.branding().legalName()).isNull();
-        verifyNoInteractions(companies);
     }
 
     // -------------------------------------------------------------------------

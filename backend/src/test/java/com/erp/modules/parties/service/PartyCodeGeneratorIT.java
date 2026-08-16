@@ -70,11 +70,12 @@ class PartyCodeGeneratorIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "cg_root", passwordEncoder.encode("RootPass1!"), "CG Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "cg_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "cg_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
     }
 
     @AfterEach
@@ -107,7 +108,7 @@ class PartyCodeGeneratorIT extends PostgresIntegrationTest {
         CustomerDto custA = customerService.create(minimalBusinessCustomer(companyA.getId(), "TIN-A1"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "cg_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "cg_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         CustomerDto custB = customerService.create(minimalBusinessCustomer(companyB.getId(), "TIN-B1"));
 
         assertThat(custA.code()).isEqualTo("CUST-0001");

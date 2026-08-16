@@ -88,6 +88,7 @@ class ApOpeningBalanceServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ap_ob_root", passwordEncoder.encode("ApOb00t!Xx"), "AP OB Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

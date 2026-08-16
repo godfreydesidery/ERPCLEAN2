@@ -1,5 +1,6 @@
 package com.erp.modules.ar.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
@@ -119,7 +120,7 @@ class FxArReceiptSettlementIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxar_root", passwordEncoder.encode("FxArR00t!Xx"), "FX AR Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -98,13 +99,13 @@ class CashBankAccountHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("cb_http_root", passwordEncoder.encode(ROOT_PASS), "CB HTTP Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("cb_http_plain", passwordEncoder.encode(PLAIN_PASS), "CB HTTP Plain");
-        plainUser = users.save(plainUser);
+        plainUser = users.save(inOrganisation(plainUser, org.getId()));
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();
         userBranches.save(plainAssign);

@@ -1,5 +1,6 @@
 package com.erp.modules.stock.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -137,13 +138,13 @@ class VanReconciliationIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("vr_root", passwordEncoder.encode("VrRootH1!z"), "VR Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("vr_plain", passwordEncoder.encode(PLAIN_PASS), "VR Plain");
-        plainUser = users.save(plainUser);
+        plainUser = users.save(inOrganisation(plainUser, org.getId()));
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();
         userBranches.save(plainAssign);
@@ -361,8 +362,8 @@ class VanReconciliationIT extends PostgresIntegrationTest {
         Organisation org2 = organisations.save(new Organisation("Van Recon IT Org 2"));
         Company company2  = companies.save(new Company(org2, "VRIT2", "Van Recon IT Co 2"));
         Branch branch2    = branches.save(new Branch(company2, "VRIT2B", "Van Recon IT Branch 2"));
-        AppUser nonRoot = users.save(new AppUser(
-                "vr_nonroot", passwordEncoder.encode("Pass1!"), "VR NonRoot"));
+        AppUser nonRoot = users.save(inOrganisation(new AppUser(
+                "vr_nonroot", passwordEncoder.encode("Pass1!"), "VR NonRoot"), org2.getId()));
 
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "vr_nonroot", false, company2.getId(), branch2.getId(), null));

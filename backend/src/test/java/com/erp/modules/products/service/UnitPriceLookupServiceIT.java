@@ -81,6 +81,7 @@ class UnitPriceLookupServiceIT extends PostgresIntegrationTest {
         AppUser root = new AppUser("batch_price_root", passwordEncoder.encode("RootPass1!"),
                 "Batch Price Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
 
         RequestContext.set(new RequestContext.Principal(

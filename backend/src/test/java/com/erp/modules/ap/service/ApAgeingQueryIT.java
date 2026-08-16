@@ -77,6 +77,7 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ap_age_root", passwordEncoder.encode("ApAg3R00t!Xx"), "AP Age Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

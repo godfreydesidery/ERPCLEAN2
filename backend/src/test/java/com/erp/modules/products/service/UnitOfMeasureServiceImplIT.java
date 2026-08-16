@@ -57,6 +57,7 @@ class UnitOfMeasureServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "uom_root", passwordEncoder.encode("RootPass1!"), "UoM Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
@@ -127,6 +128,7 @@ class UnitOfMeasureServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "uom_user_a", passwordEncoder.encode("Pass1!"), "UoM User A");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
         RequestContext.set(new RequestContext.Principal(
                 userA.getId(), "uom_user_a", false, companyA.getId(), branchA.getId(), null));

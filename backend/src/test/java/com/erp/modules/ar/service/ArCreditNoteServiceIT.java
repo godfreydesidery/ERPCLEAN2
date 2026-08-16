@@ -121,6 +121,7 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("arcn_root", passwordEncoder.encode("Root1234!"), "ArCN Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

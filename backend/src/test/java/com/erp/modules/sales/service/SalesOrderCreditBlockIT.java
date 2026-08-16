@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -108,13 +109,15 @@ class SalesOrderCreditBlockIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("socr_root", passwordEncoder.encode("R00t!Pass1"), "SOCR Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
         // Non-root sales clerk in the SAME company — passes ScopeGuard but has no granted
         // permissions, so SALES.CREDIT.OVERRIDE is denied (used for the block bar).
-        AppUser clerk = users.save(
-                new AppUser("socr_clerk", passwordEncoder.encode("Cl3rk!Pass1"), "SOCR Clerk"));
+        AppUser clerk = users.save(inOrganisation(
+                new AppUser("socr_clerk", passwordEncoder.encode("Cl3rk!Pass1"), "SOCR Clerk"),
+                org.getId()));
         clerkId = clerk.getId();
 
         setRootCtx();

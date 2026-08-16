@@ -94,6 +94,7 @@ class ApPaymentServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ap_pay_root", passwordEncoder.encode("ApPay00t!Xx"), "AP Pay Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

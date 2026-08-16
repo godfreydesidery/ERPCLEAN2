@@ -83,11 +83,12 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "prod_root", passwordEncoder.encode("RootPass1!"), "Products Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         // Seed a default unit for companyA so goodsRequest() has a valid baseUnitUid (UoM cutover).
         UnitOfMeasureDto pcs = unitService.create(
@@ -165,7 +166,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         // Switch to companyB context and seed a unit for it
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(
@@ -189,7 +190,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         productService.create(goodsRequest(companyA.getUid(), "A Product"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         productService.create(new CreateProductRequest(companyB.getUid(), null, "B Product", null,
@@ -197,7 +198,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         // back to A context: list for A must see only A's product
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         Page<ProductDto> pageA = productService.list(companyA.getId(), null, Pageable.unpaged());
         assertThat(pageA.getTotalElements()).isEqualTo(1);
         assertThat(pageA.getContent().get(0).name()).isEqualTo("A Product");
@@ -210,10 +211,11 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr", passwordEncoder.encode("Pass1!"), "User A");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
 
         RequestContext.set(new RequestContext.Principal(
-                userA.getId(), "user_a_pr", false, companyA.getId(), branchA.getId(), null));
+                userA.getId(), "user_a_pr", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.list(companyB.getId(), null, Pageable.unpaged()))
                 .isInstanceOf(ForbiddenException.class);
@@ -229,7 +231,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         Branch branchB = branches.save(new Branch(companyB, "PR-E1", "Prod Branch E1"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(new CreateProductRequest(
@@ -238,9 +240,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr2", passwordEncoder.encode("Pass1!"), "User A2");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
         RequestContext.set(new RequestContext.Principal(
-                userA.getId(), "user_a_pr2", false, companyA.getId(), branchA.getId(), null));
+                userA.getId(), "user_a_pr2", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.getByUid(prodB.uid()))
                 .isInstanceOf(ForbiddenException.class);
@@ -256,7 +259,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         Branch branchB = branches.save(new Branch(companyB, "PR-F1", "Prod Branch F1"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto prodB = productService.create(new CreateProductRequest(
@@ -265,9 +268,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr3", passwordEncoder.encode("Pass1!"), "User A3");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
         RequestContext.set(new RequestContext.Principal(
-                userA.getId(), "user_a_pr3", false, companyA.getId(), branchA.getId(), null));
+                userA.getId(), "user_a_pr3", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.listBarcodes(prodB.uid()))
                 .isInstanceOf(ForbiddenException.class);
@@ -284,9 +288,10 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         com.erp.modules.iam.domain.entity.AppUser userA =
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "user_a_pr4", passwordEncoder.encode("Pass1!"), "User A4");
+        userA.setOrganisationId(org.getId());
         userA = users.save(userA);
         RequestContext.set(new RequestContext.Principal(
-                userA.getId(), "user_a_pr4", false, companyA.getId(), branchA.getId(), null));
+                userA.getId(), "user_a_pr4", false, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.lookupBarcode(companyB.getId(), "EAN-001"))
                 .isInstanceOf(ForbiddenException.class);
@@ -344,14 +349,14 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         ProductDto composed = productService.create(goodsRequest(companyA.getUid(), "Composed A"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
         ProductDto componentB = productService.create(new CreateProductRequest(
                 companyB.getUid(), null, "Component B", null, ProductType.GOODS, true, true, pcsB.uid(), null, null, null, null, null, null, null, null, null, null, null));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         assertThatThrownBy(() ->
                 productService.addComponent(composed.uid(),
                         new AddComponentRequest(componentB.uid(), new BigDecimal("1.0"))))
@@ -512,12 +517,12 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         ProductDto prodA = productService.create(goodsRequest(companyA.getUid(), "Priced A"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), null, null));
+                rootId, "prod_root", true, companyB.getId(), null, null, org.getId()));
         PriceListDto plB = priceListService.create(
                 new CreatePriceListRequest(companyB.getUid(), "RETAIL_G", "Retail G"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.setPrice(prodA.uid(),
                 new SetProductPriceRequest(plB.uid(), new MoneyDto("1000.00", "TZS"))))
@@ -552,13 +557,13 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         Branch branchB = branches.save(new Branch(companyB, "PR-X1", "Prod Branch X1"));
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto foreignUnit = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "KG", "Kilogram"));
 
         // Back to companyA — try to use companyB's unit uid
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         assertThatThrownBy(() -> productService.create(new CreateProductRequest(
                 companyA.getUid(), null, "Cross Unit Product", null,
@@ -611,13 +616,13 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
 
         // Seed a unit in companyB
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto foreignUnit = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "BOX", "Box"));
 
         // Back in companyA — create product then try to add bulk pack using companyB's unit
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "prod_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Bulk Pack Product"));
 
         assertThatThrownBy(() -> productService.addBulkPack(prod.uid(),
@@ -704,7 +709,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "PRCZ", "Product Co Z"));
         Branch branchB = branches.save(new Branch(companyB, "PR-Z1", "Prod Branch Z1"));
         RequestContext.set(new RequestContext.Principal(
-                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "prod_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         UnitOfMeasureDto pcsB = unitService.create(
                 new CreateUnitOfMeasureRequest(companyB.getUid(), "PCS", "Pieces"));
 

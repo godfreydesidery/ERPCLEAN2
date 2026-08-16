@@ -456,7 +456,7 @@ public class DocumentModelBuilder {
 
     private BrandingBlock toBrandingBlock(DocumentBranding b) {
         if (b == null) {
-            return new BrandingBlock("", null, null, List.of(), null, null, null, null, null);
+            return new BrandingBlock("", null, null, null, List.of(), null, null, null, null, null);
         }
         List<String> addr = new ArrayList<>();
         if (b.getAddressLine1() != null) addr.add(b.getAddressLine1());
@@ -475,11 +475,16 @@ public class DocumentModelBuilder {
                     .stream().filter(s -> !s.isEmpty()).reduce((a, c) -> a + " | " + c).orElse(null);
         }
 
-        // Loaded once, and only when one of the two identity snapshots was never written — a branding
-        // row that carries both costs no extra query per rendered document. Keyed on the BRANDING
-        // ROW's company, never a caller-supplied id, and read through findScopedById, the named
-        // self-scope finder rather than a bare findById.
-        Company source = b.getCompanyId() != null && (b.getLegalName() == null || b.getTaxId() == null)
+        // Loaded once per rendered document. It used to be conditional — only when one of the two
+        // identity snapshots was missing — but the VRN has no snapshot to prefer at all
+        // (document_branding has no vrn column), so the company row is now always the source for it
+        // and the condition would never be false in practice. One findScopedById per PDF is the
+        // price of printing a legally required number.
+        //
+        // Keyed on the BRANDING ROW's company, never a caller-supplied id, and read through
+        // findScopedById — the named self-scope finder, not a bare findById — so a document can
+        // never print another tenant's identity.
+        Company source = b.getCompanyId() != null
                 ? companies.findScopedById(b.getCompanyId()).orElse(null)
                 : null;
 
@@ -487,6 +492,7 @@ public class DocumentModelBuilder {
                 b.getDisplayName(),
                 identityOrCompany(b.getLegalName(), source == null ? null : source.getLegalName()),
                 identityOrCompany(b.getTaxId(), source == null ? null : source.getTaxId()),
+                source == null ? null : source.getVrn(),
                 addr, contactLine, b.getLogoRef(), b.getLogoDataUri(),
                 b.getFooterTerms(), b.getBankDetails());
     }

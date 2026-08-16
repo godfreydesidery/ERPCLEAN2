@@ -1,5 +1,6 @@
 package com.erp.modules.products.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -84,7 +85,7 @@ class BomServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("bom_root", passwordEncoder.encode("B0mR00t!"), "BOM Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

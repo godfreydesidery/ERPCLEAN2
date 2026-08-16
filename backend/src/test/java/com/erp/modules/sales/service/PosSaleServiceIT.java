@@ -144,6 +144,7 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("possale_root", passwordEncoder.encode("R00t!Pass1"), "POS Sale Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
@@ -171,6 +172,7 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
         priceListUid = priceListService.create(new CreatePriceListRequest(company.getUid(), "RETAIL", "Retail")).uid();
 
         AppUser cashier = new AppUser("possale_cashier", passwordEncoder.encode("C@sh1Pass"), "POS Cashier");
+        cashier.setOrganisationId(org.getId());
         cashier = users.save(cashier);
         cashierId = cashier.getId();
         userBranches.save(new UserBranch(cashierId, branch, rootId));

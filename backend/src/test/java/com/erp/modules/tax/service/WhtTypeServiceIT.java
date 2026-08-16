@@ -73,6 +73,7 @@ class WhtTypeServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("whtty_root", passwordEncoder.encode("WhtTy0t1!"), "WHT Type Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
@@ -216,6 +217,7 @@ class WhtTypeServiceIT extends PostgresIntegrationTest {
         Branch branch2    = branches.save(new Branch(company2, "WHTTY21", "WHT Type IT Branch 2"));
         AppUser root2 = new AppUser("whtty2_root", passwordEncoder.encode("WhtTy2R0t!"), "WHT Root 2");
         root2.setRoot(true);
+        root2.setOrganisationId(org2.getId());
         root2 = users.save(root2);
 
         // Seed GL for company2 (glConfigService.seedDefaults needs CoA first)

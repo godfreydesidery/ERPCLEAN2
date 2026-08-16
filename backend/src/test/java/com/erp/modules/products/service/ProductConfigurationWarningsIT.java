@@ -1,5 +1,6 @@
 package com.erp.modules.products.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.iam.domain.entity.AppUser;
@@ -68,7 +69,7 @@ class ProductConfigurationWarningsIT extends PostgresIntegrationTest {
         AppUser root = new AppUser("guardrail_root", passwordEncoder.encode("RootPass1!"),
                 "Guardrail Root");
         root.setRoot(true);
-        root = users.save(root);
+        root = users.save(inOrganisation(root, org.getId()));
 
         RequestContext.set(new RequestContext.Principal(
                 root.getId(), "guardrail_root", true, company.getId(), branch.getId(), null));

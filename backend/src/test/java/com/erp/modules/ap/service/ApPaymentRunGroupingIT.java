@@ -83,6 +83,7 @@ class ApPaymentRunGroupingIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ap_run_root", passwordEncoder.encode("ApRun00t!Xx"), "AP Run Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

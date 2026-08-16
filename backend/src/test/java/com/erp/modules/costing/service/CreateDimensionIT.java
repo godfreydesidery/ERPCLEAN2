@@ -1,5 +1,6 @@
 package com.erp.modules.costing.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -52,6 +53,7 @@ class CreateDimensionIT extends PostgresIntegrationTest {
     @Autowired private PasswordEncoder        passwordEncoder;
     @Autowired private IamTestData            testData;
 
+    private Organisation org;
     private Company company;
     private Branch  branch;
     private Long    actorId;
@@ -60,13 +62,13 @@ class CreateDimensionIT extends PostgresIntegrationTest {
     void setUp() {
         testData.clearAll();
 
-        Organisation org = organisations.save(new Organisation("CreateDim IT Org"));
+        org = organisations.save(new Organisation("CreateDim IT Org"));
         company = companies.save(new Company(org, "CDIT", "CreateDim IT Co"));
         branch  = branches.save(new Branch(company, "CDIT-B1", "CreateDim IT Branch"));
 
         AppUser actor = new AppUser("cdit_user", passwordEncoder.encode("Pass1!"), "CDit User");
         actor.setRoot(true);
-        actor   = users.save(actor);
+        actor   = users.save(inOrganisation(actor, org.getId()));
         actorId = actor.getId();
 
         RequestContext.set(new RequestContext.Principal(
@@ -157,7 +159,7 @@ class CreateDimensionIT extends PostgresIntegrationTest {
         // Switch to a non-root actor whose active company is `company` (not `otherCompany`)
         AppUser nonRoot = new AppUser("cdit_nonroot", passwordEncoder.encode("Pass1!"), "NonRoot");
         nonRoot.setRoot(false);
-        nonRoot = users.save(nonRoot);
+        nonRoot = users.save(inOrganisation(nonRoot, org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "cdit_nonroot", false, company.getId(), branch.getId(), null));
 

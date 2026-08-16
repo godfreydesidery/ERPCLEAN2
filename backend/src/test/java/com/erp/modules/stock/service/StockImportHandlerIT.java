@@ -1,5 +1,6 @@
 package com.erp.modules.stock.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -92,6 +93,7 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("si_root", passwordEncoder.encode("RootPass1!"), "SI Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
         asRoot();
@@ -448,8 +450,9 @@ class StockImportHandlerIT extends PostgresIntegrationTest {
      * the shape that matters here, since root short-circuits the check it is meant to exercise.
      */
     private void asNonRoot() {
-        AppUser clerk = users.save(new AppUser(
-                "si_clerk", passwordEncoder.encode("ClerkPass1!"), "SI Clerk"));
+        AppUser clerk = users.save(inOrganisation(new AppUser(
+                "si_clerk", passwordEncoder.encode("ClerkPass1!"), "SI Clerk"),
+                companyA.getOrganisation().getId()));
         RequestContext.set(new RequestContext.Principal(
                 clerk.getId(), "si_clerk", false, companyA.getId(), branchA.getId(), null));
     }

@@ -83,12 +83,13 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "pty_root", passwordEncoder.encode("RootPass1!"), "Parties Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         // ROOT context: canActIn any company; ScopeGuard passes for all seeds.
         RequestContext.set(new RequestContext.Principal(
-                rootId, "pty_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "pty_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         // Seed real FK targets in companyA so D5-defaults tests can reference real ids.
         PriceList pl = priceListRepository.save(
@@ -280,13 +281,13 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
         // Switch context to companyB to create B's customer
         Branch branchB = branches.save(new Branch(companyB, "PTY-B1", "Branch B1"));
         RequestContext.set(new RequestContext.Principal(
-                rootId, "pty_root", true, companyB.getId(), branchB.getId(), null));
+                rootId, "pty_root", true, companyB.getId(), branchB.getId(), null, org.getId()));
         customerService.create(businessCreditRequest(companyB.getId(), "Co B Customer",
                 "TIN-LB", false, null, null, null));
 
         // List for company A — must see only A's customer
         RequestContext.set(new RequestContext.Principal(
-                rootId, "pty_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "pty_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
         Page<CustomerDto> pageA = customerService.list(companyA.getId(), null, Pageable.unpaged());
         assertThat(pageA.getTotalElements()).isEqualTo(1);
         assertThat(pageA.getContent().get(0).displayName()).isEqualTo("Co A Customer");

@@ -89,10 +89,11 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "pricing_root", passwordEncoder.encode("RootPass1!"), "Pricing Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
 
         RequestContext.set(new RequestContext.Principal(
-                root.getId(), "pricing_root", true, companyId, branchA.getId(), null));
+                root.getId(), "pricing_root", true, companyId, branchA.getId(), null, org.getId()));
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));

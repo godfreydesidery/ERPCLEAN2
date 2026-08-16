@@ -107,6 +107,13 @@ class BootstrapRunnerTest {
         // dist/bundle/.env.example and INSTALL.md both promise the first administrator is "always
         // rootadmin"; composing the alias onto it would break that on every fresh install (D-7).
         assertThat(asked.composeAdminUsername()).isFalse();
+        // The vendor's platform operator, and the ONLY caller that may ask for is_root. Bootstrap
+        // and the create-tenant endpoint share one provision() method, so making the tenant
+        // administrator non-root is a two-sided change: get this side wrong and a fresh install has
+        // no root user at all, with no way to create one (is_root is settable through no API).
+        // This class exists precisely because no environment ever executes that path before a
+        // customer does.
+        assertThat(asked.platformRootAdmin()).isTrue();
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -99,13 +100,13 @@ class BudgetHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("bud_root", passwordEncoder.encode(ROOT_PASS), "Bud Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rb = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rb.markDefault();
         userBranches.save(rb);
 
         plainUser = new AppUser("bud_plain", passwordEncoder.encode(PLAIN_PASS), "Bud Plain");
-        plainUser = users.save(plainUser);
+        plainUser = users.save(inOrganisation(plainUser, org.getId()));
         UserBranch pb = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         pb.markDefault();
         userBranches.save(pb);

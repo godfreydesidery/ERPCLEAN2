@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -89,13 +90,13 @@ class YearEndCloseHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("yec_http_root", passwordEncoder.encode(ROOT_PASS), "YEC HTTP Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("yec_http_plain", passwordEncoder.encode(PLAIN_PASS), "YEC HTTP Plain");
-        plainUser = users.save(plainUser);
+        plainUser = users.save(inOrganisation(plainUser, org.getId()));
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();
         userBranches.save(plainAssign);

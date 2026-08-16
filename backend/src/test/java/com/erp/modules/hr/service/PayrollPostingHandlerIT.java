@@ -102,6 +102,7 @@ class PayrollPostingHandlerIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("glp_root", passwordEncoder.encode("RootPass1!"), "GL Payroll Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

@@ -66,11 +66,12 @@ class PricingRulePromotionIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "promo_root", "x", "Promo Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "promo_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "promo_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
     }
 
     @AfterEach

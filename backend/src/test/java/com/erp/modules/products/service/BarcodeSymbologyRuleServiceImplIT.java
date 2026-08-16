@@ -76,11 +76,12 @@ class BarcodeSymbologyRuleServiceImplIT extends PostgresIntegrationTest {
                 new com.erp.modules.iam.domain.entity.AppUser(
                         "sym_root", passwordEncoder.encode("RootPass1!"), "Sym Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                rootId, "sym_root", true, companyA.getId(), branchA.getId(), null));
+                rootId, "sym_root", true, companyA.getId(), branchA.getId(), null, org.getId()));
 
         UnitOfMeasureDto pcs = unitService.create(
                 new CreateUnitOfMeasureRequest(companyA.getUid(), "PCS", "Pieces"));

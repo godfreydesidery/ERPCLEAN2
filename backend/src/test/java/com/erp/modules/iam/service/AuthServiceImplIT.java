@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -52,7 +53,8 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
         branch.setDefault(true);
         branches.save(branch);
 
-        AppUser user = users.save(new AppUser("alice", passwordEncoder.encode(PASSWORD), "Alice"));
+        AppUser user = users.save(inOrganisation(
+                new AppUser("alice", passwordEncoder.encode(PASSWORD), "Alice"), org.getId()));
 
         UserBranch assignment = new UserBranch(user.getId(), branch, user.getId());
         assignment.markDefault();
