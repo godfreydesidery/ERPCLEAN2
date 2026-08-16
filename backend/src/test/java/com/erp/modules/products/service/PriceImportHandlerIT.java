@@ -1,5 +1,6 @@
 package com.erp.modules.products.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -72,7 +73,7 @@ class PriceImportHandlerIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("pi_root", passwordEncoder.encode("RootPass1!"), "PI Root");
         root.setRoot(true);
-        root = users.save(root);
+        root = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
         asRoot();
 
@@ -136,8 +137,9 @@ class PriceImportHandlerIT extends PostgresIntegrationTest {
 
     @Test
     void commit_changingCostWithoutProductPermission_isRejected() {
-        AppUser priceUser = users.save(
-                new AppUser("pi_priceonly", passwordEncoder.encode("Pass1!"), "Price Only"));
+        AppUser priceUser = users.save(inOrganisation(
+                new AppUser("pi_priceonly", passwordEncoder.encode("Pass1!"), "Price Only"),
+                companyA.getOrganisation().getId()));
         RequestContext.set(new RequestContext.Principal(
                 priceUser.getId(), "pi_priceonly", false, companyA.getId(), branchA.getId(), null));
 

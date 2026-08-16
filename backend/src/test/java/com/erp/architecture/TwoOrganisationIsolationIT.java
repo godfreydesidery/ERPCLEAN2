@@ -8,21 +8,29 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.Role;
+import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.RoleRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
+import com.erp.modules.iam.repository.UserRoleRepository;
 import com.erp.modules.iam.service.CompanyService;
 import com.erp.modules.iam.service.OrganisationService;
 import com.erp.modules.iam.service.RoleService;
 import com.erp.modules.iam.service.UserService;
+import com.erp.platform.bootstrap.TenantProvisioningService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.PermissionChecks;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +76,8 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
     @Autowired private BranchRepository branches;
     @Autowired private AppUserRepository users;
     @Autowired private RoleRepository roles;
+    @Autowired private UserRoleRepository userRoles;
+    @Autowired private UserCompanyRepository userCompanies;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
 
@@ -76,6 +86,9 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
     @Autowired private CompanyService companyService;
     @Autowired private OrganisationService organisationService;
     @Autowired private RoleService roleService;
+    @Autowired private PermissionChecks perm;
+    @Autowired private PermissionResolver permissionResolver;
+    @Autowired private TenantProvisioningService tenantProvisioning;
 
     private Organisation orgA;
     private Organisation orgB;
@@ -86,6 +99,7 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
     private AppUser adminA;      // non-root administrator of A — P7-2's probe identity
     private AppUser rootA;       // root user WHOSE HOME IS A
     private AppUser userB;
+    private AppUser adminB;      // B's OWN administrator: non-root, holding ORG_ADMIN for real
     private Role roleB;
 
     @BeforeEach
@@ -108,6 +122,21 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
         roleB = new Role("TENANT_B_ROLE_" + tag, "Tenant B's own role");
         roleB.setOrganisationId(orgB.getId());
         roleB = roles.save(roleB);
+
+        // Tenant B's real administrator, shaped exactly as TenantProvisioningService now creates one:
+        // NOT root, and holding ORG_ADMIN company-wide (branchId null).
+        //
+        // The grant is not decoration. Without it the write probes below would pass for the wrong
+        // reason — a user with no grants is refused everything — which is the vacuity this class's
+        // own javadoc warns about. IamTestData.clearAll truncates user_role but deliberately keeps
+        // the is_system role_permission rows, so ORG_ADMIN's ~250 codes are the real ones.
+        adminB = newUser("admin-b-" + tag, "Admin B", orgB, false);
+        Role orgAdmin = roles.findByCode("ORG_ADMIN").orElseThrow(() -> new IllegalStateException(
+                "ORG_ADMIN is not seeded — every probe below would be vacuous"));
+        userRoles.save(new UserRole(adminB.getId(), orgAdmin, companyB.getId(), null, adminB.getId()));
+        // 30 s TTL keyed on (user, company, branch), and TRUNCATE ... RESTART IDENTITY recycles all
+        // three between methods — see PostgresIntegrationTest's note on manufactured staleness.
+        permissionResolver.invalidate();
     }
 
     private AppUser newUser(String username, String displayName, Organisation org, boolean root) {
@@ -386,6 +415,177 @@ class TwoOrganisationIsolationIT extends PostgresIntegrationTest {
 
         assertThat(roles.findById(unstamped.getId()).orElseThrow().getOrganisationId())
                 .isEqualTo(orgA.getId());
+    }
+
+    // ---------------------------------------------------------------------
+    // R-2 — the two organisation WRITE paths
+    // ---------------------------------------------------------------------
+    //
+    // Every one of the sixteen probes above is a READ. That is how this survived: a tenant
+    // administrator signed in to organisation B could POST /api/v1/organisations/uid/<A>/suspend and
+    // get a 200, and POST /api/v1/organisations and get a 201. Nothing in the suite ever attempted a
+    // cross-tenant WRITE, so nothing ever failed.
+    //
+    // The mechanism was not the permission seed — R__seed_permissions.sql already excludes the
+    // 'platform' module from ORG_ADMIN's CROSS JOIN, so a tenant administrator cannot HOLD
+    // ORG.CREATE or ORG.SUSPEND. It was that TenantProvisioningService made every tenant's
+    // administrator is_root, and PermissionResolver.hasPermission returns true for a root principal
+    // before the code is ever compared.
+
+    @Test
+    @DisplayName("R-2 · a tenant's administrator cannot suspend ANOTHER tenant")
+    void aTenantAdministratorCannotSuspendAnotherTenant() {
+        actingAsB(adminB);
+
+        // Layer 1 — the controller's gate. @perm.has('ORG.SUSPEND') is permission-only, so this is
+        // the entire check that stands in front of the endpoint.
+        assertThat(perm.has("ORG.SUSPEND"))
+                .as("ORG.SUSPEND is module 'platform', which the ORG_ADMIN CROSS JOIN excludes")
+                .isFalse();
+
+        // Layer 2 — the service, which must not depend on layer 1 having been got right. It loaded
+        // the target with a bare findByUid and guarded only against suspending your OWN
+        // organisation, i.e. it permitted every other one.
+        assertThatThrownBy(() -> organisationService.setStatus(orgA.getUid(), false))
+                // NotFound, never Forbidden: "exists but is not yours" is an existence oracle over a
+                // uid an outsider might plausibly hold.
+                .isInstanceOf(NotFoundException.class);
+
+        assertThat(organisations.findById(orgA.getId()).orElseThrow().getStatus())
+                .as("the target tenant must still be open for business")
+                .isEqualTo(MasterStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("R-2 · resume is refused across the boundary too, not only suspend")
+    void aTenantAdministratorCannotResumeAnotherTenant() {
+        // The pre-existing guard began `if (!active ...)`, so on the resume path it did not look at
+        // the target at all. Suspend is the interesting attack; resume is the one that would have
+        // been left open by a fix aimed only at the headline.
+        actingAsB(adminB);
+
+        assertThatThrownBy(() -> organisationService.setStatus(orgA.getUid(), true))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("R-2 · a tenant's administrator cannot create an organisation")
+    void aTenantAdministratorCannotCreateAnOrganisation() {
+        actingAsB(adminB);
+
+        assertThat(perm.has("ORG.CREATE"))
+                .as("provisioning another tenant is a vendor capability, not a customer one")
+                .isFalse();
+
+        // The service is deliberately NOT guarded as well, and that is a decision rather than an
+        // omission: createTenant has no cross-tenant TARGET to protect (it only inserts a new
+        // organisation), and the caller who legitimately reaches it is precisely the platform
+        // operator. The refusal that matters here is the gate, plus the fact that a tenant cannot
+        // acquire the code: AuthorityCeiling refuses to confer a permission the conferrer does not
+        // hold, and is_root is settable through no API at all.
+    }
+
+    /**
+     * The non-vacuity control. Without it, both probes above would pass for a user who simply holds
+     * nothing — which is exactly how a cross-tenant write test can be green and worthless.
+     */
+    @Test
+    @DisplayName("R-2 · ...while the same administrator really does run their own tenant")
+    void theSameAdministratorStillHoldsTheTenantCapabilities() {
+        actingAsB(adminB);
+
+        assertThat(perm.has("USER.MANAGE")).isTrue();
+        assertThat(perm.has("ROLE.MANAGE")).isTrue();
+        assertThat(perm.has("BRANCH.ASSIGN")).isTrue();
+        assertThat(perm.has("USER.COMPANY.MANAGE")).isTrue();
+        assertThat(perm.has("COMPANY.MANAGE")).isTrue();
+    }
+
+    /**
+     * The end-to-end version, and the one that fails if {@code TenantProvisioningService} goes back
+     * to minting root administrators: the identity is not hand-built here, it is whatever
+     * provisioning actually creates, and its {@code root} flag is read from the saved row rather
+     * than asserted into the principal.
+     */
+    @Test
+    @DisplayName("R-2 · a REAL provisioned tenant administrator is refused the same two writes")
+    void aProvisionedTenantAdministratorIsNotAPlatformOperator() {
+        String tag = UUID.randomUUID().toString().substring(0, 8);
+        RequestContext.clear();   // provisioning is not performed on behalf of a tenant
+
+        var provisioned = tenantProvisioning.provision(
+                new TenantProvisioningService.NewTenantRequest(
+                        "Tenant C " + tag, "Africa/Dar_es_Salaam",
+                        "TC-" + tag, "Tenant C Co",
+                        null, null, null,
+                        "TCB-" + tag, "Tenant C Branch",
+                        "orgadmin", "OrgPass12345", "Org Admin",
+                        "TZS", "TZS", List.of("TZS"),
+                        null, null, null, null, null,
+                        true, false));   // API shape: composed username, NOT a platform operator
+
+        AppUser admin = users.findById(provisioned.adminUserId()).orElseThrow();
+
+        assertThat(admin.isRoot())
+                .as("a customer's administrator holding is_root bypasses every permission code, "
+                        + "including the two platform ones")
+                .isFalse();
+
+        // What replaces it, and what makes the tenant usable without it.
+        var grants = userRoles.findByUserIdAndRevokedAtIsNull(admin.getId());
+        assertThat(grants).hasSize(1);
+        // Resolved through the repository rather than by navigating grants.get(0).getRole(), which
+        // is a lazy proxy and throws LazyInitializationException out here — the provisioning call
+        // above ran in its own transaction and this assertion does not. Reading the identifier off
+        // the proxy is safe: it is the one property Hibernate has without initialising it.
+        Long grantedRoleId = grants.get(0).getRole().getId();
+        assertThat(roles.findById(grantedRoleId).orElseThrow().getCode()).isEqualTo("ORG_ADMIN");
+        assertThat(grants.get(0).getBranchId())
+                .as("company-wide, or the administrator resolves NO permissions in any branch but "
+                        + "the founding one — invisible until the customer opens their second")
+                .isNull();
+        assertThat(userCompanies.existsByUserIdAndCompanyIdAndRevokedAtIsNull(
+                        admin.getId(), provisioned.companyId()))
+                .as("ADR-0046 membership: without it the administrator cannot assign themselves to "
+                        + "a branch they open, until the next application restart")
+                .isTrue();
+
+        // Now act as that administrator — root read from the ROW, never hard-coded, so reverting
+        // the provisioning fix turns these red rather than leaving them green and meaningless.
+        RequestContext.set(new RequestContext.Principal(
+                admin.getId(), admin.getUsername(), admin.isRoot(),
+                provisioned.companyId(), provisioned.branchId(), "127.0.0.1",
+                provisioned.organisationId()));
+        permissionResolver.invalidate();
+
+        assertThat(perm.has("ORG.SUSPEND")).isFalse();
+        assertThat(perm.has("ORG.CREATE")).isFalse();
+        assertThat(perm.has("USER.MANAGE")).as("non-vacuity control").isTrue();
+
+        assertThatThrownBy(() -> organisationService.setStatus(orgA.getUid(), false))
+                .isInstanceOf(NotFoundException.class);
+        assertThat(organisations.findById(orgA.getId()).orElseThrow().getStatus())
+                .isEqualTo(MasterStatus.ACTIVE);
+    }
+
+    /**
+     * The other side of the rule, and the reason the service guard could not simply be "refuse a
+     * foreign organisation": suspending somebody ELSE'S tenant is the endpoint's entire purpose.
+     *
+     * <p>It doubles as the honest characterisation of what this change does NOT do. The fix is
+     * provisioning-only — it touches no existing row — so any administrator already carrying
+     * {@code is_root} keeps the cross-tenant reach reported at the top of this section. Only tenants
+     * created after it ships are protected.
+     */
+    @Test
+    @DisplayName("R-2 · the platform operator may still suspend a tenant — and root still can")
+    void thePlatformOperatorMayStillSuspendATenant() {
+        actingAsA(rootA);
+
+        organisationService.setStatus(orgB.getUid(), false);
+
+        assertThat(organisations.findById(orgB.getId()).orElseThrow().getStatus())
+                .isEqualTo(MasterStatus.INACTIVE);
     }
 
     // ---------------------------------------------------------------------

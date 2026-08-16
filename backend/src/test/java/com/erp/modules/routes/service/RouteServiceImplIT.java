@@ -1,5 +1,6 @@
 package com.erp.modules.routes.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -98,12 +99,12 @@ class RouteServiceImplIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("rt_root", passwordEncoder.encode("RootPass1!"), "Route Root");
         root.setRoot(true);
-        root = users.save(root);
+        root = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         // Non-root company-A user — required as appUserId for INTERNAL agents (BR-PARTY-10).
         AppUser internalUser = new AppUser("rt_int_user", passwordEncoder.encode("RootPass1!"), "Internal User A");
-        internalUser = users.save(internalUser);
+        internalUser = users.save(inOrganisation(internalUser, org.getId()));
         userBranches.save(new UserBranch(internalUser.getId(), branchA, rootId));
         final Long internalUserId = internalUser.getId();
 

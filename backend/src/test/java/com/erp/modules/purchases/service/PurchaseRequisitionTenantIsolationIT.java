@@ -104,6 +104,7 @@ class PurchaseRequisitionTenantIsolationIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("tg_root", passwordEncoder.encode("RootPass1!"), "TenantGuard Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

@@ -27,6 +27,25 @@ public final class OrganisationAlias {
     }
 
     /**
+     * Aliases nobody may hold, because the alias becomes the suffix of every username in that tenant
+     * ({@code user@alias}, D-7).
+     *
+     * <p>A customer slugging to {@code admin} would mint {@code rootadmin@admin} and
+     * {@code joseph@admin}, which read as platform-level accounts to anyone glancing at an audit
+     * trail or a support request. {@code system} and {@code root} carry the same implication;
+     * {@code api} and {@code support} are the two most likely to be wanted later for a URL or a
+     * mailbox, and taking one back from a live customer means rewriting every username they have.
+     *
+     * <p>Enforced HERE and not as a database {@code CHECK} deliberately. The format lives in
+     * {@code ck_organisation_alias} because a shape is a shape; a blocklist is a product decision
+     * that will change, and expressing it in both places would give one rule two sources of truth.
+     * The service is also the half that can answer with a sentence rather than a constraint
+     * violation (D-7a, 2026-08-16).
+     */
+    private static final java.util.Set<String> RESERVED =
+            java.util.Set.of("admin", "root", "system", "api", "support");
+
+    /**
      * A slug for {@code name}, or an {@code org-<id>} fallback when the name yields nothing usable.
      *
      * @param id used only for the fallback; may be null before the row is persisted, in which case a
@@ -41,6 +60,15 @@ public final class OrganisationAlias {
             slug = slug.substring(0, 20).replaceAll("-+$", "");
         }
         if (slug.length() < 2) {
+            return id == null ? null : "org-" + id;
+        }
+        // A reserved slug falls back to org-<id> rather than being refused. Refusing would block a
+        // customer legitimately called "Admin Supplies Ltd" from being created at all, over a name
+        // they cannot change — and this method is called by BOTH provisioning and the reconciler,
+        // so a throw here would take an existing tenant's boot down rather than just its alias.
+        // org-<id> is unambiguous, already the fallback for an unusable name, and the operator can
+        // still be given a better one by hand.
+        if (RESERVED.contains(slug)) {
             return id == null ? null : "org-" + id;
         }
         return slug;

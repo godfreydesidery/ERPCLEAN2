@@ -1,5 +1,6 @@
 package com.erp.modules.costing.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -95,7 +96,7 @@ class DimensionServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("cc_root", passwordEncoder.encode("RootPass1!"), "CC Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

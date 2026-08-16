@@ -106,6 +106,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
         // ROOT user
         rootUser = new AppUser("ah_root", passwordEncoder.encode(ROOT_PASS), "AH Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
@@ -113,6 +114,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
 
         // Non-root plain user
         plainUser = new AppUser("ah_plain", passwordEncoder.encode(PLAIN_PASS), "AH Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();
@@ -124,7 +126,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
         // Generate audit rows via real service calls (ROOT context so ScopeGuard passes)
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                company.getId(), branch.getId(), null));
+                company.getId(), branch.getId(), null, org.getId()));
         try {
             // Three USER.CREATE rows — more than a page of size=2
             userService.create(new CreateUserRequest("ah_u1", "AH User1", "UserPass1!", null, null));
@@ -281,7 +283,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
         branchB = branches.save(branchB);
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                companyB.getId(), branchB.getId(), null));
+                companyB.getId(), branchB.getId(), null, org.getId()));
         try {
             userService.create(new CreateUserRequest("ah_b_user", "AH B User", "UserPassB1!", null, null));
         } finally {
@@ -326,7 +328,7 @@ class AuditHttpIT extends PostgresIntegrationTest {
         testData.seedMembership(user.getUid(), company.getUid());
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                company.getId(), branch.getId(), null));
+                company.getId(), branch.getId(), null, org.getId()));
         try {
             userRoleService.grant(new GrantRoleRequest(
                     user.getUid(), role.getUid(), company.getUid(), null));

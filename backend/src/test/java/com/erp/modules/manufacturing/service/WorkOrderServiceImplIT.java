@@ -110,6 +110,7 @@ class WorkOrderServiceImplIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("mfgroot", passwordEncoder.encode("MfgRoot2024!"), "Mfg Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 

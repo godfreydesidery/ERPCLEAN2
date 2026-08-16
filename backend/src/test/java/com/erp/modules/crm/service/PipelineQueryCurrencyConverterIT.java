@@ -87,11 +87,12 @@ class PipelineQueryCurrencyConverterIT extends PostgresIntegrationTest {
         branchId = branch.getId();
 
         AppUser actor = new AppUser("pcc.actor", passwordEncoder.encode("Password1!"), "PCC Actor");
+        actor.setOrganisationId(org.getId());
         users.save(actor);
         actorId = actor.getId();
 
         RequestContext.set(new RequestContext.Principal(
-                actorId, actor.getUsername(), false, companyId, branchId, "127.0.0.1"));
+                actorId, actor.getUsername(), false, companyId, branchId, "127.0.0.1", org.getId()));
 
         // Pipeline stage — required by the GROUP BY in pipelineSummaryRaw
         PipelineStage stage = new PipelineStage(

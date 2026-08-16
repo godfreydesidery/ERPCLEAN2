@@ -97,7 +97,11 @@ public class BootstrapRunner implements ApplicationRunner {
                 // Price-list code + name + VAT stance, walk-in customer, till: likewise none. The
                 // first tenant's administrator creates them from the shipped screens.
                 null, null, null, null, null,
-                false));   // bootstrap admin stays PLAIN — INSTALL.md promises 'always rootadmin'
+                false,   // bootstrap admin stays PLAIN — INSTALL.md promises 'always rootadmin'
+                // ...and IS the platform operator: root. This is the only path that may set it,
+                // and there is no second chance — is_root is settable nowhere else in the
+                // application, so a fresh install whose rootadmin is not root can never get one.
+                true));
 
         log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",
                 provisioned.organisationName(), provisioned.companyCode(),

@@ -96,12 +96,14 @@ class PurchasesHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("purch_root", passwordEncoder.encode(ROOT_PASS), "Purch Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("purch_plain", passwordEncoder.encode(PLAIN_PASS), "Purch Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();

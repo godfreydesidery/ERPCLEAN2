@@ -135,8 +135,16 @@ public class DocumentPdfRenderer {
         if (b.legalName() != null) {
             doc.add(new Paragraph(b.legalName(), FONT_NORMAL));
         }
+        // TIN and VRN are printed on separate lines, and the TIN line no longer claims to be both.
+        // "TIN/VAT:" conflated two different numbers because only one was available: the Tanzanian
+        // TIN identifies the taxpayer, the VRN identifies the VAT registration, and a document
+        // headed TAX INVOICE needs both stated distinctly. Reading the label as covering the VRN was
+        // only ever true when the two happened to be absent together.
         if (b.taxId() != null) {
-            doc.add(new Paragraph("TIN/VAT: " + b.taxId(), FONT_NORMAL));
+            doc.add(new Paragraph("TIN: " + b.taxId(), FONT_NORMAL));
+        }
+        if (b.vrn() != null && !b.vrn().isBlank()) {
+            doc.add(new Paragraph("VRN: " + b.vrn(), FONT_NORMAL));
         }
         if (b.addressLines() != null) {
             for (String line : b.addressLines()) {

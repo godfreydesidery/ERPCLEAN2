@@ -1,5 +1,6 @@
 package com.erp.modules.reporting.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
@@ -114,7 +115,7 @@ class CashFlowIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("rcf_root", passwordEncoder.encode("RootPass1!"), "RCF Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

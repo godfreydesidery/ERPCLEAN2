@@ -1,5 +1,6 @@
 package com.erp.modules.crm.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -64,7 +65,7 @@ class LeadServiceIT extends PostgresIntegrationTest {
         branchId = branch.getId();
 
         AppUser actor = new AppUser("crm.actor", passwordEncoder.encode("Password1!"), "CRM Actor");
-        users.save(actor);
+        users.save(inOrganisation(actor, org.getId()));
 
         // branchId drives Lead entity; userId drives audit
         RequestContext.set(new RequestContext.Principal(

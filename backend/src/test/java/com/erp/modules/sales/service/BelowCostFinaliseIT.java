@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -160,13 +161,14 @@ class BelowCostFinaliseIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("bcost_root", passwordEncoder.encode("R00t!Pass1"), "Below Cost Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         // Non-root clerk in the SAME company: passes ScopeGuard, holds no granted permissions, so
         // SALES.BELOW_COST.OVERRIDE is denied for them (the APPROVE "flag alone is not enough" bar).
-        AppUser clerk = users.save(
-                new AppUser("bcost_clerk", passwordEncoder.encode("Cl3rk!Pass1"), "Below Cost Clerk"));
+        AppUser clerk = users.save(inOrganisation(
+                new AppUser("bcost_clerk", passwordEncoder.encode("Cl3rk!Pass1"), "Below Cost Clerk"),
+                org.getId()));
         clerkId = clerk.getId();
 
         setRootCtx();

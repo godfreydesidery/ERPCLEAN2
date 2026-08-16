@@ -127,6 +127,7 @@ class SalesOrderApprovalGateTransactionIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("soat_root", passwordEncoder.encode("R00t!Pass1"), "SOAT Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

@@ -138,6 +138,7 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fx_root", passwordEncoder.encode("RootPass1!"), "FX Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

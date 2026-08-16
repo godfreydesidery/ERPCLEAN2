@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -70,10 +71,13 @@ class UserRoleServiceImplIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("root", passwordEncoder.encode("pw"), "Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
 
-        targetUser = users.save(new AppUser("target", passwordEncoder.encode("pw"), "Target"));
-        nonRootUser = users.save(new AppUser("nonroot", passwordEncoder.encode("pw"), "Non Root"));
+        targetUser = users.save(inOrganisation(
+                new AppUser("target", passwordEncoder.encode("pw"), "Target"), org.getId()));
+        nonRootUser = users.save(inOrganisation(
+                new AppUser("nonroot", passwordEncoder.encode("pw"), "Non Root"), org.getId()));
 
         var companyManage = permissionRepo.findByCode("COMPANY.MANAGE")
                 .orElseThrow(() -> new IllegalStateException("COMPANY.MANAGE must be seeded by V1 migration"));

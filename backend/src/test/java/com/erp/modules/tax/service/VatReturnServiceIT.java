@@ -74,6 +74,7 @@ class VatReturnServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("vat_root", passwordEncoder.encode("VatR00t1!"), "VAT Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

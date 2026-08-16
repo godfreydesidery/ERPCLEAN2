@@ -1,5 +1,6 @@
 package com.erp.platform.audit;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -110,13 +111,15 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("at_root", passwordEncoder.encode(PASSWORD), "Audit Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
 
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branchInA, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
-        targetUser = users.save(new AppUser("at_target", passwordEncoder.encode(PASSWORD), "Audit Target"));
+        targetUser = users.save(inOrganisation(
+                new AppUser("at_target", passwordEncoder.encode(PASSWORD), "Audit Target"), org.getId()));
 
         Permission perm = permissions.findByCode("COMPANY.MANAGE")
                 .orElseThrow(() -> new IllegalStateException("COMPANY.MANAGE not seeded"));
@@ -127,7 +130,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
         // Root principal active in company A — all service calls pass ScopeGuard from here.
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                companyA.getId(), branchInA.getId(), "10.0.0.1"));
+                companyA.getId(), branchInA.getId(), "10.0.0.1", org.getId()));
     }
 
     @AfterEach
@@ -313,7 +316,7 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
         // Need to set root context to branchInB's company so ScopeGuard passes.
         RequestContext.set(new RequestContext.Principal(
                 rootUser.getId(), rootUser.getUsername(), true,
-                companyB.getId(), branchInB.getId(), "10.0.0.1"));
+                companyB.getId(), branchInB.getId(), "10.0.0.1", rootUser.getOrganisationId()));
         userBranchService.setDefault(branchBAssign.uid());
 
         List<AuditLog> rows = auditRepo.findAll();

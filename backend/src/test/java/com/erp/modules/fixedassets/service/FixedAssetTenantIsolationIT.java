@@ -110,6 +110,7 @@ class FixedAssetTenantIsolationIT extends PostgresIntegrationTest {
         branchAId = brA.getId();
 
         AppUser userA = new AppUser("ti-user-a", passwordEncoder.encode("Password1234"), "TI User A");
+        userA.setOrganisationId(org.getId());
         users.save(userA);
 
         // --- Company B ---
@@ -123,6 +124,7 @@ class FixedAssetTenantIsolationIT extends PostgresIntegrationTest {
         branchBId = brB.getId();
 
         AppUser userB = new AppUser("ti-user-b", passwordEncoder.encode("Password1234"), "TI User B");
+        userB.setOrganisationId(org.getId());
         users.save(userB);
 
         // Seeding below calls scope-guarded services for BOTH companies; act as root during setup.

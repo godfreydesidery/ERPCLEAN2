@@ -111,10 +111,12 @@ class AuditF8HttpIT extends PostgresIntegrationTest {
         // Root sentinel (needed so UserBranch constructor has a valid assignedById)
         AppUser rootSentinel = new AppUser("f8_root", passwordEncoder.encode("RootF8Pass1!"), "F8 Root");
         rootSentinel.setRoot(true);
+        rootSentinel.setOrganisationId(org.getId());
         rootSentinel = users.save(rootSentinel);
 
         // Non-root user U, assigned to B as default via UserBranchService (requires RequestContext)
         userU = new AppUser("f8_user", passwordEncoder.encode(USER_PASS), "F8 User");
+        userU.setOrganisationId(org.getId());
         userU = users.save(userU);
 
         // Assign U to B as default — use direct UserBranch save (mirrors Slice5HttpIT pattern)

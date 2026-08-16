@@ -79,6 +79,7 @@ class OpportunityServiceIT extends PostgresIntegrationTest {
         branchId = branch.getId();
 
         AppUser actor = new AppUser("opp.actor", passwordEncoder.encode("Password1!"), "Opp Actor");
+        actor.setOrganisationId(org.getId());
         users.save(actor);
 
         RequestContext.set(new RequestContext.Principal(

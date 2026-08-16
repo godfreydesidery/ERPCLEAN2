@@ -8,7 +8,9 @@ import com.erp.modules.iam.domain.dto.SetPasswordRequest;
 import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
@@ -37,21 +39,31 @@ class UserServiceImplIT extends PostgresIntegrationTest {
 
     @Autowired private UserService userService;
     @Autowired private AppUserRepository users;
+    @Autowired private OrganisationRepository organisations;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
 
     private static final String VALID_PASSWORD = "ValidPass1";
 
+    /**
+     * The single tenant these tests run in. Left without an alias on purpose: an aliased
+     * organisation makes {@code UserServiceImpl.composeUsername} append {@code @alias}, which the
+     * username assertions here deliberately do not expect.
+     */
+    private Organisation org;
+
     @BeforeEach
     void setUp() {
         testData.clearAll();
+        org = organisations.save(new Organisation("User Service IT Org"));
         // A real, persisted root user — the audit aspect FKs actor_user_id to app_users(id), so a
         // synthetic id (e.g. 0L) trips fk_audit_log_actor on any audited write in these tests.
         AppUser itRoot = new AppUser("usr_it_root", passwordEncoder.encode(VALID_PASSWORD), "IT Root");
         itRoot.setRoot(true);
+        itRoot.setOrganisationId(org.getId());
         itRoot = users.save(itRoot);
         RequestContext.set(new RequestContext.Principal(
-                itRoot.getId(), itRoot.getUsername(), true, null, null, null));
+                itRoot.getId(), itRoot.getUsername(), true, null, null, null, org.getId()));
     }
 
     @AfterEach
@@ -200,6 +212,9 @@ class UserServiceImplIT extends PostgresIntegrationTest {
         // Seed a root user directly: is_root=true, bypass setRoot-via-API restriction
         AppUser rootUser = new AppUser("rootadmin", passwordEncoder.encode(VALID_PASSWORD), "Root Admin");
         rootUser.setRoot(true);
+        // Same organisation as the acting principal: a different one makes requireInScope throw
+        // NotFound on the tenant check before it ever reaches the is_root lockout guard under test.
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
 
         final String rootUid = rootUser.getUid();

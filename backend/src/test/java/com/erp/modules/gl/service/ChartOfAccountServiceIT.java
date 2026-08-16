@@ -1,5 +1,6 @@
 package com.erp.modules.gl.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -77,6 +78,7 @@ class ChartOfAccountServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("coa_root", passwordEncoder.encode("RootPass1!"), "CoA Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
@@ -276,8 +278,8 @@ class ChartOfAccountServiceIT extends PostgresIntegrationTest {
         Organisation org2 = organisations.save(new Organisation("CoA Tenant Org 2"));
         Company company2  = companies.save(new Company(org2, "CATEN2", "CoA Tenant Co 2"));
         Branch  branch2   = branches.save(new Branch(company2, "CAT2B", "CoA Tenant Branch 2"));
-        AppUser nonRoot = users.save(new AppUser(
-                "coa_nonroot", passwordEncoder.encode("Pass1!"), "CoA NonRoot"));
+        AppUser nonRoot = users.save(inOrganisation(new AppUser(
+                "coa_nonroot", passwordEncoder.encode("Pass1!"), "CoA NonRoot"), org2.getId()));
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "coa_nonroot", false, company2.getId(), branch2.getId(), null));
 

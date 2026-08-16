@@ -105,6 +105,7 @@ class ProductsTenantIsolationIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("iso_root", passwordEncoder.encode("Is0R00t!"), "ISO Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

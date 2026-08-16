@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -127,7 +128,7 @@ class SalesOrderSetAgentIT extends PostgresIntegrationTest {
         // Root user — deliberately NOT an internal agent, so created orders are agentless.
         AppUser root = new AppUser("sa_root", passwordEncoder.encode("S0Root!Xx"), "SA Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         setCtx();

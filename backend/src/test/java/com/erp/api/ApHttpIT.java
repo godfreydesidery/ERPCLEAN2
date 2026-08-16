@@ -99,12 +99,14 @@ class ApHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("ap_http_root", passwordEncoder.encode(ROOT_PASS), "AP HTTP Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("ap_http_plain", passwordEncoder.encode(PLAIN_PASS), "AP HTTP Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();

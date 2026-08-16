@@ -75,6 +75,7 @@ class CurrencyConversionServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxconv_root", passwordEncoder.encode("Root1234!"), "FxConv Root");
         root.setRoot(true);
+        root.setOrganisationId(orgA.getId());
         users.save(root);
 
         setContext(companyA);

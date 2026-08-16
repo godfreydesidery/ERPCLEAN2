@@ -97,6 +97,7 @@ class ArWriteOffServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("arwo_root", passwordEncoder.encode("RootPass1!"), "ARWO Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
@@ -244,6 +245,7 @@ class ArWriteOffServiceIT extends PostgresIntegrationTest {
         Company company2   = companies.save(new Company(org2, "ARWO2", "Other Co"));
         Branch branch2     = branches.save(new Branch(company2, "ARWO2B", "Other Branch"));
         AppUser user2 = new AppUser("arwo_user2", passwordEncoder.encode("Pass1!"), "Other User");
+        user2.setOrganisationId(org2.getId());
         user2 = users.save(user2);
         RequestContext.set(new RequestContext.Principal(
                 user2.getId(), "arwo_user2", false, company2.getId(), branch2.getId(), null));

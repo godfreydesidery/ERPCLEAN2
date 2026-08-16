@@ -1,5 +1,6 @@
 package com.erp.modules.approvals;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -95,19 +96,19 @@ class ApprovalsEngineIT extends PostgresIntegrationTest {
         branch  = branches.save(new Branch(company, "APPR-HQ", "Approvals HQ"));
 
         buyerUser = new AppUser("buyer", passwordEncoder.encode("pass"), "Buyer User");
-        buyerUser = users.save(buyerUser);
+        buyerUser = users.save(inOrganisation(buyerUser, org.getId()));
         UserBranch buyerAssign = new UserBranch(buyerUser.getId(), branch, buyerUser.getId());
         buyerAssign.markDefault();
         userBranches.save(buyerAssign);
 
         pmUser = new AppUser("pm_user", passwordEncoder.encode("pass"), "PM User");
-        pmUser = users.save(pmUser);
+        pmUser = users.save(inOrganisation(pmUser, org.getId()));
         UserBranch pmAssign = new UserBranch(pmUser.getId(), branch, pmUser.getId());
         pmAssign.markDefault();
         userBranches.save(pmAssign);
 
         fmUser = new AppUser("fm_user", passwordEncoder.encode("pass"), "FM User");
-        fmUser = users.save(fmUser);
+        fmUser = users.save(inOrganisation(fmUser, org.getId()));
         UserBranch fmAssign = new UserBranch(fmUser.getId(), branch, fmUser.getId());
         fmAssign.markDefault();
         userBranches.save(fmAssign);

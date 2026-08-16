@@ -118,6 +118,7 @@ class PosAgeRestrictionIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("posage_root", passwordEncoder.encode("R00t!Pass1"), "POS Age Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
@@ -156,6 +157,7 @@ class PosAgeRestrictionIT extends PostgresIntegrationTest {
         // Non-root cashier user — BR-PARTY-10 forbids linking root as an internal agent.
         // Must belong to the company (via user_branch) so isActiveUserInCompany passes.
         AppUser cashier = new AppUser("posage_cashier", passwordEncoder.encode("C@sh1Pass"), "POS Cashier");
+        cashier.setOrganisationId(org.getId());
         cashier = users.save(cashier);
         cashierId = cashier.getId();
         userBranches.save(new UserBranch(cashierId, branch, rootId));

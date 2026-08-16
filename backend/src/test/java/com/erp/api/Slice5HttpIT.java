@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -145,14 +146,14 @@ class Slice5HttpIT extends PostgresIntegrationTest {
         // --- ROOT user: assigned to a1 (default). NOT assigned to b1. ---
         rootUser = new AppUser("s5_root", passwordEncoder.encode(ROOT_PASS), "S5 Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssign = new UserBranch(rootUser.getId(), a1, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         // --- Non-root test user: default = a1; secondary = b1. ---
         testUser = new AppUser("s5_user", passwordEncoder.encode(USER_PASS), "S5 User");
-        testUser = users.save(testUser);
+        testUser = users.save(inOrganisation(testUser, org.getId()));
 
         UserBranch userDefaultAssign = new UserBranch(testUser.getId(), a1, rootUser.getId());
         userDefaultAssign.markDefault();

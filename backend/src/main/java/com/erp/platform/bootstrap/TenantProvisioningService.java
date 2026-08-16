@@ -6,12 +6,14 @@ import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.domain.entity.UserBranch;
+import com.erp.modules.iam.domain.entity.UserCompany;
 import com.erp.modules.iam.domain.entity.UserRole;
 import com.erp.modules.iam.repository.AppUserRepository;
 import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.modules.iam.repository.UserCompanyRepository;
 import com.erp.modules.parties.service.WalkInCustomerProvisioner;
 import com.erp.modules.products.service.DefaultPriceListProvisioner;
 import com.erp.modules.sales.service.PosTillProvisioner;
@@ -73,6 +75,7 @@ public class TenantProvisioningService {
     private final BranchRepository branches;
     private final AppUserRepository users;
     private final UserBranchRepository userBranches;
+    private final UserCompanyRepository userCompanies;
     private final PasswordEncoder passwordEncoder;
     private final CompanyProvisioningService companyProvisioning;
     private final StockLocationSeeder stockLocationSeeder;
@@ -93,6 +96,7 @@ public class TenantProvisioningService {
                                      BranchRepository branches,
                                      AppUserRepository users,
                                      UserBranchRepository userBranches,
+                                     UserCompanyRepository userCompanies,
                                      PasswordEncoder passwordEncoder,
                                      CompanyProvisioningService companyProvisioning,
                                      StockLocationSeeder stockLocationSeeder,
@@ -107,6 +111,7 @@ public class TenantProvisioningService {
         this.branches = branches;
         this.users = users;
         this.userBranches = userBranches;
+        this.userCompanies = userCompanies;
         this.passwordEncoder = passwordEncoder;
         this.companyProvisioning = companyProvisioning;
         this.stockLocationSeeder = stockLocationSeeder;
@@ -167,7 +172,38 @@ public class TenantProvisioningService {
                                     * fresh install, for a uniqueness problem a deployment's founding
                                     * account does not have.
                                     */
-                                   boolean composeAdminUsername) {
+                                   boolean composeAdminUsername,
+                                   /**
+                                    * Whether the administrator this creates is the VENDOR's platform
+                                    * operator — i.e. whether it gets {@code is_root}.
+                                    *
+                                    * <p>TRUE for {@code BootstrapRunner} only. {@code rootadmin} on a
+                                    * fresh install IS the platform account and must stay root:
+                                    * {@code is_root} is not settable through any API — the assignment
+                                    * below is the only {@code setRoot} call in the whole application
+                                    * — so a deployment whose founding administrator is not root has
+                                    * no way to ever acquire one.
+                                    *
+                                    * <p>FALSE for every tenant provisioned through
+                                    * {@code POST /api/v1/organisations}. A customer's administrator is
+                                    * not a platform operator, and root is not a degree of authority —
+                                    * it is a bypass. {@code PermissionResolver.hasPermission} returns
+                                    * true for a root principal BEFORE the code is ever compared, so a
+                                    * root tenant administrator effectively holds {@code ORG.CREATE}
+                                    * and {@code ORG.SUSPEND} however carefully
+                                    * {@code R__seed_permissions.sql} withholds the {@code platform}
+                                    * module from {@code ORG_ADMIN} — and can therefore suspend
+                                    * ANOTHER customer's organisation. Their authority comes from the
+                                    * {@code ORG_ADMIN} role instead, which the seed grants every
+                                    * non-{@code platform} permission.
+                                    *
+                                    * <p>Deliberately NOT folded into {@code composeAdminUsername}
+                                    * above. That is a username-FORMAT decision; the two values happen
+                                    * to agree today, and conflating them means the next caller who
+                                    * wants a plain username silently mints a root account, with no
+                                    * compile error and nothing to go red.
+                                    */
+                                   boolean platformRootAdmin) {
     }
 
     /**
@@ -284,7 +320,11 @@ public class TenantProvisioningService {
                 adminUsername,
                 passwordEncoder.encode(request.rawAdminPassword()),
                 request.adminDisplayName());
-        admin.setRoot(true);
+        // ONLY the vendor's platform operator is root. See NewTenantRequest.platformRootAdmin for
+        // why this is a request component rather than an unconditional `true` (deleting the flag
+        // outright would demote `rootadmin` on every fresh install, because bootstrap and the API
+        // share this one method) and for what a root tenant administrator could actually do.
+        admin.setRoot(request.platformRootAdmin());
         // A fresh tenant is otherwise born unattributed: V101's backfill only covers rows that
         // already existed, so the first user of a new tenant would have none (ADR-0062 P2-1).
         admin.setOrganisationId(org.getId());
@@ -294,25 +334,56 @@ public class TenantProvisioningService {
         defaultAssignment.markDefault();
         userBranches.save(defaultAssignment);
 
-        // P4-3 (ADR-0062): give the tenant's administrator ORG_ADMIN as a ROLE, not only the
-        // is_root flag. Additive on purpose - is_root is left exactly as it was, so nothing this
-        // release does can leave a tenant with nobody able to administer it.
+        // The administrator's OWN company membership (ADR-0046). Root used to make this unnecessary;
+        // it is now load-bearing, and its absence is a wall rather than an inconvenience:
+        // UserCompanyServiceImpl.isActiveMember reads user_company and NOTHING else — no root
+        // exemption, no fallback to user_role or user_branch — and both UserRoleServiceImpl.grant
+        // and UserBranchServiceImpl.assign refuse outright without it ("Assign this user to the
+        // company before ..."). So a tenant whose administrator has no membership row cannot assign
+        // ITSELF to a second branch on the morning it opens one.
         //
-        // It matters because of where the model is going: rootadmin becomes the PLATFORM account,
-        // and each tenant gets its own orgadmin. A tenant whose only administrator is is_root has
-        // no administrator at all once that lands, and usernames are never rewritten, so retro-
-        // fitting the grant later means touching every tenant provisioned before the change.
-        // Granting it now costs one row and makes that transition a flag flip.
+        // Today that row appears only when UserCompanyBackfill runs, and that is an ApplicationRunner
+        // — the next restart, which on a customer's box may be weeks away.
         //
-        // A missing ORG_ADMIN row is logged rather than thrown: it is seeded by V1 and cannot be
-        // absent in practice, but failing tenant creation over a missing grant would trade a
-        // complete tenant for none at all.
-        roles.findByCode(ORG_ADMIN_CODE).ifPresentOrElse(
-                orgAdmin -> userRoles.save(new UserRole(
-                        admin.getId(), orgAdmin, company.getId(), branch.getId(), admin.getId())),
-                () -> log.warn("Provisioned tenant {} without an ORG_ADMIN grant: the role is not "
-                        + "seeded. The administrator still has is_root, so the tenant is usable, "
-                        + "but grant it once the seed is repaired.", org.getName()));
+        // Written straight at the repository, NOT through UserCompanyService.ensureMembership: that
+        // method is @Transactional(REQUIRES_NEW), so it would commit a membership for a user this
+        // transaction may still roll away, against the all-or-nothing property this method's javadoc
+        // insists on.
+        userCompanies.save(new UserCompany(admin.getId(), company, admin.getId()));
+
+        // P4-3 (ADR-0062): the tenant's administrator holds ORG_ADMIN as a ROLE. For an
+        // API-provisioned tenant this is now the ONLY thing they hold — the transition this comment
+        // block used to describe as future work has landed, and is_root is no longer the backstop.
+        //
+        // branchId is NULL, i.e. the grant is COMPANY-WIDE. It used to be pinned to the founding
+        // branch, and that is invisible only while is_root papers over it:
+        // UserRoleRepository.resolvePermissionCodes matches `ur.branchId IS NULL OR ur.branchId =
+        // :branchId`, so a branch-pinned administrator resolves the EMPTY permission set the moment
+        // they switch into the second branch they just created. The symptom is not an error message
+        // — it is a blank product, on a customer's second branch, weeks after this shipped.
+        //
+        // A missing ORG_ADMIN row can no longer be logged away for an API-provisioned tenant. The
+        // old justification was "the administrator still has is_root, so the tenant is usable"; with
+        // a non-root administrator, that tenant has no administrator at all, and nothing anywhere
+        // would go red. Fail the whole transaction instead — the method is all-or-nothing on purpose.
+        // Bootstrap keeps the log-and-continue behaviour: its administrator IS root, so the sentence
+        // is still true there, and refusing to start a fresh install over a seed the migration owns
+        // would trade a usable deployment for none.
+        var orgAdminRole = roles.findByCode(ORG_ADMIN_CODE);
+        if (orgAdminRole.isPresent()) {
+            userRoles.save(new UserRole(
+                    admin.getId(), orgAdminRole.get(), company.getId(), null, admin.getId()));
+        } else if (request.platformRootAdmin()) {
+            log.warn("Bootstrapped tenant {} without an ORG_ADMIN grant: the role is not seeded. "
+                    + "The administrator is the platform operator and has is_root, so the "
+                    + "deployment is usable, but grant it once the seed is repaired.", org.getName());
+        } else {
+            log.error("Refusing to provision tenant {}: the ORG_ADMIN role is not seeded, so the "
+                    + "tenant's administrator would hold no permissions at all.", org.getName());
+            // User-facing text carries no internal detail (error-hygiene rule); the cause is above.
+            throw new IllegalStateException(
+                    "The tenant could not be created. Please contact support.");
+        }
 
         log.info("Provisioned tenant: organisation '{}', company '{}', branch '{}', admin '{}'.",
                 org.getName(), company.getCode(), branch.getCode(), admin.getUsername());

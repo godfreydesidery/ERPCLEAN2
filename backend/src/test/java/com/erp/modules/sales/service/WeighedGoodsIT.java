@@ -106,6 +106,7 @@ class WeighedGoodsIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("wgh_root", passwordEncoder.encode("R00t!Pass1"), "Weighed Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
         RequestContext.set(new RequestContext.Principal(

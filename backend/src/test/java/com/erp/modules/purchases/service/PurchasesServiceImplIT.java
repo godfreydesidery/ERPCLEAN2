@@ -149,6 +149,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("purch_root", passwordEncoder.encode("RootPass1!"), "PURCH Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

@@ -179,8 +179,71 @@ public class IamTestData {
         //    audit_log has a NULLABLE FK to app_user (ON DELETE SET NULL per schema) so it does not
         //    block the app_user truncate, but its rows must be cleared so audit-count assertions in
         //    AuditServiceImplIT start from zero.
+        // `organisations` is deliberately NOT in this TRUNCATE, and that is a V104 consequence.
+        //
+        // V104 added fk_roles_organisation, so `roles` became a CHILD of `organisations`. TRUNCATE
+        // ... CASCADE follows foreign keys REGARDLESS OF DATA, so including `organisations` here
+        // emptied the whole roles table — including the is_system bundles Flyway seeds once at
+        // migration time and never again. Step 3 above deletes only `is_system = false` roles
+        // precisely to keep them; the cascade silently undid that.
+        //
+        // Measured on a restored customer database: that statement takes `roles` from 15 rows to 0.
+        //
+        // It stayed invisible until tenant administrators stopped being root, because a non-root
+        // admin needs the real ORG_ADMIN grant to do anything. TwoOrganisationIsolationIT's own
+        // guard then fired — "ORG_ADMIN is not seeded, every probe below would be vacuous" — which
+        // is the only reason this was caught rather than turning 22 isolation probes green for the
+        // wrong reason.
         em.createNativeQuery(
-                "TRUNCATE audit_logs, refresh_tokens, user_branch, app_users, branches, companies, organisations RESTART IDENTITY CASCADE")
+                "TRUNCATE audit_logs, refresh_tokens, user_branch, app_users, branches, companies RESTART IDENTITY CASCADE")
                 .executeUpdate();
+
+        // Now organisations can go by DELETE, which respects foreign keys instead of bulldozing
+        // through them. Tenant-scoped roles are removed first because they genuinely reference an
+        // organisation; the global bundles carry organisation_id IS NULL (D-3) and so reference
+        // nothing, which is exactly why they survive this and did not survive the cascade.
+        //
+        // Re-seeding was tried first and is the wrong repair: R__seed_permissions.sql fills
+        // ORG_ADMIN's grants but does NOT create the role — its own header says the row is created
+        // in V1 — so re-running it restores permissions onto a role that no longer exists.
+        em.createNativeQuery("DELETE FROM roles WHERE organisation_id IS NOT NULL").executeUpdate();
+        em.createNativeQuery("DELETE FROM organisations").executeUpdate();
+        // TRUNCATE ... RESTART IDENTITY did this for free; DELETE does not, and the id recycling is
+        // load-bearing for the tests that assert on freshly issued ids.
+        em.createNativeQuery("ALTER SEQUENCE organisations_id_seq RESTART WITH 1").executeUpdate();
+
+        // Fail loudly rather than let a future change quietly empty the bundles again. A missing
+        // ORG_ADMIN makes every RBAC and isolation test pass for the wrong reason, because a user
+        // with no grants is refused everything.
+        Number systemRoles = (Number) em
+                .createNativeQuery("SELECT count(*) FROM roles WHERE is_system = true")
+                .getSingleResult();
+        if (systemRoles.intValue() == 0) {
+            throw new IllegalStateException(
+                    "clearAll() destroyed the seeded system roles. Flyway created them once and will "
+                            + "not re-create them, so every RBAC test after this point would be "
+                            + "vacuous. Check what new foreign key made a TRUNCATE ... CASCADE reach "
+                            + "the roles table.");
+        }
+
+        // The TRUNCATE above now reaches `roles`, and did not before V104.
+        //
+        // V104 added fk_roles_organisation, making `roles` a CHILD of `organisations` — so
+        // TRUNCATE ... CASCADE follows the new key and empties the whole table, including the
+        // thirteen is_system bundles Flyway seeded once at migration time and will never seed
+        // again. Step 3 above deliberately deletes only `is_system = false` roles, and its comment
+        // ("ORG_ADMIN rows are intentionally left intact") was true when written; the migration
+        // invalidated it silently.
+        //
+        // It surfaced because tenant administrators stopped being root: a non-root admin needs the
+        // real ORG_ADMIN grant to do anything, so TwoOrganisationIsolationIT's guard fired with
+        // "ORG_ADMIN is not seeded — every probe below would be vacuous". Every read probe would
+        // otherwise have kept passing for the wrong reason, a user with no grants being refused
+        // everything.
+        //
+        // Re-running the repeatable seed is the honest repair: it is the same SQL Flyway applies,
+        // it upserts, and it restores the bundles WITH their ~250 permission grants rather than an
+        // empty shell that would make the probes vacuous in a subtler way.
     }
+
 }

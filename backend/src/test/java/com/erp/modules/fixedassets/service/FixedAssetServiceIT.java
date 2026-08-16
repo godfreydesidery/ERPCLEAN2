@@ -110,6 +110,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
         branchId = br.getId();
 
         AppUser user = new AppUser("fa-user", passwordEncoder.encode("Password1234"), "FA User");
+        user.setOrganisationId(org.getId());
         users.save(user);
 
         RequestContext.set(new RequestContext.Principal(user.getId(), "fa-user", false, companyId, branchId, null));

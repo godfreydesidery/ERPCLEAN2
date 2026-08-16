@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -107,12 +108,14 @@ class PettyCashIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("pc_root", passwordEncoder.encode(ROOT_PASS), "PC Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("pc_plain", passwordEncoder.encode(PLAIN_PASS), "PC Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();
@@ -277,8 +280,8 @@ class PettyCashIT extends PostgresIntegrationTest {
         Organisation org2 = organisations.save(new Organisation("PC IT Org 2"));
         Company company2  = companies.save(new Company(org2, "PCIT2", "PC IT Co 2"));
         Branch branch2    = branches.save(new Branch(company2, "PCIT2B", "PC IT Branch 2"));
-        AppUser nonRoot = users.save(new AppUser(
-                "pc_nonroot", passwordEncoder.encode("Pass1!"), "PC NonRoot"));
+        AppUser nonRoot = users.save(inOrganisation(new AppUser(
+                "pc_nonroot", passwordEncoder.encode("Pass1!"), "PC NonRoot"), org2.getId()));
 
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "pc_nonroot", false, company2.getId(), branch2.getId(), null));

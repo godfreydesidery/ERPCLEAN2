@@ -86,6 +86,7 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("rcn_root", passwordEncoder.encode("RootPass1!"), "RCN Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 
