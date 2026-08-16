@@ -88,6 +88,24 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// fix what was wrong and try again.
   String? _rejection;
 
+  /// Whatever the server said, on an outcome we could NOT classify as a definite
+  /// refusal — kept as supporting detail beneath the ambiguous banner, never in
+  /// place of it.
+  ///
+  /// This used to be discarded. A sale that fails a business rule the server has
+  /// no definite verdict for (an unpriced line, most commonly) arrives as a plain
+  /// 400, which [PosSaleFlowStatus.resolve] maps to `unknown` — so the till showed
+  /// "no answer from the ERP, press Retry" while the response body carried an
+  /// exact explanation. Retrying can never succeed, and nobody at the counter can
+  /// see why. That cost a customer a morning of a dead till.
+  ///
+  /// The classification is deliberately left alone: only the server may claim
+  /// nothing was written, and treating an unrecognised 4xx as definite is what
+  /// once produced a second invoice. So the cashier still reads "press Retry — it
+  /// is safe". This only stops the reason being invisible to whoever is called
+  /// over to look at it.
+  String? _serverDetail;
+
   /// True when a refusal COULD be about an unapproved discount, so offering the
   /// manager-approval path is worth doing. The threshold itself is the server's
   /// business (it is company policy and the till is never told what it is) —
@@ -262,6 +280,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       _busy = true;
       _ambiguous = false;
       _rejection = null;
+      _serverDetail = null;
       _offerDiscountApproval = false;
     });
     final pendingStore = ref.read(pendingSaleStoreProvider);
@@ -362,6 +381,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       _busy = false;
       _ambiguous = undecided;
       _rejection = undecided ? null : e.message;
+      // Keep the server's own words either way. When the outcome is undecided the
+      // banner above still leads with "press Retry"; this only preserves the
+      // explanation that used to be dropped on the floor.
+      _serverDetail = undecided ? e.message : null;
       _offerDiscountApproval = canApprove;
     });
     if (status == PosSaleFlowStatus.staleReplay) {
@@ -416,6 +439,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     }
     setState(() {
       _rejection = null;
+      _serverDetail = null;
       _offerDiscountApproval = false;
     });
     showToast(context, 'Approved by ${approval.approverLabel}.', ok: true);
@@ -533,6 +557,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           if (_ambiguous) ...[
             const SizedBox(height: 10),
             _ambiguousBanner(),
+            if (_serverDetail != null && _serverDetail!.trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _serverDetailNote(_serverDetail!),
+            ],
           ],
           if (_rejection != null) ...[
             const SizedBox(height: 10),
@@ -673,6 +701,34 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         style: TextStyle(
             color: AppColors.warn, fontSize: 12.5, fontWeight: FontWeight.w600),
       ),
+    );
+  }
+
+  /// The server's own words, under the ambiguous banner — supporting detail, in a
+  /// quieter voice, never the headline.
+  ///
+  /// Deliberately NOT styled as an error and deliberately second. The cashier's
+  /// instruction is still "press Retry", because the outcome really is unknown and
+  /// retrying under the same key is still the safe move. This line is for the
+  /// person called over when retrying keeps failing: without it they see only
+  /// "no answer from the ERP" and start looking at the network, when the response
+  /// said something as specific as "this product has no price yet".
+  Widget _serverDetailNote(String message) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1, right: 6),
+          child: Icon(Icons.info_outline, size: 13, color: AppColors.ink2),
+        ),
+        Expanded(
+          child: Text(
+            'The ERP said: $message',
+            style: const TextStyle(
+                color: AppColors.ink2, fontSize: 11.5, height: 1.35),
+          ),
+        ),
+      ],
     );
   }
 

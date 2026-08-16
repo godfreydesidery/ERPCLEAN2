@@ -326,7 +326,23 @@ public class PosSaleServiceImpl implements PosSaleService {
             return invoiceService.getByUid(invoiceUid);
         } catch (PosSaleFlowException ex) {
             throw ex;
-        } catch (ConflictException | IllegalStateException ex) {
+        } catch (ConflictException | IllegalStateException | IllegalArgumentException ex) {
+            // IllegalArgumentException joins the other two because of what the till does with the
+            // difference. This whole method is one transaction, so ANY exception escaping here means
+            // nothing was written — and REJECTED is precisely the verdict "nothing was written, act
+            // on the message". Without it a validation refusal left as a bare 400, which
+            // PosSaleFlowStatus.resolve maps to `unknown`, i.e. "we cannot tell whether this sale
+            // went through — press Retry."
+            //
+            // That is the wrong instruction twice over: the sale can never succeed however many
+            // times it is retried, and the response body already carried the exact reason
+            // ("This product has no price yet..."), which the till discards on an undecided outcome.
+            // A shop lost a morning to that loop on 2026-08-16 — the price existed, the line rang at
+            // 0.00, and the banner blamed the network.
+            //
+            // The line-pricing path throws IllegalArgumentException (PriceResolutionServiceImpl's
+            // NO_PRICE and UNIT_NOT_APPLICABLE), so this is its natural home rather than a special
+            // case for pricing alone.
             throw PosSaleFlowException.rejected(ex.getMessage(), refusalCodeOf(ex));
         }
     }

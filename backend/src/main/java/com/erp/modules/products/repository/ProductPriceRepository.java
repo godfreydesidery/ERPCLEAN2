@@ -34,4 +34,18 @@ public interface ProductPriceRepository extends JpaRepository<ProductPrice, Long
 
     /** The per-unit price row for a product/unit, regardless of price list — first wins (see above). */
     Optional<ProductPrice> findFirstByProductIdAndUnitIdOrderByIdAsc(Long productId, Long unitId);
+
+    /**
+     * Whether this product carries ANY price row, on any price list, base or per-unit.
+     *
+     * <p>Used by {@code ProductServiceImpl.updateByUid} to refuse a base-unit change while prices
+     * exist: a price amount is per unit, so the stored number silently changes meaning under a new
+     * base unit, and the row also stops being reachable by the resolver.
+     *
+     * <p>Deliberately an existence check rather than {@code findByProductId(...).isEmpty()} — the
+     * rows are never read, only counted, and a product on many price lists should not be loaded to
+     * answer a yes/no. It is company-safe despite taking no companyId: the caller has already loaded
+     * the product through a company-scoped finder, so the id cannot address another tenant's row.
+     */
+    boolean existsByProductId(Long productId);
 }
