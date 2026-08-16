@@ -22,6 +22,7 @@ import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.hr.service.LeaveTypeSeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
@@ -46,6 +47,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CompanyProvisioningServiceImplTest {
 
+    @Mock CodeSequenceSeeder     codeSequenceSeeder;
     @Mock UnitOfMeasureSeeder    unitSeeder;
     @Mock TaxRateSeeder          taxRateSeeder;
     @Mock SalesSettingsSeeder    salesSettingsSeeder;
@@ -63,6 +65,7 @@ class CompanyProvisioningServiceImplTest {
     @Mock CrmStageSeeder         crmStageSeeder;
     @Mock HrGlSeeder             hrGlSeeder;
     @Mock HrStatutorySeeder      hrStatutorySeeder;
+    @Mock LeaveTypeSeeder        leaveTypeSeeder;
     @Mock NotificationTypeSeeder notificationTypeSeeder;
     @Mock ManufacturingGlSeeder  manufacturingGlSeeder;
     @Mock CurrencyEnablementSeeder currencyEnablementSeeder;
@@ -76,8 +79,13 @@ class CompanyProvisioningServiceImplTest {
                 unitSeeder, taxRateSeeder, salesSettingsSeeder, chartOfAccountService, fiscalCalendarService,
                 glConfigService, arGlSeeder, apGlSeeder, cashBankSeeder, pettyCashFundSeeder,
                 inventoryGlSeeder, documentBrandingSeeder, fixedAssetGlSeeder, dimensionSeeder,
-                crmStageSeeder, hrGlSeeder, hrStatutorySeeder, notificationTypeSeeder,
-                manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder);
+                crmStageSeeder, hrGlSeeder, hrStatutorySeeder,
+                // P5-5: moved here from TenantProvisioningService, which covered a tenant's
+                // FIRST company only — a second company got no leave types at all.
+                leaveTypeSeeder, notificationTypeSeeder,
+                manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder,
+                // P5-6: provisioning now seeds the document-number sequences up front.
+                codeSequenceSeeder);
     }
 
     @Test
@@ -104,6 +112,7 @@ class CompanyProvisioningServiceImplTest {
         verify(crmStageSeeder, times(1)).seedDefaults(companyId);
         verify(hrGlSeeder, times(1)).seedDefaults(companyId);
         verify(hrStatutorySeeder, times(1)).seedDefaults(companyId);
+        verify(leaveTypeSeeder, times(1)).seedDefaults(companyId);
         verify(notificationTypeSeeder, times(1)).seedDefaults(companyId);
         verify(manufacturingGlSeeder, times(1)).seedDefaults(companyId);
         verify(currencyEnablementSeeder, times(1))
@@ -136,6 +145,34 @@ class CompanyProvisioningServiceImplTest {
         service.provisionDefaults(7L, "KES", "KES", enabled);
 
         verify(currencyEnablementSeeder).seedDefaults(7L, "KES", "KES", enabled);
+    }
+
+    /**
+     * The heal path creates no price list, no walk-in customer and no POS till — and it cannot,
+     * because it holds no collaborator that could.
+     *
+     * <p>{@code provisionDefaults} is reached from {@code CompanyServiceImpl.reprovisionDefaults},
+     * the {@code POST .../provision-defaults} endpoint, which runs against companies that have
+     * traded for years. Those three are built from values a human supplies on the tenant-creation
+     * request, so there is nothing here for a heal to seed; keeping them out means a live company
+     * has no row to be idempotent about. {@code TenantOnlyProvisionersTest} enforces the same thing
+     * across the whole codebase — this asserts it at the one place someone would be tempted to add
+     * them.
+     */
+    @Test
+    void provisionDefaults_holdsNoRequestDrivenProvisioner() {
+        var collaborators = java.util.Arrays.stream(
+                        CompanyProvisioningServiceImpl.class.getDeclaredConstructors()[0]
+                                .getParameterTypes())
+                .map(Class::getSimpleName)
+                .toList();
+
+        org.assertj.core.api.Assertions.assertThat(collaborators)
+                .as("a price-list / walk-in-customer / till provisioner wired in here would fire on "
+                        + "the heal endpoint, against a live customer's companies. Create them on "
+                        + "the tenant path instead.")
+                .doesNotContain("DefaultPriceListProvisioner", "WalkInCustomerProvisioner",
+                        "PosTillProvisioner");
     }
 
     @Test

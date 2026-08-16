@@ -85,9 +85,18 @@ public class BootstrapRunner implements ApplicationRunner {
         var provisioned = tenantProvisioning.provision(new TenantProvisioningService.NewTenantRequest(
                 props.organisationName(), props.timeZone(),
                 props.companyCode(), props.companyName(),
+                // Legal name, TIN, VRN: bootstrap asks for none of them and creates none of them.
+                // A fresh install must produce exactly what it produced before these components
+                // existed — this is the ONE path no test environment ever executes (it runs only on
+                // an empty database), so the customer is the first to run it, and that property has
+                // already cost two live outages. Deliberately not wired to new ERP_BOOTSTRAP_* keys.
+                null, null, null,
                 props.branchCode(), props.branchName(),
                 props.adminUsername(), props.adminPassword(), props.adminDisplayName(),
                 ccy.effectiveBase(), ccy.effectiveDefault(), ccy.effectiveEnabled(),
+                // Price-list code + name + VAT stance, walk-in customer, till: likewise none. The
+                // first tenant's administrator creates them from the shipped screens.
+                null, null, null, null, null,
                 false));   // bootstrap admin stays PLAIN — INSTALL.md promises 'always rootadmin'
 
         log.info("Bootstrap complete: organisation '{}', company '{}', branch '{}', root admin '{}'.",

@@ -52,6 +52,8 @@ import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
+import static com.erp.support.TenantFixtures.inOrganisation;
+
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
@@ -121,6 +123,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         branchA = branches.save(new Branch(companyA, "SL-A1", "Sales Branch A1"));
 
         AppUser root = new AppUser("sales_root", passwordEncoder.encode("RootPass1!"), "Sales Root");
+        root.setOrganisationId(org.getId());
         root.setRoot(true);
         root = users.save(root);
         rootId = root.getId();
@@ -621,7 +624,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "SLCX", "Sales Co X"));
         Branch branchB = branches.save(new Branch(companyB, "SL-X1", "Sales Branch X1"));
         AppUser userB = users.save(
-                new AppUser("user_b_sl", passwordEncoder.encode("Pass1!"), "User B"));
+                inOrganisation(new AppUser("user_b_sl", passwordEncoder.encode("Pass1!"), "User B"), org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 userB.getId(), "user_b_sl", false, companyB.getId(), branchB.getId(), null));
 
@@ -633,7 +636,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     void list_crossCompany_throwsForbidden() {
         Company companyB = companies.save(new Company(org, "SLCY", "Sales Co Y"));
         AppUser userA = users.save(
-                new AppUser("user_a_sl", passwordEncoder.encode("Pass1!"), "User A"));
+                inOrganisation(new AppUser("user_a_sl", passwordEncoder.encode("Pass1!"), "User A"), org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 userA.getId(), "user_a_sl", false, companyA.getId(), branchA.getId(), null));
 
@@ -649,7 +652,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "SLCZ", "Sales Co Z"));
         Branch branchB = branches.save(new Branch(companyB, "SL-Z1", "Sales Branch Z1"));
         AppUser userB = users.save(
-                new AppUser("user_bz_sl", passwordEncoder.encode("Pass1!"), "User BZ"));
+                inOrganisation(new AppUser("user_bz_sl", passwordEncoder.encode("Pass1!"), "User BZ"), org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 userB.getId(), "user_bz_sl", false, companyB.getId(), branchB.getId(), null));
 
@@ -667,7 +670,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "SLCW", "Sales Co W"));
         Branch branchB = branches.save(new Branch(companyB, "SL-W1", "Sales Branch W1"));
         AppUser userB = users.save(
-                new AppUser("user_bw_sl", passwordEncoder.encode("Pass1!"), "User BW"));
+                inOrganisation(new AppUser("user_bw_sl", passwordEncoder.encode("Pass1!"), "User BW"), org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 userB.getId(), "user_bw_sl", false, companyB.getId(), branchB.getId(), null));
 
@@ -822,7 +825,7 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     void listTaxRates_crossCompany_throwsForbidden() {
         Company companyB = companies.save(new Company(org, "SLCT", "Sales Co T"));
         AppUser userA = users.save(
-                new AppUser("user_at_sl", passwordEncoder.encode("Pass1!"), "User AT"));
+                inOrganisation(new AppUser("user_at_sl", passwordEncoder.encode("Pass1!"), "User AT"), org.getId()));
         RequestContext.set(new RequestContext.Principal(
                 userA.getId(), "user_at_sl", false, companyA.getId(), branchA.getId(), null));
 
@@ -905,7 +908,11 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> salesInvoiceService.addLine(draft.uid(),
                 new AddInvoiceLineRequest(unpricedProd.uid(), pcsUid, new BigDecimal("1"), null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("no price configured");
+                // Reworded by e7cc963d (2026-08-12) from "no price configured" to name the cause
+                // and the remedy. Asserting on the substring that still carries the meaning — that
+                // the rejection is about price — rather than on the whole sentence, which is user
+                // copy and will be reworded again.
+                .hasMessageContaining("no price");
     }
 
     // -----------------------------------------------------------------------

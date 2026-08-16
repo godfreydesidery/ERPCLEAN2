@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.documents.domain.entity.DocumentBranding;
 import com.erp.modules.documents.service.DocumentModelBuilder;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintLineDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
@@ -30,7 +31,10 @@ import org.junit.jupiter.api.Test;
  */
 class GoodsReceiptNoteLayoutTest {
 
-    private final DocumentModelBuilder builder = new DocumentModelBuilder(new ObjectMapper());
+    // The repository is only consulted when the branding row's TIN is blank, and this fixture's is
+    // not — a mock that is never called keeps the layout assertions about the layout.
+    private final DocumentModelBuilder builder =
+            new DocumentModelBuilder(new ObjectMapper(), org.mockito.Mockito.mock(CompanyRepository.class));
     private final DocumentPdfRenderer  renderer = new DocumentPdfRenderer();
 
     // -------------------------------------------------------------------------

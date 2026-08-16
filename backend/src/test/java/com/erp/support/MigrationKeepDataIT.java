@@ -43,10 +43,27 @@ class MigrationKeepDataIT extends PostgresIntegrationTest {
         }
 
         // 1) Migrate the isolated schema up to V9 (the state before GL/V10).
+        //
+        // repeatableSqlMigrationPrefix: Flyway runs REPEATABLE migrations in every migrate() call,
+        // including a version-targeted one — so without this, `target("9")` applies V1..V9 and then
+        // immediately runs today's R__seed_permissions.sql against a V9-era schema. The seed is
+        // authored against HEAD: its role upsert needs roles.organisation_id (added V99) and infers
+        // the partial index uq_role_code_global (created V102), so at V9 it dies with
+        // 42703 "column organisation_id does not exist" and this test never reaches the behaviour it
+        // exists to check. Renaming the prefix for THIS STEP ONLY means Flyway does not recognise
+        // R__*.sql as a migration at all here; the second migrate below is left entirely on defaults,
+        // so the seed still runs — last, after V103, onto a schema that already holds the
+        // organisation + company inserted in step 2. That is exactly the real upgrade path.
+        //
+        // NOTE for future authors: R__seed_permissions.sql is the ONLY repeatable in the tree today,
+        // so this suppresses nothing else. If a second repeatable is ever added that must run BEFORE
+        // V10, it would be silently skipped here and this line has to be revisited. Likewise any new
+        // targeted migrate below the seed's floor (V102) will fail the same way.
         Flyway.configure()
                 .dataSource(url, user, pass)
                 .schemas(SCHEMA).defaultSchema(SCHEMA)
                 .locations("classpath:db/migration")
+                .repeatableSqlMigrationPrefix("NO_REPEATABLES_IN_THIS_STEP__")
                 .target("9")
                 .load()
                 .migrate();

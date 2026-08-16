@@ -46,6 +46,10 @@
                 <includeMdcKeyName>username</includeMdcKeyName>
                 <includeMdcKeyName>companyId</includeMdcKeyName>
                 <includeMdcKeyName>branchId</includeMdcKeyName>
+                <!-- P8-3 (ADR-0062): the filter has populated organisationId in the MDC since P2,
+                     but it was never listed here - so support could not filter a log stream to one
+                     customer, which was the entire point of putting it in the MDC. -->
+                <includeMdcKeyName>organisationId</includeMdcKeyName>
             </encoder>
         </appender>
 

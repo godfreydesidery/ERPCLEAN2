@@ -201,3 +201,43 @@ route module.
 
 **Key files:** stock location model (van type), `StockTransfer*`, route-sales issue path, new
 van-reconciliation service + web screen.
+
+---
+
+## D-9 · The installer's password lottery — 1 fresh install in 33 hangs for 15 minutes
+
+**Deferred:** 2026-08-15 (owner: "skip them, we will fix them when we have time"). **Effort:** XS.
+**Needs:** nothing — two lines in two shipped scripts, plus one line of documentation. No schema, no ADR.
+
+**The gap.** `install.sh:352-356` draws the first administrator's password as 20 characters from
+`A-Za-z0-9` **with no guarantee of a digit**. `PasswordPolicy.validate` rejects a digit-free password
+and `BootstrapRunner` calls it, so the application throws `WeakPasswordException` at startup and
+crash-loops. `install.ps1:275-282` (`New-Secret`) uses the identical alphabet, so Windows is equally
+exposed.
+
+**Measured, not estimated:** 3,000 draws produced **91 digit-free — 3.03%**, against a theoretical
+`(52/62)^20 = 2.97%`. Roughly one install in thirty-three.
+
+**Why it is worse than a retry.** `container_health()` (`orbixerp.sh:134-142`) reports `stopped` only
+when the container status is not `running` — a container crash-looping under `restart: unless-stopped`
+reads as `running`, so `wait_healthy`'s fast-fail branch never fires. The install **burns the full
+900 s** and dies with *"The system did not become ready within 15 minutes"*, a message that names
+nothing. The schema is fully migrated and `organisations` is 0, so it is recoverable by putting a
+password containing a digit in `.env` and restarting — but nothing tells the customer that.
+
+**The documentation currently points the wrong way.** `dist/bundle/docs/TROUBLESHOOTING.md` covers
+that exact message and attributes it to slow disk or insufficient memory, advising more RAM. For this
+case that advice is wrong, and following it means retrying the install while the real cause sits in
+the API log.
+
+**Way forward (outline).** Make the generator guarantee at least one digit and one letter (draw, test,
+redraw — or compose deterministically), in both scripts. Separately, make `container_health()` treat a
+climbing restart count as unhealthy so the installer fails in seconds with the real error rather than
+after fifteen minutes with none. Add the triage line to TROUBLESHOOTING.md.
+
+**Triage rule until then.** If an install hangs 15 minutes and dies, grep the API log for
+`Password must contain letters and at least one number` **before** suspecting a migration regression.
+
+**Key files:** `dist/bundle/install.sh`, `dist/bundle/install.ps1`, `dist/bundle/orbixerp.sh`
+(`container_health`), `dist/bundle/docs/TROUBLESHOOTING.md`. Full evidence:
+[`docs/ops/fresh-install-rehearsal.md`](ops/fresh-install-rehearsal.md).

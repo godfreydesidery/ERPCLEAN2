@@ -64,4 +64,34 @@ class TenantScopingRulesTest {
 
         FreezingArchRule.freeze(rule).check(CLASSES);
     }
+
+    /**
+     * The same confused-deputy shape, one method along: {@code existsById} (ADR-0062 P7-3).
+     *
+     * <p>The frozen rule above catches {@code findById}/{@code getReferenceById} — the calls that
+     * hand back a row. {@code existsById} hands back a boolean, which reads as harmless and is not:
+     * services use it to VALIDATE a foreign key before writing it, so a bare one answers "this id
+     * exists somewhere" when the question was "this id is mine". That is exactly the defect fixed in
+     * {@code EmployeeServiceImpl} (P7-4), where a branch was accepted because it existed on the
+     * estate rather than in the caller's company.
+     *
+     * <p>Deliberately NOT frozen. The freeze store exists because ~200 legitimate by-id lookups
+     * predate the rule; there is no such backlog here — P7-4 removed the only offender — so this
+     * starts clean and stays clean. Freezing it would grandfather the next one in silently.
+     */
+    @Test
+    void servicesMustNotValidateForeignKeysWithBareExistsById() {
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..service..")
+                .should().callMethodWhere(DescribedPredicate.describe(
+                        "call existsById on a Spring Data repository",
+                        call -> call.getTarget().getName().equals("existsById")
+                                && call.getTarget().getOwner().isAssignableTo(Repository.class)))
+                .as("services must validate a foreign key with a company-scoped finder "
+                        + "(existsByIdAndCompanyId / existsByIdAndCompany_Id), not a bare existsById "
+                        + "— a bare one proves the row exists SOMEWHERE, not that it belongs to the "
+                        + "caller, and a database foreign key will accept another tenant's id");
+
+        rule.check(CLASSES);
+    }
 }

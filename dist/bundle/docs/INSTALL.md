@@ -204,19 +204,37 @@ If colleagues cannot reach that address, see
 
 ---
 
-## 6. Set up backups — do this on day one
+## 6. Backups — half of this is already done
+
+**The installer has scheduled a backup every night at 02:00.** You do not need to set that
+up, and the summary it printed says so. Two things are still worth doing today.
+
+### Check it exists
+
+```bash
+crontab -l                                          # Linux / macOS
+Get-ScheduledTask -TaskPath '\OrbixERP\'            # Windows
+```
+
+You should see one OrbixERP entry. If the installer said it could **not** schedule the
+backup — on Windows this happens when it was not started as an administrator — it printed
+exactly what to do instead. Go back and do that now; it is the difference between having
+backups and intending to.
+
+Take one straight away as well, so you have seen it work:
 
 ```bash
 ./orbixerp.sh backup           # Linux / macOS
 .\orbixerp.ps1 backup          # Windows
 ```
 
-This writes a file into the `backups` folder. **Copy that folder somewhere else** — another
-computer, an external drive, or cloud storage. A backup that only exists on the same machine
-does not protect you from that machine failing.
+### Arrange to get them off this machine — nothing does this for you
 
-Three things must be backed up **together**, or you will have a database you cannot sign
-into:
+The schedule writes backups to this machine's own disk, and stops there. A backup on the
+computer that failed is not a backup. Set up a copy to another computer, a NAS, cloud
+storage, or an external drive that physically leaves the building.
+
+Three things must be copied **together**, or you will have a database you cannot sign into:
 
 ```
 backups/     the data
@@ -224,7 +242,12 @@ backups/     the data
 secrets/     the sign-in security keys
 ```
 
-[OPERATIONS.md](OPERATIONS.md) explains how to schedule this automatically.
+> If this system is **shared with another organisation**, do not copy these yourself — the
+> file contains their data as well as yours. See *When the system is shared by more than one
+> organisation* in [OPERATIONS.md](OPERATIONS.md).
+
+[OPERATIONS.md](OPERATIONS.md) explains how to change the time, check the schedule is still
+running, and restore.
 
 ---
 

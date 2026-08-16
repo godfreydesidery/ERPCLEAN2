@@ -181,6 +181,30 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         // the caller asked for (the order the batch statuses were specified in).
         Optional<ProductPrice> baseRow =
                 productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productId);
+
+        // A base price is SUPPOSED to live on the NULL row — resolvePriceUnit coerces a base-unit uid
+        // to null on every write (ADR-0048 D-1). But a row can end up keyed on the base unit id
+        // anyway: it was written against a PACK unit, correctly, and the product's base unit was
+        // later changed to that same unit. The row never moved.
+        //
+        // Such a row is then invisible here, and invisible in the worst way. Step 1 above skips the
+        // explicit per-unit lookup PRECISELY because the caller asked for the base unit, and this
+        // step only looks for NULL — so the price falls between the two branches. The back office
+        // lists it, the till prices the line at nothing, and no error is raised anywhere. A shop
+        // lost a morning to it on 2026-08-16 with a 20,000 TZS price sitting on the screen.
+        //
+        // Read-side tolerance rather than a data migration: it heals the rows in place, on every
+        // install, without anyone first having to work out which products are affected — and
+        // rewriting live price rows to repair a read is the more dangerous of the two options.
+        // ProductServiceImpl.updateByUid now refuses the base-unit change that creates this shape,
+        // so what remains is the rows that already drifted.
+        //
+        // The NULL row still wins when both exist, so correctly-keyed data behaves identically.
+        if (baseRow.isEmpty()) {
+            baseRow = productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(
+                    productId, product.getBaseUnit().getId());
+        }
+
         if (baseRow.isEmpty()) {
             return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
         }

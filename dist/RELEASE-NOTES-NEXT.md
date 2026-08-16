@@ -1,74 +1,97 @@
-### Fixes a problem introduced in 1.8.0
+### Backups are now taken automatically, every night
 
-If you installed 1.8.0 and the system would not start, this release contains the fix. A check added
-in 1.8.0 to keep role names tidy was too strict and rejected the system's own start-up housekeeping,
-so the application restarted over and over instead of coming up.
+Until now the installer created a `backups` folder and the guides asked you to set up a nightly
+backup yourself, in cron or Task Scheduler. **The installer now does it** — a backup every night at
+02:00, into the same folder as before.
 
-If we applied a correction directly to your database to get you running again, this release makes
-that correction permanent — installing it changes nothing further for you.
+You can move it or turn it off by running the installer again with `--backup-time 03:30` /
+`-BackupTime 03:30`, or `--no-schedule` / `-NoSchedule`. Running it again replaces the schedule
+rather than adding a second one.
 
-Two related problems were fixed at the same time. Neither has affected you, but both could have:
+Two things worth knowing:
 
-- If one of your own role names happened to match one of the standard role names supplied with
-  OrbixERP, the same housekeeping would have stopped the system starting. It now leaves that role
-  alone, writes a note in the log naming it, and starts normally. Rename the role and it is picked
-  up automatically on the next start.
-- The check itself has been corrected so it compares a role against *other* roles, rather than
-  against itself.
+- **On Windows, adding a scheduled task usually needs administrator rights.** If Setup was not
+  started with "Run as administrator", it now says so plainly and prints exactly what to do,
+  instead of failing quietly. The system itself installs and runs either way.
+- **Nothing copies backups off the machine.** That part is still yours to arrange, and a backup on
+  the computer that failed is not a backup. OPERATIONS.md says more.
 
-### Your administrator can now hand out the standard job roles
+### Old backups are cleaned up properly
 
-The twelve standard roles that ship with OrbixERP — Cashier, Salesperson, Accountant, Storekeeper,
-Procurement Officer and the rest — could not previously be given to anyone by your own
-administrator. Only we could. In practice that meant either waiting for us, or someone being made a
-full system owner just so they could get on with their work.
+Backups used to be deleted after 14 days — but only the ordinary ones. Two other kinds were never
+cleaned up at all, and one important kind was deleted too soon:
 
-Your administrator can now assign any of those roles to your staff directly, with one limit that
-matters: **they can only give away what they hold themselves.** Someone who cannot post to the
-general ledger cannot grant that ability to anybody else. Nobody can promote themselves.
+- The copy taken automatically **before an upgrade** — the only way to undo one — was thrown away
+  after 14 days. It is now kept for 90.
+- The copy taken automatically **before a restore** was never deleted at all, and built up for ever.
+  It is now kept for 30 days.
 
-### The last administrator can no longer be removed by accident
+There are also new limits so the folder can never fill the disk, and a floor so it can never empty
+itself: at least the 7 newest backups are always kept, whatever their age. All of it is adjustable
+in `.env`, and the settings are listed in OPERATIONS.md.
 
-Removing the administrator role from the only person who has it used to be allowed. It left nobody
-able to add a user, grant a role or undo the mistake — and the only way back was for us to repair it
-directly in the database.
+### Backups fail more safely
 
-That is now refused, with a message explaining why. Give someone else the administrator role first,
-then remove it from the original person.
+- If a backup fails part-way, the incomplete file is now **deleted**. Before, it stayed in the
+  folder looking exactly like a good backup — and could have been chosen to restore from.
+- A backup now refuses to start if the disk is too full to finish, rather than running out of space
+  half-way through.
 
-### Approval attempts at the till
+### Restoring the right file
 
-When a cashier asks a supervisor to approve something — a discount, a price override — and the
-supervisor's password is correct but they are **not allowed** to approve that particular action,
-that attempt now counts towards the same short cool-down as a wrong password.
+If you restored a backup from a USB drive or another folder, and a file of the same name already
+existed in `backups`, the system restored **that** one instead — and said it had succeeded. It now
+always restores the file you named.
 
-This closes a gap. Previously those attempts were unlimited, which meant someone could stand at a
-till and check a colleague's password over and over without ever being locked out.
+The restore also warns, before it starts, that it replaces the whole database — which matters on a
+system shared by more than one organisation, where it takes everybody back, not just you.
 
-The message on screen is unchanged and still tells the operator plainly that the person is not
-allowed to approve the action — it does not pretend the password was wrong.
+### One correction in the guides
 
-### Withdrawn branch access now takes effect properly
+The instructions for moving to another machine said to stop the system and then take a backup. That
+cannot work: the backup reads the database through the running system. It now says to back up
+first, then stop.
 
-If a user's access to a branch is withdrawn, they could still switch their session into that branch.
-They were then refused the branch's reports, which looked like a broken screen rather than a
-withdrawn permission. Withdrawn access is now honoured at the point of switching.
+### Standing orders now actually run
 
-We checked your live system before making this change: **no branch access has been withdrawn on your
-installation**, so nobody currently working is affected.
+Standing orders have never generated anything — on any version, since the feature shipped. The
+nightly job that creates them ran with no signed-in user behind it, was refused by the system's own
+permission check, and the failure was written to a log nobody reads. Nothing appeared, and nothing
+said why.
 
-### Branch switching appears in the audit trail
+If you have never used standing orders, nothing changes for you. If you set one up in the past and
+quietly gave up on it, it will work now.
 
-Moving between branches was not recorded anywhere. Where the move crosses from one company to
-another it is now written to the audit trail, with who did it and when.
+### The system can no longer be shut down by accident
 
-### Removing a system owner now takes effect immediately
+An administrator could suspend the organisation they were signed in to — which locked out everyone,
+including the administrator, with no way back in through the product. Recovering from it needed us to
+work directly on your database.
 
-If someone's system-owner status is removed, it previously stayed in force until their existing
-sign-in expired — up to fifteen minutes. It now applies on their next action.
+That is now refused with a plain message. As a second safeguard, if it ever happens by some other
+route, the system owner can still sign in and undo it.
 
-### Groundwork you will not see
+### Employee records are properly checked against your company
 
-Most of this release is preparation for running several separate businesses on one installation.
-None of it changes anything on a single installation like yours: the same screens, the same data,
-the same numbers. It is mentioned only so the update log makes sense if you look at it.
+When adding an employee, the branch and the linked user account are now verified to belong to your
+company before the record is saved. Previously the branch was only checked to exist somewhere, and
+the user account was not checked at all.
+
+### Background jobs no longer queue behind one another
+
+Scheduled work — sending notifications, the nightly standing-order run, and the background dispatcher
+— all shared a single worker. A slow job delayed the rest; the hourly notification scan walks through
+every company in turn, and while it ran the nightly order run could not start. They now run on four
+workers.
+
+### Adding a user shows the full username
+
+When you add a user, the form now shows the full username that will be created, including your
+organisation's suffix, before you save. Give the new person that full name — it is what they type to
+sign in. Previously the form showed only the part you typed, so it was easy to hand out a name that
+would not work.
+
+### Support diagnostics
+
+Log entries now carry the organisation, so a support question can be traced without sifting through
+unrelated activity. Nothing on screen changes.

@@ -121,8 +121,13 @@ com.erp
 ## 6. Audit
 - An **audit aspect** writes `audit_log` rows for IAM-significant actions (user/role/branch changes,
   default-branch change, password reset, lockout/unlock, login success/failure) — written by the
-  aspect, not the calling code, so it can't be forgotten (FR-IAM-23). Append-only; the deploy grants
-  the app DB role no UPDATE/DELETE on `audit_log` (US-IAM-010 AC2).
+  aspect, not the calling code, so it can't be forgotten (FR-IAM-23). **Append-only, enforced by the
+  application**: `AuditService` declares no update or delete, `AuditLog` exposes getters only, and the
+  implementation persists a transient entity once — which is what US-IAM-010 AC2 asks for ("cannot be
+  edited or deleted *through the application*"). This previously claimed the deploy revokes
+  UPDATE/DELETE from the app DB role; that revoke was never applied on any estate, and applying it
+  would change nothing, because the runtime role is superuser or schema owner in every shipped
+  topology (verified on the live client 2026-08-14, corrected 2026-08-15).
 
 ## 7. API conventions
 - Base path `/api/v1`. Entity routes by uid: `/api/v1/<resource>/uid/{uid}`.

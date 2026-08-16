@@ -197,12 +197,38 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         log.info("StandingOrder scheduler: {} due order(s) for {}", due.size(), today);
         for (var standing : due) {
             try {
+                // P8-6 (ADR-0062). This sweep runs on the SCHEDULER thread, where RequestContext is
+                // empty — so SalesOrderServiceImpl's assertCanActIn was handed a null principal,
+                // denied, and the ForbiddenException landed in the catch below. Silently. The result
+                // is that **standing orders have never generated anything, on any installation**:
+                // the log line said "0 due order(s)" or reported a failure nobody was reading.
+                //
+                // The principal is installed PER STANDING ORDER and scoped to that order's own
+                // company and branch — deliberately not one global system principal for the sweep
+                // (G14). Principal.system() has a null userId, so it is exempt from the tenancy
+                // check (it is not acting for a tenant, the row's company is already fixed), but it
+                // is NOT root, so canActIn still requires companyId to match. Each iteration can
+                // therefore only act inside the company of the order it is generating.
+                RequestContext.set(RequestContext.Principal.system(
+                        standing.getCompanyId(), standing.getBranchId()));
                 generateSo(standing, today);
             } catch (Exception ex) {
                 log.error("Standing order generation failed for uid={}: {}", standing.getUid(), ex.getMessage(), ex);
+            } finally {
+                // The scheduler thread is pooled and outlives this loop: a principal left behind
+                // would be inherited by whatever runs next on it.
+                RequestContext.clear();
             }
         }
     }
+
+    // NOTE (P8-6, deliberately NOT fixed here): this @Scheduled sweep takes no lock and CREATES
+    // sales orders. Two application nodes would both find the same due orders and double-generate
+    // for every tenant. There is one node today, and a wrong locking fix is worse than a documented
+    // one — a session-scoped advisory lock leaks for the life of a pooled connection, and a
+    // transaction-scoped one would force the whole sweep into a single transaction, discarding the
+    // per-order isolation the try/catch above exists to provide. This must be solved before a second
+    // node is ever run.
 
     // ---- helpers ---------------------------------------------------------------
 

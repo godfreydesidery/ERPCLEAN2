@@ -11,6 +11,11 @@
       .\orbixerp.ps1 restore <file>   REPLACE the database from a backup file
       .\orbixerp.ps1 update <dir>     upgrade to a newer release bundle
       .\orbixerp.ps1 version          what is installed
+      .\orbixerp.ps1 schedule         set up (or move) the nightly backup
+
+    The installer schedules `backup` to run every night, so you should not have to
+    type it. `restore` asks you to type RESTORE first; add -Yes to skip that when a
+    script is driving it.
 
     If Windows refuses to run this file, start it like this:
       powershell -ExecutionPolicy Bypass -File .\orbixerp.ps1 status
@@ -22,7 +27,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)] [string] $Command = 'help',
-    [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]] $Rest
+    [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]] $Rest,
+    # For a scheduled or scripted restore - a recovery drill, or a remote session with no
+    # console. Typing RESTORE stays the default and nothing else about the command changes.
+    [switch] $Yes,
+    # Used by `schedule`. Both installers pass it through.
+    [string] $BackupTime = '02:00'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -246,6 +256,112 @@ function Get-DbPort {
 }
 
 # ---------------------------------------------------------------------------
+# Backup housekeeping
+#
+# Three different kinds of file end up in backups\, and they must NOT expire together:
+#
+#   orbixerp_<stamp>.dump                  the nightly and manual backups
+#   orbixerp-preupdate_<stamp>_<from-to>   taken by `update`; the ONLY way to undo a
+#                                          release that changed the database
+#   safety-before-restore-<stamp>.dump     taken by `restore` just before it overwrites
+#
+# Older versions deleted only the first kind. That meant the safety copies accumulated
+# for ever, while the rollback point for an update - the one file that can undo a
+# release - was thrown away after fourteen days. Each kind now has its own lifetime,
+# plus a floor (never prune below this many) and a ceiling (never let the folder grow
+# past this many files or this many megabytes).
+# ---------------------------------------------------------------------------
+$BackupDir = Join-Path $ScriptDir 'backups'
+$AnyBackup = '^(orbixerp_|orbixerp-preupdate_|safety-before-restore-).*\.dump$'
+
+# A setting that is not a whole number falls back to its default rather than throwing in
+# the middle of a backup.
+function Get-EnvInt {
+    param([string]$Key, [int]$Default)
+    $parsed = 0
+    if ([int]::TryParse((Get-EnvValue $Key "$Default"), [ref]$parsed)) { return $parsed }
+    return $Default
+}
+
+# Backup files matching a pattern, newest first.
+function Get-BackupFiles {
+    param([string]$Pattern)
+    if (-not (Test-Path $BackupDir)) { return @() }
+    return @(Get-ChildItem $BackupDir -File -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -match $Pattern } |
+             Sort-Object LastWriteTime -Descending)
+}
+
+# The "always keep newest" floor is what stops the machine being switched off for a month
+# and the next backup then deleting every backup that exists.
+function Remove-ExpiredBackups {
+    param([string]$Pattern, [int]$Days, [int]$KeepNewest)
+    if ($Days -le 0) { return }
+    $cutoff = (Get-Date).AddDays(-$Days)
+    $files = Get-BackupFiles $Pattern
+    for ($i = $KeepNewest; $i -lt $files.Count; $i++) {
+        if ($files[$i].LastWriteTime -lt $cutoff) {
+            Remove-Item $files[$i].FullName -Force -ErrorAction SilentlyContinue
+            Write-Host "  removed $($files[$i].Name) (older than $Days days)"
+        }
+    }
+}
+
+# The ceilings, applied across all three kinds together: delete the oldest file until the
+# folder is back inside its limits, and never go below the floor.
+function Limit-BackupFolder {
+    param([int]$KeepMin, [int]$KeepMax, [int]$DirMaxMb)
+    while ($true) {
+        $files = Get-BackupFiles $AnyBackup
+        if ($files.Count -le $KeepMin) { return }
+        $sizeMb = [math]::Round((($files | Measure-Object Length -Sum).Sum) / 1MB, 0)
+        if ($files.Count -le $KeepMax -and $sizeMb -le $DirMaxMb) { return }
+        $oldest = $files[$files.Count - 1]
+        Remove-Item $oldest.FullName -Force -ErrorAction SilentlyContinue
+        Write-Host "  removed $($oldest.Name) to stay inside the backup limits ($($files.Count) files, $sizeMb MB)"
+    }
+}
+
+function Remove-OldBackups {
+    if (-not (Test-Path $BackupDir)) { return }
+    Remove-ExpiredBackups '^orbixerp_.*\.dump$'              (Get-EnvInt 'ERP_BACKUP_RETAIN_DAYS' 14)           0
+    Remove-ExpiredBackups '^safety-before-restore-.*\.dump$' (Get-EnvInt 'ERP_BACKUP_SAFETY_RETAIN_DAYS' 30)    3
+    Remove-ExpiredBackups '^orbixerp-preupdate_.*\.dump$'    (Get-EnvInt 'ERP_BACKUP_PREUPDATE_RETAIN_DAYS' 90) 5
+    Limit-BackupFolder (Get-EnvInt 'ERP_BACKUP_KEEP_MIN' 7) `
+                       (Get-EnvInt 'ERP_BACKUP_KEEP_MAX' 90) `
+                       (Get-EnvInt 'ERP_BACKUP_DIR_MAX_MB' 2048)
+}
+
+# The nightly backup appends what it prints to backups\backup.log. Left alone that file
+# grows for ever, in the same folder - and on the same disk - as the backups themselves.
+function Limit-BackupLog {
+    $log = Join-Path $BackupDir 'backup.log'
+    if (-not (Test-Path $log)) { return }
+    if ((Get-Item $log).Length -le 1MB) { return }
+    $tail = Get-Content $log -Tail 200
+    Set-Content -Path $log -Value $tail -Encoding UTF8
+}
+
+# Refuse to START a dump that cannot finish. A dump that runs out of disk halfway leaves a
+# truncated file behind that looks exactly like a good backup in a directory listing.
+function Assert-DiskHeadroom {
+    $drive = (Get-Item $BackupDir).PSDrive
+    if ($null -eq $drive -or $null -eq $drive.Free) { return }
+    $newest = Get-BackupFiles '^orbixerp[_-].*\.dump$' | Select-Object -First 1
+    $needed = if ($newest) { $newest.Length * 3 } else { 200MB }
+    if ($drive.Free -ge $needed) { return }
+    Stop-WithError @"
+There is not enough free disk space to take a backup safely.
+
+Free space where backups are kept : $([math]::Round($drive.Free / 1MB, 0)) MB
+Wanted before starting            : $([math]::Round($needed / 1MB, 0)) MB
+
+Free some space on this disk, or lower ERP_BACKUP_KEEP_MAX / ERP_BACKUP_DIR_MAX_MB
+in .env, and try again. Nothing was written.
+"@
+}
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 function Invoke-Start {
@@ -292,14 +408,21 @@ function Invoke-Logs {
 }
 
 # Returns the path of the backup file it wrote, so Invoke-Update can offer it as the
-# rollback point. Progress goes to the host, not down the pipeline.
+# rollback point. Progress goes to the host, NOT down the pipeline - anything added here
+# that writes to the pipeline instead of the host silently corrupts that filename.
+#
+# An optional label marks the backup as an update's rollback point. Those are named
+# differently so they are kept far longer than a nightly backup - see Remove-OldBackups.
 function Invoke-Backup {
+    param([string]$Label = '')
     Assert-EnvFile; Assert-Docker
-    $backups = Join-Path $ScriptDir 'backups'
-    if (-not (Test-Path $backups)) { New-Item -ItemType Directory -Path $backups | Out-Null }
+    if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }
+    Limit-BackupLog
+    Assert-DiskHeadroom
 
-    $name = "orbixerp_$(Get-Date -Format 'yyyyMMdd_HHmmss').dump"
-    $file = Join-Path $backups $name
+    $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $name  = if ($Label) { "orbixerp-preupdate_${stamp}_$Label.dump" } else { "orbixerp_$stamp.dump" }
+    $file  = Join-Path $BackupDir $name
 
     Write-Step "Backing up the database to backups\$name"
     # -Fc = PostgreSQL's compressed custom format, which pg_restore reads.
@@ -309,47 +432,70 @@ function Invoke-Backup {
                             '-U', (Get-EnvValue 'ERP_DB_USER' 'erp'),
                             '-d', (Get-EnvValue 'ERP_DB_NAME' 'erp'),
                             '-Fc', '-f', "/backups/$name")
+    # On failure the part-written file is DELETED. Left in place it would sit in the folder
+    # looking like every other backup, and could be picked for a restore.
     if ($code -ne 0) {
-        Stop-WithError 'Backup failed. Nothing was written. The database may be unreachable - check .\orbixerp.ps1 status.'
+        Remove-Item $file -Force -ErrorAction SilentlyContinue
+        Stop-WithError "Backup failed, and the part-written file has been deleted.`nThe database may be unreachable - check .\orbixerp.ps1 status."
     }
     # An empty file is a failed backup that looks like a successful one. Refuse it so it
     # can never be mistaken for a safe rollback point during an update.
     if (-not (Test-Path $file) -or (Get-Item $file).Length -eq 0) {
+        Remove-Item $file -Force -ErrorAction SilentlyContinue
         Stop-WithError 'Backup produced an empty file. Treating this as a failure - do not rely on it.'
     }
     $sizeMb = [math]::Round((Get-Item $file).Length / 1MB, 1)
     Write-Ok "Backup complete: backups\$name ($sizeMb MB)"
 
-    $retain = 0
-    if ([int]::TryParse((Get-EnvValue 'ERP_BACKUP_RETAIN_DAYS' '14'), [ref]$retain) -and $retain -gt 0) {
-        Get-ChildItem $backups -Filter 'orbixerp_*.dump' -File |
-            Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$retain) } |
-            Remove-Item -Force -ErrorAction SilentlyContinue
-        Write-Host "  Backups older than $retain days have been removed."
-    }
+    Remove-OldBackups
     return $file
 }
 
 function Invoke-Restore {
     Assert-EnvFile; Assert-Docker
-    if ($null -eq $Rest -or $Rest.Count -eq 0) {
-        Stop-WithError "Which backup? Usage:`n    .\orbixerp.ps1 restore backups\erp_20260801_120000.dump"
+    # -Yes may arrive as a real switch or, for symmetry with the Linux script, as --yes.
+    $assumeYes  = [bool]$Yes
+    $positional = @()
+    # @($null) is an array holding one $null, not an empty one - so a blank argument has to be
+    # skipped explicitly, or `restore` with nothing after it ends up "restoring" $null and
+    # failing with a PowerShell binding error instead of saying which backup it wanted.
+    foreach ($a in @($Rest)) {
+        if ([string]::IsNullOrWhiteSpace($a)) { continue }
+        if ($a -eq '--yes' -or $a -eq '-y' -or $a -eq '-Yes') { $assumeYes = $true } else { $positional += $a }
     }
-    $file = $Rest[0]
+    if ($positional.Count -eq 0) {
+        Stop-WithError "Which backup? Usage:`n    .\orbixerp.ps1 restore backups\orbixerp_20260801_120000.dump [-Yes]"
+    }
+    $file = $positional[0]
     if (-not (Test-Path $file)) { Stop-WithError "Backup file not found: $file" }
 
-    $base    = Split-Path -Leaf $file
-    $backups = Join-Path $ScriptDir 'backups'
-    if (-not (Test-Path $backups)) { New-Item -ItemType Directory -Path $backups | Out-Null }
-    $target = Join-Path $backups $base
-    if (-not (Test-Path $target)) { Copy-Item $file $target }
+    if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir | Out-Null }
+
+    # The restore runs inside a container that can only see backups\, so the file has to be
+    # in there. It is copied in under a name of OUR choosing, not its own.
+    #
+    # This used to reuse any file already in backups\ with the same name - so restoring
+    # E:\orbixerp_20260801_120000.dump, when a local file of that name existed, silently
+    # restored the LOCAL one and reported success.
+    $base   = Split-Path -Leaf $file
+    $staged = "restore-source-$PID-$base"
+    Copy-Item $file (Join-Path $BackupDir $staged) -Force
 
     Write-Host ''
     Write-Host "This REPLACES the current database with the contents of $base." -ForegroundColor Yellow
     Write-Host 'Everything recorded since that backup was taken will be lost.'
+    Write-Host 'It replaces the WHOLE database, so on a system shared by more than one'
+    Write-Host 'organisation every organisation is taken back to that moment, not just yours.'
     Write-Host ''
-    $answer = Read-Host 'Type RESTORE to continue'
-    if ($answer -ne 'RESTORE') { Stop-WithError 'Cancelled. Nothing was changed.' }
+    if ($assumeYes) {
+        Write-Warn 'Continuing without asking, because -Yes was given.'
+    } else {
+        $answer = Read-Host 'Type RESTORE to continue'
+        if ($answer -ne 'RESTORE') {
+            Remove-Item (Join-Path $BackupDir $staged) -Force -ErrorAction SilentlyContinue
+            Stop-WithError 'Cancelled. Nothing was changed.'
+        }
+    }
 
     Write-Step 'Stopping the application (the database keeps running)'
     [void](Invoke-Compose @('stop', 'api'))
@@ -394,10 +540,12 @@ function Invoke-Restore {
     # database that reports success is worse than a failure you can see.
     $code = Invoke-PgTool @('pg_restore', '-h', (Get-DbHost), '-p', (Get-DbPort),
                             '-U', $dbUser, '-d', $dbName,
-                            '--no-owner', '--exit-on-error', "/backups/$base")
+                            '--no-owner', '--exit-on-error', "/backups/$staged")
     if ($code -ne 0) {
+        Remove-Item (Join-Path $BackupDir $staged) -Force -ErrorAction SilentlyContinue
         Stop-WithError "The restore FAILED and the database is now incomplete. Do not start the system.`nRestore the safety copy taken a moment ago:`n    .\orbixerp.ps1 restore backups/$safety`nIf that also fails, contact support and quote both file names."
     }
+    Remove-Item (Join-Path $BackupDir $staged) -Force -ErrorAction SilentlyContinue
 
     Write-Step 'Restarting the application'
     [void](Invoke-Compose @('up', '-d'))
@@ -437,8 +585,11 @@ function Invoke-Update {
     # This is not belt-and-braces. Database migrations only run forwards: once the new
     # version has upgraded the schema, the old version will not start against it.
     # Restoring this backup is the ONLY way to undo an update.
+    # Labelled, so housekeeping keeps it for ERP_BACKUP_PREUPDATE_RETAIN_DAYS (90 by default)
+    # rather than the fourteen days a nightly backup gets. It used to be an ordinary nightly
+    # backup, which meant the only file able to undo a release expired in a fortnight.
     Write-Step 'Taking a safety backup first - the update stops here if it fails'
-    $backupFile = Invoke-Backup
+    $backupFile = Invoke-Backup -Label "$curVersion-to-$newVersion"
     Write-Host "  If this update goes wrong, undo it with:"
     Write-Host "    .\orbixerp.ps1 restore $backupFile"
 
@@ -493,6 +644,125 @@ function Invoke-Update {
     Write-Host ''
 }
 
+# ---------------------------------------------------------------------------
+# The nightly backup schedule
+#
+# It lives here rather than in install.ps1 because there are TWO Windows install paths -
+# the typed installer and the Setup.cmd wizard, which does its own work and never calls
+# install.ps1. A copy in each would eventually be a copy in one.
+#
+# THE LOGON TYPE IS THE WHOLE PROBLEM HERE, so it is worth stating plainly.
+# `backup` is `docker run` all the way down, and Docker Desktop is a per-user service
+# reached over a named pipe inside the signed-in user's session. A task running as SYSTEM,
+# or as a different user, registers perfectly and then fails every night because it cannot
+# reach the engine. "Run whether user is logged on or not" (S4U) is no better: with nobody
+# signed in, Docker Desktop is not running at all.
+#
+# So the task is registered Interactive, as the person installing. It needs no elevation and
+# no stored password, and it runs when that user is signed in - which a back-office or till
+# PC is. The precondition is stated in OPERATIONS.md rather than hidden.
+#
+# Every step fails SOFT: a Task Scheduler policy must never leave a working installation
+# looking like a failed one. Returns $true only if a schedule now exists.
+# ---------------------------------------------------------------------------
+function Invoke-Schedule {
+    param([string]$At = '02:00')
+    Write-Step 'Automatic backups'
+
+    if ($At -notmatch '^([01][0-9]|2[0-3]):[0-5][0-9]$') {
+        Write-Warn "A backup time should look like 02:00 - '$At' does not. Using 02:00."
+        $At = '02:00'
+    }
+
+    if ($null -eq (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
+        Write-Warn 'This version of Windows has no Scheduled Tasks commands, so the nightly backup was not scheduled.'
+        Write-Host '  Arrange a nightly run of this command yourself:'
+        Write-Host "      powershell -NoProfile -ExecutionPolicy Bypass -File `"$ScriptDir\orbixerp.ps1`" backup"
+        return $false
+    }
+
+    # Named after the folder, so a second instance (a training system in another folder) gets
+    # its own task instead of overwriting the live one's.
+    $taskPath = '\OrbixERP\'
+    $taskName = "Backup ($(Split-Path -Leaf $ScriptDir))"
+    $self     = Join-Path $ScriptDir 'orbixerp.ps1'
+    $log      = Join-Path $ScriptDir 'backups\backup.log'
+    if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
+
+    # Many Windows machines refuse to create a scheduled task at all unless the window is
+    # elevated - measured on Windows 11 Home, where both Register-ScheduledTask and
+    # schtasks.exe answer "Access is denied" to a standard user, at the root task path as
+    # well as a sub-folder. Saying so up front is far more useful than letting Windows
+    # return that sentence with no context attached.
+    $elevated = ([Security.Principal.WindowsPrincipal] `
+                 [Security.Principal.WindowsIdentity]::GetCurrent()
+                ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $elevated) {
+        Write-Host '  Not running as administrator - Windows may refuse to add the schedule.'
+        Write-Host '  If it does, the instructions below say exactly what to do.'
+    }
+
+    try {
+        # -Command rather than -File: a scheduled action cannot redirect on its own, and the
+        # log is what tells anyone whether the backup ever ran.
+        $inner  = "& '$self' backup *>> '$log'"
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+                    -Argument "-NoProfile -ExecutionPolicy Bypass -Command ""$inner""" `
+                    -WorkingDirectory $ScriptDir
+        $trigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::ParseExact($At, 'HH:mm', $null))
+        # -StartWhenAvailable covers a shop PC that was switched off at 02:00 - the backup
+        # runs when it next starts, rather than being skipped in silence.
+        $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+                      -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
+                      -MultipleInstances IgnoreNew
+        $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
+                      -LogonType Interactive -RunLevel Limited
+
+        # -Force overwrites a task of the same name: that is what makes running this twice
+        # replace the schedule instead of adding a second one.
+        Register-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Action $action `
+            -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+    } catch {
+        Write-Warn "The nightly backup could NOT be scheduled: $($_.Exception.Message)"
+        Write-Host ''
+        Write-Host '  OrbixERP itself is fine - only the schedule is missing, which means' -ForegroundColor Yellow
+        Write-Host '  backups will happen only when somebody takes one.' -ForegroundColor Yellow
+        Write-Host ''
+        if (-not $elevated) {
+            Write-Host '  This is almost always because Windows will not let a standard user add a'
+            Write-Host '  scheduled task. To fix it, either:'
+            Write-Host ''
+            Write-Host '    A. Right-click Setup.cmd and choose "Run as administrator", then install'
+            Write-Host '       again. Nothing is reinstalled - it recognises what is already here.'
+            Write-Host ''
+            Write-Host '    B. Add the task by hand: open Task Scheduler, Create Task, Daily at'
+            Write-Host "       $At, action 'Start a program':"
+            Write-Host '         Program   powershell.exe'
+            Write-Host "         Arguments -NoProfile -ExecutionPolicy Bypass -File `"$self`" backup"
+            Write-Host "         Start in  $ScriptDir"
+        } else {
+            Write-Host '  Add a daily task by hand in Task Scheduler, running:'
+            Write-Host "      powershell -NoProfile -ExecutionPolicy Bypass -File `"$self`" backup"
+        }
+        Write-Host ''
+        Write-Host '  Until then, take one yourself with:  .\orbixerp.ps1 backup'
+        return $false
+    }
+
+    # Read it back. A schedule that was written but cannot be read is not a schedule.
+    if ($null -eq (Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue)) {
+        Write-Warn 'The backup schedule was registered but could not be read back. Check Task Scheduler.'
+        return $false
+    }
+
+    Write-Ok "Nightly backup scheduled for $At, as $env:USERNAME"
+    Write-Host "  Backups are written to $BackupDir and pruned automatically."
+    Write-Host '  Check that it is running with:'
+    Write-Host "      Get-ScheduledTaskInfo -TaskPath '$taskPath' -TaskName '$taskName' | Select LastRunTime, LastTaskResult"
+    Write-Host '  It runs only while this Windows user is signed in and Docker Desktop is running.'
+    return $true
+}
+
 function Invoke-Version {
     Write-Host "installed version : $(Get-EnvValue 'ERP_VERSION' 'unknown')"
     Write-Host "database mode     : $(Get-EnvValue 'ERP_DB_MODE' 'docker')"
@@ -513,6 +783,11 @@ OrbixERP - control script
   .\orbixerp.ps1 restore <file>   REPLACE the database from a backup file
   .\orbixerp.ps1 update <dir>     upgrade to a newer release bundle
   .\orbixerp.ps1 version          what is installed
+  .\orbixerp.ps1 schedule [HH:MM] set up (or move) the nightly backup
+
+The installer schedules `backup` to run every night, so you should not have to
+type it. `restore` asks you to type RESTORE first; add -Yes to skip that when a
+script is driving it.
 
 Guides are in the docs\ folder.
 '@
@@ -532,6 +807,12 @@ switch ($Command.ToLower()) {
     'restore' { Invoke-Restore }
     'update'  { Invoke-Update }
     'version' { Invoke-Version }
+    'schedule' {
+        # Accept a bare time as a positional argument too:  orbixerp.ps1 schedule 03:30
+        $at = $BackupTime
+        if ($null -ne $Rest -and $Rest.Count -gt 0 -and $Rest[0] -match '^\d{2}:\d{2}$') { $at = $Rest[0] }
+        [void](Invoke-Schedule -At $at)
+    }
     'config'  { Assert-EnvFile; Assert-Docker; [void](Invoke-Compose @('config')) }
     'help'    { Invoke-Help }
     default   { Stop-WithError "Unknown command '$Command'. Run '.\orbixerp.ps1 help' to see what is available." }

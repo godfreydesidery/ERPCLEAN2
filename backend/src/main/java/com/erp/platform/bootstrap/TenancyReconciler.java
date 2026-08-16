@@ -214,6 +214,29 @@ public class TenancyReconciler implements ApplicationRunner {
                     + "ambiguity is real: {}", r1Collisions.size(), r1Collisions);
         }
 
+        // P2-2b (ADR-0062): report usernames whose @suffix disagrees with their organisation's
+        // alias. Enforcement is not needed - no setUsername exists anywhere in backend/src/main and
+        // the alias is set-once - so divergence can only arrive by direct SQL or a restored backup
+        // from another estate. That is exactly when nobody is watching, and a username that says one
+        // tenant while the row says another is the hardest kind of wrong to notice.
+        List<String> suffixDrift = users.findAll().stream()
+                .filter(u -> u.getUsername() != null && u.getUsername().indexOf('@') >= 0)
+                .filter(u -> {
+                    String suffix = u.getUsername().substring(u.getUsername().indexOf('@') + 1);
+                    return organisations.findById(u.getOrganisationId())
+                            .map(o -> !suffix.equals(o.getAlias()))
+                            .orElse(true);
+                })
+                .map(AppUser::getUsername)
+                .sorted()
+                .toList();
+        if (!suffixDrift.isEmpty()) {
+            log.warn("Username suffix drift: {} account(s) carry an @alias that does not match their "
+                    + "organisation. They can still sign in - the username is the credential - but "
+                    + "the name now misstates who they belong to: {}",
+                    suffixDrift.size(), suffixDrift);
+        }
+
         if (usersNull > 0 || rolesNull > 0) {
             log.warn("Tenancy reconcile residual: {} user(s) and {} customer role(s) still have no "
                     + "organisation. P2-1's follow-up migration will refuse to apply NOT NULL until "

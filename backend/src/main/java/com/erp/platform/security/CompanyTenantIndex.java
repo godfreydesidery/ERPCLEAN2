@@ -62,8 +62,23 @@ public class CompanyTenantIndex {
         return resolved;
     }
 
-    /** Test seam. The mapping is write-once, so this is for fixtures — not for invalidation. */
-    void clear() {
+    /**
+     * Drop every memoised mapping. <b>Test seam only — never call this from production code.</b>
+     *
+     * <p>It is not an invalidation hook and must not be used as one. The mapping is write-once (see
+     * the class javadoc); if it ever stops being write-once, the fix is to change this class's
+     * design, not to sprinkle {@code clear()} calls at the write sites.
+     *
+     * <p>It is {@code public} because the integration-test harness needs it. {@code IamTestData}
+     * resets the database with {@code TRUNCATE ... RESTART IDENTITY}, which RE-ISSUES company ids
+     * from 1 in every test method. A cache keyed on those ids therefore CAN go stale in a test JVM
+     * even though it cannot in production: one IT class caches {@code company 2 → organisation 1},
+     * the next builds {@code company 2} under a DIFFERENT organisation, and a cross-tenant check
+     * silently reads the previous class's answer. That is how {@code TwoOrganisationIsolationIT}'s
+     * root-refusal assertions were failing in CI while passing locally — the run order differs.
+     * {@code PostgresIntegrationTest} calls this before every IT method.
+     */
+    public void clear() {
         cache.clear();
     }
 }

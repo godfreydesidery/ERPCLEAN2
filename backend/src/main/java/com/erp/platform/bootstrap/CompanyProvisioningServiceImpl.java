@@ -14,6 +14,7 @@ import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
 import com.erp.modules.hr.service.HrGlSeeder;
 import com.erp.modules.hr.service.HrStatutorySeeder;
+import com.erp.modules.hr.service.LeaveTypeSeeder;
 import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
@@ -73,6 +74,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     // HR & Payroll GL + statutory seeders (ADR-0032 D-8/D-9)
     private final HrGlSeeder             hrGlSeeder;
     private final HrStatutorySeeder      hrStatutorySeeder;
+    private final LeaveTypeSeeder        leaveTypeSeeder;
     // Notifications type catalogue seeder (ADR-0024 D-9)
     private final NotificationTypeSeeder notificationTypeSeeder;
     // Manufacturing GL seeder (ADR-0035 D-7)
@@ -83,6 +85,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     // never posts drawer spend to the cash-SHORTAGE variance account; the POS expense path also
     // self-heals an existing company on first use, so an upgrade needs no manual step.
     private final TillExpenseGlSeeder    tillExpenseGlSeeder;
+    private final CodeSequenceSeeder     codeSequenceSeeder;
 
     CompanyProvisioningServiceImpl(
             UnitOfMeasureSeeder    unitSeeder,
@@ -102,10 +105,12 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             CrmStageSeeder         crmStageSeeder,
             HrGlSeeder             hrGlSeeder,
             HrStatutorySeeder      hrStatutorySeeder,
+            LeaveTypeSeeder        leaveTypeSeeder,
             NotificationTypeSeeder notificationTypeSeeder,
             ManufacturingGlSeeder  manufacturingGlSeeder,
             CurrencyEnablementSeeder currencyEnablementSeeder,
-            TillExpenseGlSeeder    tillExpenseGlSeeder) {
+            TillExpenseGlSeeder    tillExpenseGlSeeder,
+            CodeSequenceSeeder     codeSequenceSeeder) {
         this.unitSeeder               = unitSeeder;
         this.taxRateSeeder            = taxRateSeeder;
         this.salesSettingsSeeder      = salesSettingsSeeder;
@@ -123,10 +128,12 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         this.crmStageSeeder           = crmStageSeeder;
         this.hrGlSeeder               = hrGlSeeder;
         this.hrStatutorySeeder        = hrStatutorySeeder;
+        this.leaveTypeSeeder          = leaveTypeSeeder;
         this.notificationTypeSeeder   = notificationTypeSeeder;
         this.manufacturingGlSeeder    = manufacturingGlSeeder;
         this.currencyEnablementSeeder = currencyEnablementSeeder;
         this.tillExpenseGlSeeder      = tillExpenseGlSeeder;
+        this.codeSequenceSeeder       = codeSequenceSeeder;
     }
 
     /**
@@ -143,6 +150,12 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
                                   List<String> enabledCurrencies) {
         log.info("Provisioning defaults for company {} (base={}, default={}, enabled={}).",
                 companyId, baseCurrency, defaultCurrency, enabledCurrencies);
+
+        // Document-number sequences (ADR-0062 P5-6). Created up front so the PESSIMISTIC_WRITE in
+        // findByCompanyIdAndEntityKindForUpdate has a row to lock. Without them the first two
+        // clerks to raise the same kind of document race, both insert, and one gets a misleading
+        // 409 — most likely on a new tenant's first busy morning, when all thirty kinds are unused.
+        codeSequenceSeeder.seedDefaults(companyId);
 
         // Units of measure
         unitSeeder.seedDefaults(companyId);
@@ -191,6 +204,14 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         // HR GL accounts + gl_configs + TZ statutory defaults (ADR-0032 D-8/D-9)
         hrGlSeeder.seedDefaults(companyId);
         hrStatutorySeeder.seedDefaults(companyId);
+
+        // Leave types (P5-5). Moved here from TenantProvisioningService: sitting on the tenant path
+        // alone, it covered a tenant's FIRST company and nothing else — so a second company added
+        // later, and every company healed through the re-provision endpoint, opened HR -> Leave
+        // empty and could not record a single day of leave. That is the same hole P5-5 was written
+        // to close, left open one level down. Every other company-scoped default already lives in
+        // this method for exactly that reason; this one had no business being outside it.
+        leaveTypeSeeder.seedDefaults(companyId);
 
         // Notification type catalogue (ADR-0024 D-9)
         notificationTypeSeeder.seedDefaults(companyId);

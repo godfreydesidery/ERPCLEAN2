@@ -22,6 +22,15 @@
 # Output file: ${BACKUP_DIR}/erpclean2_<YYYYMMDD_HHMMSS>.dump (pg_dump -Fc format).
 # Restore with infra/prod/restore.sh.
 #
+# NOT the script on a customer's machine. Customer installations run dist/bundle/orbixerp.sh,
+# which writes orbixerp_<stamp>.dump into <install-dir>/backups and reads
+# ERP_BACKUP_RETAIN_DAYS - a different name, directory and variable from every one below.
+# Check which box you are on before quoting a filename. docs/ops/backup-restore.md has both.
+#
+# This dump is the WHOLE database. There is no per-organisation dump: on an instance shared
+# by more than one customer, this file holds every customer's ledger, payroll and customer
+# list, and its handling is a contractual question for all of them.
+#
 # POSIX sh — no bashisms.
 
 set -eu
