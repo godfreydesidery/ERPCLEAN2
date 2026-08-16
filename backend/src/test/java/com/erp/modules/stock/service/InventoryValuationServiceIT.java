@@ -10,6 +10,7 @@ import com.erp.modules.ap.domain.dto.BillLineRequest;
 import com.erp.modules.ap.domain.dto.BillMatchResultDto;
 import com.erp.modules.ap.domain.dto.EnterBillRequest;
 import com.erp.modules.ap.domain.dto.SupplierBillDto;
+import com.erp.modules.ap.domain.enums.BillMatchStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.repository.GlConfigRepository;
@@ -47,6 +48,14 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.service.PriceListService;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
+import com.erp.modules.purchases.domain.dto.AddPurchaseOrderLineRequest;
+import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
+import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
+import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
+import com.erp.modules.purchases.service.GoodsReceiptService;
+import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
@@ -138,6 +147,11 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     @Autowired private SupplierBillService     billService;
     @Autowired private BillMatchService        matchService;
     @Autowired private SupplierService         supplierService;
+    @Autowired private com.erp.modules.ap.repository.SupplierBillRepository billRepo;
+
+    // ---- Purchases (real PO + GR behind a goods bill — see purchaseAndReceive) ----
+    @Autowired private PurchaseOrderService    poService;
+    @Autowired private GoodsReceiptService     grService;
 
     // ---- Stock ----
     @Autowired private InventoryGlSeeder           invGlSeeder;
@@ -322,17 +336,16 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         BigDecimal qty  = new BigDecimal("10");
         BigDecimal cost = new BigDecimal("1000.00");
 
-        // 1. Receipt → DR Inventory / CR GRNI 10 000
-        dispatcher.dispatchOne(publishReceiptEvent("RCPT-BILL-001", product, qty, cost, 1L));
+        // 1. Real order → real receipt → DR Inventory / CR GRNI 10 000
+        PurchaseChain chain = purchaseAndReceive(product, qty, cost);
         assertThat(grniBalance()).isEqualByComparingTo(new BigDecimal("-10000").setScale(4, RoundingMode.HALF_UP));
 
-        // 2. Enter a bill where the line references a GR line (goods line)
-        String grLineUid = "GR-LINE-FAKE-001";
+        // 2. Enter a bill against that order and that receipt line (goods line)
         SupplierBillDto bill = billService.enterBill(new EnterBillRequest(
                 company.getUid(), supplierUid, "INV-GRNI-001",
-                null, LocalDate.now(), LocalDate.now().plusDays(30),
+                chain.poUid(), LocalDate.now(), LocalDate.now().plusDays(30),
                 BigDecimal.ZERO, "TZS", null,
-                List.of(new BillLineRequest(null, null, grLineUid, "Widget goods",
+                List.of(new BillLineRequest(null, chain.poLineUid(), chain.grLineUid(), "Widget goods",
                         qty, cost))));
 
         // 3. Match → must DR GRNI / CR AP (ADR-0020 D-9)
@@ -354,31 +367,79 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
     // Mixed bill: goods lines → GRNI; service lines → PURCHASES; balanced
     // =========================================================================
 
+    /**
+     * The GL split on a bill that carries BOTH a received goods line and an unreceivable service
+     * charge: the goods net clears GRNI, the service net hits PURCHASES, and AP is credited the
+     * whole thing.
+     *
+     * <p><b>Why this one goes through acceptVariance and the two around it do not.</b> A bill that
+     * names a purchase order holds EVERY line that cannot be resolved against it — not only its
+     * goods lines. That is deliberate and separately pinned:
+     * {@code BillMatchFailClosedTest.runMatch_billOnPurchaseOrderWithNoLineLinks_holdsAndDoesNotPost}
+     * asserts that exact shape is HELD and must not post. So a service charge sitting on a
+     * PO-backed bill is held by design, and a reviewer accepting it is the product's supported
+     * route — the only route — to a matched mixed bill. Verified empirically: with the service line
+     * left to match on its own the bill stays HELD and GRNI keeps the receipt's credit at -10 000.
+     *
+     * <p>This is NOT accept-variance papering over a failed control. The goods line matches
+     * cleanly on real order and receipt facts (asserted below); only the genuine service charge —
+     * the line there is nothing to compare against — needs the reviewer. The accounting bar the
+     * test exists for is untouched: GRNI nets to zero, PURCHASES takes 3 000, AP takes 13 000.
+     *
+     * <p><b>Open design question for the owner</b> (see the report): {@code postMatchedBillToGl}
+     * routes GRNI vs PURCHASES per line, so it clearly anticipates mixed bills, but
+     * {@code evaluate}'s header-level purchase-link test makes a cleanly-matched mixed bill
+     * unreachable. Supplier invoices quoting a PO plus a freight line are ordinary, and every one
+     * of them will land on a reviewer's desk.
+     */
     @Test
     void billMatchMixedBill_goodsLinesGrni_serviceLinesUsePurchases_balanced() {
         ProductDto goodsProd = stockableProduct("MixedGoods");
         BigDecimal goodsQty  = new BigDecimal("5");
         BigDecimal goodsCost = new BigDecimal("2000.00");
 
-        // Receive goods first
-        dispatcher.dispatchOne(publishReceiptEvent("RCPT-MIXED-001", goodsProd, goodsQty, goodsCost, 1L));
+        // Order + receive the goods portion for real
+        PurchaseChain chain = purchaseAndReceive(goodsProd, goodsQty, goodsCost);
 
         BigDecimal serviceAmt = new BigDecimal("3000.00");
-        String grLineUid = "GR-LINE-MIXED-001";
 
         SupplierBillDto bill = billService.enterBill(new EnterBillRequest(
                 company.getUid(), supplierUid, "INV-MIXED-001",
-                null, LocalDate.now(), LocalDate.now().plusDays(30),
+                chain.poUid(), LocalDate.now(), LocalDate.now().plusDays(30),
                 BigDecimal.ZERO, "TZS", null,
                 List.of(
-                        // goods line — grLineUid set
-                        new BillLineRequest(null, null, grLineUid, "Goods Widget",
+                        // goods line — order + receipt line both linked, so the 3-way control runs
+                        new BillLineRequest(null, chain.poLineUid(), chain.grLineUid(), "Goods Widget",
                                 goodsQty, goodsCost),
-                        // service line — no grLineUid
+                        // service line — nothing on this order to compare it against
                         new BillLineRequest(null, null, null, "Consulting",
                                 BigDecimal.ONE, serviceAmt))));
 
-        matchService.runMatch(bill.uid());
+        BillMatchResultDto firstPass = matchService.runMatch(bill.uid());
+
+        // The goods line passed a REAL comparison — that is what makes the GRNI leg below honest.
+        BillMatchResultDto.LineMatchDto goodsLine = firstPass.lineResults().get(0);
+        assertThat(goodsLine.matchStatus())
+                .as("the goods line must match on real order + receipt facts, not by default")
+                .isEqualTo(BillMatchStatus.MATCHED);
+        assertThat(goodsLine.comparisonPerformed())
+                .as("both legs of the 3-way control actually ran on the goods line")
+                .isTrue();
+
+        // ...and the bill is held on the service line alone, with nothing posted yet.
+        assertThat(firstPass.billStatus()).isEqualTo(SupplierBillStatus.HELD);
+        assertThat(firstPass.lineResults().get(1).matchStatus())
+                .isNotEqualTo(BillMatchStatus.MATCHED);
+        assertThat(grniBalance())
+                .as("a held bill must not post — GRNI still carries the receipt's credit alone")
+                .isEqualByComparingTo(new BigDecimal("-10000").setScale(4, RoundingMode.HALF_UP));
+
+        // A reviewer accepts the service charge; the bill resolves and posts.
+        String serviceLineUid = billService.getByUid(bill.uid()).lines().stream()
+                .filter(l -> l.grLineUid() == null)
+                .findFirst().orElseThrow().uid();
+        BillMatchResultDto posted = matchService.acceptVariance(bill.uid(), serviceLineUid);
+        assertThat(posted.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
 
         // GRNI: receipt CR 10 000 + match DR 10 000 = 0
         assertThat(grniBalance())
@@ -818,35 +879,58 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         BigDecimal qty  = new BigDecimal("5");
         BigDecimal cost = new BigDecimal("2000.00");
 
-        // Receive goods
-        dispatcher.dispatchOne(publishReceiptEvent("RCPT-FIXH-001", product, qty, cost, 1L));
+        // Order + receive for real
+        PurchaseChain chain = purchaseAndReceive(product, qty, cost);
 
-        // Enter a goods bill
-        String grLineUid = "GR-LINE-FIXH-001";
+        // Enter a goods bill against that order and receipt line
         SupplierBillDto bill = billService.enterBill(new EnterBillRequest(
                 company.getUid(), supplierUid, "INV-FIXH-001",
-                null, LocalDate.now(), LocalDate.now().plusDays(30),
+                chain.poUid(), LocalDate.now(), LocalDate.now().plusDays(30),
                 BigDecimal.ZERO, "TZS", null,
-                List.of(new BillLineRequest(null, null, grLineUid, "FIX H goods",
+                List.of(new BillLineRequest(null, chain.poLineUid(), chain.grLineUid(), "FIX H goods",
                         qty, cost))));
 
         // First match
         BillMatchResultDto r1 = matchService.runMatch(bill.uid());
         assertThat(r1.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
 
-        long journalCountAfterFirst = journalEntryRepo.findAll().stream()
-                .filter(e -> com.erp.modules.gl.domain.enums.JournalSourceType.AP_BILL
-                        .equals(e.getSourceType())
-                        && bill.uid().equals(e.getSourceRef()))
-                .count();
-        assertThat(journalCountAfterFirst)
+        assertThat(apBillJournalCount(bill.uid()))
                 .as("FIX H: exactly one AP_BILL journal entry after first match")
+                .isEqualTo(1L);
+
+        // SECOND match — the thing this test is named for and never actually did.
+        // runMatch refuses a bill that is already MATCHED, so reproduce the only way a second run
+        // can happen: the bill is back on HELD (a re-review) and is matched again. Precedent:
+        // BillMatchServiceIT.runMatch_idempotentBillNumber_reMatchDoesNotRenumber.
+        var persisted = billRepo.findByUid(bill.uid()).orElseThrow();
+        persisted.setStatus(SupplierBillStatus.HELD);
+        billRepo.save(persisted);
+
+        BillMatchResultDto r2 = matchService.runMatch(bill.uid());
+        assertThat(r2.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
+
+        assertThat(apBillJournalCount(bill.uid()))
+                .as("FIX H: the second match must NOT post a second AP_BILL journal entry")
                 .isEqualTo(1L);
 
         // AP balance: credited full amount (10 000) exactly once
         assertThat(apBalance().negate())
                 .as("FIX H: AP credited exactly once — idempotency guard works")
                 .isEqualByComparingTo(qty.multiply(cost));
+
+        // GRNI still nets to zero — a double DR would push it positive.
+        assertThat(grniBalance())
+                .as("FIX H: GRNI cleared exactly once")
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    /** AP_BILL journal entries posted for one bill uid. */
+    private long apBillJournalCount(String billUid) {
+        return journalEntryRepo.findAll().stream()
+                .filter(e -> com.erp.modules.gl.domain.enums.JournalSourceType.AP_BILL
+                        .equals(e.getSourceType())
+                        && billUid.equals(e.getSourceRef()))
+                .count();
     }
 
     // =========================================================================
@@ -1368,6 +1452,49 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         productService.setPrice(p.uid(),
                 new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
         return p;
+    }
+
+    /** The three uids a genuinely matchable goods bill line has to carry. */
+    private record PurchaseChain(String poUid, String poLineUid, String grLineUid) {}
+
+    /**
+     * Order and receive {@code qty} of {@code product} at {@code unitCost} through the REAL purchase
+     * path, dispatch the receipt's own STOCK.RECEIVED, and hand back the uids a bill line needs.
+     *
+     * <p>These three bill-match tests used to fabricate a GR line uid ("GR-LINE-FAKE-001") with no
+     * purchase order behind it. That stopped working — correctly — when commit 6a8aa0a5 made
+     * {@code BillMatchServiceImpl.evaluate} FAIL CLOSED: a line that claims a purchase link whose
+     * order/receipt line cannot be resolved is now HELD rather than stamped MATCHED, because the
+     * control did not run. (Live UAT had a 15 × 9,999,999 bill sail through against a 20 × 4,500
+     * order line, both facts null, both variances zero, and auto-post to the GL.) A held bill never
+     * reaches {@code postMatchedBillToGl}, so nothing was posted and GRNI kept the receipt's credit
+     * with no offsetting debit — which is exactly what the failures showed (-10 000, not a wrong
+     * figure). The product is right; the fixture was describing a state the product cannot produce
+     * anyway — {@code DirectGoodsReceiptServiceImpl} synthesises a backing PO precisely so that
+     * every goods_receipt_line hangs off a purchase_order_line.
+     *
+     * <p>Bill unit cost must equal the PO unit cost and billed qty must equal received qty at the
+     * call sites, so both variances are zero and the clean-match path (not accept-variance) is what
+     * gets exercised.
+     */
+    private PurchaseChain purchaseAndReceive(ProductDto product, BigDecimal qty, BigDecimal unitCost) {
+        setCtx();
+        PurchaseOrderDto draft = poService.create(new CreatePurchaseOrderRequest(
+                company.getUid(), supplierUid, "TZS", null, null,
+                List.of(new AddPurchaseOrderLineRequest(product.uid(), pcsUid, qty, unitCost, null))));
+        PurchaseOrderDto placed = poService.placeOrder(draft.uid());
+        String poLineUid = placed.lines().get(0).uid();
+
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), "InvVal IT receipt",
+                List.of(new GoodsReceiptLineRequest(poLineUid, qty))));
+
+        // createAndReceive raises its OWN STOCK.RECEIVED. Drive that one and only that one — a
+        // synthetic receipt event on top would credit GRNI twice and the netting assertions would
+        // fail for a real reason.
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.STOCK_RECEIVED));
+
+        return new PurchaseChain(placed.uid(), poLineUid, gr.lines().get(0).uid());
     }
 
     /** Publishes a STOCK.RECEIVED event inside its own TX and returns the new event's id. */
