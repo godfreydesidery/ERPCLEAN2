@@ -144,6 +144,7 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("arr_root", passwordEncoder.encode("RootPass1!"), "ARR Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

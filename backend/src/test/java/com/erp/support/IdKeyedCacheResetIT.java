@@ -1,5 +1,6 @@
 package com.erp.support;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.iam.domain.dto.GrantRoleRequest;
@@ -100,9 +101,11 @@ class IdKeyedCacheResetIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("seam_root", passwordEncoder.encode(PASSWORD), "Seam Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
-        AppUser holder = users.save(
-                new AppUser("seam_holder", passwordEncoder.encode(PASSWORD), "Seam Holder"));
+        AppUser holder = users.save(inOrganisation(
+                new AppUser("seam_holder", passwordEncoder.encode(PASSWORD), "Seam Holder"),
+                org.getId()));
 
         var glPost = permissionRepo.findByCode("GL.POST")
                 .orElseThrow(() -> new IllegalStateException("GL.POST must be seeded"));
@@ -147,11 +150,13 @@ class IdKeyedCacheResetIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("seam_root", passwordEncoder.encode(PASSWORD), "Seam Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         users.save(root);
         // Same creation order as the first method, so this user takes the recycled id — but with no
         // role granted to it this time.
-        AppUser holder = users.save(
-                new AppUser("seam_holder", passwordEncoder.encode(PASSWORD), "Seam Holder"));
+        AppUser holder = users.save(inOrganisation(
+                new AppUser("seam_holder", passwordEncoder.encode(PASSWORD), "Seam Holder"),
+                org.getId()));
 
         // Preconditions. If ids ever stop being recycled the trap is gone and so is the reason for
         // this test — fail loudly rather than pass for the wrong reason.

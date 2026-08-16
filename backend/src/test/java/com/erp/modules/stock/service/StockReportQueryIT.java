@@ -108,6 +108,7 @@ class StockReportQueryIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("stockreport_root", passwordEncoder.encode("SKReport@1!Xx"), "StockReport Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

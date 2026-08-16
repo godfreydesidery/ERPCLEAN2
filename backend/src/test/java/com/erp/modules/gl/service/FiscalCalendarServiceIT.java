@@ -1,5 +1,6 @@
 package com.erp.modules.gl.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -64,7 +65,7 @@ class FiscalCalendarServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fyit_root", passwordEncoder.encode("RootPass1!"), "Fiscal Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(
@@ -158,8 +159,8 @@ class FiscalCalendarServiceIT extends PostgresIntegrationTest {
         Organisation org2 = organisations.save(new Organisation("Other Org"));
         Company companyB  = companies.save(new Company(org2, "FYB", "Other Co"));
         Branch branchB    = branches.save(new Branch(companyB, "FYBB1", "Other Branch"));
-        AppUser userB = users.save(new AppUser(
-                "fyit_userb", passwordEncoder.encode("Pass1!"), "User B"));
+        AppUser userB = users.save(inOrganisation(new AppUser(
+                "fyit_userb", passwordEncoder.encode("Pass1!"), "User B"), org2.getId()));
 
         RequestContext.set(new RequestContext.Principal(
                 userB.getId(), "fyit_userb", false, companyB.getId(), branchB.getId(), null));

@@ -136,6 +136,7 @@ class WhtCaptureIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("wht_root", passwordEncoder.encode("WhtR00t1!Xx"), "WHT Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

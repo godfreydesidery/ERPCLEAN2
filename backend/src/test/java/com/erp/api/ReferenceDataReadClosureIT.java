@@ -138,6 +138,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
         // Root user
         rootUser = new AppUser("rdrc_root", passwordEncoder.encode(ROOT_PASS), "RDRC Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
@@ -145,6 +146,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
 
         // AP clerk: has AP.BILL.ENTER but deliberately NO *.VIEW read codes.
         apClerkUser = new AppUser("rdrc_apclerk", passwordEncoder.encode(AP_CLERK_PASS), "RDRC AP Clerk");
+        apClerkUser.setOrganisationId(org.getId());
         apClerkUser = users.save(apClerkUser);
         UserBranch clerkAssign = new UserBranch(apClerkUser.getId(), branch, rootUser.getId());
         clerkAssign.markDefault();
@@ -152,6 +154,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
 
         // Non-member: no grants, no roles at all.
         nonMemberUser = new AppUser("rdrc_nobody", passwordEncoder.encode(NO_ROLE_PASS), "RDRC Nobody");
+        nonMemberUser.setOrganisationId(org.getId());
         nonMemberUser = users.save(nonMemberUser);
         UserBranch noneAssign = new UserBranch(nonMemberUser.getId(), branch, rootUser.getId());
         noneAssign.markDefault();
@@ -159,6 +162,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
 
         // Customer-view user: CUSTOMER.VIEW only. Verifies the gate passes for a proper holder.
         customerViewUser = new AppUser("rdrc_custview", passwordEncoder.encode(CUST_VIEW_PASS), "RDRC Cust Viewer");
+        customerViewUser.setOrganisationId(org.getId());
         customerViewUser = users.save(customerViewUser);
         UserBranch custAssign = new UserBranch(customerViewUser.getId(), branch, rootUser.getId());
         custAssign.markDefault();
@@ -166,6 +170,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
 
         // Supplier-view user: SUPPLIER.VIEW only. Verifies the gate passes for a proper holder.
         supplierViewUser = new AppUser("rdrc_suppview", passwordEncoder.encode(SUPP_VIEW_PASS), "RDRC Supp Viewer");
+        supplierViewUser.setOrganisationId(org.getId());
         supplierViewUser = users.save(supplierViewUser);
         UserBranch suppAssign = new UserBranch(supplierViewUser.getId(), branch, rootUser.getId());
         suppAssign.markDefault();
@@ -174,6 +179,7 @@ class ReferenceDataReadClosureIT extends PostgresIntegrationTest {
         // Storekeeper: PURCHASE.RECEIVE only (no PURCHASE.ORDER.VIEW / AP.BILL.ENTER). Represents the
         // goods-receipt-create read-closure — must read the PO picker list and the chosen PO.
         storekeeperUser = new AppUser("rdrc_storekeeper", passwordEncoder.encode(STOREKEEPER_PASS), "RDRC Storekeeper");
+        storekeeperUser.setOrganisationId(org.getId());
         storekeeperUser = users.save(storekeeperUser);
         UserBranch storeAssign = new UserBranch(storekeeperUser.getId(), branch, rootUser.getId());
         storeAssign.markDefault();

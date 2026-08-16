@@ -78,6 +78,7 @@ class NotificationsIT extends PostgresIntegrationTest {
         branchId = branch.getId();
 
         AppUser user = new AppUser("testuser", "$HASHED$", "Test User");
+        user.setOrganisationId(org.getId());
         users.save(user);
         userId = user.getId();
 

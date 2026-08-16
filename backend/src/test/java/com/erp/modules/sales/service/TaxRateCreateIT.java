@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -50,6 +51,7 @@ class TaxRateCreateIT extends PostgresIntegrationTest {
     private Company company;
     private Branch branch;
     private Long rootId;
+    private Long orgId;
 
     @BeforeEach
     void setUp() {
@@ -58,9 +60,11 @@ class TaxRateCreateIT extends PostgresIntegrationTest {
         Organisation org = organisations.save(new Organisation("TaxRate Create IT Org"));
         company = companies.save(new Company(org, "TXCR", "TaxRate Create Co"));
         branch = branches.save(new Branch(company, "TXCR-1", "TaxRate Branch 1"));
+        orgId = org.getId();
 
         AppUser root = new AppUser("taxrate_root", passwordEncoder.encode("RootPass1!"), "TaxRate Root");
         root.setRoot(true);
+        root.setOrganisationId(orgId);
         root = users.save(root);
         rootId = root.getId();
 
@@ -125,8 +129,9 @@ class TaxRateCreateIT extends PostgresIntegrationTest {
         Company otherCompany = companies.save(new Company(otherOrg, "TXOT", "Other Co"));
 
         // Non-root user scoped to `company`, attempting to act in `otherCompany`
-        AppUser nonRoot = users.save(
-                new AppUser("taxrate_user", passwordEncoder.encode("Pass1!"), "TaxRate User"));
+        AppUser nonRoot = users.save(inOrganisation(
+                new AppUser("taxrate_user", passwordEncoder.encode("Pass1!"), "TaxRate User"),
+                orgId));
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "taxrate_user", false, company.getId(), branch.getId(), null));
 

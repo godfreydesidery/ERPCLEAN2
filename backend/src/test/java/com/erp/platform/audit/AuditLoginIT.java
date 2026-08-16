@@ -1,5 +1,6 @@
 package com.erp.platform.audit;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -64,7 +65,9 @@ class AuditLoginIT extends PostgresIntegrationTest {
         branch.setDefault(true);
         branch = branches.save(branch);
 
-        testUser = users.save(new AppUser("la_user", passwordEncoder.encode(PASSWORD), "Login Audit User"));
+        testUser = users.save(inOrganisation(
+                new AppUser("la_user", passwordEncoder.encode(PASSWORD), "Login Audit User"),
+                org.getId()));
         UserBranch assign = new UserBranch(testUser.getId(), branch, testUser.getId());
         assign.markDefault();
         userBranches.save(assign);

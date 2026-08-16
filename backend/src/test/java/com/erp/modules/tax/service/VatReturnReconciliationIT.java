@@ -171,6 +171,7 @@ class VatReturnReconciliationIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("vatrc_root", passwordEncoder.encode("VatRc0t1!"), "VAT Recon Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

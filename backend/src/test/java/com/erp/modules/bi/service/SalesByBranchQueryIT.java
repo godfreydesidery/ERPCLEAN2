@@ -1,5 +1,6 @@
 package com.erp.modules.bi.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.bi.domain.dto.BranchSalesRowDto;
@@ -111,7 +112,7 @@ class SalesByBranchQueryIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("sbb_root", passwordEncoder.encode("SbbR00t1!"), "SBB Root");
         root.setRoot(true);
-        root    = users.save(root);
+        root    = users.save(inOrganisation(root, org.getId()));
         rootAId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

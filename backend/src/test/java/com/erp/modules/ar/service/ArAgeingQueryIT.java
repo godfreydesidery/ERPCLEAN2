@@ -1,5 +1,6 @@
 package com.erp.modules.ar.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -82,6 +83,7 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
 
     private String companyUid;
     private Long companyId;
+    private Long orgId;
     private Long customerId;
     private String customerUidStr; // captured from create() — used by openItem() helper
 
@@ -99,9 +101,11 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
         branch     = branches.save(new Branch(company, "ARAG1", "AR Ageing IT Branch"));
         companyUid = company.getUid();
         companyId  = company.getId();
+        orgId      = org.getId();
 
         AppUser root = new AppUser("arag_root", passwordEncoder.encode("RootPass1!"), "ARAG Root");
         root.setRoot(true);
+        root.setOrganisationId(orgId);
         root   = users.save(root);
         rootId = root.getId();
 
@@ -208,8 +212,8 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
         // Cross-tenant DENIAL must be asserted with a NON-ROOT principal: root legitimately
         // bypasses tenant scope (ScopeGuard line ~197), so it would NOT be denied. A non-root user
         // scoped to company A is denied cleanly (ForbiddenException) when reaching for company B.
-        AppUser nonRoot = users.save(new AppUser(
-                "arag_nonroot", passwordEncoder.encode("Pass1!"), "ARAG NonRoot"));
+        AppUser nonRoot = users.save(inOrganisation(new AppUser(
+                "arag_nonroot", passwordEncoder.encode("Pass1!"), "ARAG NonRoot"), orgId));
         RequestContext.set(new RequestContext.Principal(
                 nonRoot.getId(), "arag_nonroot", false, companyId, branch.getId(), null));
 

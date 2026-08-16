@@ -114,6 +114,7 @@ class FxRevaluationRunServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxreval_root", passwordEncoder.encode("Root1234!"), "FxReval Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

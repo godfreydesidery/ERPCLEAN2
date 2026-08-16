@@ -111,6 +111,7 @@ class AccountLedgerIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ral_root", passwordEncoder.encode("RootPass1!"), "RAL Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

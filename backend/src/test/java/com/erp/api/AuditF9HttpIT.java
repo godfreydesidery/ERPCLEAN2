@@ -61,9 +61,11 @@ class AuditF9HttpIT extends PostgresIntegrationTest {
 
         rootSentinel = new AppUser("f9_root", passwordEncoder.encode("RootF9Pass1!"), "F9 Root");
         rootSentinel.setRoot(true);
+        rootSentinel.setOrganisationId(org.getId());
         rootSentinel = users.save(rootSentinel);
 
         userU = new AppUser("f9_user", passwordEncoder.encode("F9UserPass1!"), "F9 User");
+        userU.setOrganisationId(org.getId());
         userU = users.save(userU);
 
         // Token scoped to the company/branch — enough to authenticate; /auth/me needs only auth.

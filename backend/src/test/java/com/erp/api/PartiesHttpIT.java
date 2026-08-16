@@ -121,12 +121,14 @@ class PartiesHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("ph_root", passwordEncoder.encode(ROOT_PASS), "PH Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("ph_plain", passwordEncoder.encode(PLAIN_PASS), "PH Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branchA, rootUser.getId());
         plainAssign.markDefault();

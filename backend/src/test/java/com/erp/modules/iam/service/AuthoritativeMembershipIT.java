@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -71,7 +72,8 @@ class AuthoritativeMembershipIT extends PostgresIntegrationTest {
         Organisation org = organisations.save(new Organisation("Authoritative Corp"));
         company = companies.save(new Company(org, "AC", "Authoritative Co"));
         branch  = branches.save(new Branch(company, "AC1", "Branch AC1"));
-        user    = users.save(new AppUser("member_user", passwordEncoder.encode("ValidPass1"), "Member User"));
+        user    = users.save(inOrganisation(
+                new AppUser("member_user", passwordEncoder.encode("ValidPass1"), "Member User"), org.getId()));
         role    = roles.save(new Role("TESTROLE", "Test Role"));
 
         // Act as root: tenant scope is bypassed, but the membership gate still applies to `user`.

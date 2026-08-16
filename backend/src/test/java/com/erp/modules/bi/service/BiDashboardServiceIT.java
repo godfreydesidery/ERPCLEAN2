@@ -1,5 +1,6 @@
 package com.erp.modules.bi.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -165,7 +166,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
 
         AppUser rootA = new AppUser("bi_root_a", passwordEncoder.encode("BiR00tA1!"), "BI Root A");
         rootA.setRoot(true);
-        rootA   = users.save(rootA);
+        rootA   = users.save(inOrganisation(rootA, orgA.getId()));
         rootAId = rootA.getId();
 
         RequestContext.set(new RequestContext.Principal(
@@ -214,7 +215,7 @@ class BiDashboardServiceIT extends PostgresIntegrationTest {
 
         AppUser rootB = new AppUser("bi_root_b", passwordEncoder.encode("BiR00tB1!"), "BI Root B");
         rootB.setRoot(true);
-        rootB   = users.save(rootB);
+        rootB   = users.save(inOrganisation(rootB, orgB.getId()));
         rootBId = rootB.getId();
     }
 

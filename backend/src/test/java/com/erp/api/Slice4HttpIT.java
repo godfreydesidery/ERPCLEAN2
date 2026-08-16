@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -124,14 +125,14 @@ class Slice4HttpIT extends PostgresIntegrationTest {
         // ROOT user — is_root=true, scoped to company A / branch A
         rootUser = new AppUser("s4_root", passwordEncoder.encode(ROOT_PASS), "S4 Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssignment = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         rootAssignment.markDefault();
         userBranches.save(rootAssignment);
 
         // NON-ROOT admin — no roles yet, scoped to company A / branch A
         adminUser = new AppUser("s4_admin", passwordEncoder.encode(ADMIN_PASS), "S4 Admin");
-        adminUser = users.save(adminUser);
+        adminUser = users.save(inOrganisation(adminUser, org.getId()));
         UserBranch adminAssignment = new UserBranch(adminUser.getId(), branchA, rootUser.getId());
         adminAssignment.markDefault();
         userBranches.save(adminAssignment);
@@ -434,7 +435,7 @@ class Slice4HttpIT extends PostgresIntegrationTest {
      */
     private AppUser createPersistedUser(String username, String password) {
         AppUser user = new AppUser(username, passwordEncoder.encode(password), username + " Display");
-        return users.save(user);
+        return users.save(inOrganisation(user, org.getId()));
     }
 
     /** Builds the JSON body for POST /users. */

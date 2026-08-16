@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -119,13 +120,13 @@ class DocumentHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("doc_root", passwordEncoder.encode(ROOT_PASS), "Doc Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("doc_plain", passwordEncoder.encode(PLAIN_PASS), "Doc Plain");
-        plainUser = users.save(plainUser);
+        plainUser = users.save(inOrganisation(plainUser, org.getId()));
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branchA, rootUser.getId());
         plainAssign.markDefault();
         userBranches.save(plainAssign);

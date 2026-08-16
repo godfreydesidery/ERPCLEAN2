@@ -1,5 +1,6 @@
 package com.erp.platform.audit;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -110,13 +111,15 @@ class AuditServiceImplIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("at_root", passwordEncoder.encode(PASSWORD), "Audit Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
 
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branchInA, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
-        targetUser = users.save(new AppUser("at_target", passwordEncoder.encode(PASSWORD), "Audit Target"));
+        targetUser = users.save(inOrganisation(
+                new AppUser("at_target", passwordEncoder.encode(PASSWORD), "Audit Target"), org.getId()));
 
         Permission perm = permissions.findByCode("COMPANY.MANAGE")
                 .orElseThrow(() -> new IllegalStateException("COMPANY.MANAGE not seeded"));

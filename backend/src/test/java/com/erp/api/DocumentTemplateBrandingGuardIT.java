@@ -107,6 +107,7 @@ class DocumentTemplateBrandingGuardIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("bg_root", passwordEncoder.encode("BgRoot1!"), "BG Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch assign = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         assign.markDefault();

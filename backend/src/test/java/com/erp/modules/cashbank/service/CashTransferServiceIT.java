@@ -82,6 +82,7 @@ class CashTransferServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("cbt_root", passwordEncoder.encode("RootPass1!"), "CBT Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

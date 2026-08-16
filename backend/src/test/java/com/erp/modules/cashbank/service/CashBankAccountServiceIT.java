@@ -75,6 +75,7 @@ class CashBankAccountServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("cb_root", passwordEncoder.encode("RootPass1!"), "CB Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

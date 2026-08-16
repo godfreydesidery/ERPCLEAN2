@@ -100,12 +100,14 @@ class ArHttpIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("ar_root", passwordEncoder.encode(ROOT_PASS), "AR Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssign = new UserBranch(rootUser.getId(), branch, rootUser.getId());
         rootAssign.markDefault();
         userBranches.save(rootAssign);
 
         plainUser = new AppUser("ar_plain", passwordEncoder.encode(PLAIN_PASS), "AR Plain");
+        plainUser.setOrganisationId(org.getId());
         plainUser = users.save(plainUser);
         UserBranch plainAssign = new UserBranch(plainUser.getId(), branch, rootUser.getId());
         plainAssign.markDefault();

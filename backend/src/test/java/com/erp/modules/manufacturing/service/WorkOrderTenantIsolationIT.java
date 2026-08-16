@@ -113,6 +113,7 @@ class WorkOrderTenantIsolationIT extends PostgresIntegrationTest {
 
         AppUser rootA = new AppUser("isort_a", passwordEncoder.encode("IsoRoot2024!"), "Iso Root A");
         rootA.setRoot(true);
+        rootA.setOrganisationId(org.getId());
         rootA = users.save(rootA);
         rootAId = rootA.getId();
 

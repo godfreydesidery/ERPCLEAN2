@@ -147,6 +147,7 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("salesreport_root", passwordEncoder.encode("SReport@1!Xx"), "SalesReport Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

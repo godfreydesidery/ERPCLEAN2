@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -137,6 +138,7 @@ class FiscalReceiptIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("fiscal_root", passwordEncoder.encode("RootPass123"), "Fiscal Root");
         rootUser.setRoot(true);
+        rootUser.setOrganisationId(org.getId());
         rootUser = users.save(rootUser);
         UserBranch rootAssignment = new UserBranch(rootUser.getId(), branchA, rootUser.getId());
         rootAssignment.markDefault();
@@ -278,8 +280,9 @@ class FiscalReceiptIT extends PostgresIntegrationTest {
         branchB.setDefault(true);
         branchB = branches.save(branchB);
 
-        AppUser userB = users.save(
-                new AppUser("fiscal_user_b", passwordEncoder.encode("Pass123!"), "Fiscal User B"));
+        AppUser userB = users.save(inOrganisation(
+                new AppUser("fiscal_user_b", passwordEncoder.encode("Pass123!"), "Fiscal User B"),
+                org.getId()));
         UserBranch assignmentB = new UserBranch(userB.getId(), branchB, userB.getId());
         assignmentB.markDefault();
         userBranches.save(assignmentB);
@@ -304,8 +307,9 @@ class FiscalReceiptIT extends PostgresIntegrationTest {
     void issue_nonRootWithoutFiscalManage_returns403() throws Exception {
         String invoiceUid = finaliseInvoiceAndGetUid();
 
-        AppUser userNoPerm = users.save(new AppUser(
-                "fiscal_user_noperm", passwordEncoder.encode("Pass123!"), "No Perm User"));
+        AppUser userNoPerm = users.save(inOrganisation(new AppUser(
+                "fiscal_user_noperm", passwordEncoder.encode("Pass123!"), "No Perm User"),
+                org.getId()));
         UserBranch assignment = new UserBranch(userNoPerm.getId(), branchA, userNoPerm.getId());
         assignment.markDefault();
         userBranches.save(assignment);
@@ -322,8 +326,9 @@ class FiscalReceiptIT extends PostgresIntegrationTest {
     void get_nonRootWithoutFiscalView_returns403() throws Exception {
         String invoiceUid = finaliseInvoiceAndGetUid();
 
-        AppUser userNoPerm = users.save(new AppUser(
-                "fiscal_user_noview", passwordEncoder.encode("Pass123!"), "No View User"));
+        AppUser userNoPerm = users.save(inOrganisation(new AppUser(
+                "fiscal_user_noview", passwordEncoder.encode("Pass123!"), "No View User"),
+                org.getId()));
         UserBranch assignment = new UserBranch(userNoPerm.getId(), branchA, userNoPerm.getId());
         assignment.markDefault();
         userBranches.save(assignment);

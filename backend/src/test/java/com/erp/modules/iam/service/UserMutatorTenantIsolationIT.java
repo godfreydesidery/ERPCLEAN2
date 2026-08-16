@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -99,19 +100,22 @@ class UserMutatorTenantIsolationIT extends PostgresIntegrationTest {
         branchB  = branches.save(new Branch(companyB, "B1", "Branch B1"));
 
         // aAdmin: assigned to Branch A1 → Company A membership
-        aAdmin = users.save(new AppUser("a_admin", passwordEncoder.encode(VALID_PASSWORD), "A Admin"));
+        aAdmin = users.save(inOrganisation(
+                new AppUser("a_admin", passwordEncoder.encode(VALID_PASSWORD), "A Admin"), org.getId()));
         UserBranch ubA = new UserBranch(aAdmin.getId(), branchA, aAdmin.getId());
         ubA.markDefault();
         userBranches.save(ubA);
 
         // bVictim: assigned ONLY to Branch B1 → Company B membership only
-        bVictim = users.save(new AppUser("b_victim", passwordEncoder.encode(VALID_PASSWORD), "B Victim"));
+        bVictim = users.save(inOrganisation(
+                new AppUser("b_victim", passwordEncoder.encode(VALID_PASSWORD), "B Victim"), org.getId()));
         UserBranch ubBv = new UserBranch(bVictim.getId(), branchB, bVictim.getId());
         ubBv.markDefault();
         userBranches.save(ubBv);
 
         // abUser: assigned to both branches → member of both companies
-        abUser = users.save(new AppUser("ab_user", passwordEncoder.encode(VALID_PASSWORD), "AB User"));
+        abUser = users.save(inOrganisation(
+                new AppUser("ab_user", passwordEncoder.encode(VALID_PASSWORD), "AB User"), org.getId()));
         UserBranch ubAb1 = new UserBranch(abUser.getId(), branchA, aAdmin.getId());
         ubAb1.markDefault();
         userBranches.save(ubAb1);

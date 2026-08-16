@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.iam.domain.dto.GrantRoleRequest;
@@ -73,10 +74,11 @@ class PermissionResolverIT extends PostgresIntegrationTest {
         branchA2 = branches.save(new Branch(companyA, "A2", "Branch A2"));
         branchB1 = branches.save(new Branch(companyB, "B1", "Branch B1"));
 
-        nonRootUser = users.save(new AppUser("nonroot", passwordEncoder.encode("pw"), "Non Root"));
+        nonRootUser = users.save(inOrganisation(
+                new AppUser("nonroot", passwordEncoder.encode("pw"), "Non Root"), org.getId()));
         rootUser = new AppUser("root", passwordEncoder.encode("pw"), "Root");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
 
         Permission companyManage = permissionRepo.findByCode("COMPANY.MANAGE")
                 .orElseThrow(() -> new IllegalStateException("COMPANY.MANAGE must be seeded by V1 migration"));

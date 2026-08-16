@@ -91,6 +91,7 @@ class BillMatchServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("bm_root", passwordEncoder.encode("BmR00t!Xx"), "BillMatch Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

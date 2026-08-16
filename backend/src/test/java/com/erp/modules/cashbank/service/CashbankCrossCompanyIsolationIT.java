@@ -103,6 +103,7 @@ class CashbankCrossCompanyIsolationIT extends PostgresIntegrationTest {
 
         AppUser userA = new AppUser("iso_root_a", passwordEncoder.encode("RootPass1!"), "ISO Root A");
         userA.setRoot(true);
+        userA.setOrganisationId(org.getId());
         userA  = users.save(userA);
         rootA  = userA.getId();
 
@@ -128,6 +129,7 @@ class CashbankCrossCompanyIsolationIT extends PostgresIntegrationTest {
 
         AppUser userB = new AppUser("iso_root_b", passwordEncoder.encode("RootPass1!"), "ISO Root B");
         userB.setRoot(true);
+        userB.setOrganisationId(org.getId());
         userB  = users.save(userB);
         rootB  = userB.getId();
 

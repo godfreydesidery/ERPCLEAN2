@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.iam.domain.entity.AppUser;
@@ -115,7 +116,7 @@ class SalesOutboxIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("so_root", passwordEncoder.encode("RootPass1!"), "SO Root");
         root.setRoot(true);
-        root   = users.save(root);
+        root   = users.save(inOrganisation(root, org.getId()));
         rootId = root.getId();
 
         RequestContext.set(new RequestContext.Principal(

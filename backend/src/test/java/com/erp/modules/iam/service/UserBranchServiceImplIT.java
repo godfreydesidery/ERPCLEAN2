@@ -1,5 +1,6 @@
 package com.erp.modules.iam.service;
 
+import static com.erp.support.TenantFixtures.inOrganisation;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -85,9 +86,10 @@ class UserBranchServiceImplIT extends PostgresIntegrationTest {
 
         rootUser = new AppUser("root_s4", passwordEncoder.encode(PASSWORD), "Root S4");
         rootUser.setRoot(true);
-        rootUser = users.save(rootUser);
+        rootUser = users.save(inOrganisation(rootUser, org.getId()));
 
-        targetUser = users.save(new AppUser("target_s4", passwordEncoder.encode(PASSWORD), "Target S4"));
+        targetUser = users.save(inOrganisation(
+                new AppUser("target_s4", passwordEncoder.encode(PASSWORD), "Target S4"), org.getId()));
 
         // Seed membership so the authoritative gate in assign/grant passes for targetUser.
         testData.seedMembership(targetUser.getUid(), company.getUid());

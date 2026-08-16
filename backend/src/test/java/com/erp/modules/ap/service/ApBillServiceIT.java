@@ -69,6 +69,7 @@ class ApBillServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("ap_bill_root", passwordEncoder.encode("ApB1llR00t!"), "AP Bill Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root   = users.save(root);
         rootId = root.getId();
 

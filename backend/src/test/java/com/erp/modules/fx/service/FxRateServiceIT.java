@@ -71,6 +71,7 @@ class FxRateServiceIT extends PostgresIntegrationTest {
 
         AppUser root = new AppUser("fxrate_root", passwordEncoder.encode("Root1234!"), "FX Root");
         root.setRoot(true);
+        root.setOrganisationId(orgA.getId());
         root = users.save(root);
 
         RequestContext.set(new RequestContext.Principal(

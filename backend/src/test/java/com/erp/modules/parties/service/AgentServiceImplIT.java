@@ -73,12 +73,14 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
         // Root user — used for ScopeGuard context
         AppUser root = new AppUser("ag_root", passwordEncoder.encode(PASS), "Agent Root");
         root.setRoot(true);
+        root.setOrganisationId(org.getId());
         root = users.save(root);
         rootId = root.getId();
 
         // Active user that an INTERNAL agent can reference.
         // Must have a user_branch in the test company (security fix finding 4: isActiveUserInCompany).
         activeUser = new AppUser("ag_active", passwordEncoder.encode(PASS), "Active Agent User");
+        activeUser.setOrganisationId(org.getId());
         activeUser = users.save(activeUser);
         assertThat(activeUser.getStatus()).isEqualTo(MasterStatus.ACTIVE);
         userBranches.save(new UserBranch(activeUser.getId(), branch, rootId));
@@ -86,6 +88,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
         // Inactive user — status set to INACTIVE directly so we bypass the UserService disable guard
         inactiveUser = new AppUser("ag_inactive", passwordEncoder.encode(PASS), "Inactive Agent User");
         inactiveUser.setStatus(MasterStatus.INACTIVE);
+        inactiveUser.setOrganisationId(org.getId());
         inactiveUser = users.save(inactiveUser);
 
         RequestContext.set(new RequestContext.Principal(
@@ -208,6 +211,7 @@ class AgentServiceImplIT extends PostgresIntegrationTest {
         Company companyB = companies.save(new Company(org, "AGCOB", "Agent Co B"));
         Branch branchB = branches.save(new Branch(companyB, "AG-B2", "Agent Branch B"));
         AppUser userInB = new AppUser("ag_user_b", passwordEncoder.encode(PASS), "User In B Only");
+        userInB.setOrganisationId(org.getId());
         userInB = users.save(userInB);
         userBranches.save(new UserBranch(userInB.getId(), branchB, rootId));
 
