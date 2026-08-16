@@ -1,7 +1,11 @@
 package com.erp.support;
 
+import com.erp.platform.security.CompanyTenantIndex;
+import com.erp.platform.security.PermissionResolver;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -42,6 +46,45 @@ public abstract class PostgresIntegrationTest {
                 .withUsername("erp")
                 .withPassword("erp");
         POSTGRES.start();
+    }
+
+    // -------------------------------------------------------------------------
+    // Process-lifetime caches keyed on database ids
+    // -------------------------------------------------------------------------
+    //
+    // Both of these memoise an answer under a numeric primary key, and both are singletons in the
+    // ONE Spring context every IT class shares (failsafe runs a single reused fork). The fixtures,
+    // meanwhile, reset the database with `TRUNCATE ... RESTART IDENTITY` (IamTestData.clearAll, and
+    // NotificationsIT / PurchaseRequisitionTenantIsolationIT do their own), which RE-ISSUES ids from
+    // 1 in every test method. So `company 2` in one method and `company 2` in the next are different
+    // rows, frequently under different organisations and different users.
+    //
+    // Neither cache is wrong in production — identity sequences there are monotonic and never
+    // re-issue an id, and companies.organisation_id is write-once. The staleness is manufactured
+    // purely by the harness, and it produced two CI-only failures that looked like security
+    // regressions and were not:
+    //
+    //   * TwoOrganisationIsolationIT :156 / :169 — CompanyTenantIndex served a previous class's
+    //     {companyId → organisationId}, so ScopeGuard's tenant check saw "same tenant" and root was
+    //     allowed into another tenant's company. The guard itself is correct (ScopeGuard.java:671
+    //     runs the tenant check BEFORE the `root ||` short-circuit, and :696-698 applies it inside
+    //     canActOn's root branch too).
+    //   * SetPasswordAuthorityCeilingIT :101 — PermissionResolver served the caller's permission set
+    //     from a PREVIOUS method (30 s TTL, key "userId:companyId:branchId", all recycled), so the
+    //     ADR-0059 ceiling compared against authority the caller no longer had. Only reproducible on
+    //     a machine fast enough to run two methods inside the TTL, which is why CI failed and local
+    //     runs passed.
+    //
+    // Whatever resets the ids must also drop the memos keyed on them. Running here rather than in
+    // IamTestData covers ITs that truncate without it, and a superclass @BeforeEach is guaranteed to
+    // run before the subclass's fixture is built.
+    @Autowired private PermissionResolver  permissionResolverCacheSeam;
+    @Autowired private CompanyTenantIndex  companyTenantIndexCacheSeam;
+
+    @BeforeEach
+    protected void dropIdKeyedCaches() {
+        permissionResolverCacheSeam.invalidate();
+        companyTenantIndexCacheSeam.clear();
     }
 
     @DynamicPropertySource
