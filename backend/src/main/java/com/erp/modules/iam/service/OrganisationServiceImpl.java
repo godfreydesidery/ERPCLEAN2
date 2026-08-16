@@ -83,7 +83,14 @@ public class OrganisationServiceImpl implements OrganisationService {
                         request.priceListIncludesVat(),
                         blankToNull(request.walkInCustomerName()),
                         blankToNull(request.posTillName()),
-                        true));   // API-provisioned tenant: the admin's name composes (D-7)
+                        true,   // API-provisioned tenant: the admin's name composes (D-7)
+                        // ...and is NOT root. This is a CUSTOMER's administrator, not the vendor's
+                        // platform operator. Root short-circuits PermissionResolver entirely, so a
+                        // root tenant administrator holds ORG.CREATE and ORG.SUSPEND in effect
+                        // whatever the seed says — including over other customers' organisations.
+                        // Their authority is the ORG_ADMIN role, which carries every non-platform
+                        // permission that exists.
+                        false));
 
         // High-severity by nature: this is the vendor creating a customer. The admin password is
         // never part of the event - only who was created, and under what name.
@@ -110,15 +117,32 @@ public class OrganisationServiceImpl implements OrganisationService {
         var org = organisations.findByUid(uid)
                 .orElseThrow(() -> new NotFoundException("Organisation not found."));
 
+        RequestContext.Principal caller = RequestContext.get();
+        boolean ownOrganisation = caller != null && caller.organisationId() != null
+                && caller.organisationId().equals(org.getId());
+
+        // ANOTHER TENANT'S ORGANISATION IS ONLY THE PLATFORM OPERATOR'S TO TOUCH. Defence in depth
+        // for the R-2 gate on the controller: without this, the ONLY thing standing between a
+        // customer's administrator and suspending a different customer is that they do not hold
+        // ORG.SUSPEND — and holding a code is not how root works. Root short-circuits
+        // PermissionResolver before the code is compared, so for four years of tenants provisioned
+        // with is_root the gate was decorative. That is precisely the failure this method must not
+        // depend on staying fixed upstream.
+        //
+        // NOT FOUND, never FORBIDDEN. Telling a caller that an organisation exists but belongs to
+        // somebody else is an existence oracle over a uid an outsider might plausibly hold; the
+        // refusal is deliberately indistinguishable from a uid that names nothing.
+        if (!ownOrganisation && !isPlatformOperator(caller)) {
+            throw new NotFoundException("Organisation not found.");
+        }
+
         // A CALLER MAY NOT SUSPEND THEIR OWN TENANT. Suspension is enforced at login, so suspending
         // the organisation you are signed in to locks you out - and `resume` requires being signed
         // in. On a single-organisation install that is a hard brick recoverable only by direct SQL
         // against the customer's database. The codebase already states this invariant elsewhere:
         // UserServiceImpl refuses to disable a root admin precisely so somebody can still get back
         // in. Root is NOT exempt here: root is exactly the account that can reach this endpoint.
-        RequestContext.Principal caller = RequestContext.get();
-        if (!active && caller != null && caller.organisationId() != null
-                && caller.organisationId().equals(org.getId())) {
+        if (!active && ownOrganisation) {
             throw new ConflictException(
                     "You cannot suspend the organisation you are signed in to.");
         }
@@ -126,10 +150,41 @@ public class OrganisationServiceImpl implements OrganisationService {
         org.setStatus(active ? MasterStatus.ACTIVE : MasterStatus.INACTIVE);
         organisations.save(org);
 
+        // The DETECTIVE half, and the only part of this method that changes what a live deployment
+        // records today. A suspend/resume row named the target and nothing else, so "one customer's
+        // administrator suspended another customer" and "the vendor suspended a customer" were the
+        // same audit entry. Both organisation ids are carried, modelled on the ROOT_BYPASS row
+        // ScopeGuard.assertCanActIn already writes whenever root acts outside its own company.
         audit.record(AuditEvent.of(active ? AuditActions.ORG_RESUME : AuditActions.ORG_SUSPEND,
-                        "organisations", org.getId(), org.getUid()));
+                        "organisations", org.getId(), org.getUid())
+                .detail(java.util.Map.of(
+                        "callerOrganisationId",
+                        String.valueOf(caller == null ? null : caller.organisationId()),
+                        "targetOrganisationId", String.valueOf(org.getId()),
+                        "crossTenant", String.valueOf(!ownOrganisation))));
 
         return OrganisationDto.from(org);
+    }
+
+    /**
+     * Whether the caller acts for the VENDOR rather than for a tenant.
+     *
+     * <p>Today that is exactly {@code is_root}, and this method is honest about what that buys:
+     * <b>it denies nobody who could otherwise get here.</b> Root is simultaneously the only identity
+     * that reaches this service without holding {@code ORG.SUSPEND} (PermissionResolver's
+     * short-circuit) and the identity this exempts. Any non-root caller who arrives must hold the
+     * code by a real grant, which {@code ORG_ADMIN} cannot supply (the seed's CROSS JOIN excludes the
+     * {@code platform} module) and which a tenant cannot confer on itself (AuthorityCeiling refuses
+     * to confer a code the conferrer does not hold).
+     *
+     * <p>It is written anyway, as one named method, for two reasons that are not defence in depth:
+     * it is the single seam a seeded {@code PLATFORM_OPERATOR} role check lands in when that role
+     * exists (AuthorityCeiling already names it; nothing seeds it), and it is a pinned test. What
+     * genuinely closes the hole is that a tenant's administrator is no longer created root
+     * ({@code TenantProvisioningService}); this states the rule that fix relies on.
+     */
+    private static boolean isPlatformOperator(RequestContext.Principal caller) {
+        return caller != null && caller.root();
     }
 
     private static String blankToNull(String value, String fallback) {
