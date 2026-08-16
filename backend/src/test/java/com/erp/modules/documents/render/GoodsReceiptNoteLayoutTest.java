@@ -157,7 +157,7 @@ class GoodsReceiptNoteLayoutTest {
     void leavesOtherDocumentTypesAlone() throws IOException {
         DocumentRenderModel deliveryNote = new DocumentRenderModel(
                 "DELIVERY NOTE", new DocumentRenderModel.BrandingBlock(
-                        "Mwondoko Traders Ltd", null, null, List.of(), null, null, null, null, null),
+                        "Mwondoko Traders Ltd", null, null, null, List.of(), null, null, null, null, null),
                 List.of(new DocumentRenderModel.MetaPair("Delivery No.", "DN-0001")),
                 new DocumentRenderModel.PartyBlock("A CUSTOMER", List.of(), null),
                 List.of(new DocumentRenderModel.DocLine(

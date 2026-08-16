@@ -59,6 +59,22 @@ public record DocumentRenderModel(
             String         displayName,
             String         legalName,
             String         taxId,
+            /**
+             * VAT registration number, always read from {@code companies.vrn} at render time.
+             *
+             * <p>Unlike {@code legalName} and {@code taxId} there is no snapshot to prefer:
+             * {@code document_branding} has no {@code vrn} column (V19 created the table with
+             * {@code tax_id} only, and no later migration adds one). Adding one was the obvious
+             * route and was rejected as the more expensive of two options — it would need a
+             * migration against a durable database, a DTO field, a form field and a template
+             * change, to buy a per-company override nobody has asked for.
+             *
+             * <p>The cost of reading it live is that a company cannot suppress or override its VRN
+             * per document. That is the correct default anyway: a VAT-registered supplier's number
+             * belongs on its tax invoices, and "printed something different from the company
+             * record" is not a state worth being able to configure.
+             */
+            String         vrn,
             List<String>   addressLines,
             String         contactLine,
             String         logoRef,
