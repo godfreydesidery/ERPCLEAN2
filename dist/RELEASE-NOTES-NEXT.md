@@ -1,3 +1,46 @@
+### A priced product could ring up as nothing at the till
+
+If a product had a price on screen in the back office but the till showed a dash and a total of
+0.00, this was why — and it is fixed.
+
+It happened when a product's **unit was changed after its price was set**. The price stayed attached
+to the old unit, and the till could no longer see it. Nothing looked wrong anywhere: the price list
+showed the amount, the product page showed the amount, and only the till disagreed.
+
+Three things change:
+
+- **Prices like that are found again.** Nothing needs re-entering — every affected product starts
+  pricing correctly as soon as this update is installed.
+- **You can now delete such a price.** The Remove button used to do nothing at all on one of these
+  rows, so the only visible fix was also unavailable.
+- **The unit can no longer be changed while a product has prices.** You will be asked to remove the
+  prices, change the unit, and enter them again. That is deliberate: a price of 20,000 per carton is
+  not 20,000 per piece, and silently keeping the number would have put a wrong price on a receipt
+  rather than no price at all.
+
+### The till now says what went wrong
+
+When the system refused a sale, the till often said "No answer from the ERP, so we cannot tell
+whether this sale went through. Press Retry" — and retrying could never work, because the sale had
+been refused for a reason the till never showed.
+
+It now shows the reason. If a line has no price, it says so.
+
+### TIN and VRN print separately on documents
+
+Documents printed a single line labelled `TIN/VAT:`, which ran two different numbers together. The
+TIN identifies the taxpayer and the VRN identifies the VAT registration, and a document headed TAX
+INVOICE needs both, stated separately. They now print on their own lines, and the VRN appears from
+the company record without anything to re-enter.
+
+### A database update is included
+
+This release updates the database structure. **The upgrade takes a safety backup first and stops if
+it cannot** — and it has been rehearsed against a copy of your own live database, taken the same
+day, before being offered to you.
+
+---
+
 ### Backups are now taken automatically, every night
 
 Until now the installer created a `backups` folder and the guides asked you to set up a nightly
