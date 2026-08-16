@@ -19,7 +19,14 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
+import com.erp.modules.products.domain.entity.Product;
+import com.erp.modules.products.domain.entity.ProductPrice;
+import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.repository.PriceListRepository;
+import com.erp.modules.products.repository.ProductPriceRepository;
+import com.erp.modules.products.repository.ProductRepository;
+import com.erp.platform.common.money.Money;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
@@ -59,6 +66,11 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    // Repositories, not services: the drifted-row tests below must write a shape no service can
+    // produce — that is the whole point of them.
+    @Autowired private ProductRepository products;
+    @Autowired private ProductPriceRepository productPrices;
+    @Autowired private PriceListRepository priceLists;
 
     private Company companyA;
     private Long companyId;
@@ -193,6 +205,66 @@ class PriceResolutionServiceImplIT extends PostgresIntegrationTest {
         // Backward-compat constructor omits priceIncludesVat -> service/DB default stays EXCLUSIVE
         // (ADR-0056 D-2; inclusive-by-default is a UI affordance, not a service default).
         assertThat(resolved.vatInclusive()).isFalse();
+    }
+
+    // -----------------------------------------------------------------------
+    // Base price keyed on the base unit id, not on NULL — the shape that made a
+    // priced product ring 0.00 at the till on 2026-08-16.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void resolveUnitListPrice_basePriceKeyedOnTheBaseUnitId_stillResolves() {
+        ProductDto product = productService.create(goodsRequest("Drifted Base Unit Product"));
+        PriceListDto list = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "RETAIL_DRIFT", "Retail Drift"));
+
+        // Written through the REPOSITORY because no service path can produce this row any more:
+        // setPrice coerces a base-unit uid to null (ADR-0048 D-1), and updateByUid now refuses the
+        // base-unit change that used to create it. The row exists in databases where that change
+        // was made BEFORE the refusal shipped, and the read path has to survive data the current
+        // write path would never write. That is precisely why nothing caught this.
+        Product entity = products.findById(product.id()).orElseThrow();
+        UnitOfMeasure baseUnit = entity.getBaseUnit();
+        productPrices.saveAndFlush(new ProductPrice(entity,
+                priceLists.findById(list.id()).orElseThrow(),
+                baseUnit,                                   // <- the drift: not null
+                new Money(new BigDecimal("20000.00"), "TZS"),
+                null));
+
+        UnitListPriceDto resolved =
+                priceResolutionService.resolveUnitListPrice(companyId, product.id(), pcsId);
+
+        assertThat(resolved.amount())
+                .as("the price is on screen in the back office; the till must be able to see it too")
+                .isEqualByComparingTo("20000.00");
+    }
+
+    @Test
+    void resolveUnitListPrice_nullRowWinsOverABaseUnitKeyedRow() {
+        ProductDto product = productService.create(goodsRequest("Both Rows Product"));
+        PriceListDto viaService = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "RETAIL_NULLWINS", "Retail NullWins"));
+        PriceListDto drifted = priceListService.create(
+                new CreatePriceListRequest(companyA.getUid(), "RETAIL_DRIFTED", "Retail Drifted"));
+
+        // The correct row, written the correct way (unit_id IS NULL).
+        productService.setPrice(product.uid(),
+                new SetProductPriceRequest(viaService.uid(), new MoneyDto("500.00", "TZS")));
+
+        Product entity = products.findById(product.id()).orElseThrow();
+        productPrices.saveAndFlush(new ProductPrice(entity,
+                priceLists.findById(drifted.id()).orElseThrow(),
+                entity.getBaseUnit(),
+                new Money(new BigDecimal("999.00"), "TZS"),
+                null));
+
+        UnitListPriceDto resolved =
+                priceResolutionService.resolveUnitListPrice(companyId, product.id(), pcsId);
+
+        assertThat(resolved.amount())
+                .as("the fallback is repair for drifted data, and must never outrank a correctly "
+                        + "keyed row — otherwise it would silently change live pricing")
+                .isEqualByComparingTo("500.00");
     }
 
     // -----------------------------------------------------------------------

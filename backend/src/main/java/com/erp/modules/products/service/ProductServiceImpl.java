@@ -218,6 +218,34 @@ public class ProductServiceImpl implements ProductService {
                             + "kilograms. Unmark it as weighed before changing it to " + baseUnit.getName() + ".");
         }
 
+        // Changing the base unit under existing prices silently breaks them, so refuse it while any
+        // price row exists.
+        //
+        // Two things go wrong at once, and neither announces itself. A price amount is PER UNIT: a
+        // row saying 20,000 was 20,000 per CARTON, and after the base unit becomes PIECE the same
+        // number means 20,000 per piece. Re-keying it would therefore be worse than leaving it —
+        // a wrong price prints on a receipt, where a missing one at least fails visibly. And the row
+        // does not even survive as a usable base price: it stays keyed on the OLD unit, which the
+        // resolver then cannot see (PriceResolutionServiceImpl step 1 skips the explicit lookup for
+        // the base unit; step 2 wants unit_id IS NULL). That is how a shop rang 0.00 lines against a
+        // priced product on 2026-08-16 with the price plainly visible in the back office.
+        //
+        // So the operator is asked to remove the prices first, which forces the one decision the
+        // system cannot make for them: what the amount should be in the NEW unit. The resolver also
+        // tolerates already-drifted rows on read, but that is repair, not licence to create more.
+        //
+        // Deliberately narrow: only when the base unit actually changes AND priced rows exist.
+        // Every other product edit, including changing the base unit of an unpriced product, is
+        // untouched — a shopkeeper fixing a data-entry slip on a new product must not be blocked.
+        if (!previousBaseUnit.getId().equals(baseUnit.getId())
+                && prices.existsByProductId(p.getId())) {
+            throw new ConflictException(
+                    "This product has prices, so its unit cannot be changed to "
+                            + baseUnit.getName() + " — the existing prices are per "
+                            + previousBaseUnit.getName() + " and would be wrong. Remove the prices, "
+                            + "change the unit, then enter the prices again.");
+        }
+
         String nm = req.name() == null ? "" : req.name().trim();
         if (!nm.isEmpty()
                 && products.existsByCompanyIdAndNormalizedNameExcludingId(p.getCompanyId(), nm, p.getId())) {
@@ -768,6 +796,17 @@ public class ProductServiceImpl implements ProductService {
         Optional<ProductPrice> pp = unitId == null
                 ? prices.findByProductIdAndPriceListIdAndUnitIdIsNull(p.getId(), priceList.getId())
                 : prices.findByProductIdAndPriceListIdAndUnitId(p.getId(), priceList.getId(), unitId);
+
+        // Same drifted shape the resolver now tolerates: a row keyed on the base unit id rather than
+        // on NULL, left behind by a base-unit change made before updateByUid started refusing them.
+        // resolveRemovalUnitId coerces a base-unit uid to null exactly as the write path does, so
+        // Remove looked for the NULL row, found nothing, and — because this is an ifPresent — did
+        // nothing at all and said nothing. The row was unsellable AND unremovable: the one screen
+        // that could have repaired it had a button that silently no-opped.
+        if (pp.isEmpty() && unitId == null) {
+            pp = prices.findByProductIdAndPriceListIdAndUnitId(
+                    p.getId(), priceList.getId(), p.getBaseUnit().getId());
+        }
 
         pp.ifPresent(price -> {
             prices.delete(price);
