@@ -3,23 +3,15 @@ import 'package:flutter/material.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
 import '../data/mock.dart';
-import '../widgets/charts.dart';
 import '../widgets/common.dart';
+import '../widgets/kit.dart';
 
-/// The report catalogue - how an owner browses everything OrbixHQ can answer.
-///
-/// This screen carries no figure of its own beyond counts. Its job is to make
-/// twenty-nine reports feel like eight decisions: Money, Cash, Debt, Stock,
-/// Sales, Cost, People, Governance - the order a trading group actually worries
-/// in. Four reports are pinned because they are opened every morning.
+/// The report list. Three reports the client asked for, each exportable and
+/// shareable by WhatsApp or email.
 class ReportsScreen extends StatelessWidget {
-  const ReportsScreen({super.key, required this.onOpen});
+  const ReportsScreen({super.key, required this.onNavigate});
 
-  /// Fired with the slug of the report the owner tapped, e.g. `branch-league`.
-  final void Function(String reportKey) onOpen;
-
-  int get _reportCount =>
-      kCatalogue.fold<int>(0, (int a, CatalogueSection s) => a + s.entries.length);
+  final void Function(String route) onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -27,466 +19,171 @@ class ReportsScreen extends StatelessWidget {
       backgroundColor: HqColors.bg,
       appBar: AppBar(
         title: const Text('Reports', style: HqText.title),
+        titleSpacing: 20,
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
-        children: <Widget>[
-          // 1 - the question, then the shape of the answer
-          QuestionHeader(
-            question: 'What do you want to look at?',
-            subtitle:
-                '$_reportCount reports for $kCompanyName, grouped the way the '
-                'business runs. Four are pinned because you open them daily.',
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        children: [
+          _ReportTile(
+            icon: Icons.receipt_long_outlined,
+            tint: HqColors.brand,
+            title: 'Sales report',
+            subtitle: 'By product, by branch, by period',
+            figure: tzs(kSalesReportTotal),
+            figureLabel: 'this month',
+            onTap: () => onNavigate('sales'),
           ),
-          const SizedBox(height: 16),
-
-          // 2 - the stamp: doctrine 7 applies to the catalogue too
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: AsOfLine(asOf: 'Figures as at $kAsOf', coverage: kCoverage),
-              ),
-              const SizedBox(width: 12),
-              // Bounded so the chip's own Flexible can ellipsize instead of
-              // pushing the row past the screen on a 360dp handset.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 170),
-                child: const TrustChip(
-                  band: TrustBand.provisional,
-                  overrideLabel: kTrustBadge,
-                ),
-              ),
-            ],
+          const SizedBox(height: 12),
+          _ReportTile(
+            icon: Icons.inventory_outlined,
+            tint: const Color(0xFF2A78D6),
+            title: 'Stock report',
+            subtitle: 'What moved in, out and where it sits',
+            figure: '$kSkuCount',
+            figureLabel: 'items',
+            onTap: () => onNavigate('stock'),
           ),
-          const SizedBox(height: 18),
-
-          // 3 - search
-          const _SearchField(),
+          const SizedBox(height: 12),
+          _ReportTile(
+            icon: Icons.account_balance_wallet_outlined,
+            tint: const Color(0xFFEB6834),
+            title: 'Stock valuation',
+            subtitle: 'What the stock on hand is worth',
+            figure: tzs(kStockValue),
+            figureLabel: 'at cost',
+            onTap: () => onNavigate('valuation'),
+          ),
           const SizedBox(height: 24),
-
-          // 4 - pinned
-          const SectionLabel(text: 'Pinned', trailing: 'Opened every morning'),
-          SizedBox(
-            // 126 = 26 padding + 28 icon row + 11 gap + two title lines (2 x
-            // 16.2) + 4 + one sub line (13.75), with headroom. At 108 the two
-            // wrapping titles ("Where the Margin Went", "How Long the Cash
-            // Lasts") overflowed the chip by ~7px on the bottom.
-            height: 126,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.zero,
-              physics: const BouncingScrollPhysics(),
-              itemCount: _pinned.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (BuildContext _, int i) => _PinnedCard(
-                pin: _pinned[i],
-                onTap: () => onOpen(reportKeyFor(_pinned[i].title)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 26),
-
-          // 5 - the catalogue, section by section
-          for (final CatalogueSection section in kCatalogue) ...<Widget>[
-            SectionLabel(
-              text: section.title,
-              trailing: '${section.entries.length} reports',
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                section.blurb,
-                style: HqText.tiny.copyWith(color: HqColors.ink2),
-              ),
-            ),
-            HqCard(
-              padding: EdgeInsets.zero,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    for (int i = 0; i < section.entries.length; i++) ...<Widget>[
-                      if (i > 0)
-                        const Divider(
-                          height: 1,
-                          thickness: 1,
-                          color: HqColors.line,
-                        ),
-                      _ReportRow(
-                        entry: section.entries[i],
-                        onTap: () => onOpen(reportKeyFor(section.entries[i].screen)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 22),
-          ],
-
-          // 6 - the residual: what this screen is not telling you
-          const ResidualLine(
-            text:
-                'Every report opens with its own as-of stamp, coverage and trust '
-                'band. Consolidation is company-wide, all branches of '
-                '$kCompanyName.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Report keys
-// ---------------------------------------------------------------------------
-
-/// Slug for a report screen name - `Today's Trade` becomes `todays-trade`.
-/// The pinned chips and the catalogue rows resolve to the same key, so a
-/// report opened from either place lands in one destination.
-String reportKeyFor(String screenName) => screenName
-    .toLowerCase()
-    .replaceAll(RegExp(r"['’]"), '')
-    .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-    .replaceAll(RegExp(r'^-+|-+$'), '');
-
-// ---------------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------------
-
-class _SearchField extends StatelessWidget {
-  const _SearchField();
-
-  @override
-  Widget build(BuildContext context) {
-    final int count =
-        kCatalogue.fold<int>(0, (int a, CatalogueSection s) => a + s.entries.length);
-
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: HqColors.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HqColors.line2),
-        boxShadow: HqSurfaces.card,
-      ),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.search_rounded, size: 20, color: HqColors.ink3),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Search reports',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: HqText.label.copyWith(color: HqColors.ink3, fontSize: 14.5),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-            decoration: BoxDecoration(
-              color: HqColors.panel2,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: HqColors.line),
-            ),
-            child: Text(
-              '$count',
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: HqColors.ink2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pinned reports
-// ---------------------------------------------------------------------------
-
-class _Pin {
-  const _Pin(this.title, this.sub, this.icon, {this.accent = false});
-
-  final String title;
-  final String sub;
-  final IconData icon;
-
-  /// The gold rule. Exactly one pin carries it - the one that decides the day.
-  final bool accent;
-}
-
-/// Titles match their catalogue entry exactly, so both routes give one key.
-final List<_Pin> _pinned = <_Pin>[
-  const _Pin(
-    "Today's Trade",
-    'Ahead of last Tuesday',
-    Icons.storefront_rounded,
-    accent: true,
-  ),
-  _Pin(
-    'Where the Margin Went',
-    '${pp(kGrossMarginDeltaPp)} vs last month',
-    Icons.call_split_rounded,
-  ),
-  const _Pin(
-    'How Long the Cash Lasts',
-    'Floor reached in week 41',
-    Icons.hourglass_bottom_rounded,
-  ),
-  const _Pin(
-    'Branch League',
-    '$kProblemBranch is dragging',
-    Icons.emoji_events_outlined,
-  ),
-];
-
-class _PinnedCard extends StatelessWidget {
-  const _PinnedCard({required this.pin, required this.onTap});
-
-  final _Pin pin;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final BorderRadius radius = BorderRadius.circular(18);
-
-    return SizedBox(
-      width: 182,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: radius,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: radius,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 13, 13, 13),
-            decoration: BoxDecoration(
-              gradient: HqSurfaces.brandGradient,
-              borderRadius: radius,
-              boxShadow: HqSurfaces.card,
-            ),
+          const SectionLabel(text: 'SHARING'),
+          const SizedBox(height: 10),
+          HqCard(
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                if (pin.accent) ...<Widget>[
-                  Container(
-                    width: 3,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: HqSurfaces.accent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF25D366).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(11),
                   ),
-                  const SizedBox(width: 11),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    // The horizontal list gives every chip a tight height, so
-                    // the column fills it: icon pinned top, copy pinned bottom.
-                    // The Spacer absorbs the slack when a title is one line and
-                    // collapses to zero when it wraps to two.
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.14),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: HqOnDark.hairline),
-                            ),
-                            child: Icon(
-                              pin.icon,
-                              size: 15,
-                              color: HqOnDark.primary,
-                            ),
-                          ),
-                          const Spacer(),
-                          const Icon(
-                            Icons.north_east_rounded,
-                            size: 14,
-                            color: HqOnDark.tertiary,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 11),
-                      const Spacer(),
-                      Text(
-                        pin.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                          letterSpacing: -0.1,
-                          color: HqOnDark.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        pin.sub,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          height: 1.25,
-                          color: HqOnDark.secondary,
-                        ),
-                      ),
-                    ],
+                  child: const Icon(Icons.ios_share_rounded,
+                      size: 19, color: Color(0xFF25D366)),
+                ),
+                const SizedBox(width: 13),
+                const Expanded(
+                  child: Text(
+                    'Every report can go out as PDF, Excel or CSV — by '
+                    'WhatsApp, by email, or saved to the phone.',
+                    style: HqText.body,
                   ),
                 ),
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => showShareSheet(context, 'Sales report — August 2026'),
+            icon: const Icon(Icons.ios_share_rounded, size: 18),
+            label: const Text('Try sharing a report'),
+          ),
+          const SizedBox(height: 20),
+          const AsOfLine(
+            asOf: 'Figures as at $kAsOf',
+            coverage: 'Demo data — not connected to the server',
+          ),
+        ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// A catalogue row
-// ---------------------------------------------------------------------------
+class _ReportTile extends StatelessWidget {
+  const _ReportTile({
+    required this.icon,
+    required this.tint,
+    required this.title,
+    required this.subtitle,
+    required this.figure,
+    required this.figureLabel,
+    required this.onTap,
+  });
 
-/// Archetype order fixes the hue, so the same kind of report is always the
-/// same colour across the catalogue. The pill is direct-labelled - the dot
-/// never has to be looked up.
-const List<String> _archetypeOrder = <String>[
-  'Verdict',
-  'Bridge',
-  'Trend',
-  'Runway',
-  'Position',
-  'Match',
-  'Ageing',
-  'Exception',
-  'Queue',
-  'Coverage',
-  'League',
-  'Ranking',
-];
-
-Color _archetypeDot(String archetype) {
-  final int i = _archetypeOrder.indexOf(archetype);
-  return i < 0 ? VizColors.muted : VizColors.cat(i);
-}
-
-class _ReportRow extends StatelessWidget {
-  const _ReportRow({required this.entry, required this.onTap});
-
-  final CatalogueEntry entry;
+  final IconData icon;
+  final Color tint;
+  final String title;
+  final String subtitle;
+  final String figure;
+  final String figureLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(15, 13, 12, 13),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
+    return HqCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: tint, size: 22),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
+                  children: [
                     Text(
-                      entry.screen,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      title,
                       style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        height: 1.25,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
                         color: HqColors.ink,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Text(
-                      entry.question,
+                      subtitle,
+                      style: HqText.tiny,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: HqText.tiny.copyWith(color: HqColors.ink3),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              // The pill is the only non-flex child with text in this row, so
-              // it is capped: label + gap + chevron can never exceed 164dp,
-              // which leaves the title column real width even at 360dp.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 132),
-                child: _ArchetypePill(archetype: entry.archetype),
-              ),
-              const SizedBox(width: 2),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 22,
-                color: HqColors.ink3,
-              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: HqColors.ink3, size: 20),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ArchetypePill extends StatelessWidget {
-  const _ArchetypePill({required this.archetype});
-
-  final String archetype;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color dot = _archetypeDot(archetype);
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
-      decoration: BoxDecoration(
-        color: HqColors.panel2,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: HqColors.line),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              archetype,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-                color: HqColors.ink2,
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text(
+                figure,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: HqColors.ink,
+                ),
               ),
-            ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  figureLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HqText.tiny,
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -1,24 +1,19 @@
 import 'package:flutter/material.dart';
 
 import 'app/theme.dart';
-import 'features/approval_detail_screen.dart';
-import 'features/approvals_screen.dart';
-import 'features/branch_detail_screen.dart';
-import 'features/branch_league_screen.dart';
-import 'features/budget_screen.dart';
-import 'features/cash_screen.dart';
-import 'features/customers_screen.dart';
-import 'features/debtors_screen.dart';
-import 'features/governance_screen.dart';
-import 'features/home_screen.dart';
-import 'features/margin_screen.dart';
-import 'features/notifications_screen.dart';
-import 'features/people_screen.dart';
+import 'features/close_session_screen.dart';
+import 'features/create_item_screen.dart';
+import 'features/create_supplier_screen.dart';
+import 'features/dashboard_screen.dart';
+import 'features/operations_screen.dart';
+import 'features/receive_goods_screen.dart';
 import 'features/reports_screen.dart';
+import 'features/sales_report_screen.dart';
 import 'features/settings_screen.dart';
 import 'features/sign_in_screen.dart';
-import 'features/stock_screen.dart';
-import 'features/todays_trade_screen.dart';
+import 'features/stock_adjustment_screen.dart';
+import 'features/stock_report_screen.dart';
+import 'features/stock_valuation_screen.dart';
 
 void main() => runApp(const OrbixHqApp());
 
@@ -55,8 +50,7 @@ class _RootState extends State<_Root> {
   }
 }
 
-/// Bottom-nav shell. Five destinations, matching how an executive actually
-/// moves: the brief, the decisions, the catalogue, the alerts, and themselves.
+/// Four tabs: what happened, what it is worth, what to do, and who I am.
 class _Shell extends StatefulWidget {
   const _Shell({required this.onSignOut});
 
@@ -69,39 +63,29 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _tab = 0;
 
-  void _push(BuildContext context, Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
-  }
-
-  /// Route strings are deliberately loose in the demo — every tap lands
-  /// somewhere real so the owner can walk the whole product.
   void _navigate(String route) {
     final screen = switch (route) {
-      'cash' => const CashScreen(),
-      'margin' => const MarginScreen(),
-      'debtors' => const DebtorsScreen(),
-      'league' => const BranchLeagueScreen(),
-      'stock' => const StockScreen(),
-      'trade' => const TodaysTradeScreen(),
-      'governance' => const GovernanceScreen(),
-      'people' => const PeopleScreen(),
-      'budget' => const BudgetScreen(),
-      'customers' => const CustomersScreen(),
-      'arusha' => const BranchDetailScreen(branchName: 'Arusha'),
-      _ => const BranchDetailScreen(branchName: 'Arusha'),
+      'sales' => const SalesReportScreen(),
+      'stock' => const StockReportScreen(),
+      'valuation' => const StockValuationScreen(),
+      'receive' => const ReceiveGoodsScreen(),
+      'adjust' => const StockAdjustmentScreen(),
+      'item' => const CreateItemScreen(),
+      'supplier' => const CreateSupplierScreen(),
+      'session' => const CloseSessionScreen(),
+      _ => const StockValuationScreen(),
     };
-    _push(context, screen);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => screen),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      HomeScreen(onNavigate: _navigate),
-      ApprovalsScreen(
-        onOpen: (i) => _push(context, ApprovalDetailScreen(index: i)),
-      ),
-      ReportsScreen(onOpen: _navigate),
-      const NotificationsScreen(),
+      DashboardScreen(onNavigate: _navigate),
+      ReportsScreen(onNavigate: _navigate),
+      OperationsScreen(onNavigate: _navigate),
       SettingsScreen(onSignOut: widget.onSignOut),
     ];
 
@@ -122,27 +106,19 @@ class _ShellState extends State<_Shell> {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
             NavigationDestination(
-              icon: Icon(Icons.insights_outlined),
-              selectedIcon: Icon(Icons.insights, color: HqColors.brand),
-              label: 'Brief',
+              icon: Icon(Icons.space_dashboard_outlined),
+              selectedIcon: Icon(Icons.space_dashboard, color: HqColors.brand),
+              label: 'Dashboard',
             ),
             NavigationDestination(
-              icon: Badge(label: Text('3'), child: Icon(Icons.how_to_reg_outlined)),
-              selectedIcon: Badge(
-                label: Text('3'),
-                child: Icon(Icons.how_to_reg, color: HqColors.brand),
-              ),
-              label: 'Approvals',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.donut_small_outlined),
-              selectedIcon: Icon(Icons.donut_small, color: HqColors.brand),
+              icon: Icon(Icons.assessment_outlined),
+              selectedIcon: Icon(Icons.assessment, color: HqColors.brand),
               label: 'Reports',
             ),
             NavigationDestination(
-              icon: Icon(Icons.notifications_none),
-              selectedIcon: Icon(Icons.notifications, color: HqColors.brand),
-              label: 'Alerts',
+              icon: Icon(Icons.bolt_outlined),
+              selectedIcon: Icon(Icons.bolt, color: HqColors.brand),
+              label: 'Operations',
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline),
