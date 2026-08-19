@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
-import '../widgets/charts.dart';
+import '../services/sales_service.dart';
+import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
-/// Sales report — period filter, a trend, then the breakdown by product or by
-/// branch. Exportable and shareable. Mockup: the filters change the labels,
-/// not the data.
+/// Sales report over a date range — the client's "range of date".
 class SalesReportScreen extends StatefulWidget {
   const SalesReportScreen({super.key});
 
@@ -18,15 +17,10 @@ class SalesReportScreen extends StatefulWidget {
 }
 
 class _SalesReportScreenState extends State<SalesReportScreen> {
-  int _period = 2;
-  int _breakdown = 0;
+  final _viewKey = GlobalKey<AsyncViewState<SalesReport>>();
 
-  /// The presets are shortcuts; the range below is what the report actually
-  /// runs on, and the client can set it to anything.
-  DateTimeRange _range = DateTimeRange(
-    start: DateTime(2026, 8, 1),
-    end: DateTime(2026, 8, 19),
-  );
+  int _period = 2;
+  late DateTimeRange _range = _presetRange(2);
 
   static const _periods = [
     'Today',
@@ -36,26 +30,34 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
     'Custom',
   ];
 
-  void _applyPreset(int i) {
-    final today = DateTime(2026, 8, 19);
-    final range = switch (i) {
+  static DateTimeRange _presetRange(int i) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return switch (i) {
       0 => DateTimeRange(start: today, end: today),
-      1 => DateTimeRange(start: DateTime(2026, 8, 17), end: today),
-      2 => DateTimeRange(start: DateTime(2026, 8, 1), end: today),
-      3 => DateTimeRange(start: DateTime(2026, 1, 1), end: today),
-      _ => _range,
+      1 => DateTimeRange(
+          start: today.subtract(Duration(days: today.weekday - 1)),
+          end: today),
+      2 => DateTimeRange(start: DateTime(now.year, now.month, 1), end: today),
+      3 => DateTimeRange(start: DateTime(now.year, 1, 1), end: today),
+      _ => DateTimeRange(start: today, end: today),
     };
-    setState(() {
-      _period = i;
-      _range = range;
-    });
   }
 
   String get _rangeLabel => formatRange(_range);
 
+  void _applyPreset(int i) {
+    if (i == _periods.length - 1) return;
+    setState(() {
+      _period = i;
+      _range = _presetRange(i);
+    });
+    _viewKey.currentState?.reload();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = _breakdown == 0 ? kSalesByProduct : kSalesByBranch;
+    final session = AppScope.of(context).session;
 
     return Scaffold(
       backgroundColor: HqColors.bg,
@@ -65,103 +67,103 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           IconButton(
             tooltip: 'Share',
             icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () => showShareSheet(
-              context,
-              'Sales report — $_rangeLabel',
-            ),
+            onPressed: () =>
+                showShareSheet(context, 'Sales report — $_rangeLabel'),
           ),
           const SizedBox(width: 6),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-        children: [
-          FilterChipsRow(
-            options: _periods,
-            selected: _period,
-            onSelected: _applyPreset,
-          ),
-          const SizedBox(height: 12),
-          DateRangeBar(
-            range: _range,
-            onChanged: (r) => setState(() {
-              _range = r;
-              _period = _periods.length - 1;
-            }),
-          ),
-          const SizedBox(height: 16),
-          _Totals(period: _rangeLabel),
-          const SizedBox(height: 14),
-          HqCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: !session.can('SALES.INVOICE.VIEW')
+          ? const NoPermission(code: 'SALES.INVOICE.VIEW')
+          : Column(
               children: [
-                Text('Last 12 months', style: HqText.label),
-                const SizedBox(height: 14),
-                ColumnTrend(
-                  values: kSales12Months,
-                  labels: kMonthLabels,
-                  height: 150,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Column(
+                    children: [
+                      FilterChipsRow(
+                        options: _periods,
+                        selected: _period,
+                        onSelected: _applyPreset,
+                      ),
+                      const SizedBox(height: 12),
+                      DateRangeBar(
+                        range: _range,
+                        onChanged: (r) {
+                          setState(() {
+                            _range = r;
+                            _period = _periods.length - 1;
+                          });
+                          _viewKey.currentState?.reload();
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'August is a part month — shown hatched.',
-                  style: HqText.tiny,
+                Expanded(
+                  child: AsyncView<SalesReport>(
+                    key: _viewKey,
+                    load: () => AppScope.of(context).sales.report(
+                          from: _range.start,
+                          to: _range.end,
+                        ),
+                    isEmpty: (d) => d.rows.isEmpty,
+                    emptyIcon: Icons.receipt_long_outlined,
+                    emptyTitle: 'No sales in this period',
+                    emptyDetail: 'Try a different date range.',
+                    builder: (context, data) => ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                      children: [
+                        _Totals(period: _rangeLabel, report: data),
+                        const SizedBox(height: 20),
+                        SectionLabel(
+                          text: 'BY PRODUCT',
+                          trailing: '${data.rows.length} ITEMS',
+                        ),
+                        const SizedBox(height: 10),
+                        HqCard(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                          child: Column(
+                            children: [
+                              for (var i = 0; i < data.rows.length; i++) ...[
+                                if (i > 0) const Divider(height: 18),
+                                _Row(row: data.rows[i], total: data.total),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () => showShareSheet(
+                            context,
+                            'Sales report — $_rangeLabel',
+                          ),
+                          icon: const Icon(Icons.ios_share_rounded, size: 19),
+                          label: const Text('Export and share'),
+                        ),
+                        const SizedBox(height: 16),
+                        AsOfLine(
+                          asOf: data.generatedAt == null
+                              ? 'Live from the server'
+                              : 'Generated ${data.generatedAt}',
+                          coverage: session.activeBranch?.name ?? '',
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: SectionLabel(
-                  text: _breakdown == 0 ? 'BY PRODUCT' : 'BY BRANCH',
-                ),
-              ),
-              _Toggle(
-                index: _breakdown,
-                onChanged: (i) => setState(() => _breakdown = i),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          HqCard(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-            child: Column(
-              children: [
-                for (var i = 0; i < rows.length; i++) ...[
-                  if (i > 0) const Divider(height: 18),
-                  _SalesRowTile(row: rows[i]),
-                ],
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => showShareSheet(
-              context,
-              'Sales report — $_rangeLabel',
-            ),
-            icon: const Icon(Icons.ios_share_rounded, size: 19),
-            label: const Text('Export and share'),
-          ),
-          const SizedBox(height: 18),
-          const AsOfLine(
-            asOf: 'Figures as at $kAsOf',
-            coverage: 'Demo data — not connected to the server',
-          ),
-        ],
-      ),
     );
   }
 }
 
 class _Totals extends StatelessWidget {
-  const _Totals({required this.period});
+  const _Totals({required this.period, required this.report});
 
   final String period;
+  final SalesReport report;
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +179,8 @@ class _Totals extends StatelessWidget {
         children: [
           Text(
             period.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
@@ -186,7 +190,7 @@ class _Totals extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            tzs(kSalesReportTotal),
+            tzs(report.total),
             style: const TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.w700,
@@ -200,18 +204,17 @@ class _Totals extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Expanded(
-                child: _MiniFigure(
-                  label: 'Invoices',
-                  value: '$kSalesReportInvoices',
+              Expanded(
+                child: _Mini(
+                  label: 'Items sold',
+                  value: report.qtySold.toStringAsFixed(0),
                 ),
               ),
               Container(width: 1, height: 28, color: HqOnDark.hairline),
+              Expanded(child: _Mini(label: 'VAT', value: tzs(report.vat))),
+              Container(width: 1, height: 28, color: HqOnDark.hairline),
               Expanded(
-                child: _MiniFigure(
-                  label: 'Average sale',
-                  value: tzs(kSalesReportTotal / kSalesReportInvoices),
-                ),
+                child: _Mini(label: 'Margin', value: tzs(report.margin)),
               ),
             ],
           ),
@@ -221,8 +224,8 @@ class _Totals extends StatelessWidget {
   }
 }
 
-class _MiniFigure extends StatelessWidget {
-  const _MiniFigure({required this.label, required this.value});
+class _Mini extends StatelessWidget {
+  const _Mini({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -246,7 +249,7 @@ class _MiniFigure extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
@@ -257,58 +260,16 @@ class _MiniFigure extends StatelessWidget {
   }
 }
 
-class _Toggle extends StatelessWidget {
-  const _Toggle({required this.index, required this.onChanged});
+class _Row extends StatelessWidget {
+  const _Row({required this.row, required this.total});
 
-  final int index;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    const labels = ['Product', 'Branch'];
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: HqColors.panel,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: HqColors.line),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            GestureDetector(
-              onTap: () => onChanged(i),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: i == index ? HqColors.brand : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Text(
-                  labels[i],
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: i == index ? Colors.white : HqColors.ink2,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SalesRowTile extends StatelessWidget {
-  const _SalesRowTile({required this.row});
-
-  final SalesRow row;
+  final SalesReportRow row;
+  final double total;
 
   @override
   Widget build(BuildContext context) {
+    final share = total == 0 ? 0.0 : (row.amount / total).clamp(0.0, 1.0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -316,7 +277,7 @@ class _SalesRowTile extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                row.label,
+                row.productName.isEmpty ? row.productCode : row.productName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -344,7 +305,7 @@ class _SalesRowTile extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(3),
                 child: LinearProgressIndicator(
-                  value: row.share,
+                  value: share.toDouble(),
                   minHeight: 6,
                   backgroundColor: HqColors.line,
                   valueColor:
@@ -354,7 +315,7 @@ class _SalesRowTile extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             Text(
-              '${row.qty} · ${pct(row.share * 100)}',
+              '${row.qtySold.toStringAsFixed(0)} · ${pct(share * 100)}',
               style: HqText.tiny,
             ),
           ],

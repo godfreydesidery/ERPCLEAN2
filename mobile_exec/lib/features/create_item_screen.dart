@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../app/format.dart';
+import '../app/app_scope.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
+import '../core/api/api_exception.dart';
+import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
-/// Register a new product. Mockup: validates and confirms, posts nothing.
+/// Register a product against `/products`.
 class CreateItemScreen extends StatefulWidget {
   const CreateItemScreen({super.key});
 
@@ -18,25 +19,32 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   final _name = TextEditingController();
   final _code = TextEditingController();
   final _barcode = TextEditingController();
-  final _cost = TextEditingController();
-  final _price = TextEditingController();
-  final _opening = TextEditingController();
 
-  String? _category;
   String? _unit;
   bool _vatable = true;
+  bool _busy = false;
+
+  /// Base unit codes the ERP ships with.
+  static const _units = <String>[
+    'PCS',
+    'BAG',
+    'CTN',
+    'KG',
+    'LTR',
+    'BOX',
+    'DZN',
+  ];
 
   @override
   void initState() {
     super.initState();
-    for (final c in [_cost, _price]) {
-      c.addListener(() => setState(() {}));
-    }
+    _name.addListener(() => setState(() {}));
+    _code.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _code, _barcode, _cost, _price, _opening]) {
+    for (final c in [_name, _code, _barcode]) {
       c.dispose();
     }
     super.dispose();
@@ -44,187 +52,138 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
 
   bool get _ready =>
       _name.text.trim().isNotEmpty &&
-      _category != null &&
+      _code.text.trim().isNotEmpty &&
       _unit != null &&
-      _price.text.trim().isNotEmpty;
-
-  double? get _margin {
-    final c = double.tryParse(_cost.text);
-    final p = double.tryParse(_price.text);
-    if (c == null || p == null || p == 0) return null;
-    return (p - c) / p * 100;
-  }
+      !_busy;
 
   Future<void> _submit() async {
-    await showDoneSheet(
-      context,
-      title: 'Item created',
-      detail: '${_name.text.trim()}\n'
-          '${_category!} · sold by ${_unit!}',
-    );
-    if (mounted) Navigator.of(context).pop();
+    setState(() => _busy = true);
+    try {
+      final created = await AppScope.of(context).catalog.createProduct(
+            name: _name.text.trim(),
+            code: _code.text.trim().toUpperCase(),
+            baseUnitCode: _unit!,
+            barcode: _barcode.text.trim(),
+            vatable: _vatable,
+          );
+      if (!mounted) return;
+      await showDoneSheet(
+        context,
+        title: 'Item created',
+        detail: '${created.name}\n${created.code}',
+      );
+      if (mounted) Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: HqColors.bad,
+            content: Text(e.message),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final margin = _margin;
+    final session = AppScope.of(context).session;
 
     return Scaffold(
       backgroundColor: HqColors.bg,
       appBar: AppBar(title: const Text('New item', style: HqText.title)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        children: [
-          const SectionLabel(text: 'WHAT IT IS'),
-          const SizedBox(height: 12),
-          HqField(
-            label: 'Item name',
-            required: true,
-            controller: _name,
-            hint: 'e.g. Cooking Oil 20L — Tembo',
-            onTap: () => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: HqField(
-                  label: 'Item code',
-                  controller: _code,
-                  hint: 'Auto if left blank',
+      body: !session.can('PRODUCT.MANAGE')
+          ? const NoPermission(code: 'PRODUCT.MANAGE')
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+              children: [
+                const SectionLabel(text: 'WHAT IT IS'),
+                const SizedBox(height: 12),
+                HqField(
+                  label: 'Item name',
+                  required: true,
+                  controller: _name,
+                  hint: 'e.g. Cooking Oil 20L',
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: HqField(
+                const SizedBox(height: 16),
+                HqField(
+                  label: 'Item code',
+                  required: true,
+                  controller: _code,
+                  hint: 'e.g. OIL-20L',
+                  helper: 'Must be unique within the company.',
+                ),
+                const SizedBox(height: 16),
+                HqField(
                   label: 'Barcode',
                   controller: _barcode,
                   hint: 'Optional',
                   prefix: Icons.qr_code_scanner_rounded,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          HqDropdown(
-            label: 'Category',
-            required: true,
-            items: kCategories,
-            value: _category,
-            onChanged: (v) => setState(() => _category = v),
-          ),
-          const SizedBox(height: 16),
-          HqDropdown(
-            label: 'Sold by',
-            required: true,
-            items: kUnits,
-            value: _unit,
-            hint: 'Unit of measure',
-            onChanged: (v) => setState(() => _unit = v),
-          ),
-          const SizedBox(height: 24),
-          const SectionLabel(text: 'PRICING'),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: HqField(
-                  label: 'Buying price',
-                  controller: _cost,
-                  keyboardType: TextInputType.number,
-                  hint: '0',
-                  suffixText: 'TZS',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: HqField(
-                  label: 'Selling price',
+                const SizedBox(height: 16),
+                HqDropdown(
+                  label: 'Sold by',
                   required: true,
-                  controller: _price,
-                  keyboardType: TextInputType.number,
-                  hint: '0',
-                  suffixText: 'TZS',
+                  items: _units,
+                  value: _unit,
+                  hint: 'Unit of measure',
+                  onChanged: (v) => setState(() => _unit = v),
                 ),
-              ),
-            ],
-          ),
-          if (margin != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: margin < 0 ? HqColors.badSoft : HqColors.goodSoft,
-                borderRadius: BorderRadius.circular(HqRadii.sm),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    margin < 0
-                        ? Icons.trending_down_rounded
-                        : Icons.trending_up_rounded,
-                    size: 19,
-                    color: margin < 0 ? HqColors.bad : HqColors.good,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      margin < 0
-                          ? 'You would sell this below cost.'
-                          : 'Margin ${pct(margin)}',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: margin < 0 ? HqColors.bad : HqColors.good,
-                      ),
+                const SizedBox(height: 16),
+                SwitchListTile.adaptive(
+                  value: _vatable,
+                  onChanged: (v) => setState(() => _vatable = v),
+                  contentPadding: EdgeInsets.zero,
+                  activeThumbColor: HqColors.brand,
+                  title: const Text(
+                    'VAT applies',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: HqColors.ink,
                     ),
                   ),
-                ],
-              ),
+                  subtitle: Text(
+                    _vatable ? 'Standard rate' : 'Exempt',
+                    style: HqText.tiny,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                HqCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          size: 19, color: HqColors.ink3),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Prices and opening stock are set separately — '
+                          'receive the goods to bring stock in.',
+                          style: HqText.body,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 26),
+                FilledButton(
+                  onPressed: _ready ? _submit : null,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Create item'),
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: 16),
-          SwitchListTile.adaptive(
-            value: _vatable,
-            onChanged: (v) => setState(() => _vatable = v),
-            contentPadding: EdgeInsets.zero,
-            activeThumbColor: HqColors.brand,
-            title: const Text(
-              'VAT applies',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: HqColors.ink,
-              ),
-            ),
-            subtitle: Text('Standard rate 18%', style: HqText.tiny),
-          ),
-          const SizedBox(height: 16),
-          const SectionLabel(text: 'OPENING STOCK'),
-          const SizedBox(height: 12),
-          HqField(
-            label: 'Quantity on hand',
-            controller: _opening,
-            keyboardType: TextInputType.number,
-            hint: '0',
-            helper: 'Leave at zero if you will receive it separately.',
-          ),
-          const SizedBox(height: 26),
-          FilledButton(
-            onPressed: _ready ? _submit : null,
-            child: const Text('Create item'),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: Text(
-              'Demo build — nothing is saved to the server.',
-              style: HqText.tiny,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../app/theme.dart';
-import '../data/mock.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
@@ -59,31 +58,16 @@ class OperationsScreen extends StatelessWidget {
             onTap: () => onNavigate('supplier'),
           ),
           const SizedBox(height: 22),
-          SectionLabel(
-            text: 'TILLS',
-            trailing: '${kOpenSessions.length} OPEN',
-          ),
+          const SectionLabel(text: 'TILLS'),
           const SizedBox(height: 10),
           ActionTile(
             icon: Icons.receipt_outlined,
-            title: 'X / Z till report',
-            subtitle: 'Read a till now, or close it for the day',
+            title: 'X read',
+            subtitle: 'See where a till stands right now',
             tint: const Color(0xFF7C7CD6),
             onTap: () => onNavigate('till'),
           ),
-          const SizedBox(height: 10),
-          ActionTile(
-            icon: Icons.point_of_sale_outlined,
-            title: 'Close a session',
-            subtitle: 'Count the cash and close a till for the day',
-            tint: const Color(0xFF15803D),
-            onTap: () => onNavigate('session'),
-          ),
           const SizedBox(height: 24),
-          const AsOfLine(
-            asOf: 'Demo build',
-            coverage: 'Nothing on these screens is sent to the server',
-          ),
         ],
       ),
     );

@@ -1,10 +1,17 @@
 // Every screen must render on a phone-sized surface without throwing and
 // without a layout overflow, on a normal handset and on a small one.
+//
+// The screens now load from the network. These tests mount them inside an
+// AppScope holding a signed-out session, so each one paints its permission or
+// error state — which is exactly the state a user sees when the server is
+// unreachable, and the state most likely to be laid out carelessly.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:orbix_hq/app/app_scope.dart';
 import 'package:orbix_hq/app/theme.dart';
-import 'package:orbix_hq/features/close_session_screen.dart';
+import 'package:orbix_hq/core/session.dart';
 import 'package:orbix_hq/features/create_item_screen.dart';
 import 'package:orbix_hq/features/create_supplier_screen.dart';
 import 'package:orbix_hq/features/dashboard_screen.dart';
@@ -31,17 +38,23 @@ Map<String, Widget> buildScreens() => <String, Widget>{
       'stock adjustment': const StockAdjustmentScreen(),
       'create item': const CreateItemScreen(),
       'create supplier': const CreateSupplierScreen(),
-      'close session': const CloseSessionScreen(),
-      'till report': const TillReportScreen(),
+      'x read': const TillReportScreen(),
       'settings': SettingsScreen(onSignOut: () {}),
     };
 
 void main() {
-  // A common mid-range Android, and a small one.
   const sizes = <String, Size>{
     '412x915': Size(412, 915),
     '360x640': Size(360, 640),
   };
+
+  late Session session;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    session = await Session.create();
+  });
 
   sizes.forEach((sizeName, size) {
     group('at $sizeName', () {
@@ -52,9 +65,12 @@ void main() {
           addTearDown(tester.view.reset);
 
           await tester.pumpWidget(
-            MaterialApp(theme: buildHqTheme(), home: screen),
+            AppScope(
+              session: session,
+              child: MaterialApp(theme: buildHqTheme(), home: screen),
+            ),
           );
-          await tester.pumpAndSettle();
+          await tester.pump(const Duration(milliseconds: 50));
 
           expect(tester.takeException(), isNull,
               reason: '$name threw at $sizeName');

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import '../app/format.dart';
+import '../app/app_scope.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
+import '../services/catalog_service.dart';
+import '../widgets/async_view.dart';
 import '../widgets/kit.dart';
 
-/// A searchable product chooser, shared by the adjustment and receiving forms.
-Future<Product?> pickProduct(BuildContext context) {
-  return showModalBottomSheet<Product>(
+/// A searchable product chooser, backed by `/products`.
+Future<ProductItem?> pickProduct(BuildContext context) {
+  return showModalBottomSheet<ProductItem>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -27,13 +28,6 @@ class _ProductPickerState extends State<_ProductPicker> {
 
   @override
   Widget build(BuildContext context) {
-    final items = kProducts
-        .where((p) =>
-            _query.isEmpty ||
-            p.name.toLowerCase().contains(_query.toLowerCase()) ||
-            p.code.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
-
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,
@@ -71,8 +65,24 @@ class _ProductPickerState extends State<_ProductPicker> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: items.isEmpty
-                  ? Center(
+              child: AsyncView<List<ProductItem>>(
+                load: () => AppScope.of(context).catalog.products(),
+                isEmpty: (d) => d.isEmpty,
+                emptyIcon: Icons.inventory_2_outlined,
+                emptyTitle: 'No items yet',
+                emptyDetail: 'Create one from Operations first.',
+                builder: (context, all) {
+                  final q = _query.trim().toLowerCase();
+                  final items = q.isEmpty
+                      ? all
+                      : all
+                          .where((p) =>
+                              p.name.toLowerCase().contains(q) ||
+                              p.code.toLowerCase().contains(q))
+                          .toList();
+
+                  if (items.isEmpty) {
+                    return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -83,43 +93,39 @@ class _ProductPickerState extends State<_ProductPicker> {
                               style: HqText.body),
                         ],
                       ),
-                    )
-                  : ListView.separated(
-                      controller: controller,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, i) {
-                        final p = items[i];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            p.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              color: HqColors.ink,
-                            ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    controller: controller,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 8),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final p = items[i];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: HqColors.ink,
                           ),
-                          subtitle: Text(
-                            '${p.code} · ${p.onHand} ${p.unit} on hand',
-                            style: HqText.tiny,
-                          ),
-                          trailing: Text(
-                            tzs(p.price),
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: HqColors.ink2,
-                            ),
-                          ),
-                          onTap: () => Navigator.of(context).pop(p),
-                        );
-                      },
-                    ),
+                        ),
+                        subtitle: Text(
+                          '${p.code} · per ${p.unit}',
+                          style: HqText.tiny,
+                        ),
+                        onTap: () => Navigator.of(context).pop(p),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -137,7 +143,7 @@ class ProductPickerTile extends StatelessWidget {
     this.label = 'Item',
   });
 
-  final Product? product;
+  final ProductItem? product;
   final VoidCallback onTap;
   final String label;
 
@@ -174,7 +180,8 @@ class ProductPickerTile extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(HqRadii.sm),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(HqRadii.sm),
                 border: Border.all(
@@ -194,10 +201,8 @@ class ProductPickerTile extends StatelessWidget {
                     child: product == null
                         ? const Text(
                             'Tap to choose an item',
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: HqColors.ink3,
-                            ),
+                            style:
+                                TextStyle(fontSize: 15, color: HqColors.ink3),
                           )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,8 +219,7 @@ class ProductPickerTile extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${product!.code} · '
-                                '${product!.onHand} ${product!.unit} on hand',
+                                '${product!.code} · per ${product!.unit}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: HqText.tiny,

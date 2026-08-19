@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../app/format.dart';
+import '../app/app_scope.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
+import '../services/stock_service.dart';
+import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
-/// Stock report — what is on hand, what moved, and what needs attention.
+/// Stock report — what is on hand right now, searchable.
 class StockReportScreen extends StatefulWidget {
   const StockReportScreen({super.key});
 
@@ -15,17 +16,12 @@ class StockReportScreen extends StatefulWidget {
 }
 
 class _StockReportScreenState extends State<StockReportScreen> {
+  final _viewKey = GlobalKey<AsyncViewState<List<StockRow>>>();
   String _query = '';
-  DateTime _asAt = DateTime(2026, 8, 19);
 
   @override
   Widget build(BuildContext context) {
-    final items = kProducts
-        .where((p) =>
-            _query.isEmpty ||
-            p.name.toLowerCase().contains(_query.toLowerCase()) ||
-            p.code.toLowerCase().contains(_query.toLowerCase()))
-        .toList();
+    final session = AppScope.of(context).session;
 
     return Scaffold(
       backgroundColor: HqColors.bg,
@@ -35,131 +31,134 @@ class _StockReportScreenState extends State<StockReportScreen> {
           IconButton(
             tooltip: 'Share',
             icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () =>
-                showShareSheet(context, 'Stock report — $kBranchName'),
+            onPressed: () => showShareSheet(context, 'Stock report'),
           ),
           const SizedBox(width: 6),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-        children: [
-          AsAtBar(
-            date: _asAt,
-            onChanged: (d) => setState(() => _asAt = d),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: StatTile(
-                  label: 'Items',
-                  value: '$kSkuCount',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: StatTile(
-                  label: 'Low stock',
-                  value: '$kLowStockCount',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: StatTile(
-                  label: 'Out of stock',
-                  value: '$kOutOfStockCount',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const SectionLabel(text: 'MOVEMENT THIS MONTH'),
-          const SizedBox(height: 10),
-          HqCard(
-            child: Column(
+      body: !session.can('STOCK.VIEW')
+          ? const NoPermission(code: 'STOCK.VIEW')
+          : Column(
               children: [
-                FigureRow(
-                  label: 'Goods received',
-                  value: '$kReceiptsThisMonth receipts',
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: HqSearchField(
+                    hint: 'Search item or code',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
                 ),
-                const Divider(height: 12),
-                FigureRow(
-                  label: 'Issued to sales',
-                  value: '$kIssuesThisMonth issues',
-                ),
-                const Divider(height: 12),
-                FigureRow(
-                  label: 'Adjustments',
-                  value: '$kAdjustmentsThisMonth',
-                ),
-                const Divider(height: 12),
-                FigureRow(
-                  label: 'Written off',
-                  value: tzs(kShrinkageValue),
-                  valueColor: HqColors.bad,
+                Expanded(
+                  child: AsyncView<List<StockRow>>(
+                    key: _viewKey,
+                    load: () => AppScope.of(context).stock.onHand(),
+                    isEmpty: (d) => d.isEmpty,
+                    emptyIcon: Icons.inventory_outlined,
+                    emptyTitle: 'No stock records',
+                    emptyDetail: 'Nothing is held in this branch yet.',
+                    builder: (context, all) {
+                      final q = _query.trim().toLowerCase();
+                      final rows = q.isEmpty
+                          ? all
+                          : all
+                              .where((r) =>
+                                  r.productName.toLowerCase().contains(q) ||
+                                  r.productCode.toLowerCase().contains(q))
+                              .toList();
+                      final low = all.where((r) => r.low).length;
+                      final neg = all.where((r) => r.negative).length;
+
+                      return ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: StatTile(
+                                  label: 'Items',
+                                  value: '${all.length}',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: StatTile(
+                                  label: 'Low stock',
+                                  value: '$low',
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: StatTile(
+                                  label: 'Below zero',
+                                  value: '$neg',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          SectionLabel(
+                            text: 'ON HAND',
+                            trailing: q.isEmpty ? null : '${rows.length} FOUND',
+                          ),
+                          const SizedBox(height: 10),
+                          if (rows.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 40),
+                              child: Column(
+                                children: [
+                                  const Icon(Icons.search_off_rounded,
+                                      size: 40, color: HqColors.ink3),
+                                  const SizedBox(height: 12),
+                                  Text('Nothing matches "$_query"',
+                                      style: HqText.body),
+                                ],
+                              ),
+                            )
+                          else
+                            HqCard(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 6),
+                              child: Column(
+                                children: [
+                                  for (var i = 0; i < rows.length; i++) ...[
+                                    if (i > 0) const Divider(height: 1),
+                                    _ItemRow(row: rows[i]),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: () =>
+                                showShareSheet(context, 'Stock report'),
+                            icon: const Icon(Icons.ios_share_rounded, size: 19),
+                            label: const Text('Export and share'),
+                          ),
+                          const SizedBox(height: 16),
+                          AsOfLine(
+                            asOf: 'Live from the server',
+                            coverage: session.activeBranch?.name ?? '',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 22),
-          const SectionLabel(text: 'ITEMS ON HAND'),
-          const SizedBox(height: 10),
-          HqSearchField(
-            hint: 'Search item or code',
-            onChanged: (v) => setState(() => _query = v),
-          ),
-          const SizedBox(height: 12),
-          if (items.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                children: [
-                  const Icon(Icons.search_off_rounded,
-                      size: 40, color: HqColors.ink3),
-                  const SizedBox(height: 12),
-                  Text('Nothing matches "$_query"', style: HqText.body),
-                ],
-              ),
-            )
-          else
-            HqCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Column(
-                children: [
-                  for (var i = 0; i < items.length; i++) ...[
-                    if (i > 0) const Divider(height: 1),
-                    _ItemRow(product: items[i]),
-                  ],
-                ],
-              ),
-            ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () =>
-                showShareSheet(context, 'Stock report — $kBranchName'),
-            icon: const Icon(Icons.ios_share_rounded, size: 19),
-            label: const Text('Export and share'),
-          ),
-          const SizedBox(height: 18),
-          const AsOfLine(
-            asOf: 'Figures as at $kAsOf',
-            coverage: 'Demo data — not connected to the server',
-          ),
-        ],
-      ),
     );
   }
 }
 
 class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.product});
+  const _ItemRow({required this.row});
 
-  final Product product;
+  final StockRow row;
 
   @override
   Widget build(BuildContext context) {
-    final low = product.onHand < 70;
+    final color = row.negative
+        ? HqColors.bad
+        : (row.low ? HqColors.warn : HqColors.ink);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -170,7 +169,7 @@ class _ItemRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  product.name,
+                  row.productName.isEmpty ? row.productCode : row.productName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -181,7 +180,10 @@ class _ItemRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${product.code} · ${product.category}',
+                  [
+                    row.productCode,
+                    if (row.locationName != null) row.locationName!,
+                  ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: HqText.tiny,
@@ -194,15 +196,18 @@ class _ItemRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${product.onHand} ${product.unit}',
+                row.quantity.toStringAsFixed(0),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: low ? HqColors.warn : HqColors.ink,
+                  color: color,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(tzs(product.onHand * product.cost), style: HqText.tiny),
+              if (row.reorderLevel != null)
+                Text(
+                  'reorder ${row.reorderLevel!.toStringAsFixed(0)}',
+                  style: HqText.tiny,
+                ),
             ],
           ),
         ],

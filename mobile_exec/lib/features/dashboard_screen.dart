@@ -1,63 +1,154 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
-import '../widgets/charts.dart';
+import '../services/sales_service.dart';
+import '../services/stock_service.dart';
+import '../widgets/async_view.dart';
 import '../widgets/common.dart';
+import '../widgets/kit.dart';
 
-/// The dashboard: today's sales and the stock position, in that order.
-/// Mockup only — every figure comes from `data/mock.dart`.
+/// What the dashboard needs, loaded in one pass.
+class _Overview {
+  const _Overview({
+    required this.today,
+    required this.month,
+    required this.stock,
+    required this.stockValue,
+  });
+
+  final SalesReport? today;
+  final SalesReport? month;
+  final List<StockRow> stock;
+  final double? stockValue;
+
+  List<StockRow> get needsAttention {
+    final rows = stock.where((r) => r.low || r.negative).toList()
+      ..sort((a, b) => a.quantity.compareTo(b.quantity));
+    return rows.take(5).toList();
+  }
+}
+
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.onNavigate});
 
   final void Function(String route) onNavigate;
 
+  Future<_Overview> _load(BuildContext context) async {
+    final scope = AppScope.of(context);
+    final session = scope.session;
+    final now = DateTime.now();
+
+    SalesReport? today;
+    SalesReport? month;
+    if (session.can('SALES.INVOICE.VIEW')) {
+      today = await scope.sales.today();
+      month = await scope.sales.report(
+        from: DateTime(now.year, now.month, 1),
+        to: DateTime(now.year, now.month, now.day),
+      );
+    }
+
+    var stock = <StockRow>[];
+    if (session.can('STOCK.VIEW')) {
+      stock = await scope.stock.onHand();
+    }
+
+    double? stockValue;
+    if (session.can('INVENTORY.VALUATION.VIEW')) {
+      try {
+        stockValue = (await scope.stock.valuation()).total;
+      } catch (_) {
+        stockValue = null; // a valuation failure must not blank the dashboard
+      }
+    }
+
+    return _Overview(
+      today: today,
+      month: month,
+      stock: stock,
+      stockValue: stockValue,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final change = (kSalesToday - kSalesYesterday) / kSalesYesterday * 100;
+    final session = AppScope.of(context).session;
 
     return Scaffold(
       backgroundColor: HqColors.bg,
       body: SafeArea(
         bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-          children: [
-            const _Greeting(),
-            const SizedBox(height: 18),
-            _SalesHero(change: change),
-            const SizedBox(height: 14),
-            const _TodayTiles(),
-            const SizedBox(height: 22),
-            SectionLabel(
-              text: 'STOCK',
-              trailing: '$kSkuCount ITEMS',
-            ),
-            const SizedBox(height: 10),
-            _StockCard(onNavigate: onNavigate),
-            const SizedBox(height: 22),
-            const SectionLabel(text: 'NEEDS ATTENTION'),
-            const SizedBox(height: 10),
-            const _LowStockCard(),
-            const SizedBox(height: 22),
-            const SectionLabel(text: 'RECENT ACTIVITY'),
-            const SizedBox(height: 10),
-            const _ActivityCard(),
-            const SizedBox(height: 18),
-            const AsOfLine(
-              asOf: 'Figures as at $kAsOf',
-              coverage: 'Demo data — not connected to the server',
-            ),
-          ],
+        child: AsyncView<_Overview>(
+          load: () => _load(context),
+          builder: (context, data) => ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            children: [
+              _Greeting(
+                name: session.displayName ?? session.username ?? 'there',
+                branch: session.activeBranch?.name ?? 'No branch',
+              ),
+              const SizedBox(height: 18),
+              if (data.today == null)
+                const _Locked(
+                  text: 'You do not have permission to see sales figures.',
+                )
+              else
+                _SalesHero(today: data.today!, month: data.month),
+              const SizedBox(height: 22),
+              const SectionLabel(text: 'STOCK'),
+              const SizedBox(height: 10),
+              _StockCard(
+                value: data.stockValue,
+                itemCount: data.stock.length,
+                onTap: () => onNavigate('valuation'),
+              ),
+              if (data.needsAttention.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                SectionLabel(
+                  text: 'NEEDS ATTENTION',
+                  trailing: '${data.needsAttention.length} ITEMS',
+                ),
+                const SizedBox(height: 10),
+                _LowStockCard(rows: data.needsAttention),
+              ],
+              const SizedBox(height: 22),
+              const SectionLabel(text: 'QUICK ACTIONS'),
+              const SizedBox(height: 10),
+              _QuickActions(onNavigate: onNavigate),
+              const SizedBox(height: 20),
+              AsOfLine(
+                asOf: 'Loaded ${_clock()}',
+                coverage: session.activeBranch?.name ?? '',
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  static String _clock() {
+    final n = DateTime.now();
+    return '${n.hour.toString().padLeft(2, '0')}:'
+        '${n.minute.toString().padLeft(2, '0')}';
+  }
 }
 
 class _Greeting extends StatelessWidget {
-  const _Greeting();
+  const _Greeting({required this.name, required this.branch});
+
+  final String name;
+  final String branch;
+
+  String get _initials {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,9 +162,9 @@ class _Greeting extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           alignment: Alignment.center,
-          child: const Text(
-            kUserInitials,
-            style: TextStyle(
+          child: Text(
+            _initials,
+            style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
               fontSize: 15,
@@ -85,11 +176,11 @@ class _Greeting extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Habari, $kUserName',
+              Text(
+                'Habari, $name',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 16.5,
                   fontWeight: FontWeight.w700,
                   color: HqColors.ink,
@@ -97,7 +188,7 @@ class _Greeting extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '$kBranchName · $kToday',
+                branch,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: HqText.tiny,
@@ -111,14 +202,13 @@ class _Greeting extends StatelessWidget {
 }
 
 class _SalesHero extends StatelessWidget {
-  const _SalesHero({required this.change});
+  const _SalesHero({required this.today, this.month});
 
-  final double change;
+  final SalesReport today;
+  final SalesReport? month;
 
   @override
   Widget build(BuildContext context) {
-    final up = change >= 0;
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -140,7 +230,7 @@ class _SalesHero extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            tzs(kSalesToday),
+            tzs(today.total),
             style: const TextStyle(
               fontSize: 38,
               fontWeight: FontWeight.w700,
@@ -148,55 +238,6 @@ class _SalesHero extends StatelessWidget {
               height: 1.05,
               letterSpacing: -1,
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                size: 15,
-                color: up ? const Color(0xFF5EEAD4) : const Color(0xFFFCA5A5),
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  '${pct(change.abs())} vs yesterday',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: up
-                        ? const Color(0xFF5EEAD4)
-                        : const Color(0xFFFCA5A5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Sparkline(
-            values: kSales7Days,
-            color: VizColors.mint,
-            height: 52,
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (final d in kDay7Labels)
-                Flexible(
-                  child: Text(
-                    d,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: HqOnDark.tertiary,
-                    ),
-                  ),
-                ),
-            ],
           ),
           const SizedBox(height: 16),
           const Divider(height: 1, color: HqOnDark.hairline),
@@ -206,21 +247,21 @@ class _SalesHero extends StatelessWidget {
               Expanded(
                 child: _HeroFigure(
                   label: 'This month',
-                  value: tzs(kSalesMonthToDate),
-                ),
-              ),
-              Container(width: 1, height: 30, color: HqOnDark.hairline),
-              const Expanded(
-                child: _HeroFigure(
-                  label: 'Invoices today',
-                  value: '$kInvoicesToday',
+                  value: month == null ? '—' : tzs(month!.total),
                 ),
               ),
               Container(width: 1, height: 30, color: HqOnDark.hairline),
               Expanded(
                 child: _HeroFigure(
-                  label: 'Average sale',
-                  value: tzs(kAverageSale),
+                  label: 'Items sold today',
+                  value: today.qtySold.toStringAsFixed(0),
+                ),
+              ),
+              Container(width: 1, height: 30, color: HqOnDark.hairline),
+              Expanded(
+                child: _HeroFigure(
+                  label: 'VAT today',
+                  value: tzs(today.vat),
                 ),
               ),
             ],
@@ -267,77 +308,45 @@ class _HeroFigure extends StatelessWidget {
   }
 }
 
-class _TodayTiles extends StatelessWidget {
-  const _TodayTiles();
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: StatTile(
-              label: 'Cash collected',
-              value: tzs(kCashCollectedToday),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: StatTile(
-              label: 'On credit',
-              value: tzs(kCreditSalesToday),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _StockCard extends StatelessWidget {
-  const _StockCard({required this.onNavigate});
+  const _StockCard({
+    required this.value,
+    required this.itemCount,
+    required this.onTap,
+  });
 
-  final void Function(String route) onNavigate;
+  final double? value;
+  final int itemCount;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return HqCard(
-      onTap: () => onNavigate('valuation'),
-      child: Column(
+      onTap: onTap,
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Stock value', style: HqText.label),
-                    const SizedBox(height: 4),
-                    Text(
-                      tzs(kStockValue),
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: HqColors.ink,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Stock value', style: HqText.label),
+                const SizedBox(height: 4),
+                Text(
+                  value == null ? 'Not available' : tzs(value!),
+                  style: TextStyle(
+                    fontSize: value == null ? 17 : 26,
+                    fontWeight: FontWeight.w700,
+                    color: value == null ? HqColors.ink3 : HqColors.ink,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, color: HqColors.ink3),
-            ],
+                const SizedBox(height: 4),
+                Text('$itemCount items on hand', style: HqText.tiny),
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
-          ShareBar(
-            parts: [
-              for (final v in kValuation)
-                SharePart(v.category, v.value.toDouble()),
-            ],
-          ),
+          const Icon(Icons.chevron_right, color: HqColors.ink3),
         ],
       ),
     );
@@ -345,7 +354,9 @@ class _StockCard extends StatelessWidget {
 }
 
 class _LowStockCard extends StatelessWidget {
-  const _LowStockCard();
+  const _LowStockCard({required this.rows});
+
+  final List<StockRow> rows;
 
   @override
   Widget build(BuildContext context) {
@@ -353,7 +364,7 @@ class _LowStockCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Column(
         children: [
-          for (var i = 0; i < kLowStock.length; i++) ...[
+          for (var i = 0; i < rows.length; i++) ...[
             if (i > 0) const Divider(height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -363,9 +374,7 @@ class _LowStockCard extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: kLowStock[i].critical
-                          ? HqColors.bad
-                          : HqColors.warn,
+                      color: rows[i].negative ? HqColors.bad : HqColors.warn,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -375,7 +384,7 @@ class _LowStockCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          kLowStock[i].name,
+                          rows[i].productName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -386,7 +395,9 @@ class _LowStockCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          kLowStock[i].detail,
+                          rows[i].negative
+                              ? 'Below zero — needs a count'
+                              : 'Below reorder level',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: HqText.tiny,
@@ -396,13 +407,12 @@ class _LowStockCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${kLowStock[i].qty} ${kLowStock[i].unit}',
+                    rows[i].quantity.toStringAsFixed(0),
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w700,
-                      color: kLowStock[i].critical
-                          ? HqColors.bad
-                          : HqColors.ink2,
+                      color:
+                          rows[i].negative ? HqColors.bad : HqColors.ink2,
                     ),
                   ),
                 ],
@@ -415,72 +425,49 @@ class _LowStockCard extends StatelessWidget {
   }
 }
 
-class _ActivityCard extends StatelessWidget {
-  const _ActivityCard();
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.onNavigate});
 
-  static const _icons = <String, IconData>{
-    'receive': Icons.local_shipping_outlined,
-    'adjust': Icons.tune_rounded,
-    'item': Icons.inventory_2_outlined,
-    'session': Icons.point_of_sale_outlined,
-  };
+  final void Function(String route) onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ActionTile(
+          icon: Icons.local_shipping_outlined,
+          title: 'Receive goods',
+          subtitle: 'Take in stock without a purchase order',
+          tint: const Color(0xFF2A78D6),
+          onTap: () => onNavigate('receive'),
+        ),
+        const SizedBox(height: 10),
+        ActionTile(
+          icon: Icons.tune_rounded,
+          title: 'Stock adjustment',
+          subtitle: 'Correct a quantity',
+          tint: const Color(0xFFEB6834),
+          onTap: () => onNavigate('adjust'),
+        ),
+      ],
+    );
+  }
+}
+
+class _Locked extends StatelessWidget {
+  const _Locked({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return HqCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Column(
+      child: Row(
         children: [
-          for (var i = 0; i < kRecentActivity.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: HqColors.brandSoft,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Icon(
-                      _icons[kRecentActivity[i].kind] ?? Icons.circle_outlined,
-                      size: 17,
-                      color: HqColors.brand,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          kRecentActivity[i].title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: HqColors.ink,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          kRecentActivity[i].detail,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: HqText.tiny,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(kRecentActivity[i].time, style: HqText.tiny),
-                ],
-              ),
-            ),
-          ],
+          const Icon(Icons.lock_outline_rounded,
+              size: 20, color: HqColors.ink3),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: HqText.body)),
         ],
       ),
     );

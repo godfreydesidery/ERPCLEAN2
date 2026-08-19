@@ -1,27 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_scope.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
+import '../core/session.dart';
 import '../widgets/common.dart';
 
-/// Profile and settings. Deliberately short — the client asked for the
-/// minimum, so this holds identity, branch, and the few switches that matter.
-class SettingsScreen extends StatefulWidget {
+/// Profile, branch and server. Short by design.
+class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.onSignOut});
 
   final VoidCallback onSignOut;
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _biometric = true;
-  bool _dailySummary = true;
-  bool _lowStockAlerts = true;
-
-  @override
   Widget build(BuildContext context) {
+    final scope = AppScope.of(context);
+    final session = scope.session;
+
     return Scaffold(
       backgroundColor: HqColors.bg,
       body: SafeArea(
@@ -29,7 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           children: [
-            const _ProfileHeader(),
+            _ProfileHeader(session: session),
             const SizedBox(height: 22),
             const SectionLabel(text: 'WHERE YOU ARE WORKING'),
             const SizedBox(height: 10),
@@ -38,59 +32,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   _Row(
-                    icon: Icons.business_outlined,
-                    title: 'Company',
-                    value: kCompanyName,
-                    locked: true,
+                    icon: Icons.storefront_outlined,
+                    title: 'Branch',
+                    value: session.activeBranch?.name ?? 'None assigned',
+                    onTap: session.branches.length < 2
+                        ? null
+                        : () => _pickBranch(context, session),
                   ),
                   const Divider(height: 1),
                   _Row(
-                    icon: Icons.storefront_outlined,
-                    title: 'Branch',
-                    value: kBranchName,
-                    onTap: () => _pickBranch(context),
+                    icon: Icons.badge_outlined,
+                    title: 'Signed in as',
+                    value: session.username ?? '—',
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 22),
-            const SectionLabel(text: 'SECURITY'),
-            const SizedBox(height: 10),
-            HqCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  _Switch(
-                    icon: Icons.fingerprint_rounded,
-                    title: 'Fingerprint unlock',
-                    subtitle: 'Open the app without typing a password',
-                    value: _biometric,
-                    onChanged: (v) => setState(() => _biometric = v),
-                  ),
-                ],
-              ),
+            SectionLabel(
+              text: 'WHAT YOU CAN DO',
+              trailing: session.isRoot
+                  ? 'ROOT'
+                  : '${session.permissions.length} PERMISSIONS',
             ),
-            const SizedBox(height: 22),
-            const SectionLabel(text: 'NOTIFICATIONS'),
             const SizedBox(height: 10),
             HqCard(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
-                  _Switch(
-                    icon: Icons.sunny,
-                    title: 'Daily summary',
-                    subtitle: "Yesterday's sales, every morning at 06:30",
-                    value: _dailySummary,
-                    onChanged: (v) => setState(() => _dailySummary = v),
+                  _Capability(
+                    label: 'See sales reports',
+                    granted: session.can('SALES.INVOICE.VIEW'),
                   ),
                   const Divider(height: 1),
-                  _Switch(
-                    icon: Icons.inventory_2_outlined,
-                    title: 'Low stock alerts',
-                    subtitle: 'When an item falls below its reorder level',
-                    value: _lowStockAlerts,
-                    onChanged: (v) => setState(() => _lowStockAlerts = v),
+                  _Capability(
+                    label: 'See stock',
+                    granted: session.can('STOCK.VIEW'),
+                  ),
+                  const Divider(height: 1),
+                  _Capability(
+                    label: 'Adjust stock',
+                    granted: session.can('STOCK.ADJUST'),
+                  ),
+                  const Divider(height: 1),
+                  _Capability(
+                    label: 'Receive goods',
+                    granted: session.can('PURCHASE.RECEIVE.DIRECT'),
+                  ),
+                  const Divider(height: 1),
+                  _Capability(
+                    label: 'Create items',
+                    granted: session.can('PRODUCT.MANAGE'),
+                  ),
+                  const Divider(height: 1),
+                  _Capability(
+                    label: 'Create suppliers',
+                    granted: session.can('SUPPLIER.MANAGE'),
+                  ),
+                  const Divider(height: 1),
+                  _Capability(
+                    label: 'Close a till',
+                    granted: session.can('POS.SESSION.CLOSE'),
                   ),
                 ],
               ),
@@ -100,39 +102,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 10),
             HqCard(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: const Column(
+              child: Column(
                 children: [
                   _Row(
                     icon: Icons.dns_outlined,
                     title: 'Server',
-                    value: kServerHost,
+                    value: session.config.baseHost,
                   ),
-                  Divider(height: 1),
-                  _Row(
+                  const Divider(height: 1),
+                  const _Row(
                     icon: Icons.info_outline_rounded,
                     title: 'Version',
-                    value: '1.0.0 — demo build',
+                    value: '1.0.0',
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: widget.onSignOut,
+              onPressed: onSignOut,
               icon: const Icon(Icons.logout_rounded, size: 19),
               label: const Text('Sign out'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: HqColors.bad,
                 side: const BorderSide(color: HqColors.line2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                'This is a look-and-feel demo.\n'
-                'It is not connected to the ERP.',
-                textAlign: TextAlign.center,
-                style: HqText.tiny,
               ),
             ),
           ],
@@ -141,11 +134,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _pickBranch(BuildContext context) {
+  void _pickBranch(BuildContext context, Session session) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         decoration: const BoxDecoration(
           color: HqColors.panel,
           borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -158,27 +151,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Choose a branch', style: HqText.title),
+              const SizedBox(height: 4),
+              Text(
+                'Reports and stock follow the branch you pick.',
+                style: HqText.tiny,
+              ),
               const SizedBox(height: 12),
-              for (final b in kBranches)
+              for (final b in session.branches)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
-                    b == kBranchName
+                    b.uid == session.activeBranch?.uid
                         ? Icons.radio_button_checked
                         : Icons.radio_button_unchecked,
-                    color: b == kBranchName ? HqColors.brand : HqColors.ink3,
+                    color: b.uid == session.activeBranch?.uid
+                        ? HqColors.brand
+                        : HqColors.ink3,
                   ),
                   title: Text(
-                    b,
+                    b.name,
                     style: TextStyle(
                       fontSize: 15,
-                      fontWeight: b == kBranchName
+                      fontWeight: b.uid == session.activeBranch?.uid
                           ? FontWeight.w700
                           : FontWeight.w500,
                       color: HqColors.ink,
                     ),
                   ),
-                  onTap: () => Navigator.of(context).pop(),
+                  subtitle: b.isDefault
+                      ? Text('Your default', style: HqText.tiny)
+                      : null,
+                  onTap: () {
+                    session.switchBranch(b);
+                    Navigator.of(sheetContext).pop();
+                  },
                 ),
               const SizedBox(height: 8),
             ],
@@ -190,7 +196,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader();
+  const _ProfileHeader({required this.session});
+
+  final Session session;
+
+  String get _name => session.displayName ?? session.username ?? 'Signed in';
+
+  String get _initials {
+    final parts = _name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+        .toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,9 +230,9 @@ class _ProfileHeader extends StatelessWidget {
               border: Border.all(color: HqOnDark.hairline),
             ),
             alignment: Alignment.center,
-            child: const Text(
-              kUserInitials,
-              style: TextStyle(
+            child: Text(
+              _initials,
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 19,
@@ -226,11 +244,11 @@ class _ProfileHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  kUserName,
+                Text(
+                  _name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
@@ -238,22 +256,12 @@ class _ProfileHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  kUserRole,
+                  session.isRoot ? 'Administrator' : 'ERP user',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
                     color: HqOnDark.secondary,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  kCompanyName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: HqOnDark.tertiary,
                   ),
                 ),
               ],
@@ -271,14 +279,12 @@ class _Row extends StatelessWidget {
     required this.title,
     required this.value,
     this.onTap,
-    this.locked = false,
   });
 
   final IconData icon;
   final String title;
   final String value;
   final VoidCallback? onTap;
-  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -300,49 +306,43 @@ class _Row extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: HqText.tiny,
       ),
-      trailing: locked
-          ? const Icon(Icons.lock_outline_rounded,
-              size: 16, color: HqColors.ink3)
-          : (onTap == null
-              ? null
-              : const Icon(Icons.chevron_right,
-                  size: 20, color: HqColors.ink3)),
+      trailing: onTap == null
+          ? null
+          : const Icon(Icons.chevron_right, size: 20, color: HqColors.ink3),
     );
   }
 }
 
-class _Switch extends StatelessWidget {
-  const _Switch({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
+class _Capability extends StatelessWidget {
+  const _Capability({required this.label, required this.granted});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  final String label;
+  final bool granted;
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile.adaptive(
-      value: value,
-      onChanged: onChanged,
-      contentPadding: EdgeInsets.zero,
-      activeThumbColor: HqColors.brand,
-      secondary: Icon(icon, size: 21, color: HqColors.ink3),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 14.5,
-          fontWeight: FontWeight.w600,
-          color: HqColors.ink,
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        children: [
+          Icon(
+            granted ? Icons.check_circle_rounded : Icons.remove_circle_outline,
+            size: 19,
+            color: granted ? HqColors.good : HqColors.ink3,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: granted ? HqColors.ink : HqColors.ink3,
+                fontWeight: granted ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
       ),
-      subtitle: Text(subtitle, style: HqText.tiny),
     );
   }
 }

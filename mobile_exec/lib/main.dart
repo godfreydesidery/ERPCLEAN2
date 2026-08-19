@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'app/app_scope.dart';
 import 'app/theme.dart';
-import 'features/close_session_screen.dart';
+import 'core/session.dart';
 import 'features/create_item_screen.dart';
 import 'features/create_supplier_screen.dart';
 import 'features/dashboard_screen.dart';
@@ -16,18 +17,27 @@ import 'features/stock_report_screen.dart';
 import 'features/stock_valuation_screen.dart';
 import 'features/till_report_screen.dart';
 
-void main() => runApp(const OrbixHqApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final session = await Session.create();
+  runApp(OrbixHqApp(session: session));
+}
 
 class OrbixHqApp extends StatelessWidget {
-  const OrbixHqApp({super.key});
+  const OrbixHqApp({super.key, required this.session});
+
+  final Session session;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'OrbixHQ',
-      debugShowCheckedModeBanner: false,
-      theme: buildHqTheme(),
-      home: const _Root(),
+    return AppScope(
+      session: session,
+      child: MaterialApp(
+        title: 'OrbixHQ',
+        debugShowCheckedModeBanner: false,
+        theme: buildHqTheme(),
+        home: const _Root(),
+      ),
     );
   }
 }
@@ -40,14 +50,44 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
+  bool _checking = true;
   bool _signedIn = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checking) _restore();
+  }
+
+  Future<void> _restore() async {
+    final ok = await AppScope.of(context).session.restore();
+    if (mounted) {
+      setState(() {
+        _signedIn = ok;
+        _checking = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_checking) {
+      return const Scaffold(
+        body: DecoratedBox(
+          decoration: BoxDecoration(gradient: HqSurfaces.heroGradient),
+          child: Center(child: CircularProgressIndicator(color: Colors.white)),
+        ),
+      );
+    }
     if (!_signedIn) {
       return SignInScreen(onSignedIn: () => setState(() => _signedIn = true));
     }
-    return _Shell(onSignOut: () => setState(() => _signedIn = false));
+    return _Shell(
+      onSignOut: () async {
+        await AppScope.of(context).session.signOut();
+        if (mounted) setState(() => _signedIn = false);
+      },
+    );
   }
 }
 
@@ -73,7 +113,6 @@ class _ShellState extends State<_Shell> {
       'adjust' => const StockAdjustmentScreen(),
       'item' => const CreateItemScreen(),
       'supplier' => const CreateSupplierScreen(),
-      'session' => const CloseSessionScreen(),
       'till' => const TillReportScreen(),
       _ => const StockValuationScreen(),
     };

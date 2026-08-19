@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 
+import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
-import '../data/mock.dart';
+import '../services/operations_service.dart';
+import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
-/// X and Z till reports.
+/// X read — `GET /pos/sessions/uid/{uid}/x-read`.
 ///
-///  * **X read** — a look at the till mid-shift. The session stays open and
-///    nothing resets, so it can be taken as often as you like.
-///  * **Z read** — the end-of-day close-out. It finalises the session, takes a
-///    Z number, and the totals start again from zero.
-///
-/// Mockup: the arithmetic is real, nothing is read from or written to a till.
-enum TillReadKind { x, z }
-
+/// Read-only by design. An X read looks at a till and changes nothing, so it
+/// is safe from a phone. Closing the day (the Z) stays at the till itself: a
+/// manager closing a session remotely would end a cashier's shift from under
+/// them mid-sale.
 class TillReportScreen extends StatefulWidget {
   const TillReportScreen({super.key});
 
@@ -24,354 +22,81 @@ class TillReportScreen extends StatefulWidget {
 }
 
 class _TillReportScreenState extends State<TillReportScreen> {
-  TillReadKind _kind = TillReadKind.x;
-  TillSession _session = kOpenSessions.first;
-
-  num get _tenderTotal => kTenderSplit.fold<num>(0, (a, t) => a + t.amount);
-
-  num get _expectedCash =>
-      kOpeningFloat + kTenderSplit.first.amount + kCashIn - kCashOut;
-
-  bool get _isZ => _kind == TillReadKind.z;
-
-  Future<void> _run() async {
-    if (_isZ) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Take the Z read?'),
-          content: Text(
-            'This closes ${_session.till} for the day and resets its totals. '
-            'It cannot be undone — take an X read instead if you only want to '
-            'look.',
-            style: HqText.body,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Close the day'),
-            ),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
-      await showDoneSheet(
-        context,
-        title: 'Z read taken',
-        detail: '${_session.till} closed for the day\n'
-            'Z number ${kLastZNumber + 1} · ${tzs(_session.sales)}',
-      );
-    } else {
-      await showDoneSheet(
-        context,
-        title: 'X read taken',
-        detail: '${_session.till} is still open\n'
-            '${tzs(_session.sales)} so far today',
-      );
-    }
-  }
+  SessionRow? _session;
 
   @override
   Widget build(BuildContext context) {
+    final session = AppScope.of(context).session;
+
     return Scaffold(
       backgroundColor: HqColors.bg,
-      appBar: AppBar(
-        title: const Text('Till report', style: HqText.title),
-        actions: [
-          IconButton(
-            tooltip: 'Share',
-            icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () => showShareSheet(
-              context,
-              '${_isZ ? 'Z' : 'X'} read — ${_session.till}',
+      appBar: AppBar(title: const Text('X read', style: HqText.title)),
+      body: !session.can('POS.SESSION.VIEW')
+          ? const NoPermission(code: 'POS.SESSION.VIEW')
+          : AsyncView<List<SessionRow>>(
+              load: () => AppScope.of(context).operations.openSessions(),
+              isEmpty: (d) => d.isEmpty,
+              emptyIcon: Icons.point_of_sale_outlined,
+              emptyTitle: 'No till is open',
+              emptyDetail: 'A cashier must open a session first.',
+              builder: (context, sessions) {
+                final chosen = _session != null &&
+                        sessions.any((s) => s.uid == _session!.uid)
+                    ? _session!
+                    : sessions.first;
+
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                  children: [
+                    const _ReadNote(),
+                    const SizedBox(height: 18),
+                    SectionLabel(
+                      text: 'OPEN TILLS',
+                      trailing: '${sessions.length}',
+                    ),
+                    const SizedBox(height: 10),
+                    for (final s in sessions) ...[
+                      _SessionCard(
+                        session: s,
+                        selected: s.uid == chosen.uid,
+                        onTap: () => setState(() => _session = s),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    const SizedBox(height: 10),
+                    _ReadPanel(key: ValueKey(chosen.uid), session: chosen),
+                  ],
+                );
+              },
             ),
-          ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        children: [
-          _KindToggle(
-            kind: _kind,
-            onChanged: (k) => setState(() => _kind = k),
-          ),
-          const SizedBox(height: 12),
-          _KindNote(isZ: _isZ),
-          const SizedBox(height: 20),
-          const SectionLabel(text: 'WHICH TILL'),
-          const SizedBox(height: 10),
-          HqDropdown(
-            label: 'Till',
-            items: [for (final s in kOpenSessions) '${s.till} · ${s.cashier}'],
-            value: '${_session.till} · ${_session.cashier}',
-            onChanged: (v) {
-              final match = kOpenSessions.firstWhere(
-                (s) => '${s.till} · ${s.cashier}' == v,
-                orElse: () => _session,
-              );
-              setState(() => _session = match);
-            },
-          ),
-          const SizedBox(height: 22),
-          _Header(session: _session, isZ: _isZ),
-          const SizedBox(height: 14),
-          const SectionLabel(text: 'HOW THEY PAID'),
-          const SizedBox(height: 10),
-          HqCard(
-            child: Column(
-              children: [
-                for (var i = 0; i < kTenderSplit.length; i++) ...[
-                  if (i > 0) const Divider(height: 14),
-                  _TenderRow(line: kTenderSplit[i]),
-                ],
-                const Divider(height: 16, thickness: 1.4),
-                FigureRow(
-                  label: 'Total takings',
-                  value: tzs(_tenderTotal),
-                  emphasise: true,
-                  valueColor: HqColors.brand,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const SectionLabel(text: 'CASH IN THE DRAWER'),
-          const SizedBox(height: 10),
-          HqCard(
-            child: Column(
-              children: [
-                FigureRow(
-                  label: 'Opening float',
-                  value: tzs(kOpeningFloat),
-                ),
-                const Divider(height: 14),
-                FigureRow(label: 'Cash sales', value: tzs(kTenderSplit.first.amount)),
-                const Divider(height: 14),
-                FigureRow(label: 'Paid in', value: tzs(kCashIn)),
-                const Divider(height: 14),
-                FigureRow(
-                  label: 'Paid out',
-                  value: '−${tzs(kCashOut)}',
-                  valueColor: HqColors.bad,
-                ),
-                const Divider(height: 16, thickness: 1.4),
-                FigureRow(
-                  label: 'Cash the drawer should hold',
-                  value: tzs(_expectedCash),
-                  emphasise: true,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          const SectionLabel(text: 'EXCEPTIONS'),
-          const SizedBox(height: 10),
-          HqCard(
-            child: Column(
-              children: [
-                FigureRow(
-                  label: 'Voids ($kVoidCount)',
-                  value: tzs(kVoidValue),
-                  valueColor: kVoidCount > 0 ? HqColors.warn : null,
-                ),
-                const Divider(height: 14),
-                FigureRow(
-                  label: 'Refunds ($kRefundCount)',
-                  value: tzs(kRefundValue),
-                  valueColor: kRefundCount > 0 ? HqColors.warn : null,
-                ),
-                const Divider(height: 14),
-                FigureRow(label: 'Discounts given', value: tzs(kDiscountValue)),
-                const Divider(height: 14),
-                FigureRow(label: 'VAT collected', value: tzs(kVatCollected)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          HqCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              children: [
-                FigureRow(
-                  label: 'Last Z read',
-                  value: 'No. $kLastZNumber',
-                ),
-                const Divider(height: 14),
-                FigureRow(label: 'Taken', value: kLastZAt),
-                const Divider(height: 14),
-                FigureRow(
-                  label: 'X reads since',
-                  value: '$kXReadsToday today',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _run,
-            style: _isZ
-                ? FilledButton.styleFrom(backgroundColor: HqColors.bad)
-                : null,
-            icon: Icon(
-              _isZ ? Icons.lock_outline_rounded : Icons.visibility_outlined,
-              size: 19,
-            ),
-            label: Text(_isZ ? 'Take Z read and close' : 'Take X read'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: () => showShareSheet(
-              context,
-              '${_isZ ? 'Z' : 'X'} read — ${_session.till}',
-            ),
-            icon: const Icon(Icons.ios_share_rounded, size: 19),
-            label: const Text('Export and share'),
-          ),
-          const SizedBox(height: 14),
-          Center(
-            child: Text(
-              'Demo build — no till is actually read or closed.',
-              style: HqText.tiny,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-class _KindToggle extends StatelessWidget {
-  const _KindToggle({required this.kind, required this.onChanged});
-
-  final TillReadKind kind;
-  final ValueChanged<TillReadKind> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: HqColors.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: HqColors.line),
-      ),
-      child: Row(
-        children: [
-          _Half(
-            label: 'X read',
-            sub: 'Look now',
-            selected: kind == TillReadKind.x,
-            onTap: () => onChanged(TillReadKind.x),
-            tint: HqColors.brand,
-          ),
-          _Half(
-            label: 'Z read',
-            sub: 'Close the day',
-            selected: kind == TillReadKind.z,
-            onTap: () => onChanged(TillReadKind.z),
-            tint: HqColors.bad,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Half extends StatelessWidget {
-  const _Half({
-    required this.label,
-    required this.sub,
-    required this.selected,
-    required this.onTap,
-    required this.tint,
-  });
-
-  final String label;
-  final String sub;
-  final bool selected;
-  final VoidCallback onTap;
-  final Color tint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? tint : Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Column(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : HqColors.ink2,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                sub,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: selected
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : HqColors.ink3,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _KindNote extends StatelessWidget {
-  const _KindNote({required this.isZ});
-
-  final bool isZ;
+class _ReadNote extends StatelessWidget {
+  const _ReadNote();
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: isZ ? HqColors.badSoft : HqColors.brandSoft,
+        color: HqColors.brandSoft,
         borderRadius: BorderRadius.circular(HqRadii.sm),
       ),
       child: Row(
         children: [
-          Icon(
-            isZ ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-            size: 19,
-            color: isZ ? HqColors.bad : HqColors.brand,
-          ),
+          const Icon(Icons.info_outline_rounded,
+              size: 19, color: HqColors.brand),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              isZ
-                  ? 'A Z read closes the till for the day and resets its '
-                      'totals. Take it once, at the end.'
-                  : 'An X read only looks at the till. The session stays open '
-                      'and nothing resets — take it as often as you like.',
+              'An X read only looks at the till. Nothing is closed and nothing '
+              'resets, so you can take it as often as you like.',
               style: TextStyle(
                 fontSize: 13,
                 height: 1.35,
-                color: isZ ? const Color(0xFF8A1F1F) : HqColors.brandD,
+                color: HqColors.brandD,
               ),
             ),
           ),
@@ -381,11 +106,92 @@ class _KindNote extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.session, required this.isZ});
+class _ReadPanel extends StatelessWidget {
+  const _ReadPanel({super.key, required this.session});
 
-  final TillSession session;
-  final bool isZ;
+  final SessionRow session;
+
+  @override
+  Widget build(BuildContext context) {
+    return AsyncView<TillRead>(
+      load: () => AppScope.of(context).operations.xRead(session.uid),
+      builder: (context, read) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _Header(read: read),
+            const SizedBox(height: 16),
+            const SectionLabel(text: 'HOW THEY PAID'),
+            const SizedBox(height: 10),
+            HqCard(
+              child: Column(
+                children: [
+                  if (read.tenders.isEmpty)
+                    Text('No sales on this till yet.', style: HqText.body)
+                  else
+                    for (var i = 0; i < read.tenders.length; i++) ...[
+                      if (i > 0) const Divider(height: 14),
+                      FigureRow(
+                        label: '${read.tenders[i].label} '
+                            '(${read.tenders[i].count})',
+                        value: tzs(read.tenders[i].amount),
+                      ),
+                    ],
+                  const Divider(height: 16, thickness: 1.4),
+                  FigureRow(
+                    label: 'Total takings',
+                    value: tzs(read.totalSales),
+                    emphasise: true,
+                    valueColor: HqColors.brand,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            const SectionLabel(text: 'CASH IN THE DRAWER'),
+            const SizedBox(height: 10),
+            HqCard(
+              child: Column(
+                children: [
+                  FigureRow(
+                    label: 'Opening float',
+                    value: tzs(read.openingFloat),
+                  ),
+                  const Divider(height: 14),
+                  FigureRow(label: 'Cash sales', value: tzs(read.cashTender)),
+                  const Divider(height: 14),
+                  FigureRow(
+                    label: 'Paid out',
+                    value: tzs(read.payoutsNet),
+                    valueColor: read.payoutsNet > 0 ? HqColors.bad : null,
+                  ),
+                  const Divider(height: 16, thickness: 1.4),
+                  FigureRow(
+                    label: 'Cash the drawer should hold',
+                    value: tzs(read.expectedCash),
+                    emphasise: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  showShareSheet(context, 'X read for ${read.tillName}'),
+              icon: const Icon(Icons.ios_share_rounded, size: 19),
+              label: const Text('Export and share'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.read});
+
+  final TillRead read;
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +209,7 @@ class _Header extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${isZ ? 'Z' : 'X'} READ · ${session.till}'.toUpperCase(),
+                  'X READ - ${read.tillName}'.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -421,9 +227,9 @@ class _Header extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  isZ ? 'CLOSES THE DAY' : 'SESSION STAYS OPEN',
-                  style: const TextStyle(
+                child: const Text(
+                  'STAYS OPEN',
+                  style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
@@ -435,7 +241,7 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            tzs(session.sales),
+            tzs(read.totalSales),
             style: const TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.w700,
@@ -446,14 +252,10 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${session.cashier} · opened ${session.openedAt} · '
-            '${session.transactions} sales',
+            '${read.cashierName} · ${read.invoiceCount} sales',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: HqOnDark.secondary,
-            ),
+            style: const TextStyle(fontSize: 12.5, color: HqOnDark.secondary),
           ),
         ],
       ),
@@ -461,41 +263,78 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _TenderRow extends StatelessWidget {
-  const _TenderRow({required this.line});
+class _SessionCard extends StatelessWidget {
+  const _SessionCard({
+    required this.session,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final TenderLine line;
+  final SessionRow session;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Material(
+      color: HqColors.panel,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? HqColors.brand : HqColors.line,
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Row(
             children: [
-              Text(
-                line.label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: HqColors.ink,
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: selected ? HqColors.brand : HqColors.brandSoft,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  Icons.point_of_sale_outlined,
+                  size: 21,
+                  color: selected ? Colors.white : HqColors.brand,
                 ),
               ),
-              Text('${line.count} sales', style: HqText.tiny),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.tillName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: HqColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      session.cashierName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: HqText.tiny,
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(width: 10),
-        Text(
-          tzs(line.amount),
-          style: const TextStyle(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w700,
-            color: HqColors.ink,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

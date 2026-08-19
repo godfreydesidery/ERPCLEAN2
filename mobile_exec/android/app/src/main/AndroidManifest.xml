@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter ships INTERNET in the debug manifest only; without it here a
+         release build cannot reach the ERP at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
+        android:usesCleartextTraffic="true"
         android:label="OrbixHQ"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
