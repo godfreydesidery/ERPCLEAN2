@@ -8,8 +8,15 @@ import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
 /// Stock valuation — what the stock on hand is worth, by category.
-class StockValuationScreen extends StatelessWidget {
+class StockValuationScreen extends StatefulWidget {
   const StockValuationScreen({super.key});
+
+  @override
+  State<StockValuationScreen> createState() => _StockValuationScreenState();
+}
+
+class _StockValuationScreenState extends State<StockValuationScreen> {
+  DateTime _asAt = DateTime(2026, 8, 19);
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +41,11 @@ class StockValuationScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         children: [
+          AsAtBar(
+            date: _asAt,
+            onChanged: (d) => setState(() => _asAt = d),
+          ),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(

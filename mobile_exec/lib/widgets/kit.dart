@@ -752,3 +752,206 @@ class FigureRow extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Date range
+// ---------------------------------------------------------------------------
+
+const _months = <String>[
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String formatDay(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+/// "1 Aug – 19 Aug 2026", collapsing the year when both ends share it.
+String formatRange(DateTimeRange r) {
+  final sameYear = r.start.year == r.end.year;
+  final start = sameYear
+      ? '${r.start.day} ${_months[r.start.month - 1]}'
+      : formatDay(r.start);
+  return '$start \u2013 ${formatDay(r.end)}';
+}
+
+/// The date-range bar the client asked for: shows the period in force and
+/// opens a picker to change it. Mockup — changing it relabels the report.
+class DateRangeBar extends StatelessWidget {
+  const DateRangeBar({
+    super.key,
+    required this.range,
+    required this.onChanged,
+    this.label = 'Period',
+  });
+
+  final DateTimeRange range;
+  final ValueChanged<DateTimeRange> onChanged;
+  final String label;
+
+  Future<void> _pick(BuildContext context) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: range,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030, 12, 31),
+      helpText: 'Choose the period',
+      saveText: 'Apply',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: HqColors.brand,
+                onPrimary: Colors.white,
+                surface: HqColors.panel,
+                onSurface: HqColors.ink,
+              ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = range.end.difference(range.start).inDays + 1;
+
+    return Material(
+      color: HqColors.panel,
+      borderRadius: BorderRadius.circular(HqRadii.sm),
+      child: InkWell(
+        onTap: () => _pick(context),
+        borderRadius: BorderRadius.circular(HqRadii.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(HqRadii.sm),
+            border: Border.all(color: HqColors.line2),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.date_range_rounded,
+                  size: 20, color: HqColors.brand),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: HqColors.ink3,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatRange(range),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: HqColors.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('$days ${days == 1 ? 'day' : 'days'}',
+                  style: HqText.tiny),
+              const SizedBox(width: 6),
+              const Icon(Icons.expand_more_rounded,
+                  size: 20, color: HqColors.ink3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single "as at" date, for position reports like stock and valuation.
+class AsAtBar extends StatelessWidget {
+  const AsAtBar({super.key, required this.date, required this.onChanged});
+
+  final DateTime date;
+  final ValueChanged<DateTime> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030, 12, 31),
+      helpText: 'Stock as at',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: HqColors.brand,
+                onPrimary: Colors.white,
+                surface: HqColors.panel,
+                onSurface: HqColors.ink,
+              ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: HqColors.panel,
+      borderRadius: BorderRadius.circular(HqRadii.sm),
+      child: InkWell(
+        onTap: () => _pick(context),
+        borderRadius: BorderRadius.circular(HqRadii.sm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(HqRadii.sm),
+            border: Border.all(color: HqColors.line2),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.event_rounded, size: 20, color: HqColors.brand),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'STOCK AS AT',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: HqColors.ink3,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      formatDay(date),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: HqColors.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.expand_more_rounded,
+                  size: 20, color: HqColors.ink3),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

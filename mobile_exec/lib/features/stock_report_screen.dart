@@ -16,6 +16,7 @@ class StockReportScreen extends StatefulWidget {
 
 class _StockReportScreenState extends State<StockReportScreen> {
   String _query = '';
+  DateTime _asAt = DateTime(2026, 8, 19);
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +44,11 @@ class _StockReportScreenState extends State<StockReportScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         children: [
+          AsAtBar(
+            date: _asAt,
+            onChanged: (d) => setState(() => _asAt = d),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(

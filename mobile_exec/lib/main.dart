@@ -14,6 +14,7 @@ import 'features/sign_in_screen.dart';
 import 'features/stock_adjustment_screen.dart';
 import 'features/stock_report_screen.dart';
 import 'features/stock_valuation_screen.dart';
+import 'features/till_report_screen.dart';
 
 void main() => runApp(const OrbixHqApp());
 
@@ -73,6 +74,7 @@ class _ShellState extends State<_Shell> {
       'item' => const CreateItemScreen(),
       'supplier' => const CreateSupplierScreen(),
       'session' => const CloseSessionScreen(),
+      'till' => const TillReportScreen(),
       _ => const StockValuationScreen(),
     };
     Navigator.of(context).push(

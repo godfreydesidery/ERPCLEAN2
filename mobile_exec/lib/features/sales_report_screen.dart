@@ -21,7 +21,37 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   int _period = 2;
   int _breakdown = 0;
 
-  static const _periods = ['Today', 'This week', 'This month', 'This year'];
+  /// The presets are shortcuts; the range below is what the report actually
+  /// runs on, and the client can set it to anything.
+  DateTimeRange _range = DateTimeRange(
+    start: DateTime(2026, 8, 1),
+    end: DateTime(2026, 8, 19),
+  );
+
+  static const _periods = [
+    'Today',
+    'This week',
+    'This month',
+    'This year',
+    'Custom',
+  ];
+
+  void _applyPreset(int i) {
+    final today = DateTime(2026, 8, 19);
+    final range = switch (i) {
+      0 => DateTimeRange(start: today, end: today),
+      1 => DateTimeRange(start: DateTime(2026, 8, 17), end: today),
+      2 => DateTimeRange(start: DateTime(2026, 8, 1), end: today),
+      3 => DateTimeRange(start: DateTime(2026, 1, 1), end: today),
+      _ => _range,
+    };
+    setState(() {
+      _period = i;
+      _range = range;
+    });
+  }
+
+  String get _rangeLabel => formatRange(_range);
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +67,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             icon: const Icon(Icons.ios_share_rounded),
             onPressed: () => showShareSheet(
               context,
-              'Sales report — ${_periods[_period]}',
+              'Sales report — $_rangeLabel',
             ),
           ),
           const SizedBox(width: 6),
@@ -49,10 +79,18 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           FilterChipsRow(
             options: _periods,
             selected: _period,
-            onSelected: (i) => setState(() => _period = i),
+            onSelected: _applyPreset,
+          ),
+          const SizedBox(height: 12),
+          DateRangeBar(
+            range: _range,
+            onChanged: (r) => setState(() {
+              _range = r;
+              _period = _periods.length - 1;
+            }),
           ),
           const SizedBox(height: 16),
-          _Totals(period: _periods[_period]),
+          _Totals(period: _rangeLabel),
           const SizedBox(height: 14),
           HqCard(
             child: Column(
@@ -104,7 +142,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           FilledButton.icon(
             onPressed: () => showShareSheet(
               context,
-              'Sales report — ${_periods[_period]}',
+              'Sales report — $_rangeLabel',
             ),
             icon: const Icon(Icons.ios_share_rounded, size: 19),
             label: const Text('Export and share'),

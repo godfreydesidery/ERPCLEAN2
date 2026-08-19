@@ -446,3 +446,39 @@ const List<String> kAdjustmentReasons = <String>[
   'Sample or donation',
   'Opening balance',
 ];
+
+// ---------------------------------------------------------------------------
+// Till reports — X (read, session stays open) and Z (end of day, closes it)
+// ---------------------------------------------------------------------------
+
+class TenderLine {
+  const TenderLine(this.label, this.amount, this.count);
+
+  final String label;
+  final num amount;
+  final int count;
+}
+
+/// Tender split for a till read. Sums to the session's sales.
+const List<TenderLine> kTenderSplit = <TenderLine>[
+  TenderLine('Cash', 2_240_000, 19),
+  TenderLine('Mobile money', 690_000, 6),
+  TenderLine('Card', 180_000, 2),
+  TenderLine('Cheque', 70_000, 1),
+];
+
+/// Figures a till read carries beyond the tender split.
+const num kOpeningFloat = 100_000;
+const num kCashIn = 0;
+const num kCashOut = 60_000;
+const int kVoidCount = 2;
+const num kVoidValue = 84_000;
+const int kRefundCount = 1;
+const num kRefundValue = 31_000;
+const num kDiscountValue = 47_500;
+const num kVatCollected = 485_085;
+
+/// The last Z number issued on this till, and how many X reads since.
+const int kLastZNumber = 418;
+const String kLastZAt = '18 Aug 2026, 20:41';
+const int kXReadsToday = 2;

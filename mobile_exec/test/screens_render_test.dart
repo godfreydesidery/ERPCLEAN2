@@ -17,6 +17,7 @@ import 'package:orbix_hq/features/sign_in_screen.dart';
 import 'package:orbix_hq/features/stock_adjustment_screen.dart';
 import 'package:orbix_hq/features/stock_report_screen.dart';
 import 'package:orbix_hq/features/stock_valuation_screen.dart';
+import 'package:orbix_hq/features/till_report_screen.dart';
 
 Map<String, Widget> buildScreens() => <String, Widget>{
       'sign in': SignInScreen(onSignedIn: () {}),
@@ -31,6 +32,7 @@ Map<String, Widget> buildScreens() => <String, Widget>{
       'create item': const CreateItemScreen(),
       'create supplier': const CreateSupplierScreen(),
       'close session': const CloseSessionScreen(),
+      'till report': const TillReportScreen(),
       'settings': SettingsScreen(onSignOut: () {}),
     };
 

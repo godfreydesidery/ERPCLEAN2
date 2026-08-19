@@ -65,6 +65,14 @@ class OperationsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ActionTile(
+            icon: Icons.receipt_outlined,
+            title: 'X / Z till report',
+            subtitle: 'Read a till now, or close it for the day',
+            tint: const Color(0xFF7C7CD6),
+            onTap: () => onNavigate('till'),
+          ),
+          const SizedBox(height: 10),
+          ActionTile(
             icon: Icons.point_of_sale_outlined,
             title: 'Close a session',
             subtitle: 'Count the cash and close a till for the day',
