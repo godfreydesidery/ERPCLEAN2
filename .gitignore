@@ -71,3 +71,7 @@ docs/USER-MANUAL.with-images.docx
 
 # POS app screenshots — local only, not tracked (for usability review)
 pos_app/screenshots/
+
+# OrbixHQ demo APKs — built artefacts, distributed out-of-band, never committed
+dist/orbixhq/*.apk
+dist/orbixhq/*.aab

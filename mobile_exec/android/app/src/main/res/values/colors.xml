@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OrbixHQ brand teal — must stay in step with HqColors.brand in lib/app/theme.dart. -->
+    <color name="hq_brand_teal">#0F766E</color>
+</resources>
