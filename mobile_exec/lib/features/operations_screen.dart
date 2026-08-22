@@ -5,7 +5,6 @@ import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
 /// The operations hub — the things a manager does from the shop floor.
-/// Mockup only: each action opens a real-looking form that does not post.
 class OperationsScreen extends StatelessWidget {
   const OperationsScreen({super.key, required this.onNavigate});
 
@@ -56,6 +55,14 @@ class OperationsScreen extends StatelessWidget {
             subtitle: 'Add a supplier you buy from',
             tint: const Color(0xFF7C7CD6),
             onTap: () => onNavigate('supplier'),
+          ),
+          const SizedBox(height: 10),
+          ActionTile(
+            icon: Icons.view_in_ar_outlined,
+            title: 'Pack sizes',
+            subtitle: 'Cartons, boxes and outers — and what each sells for',
+            tint: const Color(0xFF0E9F6E),
+            onTap: () => onNavigate('packs'),
           ),
           const SizedBox(height: 22),
           const SectionLabel(text: 'TILLS'),

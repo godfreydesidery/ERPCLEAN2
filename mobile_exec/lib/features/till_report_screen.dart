@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
+import '../core/export/report_doc.dart';
 import '../services/operations_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
@@ -176,8 +177,7 @@ class _ReadPanel extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             OutlinedButton.icon(
-              onPressed: () =>
-                  showShareSheet(context, 'X read for ${read.tillName}'),
+              onPressed: () => showShareSheet(context, _readDoc(read)),
               icon: const Icon(Icons.ios_share_rounded, size: 19),
               label: const Text('Export and share'),
             ),
@@ -338,3 +338,31 @@ class _SessionCard extends StatelessWidget {
     );
   }
 }
+
+/// An X read as a document — the figures a manager is asked to account for,
+/// in the order they are counted at the drawer.
+ExportDoc _readDoc(TillRead read) => ExportDoc(
+      title: 'X read - ${read.tillName}',
+      subtitle: 'Cashier ${read.cashierName}',
+      meta: [
+        'Opened ${read.openedAt}',
+        'A read only - the till stays open.',
+      ],
+      columns: const ['Tender', 'Transactions', 'Amount'],
+      rows: [
+        for (final t in read.tenders)
+          [
+            Cell.text(t.label),
+            Cell.number(t.count.toDouble()),
+            Cell.money(t.amount),
+          ],
+      ],
+      totals: [
+        DocTotal('Invoices', Cell.number(read.invoiceCount.toDouble())),
+        DocTotal('Total sales', Cell.money(read.totalSales)),
+        DocTotal('Opening float', Cell.money(read.openingFloat)),
+        DocTotal('Cash sales', Cell.money(read.cashTender)),
+        DocTotal('Paid out', Cell.money(read.payoutsNet)),
+        DocTotal('Cash the drawer should hold', Cell.money(read.expectedCash)),
+      ],
+    );

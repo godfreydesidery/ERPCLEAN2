@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
 import '../app/theme.dart';
+import '../core/api/api_exception.dart';
+import '../core/export/report_doc.dart';
+import '../services/catalog_service.dart';
 import '../services/stock_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 
 /// Stock report — what is on hand right now, searchable.
+///
+/// Every quantity is labelled with the unit it is counted in. `/stock/on-hand`
+/// does not carry the unit, so the product list is loaded alongside and joined
+/// on the product code: a bare "240" on a phone is unreadable when the same
+/// item is also handled in cartons.
 class StockReportScreen extends StatefulWidget {
   const StockReportScreen({super.key});
 
@@ -16,23 +24,144 @@ class StockReportScreen extends StatefulWidget {
 }
 
 class _StockReportScreenState extends State<StockReportScreen> {
-  final _viewKey = GlobalKey<AsyncViewState<List<StockRow>>>();
+  final _viewKey = GlobalKey<AsyncViewState<StockView>>();
   String _query = '';
+
+  Future<StockView> _load() async {
+    final scope = AppScope.of(context);
+    final results = await Future.wait([
+      scope.stock.onHand(),
+      scope.catalog.productsByCode(),
+    ]);
+    return StockView(
+      rows: results[0] as List<StockRow>,
+      products: results[1] as Map<String, ProductItem>,
+    );
+  }
+
+  /// The pack breakdown of one line, loaded on demand.
+  ///
+  /// Per-product pack sizes are one request each — cheap on a tap, ruinous
+  /// across a two-hundred-line report, so the list stays in base units and the
+  /// carton reading is a tap away.
+  Future<void> _showBreakdown(StockRow row, ProductItem? product) async {
+    if (product == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    List<TxUnit> units;
+    try {
+      units = await AppScope.of(context).catalog.transactionUnits(product);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: HqColors.bad,
+        content: Text(e.message),
+      ));
+      return;
+    }
+    if (!mounted) return;
+
+    final packs = describeInPacks(row.quantity, units, product.unit);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: HqColors.panel,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                row.productName.isEmpty ? row.productCode : row.productName,
+                style: HqText.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(row.productCode, style: HqText.tiny),
+              const SizedBox(height: 16),
+              FigureRow(
+                label: 'On hand',
+                value: '${_qty(row.quantity)} ${product.unit}',
+                emphasise: true,
+                valueColor: row.negative ? HqColors.bad : HqColors.ink,
+              ),
+              if (packs != null) ...[
+                const Divider(height: 20),
+                FigureRow(label: 'That is', value: packs),
+              ],
+              const Divider(height: 20),
+              for (final u in units.where((u) => !u.isBase))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    '1 ${u.code} = ${u.factorLabel} ${product.unit}',
+                    style: HqText.tiny,
+                  ),
+                ),
+              if (units.length == 1)
+                Text(
+                  'No pack sizes are set for this item. Add them from '
+                  'Operations > Pack sizes.',
+                  style: HqText.tiny,
+                ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  ExportDoc _doc(StockView view, String branch) => ExportDoc(
+        title: 'Stock report',
+        subtitle: branch.isEmpty ? null : branch,
+        meta: ['On hand as at the moment this was run.'],
+        columns: const ['Item', 'Code', 'Location', 'On hand', 'Unit', 'Reorder level'],
+        rows: [
+          for (final r in view.rows)
+            [
+              Cell.text(r.productName.isEmpty ? r.productCode : r.productName),
+              Cell.text(r.productCode),
+              Cell.text(r.locationName ?? ''),
+              Cell.number(r.quantity, decimals: _decimals(r.quantity)),
+              Cell.text(view.unitOf(r)),
+              if (r.reorderLevel == null)
+                const Cell.text('')
+              else
+                Cell.number(r.reorderLevel!,
+                    decimals: _decimals(r.reorderLevel!)),
+            ],
+        ],
+        totals: [
+          DocTotal('Items', Cell.number(view.rows.length.toDouble())),
+          DocTotal('Low stock',
+              Cell.number(view.rows.where((r) => r.low).length.toDouble())),
+          DocTotal('Below zero',
+              Cell.number(view.rows.where((r) => r.negative).length.toDouble())),
+        ],
+        footnote: 'Quantities are in each item’s counting unit.',
+      );
 
   @override
   Widget build(BuildContext context) {
     final session = AppScope.of(context).session;
+    final branch = session.activeBranch?.name ?? '';
 
     return Scaffold(
       backgroundColor: HqColors.bg,
       appBar: AppBar(
         title: const Text('Stock report', style: HqText.title),
         actions: [
-          IconButton(
-            tooltip: 'Share',
-            icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () => showShareSheet(context, 'Stock report'),
-          ),
+          shareAction(context, () {
+            final view = _viewKey.currentState?.data;
+            return view == null ? null : _doc(view, branch);
+          }),
           const SizedBox(width: 6),
         ],
       ),
@@ -48,14 +177,15 @@ class _StockReportScreenState extends State<StockReportScreen> {
                   ),
                 ),
                 Expanded(
-                  child: AsyncView<List<StockRow>>(
+                  child: AsyncView<StockView>(
                     key: _viewKey,
-                    load: () => AppScope.of(context).stock.onHand(),
-                    isEmpty: (d) => d.isEmpty,
+                    load: _load,
+                    isEmpty: (d) => d.rows.isEmpty,
                     emptyIcon: Icons.inventory_outlined,
                     emptyTitle: 'No stock records',
                     emptyDetail: 'Nothing is held in this branch yet.',
-                    builder: (context, all) {
+                    builder: (context, view) {
+                      final all = view.rows;
                       final q = _query.trim().toLowerCase();
                       final rows = q.isEmpty
                           ? all
@@ -121,7 +251,14 @@ class _StockReportScreenState extends State<StockReportScreen> {
                                 children: [
                                   for (var i = 0; i < rows.length; i++) ...[
                                     if (i > 0) const Divider(height: 1),
-                                    _ItemRow(row: rows[i]),
+                                    _ItemRow(
+                                      row: rows[i],
+                                      unit: view.unitOf(rows[i]),
+                                      onTap: () => _showBreakdown(
+                                        rows[i],
+                                        view.products[rows[i].productCode],
+                                      ),
+                                    ),
                                   ],
                                 ],
                               ),
@@ -129,14 +266,14 @@ class _StockReportScreenState extends State<StockReportScreen> {
                           const SizedBox(height: 16),
                           FilledButton.icon(
                             onPressed: () =>
-                                showShareSheet(context, 'Stock report'),
+                                showShareSheet(context, _doc(view, branch)),
                             icon: const Icon(Icons.ios_share_rounded, size: 19),
                             label: const Text('Export and share'),
                           ),
                           const SizedBox(height: 16),
                           AsOfLine(
                             asOf: 'Live from the server',
-                            coverage: session.activeBranch?.name ?? '',
+                            coverage: branch,
                           ),
                         ],
                       );
@@ -149,10 +286,25 @@ class _StockReportScreenState extends State<StockReportScreen> {
   }
 }
 
+/// On-hand rows plus the products they belong to, so each quantity can be
+/// labelled with its unit.
+class StockView {
+  const StockView({required this.rows, required this.products});
+
+  final List<StockRow> rows;
+  final Map<String, ProductItem> products;
+
+  /// The unit [row] is counted in, or empty when the product is not in the
+  /// loaded page — better a bare number than a wrong unit.
+  String unitOf(StockRow row) => products[row.productCode]?.unit ?? '';
+}
+
 class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.row});
+  const _ItemRow({required this.row, required this.unit, required this.onTap});
 
   final StockRow row;
+  final String unit;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -160,58 +312,69 @@ class _ItemRow extends StatelessWidget {
         ? HqColors.bad
         : (row.low ? HqColors.warn : HqColors.ink);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    row.productName.isEmpty ? row.productCode : row.productName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: HqColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      row.productCode,
+                      if (row.locationName != null) row.locationName!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HqText.tiny,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  row.productName.isEmpty ? row.productCode : row.productName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: HqColors.ink,
+                  unit.isEmpty
+                      ? _qty(row.quantity)
+                      : '${_qty(row.quantity)} $unit',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: color,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  [
-                    row.productCode,
-                    if (row.locationName != null) row.locationName!,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HqText.tiny,
-                ),
+                if (row.reorderLevel != null)
+                  Text(
+                    'reorder ${_qty(row.reorderLevel!)}',
+                    style: HqText.tiny,
+                  ),
               ],
             ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                row.quantity.toStringAsFixed(0),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-              if (row.reorderLevel != null)
-                Text(
-                  'reorder ${row.reorderLevel!.toStringAsFixed(0)}',
-                  style: HqText.tiny,
-                ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+
+/// "240" rather than "240.0"; keeps decimals only when the figure has them.
+String _qty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+int _decimals(double v) => v == v.roundToDouble() ? 0 : 2;

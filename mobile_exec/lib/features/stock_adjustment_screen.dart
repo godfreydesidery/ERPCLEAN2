@@ -9,6 +9,7 @@ import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 import 'product_picker.dart';
+import 'unit_picker.dart';
 
 /// Stock adjustment — a signed correction with a reason, posted to
 /// `/stock/adjustments`.
@@ -26,6 +27,12 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
   final _note = TextEditingController();
   bool _busy = false;
 
+  /// The units this product can be counted in, and the one being typed in.
+  /// The server takes base units only, so the figure entered here is converted
+  /// on the way out — the owner counts cartons, the ledger records pieces.
+  List<TxUnit> _units = const [];
+  TxUnit? _unit;
+
   @override
   void dispose() {
     _note.dispose();
@@ -33,7 +40,14 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
   }
 
   bool get _ready =>
-      _product != null && _delta != 0 && _reasonLabel != null && !_busy;
+      _product != null &&
+      _delta != 0 &&
+      _reasonLabel != null &&
+      _unit != null &&
+      !_busy;
+
+  /// The signed change in BASE units — what actually gets posted.
+  double get _deltaInBase => (_unit?.factor ?? 1) * _delta;
 
   String? get _reasonCode {
     for (final e in kAdjustReasons.entries) {
@@ -44,24 +58,63 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
 
   Future<void> _pick() async {
     final p = await pickProduct(context);
-    if (p != null) setState(() => _product = p);
+    if (p == null || !mounted) return;
+
+    // Units are loaded before the product is accepted, so the screen can never
+    // show a stepper whose unit is a guess.
+    try {
+      final units = await AppScope.of(context).catalog.transactionUnits(p);
+      if (!mounted) return;
+      setState(() {
+        _product = p;
+        _units = units;
+        _unit = units.first;
+        _delta = 0;
+      });
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+    } catch (_) {
+      if (mounted) _showError('Could not load the units for ${p.name}.');
+    }
+  }
+
+  Future<void> _changeUnit() async {
+    if (_units.length < 2) return;
+    final picked = await pickUnit(
+      context,
+      units: _units,
+      baseCode: _product!.unit,
+      current: _unit,
+      title: 'Counting in which unit?',
+    );
+    if (picked == null || !mounted) return;
+    // The number on the stepper means something different in the new unit, so
+    // it is reset rather than silently re-scaled.
+    setState(() {
+      _unit = picked;
+      _delta = 0;
+    });
   }
 
   Future<void> _submit() async {
     setState(() => _busy = true);
+    final unit = _unit!;
     try {
       await AppScope.of(context).stock.adjust(
             productUid: _product!.uid,
-            quantity: _delta.toDouble(),
+            quantity: _deltaInBase,
             reasonCode: _reasonCode!,
             note: _note.text.trim(),
           );
       if (!mounted) return;
+      final entered = '${_delta > 0 ? '+' : ''}$_delta ${unit.code}';
+      final posted = '${_deltaInBase > 0 ? '+' : ''}'
+          '${_qty(_deltaInBase)} ${_product!.unit}';
       await showDoneSheet(
         context,
         title: 'Adjustment posted',
         detail: '${_product!.name}\n'
-            '${_delta > 0 ? '+' : ''}$_delta ${_product!.unit} · $_reasonLabel',
+            '${unit.isBase ? posted : '$entered = $posted'} · $_reasonLabel',
       );
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
@@ -98,14 +151,44 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
               children: [
                 ProductPickerTile(product: _product, onTap: _pick),
-                if (_product != null) ...[
+                if (_product != null && _unit != null) ...[
                   const SizedBox(height: 20),
-                  Text('Adjust by', style: HqText.label),
+                  Row(
+                    children: [
+                      Text('Adjust by', style: HqText.label),
+                      const Spacer(),
+                      if (_units.length > 1)
+                        InkWell(
+                          onTap: _changeUnit,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'in ${_unit!.code}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: HqColors.brand,
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                const Icon(Icons.swap_horiz_rounded,
+                                    size: 16, color: HqColors.brand),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   QtyStepper(
                     value: _delta,
                     allowNegative: true,
-                    unit: _product!.unit,
+                    unit: _unit!.code,
                     onChanged: (v) => setState(() => _delta = v),
                   ),
                   const SizedBox(height: 10),
@@ -137,13 +220,28 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                   HqCard(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
-                    child: FigureRow(
-                      label: 'Change to post',
-                      value: '${_delta > 0 ? '+' : ''}$_delta '
-                          '${_product!.unit}',
-                      emphasise: true,
-                      valueColor:
-                          _delta < 0 ? HqColors.bad : HqColors.brand,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FigureRow(
+                          // Always stated in the base unit: that is the number
+                          // the ledger moves, whatever was typed above.
+                          label: 'Change to post',
+                          value: '${_deltaInBase > 0 ? '+' : ''}'
+                              '${_qty(_deltaInBase)} ${_product!.unit}',
+                          emphasise: true,
+                          valueColor:
+                              _delta < 0 ? HqColors.bad : HqColors.brand,
+                        ),
+                        if (!_unit!.isBase) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_delta ${_unit!.code} x ${_unit!.factorLabel} '
+                            '${_product!.unit}',
+                            style: HqText.tiny,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -182,3 +280,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
     );
   }
 }
+
+/// "240" rather than "240.0"; keeps a decimal only when there is one.
+String _qty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();

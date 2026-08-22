@@ -16,6 +16,7 @@ import 'package:orbix_hq/features/create_item_screen.dart';
 import 'package:orbix_hq/features/create_supplier_screen.dart';
 import 'package:orbix_hq/features/dashboard_screen.dart';
 import 'package:orbix_hq/features/operations_screen.dart';
+import 'package:orbix_hq/features/pack_sizes.dart';
 import 'package:orbix_hq/features/receive_goods_screen.dart';
 import 'package:orbix_hq/features/reports_screen.dart';
 import 'package:orbix_hq/features/sales_report_screen.dart';
@@ -38,6 +39,7 @@ Map<String, Widget> buildScreens() => <String, Widget>{
       'stock adjustment': const StockAdjustmentScreen(),
       'create item': const CreateItemScreen(),
       'create supplier': const CreateSupplierScreen(),
+      'pack sizes': const PackSizesScreen(),
       'x read': const TillReportScreen(),
       'settings': SettingsScreen(onSignOut: () {}),
     };

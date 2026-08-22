@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
+import '../core/export/report_doc.dart';
+import '../core/export/report_share.dart';
 
 /// Operational UI kit — the pieces the data-entry and report screens need.
-/// Mockup only: nothing here performs a real action.
 
 // ---------------------------------------------------------------------------
 // Text input
@@ -426,46 +427,109 @@ class FilterChipsRow extends StatelessWidget {
 // Share / export sheet
 // ---------------------------------------------------------------------------
 
-/// The share sheet the client asked for: every report goes out by WhatsApp or
-/// email, as PDF or Excel. Mockup — it shows the flow, it does not send.
-Future<void> showShareSheet(BuildContext context, String reportName) {
+/// Sends a report off the phone.
+///
+/// The owner picks a format and taps Send; the phone's own share sheet opens
+/// with WhatsApp, email, Drive and Files on it. This app deliberately does not
+/// target one chat app itself — the system sheet already lists every app the
+/// owner has, and an app-specific button would break the day WhatsApp is not
+/// installed.
+Future<void> showShareSheet(BuildContext context, ExportDoc doc) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (context) => _ShareSheet(reportName: reportName),
+    builder: (context) => _ShareSheet(doc: doc),
+  );
+}
+
+/// The app-bar share button.
+///
+/// [doc] is read at tap time, not at build time, so the sheet always carries
+/// what is on screen. Before the report has loaded there is nothing to send,
+/// and the button says so instead of doing nothing.
+Widget shareAction(BuildContext context, ExportDoc? Function() doc) {
+  return IconButton(
+    tooltip: 'Share',
+    icon: const Icon(Icons.ios_share_rounded),
+    onPressed: () {
+      final ready = doc();
+      if (ready == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: HqColors.ink,
+            content: Text('The report is still loading.'),
+          ),
+        );
+        return;
+      }
+      showShareSheet(context, ready);
+    },
   );
 }
 
 class _ShareSheet extends StatefulWidget {
-  const _ShareSheet({required this.reportName});
+  const _ShareSheet({required this.doc});
 
-  final String reportName;
+  final ExportDoc doc;
 
   @override
   State<_ShareSheet> createState() => _ShareSheetState();
 }
 
 class _ShareSheetState extends State<_ShareSheet> {
-  int _format = 0;
+  ExportFormat _format = ExportFormat.pdf;
+  bool _busy = false;
 
-  static const _formats = ['PDF', 'Excel', 'CSV'];
+  /// Anchors the share popover on a tablet. Ignored on a phone.
+  Rect? get _origin {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
 
-  void _send(String channel) {
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+  Future<void> _send() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await shareDoc(widget.doc, _format, origin: _origin);
+      if (mounted) navigator.pop();
+    } catch (_) {
+      if (mounted) navigator.pop();
+      messenger.showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: HqColors.bad,
+          content: Text('The report could not be prepared for sending.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _copy() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    await Clipboard.setData(ClipboardData(text: widget.doc.toPlainText()));
+    if (mounted) navigator.pop();
+    messenger.showSnackBar(
+      const SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: HqColors.ink,
-        content: Text(
-          '${widget.reportName} (${_formats[_format]}) ready to send by $channel',
-        ),
+        content: Text('Copied. Paste it into any chat.'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final doc = widget.doc;
+    final lines = doc.rows.length;
+
     return Container(
       decoration: const BoxDecoration(
         color: HqColors.panel,
@@ -492,10 +556,15 @@ class _ShareSheetState extends State<_ShareSheet> {
             const Text('Share report', style: HqText.title),
             const SizedBox(height: 3),
             Text(
-              widget.reportName,
+              doc.subtitle == null ? doc.title : '${doc.title} — ${doc.subtitle}',
               style: HqText.body,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              lines == 1 ? '1 line' : '$lines lines',
+              style: HqText.tiny,
             ),
             const SizedBox(height: 18),
             const Text(
@@ -510,31 +579,32 @@ class _ShareSheetState extends State<_ShareSheet> {
             const SizedBox(height: 8),
             Row(
               children: [
-                for (var i = 0; i < _formats.length; i++) ...[
+                for (var i = 0; i < ExportFormat.values.length; i++) ...[
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => setState(() => _format = i),
+                      onTap: () => setState(
+                          () => _format = ExportFormat.values[i]),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: i == _format
+                          color: ExportFormat.values[i] == _format
                               ? HqColors.brandSoft
                               : HqColors.panel,
                           borderRadius: BorderRadius.circular(HqRadii.sm),
                           border: Border.all(
-                            color: i == _format
+                            color: ExportFormat.values[i] == _format
                                 ? HqColors.brand
                                 : HqColors.line2,
-                            width: i == _format ? 1.6 : 1,
+                            width: ExportFormat.values[i] == _format ? 1.6 : 1,
                           ),
                         ),
                         child: Text(
-                          _formats[i],
+                          ExportFormat.values[i].label,
                           style: TextStyle(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w700,
-                            color: i == _format
+                            color: ExportFormat.values[i] == _format
                                 ? HqColors.brand
                                 : HqColors.ink2,
                           ),
@@ -542,43 +612,28 @@ class _ShareSheetState extends State<_ShareSheet> {
                       ),
                     ),
                   ),
-                  if (i != _formats.length - 1) const SizedBox(width: 10),
+                  if (i != ExportFormat.values.length - 1)
+                    const SizedBox(width: 10),
                 ],
               ],
             ),
+            const SizedBox(height: 7),
+            Text(_format.hint, style: HqText.tiny),
             const SizedBox(height: 20),
-            const Text(
-              'SEND BY',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: HqColors.ink3,
-                letterSpacing: 0.7,
-              ),
-            ),
-            const SizedBox(height: 10),
             _ShareRow(
-              icon: Icons.chat_rounded,
+              icon: Icons.ios_share_rounded,
               tint: const Color(0xFF25D366),
-              title: 'WhatsApp',
-              subtitle: 'Send to a contact or a group',
-              onTap: () => _send('WhatsApp'),
+              title: _busy ? 'Preparing…' : 'Send',
+              subtitle: 'WhatsApp, email, or anywhere else',
+              onTap: _busy ? null : _send,
             ),
             const SizedBox(height: 10),
             _ShareRow(
-              icon: Icons.mail_outline_rounded,
-              tint: const Color(0xFF2A78D6),
-              title: 'Email',
-              subtitle: 'Attach and send',
-              onTap: () => _send('email'),
-            ),
-            const SizedBox(height: 10),
-            _ShareRow(
-              icon: Icons.download_rounded,
+              icon: Icons.copy_rounded,
               tint: HqColors.ink2,
-              title: 'Save to phone',
-              subtitle: 'Keep a copy in Downloads',
-              onTap: () => _send('download'),
+              title: 'Copy as text',
+              subtitle: 'Paste it straight into a chat',
+              onTap: _busy ? null : _copy,
             ),
             const SizedBox(height: 12),
           ],
@@ -601,7 +656,7 @@ class _ShareRow extends StatelessWidget {
   final Color tint;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -610,42 +665,45 @@ class _ShareRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(HqRadii.sm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(HqRadii.sm),
-            border: Border.all(color: HqColors.line),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: tint.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+        child: Opacity(
+          opacity: onTap == null ? 0.55 : 1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(HqRadii.sm),
+              border: Border.all(color: HqColors.line),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 20, color: tint),
                 ),
-                child: Icon(icon, color: tint, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: HqColors.ink,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: HqColors.ink,
+                        ),
                       ),
-                    ),
-                    Text(subtitle, style: HqText.tiny, maxLines: 1),
-                  ],
+                      Text(subtitle, style: HqText.tiny, maxLines: 1),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, size: 18, color: HqColors.ink3),
-            ],
+                const Icon(Icons.chevron_right, size: 18, color: HqColors.ink3),
+              ],
+            ),
           ),
         ),
       ),

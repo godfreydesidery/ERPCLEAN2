@@ -2,22 +2,50 @@ import '../core/json.dart';
 import '../core/session.dart';
 
 /// A line on a direct goods receipt.
+///
+/// The delivered unit is part of the line, not an assumption. A supplier who
+/// delivers 10 cartons of a product stocked in pieces is recorded as 10 CTN at
+/// the carton cost; the server converts to base units with the pack factor. The
+/// server REQUIRES [unitUid] — a line without it is rejected outright.
 class ReceiptLine {
   ReceiptLine({
     required this.productUid,
     required this.productName,
+    required this.baseUnit,
+    required this.unitUid,
     required this.unit,
+    required this.factorToBase,
     required this.qty,
     required this.unitCost,
   });
 
   final String productUid;
   final String productName;
-  final String unit;
+
+  /// The product's base unit code — what stock is actually counted in.
+  final String baseUnit;
+
+  /// The uid of the unit this delivery came in.
+  String unitUid;
+
+  /// That unit's code, for display.
+  String unit;
+
+  /// How many base units one [unit] holds. 1 when receiving in the base unit.
+  double factorToBase;
+
   double qty;
+
+  /// Cost of ONE [unit] — per carton when receiving cartons, exactly as the
+  /// server reads it.
   double unitCost;
 
   double get total => qty * unitCost;
+
+  /// What the receipt actually adds to stock.
+  double get qtyInBase => qty * factorToBase;
+
+  bool get isBaseUnit => factorToBase == 1;
 }
 
 /// An open till session (`PosSessionDto`).
@@ -150,6 +178,7 @@ class OperationsService {
           for (final l in lines)
             {
               'productUid': l.productUid,
+              'unitUid': l.unitUid,
               'receivedQty': l.qty,
               'unitCostAmount': l.unitCost,
               if (l.unitCost == 0) 'note': 'Received at zero cost',

@@ -11,6 +11,7 @@ import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
 import 'product_picker.dart';
+import 'unit_picker.dart';
 
 /// Receive goods with no purchase order — `/goods-receipts/direct`.
 class ReceiveGoodsScreen extends StatefulWidget {
@@ -25,6 +26,10 @@ class _ReceiveGoodsScreenState extends State<ReceiveGoodsScreen> {
   final _reference = TextEditingController();
   final _lines = <ReceiptLine>[];
   bool _busy = false;
+
+  /// Units per product, kept for the life of the screen so changing a line's
+  /// unit does not re-fetch what was already loaded when the line was added.
+  final _unitsByProduct = <String, List<TxUnit>>{};
 
   /// Minted once per receipt so a retry after a timeout cannot receive the
   /// same delivery twice.
@@ -101,17 +106,86 @@ class _ReceiveGoodsScreenState extends State<ReceiveGoodsScreen> {
     if (chosen != null) setState(() => _supplier = chosen);
   }
 
+  /// The units [p] can be received in, fetched once per product.
+  ///
+  /// A failure is surfaced rather than swallowed: falling back to the base unit
+  /// silently would record 10 cartons as 10 pieces.
+  Future<List<TxUnit>?> _unitsFor(ProductItem p) async {
+    final cached = _unitsByProduct[p.uid];
+    if (cached != null) return cached;
+    try {
+      final units = await AppScope.of(context).catalog.transactionUnits(p);
+      _unitsByProduct[p.uid] = units;
+      return units;
+    } on ApiException catch (e) {
+      if (mounted) _showError(e.message);
+      return null;
+    } catch (_) {
+      if (mounted) {
+        _showError('Could not load the units for ${p.name}. Try again.');
+      }
+      return null;
+    }
+  }
+
   Future<void> _addLine() async {
     final p = await pickProduct(context);
     if (p == null || !mounted) return;
+
+    final units = await _unitsFor(p);
+    if (units == null || !mounted) return;
+
+    // With pack sizes configured, the unit is asked for up front — it is the
+    // single fact that decides what this delivery adds to stock.
+    var chosen = units.first;
+    if (units.length > 1) {
+      final picked = await pickUnit(
+        context,
+        units: units,
+        baseCode: p.unit,
+        current: chosen,
+        title: 'Delivered in which unit?',
+      );
+      if (picked == null || !mounted) return;
+      chosen = picked;
+    }
+
     setState(() {
       _lines.add(ReceiptLine(
         productUid: p.uid,
         productName: p.name,
-        unit: p.unit,
+        baseUnit: p.unit,
+        unitUid: chosen.uid,
+        unit: chosen.code,
+        factorToBase: chosen.factor,
         qty: 1,
         unitCost: 0,
       ));
+    });
+  }
+
+  Future<void> _changeUnit(int i) async {
+    final line = _lines[i];
+    final units = _unitsByProduct[line.productUid];
+    if (units == null || units.length < 2) return;
+
+    final picked = await pickUnit(
+      context,
+      units: units,
+      baseCode: line.baseUnit,
+      current: units.firstWhere((u) => u.uid == line.unitUid,
+          orElse: () => units.first),
+      title: 'Delivered in which unit?',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      line.unitUid = picked.uid;
+      line.unit = picked.code;
+      line.factorToBase = picked.factor;
+      // The cost was entered per the OLD unit. Keeping it would silently price
+      // a carton at the price of a piece, so it is cleared and asked for again.
+      line.unitCost = 0;
     });
   }
 
@@ -121,7 +195,7 @@ class _ReceiveGoodsScreenState extends State<ReceiveGoodsScreen> {
     final saved = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cost per unit'),
+        title: Text('Cost per ${_lines[i].unit}'),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
@@ -163,18 +237,20 @@ class _ReceiveGoodsScreenState extends State<ReceiveGoodsScreen> {
       );
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: HqColors.bad,
-            content: Text(e.message),
-          ),
-        );
-      }
+      if (mounted) _showError(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: HqColors.bad,
+        content: Text(message),
+      ),
+    );
   }
 
   @override
@@ -234,8 +310,12 @@ class _ReceiveGoodsScreenState extends State<ReceiveGoodsScreen> {
                   for (var i = 0; i < _lines.length; i++) ...[
                     _LineCard(
                       line: _lines[i],
+                      canChangeUnit:
+                          (_unitsByProduct[_lines[i].productUid]?.length ?? 1) >
+                              1,
                       onQty: (q) => setState(() => _lines[i].qty = q.toDouble()),
                       onCost: () => _editCost(i),
+                      onUnit: () => _changeUnit(i),
                       onRemove: () => setState(() => _lines.removeAt(i)),
                     ),
                     const SizedBox(height: 10),
@@ -401,14 +481,20 @@ class _EmptyLines extends StatelessWidget {
 class _LineCard extends StatelessWidget {
   const _LineCard({
     required this.line,
+    required this.canChangeUnit,
     required this.onQty,
     required this.onCost,
+    required this.onUnit,
     required this.onRemove,
   });
 
   final ReceiptLine line;
+
+  /// False when the product has no pack sizes — there is nothing to swap to.
+  final bool canChangeUnit;
   final ValueChanged<int> onQty;
   final VoidCallback onCost;
+  final VoidCallback onUnit;
   final VoidCallback onRemove;
 
   @override
@@ -440,32 +526,77 @@ class _LineCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          InkWell(
-            onTap: onCost,
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Text(
-                    line.unitCost == 0
-                        ? 'Set cost per ${line.unit}'
-                        : '${tzs(line.unitCost)} per ${line.unit}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: line.unitCost == 0
-                          ? HqColors.warn
-                          : HqColors.ink2,
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: onCost,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            line.unitCost == 0
+                                ? 'Set cost per ${line.unit}'
+                                : '${tzs(line.unitCost)} per ${line.unit}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: line.unitCost == 0
+                                  ? HqColors.warn
+                                  : HqColors.ink2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Icon(Icons.edit_outlined,
+                            size: 14, color: HqColors.ink3),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 5),
-                  const Icon(Icons.edit_outlined,
-                      size: 14, color: HqColors.ink3),
-                ],
+                ),
               ),
-            ),
+              if (canChangeUnit)
+                InkWell(
+                  onTap: onUnit,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 4, horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          line.unit,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: HqColors.brand,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        const Icon(Icons.swap_horiz_rounded,
+                            size: 15, color: HqColors.brand),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
+          // What the line actually adds to stock. Without this the owner
+          // receiving cartons has no way to check the piece count that lands.
+          if (!line.isBaseUnit) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Adds ${_qty(line.qtyInBase)} ${line.baseUnit} to stock',
+              style: HqText.tiny,
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -505,3 +636,7 @@ class _LineCard extends StatelessWidget {
     );
   }
 }
+
+/// "240" rather than "240.0"; keeps a decimal only when there is one.
+String _qty(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();

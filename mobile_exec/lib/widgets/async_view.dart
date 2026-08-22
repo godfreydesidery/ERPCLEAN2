@@ -35,6 +35,7 @@ class AsyncView<T> extends StatefulWidget {
 
 class AsyncViewState<T> extends State<AsyncView<T>> {
   late Future<T> _future;
+  T? _data;
 
   @override
   void initState() {
@@ -42,8 +43,17 @@ class AsyncViewState<T> extends State<AsyncView<T>> {
     _future = widget.load();
   }
 
+  /// The value currently on screen, or null before the first load finishes.
+  ///
+  /// Lets a screen's app-bar action — share, export — act on exactly what the
+  /// user is looking at, without the screen keeping a second copy of it.
+  T? get data => _data;
+
   /// Re-run the load — used by the retry button and pull-to-refresh.
-  void reload() => setState(() => _future = widget.load());
+  void reload() => setState(() {
+        _data = null;
+        _future = widget.load();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +67,7 @@ class AsyncViewState<T> extends State<AsyncView<T>> {
           return _ErrorState(error: snap.error!, onRetry: reload);
         }
         final data = snap.data as T;
+        _data = data;
         if (widget.isEmpty?.call(data) ?? false) {
           return _EmptyState(
             icon: widget.emptyIcon,

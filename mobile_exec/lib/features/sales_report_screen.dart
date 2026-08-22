@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
+import '../core/export/report_doc.dart';
 import '../services/sales_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
@@ -46,6 +47,45 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
 
   String get _rangeLabel => formatRange(_range);
 
+  ExportDoc _doc(SalesReport data, String branch) => ExportDoc(
+        title: 'Sales report',
+        subtitle: _rangeLabel,
+        meta: [
+          if (branch.isNotEmpty) branch,
+          if (data.generatedAt != null) 'Generated ${data.generatedAt}',
+        ],
+        columns: const [
+          'Item',
+          'Code',
+          'Qty sold',
+          'Sales',
+          'Discount',
+          'VAT',
+          'Margin',
+        ],
+        rows: [
+          for (final r in data.rows)
+            [
+              Cell.text(r.productName.isEmpty ? r.productCode : r.productName),
+              Cell.text(r.productCode),
+              Cell.number(r.qtySold,
+                  decimals: r.qtySold == r.qtySold.roundToDouble() ? 0 : 2),
+              Cell.money(r.amount, currency: data.currency),
+              Cell.money(r.discount, currency: data.currency),
+              Cell.money(r.vat, currency: data.currency),
+              Cell.money(r.margin, currency: data.currency),
+            ],
+        ],
+        totals: [
+          DocTotal('Sales', Cell.money(data.total, currency: data.currency)),
+          DocTotal('Discount',
+              Cell.money(data.discount, currency: data.currency)),
+          DocTotal('VAT', Cell.money(data.vat, currency: data.currency)),
+          DocTotal('Margin', Cell.money(data.margin, currency: data.currency)),
+          DocTotal('Items sold', Cell.number(data.qtySold)),
+        ],
+      );
+
   void _applyPreset(int i) {
     if (i == _periods.length - 1) return;
     setState(() {
@@ -64,12 +104,12 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
       appBar: AppBar(
         title: const Text('Sales report', style: HqText.title),
         actions: [
-          IconButton(
-            tooltip: 'Share',
-            icon: const Icon(Icons.ios_share_rounded),
-            onPressed: () =>
-                showShareSheet(context, 'Sales report — $_rangeLabel'),
-          ),
+          shareAction(context, () {
+            final data = _viewKey.currentState?.data;
+            return data == null
+                ? null
+                : _doc(data, session.activeBranch?.name ?? '');
+          }),
           const SizedBox(width: 6),
         ],
       ),
@@ -137,7 +177,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         FilledButton.icon(
                           onPressed: () => showShareSheet(
                             context,
-                            'Sales report — $_rangeLabel',
+                            _doc(data, session.activeBranch?.name ?? ''),
                           ),
                           icon: const Icon(Icons.ios_share_rounded, size: 19),
                           label: const Text('Export and share'),

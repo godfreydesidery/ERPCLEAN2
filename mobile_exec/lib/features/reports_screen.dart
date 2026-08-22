@@ -79,8 +79,8 @@ class ReportsScreen extends StatelessWidget {
                 const SizedBox(width: 13),
                 const Expanded(
                   child: Text(
-                    'Every report can go out as PDF, Excel or CSV — by '
-                    'WhatsApp, by email, or saved to the phone.',
+                    'Every report goes out as a PDF or a spreadsheet — straight '
+                    'to WhatsApp, email, or anywhere else on the phone.',
                     style: HqText.body,
                   ),
                 ),

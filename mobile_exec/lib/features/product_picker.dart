@@ -117,7 +117,10 @@ class _ProductPickerState extends State<_ProductPicker> {
                           ),
                         ),
                         subtitle: Text(
-                          '${p.code} · per ${p.unit}',
+                          // The unit stock is COUNTED in. "per PCS" read as a
+                          // price basis; it is the counting unit, and every
+                          // quantity on the next screen is in it.
+                          '${p.code} · counted in ${p.unit}',
                           style: HqText.tiny,
                         ),
                         onTap: () => Navigator.of(context).pop(p),
@@ -219,7 +222,8 @@ class ProductPickerTile extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${product!.code} · per ${product!.unit}',
+                                '${product!.code} · counted in '
+                                '${product!.unit}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: HqText.tiny,

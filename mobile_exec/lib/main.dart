@@ -5,6 +5,7 @@ import 'app/theme.dart';
 import 'core/session.dart';
 import 'features/create_item_screen.dart';
 import 'features/create_supplier_screen.dart';
+import 'features/pack_sizes.dart';
 import 'features/dashboard_screen.dart';
 import 'features/operations_screen.dart';
 import 'features/receive_goods_screen.dart';
@@ -113,6 +114,7 @@ class _ShellState extends State<_Shell> {
       'adjust' => const StockAdjustmentScreen(),
       'item' => const CreateItemScreen(),
       'supplier' => const CreateSupplierScreen(),
+      'packs' => const PackSizesScreen(),
       'till' => const TillReportScreen(),
       _ => const StockValuationScreen(),
     };

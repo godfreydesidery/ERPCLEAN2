@@ -1,8 +1,22 @@
 # OrbixHQ — Android builds
 
-`OrbixHQ-1.0.0-qa.apk` is built against **QA** (`http://16.170.11.41`). The
-server address is only a default — it can be changed in the app on the sign-in
-screen, so one binary works against any install.
+`OrbixHQ-1.1.0-qa.apk` is the current QA build, built against **QA**
+(`http://16.170.11.41`). The server address is only a default — it can be
+changed in the app on the sign-in screen, so one binary works against any
+install.
+
+| Build | Version | Server baked in |
+|---|---|---|
+| `OrbixHQ-1.1.0-qa.apk` | 1.1.0+2 | `http://16.170.11.41` |
+| `OrbixHQ-1.0.0-qa.apk` | 1.0.0+1 | `http://16.170.11.41` |
+
+**1.1.0** adds pack sizes (cartons, boxes, outers with a price per unit),
+receiving in the unit goods actually arrived in, unit labels on every quantity
+in the stock and valuation reports, and real report sharing — PDF/CSV/text out
+to WhatsApp, email or anywhere else through the phone's own share sheet. It
+also fixes two writes that returned 400 on every attempt in 1.0.0: receive
+goods (no `unitUid` on the line) and create item (wrong `type` and base-unit
+fields).
 
 ## Building
 
@@ -12,13 +26,20 @@ screen, so one binary works against any install.
 Without `HQ_HOST` the build defaults to `http://localhost:8081`, which is only
 useful on an emulator against a local backend.
 
+**Check the host actually landed.** `String.fromEnvironment` is const-folded
+into the AOT snapshot, so a forgotten `--dart-define` produces a perfectly good
+APK pointed at localhost:
+
+    python -c "import zipfile; b=zipfile.ZipFile('build/app/outputs/flutter-apk/app-release.apk').read('lib/arm64-v8a/libapp.so'); print(b'16.170.11.41' in b)"
+
 ## Two things that will bite
 
 **INTERNET permission.** Flutter puts `android.permission.INTERNET` in the
-*debug* manifest only. It is now declared in
+*debug* manifest only. It is declared in
 `android/app/src/main/AndroidManifest.xml` — if that line is ever lost, the
 release build installs and runs but cannot reach the server at all, and every
-screen shows "Cannot reach the server".
+screen shows "Cannot reach the server". Verify with
+`aapt2 dump badging <apk> | grep uses-permission`.
 
 **Cleartext HTTP.** QA and the default `dist/` install serve plain HTTP, which
 Android 9+ blocks. `android:usesCleartextTraffic="true"` is set for that
