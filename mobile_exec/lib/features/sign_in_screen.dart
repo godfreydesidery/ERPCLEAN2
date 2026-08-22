@@ -23,6 +23,19 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _busy = false;
   String? _error;
 
+  /// Taps on the footer, counting towards revealing the server address.
+  ///
+  /// The address is baked in at build time and a manager never needs to touch
+  /// it, so it is not on the screen: an editable server field above the
+  /// username invites someone to change it, and a phone pointed at the wrong
+  /// server looks exactly like a broken app. Support still has to be able to
+  /// move a client to a new address down a phone line, hence a gesture rather
+  /// than no way in at all. Seven taps is the Android developer-options idiom
+  /// — nobody arrives here by accident, and it is easy to describe out loud.
+  static const _tapsToReveal = 7;
+  int _taps = 0;
+  DateTime? _firstTap;
+
   @override
   void dispose() {
     _user.dispose();
@@ -53,17 +66,58 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
+  void _footerTapped() {
+    final now = DateTime.now();
+    // A slow, unrelated series of taps must not accumulate into the gesture.
+    if (_firstTap == null ||
+        now.difference(_firstTap!) > const Duration(seconds: 4)) {
+      _firstTap = now;
+      _taps = 0;
+    }
+    _taps++;
+    if (_taps >= _tapsToReveal) {
+      _taps = 0;
+      _firstTap = null;
+      setState(() {});
+      _editHost();
+      return;
+    }
+    setState(() {});
+  }
+
+  /// Counts down only once someone is plainly doing this on purpose, so a
+  /// stray tap never hints that anything is there.
+  String? get _tapHint {
+    final left = _tapsToReveal - _taps;
+    if (_taps < 4 || left <= 0) return null;
+    return left == 1 ? '1 more' : '$left more';
+  }
+
   Future<void> _editHost() async {
     final session = AppScope.of(context).session;
     final controller = TextEditingController(text: session.config.baseHost);
     final saved = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ERP server'),
+        title: const Text('Server address'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(
+              'This phone is set to:',
+              style: HqText.tiny,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              HqConfig.normaliseHost(session.config.baseHost),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: HqColors.ink,
+              ),
+            ),
+            const SizedBox(height: 14),
             TextField(
               controller: controller,
               autocorrect: false,
@@ -99,8 +153,6 @@ class _SignInScreenState extends State<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final host = HqConfig.normaliseHost(AppScope.of(context).session.config.baseHost);
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: HqSurfaces.heroGradient),
@@ -157,35 +209,6 @@ class _SignInScreenState extends State<SignInScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      onTap: _busy ? null : _editHost,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.dns_outlined,
-                                size: 17, color: HqColors.ink3),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                host,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: HqColors.ink2,
-                                ),
-                              ),
-                            ),
-                            const Icon(Icons.edit_outlined,
-                                size: 16, color: HqColors.ink3),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 22),
                     HqField(
                       label: 'Username',
                       controller: _user,
@@ -277,10 +300,33 @@ class _SignInScreenState extends State<SignInScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Center(
-                child: Text(
-                  'Protected by your company\'s server',
-                  style: TextStyle(fontSize: 11.5, color: HqOnDark.tertiary),
+              Center(
+                // The way back to the server address. Looks like a footnote,
+                // because to everyone but support that is all it is.
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _busy ? null : _footerTapped,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 8),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Protected by your company\'s server',
+                          style: TextStyle(
+                              fontSize: 11.5, color: HqOnDark.tertiary),
+                        ),
+                        if (_tapHint != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _tapHint!,
+                            style: const TextStyle(
+                                fontSize: 11, color: HqOnDark.tertiary),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
