@@ -593,7 +593,7 @@ class _LineCard extends StatelessWidget {
           if (!line.isBaseUnit) ...[
             const SizedBox(height: 2),
             Text(
-              'Adds ${_qty(line.qtyInBase)} ${line.baseUnit} to stock',
+              'Adds ${qty(line.qtyInBase)} ${line.baseUnit} to stock',
               style: HqText.tiny,
             ),
           ],
@@ -616,10 +616,9 @@ class _LineCard extends StatelessWidget {
                   children: [
                     Text('Line total', style: HqText.tiny),
                     const SizedBox(height: 3),
-                    Text(
+                    Amount(
                       tzs(line.total),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      alignment: Alignment.centerRight,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -636,7 +635,3 @@ class _LineCard extends StatelessWidget {
     );
   }
 }
-
-/// "240" rather than "240.0"; keeps a decimal only when there is one.
-String _qty(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();

@@ -9,6 +9,7 @@ class ProductItem {
     required this.name,
     required this.unit,
     required this.baseUnitUid,
+    this.description,
     this.categoryName,
   });
 
@@ -18,6 +19,7 @@ class ProductItem {
         name: asStrOr(j['name']),
         unit: asStrOr(j['baseUnitCode'], asStrOr(j['unitCode'], 'unit')),
         baseUnitUid: asStrOr(j['baseUnitUid']),
+        description: asStr(j['description']),
         categoryName: asStr(j['categoryName']),
       );
 
@@ -31,6 +33,7 @@ class ProductItem {
   /// The base unit's uid. Every write addresses a unit by uid; the screens
   /// display the code.
   final String baseUnitUid;
+  final String? description;
   final String? categoryName;
 }
 

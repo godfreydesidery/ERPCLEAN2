@@ -826,6 +826,36 @@ class ResidualLine extends StatelessWidget {
 }
 
 /// Doctrine 7 - the as-of stamp plus coverage, on light or dark.
+/// A money figure that shrinks to fit rather than wrapping or being clipped.
+///
+/// Amounts are written in full now, so the widest value a screen can produce is
+/// far wider than the narrowest: a hero sized for "TZS 480,000" must still hold
+/// "TZS 1,284,300,500" on a 360-pixel phone. Scaling down is the honest
+/// failure mode — an ellipsis on money hides the digits that matter most.
+class Amount extends StatelessWidget {
+  const Amount(
+    this.text, {
+    super.key,
+    required this.style,
+    this.alignment = Alignment.centerLeft,
+    this.textAlign,
+  });
+
+  final String text;
+  final TextStyle style;
+  final Alignment alignment;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: alignment,
+      child: Text(text, maxLines: 1, textAlign: textAlign, style: style),
+    );
+  }
+}
+
 class AsOfLine extends StatelessWidget {
   const AsOfLine({
     super.key,

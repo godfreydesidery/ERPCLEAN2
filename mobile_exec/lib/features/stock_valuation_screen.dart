@@ -130,7 +130,7 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 9),
-                                Text(
+                                Amount(
                                   tzs(data.total),
                                   style: const TextStyle(
                                     fontSize: 34,
@@ -238,9 +238,9 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                                     ),
                                     Expanded(
                                       flex: 3,
-                                      child: Text(
+                                      child: Amount(
                                         tzs(data.total),
-                                        textAlign: TextAlign.right,
+                                        alignment: Alignment.centerRight,
                                         style: const TextStyle(
                                           fontSize: 15,
                                           fontWeight: FontWeight.w700,
