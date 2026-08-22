@@ -677,7 +677,7 @@ class _BridgePainter extends CustomPainter {
 
       _text(
         canvas,
-        s.isTotal ? tzsBare(shown[i]) : tzsBare(shown[i], sign: true),
+        s.isTotal ? tzsShort(shown[i]) : tzsShort(shown[i], sign: true),
         Offset(left + barW / 2, top - valueH + 3),
         HqText.tiny.copyWith(
           fontSize: 11,
@@ -788,7 +788,7 @@ class _AgeingPainter extends CustomPainter {
 
       _text(
         canvas,
-        tzsBare(b.value),
+        tzsShort(b.value),
         Offset(left + barW / 2, rect.top - valueH + 3),
         HqText.tiny.copyWith(
           fontSize: 11,

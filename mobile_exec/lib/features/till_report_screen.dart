@@ -240,7 +240,7 @@ class _Header extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
+          Amount(
             tzs(read.totalSales),
             style: const TextStyle(
               fontSize: 34,

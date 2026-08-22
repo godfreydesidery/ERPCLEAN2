@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/theme.dart';
+import 'common.dart';
 import '../core/export/report_doc.dart';
 import '../core/export/report_share.dart';
+import 'report_preview.dart';
 
 /// Operational UI kit — the pieces the data-entry and report screens need.
 
@@ -427,13 +429,13 @@ class FilterChipsRow extends StatelessWidget {
 // Share / export sheet
 // ---------------------------------------------------------------------------
 
-/// Sends a report off the phone.
+/// Previews a report, then sends it off the phone.
 ///
-/// The owner picks a format and taps Send; the phone's own share sheet opens
-/// with WhatsApp, email, Drive and Files on it. This app deliberately does not
-/// target one chat app itself — the system sheet already lists every app the
-/// owner has, and an app-specific button would break the day WhatsApp is not
-/// installed.
+/// The owner picks a format, checks it on screen, and taps Send; the phone's
+/// own share sheet opens with WhatsApp, email, Drive and Files on it. This app
+/// deliberately does not target one chat app itself — the system sheet already
+/// lists every app the owner has, and an app-specific button would break the
+/// day WhatsApp is not installed.
 Future<void> showShareSheet(BuildContext context, ExportDoc doc) {
   return showModalBottomSheet<void>(
     context: context,
@@ -509,6 +511,14 @@ class _ShareSheetState extends State<_ShareSheet> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _preview() async {
+    final navigator = Navigator.of(context);
+    final doc = widget.doc;
+    final format = _format;
+    navigator.pop();
+    await openReportPreview(navigator.context, doc, format);
   }
 
   Future<void> _copy() async {
@@ -620,6 +630,14 @@ class _ShareSheetState extends State<_ShareSheet> {
             const SizedBox(height: 7),
             Text(_format.hint, style: HqText.tiny),
             const SizedBox(height: 20),
+            _ShareRow(
+              icon: Icons.visibility_outlined,
+              tint: HqColors.brand,
+              title: 'Preview',
+              subtitle: 'See it before anyone else does',
+              onTap: _busy ? null : _preview,
+            ),
+            const SizedBox(height: 10),
             _ShareRow(
               icon: Icons.ios_share_rounded,
               tint: const Color(0xFF25D366),
@@ -797,12 +815,17 @@ class FigureRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: emphasise ? 16 : 14.5,
-              fontWeight: FontWeight.w700,
-              color: valueColor ?? HqColors.ink,
+          // Shrinks rather than wrapping: a full amount is much wider than the
+          // abbreviated one this row was sized for.
+          Flexible(
+            child: Amount(
+              value,
+              alignment: Alignment.centerRight,
+              style: TextStyle(
+                fontSize: emphasise ? 16 : 14.5,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? HqColors.ink,
+              ),
             ),
           ),
         ],

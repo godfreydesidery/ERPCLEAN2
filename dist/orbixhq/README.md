@@ -1,14 +1,22 @@
 # OrbixHQ — Android builds
 
-`OrbixHQ-1.1.0-qa.apk` is the current QA build, built against **QA**
+`OrbixHQ-1.2.0-qa.apk` is the current QA build, built against **QA**
 (`http://16.170.11.41`). The server address is only a default — it can be
 changed in the app on the sign-in screen, so one binary works against any
 install.
 
 | Build | Version | Server baked in |
 |---|---|---|
+| `OrbixHQ-1.2.0-qa.apk` | 1.2.0+3 | `http://16.170.11.41` |
 | `OrbixHQ-1.1.0-qa.apk` | 1.1.0+2 | `http://16.170.11.41` |
 | `OrbixHQ-1.0.0-qa.apk` | 1.0.0+1 | `http://16.170.11.41` |
+
+**1.2.0** answers the client's three pendings: amounts are written in full
+(`TZS 3,500,000`, not `TZS 3.5M`) everywhere except chart bar labels, where a
+full figure will not fit above a bar; a report can be previewed on screen
+before it is sent anywhere; and Operations gains a Products screen showing
+description, unit, pack sizes, buying price, selling price, margin and stock
+on hand.
 
 **1.1.0** adds pack sizes (cartons, boxes, outers with a price per unit),
 receiving in the unit goods actually arrived in, unit labels on every quantity

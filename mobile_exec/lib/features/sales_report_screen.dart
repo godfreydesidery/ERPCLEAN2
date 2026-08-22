@@ -229,7 +229,7 @@ class _Totals extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 9),
-          Text(
+          Amount(
             tzs(report.total),
             style: const TextStyle(
               fontSize: 34,
@@ -284,10 +284,8 @@ class _Mini extends StatelessWidget {
             style: const TextStyle(fontSize: 10.5, color: HqOnDark.tertiary),
           ),
           const SizedBox(height: 3),
-          Text(
+          Amount(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,

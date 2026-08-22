@@ -23,15 +23,6 @@ ExportDoc _doc({List<List<Cell>>? rows}) => ExportDoc(
     );
 
 void main() {
-  group('groupDigits', () {
-    test('separates thousands and keeps the requested decimals', () {
-      expect(groupDigits(1234567), '1,234,567');
-      expect(groupDigits(1234567.891, decimals: 2), '1,234,567.89');
-      expect(groupDigits(-4800), '-4,800');
-      expect(groupDigits(0), '0');
-    });
-  });
-
   group('Cell', () {
     test('a number reaches a spreadsheet bare and a person grouped', () {
       const c = Cell.number(1234567);

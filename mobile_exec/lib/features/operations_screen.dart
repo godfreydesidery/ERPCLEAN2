@@ -42,6 +42,14 @@ class OperationsScreen extends StatelessWidget {
           const SectionLabel(text: 'MASTER DATA'),
           const SizedBox(height: 10),
           ActionTile(
+            icon: Icons.fact_check_outlined,
+            title: 'Products',
+            subtitle: 'Unit, cost, selling price and stock on hand',
+            tint: const Color(0xFF2A78D6),
+            onTap: () => onNavigate('products'),
+          ),
+          const SizedBox(height: 10),
+          ActionTile(
             icon: Icons.inventory_2_outlined,
             title: 'New item',
             subtitle: 'Register a product with its unit and price',

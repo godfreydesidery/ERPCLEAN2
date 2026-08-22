@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
+import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
 import '../core/export/report_doc.dart';
@@ -87,7 +88,7 @@ class _StockReportScreenState extends State<StockReportScreen> {
               const SizedBox(height: 16),
               FigureRow(
                 label: 'On hand',
-                value: '${_qty(row.quantity)} ${product.unit}',
+                value: '${qty(row.quantity)} ${product.unit}',
                 emphasise: true,
                 valueColor: row.negative ? HqColors.bad : HqColors.ink,
               ),
@@ -351,8 +352,8 @@ class _ItemRow extends StatelessWidget {
               children: [
                 Text(
                   unit.isEmpty
-                      ? _qty(row.quantity)
-                      : '${_qty(row.quantity)} $unit',
+                      ? qty(row.quantity)
+                      : '${qty(row.quantity)} $unit',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -361,7 +362,7 @@ class _ItemRow extends StatelessWidget {
                 ),
                 if (row.reorderLevel != null)
                   Text(
-                    'reorder ${_qty(row.reorderLevel!)}',
+                    'reorder ${qty(row.reorderLevel!)}',
                     style: HqText.tiny,
                   ),
               ],
@@ -372,9 +373,5 @@ class _ItemRow extends StatelessWidget {
     );
   }
 }
-
-/// "240" rather than "240.0"; keeps decimals only when the figure has them.
-String _qty(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
 int _decimals(double v) => v == v.roundToDouble() ? 0 : 2;
