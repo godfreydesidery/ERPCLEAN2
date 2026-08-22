@@ -229,7 +229,7 @@ class _SalesHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text(
+          Amount(
             tzs(today.total),
             style: const TextStyle(
               fontSize: 38,
@@ -292,10 +292,8 @@ class _HeroFigure extends StatelessWidget {
             style: const TextStyle(fontSize: 10.5, color: HqOnDark.tertiary),
           ),
           const SizedBox(height: 3),
-          Text(
+          Amount(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,

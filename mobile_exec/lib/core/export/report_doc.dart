@@ -6,6 +6,8 @@
 /// CSV writes bare numbers so a spreadsheet reads them as numbers.
 library;
 
+import '../../app/format.dart';
+
 /// One cell. Text and numbers are distinguished so the CSV can stay bare while
 /// the PDF and the pasted text stay readable.
 class Cell {
@@ -42,22 +44,6 @@ class Cell {
     final currency = _currency;
     return currency == null ? grouped : '$currency $grouped';
   }
-}
-
-/// "1,234,567.89" — thousands separators, fixed decimals, minus kept in front.
-String groupDigits(num value, {int decimals = 0}) {
-  final negative = value < 0;
-  final fixed = value.abs().toStringAsFixed(decimals);
-  final dot = fixed.indexOf('.');
-  final whole = dot == -1 ? fixed : fixed.substring(0, dot);
-  final fraction = dot == -1 ? '' : fixed.substring(dot);
-
-  final buf = StringBuffer();
-  for (var i = 0; i < whole.length; i++) {
-    if (i > 0 && (whole.length - i) % 3 == 0) buf.write(',');
-    buf.write(whole[i]);
-  }
-  return '${negative ? '-' : ''}$buf$fraction';
 }
 
 /// A figure that stands on its own — a report total, an expected-cash line.

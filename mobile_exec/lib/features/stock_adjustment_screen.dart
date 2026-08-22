@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
+import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
 import '../services/catalog_service.dart';
@@ -109,7 +110,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       if (!mounted) return;
       final entered = '${_delta > 0 ? '+' : ''}$_delta ${unit.code}';
       final posted = '${_deltaInBase > 0 ? '+' : ''}'
-          '${_qty(_deltaInBase)} ${_product!.unit}';
+          '${qty(_deltaInBase)} ${_product!.unit}';
       await showDoneSheet(
         context,
         title: 'Adjustment posted',
@@ -228,7 +229,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                           // the ledger moves, whatever was typed above.
                           label: 'Change to post',
                           value: '${_deltaInBase > 0 ? '+' : ''}'
-                              '${_qty(_deltaInBase)} ${_product!.unit}',
+                              '${qty(_deltaInBase)} ${_product!.unit}',
                           emphasise: true,
                           valueColor:
                               _delta < 0 ? HqColors.bad : HqColors.brand,
@@ -280,7 +281,3 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
     );
   }
 }
-
-/// "240" rather than "240.0"; keeps a decimal only when there is one.
-String _qty(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();

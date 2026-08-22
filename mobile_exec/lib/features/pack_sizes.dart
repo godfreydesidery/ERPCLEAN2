@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
+import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
 import '../services/catalog_service.dart';
@@ -202,7 +203,7 @@ class PackDraftCard extends StatelessWidget {
           ),
           if (factor != null && factor > 0)
             Text(
-              'A ${draft.unit.code} takes ${_qty(factor)} $baseCode '
+              'A ${draft.unit.code} takes ${qty(factor)} $baseCode '
               'off the shelf.',
               style: HqText.tiny,
             )
@@ -220,7 +221,7 @@ class PackDraftCard extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               suffixText: currency,
               helper: 'Leave blank to sell at the $baseCode price times '
-                  '${factor == null || factor <= 0 ? 'the pack size' : _qty(factor)}.',
+                  '${factor == null || factor <= 0 ? 'the pack size' : qty(factor)}.',
             ),
           ],
           if (onSave != null) ...[
@@ -326,13 +327,14 @@ class _PackSizesScreenState extends State<PackSizesScreen> {
         _drafts[pack.unitUid] = PackDraft(
           UnitRef(
               uid: pack.unitUid, code: pack.unitCode, name: pack.unitName),
-          factor: _qty(pack.factorToBase),
+          factor: plainNumber(pack.factorToBase),
           price: prices[pack.unitUid] == null
               ? ''
-              : _qty(prices[pack.unitUid]!),
+              : plainNumber(prices[pack.unitUid]!),
         );
       }
-      _basePrice.text = prices[null] == null ? '' : _qty(prices[null]!);
+      _basePrice.text =
+          prices[null] == null ? '' : plainNumber(prices[null]!);
 
       setState(() {
         _units = units;
@@ -417,7 +419,7 @@ class _PackSizesScreenState extends State<PackSizesScreen> {
 
       if (!mounted) return;
       _snack('${draft.unit.code} saved: 1 ${draft.unit.code} = '
-          '${_qty(factor)} ${p.unit}.');
+          '${qty(factor)} ${p.unit}.');
       await _load();
     } on ApiException catch (e) {
       if (mounted) _snack(e.message, bad: true);
@@ -659,7 +661,3 @@ class _PackSizesScreenState extends State<PackSizesScreen> {
     );
   }
 }
-
-/// "24" rather than "24.0"; keeps a decimal only when there is one.
-String _qty(double v) =>
-    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();

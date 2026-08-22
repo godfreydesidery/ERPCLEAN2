@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
 import '../app/theme.dart';
+import '../app/version.dart';
 import '../core/session.dart';
 import '../widgets/common.dart';
 
@@ -113,7 +114,7 @@ class SettingsScreen extends StatelessWidget {
                   const _Row(
                     icon: Icons.info_outline_rounded,
                     title: 'Version',
-                    value: '1.0.0',
+                    value: kAppVersion,
                   ),
                 ],
               ),
