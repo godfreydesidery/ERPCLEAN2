@@ -10,7 +10,8 @@ import { PriceListDto, ProductModel } from '../../models/product.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { CustomerService } from '../../parties/customer.service';
-import { ProductService } from '../../products/product.service';
+import { Observable, map, tap } from 'rxjs';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 import {
@@ -151,7 +152,10 @@ export class PricingRulesComponent {
   }
 
   private loadRefData(companyId: string): void {
-    this.productService.list(companyId).subscribe({
+    // A SEED for the three product pickers, not the catalogue — anything past this first page is
+    // reached by typing, which goes to the server via searchProducts. It was previously the
+    // service's 20-row default, which put all but the first 20 products out of reach entirely.
+    this.productService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows),
       error: () => this.products.set([]),
     });
@@ -162,6 +166,25 @@ export class PricingRulesComponent {
     this.customerService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.customers.set(rows.filter((c) => c.status === 'ACTIVE')),
       error: () => this.customers.set([]),
+    });
+  }
+
+  /**
+   * Server-side product lookup shared by all three product pickers (arrow property so `this`
+   * survives the binding). Results are folded into products() as well as shown, because loadTiers()
+   * resolves the chosen uid → id from that same list and productLabel() names rows from it.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      tap(({ rows }) => this.cacheProducts(rows)),
+      map(({ rows }) => rows.map((p) => ({ uid: p.uid, label: p.name, hint: p.code }))),
+    );
+
+  /** Merge freshly-seen products into the local list, keeping it unique by uid. */
+  private cacheProducts(rows: readonly ProductModel[]): void {
+    this.products.update((existing) => {
+      const seen = new Set(existing.map((p) => p.uid));
+      return [...existing, ...rows.filter((p) => !seen.has(p.uid))];
     });
   }
 
@@ -366,6 +389,11 @@ export class PricingRulesComponent {
 
   // ── Display helpers ──────────────────────────────────────────────────────────
 
+  /**
+   * Names an existing rule's product from the locally-known set. Rows whose product is neither in
+   * the seed page nor in anything searched this session still fall back to the raw id — resolving
+   * those needs the product name on the tier/customer-price DTO itself, which is a backend change.
+   */
   productLabel(productId: string): string {
     const p = this.products().find((x) => x.id === productId);
     return p ? `${p.code} — ${p.name}` : productId;

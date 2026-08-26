@@ -7,7 +7,8 @@ import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { Observable, map, tap } from 'rxjs';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
 import { BomService } from './bom.service';
 import {
   ActivateBomRequest,
@@ -50,6 +51,31 @@ export class BomDetailComponent {
   readonly productOptions = signal<UidOption[]>([]);
   /** True when the product list could not be loaded (non-fatal; component picker is disabled with a notice). */
   readonly productsUnavailable = signal(false);
+  /** Company whose catalogue backs the picker — kept so searchProducts can scope its query. */
+  private readonly productCompanyId = signal('');
+
+  /**
+   * Server-side product lookup for the component picker (arrow property so `this` survives the
+   * binding). Matches are merged into productOptions() as well as shown, so productLabel() can name
+   * a component that was picked out of a search rather than falling back to a truncated uid.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.productCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status === 'ACTIVE')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+      tap((options) => this.cacheOptions(options)),
+    );
+
+  /** Merge freshly-seen options into the known set, keeping it unique by uid. */
+  private cacheOptions(options: readonly UidOption[]): void {
+    this.productOptions.update((existing) => {
+      const seen = new Set(existing.map((o) => o.uid));
+      return [...existing, ...options.filter((o) => !seen.has(o.uid))];
+    });
+  }
 
   // ── Entity state ──────────────────────────────────────────────────────────
   readonly bom = signal<BomDto | null>(null);
@@ -132,6 +158,11 @@ export class BomDetailComponent {
     this.fNotes.set(bom.notes ?? '');
   }
 
+  /**
+   * Seeds the component picker. A SEED, not the catalogue — anything past this first page is
+   * reached by typing, which goes to the server via searchProducts. The seed doubles as the source
+   * for productLabel(), so it is kept generous.
+   */
   private loadProductOptions(companyId: string): void {
     // Resolve companyId → list products: need companyId as string
     this.productsUnavailable.set(false);
@@ -141,6 +172,7 @@ export class BomDetailComponent {
           next: (list) => {
             const company = list.find((c) => c.id === companyId);
             if (company) {
+              this.productCompanyId.set(company.id);
               this.productService.list(company.id, undefined, 0, 500).subscribe({
                 next: ({ rows }) => {
                   this.productOptions.set(

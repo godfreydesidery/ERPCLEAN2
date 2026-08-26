@@ -3,7 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
+import { Observable, debounceTime, distinctUntilChanged, map, Subject, switchMap, tap } from 'rxjs';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
@@ -11,7 +11,7 @@ import { ProductModel, UnitOfMeasureDto } from '../../models/product.model';
 import { SupplierModel } from '../../models/party.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
 import { SupplierService } from '../../parties/supplier.service';
 import { CreateRfqRequest } from './models/rfq.model';
 import { RfqService } from './rfq.service';
@@ -129,6 +129,10 @@ export class RfqCreateComponent {
     this.loadSuppliers(id);
   }
 
+  /**
+   * Seeds the product picker with the first page. It is a SEED, not the catalogue — everything past
+   * it is reached by typing, which goes to the server via searchProducts.
+   */
   private loadProductsAndUnits(companyId: string): void {
     this.productService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => {
@@ -146,6 +150,18 @@ export class RfqCreateComponent {
       error: () => {},
     });
   }
+
+  /**
+   * Server-side product lookup for the line picker (arrow property so `this` survives the binding).
+   * Results are folded into productMap as well as shown, because the line resolves the chosen
+   * uid → id from that map — a product picked out of a search but absent from the seed would
+   * otherwise land on the request with no id.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      tap(({ rows }) => rows.forEach((p) => this.productMap.set(p.uid, p.id))),
+      map(({ rows }) => rows.map((p) => ({ uid: p.uid, label: p.name, hint: p.code }))),
+    );
 
   private loadSuppliers(companyId: string): void {
     this.supplierService.list(companyId, undefined, 0, 200).subscribe({

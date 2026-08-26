@@ -10,7 +10,8 @@ import { Company } from '../../models/company.model';
 import { ProductModel, UnitOfMeasureDto } from '../../models/product.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
+import { Observable, map, tap } from 'rxjs';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { CreatePurchaseRequisitionRequest, RequisitionLineRequest } from './purchase-requisition.model';
 import { PurchaseRequisitionService } from './purchase-requisition.service';
@@ -102,6 +103,10 @@ export class RequisitionCreateComponent {
     });
   }
 
+  /**
+   * Seeds the product picker with the first page. It is a SEED, not the catalogue — everything past
+   * it is reached by typing, which goes to the server via searchProducts.
+   */
   private loadPickerData(companyId: string): void {
     this.pickerState.set('loading');
     this.productService.list(companyId, undefined, 0, 200)
@@ -113,6 +118,26 @@ export class RequisitionCreateComponent {
         },
         error: () => this.pickerState.set('error'),
       });
+  }
+
+  /**
+   * Server-side product lookup for the line picker (arrow property so `this` survives the binding).
+   * Results are folded into products() as well as shown, because submit() resolves the chosen
+   * uid → id from that same list — a product picked out of a search but absent from the seed would
+   * otherwise fail to resolve.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      tap(({ rows }) => this.cacheProducts(rows)),
+      map(({ rows }) => rows.map((p) => ({ uid: p.uid, label: p.name, hint: p.code }))),
+    );
+
+  /** Merge freshly-seen products into the local list, keeping it unique by uid. */
+  private cacheProducts(rows: readonly ProductModel[]): void {
+    this.products.update((existing) => {
+      const seen = new Set(existing.map((p) => p.uid));
+      return [...existing, ...rows.filter((p) => !seen.has(p.uid))];
+    });
   }
 
   onCompanyChange(id: string): void {

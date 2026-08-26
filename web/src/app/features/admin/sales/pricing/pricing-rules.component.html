@@ -68,6 +68,7 @@
             <app-uid-picker id="tierProduct" name="tierProduct"
                             [(ngModel)]="tierProductUid"
                             [options]="productOptions()"
+                            [search]="searchProducts"
                             placeholder="Select product"
                             [required]="false" />
           </div>
@@ -109,6 +110,7 @@
                                     [(ngModel)]="newTierProductUid"
                                     name="newTierProduct"
                                     [options]="productOptions()"
+                                    [search]="searchProducts"
                                     placeholder="Select product"
                                     [required]="true" />
                   </div>
@@ -302,6 +304,7 @@
                                     [(ngModel)]="newCpProductUid"
                                     name="newCpProduct"
                                     [options]="productOptions()"
+                                    [search]="searchProducts"
                                     placeholder="Select product"
                                     [required]="true" />
                   </div>
