@@ -607,16 +607,32 @@ function Invoke-Update {
 
     Write-Step 'Updating configuration files'
     # .env, secrets\ and backups\ are yours and are never touched.
+    # VERSION is deliberately absent here - see the end of this function. It is the file a
+    # human reads to ask "what is installed?", and copying it before the new version is
+    # actually running makes a failed update claim success.
     foreach ($f in @('docker-compose.yml', 'docker-compose.db-docker.yml', 'docker-compose.db-host.yml',
-                     'docker-compose.tls.yml', 'Caddyfile', '.env.example', 'VERSION', 'RELEASE-NOTES.md')) {
+                     'docker-compose.tls.yml', 'Caddyfile', '.env.example', 'RELEASE-NOTES.md')) {
         $from = Join-Path $src $f
         if (Test-Path $from) { Copy-Item $from (Join-Path $ScriptDir $f) -Force }
     }
     $srcDocs = Join-Path $src 'docs'
     if (Test-Path $srcDocs) {
         $dstDocs = Join-Path $ScriptDir 'docs'
-        if (Test-Path $dstDocs) { Remove-Item $dstDocs -Recurse -Force }
-        Copy-Item $srcDocs $dstDocs -Recurse
+        # Refreshed in place rather than deleted and recreated. Removing the folder needs
+        # permission on the folder itself, which an installation created by another account
+        # does not grant - and it failed here after the images had already been loaded,
+        # leaving the update half-done with the old version still running.
+        if (-not (Test-Path $dstDocs)) { New-Item -ItemType Directory -Path $dstDocs | Out-Null }
+        # Guides the new release no longer ships are dropped, so an installation does not
+        # accumulate documentation for features it no longer has. Best-effort: one leftover
+        # that will not delete is worth a warning, not a failed update.
+        Get-ChildItem $dstDocs -File | Where-Object {
+            -not (Test-Path (Join-Path $srcDocs $_.Name))
+        } | ForEach-Object {
+            try { Remove-Item $_.FullName -Force -ErrorAction Stop }
+            catch { Write-Warn "could not remove the withdrawn guide $($_.Name)" }
+        }
+        Copy-Item (Join-Path $srcDocs '*') $dstDocs -Recurse -Force
     }
 
     Set-EnvValue 'ERP_VERSION' $newVersion
@@ -637,6 +653,12 @@ function Invoke-Update {
         $from = Join-Path $src $f
         if (Test-Path $from) { Copy-Item $from (Join-Path $ScriptDir $f) -Force }
     }
+
+    # VERSION last, once the new release is genuinely up. Copied early (as it was), an update
+    # that died part-way left this file naming a version that was not running - so the
+    # obvious "what is installed?" check confirmed a success that had not happened.
+    $fromVersion = Join-Path $src 'VERSION'
+    if (Test-Path $fromVersion) { Copy-Item $fromVersion (Join-Path $ScriptDir 'VERSION') -Force }
 
     Write-Host ''
     Write-Ok "Updated to $newVersion."

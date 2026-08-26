@@ -1,3 +1,40 @@
+### Choosing a product is now a search, not a dropdown
+
+In the places where you pick a product there were two controls doing one job: a box to type in, and
+a dropdown beside it holding the results. You typed in one and then had to look in the other.
+
+There is now one box. Type part of a name or a product code and the matches appear underneath, ready
+to click. Nothing is listed until you type, so you are never handed a long list to scroll through
+before you have said what you are looking for.
+
+Once you choose one it is shown under the box with a tick, so there is never any doubt about which
+product was actually selected — with a **clear** link beside it if you picked the wrong one.
+
+The keyboard works throughout: the arrow keys move through the matches, Enter chooses the
+highlighted one, and Escape closes the list. Enter no longer submits the whole form while you are
+still choosing.
+
+Where you pick from a short fixed list — a branch, a location, a price list — nothing changes. Those
+remain ordinary dropdowns, which suit a handful of choices better than a search box does.
+
+### An update that cannot finish now says so before it starts
+
+Updating replaces files in the installation folder. If those files belong to a different user
+account on the server, it cannot — and it used to discover this half-way through, after the safety
+backup had been taken and the new version unpacked, ending in a dozen unexplained "Permission
+denied" lines with nothing to say what had gone wrong or what to do about it. Running it again
+failed in exactly the same way.
+
+It now checks before it starts, and stops with a plain message naming the files involved and the
+single command that fixes them. Nothing on the running system is touched.
+
+One related correction: the file that records which version is installed is now written only once
+the new version is actually running. Before, an update that stopped part-way left that file naming a
+version that was not running — so the obvious way to check whether an update had worked could
+confirm a success that had not happened.
+
+---
+
 ### Products missing from the lists where you pick them
 
 When you went to choose a product — on a stock transfer, on a requisition, when setting a price, and

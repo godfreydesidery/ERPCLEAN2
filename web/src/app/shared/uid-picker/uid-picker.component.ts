@@ -59,38 +59,94 @@ export type UidSearchFn = (query: string) => Observable<readonly UidOption[]>;
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   // Strip id / aria-labelledby / aria-label from the host element so they never linger on
-  // <app-uid-picker> — the consumer-supplied values must resolve to the inner <select>
-  // (the real form control) so that <label for="X"> / aria-labelledby / aria-label associate
-  // correctly (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
+  // <app-uid-picker> — the consumer-supplied values must resolve to the inner control
+  // (the <select> in CLIENT mode, the search <input> in SERVER mode) so that
+  // <label for="X"> / aria-labelledby / aria-label associate correctly
+  // (WCAG 2.1 AA, SC 1.3.1 / 4.1.2).
   host: { '[attr.id]': 'null', '[attr.aria-labelledby]': 'null', '[attr.aria-label]': 'null' },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => UidPickerComponent), multi: true },
   ],
   template: `
     <div class="position-relative">
-      @if (showFilter()) {
-        <!-- Filter box: filters by NAME (or code), never accepts a raw uid. In SERVER mode it
-             queries the API, so the reachable set is not capped by what was preloaded. -->
-        <input type="text" class="form-control form-control-sm mb-1"
-               [attr.id]="id() ? id() + '-filter' : null"
+      @if (search()) {
+        <!-- SERVER mode: a combobox. There is deliberately NO <select> here — the whole point
+             of this mode is that the set is bigger than any list worth rendering, so what you
+             type IS the list. A dropdown alongside a search box asks the operator to look in
+             two places for one answer. -->
+        <input type="text" class="form-control form-control-sm" role="combobox"
+               [attr.id]="id() ?? null"
                [ngModel]="query()" (ngModelChange)="onQuery($event)"
-               [attr.aria-label]="(ariaLabel() || placeholder() || 'Search') + (search() ? ' — search by name or code' : ' — filter by name')"
-               [placeholder]="search() ? 'Type to search by name or code…' : 'Type to filter by name…'"
-               [disabled]="disabledState()" />
-      }
-      <select class="form-select form-select-sm"
-              [attr.id]="id() ?? null"
-              [ngModel]="value()"
-              (ngModelChange)="onPick($event)"
-              [disabled]="disabledState()"
-              [required]="required()"
-              [attr.aria-labelledby]="ariaLabelledby() ?? null"
-              [attr.aria-label]="ariaLabel() ?? ((id() || ariaLabelledby()) ? null : (placeholder() || 'Select a resource'))">
-        <option value="">{{ placeholder() || '— select —' }}</option>
-        @for (o of filtered(); track o.uid) {
-          <option [value]="o.uid">{{ o.label }}{{ o.hint ? ' (' + o.hint + ')' : '' }}</option>
+               (keydown)="onKeydown($event)"
+               (blur)="onBlur()"
+               (focus)="onFocus()"
+               autocomplete="off"
+               [placeholder]="placeholder() || 'Type to search…'"
+               [disabled]="disabledState()"
+               [attr.aria-labelledby]="ariaLabelledby() ?? null"
+               [attr.aria-label]="ariaLabel() ?? ((id() || ariaLabelledby()) ? null : (placeholder() || 'Search'))"
+               [attr.aria-required]="required() ? 'true' : null"
+               aria-autocomplete="list"
+               [attr.aria-expanded]="isOpen()"
+               [attr.aria-controls]="listboxId"
+               [attr.aria-activedescendant]="activeOptionId()" />
+
+        @if (isOpen()) {
+          <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+              [id]="listboxId"
+              [attr.aria-label]="(ariaLabel() || placeholder() || 'Results')"
+              style="z-index:1050;max-height:240px;overflow-y:auto;">
+            @for (o of filtered(); track o.uid; let i = $index) {
+              <li class="list-group-item list-group-item-action small py-2"
+                  role="option"
+                  [id]="optionId(i)"
+                  [attr.aria-selected]="o.uid === value()"
+                  [class.active]="i === activeIndex()"
+                  style="cursor:pointer"
+                  (mousedown)="onOptionMousedown($event, o)">
+                {{ o.label }}@if (o.hint) { <span class="text-muted"> ({{ o.hint }})</span> }
+              </li>
+            }
+          </ul>
         }
-      </select>
+
+        @if (selectedLabel(); as chosen) {
+          <div class="d-flex align-items-center gap-1 mt-1">
+            <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
+            <span class="small text-muted">{{ chosen }}</span>
+            @if (!disabledState()) {
+              <button type="button" class="btn btn-link btn-sm p-0 ms-1 small"
+                      (click)="clear()"
+                      [attr.aria-label]="'Clear ' + (ariaLabel() || placeholder() || 'selection')">clear</button>
+            }
+          </div>
+        }
+      } @else {
+        <!-- CLIENT mode: the caller loaded the whole set, so a native <select> is the most
+             accessible and familiar control for it. Unchanged. -->
+        @if (showFilter()) {
+          <input type="text" class="form-control form-control-sm mb-1"
+                 [attr.id]="id() ? id() + '-filter' : null"
+                 [ngModel]="query()" (ngModelChange)="onQuery($event)"
+                 [attr.aria-label]="(ariaLabel() || placeholder() || 'Search') + ' — filter by name'"
+                 placeholder="Type to filter by name…"
+                 [disabled]="disabledState()" />
+        }
+        <select class="form-select form-select-sm"
+                [attr.id]="id() ?? null"
+                [ngModel]="value()"
+                (ngModelChange)="onPick($event)"
+                [disabled]="disabledState()"
+                [required]="required()"
+                [attr.aria-labelledby]="ariaLabelledby() ?? null"
+                [attr.aria-label]="ariaLabel() ?? ((id() || ariaLabelledby()) ? null : (placeholder() || 'Select a resource'))">
+          <option value="">{{ placeholder() || '— select —' }}</option>
+          @for (o of filtered(); track o.uid) {
+            <option [value]="o.uid">{{ o.label }}{{ o.hint ? ' (' + o.hint + ')' : '' }}</option>
+          }
+        </select>
+      }
+
       @if (statusText(); as status) {
         <div class="form-text small" aria-live="polite">{{ status }}</div>
       }
@@ -166,7 +222,11 @@ export class UidPickerComponent implements ControlValueAccessor {
           )
         : this.options();
 
-    // Keep the current selection reachable even when it falls outside the visible result set.
+    // CLIENT mode only: the <select> can render nothing but its own options, so a selection
+    // outside the visible set has to be pinned in or the control would blank itself. SERVER
+    // mode has no <select> — it states the committed choice underneath instead — so pinning
+    // there would push an unrelated row into the middle of a set of search results.
+    if (this.search()) return list;
     const selected = this.value();
     if (!selected || list.some((o) => o.uid === selected)) return list;
     const held = this.pinned();
@@ -177,6 +237,42 @@ export class UidPickerComponent implements ControlValueAccessor {
     if (!this.search() || !this.query().trim()) return null;
     if (this.searching()) return 'Searching…';
     return this.filtered().length === 0 ? 'No matches. Try a different name or code.' : null;
+  });
+
+  // ── Combobox state (SERVER mode only) ─────────────────────────────────────
+  private static instances = 0;
+  /** Ids must be unique per instance: line-item tables render many pickers on one page. */
+  protected readonly listboxId = `uid-picker-list-${++UidPickerComponent.instances}`;
+
+  private readonly focused = signal(false);
+  /** Keyboard cursor. -1 = nothing highlighted, so Enter does not pick a row by accident. */
+  protected readonly activeIndex = signal(-1);
+
+  /** The list is shown only while the box has focus and there is something to show. */
+  protected readonly isOpen = computed(
+    () => this.focused() && this.query().trim().length > 0 && this.filtered().length > 0,
+  );
+
+  protected optionId(index: number): string {
+    return `${this.listboxId}-opt-${index}`;
+  }
+
+  protected readonly activeOptionId = computed<string | null>(() => {
+    const i = this.activeIndex();
+    return this.isOpen() && i >= 0 ? this.optionId(i) : null;
+  });
+
+  /**
+   * What the picker has actually committed, shown under the box. The search text is not proof
+   * of a selection — an operator can pick a product and then keep typing — so the committed
+   * choice is stated separately and always tells the truth about the bound value.
+   */
+  protected readonly selectedLabel = computed<string | null>(() => {
+    if (!this.value()) return null;
+    const held = this.pinned();
+    if (held) return held.hint ? `${held.label} (${held.hint})` : held.label;
+    const found = this.options().find((o) => o.uid === this.value());
+    return found ? (found.hint ? `${found.label} (${found.hint})` : found.label) : null;
   });
 
   constructor() {
@@ -206,6 +302,8 @@ export class UidPickerComponent implements ControlValueAccessor {
 
   protected onQuery(q: string): void {
     this.query.set(q);
+    // Typing invalidates the keyboard cursor: the row under it is about to be a different one.
+    this.activeIndex.set(-1);
     if (!this.search()) return;
     if (!q.trim()) {
       // Clearing the box returns to the seed at once — no debounce, nothing in flight matters.
@@ -213,6 +311,85 @@ export class UidPickerComponent implements ControlValueAccessor {
       this.searching.set(false);
     }
     this.queryInput.next(q);
+  }
+
+  protected onFocus(): void {
+    this.focused.set(true);
+  }
+
+  protected onBlur(): void {
+    this.focused.set(false);
+    this.activeIndex.set(-1);
+    this.onTouched();
+  }
+
+  /**
+   * mousedown, not click: click fires after blur, and blur closes the list — so by the time a
+   * click arrived the row it was aimed at would no longer exist. preventDefault keeps focus in
+   * the box so the operator can carry on typing.
+   */
+  protected onOptionMousedown(event: Event, option: UidOption): void {
+    event.preventDefault();
+    this.commit(option);
+  }
+
+  protected onKeydown(event: KeyboardEvent): void {
+    const rows = this.filtered();
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.focused.set(true);
+        if (rows.length) this.activeIndex.set((this.activeIndex() + 1) % rows.length);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        if (rows.length) {
+          const next = this.activeIndex() <= 0 ? rows.length - 1 : this.activeIndex() - 1;
+          this.activeIndex.set(next);
+        }
+        break;
+      case 'Enter': {
+        // Always swallowed while the list is open, or Enter would submit the surrounding form
+        // instead of choosing the highlighted row.
+        if (!this.isOpen()) return;
+        event.preventDefault();
+        const row = rows[this.activeIndex()];
+        if (row) this.commit(row);
+        break;
+      }
+      case 'Escape':
+        // Close without losing focus, so Escape dismisses the list rather than the field.
+        this.query.set('');
+        this.remoteResults.set([]);
+        this.activeIndex.set(-1);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Commit a choice: the search box is emptied so the list closes and the next search starts
+   * clean, and the committed row is shown beneath instead.
+   */
+  private commit(option: UidOption): void {
+    this.value.set(option.uid);
+    this.pinned.set(option);
+    this.query.set('');
+    this.remoteResults.set([]);
+    this.activeIndex.set(-1);
+    this.onChange(option.uid);
+    this.onTouched();
+  }
+
+  protected clear(): void {
+    this.value.set('');
+    this.pinned.set(null);
+    this.query.set('');
+    this.remoteResults.set([]);
+    this.activeIndex.set(-1);
+    this.onChange('');
+    this.onTouched();
   }
 
   // ── ControlValueAccessor ──────────────────────────────────────────────────
