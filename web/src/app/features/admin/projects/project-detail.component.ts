@@ -29,7 +29,8 @@ import { CustomerService } from '../parties/customer.service';
 import { CustomerModel } from '../models/party.model';
 import { UserService } from '../user/user.service';
 import { User } from '../models/user.model';
-import { ProductService } from '../products/product.service';
+import { Observable, map } from 'rxjs';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../products/product.service';
 import { ProductModel } from '../models/product.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
 
@@ -137,6 +138,8 @@ export class ProjectDetailComponent {
   readonly pickerCustomers = signal<CustomerModel[]>([]);
   readonly pickerUsers = signal<User[]>([]);
   readonly pickerProducts = signal<ProductModel[]>([]);
+  /** Company whose catalogue backs the product picker — kept so searchProducts can scope its query. */
+  private readonly pickerCompanyId = signal('');
 
   private readonly userById = computed<Map<string, User>>(() =>
     new Map(this.pickerUsers().map((u) => [u.id, u])),
@@ -257,15 +260,28 @@ export class ProjectDetailComponent {
   }
 
   private loadPickerOptions(companyId: string): void {
+    this.pickerCompanyId.set(companyId);
     this.customerService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.pickerCustomers.set(rows),
       error: () => undefined,
     });
+    // A SEED for the product picker, not the catalogue — everything past this first page is
+    // reached by typing, which goes to the server via searchProducts.
     this.productService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.pickerProducts.set(rows),
       error: () => undefined,
     });
   }
+
+  /**
+   * Server-side product lookup for the material-issue line picker (arrow property so `this`
+   * survives the binding). Without it, a product beyond the seed page could not be issued to a
+   * project at all — it would be neither listed nor findable.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.pickerCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) => rows.map((p) => ({ uid: p.uid, label: p.name, hint: p.code }))),
+    );
 
   // ── Edit project ───────────────────────────────────────────────────────────
 

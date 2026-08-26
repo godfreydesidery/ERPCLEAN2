@@ -80,6 +80,7 @@
                   Parent Product <span class="text-danger" aria-hidden="true">*</span>
                 </span>
                 <app-uid-picker [(ngModel)]="newParentProductUid" [options]="productOptions()"
+                                [search]="searchProducts"
                                 placeholder="Select finished product" [required]="true"
                                 name="newParentProductUid" />
               </div>

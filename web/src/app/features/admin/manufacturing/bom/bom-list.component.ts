@@ -4,14 +4,14 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
+import { Observable, debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap, tap } from 'rxjs';
 import { PageMeta } from '../../../../core/api/api-response.model';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
 import { BomService } from './bom.service';
 import type { BomPage } from './bom.service';
 import { BomDto, BomStatus, CreateBomRequest } from './models/bom.model';
@@ -144,6 +144,11 @@ export class BomListComponent {
     });
   }
 
+  /**
+   * Seeds the parent-product picker. A SEED, not the catalogue — anything past this first page is
+   * reached by typing, which goes to the server via searchProducts. The seed doubles as the source
+   * for productLabel(), so it is kept generous.
+   */
   private loadProductOptions(companyId: string): void {
     this.productService.list(companyId, undefined, 0, 500).subscribe({
       next: ({ rows }) => {
@@ -154,6 +159,29 @@ export class BomListComponent {
         );
       },
       error: () => {},
+    });
+  }
+
+  /**
+   * Server-side product lookup for the parent picker (arrow property so `this` survives the
+   * binding). Matches are merged into productOptions() as well as shown, so productLabel() can name
+   * a BOM whose parent was picked out of a search rather than falling back to a truncated uid.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status === 'ACTIVE')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+      tap((options) => this.cacheOptions(options)),
+    );
+
+  /** Merge freshly-seen options into the known set, keeping it unique by uid. */
+  private cacheOptions(options: readonly UidOption[]): void {
+    this.productOptions.update((existing) => {
+      const seen = new Set(existing.map((o) => o.uid));
+      return [...existing, ...options.filter((o) => !seen.has(o.uid))];
     });
   }
 

@@ -81,6 +81,7 @@
                   Finished Product <span class="text-danger" aria-hidden="true">*</span>
                 </span>
                 <app-uid-picker [(ngModel)]="newProductUid" [options]="productOptions()"
+                                [search]="searchProducts"
                                 placeholder="Select finished product" [required]="true"
                                 name="newProductUid" />
               </div>

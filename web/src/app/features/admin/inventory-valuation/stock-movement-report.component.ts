@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Observable, map } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { SessionStore } from '../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
@@ -10,7 +11,7 @@ import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { formatReportAddress, ReportCompanyHeaderDto } from '../models/report-company-header.model';
 import { OrganisationService } from '../organisation/organisation.service';
-import { ProductService } from '../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../products/product.service';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import {
@@ -34,7 +35,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  *
  * Scope is server-side from the JWT + X-Branch-Uid; no companyId is sent. The Branch/Product picker
  * OPTIONS are loaded locally against the caller's first accessible company purely to fill the
- * dropdowns (the same 200-cap fetch the Sales Report uses).
+ * dropdowns; the product seed is one page and the picker searches the server for the rest.
  *
  * Route: /admin/reports/stock-movement. Gated INVENTORY.VALUATION.VIEW; export needs REPORT.EXPORT.
  */
@@ -65,6 +66,22 @@ export class StockMovementReportComponent implements OnInit {
   readonly mode = signal<StockMovementReportMode>('SUMMARY');
   readonly branchUid = signal('');
   readonly productUid = signal('');
+  /** Company whose catalogue backs the product picker — kept so searchProducts can scope its query. */
+  private readonly companyId = signal('');
+
+  /**
+   * Server-side product lookup for the picker (arrow property so `this` survives the binding).
+   * The seed above is only the first page; without this, a product beyond it could be neither seen
+   * nor found, and the report simply could not be run for it.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.companyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status !== 'ARCHIVED')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+    );
 
   // ── Report data ────────────────────────────────────────────────────────────
   readonly report = signal<StockMovementReportDto | null>(null);
@@ -120,6 +137,9 @@ export class StockMovementReportComponent implements OnInit {
               // every branch the caller's company has — which is the unfiltered default anyway.
               error: () => this.branchOptions.set([]),
             });
+            this.companyId.set(company.id);
+            // A SEED for the picker, not the catalogue — everything past this first page is
+            // reached by typing, which goes to the server via searchProducts.
             this.productService.list(company.id, '', 0, 200).subscribe({
               next: ({ rows }) =>
                 this.productOptions.set(
