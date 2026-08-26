@@ -83,6 +83,7 @@
                       [ngModel]="line.productUid"
                       [name]="'productUid-' + i"
                       [options]="productOptions()"
+                      [search]="searchProducts"
                       placeholder="Select product"
                       [required]="true"
                       [disabled]="saving()"

@@ -1,3 +1,29 @@
+### Products missing from the lists where you pick them
+
+When you went to choose a product — on a stock transfer, on a requisition, when setting a price, and
+in several other places — some of your products were simply not in the list. Typing into the search
+box above the list did not help either: it found nothing, which made it look as though the product
+had never been created at all.
+
+The products were always there, and nothing was lost. Those lists only ever loaded the first part of
+your catalogue, and the search box only looked **inside that part**. Anything past it was both
+missing from the list and impossible to search for. Which products went missing looked random rather
+than alphabetical, because the part that loaded was in no particular order.
+
+Typing in one of those boxes now searches your whole catalogue, by product name or by product code,
+however many products you have. The list you see before you type is still just a starting point — if
+what you want is not on it, type a few letters and it will be found.
+
+This affected, and now works correctly in: stock transfers; purchase requisitions and requests for
+quotation; standing orders; batches and serial numbers; the stock movement report; issuing materials
+to a job; bills of materials and work orders; and price tiers and customer prices. Pricing was the
+worst affected — that screen was loading only the first 20 products.
+
+**Nothing needs re-entering and there is no database change.** Products that were unreachable become
+reachable as soon as this update is installed.
+
+---
+
 ### A priced product could ring up as nothing at the till
 
 If a product had a price on screen in the back office but the till showed a dash and a total of
@@ -35,9 +61,10 @@ the company record without anything to re-enter.
 
 ### A database update is included
 
-This release updates the database structure. **The upgrade takes a safety backup first and stops if
-it cannot** — and it has been rehearsed against a copy of your own live database, taken the same
-day, before being offered to you.
+If you are coming from 1.8.3 or earlier, this update also changes the database structure. (If you
+are already on 1.9.0 it does not — that change is already in place, and there is nothing further to
+apply.) **The upgrade takes a safety backup first and stops if it cannot** — and the change was
+rehearsed against a copy of your own live database, taken the same day, before being offered to you.
 
 ---
 

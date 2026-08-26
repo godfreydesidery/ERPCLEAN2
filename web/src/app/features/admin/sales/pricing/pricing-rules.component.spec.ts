@@ -152,7 +152,9 @@ describe('PricingRulesComponent — init', () => {
 
     expect(comp.companies().length).toBe(1);
     expect(comp.selectedCompanyId()).toBe('10');
-    expect(productSvc.list).toHaveBeenCalledWith('10');
+    // An explicit seed page, not the service's 20-row default: the pickers are seeded from this
+    // call and search the server for anything past it.
+    expect(productSvc.list).toHaveBeenCalledWith('10', undefined, 0, 200);
     expect(productSvc.listPriceLists).toHaveBeenCalledWith('10');
     expect(comp.products().length).toBe(1);
     expect(comp.priceLists().length).toBe(1);

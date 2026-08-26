@@ -3,14 +3,14 @@ import { SlicePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Subject, switchMap } from 'rxjs';
+import { Observable, Subject, map, switchMap, tap } from 'rxjs';
 import { PageMeta } from '../../../../core/api/api-response.model';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
 import { ProductModel } from '../../models/product.model';
 import { StockLocationService } from '../locations/stock-location.service';
 import { StockLocationDto } from '../locations/stock-location.model';
@@ -167,10 +167,34 @@ export class StockSerialListComponent {
     });
   }
 
+  /**
+   * Seeds the product picker with the first page. A SEED, not the catalogue — everything past it is
+   * reached by typing, which goes to the server via searchProducts.
+   */
   private loadProducts(companyId: string): void {
     this.productService.list(companyId, '', 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows.filter((p) => p.status !== 'ARCHIVED')),
       error: () => this.products.set([]),
+    });
+  }
+
+  /**
+   * Server-side product lookup for the picker (arrow property so `this` survives the binding).
+   * Results are folded into products() as well as shown, because selectedProductId() resolves the
+   * chosen uid → id from that same list, and that id is the API filter parameter.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) => rows.filter((p) => p.status !== 'ARCHIVED')),
+      tap((rows) => this.cacheProducts(rows)),
+      map((rows) => rows.map((p) => ({ uid: p.uid, label: p.name, hint: p.code }))),
+    );
+
+  /** Merge freshly-seen products into the local list, keeping it unique by uid. */
+  private cacheProducts(rows: readonly ProductModel[]): void {
+    this.products.update((existing) => {
+      const seen = new Set(existing.map((p) => p.uid));
+      return [...existing, ...rows.filter((p) => !seen.has(p.uid))];
     });
   }
 

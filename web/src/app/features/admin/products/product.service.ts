@@ -34,6 +34,13 @@ export interface ProductPage {
 }
 
 /**
+ * Rows fetched per keystroke-driven product search behind a picker.
+ * A dropdown, not a report: enough to recognise the right row, small enough to stay snappy on a
+ * catalogue of any size. The seed each screen preloads is separate (and only ever a first page).
+ */
+export const PRODUCT_PICKER_SEARCH_SIZE = 25;
+
+/**
  * Product API client.
  * list() uses SKIP_UNWRAP to read both data and PageMeta.
  * All other methods use the auto-unwrap path (interceptor strips the envelope).

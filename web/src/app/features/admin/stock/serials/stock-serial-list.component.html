@@ -55,6 +55,7 @@
                       [ngModel]="selectedProductUid()"
                       (ngModelChange)="selectedProductUid.set($event); onFilterChange()"
                       [options]="productOptions()"
+                      [search]="searchProducts"
                       placeholder="Select product" />
     </div>
     @if (viewMode() === 'location') {

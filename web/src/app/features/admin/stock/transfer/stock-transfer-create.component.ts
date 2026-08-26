@@ -7,7 +7,8 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { CompanyService } from '../../company/company.service';
 import { BranchService } from '../../branch/branch.service';
 import { OrganisationService } from '../../organisation/organisation.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
+import { Observable, map } from 'rxjs';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { Branch } from '../../models/branch.model';
 import { Company } from '../../models/company.model';
@@ -146,6 +147,10 @@ export class StockTransferCreateComponent {
     });
   }
 
+  /**
+   * Seeds the line picker with the first page of products. This is a SEED, not the catalogue —
+   * anything past it is reached by typing, which goes to the server via searchProducts below.
+   */
   private loadProducts(companyId: string): void {
     this.productsUnavailable.set(false);
     this.productService.list(companyId, '', 0, 200).subscribe({
@@ -153,6 +158,20 @@ export class StockTransferCreateComponent {
       error: () => { this.products.set([]); this.productsUnavailable.set(true); },
     });
   }
+
+  /**
+   * Server-side product lookup for the line picker (arrow property so `this` survives the input
+   * binding). The seed above is only the first page, so filtering it in memory would hide every
+   * product beyond it — the server search is what makes the whole catalogue reachable.
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status !== 'ARCHIVED')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+    );
 
   onSourceBranchChange(uid: string): void {
     this.sourceBranchUid.set(uid);

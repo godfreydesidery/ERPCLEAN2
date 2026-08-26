@@ -165,6 +165,7 @@
                             [ngModel]="line.productUid"
                             [name]="'lineProduct' + i"
                             [options]="productOptions()"
+                            [search]="searchProducts"
                             placeholder="Select product"
                             [required]="true"
                             [disabled]="saving()"

@@ -98,6 +98,7 @@
                       [ngModel]="line.productUid"
                       (ngModelChange)="onLineProductChange(i, $event)"
                       [options]="productOptions()"
+                      [search]="searchProducts"
                       placeholder="Select product"
                       [required]="true"
                       [name]="'product_' + i"

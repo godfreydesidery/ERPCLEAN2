@@ -12,7 +12,8 @@ import { BranchService } from '../../branch/branch.service';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { CustomerService } from '../../parties/customer.service';
-import { ProductService } from '../../products/product.service';
+import { PRODUCT_PICKER_SEARCH_SIZE, ProductService } from '../../products/product.service';
+import { Observable, map, tap } from 'rxjs';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { CurrencySelectComponent } from '../../../../shared/currency-select/currency-select.component';
 import {
@@ -145,11 +146,37 @@ export class StandingOrderCreateComponent {
       next: ({ rows }) => this.customers.set(rows),
       error: () => undefined,
     });
+    // A SEED, not the catalogue — everything past this first page is reached by typing, which
+    // goes to the server via searchProducts.
     this.productService.list(companyId, undefined, 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows),
       error: () => undefined,
     });
     // units are now loaded per-product when a product is selected on a line.
+  }
+
+  /**
+   * Server-side product lookup for the line picker (arrow property so `this` survives the binding).
+   * Results are folded into products() as well as shown, because submit() resolves the chosen
+   * uid → the product row from that same list — a product picked out of a search but absent from
+   * the seed would otherwise fail with "could not resolve product".
+   */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.selectedCompanyId(), q, 0, PRODUCT_PICKER_SEARCH_SIZE).pipe(
+      tap(({ rows }) => this.cacheProducts(rows)),
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status !== 'ARCHIVED')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+    );
+
+  /** Merge freshly-seen products into the local list, keeping it unique by uid. */
+  private cacheProducts(rows: readonly ProductModel[]): void {
+    this.products.update((existing) => {
+      const seen = new Set(existing.map((p) => p.uid));
+      return [...existing, ...rows.filter((p) => !seen.has(p.uid))];
+    });
   }
 
   onCompanyChange(uid: string): void {
