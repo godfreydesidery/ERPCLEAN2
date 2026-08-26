@@ -524,6 +524,61 @@ If that also fails, contact support and quote both file names."
   printf '  backups/%s in case you need to undo this.\n' "$safety"
 }
 
+# An update rewrites most of the installation directory. Checking that it can, up front,
+# turns a permission problem into one clear message BEFORE anything changes — instead of a
+# raw `rm:` error half-way through, with the new images already loaded, .env still naming
+# the old version, and the running container untouched.
+#
+# That is exactly what a root-owned docs/ produced: an installation created with sudo made
+# `update` fail at the same line on every release, with nothing in the output naming the
+# cause and the VERSION file already copied, so it read as though the update had worked.
+assert_install_writable() {
+  local blocked="" f
+  local targets=(
+    docker-compose.yml docker-compose.db-docker.yml docker-compose.db-host.yml
+    docker-compose.tls.yml Caddyfile .env.example VERSION RELEASE-NOTES.md .env
+    orbixerp.sh install.sh orbixerp.ps1 install.ps1 Setup.cmd setup-wizard.ps1
+    Install.cmd OrbixERP.cmd Remote-Setup.cmd remote-setup-wizard.ps1
+  )
+
+  # New files land in the directory itself, so it must be writable even when every existing
+  # file already is.
+  if [ ! -w "$SCRIPT_DIR" ]; then blocked="${blocked}
+  $SCRIPT_DIR"; fi
+
+  for f in "${targets[@]}"; do
+    if [ -e "$SCRIPT_DIR/$f" ] && [ ! -w "$SCRIPT_DIR/$f" ]; then blocked="${blocked}
+  $SCRIPT_DIR/$f"; fi
+  done
+
+  # docs/ is refreshed guide by guide, so every existing guide must be writable; the folder
+  # itself is only written to when a release adds or withdraws one.
+  if [ -d "$SCRIPT_DIR/docs" ]; then
+    if [ ! -w "$SCRIPT_DIR/docs" ]; then blocked="${blocked}
+  $SCRIPT_DIR/docs"; fi
+    for f in "$SCRIPT_DIR"/docs/*; do
+      if [ -e "$f" ] && [ ! -w "$f" ]; then blocked="${blocked}
+  $f"; fi
+    done
+  fi
+
+  [ -n "$blocked" ] || return 0
+
+  die "This update cannot replace the following, because they belong to another user:
+${blocked}
+
+You are running as $(id -un). Take ownership of those paths and run the update again:
+
+    sudo chown -R $(id -un) <each path listed above>
+
+Two things NOT to do:
+
+  - Do not do this to secrets/. The signing keys must stay owned by uid 10001, the user the
+    application runs as inside the container. Change them and nobody can sign in.
+  - Do not run this script with sudo. It would work once and leave every file root-owned,
+    putting you back here at the next release."
+}
+
 cmd_update() {
   require_env_file; require_docker
   local src="${1:-}"
@@ -544,6 +599,10 @@ cmd_update() {
   esac
   [ "$new_arch" = "$host_arch" ] || die "That release bundle is built for ${new_arch}, but this machine is ${host_arch}.
 Ask your supplier for the ${host_arch} bundle."
+
+  # Before the backup and before the images are loaded: both are slow, and neither is worth
+  # doing for an update that cannot finish.
+  assert_install_writable
 
   # A backup BEFORE anything else, and a hard stop if it fails.
   #
@@ -570,11 +629,29 @@ Ask your supplier for the ${host_arch} bundle."
 
   step "Updating configuration files"
   # .env, secrets/ and backups/ are yours and are never touched.
+  # VERSION is deliberately NOT copied here — see the end of this function. It is the file a
+  # human reads to ask "what is installed?", and copying it before the new version is
+  # actually running makes a failed update claim success.
   for f in docker-compose.yml docker-compose.db-docker.yml docker-compose.db-host.yml \
-           docker-compose.tls.yml Caddyfile .env.example VERSION; do
+           docker-compose.tls.yml Caddyfile .env.example; do
     [ -f "$src/$f" ] && cp "$src/$f" "$SCRIPT_DIR/$f"
   done
-  [ -d "$src/docs" ] && { rm -rf "$SCRIPT_DIR/docs"; cp -r "$src/docs" "$SCRIPT_DIR/docs"; }
+  # docs/ is refreshed in place rather than deleted and recreated. `rm -rf` needs write
+  # permission on the FOLDER, which an installation created with sudo does not give the user
+  # running the update; overwriting each guide needs write permission on the files only.
+  if [ -d "$src/docs" ]; then
+    mkdir -p "$SCRIPT_DIR/docs"
+    # Guides the new release no longer ships are dropped, so an installation does not
+    # accumulate documentation for features it no longer has. Best-effort: one leftover that
+    # will not delete is worth a warning, not a failed update.
+    for stale in "$SCRIPT_DIR"/docs/*; do
+      [ -e "$stale" ] || continue
+      if [ ! -e "$src/docs/$(basename "$stale")" ]; then
+        rm -f "$stale" 2>/dev/null || warn "could not remove the withdrawn guide $(basename "$stale")"
+      fi
+    done
+    cp -r "$src/docs/." "$SCRIPT_DIR/docs/"
+  fi
   [ -f "$src/RELEASE-NOTES.md" ] && cp "$src/RELEASE-NOTES.md" "$SCRIPT_DIR/RELEASE-NOTES.md"
 
   env_set ERP_VERSION "$new_version"
@@ -596,6 +673,11 @@ Ask your supplier for the ${host_arch} bundle."
            Remote-Setup.cmd remote-setup-wizard.ps1; do
     [ -f "$src/$f" ] && cp "$src/$f" "$SCRIPT_DIR/$f"
   done
+
+  # VERSION last, once the new release is genuinely up. Copied early (as it was), a update
+  # that died part-way left this file naming a version that was not running — so the
+  # obvious "what is installed?" check confirmed a success that had not happened.
+  [ -f "$src/VERSION" ] && cp "$src/VERSION" "$SCRIPT_DIR/VERSION"
 
   printf '\n'
   ok "Updated to ${new_version}."
