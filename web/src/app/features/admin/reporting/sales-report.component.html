@@ -187,7 +187,16 @@
                     <td class="num mono">{{ fmtQty(row.qtySold) }}</td>
                     <td class="num mono">{{ fmtMoney(row.discount) }}</td>
                     <td class="num mono">{{ fmtMoney(row.vat) }}</td>
-                    <td class="num mono">{{ fmtMoney(row.margin) }}</td>
+                    <td class="num mono">
+                      @if (row.margin === null || row.margin === undefined) {
+                        <!-- Not zero: unknown. fmtMoney would render 0.00 here, which reads as
+                             "no profit" when the truth is "no cost was ever recorded". -->
+                        <span class="text-muted fst-italic"
+                              title="This product's stock was sold before any cost was recorded for it, so profit cannot be calculated.">not costed</span>
+                      } @else {
+                        {{ fmtMoney(row.margin) }}
+                      }
+                    </td>
                     <td class="num mono">{{ fmtMoney(row.amount) }}</td>
                   </tr>
                 }
@@ -198,12 +207,25 @@
                   <td class="num mono">{{ fmtQty(r.totals.qtySold) }}</td>
                   <td class="num mono">{{ fmtMoney(r.totals.discount) }}</td>
                   <td class="num mono">{{ fmtMoney(r.totals.vat) }}</td>
-                  <td class="num mono">{{ fmtMoney(r.totals.margin) }}</td>
+                  <td class="num mono">
+                    {{ fmtMoney(r.totals.margin) }}@if (r.totals.marginRowsUnknown > 0) {<span aria-hidden="true">&nbsp;*</span>}
+                  </td>
                   <td class="num mono">{{ fmtMoney(r.totals.amount) }}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
+          @if (r.totals.marginRowsUnknown > 0) {
+            <p class="small text-muted mt-2 mb-0">
+              * The margin total covers only part of these sales. It leaves out
+              {{ r.totals.marginRowsUnknown }}
+              {{ r.totals.marginRowsUnknown === 1 ? 'product' : 'products' }}
+              marked <em>not costed</em>: that stock was sold before any cost was recorded for it,
+              so the profit on those sales cannot be calculated. Give those products a cost — by
+              receiving stock at a cost, or setting an opening cost — and they will be included
+              from then on.
+            </p>
+          }
         }
       }
     }

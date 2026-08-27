@@ -279,11 +279,12 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
-    // BUG #1 regression: null avg_cost → NULL SALE_ISSUE value_amount must not NPE
+    // BUG #1 regression: null avg_cost → NULL SALE_ISSUE value_amount must not NPE,
+    // and must not be reported as a margin either (customer report, 2026-08-27)
     // =========================================================================
 
     @Test
-    void nullCogs_doesNotNpe_marginEqualsNet() {
+    void nullCogs_doesNotNpe_andMarginIsReportedAsUnknown() {
         // Product created but never received → avg_cost stays null, so the SALE_ISSUE movement
         // is written with a NULL value_amount (mirrors
         // InventoryValuationServiceIT#saleIssue_nullAvgCost_cogsLegSkippedQtyStillDeducts) — the
@@ -315,10 +316,44 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
         assertThat(matches).as("product row present despite a null avg_cost").hasSize(1);
         SalesReportRowDto row = matches.get(0);
 
+        // This used to assert margin == net sales, on the reasoning that coalescing the missing
+        // cost to zero at least fabricated nothing. It does fabricate something: it reports the
+        // entire sale as profit. The customer saw it as a margin that "sometimes seems not
+        // correct" — wrong on precisely the products whose stock was never costed, right on the
+        // rest. An unknown cost is now reported as an unknown margin.
         BigDecimal net = netSalesFor(product.id());
         assertThat(row.margin())
-                .as("margin must equal net sales when COGS is coalesced to zero (no fabricated cost)")
-                .isEqualByComparingTo(net);
+                .as("margin must be unknown (null), not the whole sale, when the cost was never established")
+                .isNull();
+        assertThat(row.amount())
+                .as("the sale itself is still reported in full — only the margin is unknown")
+                .isNotNull();
+        assertThat(net).as("sanity: the sale did post net sales").isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void nullCogs_isExcludedFromTheMarginTotal_andCounted() {
+        ProductDto product = stockableProduct("SalesRpt-NoCost-Totals");
+
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        SalesReportDto report = salesReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1),
+                null, null, null, null);
+
+        // A total that silently swallowed this row would look complete while omitting it, which is
+        // how an overstated profit becomes a number somebody plans against.
+        assertThat(report.totals().marginRowsUnknown())
+                .as("uncosted rows are counted so the total can be shown as partial")
+                .isGreaterThanOrEqualTo(1);
     }
 
     // =========================================================================

@@ -4,6 +4,26 @@
       <h1>Stock Transfer</h1>
     </div>
     <div class="erp-page-head__actions">
+      @if (entity() && canExport()) {
+        <!-- Print is the PDF: the browser's own viewer prints it, and printing the screen instead
+             would carry the page furniture onto the paper. -->
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="exportAs('PDF')" [disabled]="exporting() !== null">
+          @if (exporting() === 'PDF') {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Preparing…
+          } @else {
+            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Print / PDF
+          }
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm"
+                (click)="exportAs('XLSX')" [disabled]="exporting() !== null">
+          @if (exporting() === 'XLSX') {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Preparing…
+          } @else {
+            <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Excel
+          }
+        </button>
+      }
       <a routerLink="/admin/stock-transfers" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to list
       </a>

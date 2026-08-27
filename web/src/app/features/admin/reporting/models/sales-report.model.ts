@@ -13,6 +13,11 @@ export interface SalesReportRowDto {
   qtySold: number | string | null;
   discount: number | string | null;
   vat: number | string | null;
+  /**
+   * Net sales less cost of sale, or null when the cost of sale was never established for this
+   * product. null means "not known", not "nothing" — render it as such, never through a money
+   * formatter that would turn it into 0.00.
+   */
   margin: number | string | null;
   amount: number | string | null;
 }
@@ -21,8 +26,11 @@ export interface SalesReportTotalsDto {
   qtySold: number | string | null;
   discount: number | string | null;
   vat: number | string | null;
+  /** Summed over the rows whose cost is known; see marginRowsUnknown. */
   margin: number | string | null;
   amount: number | string | null;
+  /** Rows left out of `margin` because their cost was never established. >0 ⇒ show it as partial. */
+  marginRowsUnknown: number;
 }
 
 export interface SalesReportDto {

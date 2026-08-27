@@ -46,7 +46,7 @@ const MOCK_REPORT: SalesReportDto = {
   rows: [
     { productCode: 'P001', productName: 'Widget', currentStock: 10, qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500 },
   ],
-  totals: { qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500 },
+  totals: { qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500, marginRowsUnknown: 0 },
   generatedAt: '2026-07-19T12:00:00Z',
 };
 
@@ -112,6 +112,29 @@ describe('SalesReportComponent', () => {
     expect(comp.fmtQty(5)).toBe('5');
     expect(comp.fmtQty('5')).toBe('5');
     expect(comp.fmtQty(null)).toBe('0');
+  });
+
+  it('shows an uncosted row as "not costed", never as 0.00 profit', async () => {
+    // The wire sends margin: null when the product's stock was sold before any cost was recorded.
+    // fmtMoney would turn that into 0.00 — "no profit" — when the truth is "no cost known", so the
+    // cell must not go through it. Reported by the customer as a margin that was sometimes wrong.
+    const uncosted: SalesReportDto = {
+      ...MOCK_REPORT,
+      rows: [{ ...MOCK_REPORT.rows[0], margin: null }],
+      totals: { ...MOCK_REPORT.totals, margin: 0, marginRowsUnknown: 1 },
+    };
+    makeBed({ salesReportSpy: vi.fn(() => of(uncosted)) });
+    const fixture = TestBed.createComponent(SalesReportComponent);
+    const comp = fixture.componentInstance;
+    comp.fromDate.set('2026-07-01');
+    comp.toDate.set('2026-07-19');
+    comp.run();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('not costed');
+    expect(text).toContain('margin total covers only part');
   });
 
   it('run() calls salesReport with the filled filter form', () => {

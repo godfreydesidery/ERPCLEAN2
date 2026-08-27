@@ -27,6 +27,19 @@ export class StockTransferService {
   private readonly base = `${environment.apiBaseUrl}/stock-transfers`;
   private readonly locationBase = `${environment.apiBaseUrl}/stock-locations`;
 
+  // ── Export / print ───────────────────────────────────────────────────────────
+
+  /**
+   * The transfer as a printable document. PDF is what goes with the goods; XLSX and CSV are for
+   * working with the figures. Returns the raw blob — the caller names the file and saves it.
+   */
+  export(uid: string, format: 'PDF' | 'XLSX' | 'CSV'): Observable<Blob> {
+    return this.http.get(`${this.base}/uid/${uid}/export`, {
+      params: { format },
+      responseType: 'blob',
+    });
+  }
+
   // ── List ─────────────────────────────────────────────────────────────────────
 
   list(page = 0, size = 20): Observable<StockTransferPage> {
