@@ -42,7 +42,7 @@ const MOCK_REPORT: SalesReportDto = {
   rows: [
     { productCode: 'P001', productName: 'Widget', currentStock: 10, qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500 },
   ],
-  totals: { qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500 },
+  totals: { qtySold: 5, discount: 100, vat: 50, margin: 20, amount: 500, marginRowsUnknown: 0 },
   generatedAt: '2026-07-19T12:00:00Z',
 };
 

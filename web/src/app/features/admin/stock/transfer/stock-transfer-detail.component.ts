@@ -7,6 +7,7 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { StockTransferDto } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
+import { downloadBlob } from '../../reporting/reporting.utils';
 
 @Component({
   selector: 'app-stock-transfer-detail',
@@ -51,6 +52,33 @@ export class StockTransferDetailComponent {
     const e = this.entity();
     return this.canCreate() && e?.status === 'DRAFT';
   });
+
+  // ── Export / print ───────────────────────────────────────────────────────────
+  /** The endpoint requires REPORT.EXPORT on top of the view gate, so the buttons follow it. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+  readonly exporting = signal<'PDF' | 'XLSX' | null>(null);
+
+  /**
+   * Downloads the transfer as a document. "Print" is the PDF: browsers open it in a viewer that
+   * prints, so a separate print path would only duplicate what the PDF already does — and it would
+   * print the screen furniture with it.
+   */
+  exportAs(format: 'PDF' | 'XLSX'): void {
+    const e = this.entity();
+    if (!e || this.exporting()) return;
+    this.exporting.set(format);
+    this.transferService.export(e.uid, format).subscribe({
+      next: (blob) => {
+        const ext = format === 'PDF' ? 'pdf' : 'xlsx';
+        downloadBlob(blob, `stock-transfer-${e.transferNumber ?? e.uid}.${ext}`);
+        this.exporting.set(null);
+      },
+      error: () => {
+        this.exporting.set(null);
+        this.alerts.error('Could not prepare the download', 'Please try again.');
+      },
+    });
+  }
 
   constructor() {
     queueMicrotask(() => this.init());

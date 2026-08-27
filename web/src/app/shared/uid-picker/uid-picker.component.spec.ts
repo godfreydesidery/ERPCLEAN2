@@ -88,6 +88,16 @@ function clickResult(fixture: ReturnType<typeof setup>, index: number): void {
   fixture.detectChanges();
 }
 
+/** Click one of the small link buttons under the box ("change" / "clear"). */
+function clickButton(fixture: ReturnType<typeof setup>, text: string): void {
+  const btn = Array.from(
+    fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+  ).find((b) => (b.textContent ?? '').trim() === text);
+  if (!btn) throw new Error(`no "${text}" button rendered`);
+  btn.click();
+  fixture.detectChanges();
+}
+
 function pressKey(fixture: ReturnType<typeof setup>, key: string): KeyboardEvent {
   const box = filterBox(fixture)!;
   const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
@@ -184,8 +194,50 @@ describe('UidPickerComponent', () => {
 
       expect(fixture.componentInstance.uid).toBe(BEYOND_SEED.uid);
       expect(resultLabels(fixture)).toEqual([]); // list closed
-      expect(filterBox(fixture)!.value).toBe(''); // box cleared, ready for the next search
       expect(committed(fixture)).toBe('Maize Flour 25kg (FLOUR-25)');
+    });
+
+    it('takes the search box away once a product is chosen', async () => {
+      vi.useFakeTimers();
+      const fixture = setup({ search: () => of([BEYOND_SEED]) });
+
+      expect(filterBox(fixture)).not.toBeNull();
+      await type(fixture, 'maize');
+      clickResult(fixture, 0);
+
+      // The row is settled: it names the product, and no longer offers an empty box for it.
+      expect(filterBox(fixture)).toBeNull();
+      expect(committed(fixture)).toBe('Maize Flour 25kg (FLOUR-25)');
+    });
+
+    it('"change" brings the box back without discarding the choice', async () => {
+      vi.useFakeTimers();
+      const fixture = setup({ search: () => of([BEYOND_SEED]) });
+
+      await type(fixture, 'maize');
+      clickResult(fixture, 0);
+      expect(filterBox(fixture)).toBeNull();
+
+      clickButton(fixture, 'change');
+
+      expect(filterBox(fixture)).not.toBeNull();
+      // Still committed — reopening the box is not the same as unsetting it.
+      expect(fixture.componentInstance.uid).toBe(BEYOND_SEED.uid);
+    });
+
+    it('leaving the box without choosing returns to the settled view', async () => {
+      vi.useFakeTimers();
+      const fixture = setup({ search: () => of([BEYOND_SEED]) });
+
+      await type(fixture, 'maize');
+      clickResult(fixture, 0);
+      clickButton(fixture, 'change');
+
+      filterBox(fixture)!.dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+
+      expect(filterBox(fixture)).toBeNull();
+      expect(fixture.componentInstance.uid).toBe(BEYOND_SEED.uid);
     });
 
     it('picks with the keyboard and does not let Enter submit the form', async () => {
@@ -216,6 +268,7 @@ describe('UidPickerComponent', () => {
 
       await type(fixture, 'maize');
       clickResult(fixture, 0);
+      clickButton(fixture, 'change');
       await type(fixture, 'something else');
       pressKey(fixture, 'Escape');
 
@@ -235,6 +288,7 @@ describe('UidPickerComponent', () => {
       // and must not push it into the middle of unrelated results either.
       fixture.componentInstance.search = () => of([SEED[0]]);
       fixture.detectChanges();
+      clickButton(fixture, 'change');
       await type(fixture, 'oil');
 
       expect(fixture.componentInstance.uid).toBe(BEYOND_SEED.uid);
@@ -250,8 +304,7 @@ describe('UidPickerComponent', () => {
       clickResult(fixture, 0);
       expect(fixture.componentInstance.uid).toBe(BEYOND_SEED.uid);
 
-      fixture.nativeElement.querySelector('button')!.click();
-      fixture.detectChanges();
+      clickButton(fixture, 'clear');
 
       expect(fixture.componentInstance.uid).toBe('');
       expect(committed(fixture)).toBeNull();
