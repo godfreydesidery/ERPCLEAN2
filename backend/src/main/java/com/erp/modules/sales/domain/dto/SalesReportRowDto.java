@@ -13,6 +13,11 @@ public record SalesReportRowDto(
         BigDecimal qtySold,
         BigDecimal discount,
         BigDecimal vat,
+        /**
+         * Net sales less cost of sale, or NULL when the cost of sale was never established for
+         * this product (stock sold before anything gave it an avg_cost). NULL means "not known",
+         * not "nothing": treating the missing cost as zero would report the entire sale as profit.
+         */
         BigDecimal margin,
         BigDecimal amount) {
 }

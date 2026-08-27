@@ -102,15 +102,23 @@ public class SalesReportQuery {
         BigDecimal totalVat = BigDecimal.ZERO;
         BigDecimal totalMargin = BigDecimal.ZERO;
         BigDecimal totalAmount = BigDecimal.ZERO;
+        // Rows whose cost was never established carry a null margin. They are summed as nothing
+        // rather than as zero-cost profit, and counted, so the reader is told the margin total
+        // covers only part of the sales rather than being left to assume it covers all of them.
+        int marginRowsUnknown = 0;
         for (SalesReportRowDto r : rows) {
             totalQty      = totalQty.add(r.qtySold());
             totalDiscount = totalDiscount.add(r.discount());
             totalVat      = totalVat.add(r.vat());
-            totalMargin   = totalMargin.add(r.margin());
             totalAmount   = totalAmount.add(r.amount());
+            if (r.margin() != null) {
+                totalMargin = totalMargin.add(r.margin());
+            } else {
+                marginRowsUnknown++;
+            }
         }
         SalesReportTotalsDto totals = new SalesReportTotalsDto(
-                totalQty, totalDiscount, totalVat, totalMargin, totalAmount);
+                totalQty, totalDiscount, totalVat, totalMargin, totalAmount, marginRowsUnknown);
 
         ReportCompanyHeaderDto companyDto = new ReportCompanyHeaderDto(
                 header.name(), header.legalName(),
@@ -188,7 +196,7 @@ public class SalesReportQuery {
                 },
                 mainParams.toArray());
 
-        Map<Long, BigDecimal> cogsByProduct = queryCogsByProduct(companyId, from, to, filterSql, filterParams);
+        Map<Long, Cogs> cogsByProduct = queryCogsByProduct(companyId, from, to, filterSql, filterParams);
 
         List<SalesReportRowDto> rows = new ArrayList<>(mainRows.size());
         for (Object[] r : mainRows) {
@@ -197,9 +205,20 @@ public class SalesReportQuery {
             // A SALE_ISSUE movement can exist with a NULL value_amount (product unvalued at sale
             // time), so the map may hold a null against a present key — coalesce to ZERO to keep
             // margin = net (no fabricated cost) rather than NPE on subtract.
-            BigDecimal cogs         = cogsByProduct.get(productId);
-            if (cogs == null) cogs = BigDecimal.ZERO;
-            BigDecimal margin       = netSales.subtract(cogs);
+            Cogs cogsRow            = cogsByProduct.get(productId);
+            BigDecimal cogs         = cogsRow != null && cogsRow.value() != null
+                    ? cogsRow.value() : BigDecimal.ZERO;
+
+            // A SALE_ISSUE with value_amount IS NULL means the cost was never established for that
+            // product (nothing ever gave it an avg_cost — see InventoryValuationServiceImpl
+            // .doCostIssue, which returns null and skips the COGS leg). Subtracting a zero cost
+            // there does not produce a conservative margin, it produces the whole sale as profit:
+            // the customer reported exactly this ("the margin sometimes seems not correct"), and it
+            // is wrong only for the products whose stock was never costed, which is why it looked
+            // intermittent. An unknown cost is reported as unknown; it is not worth a confident
+            // number that overstates profit.
+            boolean costIncomplete  = cogsRow != null && cogsRow.unvaluedMovements() > 0;
+            BigDecimal margin       = costIncomplete ? null : netSales.subtract(cogs);
 
             rows.add(new SalesReportRowDto(
                     (String) r[1],
@@ -219,8 +238,19 @@ public class SalesReportQuery {
      * invoice in the filtered window. Unmatched lines (unvalued/service/kit) contribute 0 — margin
      * then equals net for that portion (no fabricated cost, D-2 edge).
      */
-    private Map<Long, BigDecimal> queryCogsByProduct(Long companyId, OffsetDateTime from, OffsetDateTime to,
-                                                      String filterSql, List<Object> filterParams) {
+    /**
+     * Cost of sale for one product, plus how much of it could not be costed at all.
+     *
+     * @param value             summed cost across the valued movements
+     * @param unvaluedMovements SALE_ISSUE rows carrying no value_amount — stock sold before any
+     *                          cost was ever established for it. Non-zero means {@code value} is
+     *                          an understatement of unknown size, so a margin derived from it
+     *                          would overstate profit rather than merely be imprecise.
+     */
+    private record Cogs(BigDecimal value, long unvaluedMovements) {}
+
+    private Map<Long, Cogs> queryCogsByProduct(Long companyId, OffsetDateTime from, OffsetDateTime to,
+                                                String filterSql, List<Object> filterParams) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(from);
@@ -229,7 +259,8 @@ public class SalesReportQuery {
 
         String sql = """
                 SELECT sm.product_id AS product_id,
-                       COALESCE(SUM(ABS(sm.value_amount)), 0) AS cogs
+                       COALESCE(SUM(ABS(sm.value_amount)), 0) AS cogs,
+                       COUNT(*) FILTER (WHERE sm.value_amount IS NULL) AS unvalued
                 FROM stock_movements sm
                 JOIN sales_invoices i ON i.uid = sm.source_document_uid
                 LEFT JOIN products p ON p.id = sm.product_id
@@ -243,10 +274,11 @@ public class SalesReportQuery {
                 GROUP BY sm.product_id
                 """;
 
-        Map<Long, BigDecimal> result = new HashMap<>();
+        Map<Long, Cogs> result = new HashMap<>();
         jdbc.query(sql,
                 rs -> {
-                    result.put(rs.getLong("product_id"), rs.getBigDecimal("cogs"));
+                    result.put(rs.getLong("product_id"),
+                            new Cogs(rs.getBigDecimal("cogs"), rs.getLong("unvalued")));
                 },
                 params.toArray());
         return result;
