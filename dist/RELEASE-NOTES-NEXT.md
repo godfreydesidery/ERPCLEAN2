@@ -1,3 +1,40 @@
+### Profit on the sales report: what it could not know, it now says
+
+This one changes figures you have been reading, so it is worth a moment.
+
+The Margin column is your sales less what the goods cost you. For that to work the system has to
+know what the goods cost — and for some products it never did: the ones whose stock was entered as
+an opening balance, or brought in through a stock upload, without a cost. For those the system was
+treating the cost as **nothing**, and so reporting the whole sale as profit.
+
+That is why the margin looked right on some products and far too high on others.
+
+Those lines now read **not costed** instead of showing a profit that was never real, and the total
+tells you how many products it has had to leave out. **Expect the margin total to be lower than it
+was.** That is the correction, not a loss: the old figure was counting profit that had not been
+earned.
+
+To settle a product for good, give it a cost — receive stock at a cost price, or set an opening
+cost for it. From then on it counts towards the margin like any other product.
+
+### A stock transfer can be printed and exported
+
+Once a transfer is created you can now print it or save it. **Print / PDF** produces a document to
+send with the goods: the transfer number and date, where it is going from and to, and the items and
+quantities. **Excel** gives you the same thing as a spreadsheet.
+
+The document deliberately shows no money. A transfer moves your own stock between your own
+locations, so there is nothing to charge — and a sheet travelling with the goods should not tell
+whoever receives them what you paid for them.
+
+### A line now shows the product you picked
+
+On a transfer, every line kept showing an empty search box beside the product you had already
+chosen, so a finished line looked unfinished. The line now shows the product, with **change** if
+you want a different one and **clear** to empty it.
+
+---
+
 ### Choosing a product is now a search, not a dropdown
 
 In the places where you pick a product there were two controls doing one job: a box to type in, and
