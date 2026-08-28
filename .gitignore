@@ -75,3 +75,7 @@ pos_app/screenshots/
 # OrbixHQ demo APKs — built artefacts, distributed out-of-band, never committed
 dist/orbixhq/*.apk
 dist/orbixhq/*.aab
+
+# Python bytecode from the docs tooling (docs/tools/*.py) — a build artefact.
+__pycache__/
+*.pyc
