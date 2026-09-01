@@ -115,6 +115,29 @@ export class PurchasesService {
     );
   }
 
+  /**
+   * The same suggestion for a direct goods receipt, which has no PO to hang off — company and
+   * supplier come from the screen (K-2026-08-30 #4). Gated on PURCHASE.RECEIVE.DIRECT, which is
+   * what a storekeeper actually holds, so this is NOT the PO endpoint with different arguments.
+   * Emits null when nothing is known; SILENT_ERROR for the same reason as above.
+   */
+  directCostSuggestion(
+    companyUid: string,
+    supplierUid: string,
+    productUid: string,
+    unitUid: string,
+  ): Observable<PurchaseCostSuggestionDto | null> {
+    const params = new HttpParams()
+      .set('companyUid', companyUid)
+      .set('supplierUid', supplierUid)
+      .set('productUid', productUid)
+      .set('unitUid', unitUid);
+    return this.http.get<PurchaseCostSuggestionDto | null>(
+      `${this.grBase}/direct/cost-suggestion`,
+      { params, context: new HttpContext().set(SILENT_ERROR, true) },
+    );
+  }
+
   // ── Purchase Orders — mutations ──────────────────────────────────────────────
 
   createOrder(request: CreatePurchaseOrderRequest): Observable<PurchaseOrderDto> {

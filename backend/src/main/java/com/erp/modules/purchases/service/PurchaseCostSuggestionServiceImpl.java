@@ -1,5 +1,9 @@
 package com.erp.modules.purchases.service;
 
+import com.erp.modules.iam.domain.entity.Company;
+import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.parties.domain.entity.Supplier;
+import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductRepository;
@@ -28,8 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Read-only unit-cost suggestion for purchase-order lines (SAM client feedback 2026-08).
  *
- * <p>Security: {@code scopeGuard.assertCanActIn} on the loaded PO, then supplier/product/unit are
- * all resolved scoped to THAT PO's company — never to a caller-supplied company (F15).
+ * <p>Security: {@code scopeGuard.assertCanActIn} on the loaded PO (or, on the direct-receipt path,
+ * on the loaded company), then supplier/product/unit are all resolved scoped to THAT company —
+ * never to a caller-supplied id (F15).
  *
  * <p>Every source is matched on the requested unit: prices are per unit, so a carton price must
  * never be offered for a line ordered per piece. That is also why the product-master cost only
@@ -43,6 +48,8 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
     private final PurchaseOrderLineRepository lines;
     private final ProductRepository           products;
     private final UnitOfMeasureRepository     units;
+    private final CompanyRepository           companies;
+    private final SupplierRepository          suppliers;
     private final SupplierPriceReader         supplierPrices;
     private final ScopeGuard                  scopeGuard;
 
@@ -50,12 +57,16 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
                                              PurchaseOrderLineRepository lines,
                                              ProductRepository products,
                                              UnitOfMeasureRepository units,
+                                             CompanyRepository companies,
+                                             SupplierRepository suppliers,
                                              SupplierPriceReader supplierPrices,
                                              ScopeGuard scopeGuard) {
         this.orders         = orders;
         this.lines          = lines;
         this.products       = products;
         this.units          = units;
+        this.companies      = companies;
+        this.suppliers      = suppliers;
         this.supplierPrices = supplierPrices;
         this.scopeGuard     = scopeGuard;
     }
@@ -68,22 +79,61 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
                 "PurchaseOrder", purchaseOrderUid);
         scopeGuard.assertCanActIn(RequestContext.get(), po.getCompanyId());
 
-        Long companyId = po.getCompanyId();
+        return suggest(po.getCompanyId(), po.getSupplierId(), productUid, unitUid);
+    }
+
+    @Override
+    public Optional<PurchaseCostSuggestionDto> suggestUnitCostForDirectReceipt(String companyUid,
+                                                                               String supplierUid,
+                                                                               String productUid,
+                                                                               String unitUid) {
+        Company company = Lookups.orNotFound(companies.findByUid(companyUid), "Company", companyUid);
+        scopeGuard.assertCanActIn(RequestContext.get(), company.getId());
+
+        // Supplier is resolved scoped to THAT company, never to a caller-supplied one (F15) — the
+        // same rule the PO path gets for free by reading the supplier off the loaded order.
+        //
+        // Absent on purpose rather than rejected: the storekeeper types the delivery in whatever
+        // order the paperwork comes in, so items are often picked before the supplier. Refusing
+        // here would mean no suggestion at all on exactly those lines; instead the two
+        // supplier-specific sources are skipped and the product master's cost still answers.
+        Long supplierId = null;
+        if (supplierUid != null && !supplierUid.isBlank()) {
+            supplierId = suppliers.findByCompanyIdAndUid(company.getId(), supplierUid)
+                    .map(Supplier::getId)
+                    .orElseThrow(() -> new NotFoundException("Supplier not found."));
+        }
+
+        return suggest(company.getId(), supplierId, productUid, unitUid);
+    }
+
+    /**
+     * The fallback chain itself, shared by both entry points so a fix to one can never leave the
+     * other behind. Product and unit are resolved against the company the caller has already been
+     * scope-checked for.
+     *
+     * @param supplierId may be null on the direct-receipt path — the supplier-specific sources are
+     *                   then skipped rather than queried with a null key
+     */
+    private Optional<PurchaseCostSuggestionDto> suggest(Long companyId, Long supplierId,
+                                                        String productUid, String unitUid) {
         Product product = products.findByCompanyIdAndUid(companyId, productUid)
                 .orElseThrow(() -> new NotFoundException("Product not found."));
         UnitOfMeasure unit = units.findByCompanyIdAndUid(companyId, unitUid)
                 .orElseThrow(() -> new NotFoundException("Unit of measure not found."));
 
         // First hit wins — see the interface javadoc for why avg cost on hand is not in the chain.
-        Optional<PurchaseCostSuggestionDto> fromQuote =
-                fromLastQuote(companyId, po.getSupplierId(), product, unit);
-        if (fromQuote.isPresent()) {
-            return fromQuote;
-        }
-        Optional<PurchaseCostSuggestionDto> fromPurchase =
-                fromLastPurchase(companyId, po.getSupplierId(), product, unit);
-        if (fromPurchase.isPresent()) {
-            return fromPurchase;
+        if (supplierId != null) {
+            Optional<PurchaseCostSuggestionDto> fromQuote =
+                    fromLastQuote(companyId, supplierId, product, unit);
+            if (fromQuote.isPresent()) {
+                return fromQuote;
+            }
+            Optional<PurchaseCostSuggestionDto> fromPurchase =
+                    fromLastPurchase(companyId, supplierId, product, unit);
+            if (fromPurchase.isPresent()) {
+                return fromPurchase;
+            }
         }
         return fromProductCost(product, unit);
     }

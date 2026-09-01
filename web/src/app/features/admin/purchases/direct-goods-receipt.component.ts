@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -15,6 +15,7 @@ import {
   DirectGoodsReceiptLineRequest,
   DirectGoodsReceiptRequest,
 } from '../models/purchases.model';
+import { PurchaseCostSource, PurchaseCostSuggestionDto } from './purchases.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from '../products/product.service';
@@ -51,7 +52,7 @@ interface StagedLine {
  */
 @Component({
   selector: 'app-direct-goods-receipt',
-  imports: [FormsModule, RouterLink, DecimalPipe, CurrencySelectComponent],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, CurrencySelectComponent],
   templateUrl: './direct-goods-receipt.component.html',
   styleUrl: './direct-goods-receipt.component.scss',
 })
@@ -96,6 +97,25 @@ export class DirectGoodsReceiptComponent {
   readonly lineFormError = signal<string | null>(null);
   readonly productSearchError = signal<string | null>(null);
   private readonly productSearch$ = new Subject<string>();
+
+  // ── Unit-cost suggestion (K-2026-08-30 #4) ─────────────────────────────────
+  /** The cost the system already knows for this item, with its provenance; null when unknown. */
+  readonly costSuggestion = signal<PurchaseCostSuggestionDto | null>(null);
+  /** True while the cost box holds a figure WE put there, not one the storekeeper typed. */
+  private readonly costPrefilled = signal(false);
+  /** Guards against a slow lookup landing after a newer product/unit pick. */
+  private suggestionRequest = 0;
+
+  /**
+   * True when the suggested price is in a different currency from the receipt. No conversion is
+   * attempted — the storekeeper is simply told, so a figure from a foreign-currency purchase is
+   * never mistaken for one in the receipt's currency.
+   */
+  readonly costCurrencyMismatch = computed(() => {
+    const suggestion = this.costSuggestion();
+    if (!suggestion) return false;
+    return suggestion.currency !== this.currency();
+  });
 
   // ── Staged lines + submit ──────────────────────────────────────────────────
   readonly stagedLines = signal<StagedLine[]>([]);
@@ -194,6 +214,10 @@ export class DirectGoodsReceiptComponent {
     this.selectedSupplier.set({ uid: s.uid, label: `${s.code} — ${s.displayName}` });
     this.supplierResults.set([]);
     this.supplierSearchQ.set(`${s.code} — ${s.displayName}`);
+    // Knowing the supplier narrows the suggestion to what THEY last charged, so an item picked
+    // before the supplier gets a better answer now rather than keeping the generic one.
+    const unitUid = this.newLineUnitUid();
+    if (this.selectedProduct() && unitUid) this.loadCostSuggestion(unitUid);
   }
 
   private resetSupplier(): void {
@@ -209,6 +233,7 @@ export class DirectGoodsReceiptComponent {
     this.selectedProduct.set(null);
     this.lineUnits.set([]);
     this.newLineUnitUid.set('');
+    this.clearCostSuggestion();
     this.productSearch$.next(q);
   }
 
@@ -220,10 +245,91 @@ export class DirectGoodsReceiptComponent {
       next: (units) => {
         this.lineUnits.set(units);
         // First returned unit is the base unit — the safe default for a counter delivery.
-        if (units.length > 0) this.newLineUnitUid.set(units[0].uid);
+        if (units.length > 0) {
+          this.newLineUnitUid.set(units[0].uid);
+          this.loadCostSuggestion(units[0].uid);
+        }
       },
       error: () => this.lineUnits.set([]),
     });
+  }
+
+  /** The unit the goods arrived in changes which price applies, so the suggestion is re-read. */
+  onUnitChange(unitUid: string): void {
+    this.newLineUnitUid.set(unitUid);
+    this.loadCostSuggestion(unitUid);
+  }
+
+  /** A cost the storekeeper types is theirs — stop treating the box as ours to clear or replace. */
+  onUnitCostChange(value: string | number | null | undefined): void {
+    this.newLineCost.set(this.asStr(value));
+    this.costPrefilled.set(false);
+  }
+
+  // ── Unit-cost suggestion ───────────────────────────────────────────────────
+
+  /**
+   * Fetch the cost the system already holds for this item and pre-fill the box with it — the whole
+   * point of K-2026-08-30 #4 ("not having to input the cost price all the time").
+   *
+   * <p>Only an EMPTY box is filled, so a figure the storekeeper typed is never overwritten, and the
+   * hint underneath always says where the number came from: a defaulted cost feeds the moving
+   * average, so it must never look like a figure someone checked when it is not.
+   */
+  private loadCostSuggestion(unitUid: string): void {
+    const productUid = this.selectedProduct()?.uid;
+    const companyUid = this.selectedCompanyUid();
+    this.costSuggestion.set(null);
+    // Anything WE filled in belongs to the previous product/unit — drop it before looking the new
+    // one up, so a carton price can never linger on a line that is now received per piece.
+    if (this.costPrefilled()) {
+      this.newLineCost.set('');
+      this.costPrefilled.set(false);
+    }
+    if (!productUid || !unitUid || !companyUid) return;
+
+    // The supplier is optional here: it narrows the answer to what THIS supplier last charged, but
+    // items are often picked before the supplier is chosen, and the product cost still answers.
+    const supplierUid = this.selectedSupplier()?.uid ?? '';
+
+    const request = ++this.suggestionRequest;
+    this.purchasesService
+      .directCostSuggestion(companyUid, supplierUid, productUid, unitUid)
+      .subscribe({
+        next: (suggestion) => {
+          if (request !== this.suggestionRequest) return;  // a newer pick already superseded this
+          this.costSuggestion.set(suggestion);
+          if (suggestion && this.asStr(this.newLineCost()) === '') {
+            this.newLineCost.set(String(suggestion.amount));
+            this.costPrefilled.set(true);
+          }
+        },
+        error: () => {
+          if (request === this.suggestionRequest) this.costSuggestion.set(null);
+        },
+      });
+  }
+
+  private clearCostSuggestion(): void {
+    this.suggestionRequest++;
+    this.costSuggestion.set(null);
+    // Drop the box too when the figure in it is OURS: otherwise the old product's price sits in a
+    // non-empty box, which then blocks the next suggestion from ever being applied — the line would
+    // be staged at the previous item's price.
+    if (this.costPrefilled()) this.newLineCost.set('');
+    this.costPrefilled.set(false);
+  }
+
+  /** Friendly provenance wording for the hint under the cost box. */
+  costSourceLabel(source: PurchaseCostSource): string {
+    switch (source) {
+      case 'LAST_QUOTE':
+        return 'From the last quote';
+      case 'LAST_PURCHASE':
+        return 'From the last purchase';
+      case 'PRODUCT_COST':
+        return 'From the product cost price';
+    }
   }
 
   /** Coerce a number-typed-input signal value to a trimmed string (ngModel on type="number"
@@ -300,6 +406,7 @@ export class DirectGoodsReceiptComponent {
     this.newLineCost.set('');
     this.newLineNote.set('');
     this.lineFormError.set(null);
+    this.clearCostSuggestion();
   }
 
   lineTotal(line: StagedLine): number {

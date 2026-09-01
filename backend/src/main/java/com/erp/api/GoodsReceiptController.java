@@ -3,9 +3,11 @@ package com.erp.api;
 import com.erp.modules.purchases.domain.dto.CreateGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
+import com.erp.modules.purchases.domain.dto.PurchaseCostSuggestionDto;
 import com.erp.modules.purchases.domain.dto.VoidGoodsReceiptRequest;
 import com.erp.modules.purchases.service.DirectGoodsReceiptService;
 import com.erp.modules.purchases.service.GoodsReceiptService;
+import com.erp.modules.purchases.service.PurchaseCostSuggestionService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import java.util.List;
@@ -33,11 +35,14 @@ public class GoodsReceiptController {
 
     private final GoodsReceiptService service;
     private final DirectGoodsReceiptService directService;
+    private final PurchaseCostSuggestionService costSuggestions;
 
     public GoodsReceiptController(GoodsReceiptService service,
-                                   DirectGoodsReceiptService directService) {
+                                   DirectGoodsReceiptService directService,
+                                   PurchaseCostSuggestionService costSuggestions) {
         this.service = service;
         this.directService = directService;
+        this.costSuggestions = costSuggestions;
     }
 
     /**
@@ -68,6 +73,30 @@ public class GoodsReceiptController {
     @PreAuthorize("@perm.scoped(#req.companyUid(), 'company', 'PURCHASE.RECEIVE.DIRECT')")
     public ApiResponse<GoodsReceiptDto> receiveDirect(@RequestBody DirectGoodsReceiptRequest req) {
         return ApiResponse.ok(directService.receiveDirect(req));
+    }
+
+    /**
+     * Suggested unit cost for an item the storekeeper is about to add to a direct receipt — the
+     * last quote from this supplier, then the last actual purchase from them, then the product's
+     * cost price (K-2026-08-30 #4: the cost was being retyped on every delivery).
+     *
+     * <p>Gated on {@code PURCHASE.RECEIVE.DIRECT} rather than the PO path's
+     * {@code PURCHASE.ORDER.CREATE}: a storekeeper holds the former and not the latter, so reusing
+     * the purchase-order endpoint here would 403 exactly the person the suggestion is for.
+     *
+     * <p>Returns {@code null} data when no source has a price — the caller leaves the cost blank
+     * rather than defaulting to zero.
+     */
+    @GetMapping("/direct/cost-suggestion")
+    @PreAuthorize("@perm.scoped(#companyUid, 'company', 'PURCHASE.RECEIVE.DIRECT')")
+    public ApiResponse<PurchaseCostSuggestionDto> directCostSuggestion(
+            @RequestParam String companyUid,
+            @RequestParam(required = false) String supplierUid,
+            @RequestParam String productUid,
+            @RequestParam String unitUid) {
+        return ApiResponse.ok(costSuggestions
+                .suggestUnitCostForDirectReceipt(companyUid, supplierUid, productUid, unitUid)
+                .orElse(null));
     }
 
     /** Get GR by uid. */
