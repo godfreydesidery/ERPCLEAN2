@@ -614,6 +614,17 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/sales-report.component').then((m) => m.SalesReportComponent),
   },
+  // K-2026-08-30 #2. Same guard as the Sales Report and the same @PreAuthorize on the endpoint:
+  // that report already discloses margin at this gate, so cost of sales here is no wider a
+  // disclosure to a narrower audience.
+  {
+    path: 'reports/profitability',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./reporting/profitability-report.component').then(
+        (m) => m.ProfitabilityReportComponent,
+      ),
+  },
   {
     path: 'reports/stock',
     canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],

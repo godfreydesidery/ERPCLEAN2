@@ -35,6 +35,8 @@ import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.FinaliseInvoiceRequest;
+import com.erp.modules.sales.domain.dto.ProfitabilityReportDto;
+import com.erp.modules.sales.domain.dto.ProfitabilityRowDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesReportDto;
 import com.erp.modules.sales.domain.dto.SalesReportRowDto;
@@ -116,8 +118,9 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
     // ---- Stock (to read back avg_cost) ----
     @Autowired private StockOnHandRepository   stockOnHandRepo;
 
-    // ---- Bean under test ----
-    @Autowired private SalesReportQuery        salesReportQuery;
+    // ---- Beans under test ----
+    @Autowired private SalesReportQuery         salesReportQuery;
+    @Autowired private ProfitabilityReportQuery profitabilityReportQuery;
 
     // ---- Events ----
     @Autowired private DomainEventRepository   domainEventRepo;
@@ -379,6 +382,148 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
                 .as("finalised_at window predicate must exclude a sale outside the requested range")
                 .filteredOn(r -> product.code().equals(r.productCode()))
                 .isEmpty();
+    }
+
+    // =========================================================================
+    // Profitability Report (K-2026-08-30 #2) — same data shapes, same Postgres.
+    //
+    // It reads sales_invoice_lines and stock_movements directly, so nothing but a real database
+    // proves the SQL binds and the five figures tie together. Hosted here rather than in a class of
+    // its own because this scaffold already produces exactly the two shapes that matter: a sale
+    // with a known cost, and a sale of stock that was never costed.
+    // =========================================================================
+
+    @Test
+    void profitability_grossLessVatIsNet_andProfitIsNetLessCostOfSales() {
+        ProductDto product = stockableProduct("Profit-Widget");
+        BigDecimal receiptCost = new BigDecimal("600.00");
+        dispatcher.dispatchOne(publishReceiptEvent(
+                "RCPT-PR-001", product, new BigDecimal("10"), receiptCost, 1L));
+
+        BigDecimal avgCost = requireSoh(product.id()).getAvgCost(); // 600
+        BigDecimal sellQty = new BigDecimal("4");
+
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), sellQty);
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        ProfitabilityReportDto report = profitabilityReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1), null);
+
+        List<ProfitabilityRowDto> matches = report.rows().stream()
+                .filter(r -> product.code().equals(r.productCode()))
+                .toList();
+        assertThat(matches).as("exactly one row for the sold product").hasSize(1);
+        ProfitabilityRowDto row = matches.get(0);
+
+        // Net derived independently of the DTO under test, so the identities below are real
+        // cross-checks rather than restatements of the row's own arithmetic.
+        BigDecimal net = netSalesFor(product.id());
+        BigDecimal expectedCogs = sellQty.multiply(avgCost);   // 4 × 600 = 2400
+
+        assertThat(row.qtySold()).isEqualByComparingTo(sellQty);
+        assertThat(row.netAmount())
+                .as("net must be the invoice's own net, not a figure this report re-derives")
+                .isEqualByComparingTo(net);
+        assertThat(row.grossSales().subtract(row.vatAmount()))
+                .as("gross − VAT = net, the identity printed on the page")
+                .isEqualByComparingTo(row.netAmount());
+        assertThat(row.costOfSales())
+                .as("cost of sales is the cost at the moment of sale (avg 600 × qty 4)")
+                .isEqualByComparingTo(expectedCogs);
+        assertThat(row.profit())
+                .as("net − cost of sales = profit, the other identity on the page")
+                .isEqualByComparingTo(net.subtract(expectedCogs));
+
+        assertThat(report.totals().rowsWithUnknownCost())
+                .as("every cost here is known, so the totals are complete")
+                .isZero();
+    }
+
+    /**
+     * The rule the whole report rests on. Stock sold before it was ever costed has an UNKNOWN cost;
+     * carrying it as zero would report the entire sale as profit — the defect already corrected on
+     * the Sales Report, and far worse on a report whose only purpose is the profit figure.
+     */
+    @Test
+    void profitability_uncostedStock_reportsUnknown_ratherThanTheWholeSaleAsProfit() {
+        ProductDto product = stockableProduct("Profit-NoCost");
+
+        // Backorder opt-in for the same reason as the margin test: the product must stay unreceived
+        // for its avg_cost — and so its SALE_ISSUE value_amount — to be null.
+        setCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", true));
+
+        setCtx();
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        ProfitabilityReportDto report = profitabilityReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1), null);
+
+        ProfitabilityRowDto row = report.rows().stream()
+                .filter(r -> product.code().equals(r.productCode()))
+                .findFirst().orElseThrow();
+
+        assertThat(row.costOfSales())
+                .as("unknown, not zero — a zero cost would report the whole sale as profit")
+                .isNull();
+        assertThat(row.profit())
+                .as("a profit derived from an unknown cost is not reportable either")
+                .isNull();
+        assertThat(row.grossSales())
+                .as("the sale itself is still reported in full — only the cost side is unknown")
+                .isGreaterThan(BigDecimal.ZERO);
+
+        // The foot must disclose that it is partial; a total that silently omits this row reads as
+        // complete and overstates the profit somebody then plans against.
+        assertThat(report.totals().rowsWithUnknownCost()).isGreaterThanOrEqualTo(1);
+        assertThat(report.totals().grossSales())
+                .as("sales totals still include the uncosted row")
+                .isGreaterThanOrEqualTo(row.grossSales());
+    }
+
+    /**
+     * The branch predicate is appended SQL that only fails at execution time, and every other
+     * profitability test passes a null branch — so without this it would ship unexecuted.
+     */
+    @Test
+    void profitability_branchFilter_bindsAndAnUnknownBranchIsRejected() {
+        ProductDto product = stockableProduct("Profit-BranchScope");
+        dispatcher.dispatchOne(publishReceiptEvent(
+                "RCPT-PR-BR-001", product, new BigDecimal("10"), new BigDecimal("500.00"), 1L));
+
+        SalesInvoiceDto draft = makeSaleInvoice(product.uid(), new BigDecimal("3"));
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        ProfitabilityReportDto report = profitabilityReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1), branch.getUid());
+
+        assertThat(report.branchName()).isEqualTo(branch.getName());
+        assertThat(report.rows())
+                .filteredOn(r -> product.code().equals(r.productCode()))
+                .hasSize(1);
+
+        setCtx();
+        assertThatThrownBy(() -> profitabilityReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1),
+                "NOSUCHBRANCHUID0000000000"))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+    }
+
+    /** A backwards date range is refused before it reaches the database. */
+    @Test
+    void profitability_endBeforeStart_isRejected() {
+        setCtx();
+        assertThatThrownBy(() -> profitabilityReportQuery.report(company.getId(),
+                LocalDate.now(), LocalDate.now().minusDays(1), null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================================

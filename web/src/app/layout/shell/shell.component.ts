@@ -290,6 +290,16 @@ export class ShellComponent {
         { label: 'Cash-Flow Statement', route: '/admin/reporting/cash-flow', icon: 'bi-cash-stack', available: true, permission: 'REPORT.CASHFLOW.VIEW' },
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
         { label: 'Sales Report', route: '/admin/reports/sales', icon: 'bi-receipt-cutoff', available: true, permission: 'SALES.INVOICE.VIEW' },
+        // K-2026-08-30 #2. Keywords carry the words a shopkeeper uses — they ask for "profit",
+        // "gross profit" or "margin report", never for "profitability".
+        {
+          label: 'Profitability Report',
+          route: '/admin/reports/profitability',
+          icon: 'bi-graph-up-arrow',
+          available: true,
+          permission: 'SALES.INVOICE.VIEW',
+          keywords: ['profit', 'gross profit', 'margin', 'cost of sales', 'net sales', 'vat amount'],
+        },
       ],
     },
     // ── Approvals ─────────────────────────────────────────────────────────────
