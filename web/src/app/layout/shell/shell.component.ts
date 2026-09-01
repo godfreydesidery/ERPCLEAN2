@@ -18,6 +18,10 @@ import { NavSearchComponent, NavDestination } from './nav-search.component';
  * - `anyPermission`: when set (instead of `permission`), the item is shown to a user holding ANY of
  *   the listed codes — mirrors the route's `requireAnyPermission` guard for a screen reachable by
  *   more than one atomic permission (e.g. the generic bulk-import wizard, gated per entity type).
+ * - `allPermissions`: shown only to a user holding EVERY listed code — mirrors
+ *   `requireAllPermissions`, for a screen whose endpoint is gated on a conjunction (Item Inquiry
+ *   needs PRODUCT.VIEW and STOCK.VIEW). Showing such a link on one of the two codes puts a link in
+ *   front of a user the guard then turns away.
  * - `keywords`: extra search terms for the Ctrl+K palette only (never rendered). They exist because
  *   users search for a screen by the words THEY use, not the words we labelled it with — a client
  *   asked for "a stock report with opening balance, purchases, sales and closing" and concluded the
@@ -30,6 +34,7 @@ interface NavItem {
   readonly available: boolean;
   readonly permission?: string;
   readonly anyPermission?: readonly string[];
+  readonly allPermissions?: readonly string[];
   readonly keywords?: readonly string[];
 }
 
@@ -190,6 +195,17 @@ export class ShellComponent {
     {
       label: 'Inventory',
       items: [
+        // The counter lookup (K-2026-08-30 #3). Keywords carry the words a shop actually uses —
+        // "price check", "how many left" — because nobody searches for "item inquiry" unless they
+        // already know we called it that.
+        {
+          label: 'Item Inquiry',
+          route: '/admin/stock/item-inquiry',
+          icon: 'bi-search',
+          available: true,
+          allPermissions: ['PRODUCT.VIEW', 'STOCK.VIEW'],
+          keywords: ['price check', 'item lookup', 'how many left', 'available quantity', 'barcode', 'cost'],
+        },
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
         { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
         { label: 'Stock Locations', route: '/admin/stock/locations', icon: 'bi-geo-alt', available: true, permission: 'STOCK.LOCATION.VIEW' },
@@ -436,6 +452,9 @@ export class ShellComponent {
   );
 
   private isNavItemVisible(item: NavItem): boolean {
+    if (item.allPermissions && item.allPermissions.length > 0) {
+      return item.allPermissions.every((code) => this.session.hasPermission(code));
+    }
     if (item.anyPermission && item.anyPermission.length > 0) {
       return item.anyPermission.some((code) => this.session.hasPermission(code));
     }

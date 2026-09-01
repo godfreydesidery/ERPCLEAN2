@@ -1,0 +1,172 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-search me-2" aria-hidden="true"></i>Item Inquiry
+      </h1>
+      <p class="subtitle">
+        Look up one item: what it is, what it costs, what you sell it for, and how many are left.
+        Search by item code, part of the description, or scan a barcode.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to look up items.
+    </div>
+  } @else {
+
+    <!-- Search -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-12 col-lg-6">
+            <label class="form-label" for="ii-search">Item</label>
+            <div class="input-group">
+              <span class="input-group-text" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
+              <input id="ii-search" name="ii-search" type="search" class="form-control form-control-lg"
+                     [ngModel]="searchQ()" (ngModelChange)="onSearchChange($event)"
+                     placeholder="Item code, description or barcode"
+                     autocomplete="off" autofocus
+                     aria-describedby="ii-search-help" />
+            </div>
+            <span id="ii-search-help" class="form-text small">
+              Results appear as you type. A scanned barcode must be complete to match.
+            </span>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ii-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ii-branch" name="ii-branch"
+                            [ngModel]="branchUid()" (ngModelChange)="onBranchChange($event)"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Looking it up…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not look that up. Please try again.' }}
+        </p>
+      }
+      @default {
+        @if (!hasSearched()) {
+          <div class="erp-empty">
+            <i class="bi bi-upc-scan" aria-hidden="true"></i>
+            Type an item code or description above, or scan a barcode.
+          </div>
+        } @else if (noMatches()) {
+          <div class="erp-empty">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            No item matches “{{ searchQ() }}”. Check the code, or try part of the description.
+          </div>
+        }
+
+        @if (result(); as r) {
+          @if (r.rows.length > 0) {
+
+            <!-- A blank selling price is a missing default price list, not a bug. Say which. -->
+            @if (noPriceList()) {
+              <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                <span>
+                  No <strong>default price list</strong> is set for this company, so selling prices
+                  cannot be shown. Ask whoever manages your price lists to mark one as the default.
+                </span>
+              </div>
+            }
+
+            <!-- More matched than came back: say so, rather than letting a clipped list read as all
+                 of them. -->
+            @if (r.truncated) {
+              <p class="text-muted small mb-2" role="status">
+                <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
+                Showing the first {{ r.rows.length }} matches. Type more of the code or description
+                to narrow it down.
+              </p>
+            }
+
+            <p class="text-muted small mb-2">
+              Branch: {{ branchLabel() }} · Currency: {{ r.currency }}
+              @if (r.priceListName) { · Price list: {{ r.priceListName }} }
+              · Quantities are in each item's own unit
+            </p>
+
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">
+                  Items matching the search, with cost, selling price and quantity on hand
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Code</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Unit</th>
+                    <th scope="col" class="num">Available</th>
+                    <th scope="col" class="num">
+                      Cost
+                      @if (!r.costVisible) {
+                        <i class="bi bi-eye-slash ms-1" aria-hidden="true"
+                           title="Hidden for your role"></i>
+                      }
+                    </th>
+                    <th scope="col" class="num">{{ sellingHeader() }}</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of rows(); track row.productUid) {
+                    <tr>
+                      <td class="mono">{{ row.productCode }}</td>
+                      <td>{{ row.productName }}</td>
+                      <td>{{ row.unitName ?? '—' }}</td>
+                      <td class="num">
+                        @if (row.stockable) {
+                          {{ fmtQty(row.quantityOnHand) }}
+                        } @else {
+                          <span class="text-muted" title="This item is not stocked">Not stocked</span>
+                        }
+                      </td>
+                      <td class="num">
+                        <!-- Withheld and never-costed are different answers and must not look alike. -->
+                        @if (r.costVisible) {
+                          {{ fmtAmount(row.buyingPrice) }}
+                        } @else {
+                          <span class="text-muted">Hidden</span>
+                        }
+                      </td>
+                      <td class="num">{{ fmtAmount(row.sellingPrice) }}</td>
+                      <td>
+                        <a class="btn btn-sm btn-outline-secondary"
+                           [routerLink]="['/admin/products/uid', row.productUid]">
+                          Open
+                        </a>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <p class="text-muted small mt-2">
+              A dash means the figure is not known — the item has never been costed or never priced.
+              It does not mean zero.
+            </p>
+          }
+        }
+      }
+    }
+  }
+</section>

@@ -46,3 +46,22 @@ export function requireAnyPermission(...codes: string[]): CanActivateFn {
     return router.createUrlTree(['/admin/home']);
   };
 }
+
+/**
+ * Allows the route only if the user holds EVERY one of {@code codes} (root always passes). Use where
+ * the backend endpoint the screen depends on is itself gated on a conjunction — e.g. Item Inquiry's
+ * {@code @perm.has('PRODUCT.VIEW') and @perm.has('STOCK.VIEW')}.
+ *
+ * <p>Guarding such a screen on only one of the two codes is the parity bug that keeps recurring: the
+ * page opens, its one request 403s, and the user reads a permissions problem as a broken screen.
+ */
+export function requireAllPermissions(...codes: string[]): CanActivateFn {
+  return () => {
+    const session = inject(SessionStore);
+    const router = inject(Router);
+    const toasts = inject(ToastService);
+    if (codes.every((c) => session.hasPermission(c))) return true;
+    toasts.info(NO_ACCESS_MESSAGE);
+    return router.createUrlTree(['/admin/home']);
+  };
+}

@@ -12,6 +12,7 @@ import {
   StockMovementDto,
   StockOnHandDto,
 } from '../models/stock.model';
+import { ItemInquiryDto } from './item-inquiry.model';
 
 export interface StockOnHandPage {
   rows: StockOnHandDto[];
@@ -152,5 +153,19 @@ export class StockService {
       `${this.base}/on-hand/by-product/uid/${productUid}`,
       { params },
     );
+  }
+
+  // ── Item Inquiry ─────────────────────────────────────────────────────────────
+
+  /**
+   * GET /api/v1/stock/item-inquiry — the counter lookup (K-2026-08-30 #3): code, description, cost,
+   * selling price and available quantity for the items matching `q` (code, name fragment, or a
+   * scanned barcode). Gated PRODUCT.VIEW + STOCK.VIEW; the cost column additionally needs
+   * INVENTORY.VALUATION.VIEW, which the response reports via `costVisible`.
+   */
+  itemInquiry(q: string, branchUid?: string | null): Observable<ItemInquiryDto> {
+    let params = new HttpParams().set('q', q);
+    if (branchUid?.trim()) params = params.set('branchUid', branchUid.trim());
+    return this.http.get<ItemInquiryDto>(`${this.base}/item-inquiry`, { params });
   }
 }
