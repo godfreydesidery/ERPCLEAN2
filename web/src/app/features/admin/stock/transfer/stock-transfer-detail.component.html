@@ -190,13 +190,43 @@
                     <td>{{ line.lineNo }}</td>
                     <td class="mono">{{ line.productCode }}</td>
                     <td>{{ line.productName }}</td>
-                    <td>{{ line.unitName }}</td>
+                    <td>{{ line.unitName ?? '—' }}</td>
                     <td class="num">{{ +line.qtyTransferred | number:'1.0-4' }}</td>
-                    <td class="num">{{ +line.valueAmount | number:'1.2-2' }}</td>
-                    <td>{{ line.currency }}</td>
+                    <!-- Never costed is an unknown, not a zero: 0.00 here read as "worth nothing". -->
+                    <td class="num">
+                      @if (line.valueAmount === null || line.valueAmount === undefined) {
+                        <span class="text-muted" title="This product has never been costed">—</span>
+                      } @else {
+                        {{ +line.valueAmount | number:'1.2-2' }}
+                      }
+                    </td>
+                    <td>{{ line.currency ?? '—' }}</td>
                   </tr>
                 }
               </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" colspan="4">Total</th>
+                  <td class="num"><strong>{{ totalQty() | number:'1.0-4' }}</strong></td>
+                  <td class="num">
+                    @if (totalValue() === null) {
+                      <span class="text-muted">—</span>
+                    } @else {
+                      <strong>{{ totalValue() | number:'1.2-2' }}</strong>
+                    }
+                  </td>
+                  <td>{{ t.lines[0].currency ?? '' }}</td>
+                </tr>
+                @if (unvaluedLineCount() > 0) {
+                  <tr>
+                    <td colspan="7" class="small text-muted">
+                      {{ unvaluedLineCount() }} of {{ t.lines.length }}
+                      {{ t.lines.length === 1 ? 'line has' : 'lines have' }} no cost on record, so
+                      the total above leaves {{ unvaluedLineCount() === 1 ? 'it' : 'them' }} out.
+                    </td>
+                  </tr>
+                }
+              </tfoot>
             </table>
           </div>
         }

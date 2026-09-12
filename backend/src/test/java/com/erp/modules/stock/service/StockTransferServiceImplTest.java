@@ -1,11 +1,16 @@
 package com.erp.modules.stock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.products.domain.dto.ProductDto;
+import com.erp.modules.stock.domain.dto.CreateStockTransferRequest;
 import com.erp.modules.stock.domain.dto.StockTransferDto;
+import com.erp.modules.stock.domain.entity.StockOnHand;
+import com.erp.modules.stock.domain.entity.StockTransferLine;
 import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockTransfer;
 import com.erp.modules.stock.domain.enums.LocationType;
@@ -15,7 +20,9 @@ import com.erp.modules.stock.repository.StockTransferLineRepository;
 import com.erp.modules.stock.repository.StockTransferRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
@@ -116,6 +123,100 @@ class StockTransferServiceImplTest {
         assertThat(dto.destBranchCode()).isNull();
         assertThat(dto.destLocationName()).isNull();
         // never throws — missing rows degrade to null names, they never fail the read.
+    }
+
+    // -------------------------------------------------------------------------
+    // create(): the unit and the value the line carries (Kilimanjaro 2026-09-12 #5)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Both fields were passed as null at create and nothing has ever written them since — the
+     * columns are {@code updatable = false}. The storekeeper saw the result: a permanently blank
+     * Unit column, and a Value column that rendered 0.00 because the screen coerced null to zero.
+     */
+    @Test
+    void create_snapshotsTheBaseUnitAndThelineValue() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+
+        service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("4")))));
+
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
+        assertThat(saved.get(0).getValueAmount()).isEqualByComparingTo("6000.00");
+    }
+
+    /**
+     * An uncosted product has an UNKNOWN value, not a zero one. Storing zero would put a confident
+     * 0.00 on a transfer document for goods that are worth something — the same rule the sales
+     * margin fix settled: what the system cannot know, it says it cannot know.
+     */
+    @Test
+    void create_leavesTheValueNullWhenTheProductHasNeverBeenCosted() {
+        List<StockTransferLine> saved = stubCreate(null);
+
+        service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("4")))));
+
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
+        assertThat(saved.get(0).getValueAmount()).isNull();
+    }
+
+    /**
+     * Stubs everything create() touches and captures the lines it saves.
+     *
+     * @param avgCost the running average the source stock carries, or null for never costed
+     */
+    private List<StockTransferLine> stubCreate(BigDecimal avgCost) {
+        StockLocation src = location("Main Store");
+        ReflectionTestUtils.setField(src, "id", SRC_LOC_ID);
+        StockLocation dst = location("Bar Counter");
+        ReflectionTestUtils.setField(dst, "id", DST_LOC_ID);
+        ReflectionTestUtils.setField(dst, "branchId", DST_BRANCH_ID);
+
+        when(locationResolver.resolveLocation("SRCLOCUID0000000000000001", COMPANY_ID))
+                .thenReturn(src);
+        when(locationResolver.resolveLocation("DSTLOCUID0000000000000001", COMPANY_ID))
+                .thenReturn(dst);
+        when(numberGenerator.nextTransfer(COMPANY_ID)).thenReturn("TRF-0001");
+        when(transfers.save(any(StockTransfer.class))).thenAnswer(inv -> {
+            StockTransfer t = inv.getArgument(0);
+            ReflectionTestUtils.setField(t, "id", 700L);
+            ReflectionTestUtils.setField(t, "uid", "STUID00000000000000000001");
+            return t;
+        });
+        when(productService.getByUid("PRODUID00000000000000001")).thenReturn(product());
+
+        StockOnHand soh = new StockOnHand(COMPANY_ID, SRC_BRANCH_ID, SRC_LOC_ID, 5L);
+        ReflectionTestUtils.setField(soh, "avgCost", avgCost);
+        when(onHands.findByCompanyIdAndProductId(COMPANY_ID, 5L)).thenReturn(List.of(soh));
+
+        List<StockTransferLine> saved = new ArrayList<>();
+        when(transferLines.save(any(StockTransferLine.class))).thenAnswer(inv -> {
+            StockTransferLine l = inv.getArgument(0);
+            saved.add(l);
+            return l;
+        });
+        when(transferLines.findByStockTransferIdOrderByLineNoAsc(700L)).thenReturn(saved);
+        return saved;
+    }
+
+    /** Base unit "Bottle" is the field under test; everything else is irrelevant padding. */
+    private static ProductDto product() {
+        return new ProductDto(5L, "PRODUID00000000000000001", COMPANY_ID,
+                "P001", "Konyagi 500ml", null, null,
+                true, true, false, false, false, null, null, "Bottle",
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);
     }
 
     // -------------------------------------------------------------------------
