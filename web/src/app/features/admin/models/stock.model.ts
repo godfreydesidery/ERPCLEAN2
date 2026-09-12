@@ -109,6 +109,8 @@ export interface LocationOnHandRowDto {
   productUid: string;
   productCode: string;
   productName: string;
+  /** The product's base-unit label — every quantity on this row is in this unit. */
+  unitLabel: string | null;
   /** Wire: BigDecimal — coerce with +v */
   quantity: number | string;
   /** Wire: BigDecimal — coerce with +v */
