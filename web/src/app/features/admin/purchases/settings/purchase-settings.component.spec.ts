@@ -8,6 +8,11 @@
  *  4. receiptTolerancePct: loaded from a numeric DTO value into the string form field.
  *  5. receiptTolerancePct: blank form field sends null (strict receiving).
  *  6. receiptTolerancePct: populated form field sends a number, not a string.
+ *  7. purchaseVatTreatment: loaded from the DTO (V105, ADR-0063).
+ *  8. purchaseVatTreatment: a company that has never been asked defaults to EXCLUSIVE, so nothing
+ *     changes for anyone on upgrade.
+ *  9. purchaseVatTreatment: the chosen value is sent on save.
+ * 10. The control offers all three treatments and explains which one fixes the double-VAT note.
  */
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -25,6 +30,7 @@ const STUB_SETTINGS = {
   id: '1', uid: 'S1', companyId: '10', companyUid: 'CO1',
   poApprovalEnabled: true, poApprovalThresholdAmount: '5000', currency: 'TZS',
   receiptTolerancePct: null,
+  purchaseVatTreatment: 'EXCLUSIVE' as const,
 };
 
 function makeBed(updateSpy = vi.fn(() => of(STUB_SETTINGS))) {
@@ -159,5 +165,78 @@ describe('PurchaseSettingsComponent — number-input coercion', () => {
     const req = (updateSpy.mock.calls as any[][])[0][0];
     expect(req.receiptTolerancePct).toBe(7.5);
     expect(typeof req.receiptTolerancePct).toBe('number');
+  });
+
+  // ── 7-10. purchaseVatTreatment (V105, ADR-0063) ──────────────────────────
+
+  it('loads the stored VAT treatment from the DTO', async () => {
+    makeBed();
+    const inclusive = { ...STUB_SETTINGS, purchaseVatTreatment: 'INCLUSIVE' as const };
+    TestBed.overrideProvider(PurchaseSettingsService, {
+      useValue: {
+        getByCompany: vi.fn(() => of(inclusive)),
+        update: vi.fn(() => of(inclusive)),
+      },
+    });
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.fPurchaseVatTreatment()).toBe('INCLUSIVE');
+  });
+
+  /**
+   * The upgrade case. A company whose row predates V105 gets EXCLUSIVE from the column default, and
+   * a response that somehow omits the field must land on the same answer — anything else would
+   * silently change what an existing company's printed notes say.
+   */
+  it('falls back to EXCLUSIVE when the stored value is missing', async () => {
+    makeBed();
+    const legacy = { ...STUB_SETTINGS } as Record<string, unknown>;
+    delete legacy['purchaseVatTreatment'];
+    TestBed.overrideProvider(PurchaseSettingsService, {
+      useValue: {
+        getByCompany: vi.fn(() => of(legacy)),
+        update: vi.fn(() => of(legacy)),
+      },
+    });
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.fPurchaseVatTreatment()).toBe('EXCLUSIVE');
+  });
+
+  it('save() sends the chosen VAT treatment', async () => {
+    const { updateSpy } = makeBed();
+    const comp = TestBed.createComponent(PurchaseSettingsComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fPoApprovalEnabled.set(true);
+    comp.fThresholdAmount.set(String(3000));
+    comp.fPurchaseVatTreatment.set('INCLUSIVE');
+
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    expect(updateSpy).toHaveBeenCalledOnce();
+    const req = (updateSpy.mock.calls as any[][])[0][0];
+    expect(req.purchaseVatTreatment).toBe('INCLUSIVE');
+  });
+
+  /** All three must be reachable, and the hint must name the one that fixes the client's problem. */
+  it('offers all three treatments and explains the inclusive one', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(PurchaseSettingsComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const select: HTMLSelectElement =
+      fixture.nativeElement.querySelector('#purchaseVatTreatment');
+    expect(select).toBeTruthy();
+    expect(Array.from(select.options).map((o) => o.value))
+      .toEqual(['EXCLUSIVE', 'INCLUSIVE', 'NONE']);
+
+    const hint: HTMLElement = fixture.nativeElement.querySelector('#purchaseVatTreatmentHint');
+    expect(select.getAttribute('aria-describedby')).toBe('purchaseVatTreatmentHint');
+    expect(hint.textContent).toContain('adds VAT a second time');
   });
 });

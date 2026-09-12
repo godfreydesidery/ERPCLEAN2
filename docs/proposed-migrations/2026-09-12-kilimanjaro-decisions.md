@@ -4,7 +4,12 @@ Triage of the six issues on the client's sheet. Four were fixed without schema a
 same PR as this note. **One needs a migration and your approval** ([V105 draft](V105__purchase_vat_treatment.sql)).
 Two things are judgement calls that are yours, not mine.
 
-## 1. Approve or reject: `V105__purchase_vat_treatment.sql`
+> **Resolved 2026-09-12: V105 was APPROVED by the owner and is built.** It now lives in
+> `backend/src/main/resources/db/migration/`, with [ADR-0063](../decisions/0063-purchase-vat-treatment-on-the-printed-grn.md).
+> Section 1 below is kept as the record of what was decided and why. **Sections 2 and 3 are still
+> open.**
+
+## 1. ~~Approve or reject~~ APPROVED: `V105__purchase_vat_treatment.sql`
 
 **The defect.** The printed Goods Received Note computes `total = net + VAT`, unconditionally,
 treating every entered cost as VAT-exclusive. The client enters costs off supplier invoices that
@@ -15,7 +20,7 @@ already include VAT, so the note adds 18% twice. There is no setting to say othe
 supplier bill), and stock is valued at the stored line cost either way. Nothing in the ledger is
 wrong today. What is wrong is a piece of paper the client reconciles against.
 
-**The DDL.** One column on `purchase_settings` — one row per company, so single-digit rows.
+**The DDL as shipped.** One column on `purchase_settings` — one row per company, so single-digit rows.
 `NOT NULL DEFAULT 'EXCLUSIVE'` is a metadata-only change on PostgreSQL 11+: no table rewrite,
 no backfill, and every existing company keeps today's behaviour until somebody changes it.
 

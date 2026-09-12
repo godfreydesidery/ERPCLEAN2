@@ -114,6 +114,30 @@
                         Leave blank for strict receiving (no over-receipt).
                       </span>
                     </div>
+
+                    <!-- V105 / ADR-0063. Worded for a shopkeeper, not an accountant: the question
+                         is what they TYPE, because that is the thing they know. -->
+                    <div class="erp-field">
+                      <label class="form-label small text-muted mb-1" for="purchaseVatTreatment">
+                        When receiving goods, the cost I enter is…
+                      </label>
+                      <select id="purchaseVatTreatment" name="purchaseVatTreatment"
+                              class="form-select"
+                              [ngModel]="fPurchaseVatTreatment()"
+                              (ngModelChange)="fPurchaseVatTreatment.set($event)"
+                              [disabled]="saving() || !canEdit()"
+                              aria-describedby="purchaseVatTreatmentHint">
+                        <option value="EXCLUSIVE">before VAT &mdash; add VAT on the printed note</option>
+                        <option value="INCLUSIVE">VAT included &mdash; show the VAT inside it</option>
+                        <option value="NONE">not a VAT matter &mdash; show no VAT at all</option>
+                      </select>
+                      <span class="hint" id="purchaseVatTreatmentHint">
+                        This changes the printed Goods Received Note only &mdash; never your accounts.
+                        Choose <strong>VAT included</strong> if you copy costs straight from a
+                        supplier invoice that already has VAT in it; otherwise the note adds VAT a
+                        second time.
+                      </span>
+                    </div>
                   </div>
 
                   @if (saveError(); as msg) {

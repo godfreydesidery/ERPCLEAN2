@@ -179,6 +179,34 @@ class GoodsReceiptNoteLayoutTest {
     // Fixture — the client's own sample note
     // -------------------------------------------------------------------------
 
+    /**
+     * V105 NONE (ADR-0063): a company that is not VAT registered prints no VAT band, and must not
+     * get a "Vat Amount 0.00" line in its place — that is the row the setting exists to remove.
+     * The Net and Total rows stay, and Total still equals what was received.
+     */
+    @Test
+    void omitsTheVatFootRowEntirelyWhenThereAreNoBands() throws IOException {
+        GoodsReceiptPrintDto gr = new GoodsReceiptPrintDto(
+                "01J000000000000000000000GR", 1L, "GRN00002", "RECEIVED",
+                Instant.parse("2026-09-12T09:00:00Z"), "PO-0002",
+                "NO VAT SUPPLIER", null, List.of(), "MWONDOKO", "TZS", null, "RICHARD",
+                List.of(new GoodsReceiptPrintLineDto(
+                        1, "00000002", "PLAIN ITEM", new BigDecimal("2"), "PCS",
+                        new BigDecimal("4000.0000"), null, null, null,
+                        new BigDecimal("8000.0000"), "EXEMPT")),
+                List.of(),                                   // no bands at all
+                new BigDecimal("8000.00"), BigDecimal.ZERO,
+                BigDecimal.ZERO, new BigDecimal("8000.00"));
+
+        String text = extract(renderer.render(
+                builder.buildGoodsReceipt(gr, branding(), "Goods Received Note (Vendor)", "skarume")));
+
+        assertThat(text).doesNotContain("Vat Amount");
+        assertThat(text).contains("Net Amount");
+        assertThat(text).contains("Total Amount");
+        assertThat(text).contains("8,000.00");
+    }
+
     private String renderSample() throws IOException {
         return extract(renderer.render(
                 builder.buildGoodsReceipt(sample(), branding(),

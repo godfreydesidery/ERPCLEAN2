@@ -1,5 +1,5 @@
 -- ============================================================================
--- DRAFT — NOT ACTIVE. Awaiting owner approval (migration-approval rule).
+-- Approved by the owner 2026-09-12. See ADR-0063.
 --
 -- Kilimanjaro, 2026-09-12, issue #3:
 --   "Receiving goods inajiongeza VAT tena wakati wa printing causing confusion."
