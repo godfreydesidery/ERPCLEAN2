@@ -14,6 +14,14 @@ import java.math.BigDecimal;
  * @param productUid    so the screen can open the item itself from a result row
  * @param productCode   the code the shop actually calls it by
  * @param productName   the description
+ * @param department    the product's category, which is what this client calls a department. Free
+ *                      text on the product master with no category master behind it, so it is null
+ *                      for every product nobody has classified — the screen leaves the cell empty
+ *                      rather than inventing a default
+ * @param supplierName  the product's PREFERRED supplier, not "who last delivered it". One product
+ *                      may be bought from several; this is the one set on the product master, and
+ *                      null when none is. Deriving it from the last goods receipt instead would be
+ *                      a different, changing answer every delivery
  * @param unitName      the base unit the quantity is expressed in — "12" means nothing on its own
  * @param quantityOnHand on-hand in the base unit, summed over the branch(es) in scope; zero is a
  *                      real answer here (the item exists and none is left)
@@ -28,6 +36,8 @@ public record ItemInquiryRowDto(
         String     productUid,
         String     productCode,
         String     productName,
+        String     department,
+        String     supplierName,
         String     unitName,
         BigDecimal quantityOnHand,
         boolean    stockable,

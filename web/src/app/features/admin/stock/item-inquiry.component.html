@@ -107,12 +107,15 @@
             <div class="erp-table-wrap">
               <table class="erp-table">
                 <caption class="visually-hidden">
-                  Items matching the search, with cost, selling price and quantity on hand
+                  Items matching the search, with department, supplier, cost, selling price and
+                  quantity on hand
                 </caption>
                 <thead>
                   <tr>
                     <th scope="col">Code</th>
                     <th scope="col">Description</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Supplier</th>
                     <th scope="col">Unit</th>
                     <th scope="col" class="num">Available</th>
                     <th scope="col" class="num">
@@ -131,6 +134,8 @@
                     <tr>
                       <td class="mono">{{ row.productCode }}</td>
                       <td>{{ row.productName }}</td>
+                      <td class="small">{{ row.department ?? '—' }}</td>
+                      <td class="small">{{ row.supplierName ?? '—' }}</td>
                       <td>{{ row.unitName ?? '—' }}</td>
                       <td class="num">
                         @if (row.stockable) {

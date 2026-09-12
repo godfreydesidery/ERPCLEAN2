@@ -33,11 +33,13 @@ const MOCK_RESULT: ItemInquiryDto = {
   rows: [
     {
       productUid: 'PRD-1', productCode: 'KON500', productName: 'Konyagi 500ml',
+      department: 'Spirits', supplierName: 'Tanzania Distilleries',
       unitName: 'Bottle', quantityOnHand: 48, stockable: true,
       buyingPrice: 7200, sellingPrice: 9500,
     },
     {
       productUid: 'PRD-2', productCode: 'NEW01', productName: 'New arrival',
+      department: null, supplierName: null,
       unitName: 'Bottle', quantityOnHand: 6, stockable: true,
       buyingPrice: null, sellingPrice: null,
     },

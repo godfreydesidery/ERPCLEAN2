@@ -12,6 +12,13 @@ export interface ItemInquiryRowDto {
   productUid: string;
   productCode: string | null;
   productName: string | null;
+  /**
+   * The product's category — what this client calls a department. Free text on the product master
+   * with no category master behind it, so it is null for anything nobody has classified.
+   */
+  department: string | null;
+  /** The PREFERRED supplier from the product master, not whoever last delivered it. */
+  supplierName: string | null;
   /** The base unit the quantity is expressed in — "12" means nothing on its own. */
   unitName: string | null;
   quantityOnHand: number | string | null;
