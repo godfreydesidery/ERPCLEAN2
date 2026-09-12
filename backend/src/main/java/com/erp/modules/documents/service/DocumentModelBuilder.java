@@ -217,7 +217,14 @@ public class DocumentModelBuilder {
         // copied from the print DTO, which resolved it in the purchases module (BR-DOC-02/09).
         List<TotalRow> totals = new ArrayList<>();
         totals.add(new TotalRow("Net Amount", gr.netAmount(), false));
-        totals.add(new TotalRow("Vat Amount", gr.vatAmount(), false));
+        // No bands means the company prints no VAT on receiving at all (V105 NONE, ADR-0063), and a
+        // "Vat Amount 0.00" line would undo exactly what that setting was chosen for: a business
+        // that is not VAT registered has NO VAT here, not zero VAT, and a row of zeros invites the
+        // reader to wonder what went wrong. Read off the bands rather than a new DTO field, so this
+        // stays a presentation choice and the documents module still derives no amount (BR-DOC-02).
+        if (!gr.vatBands().isEmpty()) {
+            totals.add(new TotalRow("Vat Amount", gr.vatAmount(), false));
+        }
         totals.add(new TotalRow("Rounding Amount", gr.roundingAmount(), false));
         totals.add(new TotalRow("Total Amount", gr.totalAmount(), true));
 

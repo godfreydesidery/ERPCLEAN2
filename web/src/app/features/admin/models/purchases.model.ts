@@ -345,7 +345,16 @@ export interface PurchaseSettingsDto {
    * JSON number (not stringified; only Long ids are). Null = strict receiving (no over-receipt).
    */
   receiptTolerancePct: number | null;
+  /**
+   * How costs entered on goods receipts are read by the PRINTED goods-received note (V105).
+   * Never affects posting — a receipt posts no VAT, and stock is valued at the entered cost either
+   * way. Never null: EXCLUSIVE is the default and the behaviour every receipt had before V105.
+   */
+  purchaseVatTreatment: PurchaseVatTreatment;
 }
+
+/** See the backend enum of the same name (ADR-0063). */
+export type PurchaseVatTreatment = 'EXCLUSIVE' | 'INCLUSIVE' | 'NONE';
 
 export interface UpdatePurchaseSettingsRequest {
   companyUid: string;
@@ -354,4 +363,6 @@ export interface UpdatePurchaseSettingsRequest {
   currency: string;
   /** Null clears the tolerance (strict receiving) — not "leave unchanged". */
   receiptTolerancePct: number | null;
+  /** Omitted or null leaves it unchanged; an unknown value is refused by the backend. */
+  purchaseVatTreatment: PurchaseVatTreatment;
 }

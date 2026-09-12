@@ -3,6 +3,7 @@ package com.erp.modules.purchases.service;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintLineDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
+import com.erp.modules.purchases.domain.enums.PurchaseVatTreatment;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -87,20 +88,47 @@ public class GoodsReceiptPrintQuery {
         Long priceListId = resolveDefaultPriceListId(h.companyId());
         List<GoodsReceiptPrintLineDto> lines = loadLines(h, priceListId);
 
-        List<GoodsReceiptVatBandDto> bands = vatBands(loadLineTax(h.id()));
+        PurchaseVatTreatment treatment = resolveVatTreatment(h.companyId());
+        List<GoodsReceiptVatBandDto> bands = vatBands(loadLineTax(h.id()), treatment);
 
-        BigDecimal net = sum(lines.stream().map(GoodsReceiptPrintLineDto::amount).toList())
+        BigDecimal lineTotal = sum(lines.stream().map(GoodsReceiptPrintLineDto::amount).toList())
                 .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
         BigDecimal vat = sum(bands.stream().map(GoodsReceiptVatBandDto::vatAmount).toList())
                 .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
         BigDecimal rounding = BigDecimal.ZERO.setScale(MONEY_SCALE);
+
+        // The entered line amounts are the same figure in all three cases. What changes is what
+        // that figure MEANS, and therefore what the foot may add to it (V105, ADR-0063):
+        //   EXCLUSIVE  the amounts are net      -> net = amounts,       total = net + vat
+        //   INCLUSIVE  the amounts already have VAT in them
+        //                                       -> net = amounts - vat, total = amounts
+        //   NONE       no VAT is shown at all   -> net = amounts,       total = net
+        // The old code only ever did the first, which is how a VAT-inclusive cost got 18% added
+        // to a figure that already contained it.
+        BigDecimal net = treatment == PurchaseVatTreatment.INCLUSIVE
+                ? lineTotal.subtract(vat)
+                : lineTotal;
+        BigDecimal total = net.add(vat).add(rounding);
 
         return new GoodsReceiptPrintDto(
                 h.uid(), h.companyId(), h.receiptNumber(), h.status(), h.receivedAt(),
                 h.orderNumber(), h.supplierName(), h.supplierTin(), supplierAddress(h),
                 h.branchName(), h.currency(), h.notes(), h.preparedByName(),
                 lines, bands,
-                net, vat, rounding, net.add(vat).add(rounding));
+                net, vat, rounding, total);
+    }
+
+    /**
+     * Reads the company's setting. Falls back to EXCLUSIVE for a company with no settings row,
+     * which is today's behaviour and the column default — a missing row must not silently change
+     * what an existing note prints.
+     */
+    private PurchaseVatTreatment resolveVatTreatment(Long companyId) {
+        List<String> raw = jdbc.queryForList(
+                "SELECT purchase_vat_treatment FROM purchase_settings WHERE company_id = ?",
+                String.class, companyId);
+        return raw.isEmpty() ? PurchaseVatTreatment.EXCLUSIVE
+                             : PurchaseVatTreatment.orDefault(raw.get(0));
     }
 
     // -------------------------------------------------------------------------
@@ -312,10 +340,21 @@ public class GoodsReceiptPrintQuery {
      * gets — per-line rounding then adding would drift by a shilling or two and cost somebody an
      * afternoon.
      *
+     * <p><b>V105 (ADR-0063).</b> The {@code treatment} decides what the accumulated line amounts
+     * mean. Under EXCLUSIVE they are the goods value and VAT is {@code goods × rate}. Under
+     * INCLUSIVE they are gross, so the band's goods value is the amount with VAT taken back out
+     * ({@code gross ÷ (1 + rate)}) and VAT is the remainder — computed as a subtraction, not as a
+     * second rounded multiplication, so {@code goods + vat} always equals the gross that was
+     * entered and the foot reconciles exactly against the supplier's invoice. Under NONE there are
+     * no bands at all.
+     *
      * <p>Package-private and static so the grouping and the rounding are testable without a database.
      */
-    static List<GoodsReceiptVatBandDto> vatBands(List<LineTax> lines) {
-        Map<String, BigDecimal[]> acc = new LinkedHashMap<>();  // status -> [rate, goodsValue]
+    static List<GoodsReceiptVatBandDto> vatBands(List<LineTax> lines, PurchaseVatTreatment treatment) {
+        if (treatment == PurchaseVatTreatment.NONE) {
+            return List.of();
+        }
+        Map<String, BigDecimal[]> acc = new LinkedHashMap<>();  // status -> [rate, amount]
         for (LineTax l : lines) {
             String status  = l.vatStatus() != null ? l.vatStatus() : "";
             BigDecimal rate = l.rate() != null ? l.rate() : BigDecimal.ZERO;
@@ -325,11 +364,20 @@ public class GoodsReceiptPrintQuery {
         }
         List<GoodsReceiptVatBandDto> out = new ArrayList<>();
         for (Map.Entry<String, BigDecimal[]> e : acc.entrySet()) {
-            BigDecimal rate  = e.getValue()[0];
-            BigDecimal goods = e.getValue()[1].setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            out.add(new GoodsReceiptVatBandDto(
-                    e.getKey(), rate, goods,
-                    goods.multiply(rate).setScale(MONEY_SCALE, RoundingMode.HALF_UP)));
+            BigDecimal rate   = e.getValue()[0];
+            BigDecimal amount = e.getValue()[1];
+            BigDecimal goods;
+            BigDecimal vat;
+            if (treatment == PurchaseVatTreatment.INCLUSIVE && rate.signum() != 0) {
+                BigDecimal gross = amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                goods = gross.divide(BigDecimal.ONE.add(rate), MONEY_SCALE, RoundingMode.HALF_UP);
+                vat   = gross.subtract(goods);   // by subtraction: goods + vat == the gross entered
+            } else {
+                // EXCLUSIVE, or a zero-rated/exempt band where there is nothing to take back out.
+                goods = amount.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                vat   = goods.multiply(rate).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            }
+            out.add(new GoodsReceiptVatBandDto(e.getKey(), rate, goods, vat));
         }
         return List.copyOf(out);
     }

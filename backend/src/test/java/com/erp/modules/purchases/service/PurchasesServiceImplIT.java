@@ -472,7 +472,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     private void setReceiptTolerance(BigDecimal pct) {
         purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
                 companyA.getUid(), false, null, "TZS",
-                null, null, null, null, null, null, null, pct));
+                null, null, null, null, null, null, null, pct, null));
     }
 
     // Regression: a partial update (the settings form only sends approval + receipt-tolerance) must
@@ -482,12 +482,12 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         // First, set a match-tolerance (a field no UI currently surfaces).
         purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
                 companyA.getUid(), false, null, "TZS",
-                null, null, new BigDecimal("2.5"), null, null, null, null, null));
+                null, null, new BigDecimal("2.5"), null, null, null, null, null, null));
 
         // Then a settings-form-shaped partial update: approval + receiptTolerance only, matchTolerance omitted.
         PurchaseSettingsDto after = purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
                 companyA.getUid(), false, null, "TZS",
-                null, null, null, null, null, null, null, new BigDecimal("5")));
+                null, null, null, null, null, null, null, new BigDecimal("5"), null));
 
         assertThat(after.matchTolerancePct())
                 .as("a field the form doesn't send must be preserved, not wiped to null")
@@ -502,7 +502,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     void setReceiptTolerance_negative_friendlyMessage() {
         assertThatThrownBy(() -> purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
                 companyA.getUid(), false, null, "TZS",
-                null, null, null, null, null, null, null, new BigDecimal("-5"))))
+                null, null, null, null, null, null, null, new BigDecimal("-5"), null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Over-receipt tolerance cannot be negative.");
     }
@@ -1124,7 +1124,7 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     private void enablePoApprovalForEverySpend() {
         purchaseSettingsService.update(new UpdatePurchaseSettingsRequest(
                 companyA.getUid(), true, BigDecimal.ZERO, "TZS",
-                null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null));
     }
 
     @Test

@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
 import com.erp.modules.purchases.service.GoodsReceiptPrintQuery.LineTax;
+import static com.erp.modules.purchases.domain.enums.PurchaseVatTreatment.EXCLUSIVE;
+import static com.erp.modules.purchases.domain.enums.PurchaseVatTreatment.INCLUSIVE;
+import static com.erp.modules.purchases.domain.enums.PurchaseVatTreatment.NONE;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -63,7 +66,7 @@ class GoodsReceiptPrintQueryTest {
         List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
                 new LineTax("STANDARD", bd("0.18"), bd("100000")),
                 new LineTax("EXEMPT",   bd("0"),    bd("50000")),
-                new LineTax("STANDARD", bd("0.18"), bd("200000"))));
+                new LineTax("STANDARD", bd("0.18"), bd("200000"))), EXCLUSIVE);
 
         assertThat(bands).hasSize(2);
         assertThat(bands.get(0).vatStatus()).isEqualTo("STANDARD");
@@ -85,7 +88,7 @@ class GoodsReceiptPrintQueryTest {
         List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
                 new LineTax("STANDARD", bd("0.18"), bd("0.05")),
                 new LineTax("STANDARD", bd("0.18"), bd("0.05")),
-                new LineTax("STANDARD", bd("0.18"), bd("0.05"))));
+                new LineTax("STANDARD", bd("0.18"), bd("0.05"))), EXCLUSIVE);
 
         // Band total 0.15 × 0.18 = 0.027 → 0.03. Per-line would be 0.01 × 3 = 0.03 only by luck;
         // what matters is that goodsValue × rate reproduces the printed VAT exactly.
@@ -98,11 +101,91 @@ class GoodsReceiptPrintQueryTest {
     @Test
     void anUnconfiguredRateProducesAZeroBand() {
         List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
-                new LineTax("ZERO_RATED", BigDecimal.ZERO, bd("885000"))));
+                new LineTax("ZERO_RATED", BigDecimal.ZERO, bd("885000"))), EXCLUSIVE);
 
         assertThat(bands).hasSize(1);
         assertThat(bands.get(0).vatAmount()).isEqualByComparingTo("0.00");
         assertThat(bands.get(0).goodsValue()).isEqualByComparingTo("885000.00");
+    }
+
+    // -------------------------------------------------------------------------
+    // VAT treatment (V105, ADR-0063) — Kilimanjaro 2026-09-12 #3
+    // -------------------------------------------------------------------------
+
+    /**
+     * The defect this exists to fix. The client types the cost off a supplier invoice that already
+     * contains VAT; the note used to add 18% on top of it regardless, so 118,000 of goods printed
+     * as a total of 139,240.
+     *
+     * <p>Under INCLUSIVE the same entered figure is read as gross: VAT comes back OUT of it, and
+     * goods + VAT is exactly the amount that was entered.
+     */
+    @Test
+    void inclusiveExtractsVatFromTheEnteredAmountInsteadOfAddingItOnTop() {
+        List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
+                new LineTax("STANDARD", bd("0.18"), bd("118000"))), INCLUSIVE);
+
+        assertThat(bands).hasSize(1);
+        assertThat(bands.get(0).goodsValue()).isEqualByComparingTo("100000.00");
+        assertThat(bands.get(0).vatAmount()).isEqualByComparingTo("18000.00");
+        // The whole point: the two still add up to what the storekeeper typed.
+        assertThat(bands.get(0).goodsValue().add(bands.get(0).vatAmount()))
+                .isEqualByComparingTo("118000.00");
+    }
+
+    /**
+     * VAT is taken out by SUBTRACTION, not by a second rounded multiplication. On a gross that does
+     * not divide cleanly, {@code goods × rate} would round independently of {@code gross − goods}
+     * and the foot would miss the invoice by a cent — the exact class of discrepancy that sends a
+     * shopkeeper back to the supplier.
+     */
+    @Test
+    void inclusiveAlwaysReconcilesToTheGrossThatWasEntered() {
+        for (String gross : List.of("100000", "33333.33", "0.05", "77777.77", "1")) {
+            List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
+                    new LineTax("STANDARD", bd("0.18"), bd(gross))), INCLUSIVE);
+
+            assertThat(bands.get(0).goodsValue().add(bands.get(0).vatAmount()))
+                    .as("goods + vat must equal the gross entered, for %s", gross)
+                    .isEqualByComparingTo(bd(gross).setScale(2, java.math.RoundingMode.HALF_UP));
+        }
+    }
+
+    /** A zero-rated or exempt band has nothing to take back out; inclusive and exclusive agree. */
+    @Test
+    void inclusiveLeavesAZeroRatedBandAlone() {
+        List<GoodsReceiptVatBandDto> inclusive = GoodsReceiptPrintQuery.vatBands(List.of(
+                new LineTax("EXEMPT", BigDecimal.ZERO, bd("50000"))), INCLUSIVE);
+        List<GoodsReceiptVatBandDto> exclusive = GoodsReceiptPrintQuery.vatBands(List.of(
+                new LineTax("EXEMPT", BigDecimal.ZERO, bd("50000"))), EXCLUSIVE);
+
+        assertThat(inclusive.get(0).goodsValue()).isEqualByComparingTo("50000.00");
+        assertThat(inclusive.get(0).vatAmount()).isEqualByComparingTo("0.00");
+        assertThat(inclusive.get(0).goodsValue()).isEqualByComparingTo(exclusive.get(0).goodsValue());
+    }
+
+    /**
+     * NONE prints no band at all rather than a band of zeros. A business that is not VAT registered
+     * does not have zero VAT to declare — it has none, and a row of 0.00 invites the reader to
+     * wonder what went wrong.
+     */
+    @Test
+    void noneShowsNoBandAtAllRatherThanABandOfZeros() {
+        List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
+                new LineTax("STANDARD", bd("0.18"), bd("118000")),
+                new LineTax("EXEMPT",   BigDecimal.ZERO, bd("50000"))), NONE);
+
+        assertThat(bands).isEmpty();
+    }
+
+    /** Nothing changes for anyone who has not been asked the question. */
+    @Test
+    void exclusiveIsUnchangedFromTheBehaviourEveryReceiptHasHad() {
+        List<GoodsReceiptVatBandDto> bands = GoodsReceiptPrintQuery.vatBands(List.of(
+                new LineTax("STANDARD", bd("0.18"), bd("100000"))), EXCLUSIVE);
+
+        assertThat(bands.get(0).goodsValue()).isEqualByComparingTo("100000.00");
+        assertThat(bands.get(0).vatAmount()).isEqualByComparingTo("18000.00");
     }
 
     private static BigDecimal bd(String v) {
