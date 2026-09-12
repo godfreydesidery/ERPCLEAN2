@@ -6,6 +6,11 @@
  *  2. Renders the "From: ... → To: ..." route line with branch + location names.
  *  3. Renders the Source / Destination fields with branch name, code, and location.
  *  4. Null-safe: falls back to "—" when a branch name is missing (never a raw id).
+ *
+ * Line unit + value (Kilimanjaro 2026-09-12 #5):
+ *  5. A costed line shows its value, and the foot totals qty and value.
+ *  6. An uncosted line reads "—", never 0.00, and is excluded from the total with a note saying so.
+ *  7. Every line uncosted leaves the total itself unknown rather than showing zero.
  */
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
@@ -153,5 +158,73 @@ describe('StockTransferDetailComponent — route display', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('—');
     expect(text).not.toContain('sourceBranchId');
+  });
+});
+
+
+// ── Line unit + value (Kilimanjaro 2026-09-12 #5) ───────────────────────────
+
+/**
+ * The Value column used to coerce a null through `+line.valueAmount`, so goods nobody had costed
+ * were reported as worth 0.00 on a document a driver carries. Unknown and zero must not look alike.
+ */
+describe('StockTransferDetailComponent — line value', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function line(overrides: Record<string, unknown> = {}) {
+    return {
+      id: '1', uid: 'L1', lineNo: 1,
+      productId: '5', productCode: 'KON500', productName: 'Konyagi 500ml',
+      unitName: 'Bottle',
+      qtyTransferred: '4', qtyTransferredBase: '4',
+      valueAmount: 6000, currency: 'TZS',
+      ...overrides,
+    } as never;
+  }
+
+  it('shows a costed line value and totals qty and value in the foot', async () => {
+    makeBed({ transfer: makeTransfer({ lines: [line(), line({ uid: 'L2', lineNo: 2, qtyTransferred: '2', valueAmount: 3000 })] }) });
+    const fixture = createFixture();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.totalQty()).toBe(6);
+    expect(comp.totalValue()).toBe(9000);
+    expect(comp.unvaluedLineCount()).toBe(0);
+
+    const foot = (fixture.nativeElement as HTMLElement).querySelector('tfoot');
+    expect(foot?.textContent).toContain('9,000.00');
+  });
+
+  it('reads an uncosted line as unknown, leaves it out of the total, and says so', async () => {
+    makeBed({ transfer: makeTransfer({ lines: [line(), line({ uid: 'L2', lineNo: 2, valueAmount: null })] }) });
+    const fixture = createFixture();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.totalValue()).toBe(6000);
+    expect(comp.unvaluedLineCount()).toBe(1);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('no cost on record');
+    // The give-away the fix exists for: a null must never have printed as a confident zero.
+    const bodyCells = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr:nth-child(2) td'),
+    ).map((td) => td.textContent?.trim() ?? '');
+    expect(bodyCells).not.toContain('0.00');
+  });
+
+  it('leaves the total unknown when no line is costed at all', async () => {
+    makeBed({ transfer: makeTransfer({ lines: [line({ valueAmount: null })] }) });
+    const fixture = createFixture();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.totalValue()).toBeNull();
   });
 });

@@ -155,6 +155,8 @@ public class ItemInquiryQuery {
                 SELECT p.uid                        AS product_uid,
                        p.code                       AS product_code,
                        p.name                       AS product_name,
+                       p.category                   AS department,
+                       sup.display_name             AS supplier_name,
                        p.stockable                  AS stockable,
                        u.name                       AS unit_name,
                        COALESCE(soh.qty, 0)         AS qty,
@@ -166,6 +168,8 @@ public class ItemInquiryQuery {
                 LEFT JOIN soh  ON soh.product_id  = p.id
                 LEFT JOIN sell ON sell.product_id = p.id
                 LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
+                LEFT JOIN suppliers sup ON sup.id = p.preferred_supplier_id
+                                       AND sup.company_id = p.company_id
                 WHERE p.company_id = ?
                   AND p.status = 'ACTIVE'
                   AND (lower(p.code) LIKE ?
@@ -192,6 +196,8 @@ public class ItemInquiryQuery {
                     rs.getString("product_uid"),
                     rs.getString("product_code"),
                     rs.getString("product_name"),
+                    rs.getString("department"),
+                    rs.getString("supplier_name"),
                     rs.getString("unit_name"),
                     qty != null ? qty : BigDecimal.ZERO,
                     rs.getBoolean("stockable"),

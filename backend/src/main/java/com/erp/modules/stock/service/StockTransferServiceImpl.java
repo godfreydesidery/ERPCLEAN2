@@ -124,12 +124,29 @@ public class StockTransferServiceImpl implements StockTransferService {
         for (CreateStockTransferRequest.LineRequest lineReq : request.lines()) {
             lineNo++;
             ProductDto product = productService.getByUid(lineReq.productUid());
+
+            // Kilimanjaro 2026-09-12 #5. Both of these were left null at create, and nothing has
+            // ever written them since (the columns are updatable=false). The consequence reached
+            // the storekeeper: the Unit column on the transfer and on its printed document was
+            // permanently blank, and the Value column rendered a confident 0.00 — telling whoever
+            // read it that the goods being moved were worth nothing.
+            //
+            // unitId stays null on purpose. It is not display state: it is carried into the
+            // dispatch payload and onto the stock movement, whose quantity is qtyTransferredBase.
+            // Naming a unit there would need the numeric id of the base unit, which ProductDto
+            // does not expose (ids are internal, uids cross), and would change what the movement
+            // records. The NAME is what the document has to show, and that is what is stored.
+            BigDecimal avgCost = resolveAvgCost(principal.companyId(), product.id());
+            BigDecimal lineValue = avgCost != null
+                    ? avgCost.multiply(lineReq.qty()).setScale(SCALE, RM)
+                    : null;   // never costed — null, not zero (the same rule as every other screen)
+
             StockTransferLine line = new StockTransferLine(
                     transfer.getId(), principal.companyId(), lineNo,
                     product.id(), product.code(), product.name(),
-                    null, null,
+                    null, product.baseUnitName(),
                     lineReq.qty(), lineReq.qty(), // base qty = transferred qty (assuming base unit)
-                    null, BASE_CURRENCY, principal.userId());
+                    lineValue, BASE_CURRENCY, principal.userId());
             transferLines.save(line);
         }
 

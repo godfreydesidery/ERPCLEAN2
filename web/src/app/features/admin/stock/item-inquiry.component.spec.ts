@@ -47,12 +47,14 @@ function result(overrides: Partial<ItemInquiryDto> = {}): ItemInquiryDto {
     rows: [
       {
         productUid: 'PRD-1', productCode: 'KON500', productName: 'Konyagi 500ml',
+        department: 'Spirits', supplierName: 'Tanzania Distilleries',
         unitName: 'Bottle', quantityOnHand: 48, stockable: true,
         buyingPrice: 7200, sellingPrice: 9500,
       },
       // Never costed, never priced — must NOT render as 0.00.
       {
         productUid: 'PRD-2', productCode: 'NEW01', productName: 'New arrival',
+        department: null, supplierName: null,
         unitName: 'Bottle', quantityOnHand: 6, stockable: true,
         buyingPrice: null, sellingPrice: null,
       },
@@ -137,11 +139,36 @@ describe('ItemInquiryComponent', () => {
     const cells = (i: number) =>
       Array.from(rows[i].querySelectorAll('td')).map((td) => td.textContent?.trim() ?? '');
 
-    expect(cells(0)[4]).toBe('7,200.00');
-    expect(cells(0)[5]).toBe('9,500.00');
+    // Code, Description, Department, Supplier, Unit, Available, Cost, Selling, Actions.
+    expect(cells(0)[6]).toBe('7,200.00');
+    expect(cells(0)[7]).toBe('9,500.00');
     // The never-costed, never-priced row: unknown, not free.
-    expect(cells(1)[4]).toBe('—');
-    expect(cells(1)[5]).toBe('—');
+    expect(cells(1)[6]).toBe('—');
+    expect(cells(1)[7]).toBe('—');
+  });
+
+  /**
+   * Kilimanjaro 2026-09-12 #1 asked for supplier and department alongside the rest. Both are
+   * optional on the product master, and an unclassified item must read as unanswered rather than
+   * borrow the row above it.
+   */
+  it('shows department and supplier, and a dash when the product master has neither', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onSearchChange('kon');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr');
+    const cells = (i: number) =>
+      Array.from(rows[i].querySelectorAll('td')).map((td) => td.textContent?.trim() ?? '');
+
+    expect(cells(0)[2]).toBe('Spirits');
+    expect(cells(0)[3]).toBe('Tanzania Distilleries');
+    expect(cells(1)[2]).toBe('—');
+    expect(cells(1)[3]).toBe('—');
   });
 
   /**
@@ -181,6 +208,7 @@ describe('ItemInquiryComponent', () => {
       itemInquirySpy: vi.fn(() => of(result({
         rows: [{
           productUid: 'PRD-3', productCode: 'SVC1', productName: 'Delivery service',
+          department: null, supplierName: null,
           unitName: 'Each', quantityOnHand: 0, stockable: false,
           buyingPrice: null, sellingPrice: 5000,
         }],
