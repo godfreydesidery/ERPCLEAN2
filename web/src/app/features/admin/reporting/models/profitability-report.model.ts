@@ -37,6 +37,36 @@ export interface ProfitabilityTotalsDto {
   rowsWithUnknownCost: number;
 }
 
+/**
+ * One department, to the column set of the client's own profitability report. Every figure is
+ * computed by the backend — never re-derive one here, or the screen and the printed report can
+ * disagree about the same month.
+ *
+ * A null cost/contribution/margin/markup means at least one product in the department sold stock
+ * that had never been costed, so the figure would understate by an unmeasurable amount. It is NOT
+ * zero, and must never render as 0.00.
+ */
+export interface ProfitabilityDepartmentRowDto {
+  department: string;
+  /** VAT-inclusive turnover before discount. */
+  grossSales: number | string | null;
+  discount: number | string | null;
+  /** grossSales − discount, still VAT-inclusive. */
+  netSales: number | string | null;
+  /** The VAT-exclusive sale — the revenue contribution is measured against. */
+  netAmount: number | string | null;
+  vatAmount: number | string | null;
+  /** netAmount split by how it is taxed; the three add back to netAmount. */
+  vatPortion: number | string | null;
+  exemptPortion: number | string | null;
+  zeroRatedPortion: number | string | null;
+  costOfSales: number | string | null;
+  netContribution: number | string | null;
+  marginPercent: number | string | null;
+  markupPercent: number | string | null;
+  productsWithUnknownCost: number;
+}
+
 export interface ProfitabilityReportDto {
   company: ReportCompanyHeaderDto;
   fromDate: string;
@@ -45,6 +75,8 @@ export interface ProfitabilityReportDto {
   branchName: string | null;
   currency: string;
   rows: ProfitabilityRowDto[];
+  /** The same sales rolled up by department. Additive — `rows` is unchanged. */
+  departments: ProfitabilityDepartmentRowDto[];
   totals: ProfitabilityTotalsDto;
   generatedAt: string;
 }

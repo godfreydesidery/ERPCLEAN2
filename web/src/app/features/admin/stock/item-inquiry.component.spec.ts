@@ -24,6 +24,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ItemInquiryDto } from './item-inquiry.model';
 import { ItemInquiryComponent } from './item-inquiry.component';
+import { ProductService } from '../products/product.service';
 import { StockService } from './stock.service';
 
 const STUB_ORG = { uid: 'ORG1', id: '1', name: 'Acme' };
@@ -65,6 +66,7 @@ function result(overrides: Partial<ItemInquiryDto> = {}): ItemInquiryDto {
 
 function makeBed(overrides: {
   itemInquirySpy?: ReturnType<typeof vi.fn>;
+  getByUidSpy?: ReturnType<typeof vi.fn>;
   hasPermission?: (code: string) => boolean;
 } = {}) {
   const itemInquirySpy = overrides.itemInquirySpy ?? vi.fn(() => of(result()));
@@ -79,6 +81,14 @@ function makeBed(overrides: {
       { provide: OrganisationService, useValue: { current: vi.fn(() => of(STUB_ORG)) } },
       { provide: CompanyService, useValue: { list: vi.fn(() => of([STUB_COMPANY])) } },
       { provide: BranchService, useValue: { list: vi.fn(() => of([])) } },
+      {
+        provide: ProductService,
+        useValue: {
+          getByUid: overrides.getByUidSpy
+            ?? vi.fn(() => of({ uid: 'PRD-1', code: 'KON500', name: 'Konyagi 500ml' })),
+          list: vi.fn(() => of({ rows: [], meta: {} })),
+        },
+      },
       { provide: AuthService, useValue: { myBranches: vi.fn(() => of(MY_BRANCHES)) } },
       {
         provide: SessionStore,
@@ -95,6 +105,110 @@ function makeBed(overrides: {
 
   return { itemInquirySpy };
 }
+
+// ── Selecting one item and viewing it (Kilimanjaro 2026-09-13) ────────────────
+
+describe('ItemInquiryComponent — one selected item', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('looks the picked item up by its code and shows that item', async () => {
+    const { itemInquirySpy } = makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(itemInquirySpy).toHaveBeenCalledWith('KON500', null);
+    expect(comp.selectedItem()?.productCode).toBe('KON500');
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Konyagi 500ml');
+    expect(text).toContain('Spirits');                 // department
+    expect(text).toContain('Tanzania Distilleries');   // supplier
+  });
+
+  /**
+   * A code search can legitimately match more than one item, so the panel must keep the row that
+   * IS the picked product — matched on uid. Matching on the code string would show a neighbour.
+   */
+  it('keeps the row for the picked product, not merely the first match', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-2');
+    await vi.runAllTimersAsync();
+
+    expect(comp.selectedItem()?.productUid).toBe('PRD-2');
+    expect(comp.selectedItem()?.productName).toBe('New arrival');
+  });
+
+  /** The picker offered it, so it exists; not being stocked here is an answer, not an empty panel. */
+  it('says so when the picked item is not stocked in the chosen branch', async () => {
+    makeBed({ itemInquirySpy: vi.fn(() => of(result({ rows: [] }))) });
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.selectedItem()).toBeNull();
+    expect(comp.selectedMissing()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('is not stocked in');
+  });
+
+  /** Cost stays hidden from a caller who may not see it, in the panel as well as the table. */
+  it('withholds cost in the panel when the caller may not see it', async () => {
+    makeBed({
+      itemInquirySpy: vi.fn(() => of(result({ costVisible: false }))),
+      hasPermission: (code) => code !== 'INVENTORY.VALUATION.VIEW',
+    });
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.selectedCostVisible()).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Hidden');
+  });
+
+  /**
+   * The panel is a VIEW. It must not become the door back into the catalogue that this screen had
+   * removed — so it carries no link and nothing that navigates, only a way to close it.
+   */
+  it('offers no link out of the detail panel', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-1');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelectorAll('a, [routerLink], [href]')).toHaveLength(0);
+  });
+
+  it('clearing the selection puts the panel away', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onProductSelected('PRD-1');
+    await vi.runAllTimersAsync();
+    comp.clearSelectedItem();
+    fixture.detectChanges();
+
+    expect(comp.selectedItem()).toBeNull();
+    expect(comp.selectedProductUid()).toBe('');
+  });
+});
 
 describe('ItemInquiryComponent', () => {
   beforeEach(() => vi.useFakeTimers());

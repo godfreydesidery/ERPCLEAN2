@@ -35,6 +35,7 @@ public class TabularPdfRenderer {
         PdfWriter.getInstance(doc, baos);
         doc.open();
 
+        embedLogo(doc, model.logoDataUri());
         doc.add(new Paragraph(model.title(), FONT_TITLE));
         if (model.headerLines() != null) {
             for (String line : model.headerLines()) {
@@ -68,8 +69,45 @@ public class TabularPdfRenderer {
         }
 
         doc.add(table);
+
+        // Foot of the document: the print footprint, and any sign-off rules. Below the table, which
+        // is where a reader looks for "who produced this and when" — the header already carries what
+        // the document IS.
+        if (!model.footerLines().isEmpty()) {
+            doc.add(new Paragraph(" "));
+            for (String line : model.footerLines()) {
+                doc.add(new Paragraph(line != null ? line : "", FONT_HEADER));
+            }
+        }
+
         doc.close();
         return baos.toByteArray();
+    }
+
+    /**
+     * Draw the company logo above the title, mirroring the documents module's own header so a
+     * transfer and a goods-received note from the same company look like they came from it.
+     *
+     * <p>Best-effort by design: a missing, malformed or unsupported logo leaves a text-only
+     * document rather than failing the export. Nobody should be unable to print a transfer note
+     * because somebody uploaded a corrupt image.
+     */
+    private void embedLogo(Document doc, String dataUri) {
+        if (dataUri == null || dataUri.isBlank()) {
+            return;
+        }
+        int comma = dataUri.indexOf(',');
+        if (comma < 0) {
+            return;
+        }
+        try {
+            byte[] bytes = java.util.Base64.getDecoder().decode(dataUri.substring(comma + 1).trim());
+            com.lowagie.text.Image logo = com.lowagie.text.Image.getInstance(bytes);
+            logo.scaleToFit(57f, 57f);   // ~2 cm at 72 dpi, same as the document renderer
+            doc.add(logo);
+        } catch (Exception ignored) {
+            // Unsupported or corrupt bytes — text-only header.
+        }
     }
 
     // -------------------------------------------------------------------------

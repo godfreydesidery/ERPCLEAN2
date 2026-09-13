@@ -1,1 +1,17 @@
 @use '../admin.styles';
+
+/*
+ * The item picker drops an absolutely-positioned list past the bottom edge of the search card.
+ * Two separate things hide it, and both have to be answered:
+ *
+ *  1. `.erp-card` is `overflow: clip`, which slices the list off at the card boundary — handled by
+ *     `erp-card--overflow-visible` on the card in the template.
+ *  2. Once it is no longer clipped it still has to WIN against what follows it. The cards below
+ *     come later in the document, so raising this one puts the open list in front of them instead
+ *     of behind. Scoped to this screen rather than changed on the shared card, which every other
+ *     screen relies on.
+ */
+.erp-card--overflow-visible {
+  position: relative;
+  z-index: 30;
+}

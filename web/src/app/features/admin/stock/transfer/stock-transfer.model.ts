@@ -31,6 +31,12 @@ export interface StockTransferLineDto {
   qtyTransferred: string;
   qtyTransferredBase: string;
   /**
+   * Cost of ONE `unitName` — so for a line counted in cartons this is the price of a carton, not
+   * of a piece. Derived by the backend; never re-derive it here, or the screen and the printed
+   * document can disagree. Null is unknown (never costed, or a zero quantity), not free.
+   */
+  unitCost: string | number | null;
+  /**
    * Cost value of the line when the transfer was raised. A BigDecimal, so it arrives as a JSON
    * NUMBER despite the `string` typing on its siblings — coerce with +v, never call string methods.
    *
