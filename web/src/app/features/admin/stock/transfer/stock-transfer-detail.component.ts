@@ -53,6 +53,31 @@ export class StockTransferDetailComponent {
     return this.canCreate() && e?.status === 'DRAFT';
   });
 
+  // ── Line value totals (Kilimanjaro 2026-09-12 #5) ─────────────────────────
+
+  /**
+   * Σ line value, over the lines that HAVE one. Null when the transfer carries no valued line at
+   * all, so the foot reads "—" rather than a total of zero for goods nobody has costed.
+   */
+  readonly totalValue = computed(() => {
+    const lines = this.entity()?.lines ?? [];
+    const valued = lines.filter((l) => l.valueAmount !== null && l.valueAmount !== undefined);
+    if (valued.length === 0) return null;
+    return valued.reduce((sum, l) => sum + (+(l.valueAmount ?? 0) || 0), 0);
+  });
+
+  /**
+   * How many lines could not be valued. A total that silently omits them would understate what is
+   * moving, so the screen says so instead — the same rule as the sales-report margin.
+   */
+  readonly unvaluedLineCount = computed(() =>
+    (this.entity()?.lines ?? []).filter((l) => l.valueAmount === null || l.valueAmount === undefined)
+      .length);
+
+  /** Σ quantity, always answerable — every line has a qty. */
+  readonly totalQty = computed(() =>
+    (this.entity()?.lines ?? []).reduce((sum, l) => sum + (+l.qtyTransferred || 0), 0));
+
   // ── Export / print ───────────────────────────────────────────────────────────
   /** The endpoint requires REPORT.EXPORT on top of the view gate, so the buttons follow it. */
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));

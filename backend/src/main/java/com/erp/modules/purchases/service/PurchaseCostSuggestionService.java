@@ -31,4 +31,22 @@ public interface PurchaseCostSuggestionService {
     Optional<PurchaseCostSuggestionDto> suggestUnitCost(String purchaseOrderUid,
                                                         String productUid,
                                                         String unitUid);
+
+    /**
+     * The same suggestion for a direct goods receipt, which has no purchase order to read the
+     * company and supplier from — the storekeeper picks both on the screen (K-2026-08-30 #4:
+     * "have items pick cost price already existing in the system, not having to input the cost
+     * price all the time").
+     *
+     * <p>Identical fallback chain and identical guarantees: advisory only, nothing written, and
+     * {@link Optional#empty()} rather than a zero when no source has a price.
+     *
+     * @param companyUid  the company the delivery belongs to — scope is asserted against it
+     * @param supplierUid the supplier who delivered; the first two sources are supplier-specific,
+     *                    so a blank one falls straight through to the product master's cost
+     */
+    Optional<PurchaseCostSuggestionDto> suggestUnitCostForDirectReceipt(String companyUid,
+                                                                        String supplierUid,
+                                                                        String productUid,
+                                                                        String unitUid);
 }

@@ -9,6 +9,10 @@ import {
   ExportFormat,
   IncomeStatementDto,
 } from './models/reporting.model';
+import {
+  ProfitabilityReportDto,
+  ProfitabilityReportFilter,
+} from './models/profitability-report.model';
 import { SalesReportDto, SalesReportFilter } from './models/sales-report.model';
 
 /**
@@ -199,6 +203,32 @@ export class ReportingService {
     if (filter.agentUid) params = params.set('agentUid', filter.agentUid);
     if (filter.routeUid) params = params.set('routeUid', filter.routeUid);
     if (filter.supplierUid) params = params.set('supplierUid', filter.supplierUid);
+    if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
+    return params;
+  }
+
+  // ── Profitability Report (K-2026-08-30 #2) ──────────────────────────────────
+  // Gross sales, VAT, net, cost of sales and profit, per product with totals. Scoped server-side
+  // from the JWT/branch context like the Sales Report — no companyId param on either endpoint.
+
+  profitabilityReport(filter: ProfitabilityReportFilter): Observable<ProfitabilityReportDto> {
+    return this.http.get<ProfitabilityReportDto>(`${this.base}/profitability`, {
+      params: this.profitabilityParams(filter),
+    });
+  }
+
+  exportProfitabilityReport(
+    filter: ProfitabilityReportFilter,
+    format: ExportFormat,
+  ): Observable<Blob> {
+    const params = this.profitabilityParams(filter).set('format', format);
+    return this.http.get(`${this.base}/profitability/export`, { params, responseType: 'blob' });
+  }
+
+  private profitabilityParams(filter: ProfitabilityReportFilter): HttpParams {
+    let params = new HttpParams()
+      .set('fromDate', filter.fromDate)
+      .set('toDate', filter.toDate);
     if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
     return params;
   }

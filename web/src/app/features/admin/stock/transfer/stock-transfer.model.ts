@@ -22,11 +22,23 @@ export interface StockTransferLineDto {
   productId: string;
   productCode: string;
   productName: string;
-  unitName: string;
+  /**
+   * The product's base unit, snapshotted when the transfer was raised. Null on transfers created
+   * before the unit was captured — the screen leaves it blank rather than guessing a unit, because
+   * a wrong unit on a transfer document is worse than none.
+   */
+  unitName: string | null;
   qtyTransferred: string;
   qtyTransferredBase: string;
-  valueAmount: string;
-  currency: string;
+  /**
+   * Cost value of the line when the transfer was raised. A BigDecimal, so it arrives as a JSON
+   * NUMBER despite the `string` typing on its siblings — coerce with +v, never call string methods.
+   *
+   * Null is a REAL answer: the product has never been costed, or the transfer predates the field.
+   * It must not render as 0.00 — that told storekeepers the goods they were moving were worthless.
+   */
+  valueAmount: string | number | null;
+  currency: string | null;
 }
 
 export interface StockTransferDto {
@@ -64,6 +76,13 @@ export interface StockTransferDto {
 export interface StockTransferLineRequest {
   productUid: string;
   qty: string;
+  /**
+   * The unit `qty` is counted in. Omit (or send the base unit) to mean the product's base unit,
+   * which is what every transfer meant implicitly before units were selectable. Must be the base
+   * unit or one of the product's configured pack sizes — the backend refuses anything else rather
+   * than guessing, since a silent mis-conversion moves the wrong amount of stock.
+   */
+  unitUid?: string;
 }
 
 export interface CreateStockTransferRequest {

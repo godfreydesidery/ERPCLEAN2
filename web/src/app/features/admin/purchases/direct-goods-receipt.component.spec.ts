@@ -42,11 +42,22 @@ const STUB_GR = {
   notes: null, createdAt: null, lines: null,
 };
 
+/** A cost the system already holds for the item — what K-2026-08-30 #4 asked to stop retyping. */
+const STUB_SUGGESTION = {
+  amount: 4500,
+  currency: 'TZS',
+  source: 'LAST_PURCHASE' as const,
+  asOf: '2026-08-14',
+};
+
 function makeBed(overrides: {
   receiveDirectSpy?: ReturnType<typeof vi.fn>;
+  directCostSuggestionSpy?: ReturnType<typeof vi.fn>;
   hasPermission?: (code: string) => boolean;
 } = {}) {
   const receiveDirectSpy = overrides.receiveDirectSpy ?? vi.fn(() => of(STUB_GR));
+  // Default: nothing known. The screen must behave exactly as it did before the suggestion existed.
+  const directCostSuggestionSpy = overrides.directCostSuggestionSpy ?? vi.fn(() => of(null));
 
   TestBed.configureTestingModule({
     imports: [DirectGoodsReceiptComponent],
@@ -54,7 +65,13 @@ function makeBed(overrides: {
       provideHttpClient(),
       provideHttpClientTesting(),
       provideRouter(STUB_ROUTES),
-      { provide: PurchasesService, useValue: { receiveDirect: receiveDirectSpy } },
+      {
+        provide: PurchasesService,
+        useValue: {
+          receiveDirect: receiveDirectSpy,
+          directCostSuggestion: directCostSuggestionSpy,
+        },
+      },
       { provide: OrganisationService, useValue: { current: vi.fn(() => of(STUB_ORG)) } },
       { provide: CompanyService, useValue: { list: vi.fn(() => of([STUB_COMPANY])) } },
       {
@@ -90,7 +107,7 @@ function makeBed(overrides: {
     ],
   });
 
-  return { receiveDirectSpy };
+  return { receiveDirectSpy, directCostSuggestionSpy };
 }
 
 /**
@@ -176,6 +193,91 @@ describe('DirectGoodsReceiptComponent', () => {
 
     expect(receiveDirectSpy).not.toHaveBeenCalled();
     expect(comp.formError()).toContain('at least one item');
+  });
+
+  // K-2026-08-30 #4: "have items pick cost price already existing in the system, not having to
+  // input the cost price all the time."
+  describe('unit-cost suggestion', () => {
+    it('fills the cost box from the stored price and says where it came from', async () => {
+      const { directCostSuggestionSpy } = makeBed({
+        directCostSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)),
+      });
+      const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      comp.selectSupplier(STUB_SUPPLIER as never);
+      comp.selectProduct(STUB_PRODUCT as never);
+      await vi.runAllTimersAsync();
+
+      expect(directCostSuggestionSpy).toHaveBeenCalledWith(
+        'CO1', 'SUP-UID-1', 'PRD-UID-1', 'UOM-UID-1');
+      expect(comp.newLineCost()).toBe('4500');
+      expect(comp.costSuggestion()).toEqual(STUB_SUGGESTION);
+    });
+
+    // The supplier narrows the answer but must not gate it: the storekeeper often picks the items
+    // first, and the product master's cost still answers without one.
+    it('asks without a supplier when none is picked yet', async () => {
+      const { directCostSuggestionSpy } = makeBed({
+        directCostSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)),
+      });
+      const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      comp.selectProduct(STUB_PRODUCT as never);
+      await vi.runAllTimersAsync();
+
+      expect(directCostSuggestionSpy).toHaveBeenCalledWith('CO1', '', 'PRD-UID-1', 'UOM-UID-1');
+    });
+
+    // A defaulted cost feeds the moving average. A figure the storekeeper actually typed is the
+    // one they checked, so it must survive.
+    it('never overwrites a cost the storekeeper typed', async () => {
+      makeBed({ directCostSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)) });
+      const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      comp.onUnitCostChange(7250);
+      comp.selectProduct(STUB_PRODUCT as never);
+      await vi.runAllTimersAsync();
+
+      expect(comp.newLineCost()).toBe('7250');
+    });
+
+    // Regression guard: our own prefill must not linger onto the next item, or the line would be
+    // staged at the previous product's price.
+    it('drops a figure it filled in when the item changes', async () => {
+      makeBed({ directCostSuggestionSpy: vi.fn(() => of(STUB_SUGGESTION)) });
+      const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      comp.selectProduct(STUB_PRODUCT as never);
+      await vi.runAllTimersAsync();
+      expect(comp.newLineCost()).toBe('4500');
+
+      comp.onProductSearchChange('something else');
+      expect(comp.newLineCost()).toBe('');
+      expect(comp.costSuggestion()).toBeNull();
+    });
+
+    // The suggestion is a convenience. A lookup that fails must leave the storekeeper typing, not
+    // block the delivery.
+    it('leaves the box blank and silent when nothing is known', async () => {
+      makeBed();
+      const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+      const comp = fixture.componentInstance;
+      await vi.runAllTimersAsync();
+
+      comp.selectProduct(STUB_PRODUCT as never);
+      await vi.runAllTimersAsync();
+
+      expect(comp.newLineCost()).toBe('');
+      expect(comp.costSuggestion()).toBeNull();
+    });
   });
 
   it('refuses a zero unit cost with no note (mirrors the backend rule)', async () => {

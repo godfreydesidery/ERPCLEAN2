@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -9,6 +9,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { blobErrorMessage } from '../../../core/api/blob-error';
 import { ProductModel, UnitOfMeasureDto } from '../models/product.model';
+import { LocationOnHandRowDto } from '../models/stock.model';
 import {
   AddPurchaseOrderLineRequest,
   PoApprovalStatus,
@@ -18,6 +19,7 @@ import {
   VoidPurchaseOrderRequest,
 } from '../models/purchases.model';
 import { ProductService } from '../products/product.service';
+import { StockService } from '../stock/stock.service';
 import { DocumentsService } from '../documents/documents.service';
 import {
   PurchaseCostSource,
@@ -51,7 +53,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-purchase-order-detail',
-  imports: [FormsModule, RouterLink, DatePipe],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
   templateUrl: './purchase-order-detail.component.html',
   styleUrl: './purchase-order-detail.component.scss',
 })
@@ -59,6 +61,7 @@ export class PurchaseOrderDetailComponent {
   private readonly purchasesService = inject(PurchasesService);
   private readonly purchaseSettingsService = inject(PurchaseSettingsService);
   private readonly productService = inject(ProductService);
+  private readonly stockService = inject(StockService);
   private readonly documentsService = inject(DocumentsService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
@@ -110,6 +113,37 @@ export class PurchaseOrderDetailComponent {
   private readonly costPrefilled = signal(false);
   /** Guards against a slow lookup landing after a newer product/unit pick. */
   private suggestionRequest = 0;
+
+  // ── Stock on hand for the picked product (Kilimanjaro 2026-09-12 #2) ──────────
+  /**
+   * Per-location on-hand for the product currently in the add-line form. The buyer was ordering
+   * blind: nothing on this screen said how much of the item the company already holds.
+   *
+   * <p>A hint, never a gate — it neither blocks nor changes the line. 'unavailable' is a real
+   * state, not an error: the lookup is gated STOCK.VIEW, which every seeded buying role
+   * (PROCUREMENT_OFFICER, PROCUREMENT_MANAGER) holds, but a hand-built role might not. Such a
+   * caller gets 403 and simply sees nothing here, rather than a banner over a form that works.
+   */
+  readonly stockRows = signal<LocationOnHandRowDto[] | null>(null);
+  readonly stockState = signal<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  private stockRequest = 0;
+
+  /** Σ on-hand across every location holding it, in the product's base unit. */
+  readonly stockTotal = computed(() => {
+    const rows = this.stockRows();
+    if (!rows) return null;
+    return rows.reduce((sum, r) => sum + (+r.quantity || 0), 0);
+  });
+
+  /**
+   * The base unit the total is expressed in. "12" means nothing on its own — 12 bottles and
+   * 12 crates are different orders.
+   */
+  readonly stockUnitLabel = computed(() => this.stockRows()?.[0]?.unitLabel ?? null);
+
+  /** Locations actually holding any, so the buyer can see it is all in the wrong branch. */
+  readonly stockByLocation = computed(() =>
+    (this.stockRows() ?? []).filter((r) => (+r.quantity || 0) !== 0));
 
   private readonly productSearch$ = new Subject<string>();
 
@@ -340,6 +374,7 @@ export class PurchaseOrderDetailComponent {
     this.newLineUnitUid.set('');
     this.lineUnits.set([]);
     this.clearCostSuggestion();
+    this.clearStockOnHand();
     this.productSearch$.next(q);
   }
 
@@ -348,6 +383,7 @@ export class PurchaseOrderDetailComponent {
     this.productResults.set([]);
     this.productSearchQ.set(`${product.code} — ${product.name}`);
     this.loadUnitsForProduct(product.uid);
+    this.loadStockOnHand(product.uid);
   }
 
   /** Prices are per unit, so a new unit invalidates the current suggestion — look it up again. */
@@ -409,6 +445,46 @@ export class PurchaseOrderDetailComponent {
     this.costPrefilled.set(false);
   }
 
+  // ── Stock on hand ─────────────────────────────────────────────────
+
+  /**
+   * Look up what the company already holds of the picked product. Race-guarded the same way as the
+   * cost suggestion: a slow answer for a product the buyer has already moved on from is dropped,
+   * never shown against the new one.
+   *
+   * <p>Any failure is silent. An empty list is NOT a failure — it means none is held, which is
+   * exactly the answer a buyer about to order needs, so it renders as zero rather than as nothing.
+   */
+  private loadStockOnHand(productUid: string): void {
+    const companyId = this.po()?.companyId;
+    this.stockRows.set(null);
+    if (!companyId) {
+      this.stockState.set('idle');
+      return;
+    }
+
+    const request = ++this.stockRequest;
+    this.stockState.set('loading');
+    this.stockService.listOnHandByProduct(productUid, companyId).subscribe({
+      next: (rows) => {
+        if (request !== this.stockRequest) return;   // superseded by a newer pick
+        this.stockRows.set(rows);
+        this.stockState.set('ready');
+      },
+      error: () => {
+        if (request !== this.stockRequest) return;
+        this.stockRows.set(null);
+        this.stockState.set('unavailable');
+      },
+    });
+  }
+
+  private clearStockOnHand(): void {
+    this.stockRequest++;
+    this.stockRows.set(null);
+    this.stockState.set('idle');
+  }
+
   /** Friendly provenance wording for the hint under the cost box. */
   costSourceLabel(source: PurchaseCostSource): string {
     switch (source) {
@@ -465,6 +541,7 @@ export class PurchaseOrderDetailComponent {
         this.newLineUnitCost.set('');
         this.newLineNote.set('');
         this.clearCostSuggestion();
+        this.clearStockOnHand();
         this.addingLine.set(false);
         this.alerts.success('Line added');
         this.loadLines();

@@ -1,5 +1,9 @@
 import { Routes } from '@angular/router';
-import { requirePermission, requireAnyPermission } from '../../core/auth/permission.guard';
+import {
+  requireAllPermissions,
+  requireAnyPermission,
+  requirePermission,
+} from '../../core/auth/permission.guard';
 
 /**
  * Admin (IAM) feature routes, lazy-loaded from app.routes.ts.
@@ -299,6 +303,15 @@ export const ADMIN_ROUTES: Routes = [
       import('./stock/serials/stock-serial-list.component').then(
         (m) => m.StockSerialListComponent,
       ),
+  },
+  // Counter lookup (K-2026-08-30 #3). Guard = PRODUCT.VIEW AND STOCK.VIEW, matching the
+  // @PreAuthorize on ItemInquiryController exactly — guarding on only one of a conjunction opens
+  // the page and then 403s its only request, which reads to the user as a broken screen.
+  {
+    path: 'stock/item-inquiry',
+    canActivate: [requireAllPermissions('PRODUCT.VIEW', 'STOCK.VIEW')],
+    loadComponent: () =>
+      import('./stock/item-inquiry.component').then((m) => m.ItemInquiryComponent),
   },
   // ── Inventory Valuation ───────────────────────────────────────────────────
   {
@@ -600,6 +613,17 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('SALES.INVOICE.VIEW')],
     loadComponent: () =>
       import('./reporting/sales-report.component').then((m) => m.SalesReportComponent),
+  },
+  // K-2026-08-30 #2. Same guard as the Sales Report and the same @PreAuthorize on the endpoint:
+  // that report already discloses margin at this gate, so cost of sales here is no wider a
+  // disclosure to a narrower audience.
+  {
+    path: 'reports/profitability',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./reporting/profitability-report.component').then(
+        (m) => m.ProfitabilityReportComponent,
+      ),
   },
   {
     path: 'reports/stock',

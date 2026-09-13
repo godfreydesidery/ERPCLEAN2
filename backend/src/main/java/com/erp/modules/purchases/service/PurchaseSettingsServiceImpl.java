@@ -3,6 +3,7 @@ package com.erp.modules.purchases.service;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
+import com.erp.modules.purchases.domain.enums.PurchaseVatTreatment;
 import com.erp.modules.purchases.domain.entity.PurchaseSettings;
 import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
 import com.erp.platform.common.api.NotFoundException;
@@ -87,12 +88,34 @@ public class PurchaseSettingsServiceImpl implements PurchaseSettingsService {
         if (req.requisitionApprovalEnabled() != null) {
             s.setRequisitionApprovalEnabled(req.requisitionApprovalEnabled());
         }
+        // V105 — null leaves it unchanged. An unknown value is REFUSED rather than quietly
+        // defaulted: silently falling back to EXCLUSIVE would tell a shop that asked for INCLUSIVE
+        // that it had been set, and they would find out from a printed note that still double-counts.
+        if (req.purchaseVatTreatment() != null && !req.purchaseVatTreatment().isBlank()) {
+            s.setPurchaseVatTreatment(parseVatTreatment(req.purchaseVatTreatment()));
+        }
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
         return PurchaseSettingsDto.from(settings.save(s));
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * Reads the requested VAT treatment, or refuses with a message a shopkeeper can act on.
+     * Deliberately not {@code PurchaseVatTreatment.orDefault} — that lenient reader exists for
+     * data already in the column, where today's behaviour is the safe fallback. A value arriving
+     * from a form is a request, and a request that cannot be honoured must say so.
+     */
+    private static PurchaseVatTreatment parseVatTreatment(String raw) {
+        try {
+            return PurchaseVatTreatment.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "Choose how purchase costs are entered: prices exclude VAT, prices include VAT, "
+                    + "or no VAT.");
+        }
+    }
 
     /** Returns an unsaved default; callers within a readOnly tx get a transient fallback. */
     private PurchaseSettings defaultSettings(Long companyId) {

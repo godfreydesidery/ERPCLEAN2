@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -25,7 +25,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-goods-receipt-list',
-  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, PaginatorComponent],
   templateUrl: './goods-receipt-list.component.html',
   styleUrl: './goods-receipt-list.component.scss',
 })

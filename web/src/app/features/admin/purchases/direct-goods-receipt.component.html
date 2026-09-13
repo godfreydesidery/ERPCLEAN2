@@ -173,7 +173,7 @@
                 </label>
                 <select id="drUnit" name="drUnit" class="form-select"
                         [ngModel]="newLineUnitUid()"
-                        (ngModelChange)="newLineUnitUid.set($event)"
+                        (ngModelChange)="onUnitChange($event)"
                         [disabled]="submitting() || lineUnits().length === 0">
                   <option value="">Select a unit…</option>
                   @for (u of lineUnits(); track u.uid) {
@@ -198,10 +198,24 @@
                   Unit cost <span class="text-danger" aria-hidden="true">*</span>
                 </label>
                 <input id="drCost" name="drCost" type="number" min="0" step="any" class="form-control"
-                       [ngModel]="newLineCost()" (ngModelChange)="newLineCost.set($event)"
+                       [ngModel]="newLineCost()" (ngModelChange)="onUnitCostChange($event)"
                        [disabled]="submitting()"
-                       aria-describedby="drCostHelp" />
+                       [attr.aria-describedby]="costSuggestion() ? 'drCostHelp drCostHint' : 'drCostHelp'" />
                 <span id="drCostHelp" class="form-text small">What you paid, per unit above.</span>
+                <!-- Provenance of a pre-filled cost. Absent (and silent) when nothing was found. -->
+                @if (costSuggestion(); as suggestion) {
+                  <p id="drCostHint" class="form-text small text-muted mb-0" aria-live="polite">
+                    {{ costSourceLabel(suggestion.source)
+                    }}@if (suggestion.asOf) {, {{ suggestion.asOf | date: 'd MMM y' }}}. Change it if
+                    this delivery cost something else.
+                    @if (costCurrencyMismatch()) {
+                      <span class="d-block text-warning-emphasis">
+                        That price is in {{ suggestion.currency }} and this receipt is in
+                        {{ currency() }} — check the amount before adding the item.
+                      </span>
+                    }
+                  </p>
+                }
               </div>
 
               <!-- Note -->

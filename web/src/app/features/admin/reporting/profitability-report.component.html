@@ -1,0 +1,261 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-graph-up-arrow me-2" aria-hidden="true"></i>Profitability Report
+      </h1>
+      <p class="subtitle">
+        What you sold and what you made on it: gross sales, VAT, net sales, cost of sales and
+        profit, per item and in total. Built from your sales invoices and the stock issued against
+        them — for the accounting view of profit after all other costs, see the
+        <a routerLink="/admin/reports/income-statement">Income Statement</a>.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Profitability Report.
+    </div>
+  } @else {
+
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Period</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="pr-from">From</label>
+            <input id="pr-from" name="pr-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="pr-to">To</label>
+            <input id="pr-to" name="pr-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="pr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="pr-branch" name="pr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading' || !datesValid()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+        @if (!datesValid()) {
+          <p class="text-danger small mb-0 mt-2" role="alert">
+            Choose a start date and an end date, with the end date on or after the start.
+          </p>
+        }
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Working out the figures…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not build the Profitability Report. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-graph-up-arrow" aria-hidden="true"></i>
+            Choose a period and click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <!-- A partial cost side must never read as a complete one: it overstates the profit. -->
+          @if (costIncomplete()) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                <strong>{{ r.totals.rowsWithUnknownCost }}</strong> item(s) were sold before their
+                stock had ever been costed, so their cost of sales is not known. Those items are
+                left out of the Cost of Sales and Profit totals — the sales figures still include
+                them. Set an opening cost for those items and the profit will be complete.
+              </span>
+            </div>
+          }
+
+          <!-- Company header block (only non-empty fields render) -->
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (r.company.legalName) {
+                <p class="small text-muted mb-1">{{ r.company.legalName }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Profitability</h2>
+          <p class="text-muted small mb-3">
+            {{ r.fromDate }} to {{ r.toDate }}
+            · Branch: {{ r.branchName ?? 'All branches' }}
+            · Currency: {{ r.currency }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <!-- The summary the manager asked for: the whole period on one line, before the detail. -->
+          <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+              <div class="erp-card h-100">
+                <div class="erp-card__body">
+                  <p class="small text-muted mb-1">Gross sales</p>
+                  <p class="h5 mb-0">{{ fmtAmount(r.totals.grossSales) }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="erp-card h-100">
+                <div class="erp-card__body">
+                  <p class="small text-muted mb-1">VAT</p>
+                  <p class="h5 mb-0">{{ fmtAmount(r.totals.vatAmount) }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="erp-card h-100">
+                <div class="erp-card__body">
+                  <p class="small text-muted mb-1">Net sales</p>
+                  <p class="h5 mb-0">{{ fmtAmount(r.totals.netAmount) }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-lg-3">
+              <div class="erp-card h-100">
+                <div class="erp-card__body">
+                  <p class="small text-muted mb-1">
+                    Profit
+                    @if (costIncomplete()) {
+                      <span class="badge text-bg-warning ms-1">partial</span>
+                    }
+                  </p>
+                  <p class="h5 mb-0">{{ fmtAmount(r.totals.profit) }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Gross sales, VAT, net sales, cost of sales and profit for each item sold in the period
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" class="num">Qty sold</th>
+                  <th scope="col" class="num">Gross sales</th>
+                  <th scope="col" class="num">VAT</th>
+                  <th scope="col" class="num">Net sales</th>
+                  <th scope="col" class="num">Cost of sales</th>
+                  <th scope="col" class="num">Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.productCode) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="num">{{ fmtQty(row.qtySold) }}</td>
+                    <td class="num">{{ fmtAmount(row.grossSales) }}</td>
+                    <td class="num">{{ fmtAmount(row.vatAmount) }}</td>
+                    <td class="num">{{ fmtAmount(row.netAmount) }}</td>
+                    <td class="num">{{ fmtAmount(row.costOfSales) }}</td>
+                    <td class="num">{{ fmtAmount(row.profit) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="8" class="text-muted text-center py-4">
+                      Nothing was sold in this period.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              @if (r.rows.length > 0) {
+                <tfoot>
+                  <tr class="fw-semibold">
+                    <td></td>
+                    <td>TOTAL</td>
+                    <td class="num">{{ fmtQty(r.totals.qtySold) }}</td>
+                    <td class="num">{{ fmtAmount(r.totals.grossSales) }}</td>
+                    <td class="num">{{ fmtAmount(r.totals.vatAmount) }}</td>
+                    <td class="num">{{ fmtAmount(r.totals.netAmount) }}</td>
+                    <td class="num">{{ fmtAmount(r.totals.costOfSales) }}</td>
+                    <td class="num">{{ fmtAmount(r.totals.profit) }}</td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+
+          <p class="text-muted small mt-2">
+            Gross sales include VAT; net sales are what is left after it. Profit is net sales less
+            what the goods cost you at the time you sold them. A dash means the figure is not known
+            — not zero.
+          </p>
+        }
+      }
+    }
+  }
+</section>

@@ -4,7 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
-import { PurchaseSettingsDto, UpdatePurchaseSettingsRequest } from '../../models/purchases.model';
+import {
+  PurchaseSettingsDto,
+  PurchaseVatTreatment,
+  UpdatePurchaseSettingsRequest,
+} from '../../models/purchases.model';
 import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PurchaseSettingsService } from './purchase-settings.service';
@@ -39,6 +43,8 @@ export class PurchaseSettingsComponent {
   readonly fThresholdAmount = signal('0');
   readonly fCurrency = signal('TZS');
   readonly fReceiptTolerancePct = signal('');
+  /** V105 — how the printed goods-received note reads the costs that were entered. */
+  readonly fPurchaseVatTreatment = signal<PurchaseVatTreatment>('EXCLUSIVE');
 
   // ── Save state ─────────────────────────────────────────────────────────────
   readonly saving = signal(false);
@@ -103,6 +109,7 @@ export class PurchaseSettingsComponent {
     this.fThresholdAmount.set(s.poApprovalThresholdAmount ?? '0');
     this.fCurrency.set(s.currency ?? 'TZS');
     this.fReceiptTolerancePct.set(s.receiptTolerancePct != null ? String(s.receiptTolerancePct) : '');
+    this.fPurchaseVatTreatment.set(s.purchaseVatTreatment ?? 'EXCLUSIVE');
   }
 
   save(): void {
@@ -135,6 +142,7 @@ export class PurchaseSettingsComponent {
       poApprovalThresholdAmount: threshold,
       currency: this.fCurrency().trim(),
       receiptTolerancePct,
+      purchaseVatTreatment: this.fPurchaseVatTreatment(),
     };
 
     this.settingsService.update(request).subscribe({

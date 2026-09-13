@@ -106,9 +106,11 @@
               <thead>
                 <tr>
                   <th scope="col">Receipt #</th>
+                  <th scope="col">Supplier</th>
                   <th scope="col">Status</th>
                   <th scope="col">PO</th>
                   <th scope="col">Received At</th>
+                  <th scope="col" class="num">Amount</th>
                   <th scope="col">Notes</th>
                   <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
@@ -117,6 +119,7 @@
                 @for (gr of rows(); track gr.uid) {
                   <tr>
                     <td class="mono">{{ gr.receiptNumber }}</td>
+                    <td>{{ gr.supplierName ?? '—' }}</td>
                     <td>
                       <span class="status-tag"
                         [class.status-tag--ok]="gr.status === 'RECEIVED'"
@@ -135,6 +138,13 @@
                       }
                     </td>
                     <td class="small text-muted">{{ gr.receivedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="num">
+                      @if (gr.receiptTotalAmount === null) {
+                        <span class="text-muted">—</span>
+                      } @else {
+                        {{ gr.currency }} {{ +gr.receiptTotalAmount | number:'1.2-2' }}
+                      }
+                    </td>
                     <td class="small text-muted">{{ gr.notes ?? '—' }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

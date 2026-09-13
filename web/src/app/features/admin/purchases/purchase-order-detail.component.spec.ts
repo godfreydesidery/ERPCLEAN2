@@ -38,6 +38,13 @@
  * 26.  costCurrencyMismatch flags a suggestion quoted in another currency.
  * 27.  The hint renders and is wired to the input via aria-describedby.
  * 28.  A failed lookup is silent: no hint, the typed cost untouched.
+ *
+ * Suite D — stock on hand for the picked product (Kilimanjaro 2026-09-12 #2):
+ * 29.  Picking a product looks its on-hand up for the PO's company.
+ * 30.  The total is Σ across locations, and the locations holding it are listed.
+ * 31.  Held nowhere reads as a real zero, not as "unknown".
+ * 32.  A caller without STOCK.VIEW (403) sees nothing — no figure, no error banner.
+ * 33.  A slow answer for a product already replaced is dropped, never shown against the new one.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -45,10 +52,11 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ProductService } from '../products/product.service';
+import { StockService } from '../stock/stock.service';
 import { PurchasesService } from './purchases.service';
 import { PurchaseSettingsService } from './settings/purchase-settings.service';
 import { DocumentsService } from '../documents/documents.service';
@@ -94,6 +102,20 @@ const STUB_PRODUCT = {
   status: 'ACTIVE', companyId: '10',
 };
 
+/** Per-location on-hand rows. `quantity` is a BigDecimal — a JSON number on the wire. */
+const STUB_ON_HAND = [
+  {
+    locationId: '1', locationUid: 'LOC-1', locationCode: 'MAIN', locationName: 'Main Store',
+    productId: '5', productUid: 'PROD-UID-1', productCode: 'P001', productName: 'Widget',
+    unitLabel: 'Each', quantity: 18, onHandValue: 90000, avgCost: 5000, currency: 'TZS',
+  },
+  {
+    locationId: '2', locationUid: 'LOC-2', locationCode: 'BAR', locationName: 'Bar Counter',
+    productId: '5', productUid: 'PROD-UID-1', productCode: 'P001', productName: 'Widget',
+    unitLabel: 'Each', quantity: 6, onHandValue: 30000, avgCost: 5000, currency: 'TZS',
+  },
+];
+
 /** BigDecimal serialises as a JSON *number*; asOf is an ISO date. */
 const STUB_SUGGESTION = {
   amount: 12500.5, currency: 'TZS', source: 'LAST_PURCHASE' as const, asOf: '2026-07-12',
@@ -105,6 +127,7 @@ interface BedOptions {
   listProductUnitsSpy?: ReturnType<typeof vi.fn>;
   submitForApprovalSpy?: ReturnType<typeof vi.fn>;
   costSuggestionSpy?: ReturnType<typeof vi.fn>;
+  onHandByProductSpy?: ReturnType<typeof vi.fn>;
   settingsResponse?: object | 'error';
   poOverride?: Partial<typeof STUB_PO>;
 }
@@ -119,6 +142,8 @@ function makeBed(opts: BedOptions = {}) {
   // Default: no stored price for the product — the suites that don't exercise the suggestion
   // then behave exactly as before (blank cost box, no hint).
   const costSuggestionSpy = opts.costSuggestionSpy ?? vi.fn(() => of(null));
+
+  const onHandByProductSpy = opts.onHandByProductSpy ?? vi.fn(() => of(STUB_ON_HAND));
 
   const po = { ...STUB_PO, ...opts.poOverride };
 
@@ -159,6 +184,10 @@ function makeBed(opts: BedOptions = {}) {
         },
       },
       {
+        provide: StockService,
+        useValue: { listOnHandByProduct: onHandByProductSpy },
+      },
+      {
         provide: DocumentsService,
         useValue: { renderBlob: vi.fn(() => of(new Blob())) },
       },
@@ -179,7 +208,8 @@ function makeBed(opts: BedOptions = {}) {
     ],
   });
 
-  return { listProductUnitsSpy, submitForApprovalSpy, settingsSpy, costSuggestionSpy };
+  return { listProductUnitsSpy, submitForApprovalSpy, settingsSpy, costSuggestionSpy,
+           onHandByProductSpy };
 }
 
 // ── Suite A: unit-picker (pre-existing) ───────────────────────────────────────
@@ -620,5 +650,97 @@ describe('PurchaseOrderDetailComponent — unit-cost suggestion', () => {
     expect(comp.newLineUnitCost()).toBe('');
     expect(comp.lineFormError()).toBeNull();
     expect(fixture.nativeElement.querySelector('#lineUnitCostHint')).toBeNull();
+  });
+});
+
+// ── Suite D: stock on hand for the picked product (Kilimanjaro 2026-09-12 #2) ──────
+
+describe('PurchaseOrderDetailComponent — stock on hand', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function setup(opts: BedOptions = {}) {
+    const spies = makeBed(opts);
+    const fixture = TestBed.createComponent(PurchaseOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'PO-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    return { comp, fixture, ...spies };
+  }
+
+  async function pickProduct(comp: PurchaseOrderDetailComponent) {
+    comp.selectProduct(STUB_PRODUCT as any);
+    await vi.runAllTimersAsync();
+  }
+
+  // ── 29. looked up for the PO's company ────────────────────────────────
+
+  it('looks the on-hand up for the picked product in the company that owns the order', async () => {
+    const { comp, onHandByProductSpy } = await setup();
+    await pickProduct(comp);
+
+    expect(onHandByProductSpy).toHaveBeenCalledWith('PROD-UID-1', '10');
+  });
+
+  // ── 30. total is Σ across locations, and the locations are named ───────────────
+
+  it('totals every location holding it and names them', async () => {
+    const { comp, fixture } = await setup();
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    expect(comp.stockTotal()).toBe(24);
+    expect(comp.stockUnitLabel()).toBe('Each');
+    expect(comp.stockByLocation().map((r) => r.locationName))
+      .toEqual(['Main Store', 'Bar Counter']);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('In stock:');
+    expect(text).toContain('Main Store');
+  });
+
+  // ── 31. none held is a real zero, not an unknown ────────────────────────
+
+  it('reads none held as a real zero', async () => {
+    const { comp, fixture } = await setup({ onHandByProductSpy: vi.fn(() => of([])) });
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    expect(comp.stockState()).toBe('ready');
+    expect(comp.stockTotal()).toBe(0);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('In stock:');
+  });
+
+  // ── 32. no STOCK.VIEW → silent, and the form still works ───────────────────
+
+  it('says nothing at all when the caller may not see stock', async () => {
+    const forbidden = new HttpErrorResponse({ status: 403, statusText: 'Forbidden' });
+    const { comp, fixture } = await setup({
+      onHandByProductSpy: vi.fn(() => throwError(() => forbidden)),
+    });
+    await pickProduct(comp);
+    fixture.detectChanges();
+
+    expect(comp.stockState()).toBe('unavailable');
+    expect(comp.stockTotal()).toBeNull();
+    expect(comp.lineFormError()).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('In stock:');
+  });
+
+  // ── 33. a superseded answer is dropped ────────────────────────────────
+
+  it('drops an answer for a product the buyer has already moved on from', async () => {
+    const late = new Subject<typeof STUB_ON_HAND>();
+    const { comp } = await setup({ onHandByProductSpy: vi.fn(() => late) });
+    await pickProduct(comp);
+
+    // The buyer clears the box and starts typing a different product before the answer lands.
+    comp.onProductSearchChange('something else');
+    late.next(STUB_ON_HAND);
+    late.complete();
+    await vi.runAllTimersAsync();
+
+    expect(comp.stockRows()).toBeNull();
+    expect(comp.stockState()).toBe('idle');
   });
 });

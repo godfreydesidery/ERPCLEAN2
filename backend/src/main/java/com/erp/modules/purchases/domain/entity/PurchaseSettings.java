@@ -1,9 +1,12 @@
 package com.erp.modules.purchases.domain.entity;
 
+import com.erp.modules.purchases.domain.enums.PurchaseVatTreatment;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.domain.UidEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -81,6 +84,19 @@ public class PurchaseSettings extends UidEntity {
     @Column(name = "requisition_approval_threshold_amount", precision = 19, scale = 4)
     @Setter
     private BigDecimal requisitionApprovalThresholdAmount;
+
+    /**
+     * How costs entered on this company's goods receipts are read by the PRINTED goods-received
+     * note (V105, ADR-0063). Never affects posting: a receipt posts no VAT, and stock is valued at
+     * the stored line cost whichever value this holds.
+     *
+     * <p>Defaults to EXCLUSIVE in both the column and the field, so a company that has never been
+     * asked the question keeps the behaviour it has always had.
+     */
+    @Column(name = "purchase_vat_treatment", nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    @Setter
+    private PurchaseVatTreatment purchaseVatTreatment = PurchaseVatTreatment.EXCLUSIVE;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

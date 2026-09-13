@@ -297,6 +297,33 @@
                       <i class="bi bi-check-circle-fill text-success small" aria-hidden="true"></i>
                       <span class="small text-muted">{{ selectedProduct()!.label }}</span>
                     </div>
+                    <!-- What we already hold (Kilimanjaro 2026-09-12 #2): a hint, never a gate. -->
+                    <div class="form-text small mb-0" aria-live="polite">
+                      @switch (stockState()) {
+                        @case ('loading') {
+                          <span class="text-muted">Checking stock…</span>
+                        }
+                        @case ('ready') {
+                          <span class="text-muted">In stock:</span>
+                          <strong class="ms-1"
+                                  [class.text-danger]="stockTotal() === 0"
+                                  [class.text-body]="stockTotal() !== 0">{{ stockTotal() | number:'1.0-3' }}</strong>
+                          @if (stockUnitLabel()) {
+                            <span class="text-muted ms-1">{{ stockUnitLabel() }}</span>
+                          }
+                          @if (stockByLocation().length > 0) {
+                            <span class="text-muted d-block">
+                              @for (r of stockByLocation(); track r.locationUid; let last = $last) {
+                                {{ r.locationName }} {{ +r.quantity | number:'1.0-3' }}{{ last ? '' : ' · ' }}
+                              }
+                            </span>
+                          }
+                        }
+                        @case ('unavailable') {
+                          <!-- No STOCK.VIEW, or the lookup failed: say nothing rather than alarm. -->
+                        }
+                      }
+                    </div>
                   }
                   @if (productResults().length > 0) {
                     <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
