@@ -2,11 +2,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
+import { Observable, Subject, catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { BranchService } from '../branch/branch.service';
+import { ProductService } from '../products/product.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import {
@@ -59,6 +60,7 @@ export class ItemInquiryComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly companyService = inject(CompanyService);
   private readonly branchService = inject(BranchService);
+  private readonly productService = inject(ProductService);
   private readonly auth = inject(AuthService);
   protected readonly session = inject(SessionStore);
 
@@ -102,6 +104,54 @@ export class ItemInquiryComponent {
 
   readonly branchLabel = computed(() => this.result()?.branchName ?? 'All branches');
 
+  // ── Pick one item and look at it on its own ────────────────────────────
+
+  /**
+   * Typing a term answers "which items match this"; the picker answers "tell me about THIS item".
+   * Both are needed: a counter clerk searching "kony" wants the list, while somebody checking one
+   * known item wants it without reading a table to find its row.
+   *
+   * <p>Still read-only. This opens a panel on the same screen — it does NOT navigate to the Product
+   * Master, which is an edit screen and is the door this screen deliberately does not have.
+   */
+  readonly companyUid = signal('');
+  readonly selectedProductUid = signal('');
+  readonly selectedItem = signal<ItemInquiryRowDto | null>(null);
+  /**
+   * The answer the picked item came back in. Held separately from {@link result} because the two
+   * are answers to different questions: whether cost may be shown, and which price list the selling
+   * price came from, belong to THIS lookup — reading them off the typed search would describe the
+   * panel using a different question's answer.
+   */
+  private readonly selectedDto = signal<ItemInquiryDto | null>(null);
+  readonly selectedState = signal<LoadState>('idle');
+  readonly selectedMissing = signal(false);
+
+  /**
+   * Server-side product lookup for the picker (arrow property so {@code this} survives the binding).
+   * Never a preloaded list filtered in the browser: past the first page an item would be neither
+   * listed nor findable, which is exactly how the product pickers came to be reported as "missing
+   * products".
+   */
+  /** False also when nothing is selected — the panel is not rendered then anyway. */
+  readonly selectedCostVisible = computed(() => this.selectedDto()?.costVisible ?? false);
+
+  /** Mirrors {@link sellingHeader}, but for the picked item's own answer. */
+  readonly selectedSellingHeader = computed(() => {
+    const d = this.selectedDto();
+    if (!d || d.priceListName === null) return 'Selling price';
+    return d.priceIncludesVat ? 'Selling price (VAT incl.)' : 'Selling price (excl. VAT)';
+  });
+
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.productService.list(this.companyUid(), q, 0, 25).pipe(
+      map(({ rows }) =>
+        rows
+          .filter((p) => p.status !== 'ARCHIVED')
+          .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
+      ),
+    );
+
   constructor() {
     this.search$
       .pipe(
@@ -142,10 +192,64 @@ export class ItemInquiryComponent {
     this.search$.next(q);
   }
 
+  /**
+   * An item was picked from the dropdown. Resolve it to its code, ask the same inquiry endpoint
+   * about it, and keep the row that IS that product — matched on uid, not on the code string,
+   * because a code search can legitimately match more than one item.
+   */
+  onProductSelected(uid: string): void {
+    this.selectedProductUid.set(uid);
+    this.selectedItem.set(null);
+    this.selectedDto.set(null);
+    this.selectedMissing.set(false);
+    if (!uid) {
+      this.selectedState.set('idle');
+      return;
+    }
+
+    this.selectedState.set('loading');
+    this.productService.getByUid(uid).subscribe({
+      next: (product) => {
+        this.stockService.itemInquiry(product.code, this.branchUid() || null).subscribe({
+          next: (dto) => {
+            if (this.selectedProductUid() !== uid) return;   // a newer pick already superseded this
+            const row = dto.rows.find((r) => r.productUid === uid) ?? null;
+            this.selectedDto.set(dto);
+            this.selectedItem.set(row);
+            // The picker offered it, so it exists; if the inquiry cannot see it the item is not
+            // stocked in this branch, and saying so beats showing an empty panel.
+            this.selectedMissing.set(row === null);
+            this.selectedState.set('idle');
+          },
+          error: (err: unknown) => {
+            if (this.selectedProductUid() !== uid) return;
+            this.loadError.set(this.messageFrom(err));
+            this.selectedState.set('error');
+          },
+        });
+      },
+      error: (err: unknown) => {
+        if (this.selectedProductUid() !== uid) return;
+        this.loadError.set(this.messageFrom(err));
+        this.selectedState.set('error');
+      },
+    });
+  }
+
+  clearSelectedItem(): void {
+    this.selectedProductUid.set('');
+    this.selectedItem.set(null);
+    this.selectedDto.set(null);
+    this.selectedMissing.set(false);
+    this.selectedState.set('idle');
+  }
+
   /** Changing the branch re-asks the same question about a different shelf. */
   onBranchChange(uid: string): void {
     this.branchUid.set(uid);
     const term = this.searchQ().trim();
+    // The picked item is answered for a branch too, so it must be re-asked for the new one.
+    if (this.selectedProductUid()) this.onProductSelected(this.selectedProductUid());
     // distinctUntilChanged would swallow the identical term, so re-issue it directly.
     if (term) this.runSearch(term);
   }
@@ -178,6 +282,7 @@ export class ItemInquiryComponent {
           next: (list) => {
             if (list.length === 0) return;
             const companyUid = list[0].uid;
+            this.companyUid.set(list[0].id);   // the product list is queried by company ID
             if (this.session.user()?.isRoot === true) {
               this.branchService.list(companyUid).subscribe({
                 next: (branches) =>
