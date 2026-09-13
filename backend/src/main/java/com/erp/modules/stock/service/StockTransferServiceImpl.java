@@ -133,19 +133,26 @@ public class StockTransferServiceImpl implements StockTransferService {
             //
             // unitId stays null on purpose. It is not display state: it is carried into the
             // dispatch payload and onto the stock movement, whose quantity is qtyTransferredBase.
-            // Naming a unit there would need the numeric id of the base unit, which ProductDto
-            // does not expose (ids are internal, uids cross), and would change what the movement
-            // records. The NAME is what the document has to show, and that is what is stored.
+            // Naming the PACK unit there while the quantity is in base units would describe the
+            // movement wrongly, and ProductDto exposes no numeric id for the base unit (ids are
+            // internal, uids cross). The NAME is what the document shows, and that is what is
+            // stored. (Kilimanjaro 2026-09-13.)
+            Uom uom = resolveUnit(product, lineReq.unitUid());
+            BigDecimal qtyBase = lineReq.qty().multiply(uom.factorToBase());
+
+            // Value is the cost of what actually moves, so it is priced off the BASE quantity:
+            // avg_cost is held per base unit, and multiplying it by "2 cartons" instead of the
+            // 24 pieces those cartons contain would understate the line twelvefold.
             BigDecimal avgCost = resolveAvgCost(principal.companyId(), product.id());
             BigDecimal lineValue = avgCost != null
-                    ? avgCost.multiply(lineReq.qty()).setScale(SCALE, RM)
+                    ? avgCost.multiply(qtyBase).setScale(SCALE, RM)
                     : null;   // never costed — null, not zero (the same rule as every other screen)
 
             StockTransferLine line = new StockTransferLine(
                     transfer.getId(), principal.companyId(), lineNo,
                     product.id(), product.code(), product.name(),
-                    null, product.baseUnitName(),
-                    lineReq.qty(), lineReq.qty(), // base qty = transferred qty (assuming base unit)
+                    null, uom.name(),
+                    lineReq.qty(), qtyBase,
                     lineValue, BASE_CURRENCY, principal.userId());
             transferLines.save(line);
         }
@@ -390,6 +397,33 @@ public class StockTransferServiceImpl implements StockTransferService {
                 .orElseThrow(() -> NotFoundException.of("StockTransfer", uid));
         scopeGuard.assertCanActIn(principal, t.getCompanyId());
         return t;
+    }
+
+    /** The unit a line is counted in, and how many base units one of them is. */
+    private record Uom(String name, BigDecimal factorToBase) {}
+
+    /**
+     * Resolves the unit a transfer line is counted in.
+     *
+     * <p>Null means the product's base unit — what every transfer raised before this existed meant
+     * implicitly, so nothing changes for a caller that does not send one. Otherwise the uid must
+     * name the base unit or one of the product's configured bulk packs.
+     *
+     * <p>An unrecognised unit is REFUSED, never defaulted to the base unit. Defaulting would accept
+     * "2 cartons" and move 2 pieces, and nobody would find out until a count came up short. Same
+     * rule as {@code SalesInvoiceServiceImpl.computeQtyInBase}, which this deliberately mirrors.
+     */
+    private Uom resolveUnit(ProductDto product, String unitUid) {
+        if (unitUid == null || unitUid.isBlank() || unitUid.equals(product.baseUnitUid())) {
+            return new Uom(product.baseUnitName(), BigDecimal.ONE);
+        }
+        return productService.listBulkPacks(product.uid()).stream()
+                .filter(bp -> unitUid.equals(bp.unitUid()))
+                .findFirst()
+                .map(bp -> new Uom(bp.unitName(), bp.factorToBase()))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "That unit cannot be used for " + product.name()
+                        + ". Choose the item's own unit or one of its pack sizes."));
     }
 
     private BigDecimal resolveAvgCost(Long companyId, Long productId) {

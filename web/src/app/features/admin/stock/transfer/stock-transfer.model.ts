@@ -76,6 +76,13 @@ export interface StockTransferDto {
 export interface StockTransferLineRequest {
   productUid: string;
   qty: string;
+  /**
+   * The unit `qty` is counted in. Omit (or send the base unit) to mean the product's base unit,
+   * which is what every transfer meant implicitly before units were selectable. Must be the base
+   * unit or one of the product's configured pack sizes — the backend refuses anything else rather
+   * than guessing, since a silent mis-conversion moves the wrong amount of stock.
+   */
+  unitUid?: string;
 }
 
 export interface CreateStockTransferRequest {

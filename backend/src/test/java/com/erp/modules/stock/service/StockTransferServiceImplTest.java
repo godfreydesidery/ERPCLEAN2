@@ -1,11 +1,13 @@
 package com.erp.modules.stock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.stock.domain.dto.CreateStockTransferRequest;
 import com.erp.modules.stock.domain.dto.StockTransferDto;
@@ -142,7 +144,7 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000001", new BigDecimal("4")))));
+                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
 
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
@@ -162,11 +164,76 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000001", new BigDecimal("4")))));
+                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
 
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
         assertThat(saved.get(0).getValueAmount()).isNull();
+    }
+
+    /**
+     * A pack unit multiplies into base units. avg_cost is held PER BASE UNIT, so the line value must
+     * be priced off the converted quantity — pricing "2 cartons" at the cost of 2 pieces understates
+     * the line by the pack factor, and the transfer document then reports a fraction of what moved.
+     */
+    @Test
+    void create_convertsAPackUnitToBaseUnitsAndPricesOffTheConvertedQuantity() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+        when(productService.listBulkPacks("PRODUID00000000000000001")).thenReturn(List.of(
+                new ProductBulkPackDto(9L, "PACKUID00000000000000001", 5L,
+                        "UNITUID00000000000000CTN", "CTN", "Carton",
+                        new BigDecimal("12"), null, false, false, List.of())));
+
+        service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("2"),
+                        "UNITUID00000000000000CTN"))));
+
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getUnitName()).isEqualTo("Carton");
+        // What the storekeeper typed stays as typed …
+        assertThat(saved.get(0).getQtyTransferred()).isEqualByComparingTo("2");
+        // … and what actually moves is 24 pieces.
+        assertThat(saved.get(0).getQtyTransferredBase()).isEqualByComparingTo("24");
+        // 24 x 1500, not 2 x 1500.
+        assertThat(saved.get(0).getValueAmount()).isEqualByComparingTo("36000.00");
+    }
+
+    /** An omitted unit means the base unit — what every transfer meant before units were selectable. */
+    @Test
+    void create_treatsAnAbsentUnitAsTheBaseUnit() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+
+        service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
+
+        assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
+        assertThat(saved.get(0).getQtyTransferredBase()).isEqualByComparingTo("4");
+    }
+
+    /**
+     * An unrecognised unit is REFUSED, never quietly treated as the base unit. Defaulting would
+     * accept "2 cartons" and move 2 bottles, and nobody would find out until a stock count came up
+     * short weeks later.
+     */
+    @Test
+    void create_refusesAUnitThatIsNotTheBaseUnitOrAConfiguredPack() {
+        stubUpToProductLookup();
+        when(productService.listBulkPacks("PRODUID00000000000000001")).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("2"),
+                        "UNITUID0000000000000BOGUS")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Choose the item's own unit or one of its pack sizes");
     }
 
     /**
@@ -175,6 +242,27 @@ class StockTransferServiceImplTest {
      * @param avgCost the running average the source stock carries, or null for never costed
      */
     private List<StockTransferLine> stubCreate(BigDecimal avgCost) {
+        stubUpToProductLookup();
+
+        StockOnHand soh = new StockOnHand(COMPANY_ID, SRC_BRANCH_ID, SRC_LOC_ID, 5L);
+        ReflectionTestUtils.setField(soh, "avgCost", avgCost);
+        when(onHands.findByCompanyIdAndProductId(COMPANY_ID, 5L)).thenReturn(List.of(soh));
+
+        List<StockTransferLine> saved = new ArrayList<>();
+        when(transferLines.save(any(StockTransferLine.class))).thenAnswer(inv -> {
+            StockTransferLine l = inv.getArgument(0);
+            saved.add(l);
+            return l;
+        });
+        when(transferLines.findByStockTransferIdOrderByLineNoAsc(700L)).thenReturn(saved);
+        return saved;
+    }
+
+    /**
+     * Only what create() touches BEFORE the unit is resolved. Split out because the refusal path
+     * throws there, and stubbing the save calls it never reaches trips Mockito's strict stubbing.
+     */
+    private void stubUpToProductLookup() {
         StockLocation src = location("Main Store");
         ReflectionTestUtils.setField(src, "id", SRC_LOC_ID);
         StockLocation dst = location("Bar Counter");
@@ -193,19 +281,6 @@ class StockTransferServiceImplTest {
             return t;
         });
         when(productService.getByUid("PRODUID00000000000000001")).thenReturn(product());
-
-        StockOnHand soh = new StockOnHand(COMPANY_ID, SRC_BRANCH_ID, SRC_LOC_ID, 5L);
-        ReflectionTestUtils.setField(soh, "avgCost", avgCost);
-        when(onHands.findByCompanyIdAndProductId(COMPANY_ID, 5L)).thenReturn(List.of(soh));
-
-        List<StockTransferLine> saved = new ArrayList<>();
-        when(transferLines.save(any(StockTransferLine.class))).thenAnswer(inv -> {
-            StockTransferLine l = inv.getArgument(0);
-            saved.add(l);
-            return l;
-        });
-        when(transferLines.findByStockTransferIdOrderByLineNoAsc(700L)).thenReturn(saved);
-        return saved;
     }
 
     /** Base unit "Bottle" is the field under test; everything else is irrelevant padding. */

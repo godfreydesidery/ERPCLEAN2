@@ -139,7 +139,7 @@ describe('ItemInquiryComponent', () => {
     const cells = (i: number) =>
       Array.from(rows[i].querySelectorAll('td')).map((td) => td.textContent?.trim() ?? '');
 
-    // Code, Description, Department, Supplier, Unit, Available, Cost, Selling, Actions.
+    // Code, Description, Department, Supplier, Unit, Available, Cost, Selling.
     expect(cells(0)[6]).toBe('7,200.00');
     expect(cells(0)[7]).toBe('9,500.00');
     // The never-costed, never-priced row: unknown, not free.
@@ -288,5 +288,40 @@ describe('ItemInquiryComponent', () => {
     expect(comp.branchOptions()).toEqual([
       { uid: 'BR-HQ', label: 'Head Office', hint: 'HQ' },
     ]);
+  });
+
+  // ── Display only (Kilimanjaro 2026-09-13) ───────────────────────────────
+
+  /**
+   * The screen used to put an "Open" button on every row, into the Product Master — an EDIT screen.
+   * A cashier looking up a price mid-sale was one click from the catalogue. The client asked for
+   * display only.
+   *
+   * Asserted as "no interactive element anywhere in the results table" rather than "no button
+   * labelled Open", because the next person to want a convenient link will not call it Open.
+   */
+  it('offers no way to act on a result — the table is display only', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    const comp = fixture.componentInstance;
+
+    comp.onSearchChange('kon');
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const table: HTMLElement = fixture.nativeElement.querySelector('table');
+    expect(table).toBeTruthy();
+    expect(table.querySelectorAll('a, button, input, select, [routerLink], [href]')).toHaveLength(0);
+  });
+
+  /** The search box and branch picker are how the question is asked; they must survive. */
+  it('still lets the user change the search and the branch', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(ItemInquiryComponent);
+    fixture.detectChanges();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#ii-search')).toBeTruthy();
   });
 });
