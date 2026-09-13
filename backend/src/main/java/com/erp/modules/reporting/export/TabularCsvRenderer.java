@@ -36,6 +36,10 @@ public class TabularCsvRenderer {
             if (model.totalsRow() != null) {
                 w.println(joinAll(model.totalsRow()));
             }
+            for (String line : model.footerLines()) {
+                w.println();
+                w.println(text(line != null ? line : ""));
+            }
         }
         return baos.toByteArray();
     }

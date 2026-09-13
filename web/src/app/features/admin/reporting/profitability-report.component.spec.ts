@@ -62,6 +62,7 @@ function report(overrides: Partial<ProfitabilityReportDto> = {}): ProfitabilityR
         costOfSales: null, profit: null,
       },
     ],
+    departments: [],
     totals: {
       qtySold: 130,
       grossSales: 1298000,
@@ -191,6 +192,7 @@ describe('ProfitabilityReportComponent', () => {
           grossSales: 1180000, vatAmount: 180000, netAmount: 1000000,
           costOfSales: 700000, profit: 300000,
         }],
+        departments: [],
         totals: {
           qtySold: 120, grossSales: 1180000, vatAmount: 180000, netAmount: 1000000,
           costOfSales: 700000, profit: 300000, rowsWithUnknownCost: 0,

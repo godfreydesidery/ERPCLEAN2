@@ -22,6 +22,12 @@ public record ProfitabilityReportDto(
         String                  branchName,
         String                  currency,
         List<ProfitabilityRowDto> rows,
+        /**
+         * The same sales rolled up by department, to the column set of the client's own report
+         * (Kilimanjaro sample). Additive: the per-product {@code rows} above are unchanged, because
+         * a working report should not be taken away to add a second view of it.
+         */
+        List<ProfitabilityDepartmentRowDto> departments,
         ProfitabilityTotalsDto  totals,
         String                  generatedAt
 ) {

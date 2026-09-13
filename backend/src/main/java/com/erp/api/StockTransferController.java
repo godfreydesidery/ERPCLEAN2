@@ -17,6 +17,11 @@ import com.erp.platform.common.api.PageMeta;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import com.erp.modules.documents.domain.dto.DocumentBrandingDto;
+import com.erp.modules.documents.service.DocumentBrandingService;
+import com.erp.platform.security.RequestContext;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.domain.Page;
@@ -60,16 +65,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/stock-transfers")
 public class StockTransferController {
 
+    /** Date and time on the print footprint, matching the client's own documents (30-Aug-2026). */
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd-MMM-yyyy");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("h:mm:ss a");
+
     private final StockTransferService transferService;
+    private final DocumentBrandingService branding;
     private final TabularExporter exporter;
     private final ReportCompanyHeaderQuery companyHeaderQuery;
 
     public StockTransferController(StockTransferService transferService,
                                    TabularExporter exporter,
-                                   ReportCompanyHeaderQuery companyHeaderQuery) {
+                                   ReportCompanyHeaderQuery companyHeaderQuery,
+                                   DocumentBrandingService branding) {
         this.transferService    = transferService;
         this.exporter           = exporter;
         this.companyHeaderQuery = companyHeaderQuery;
+        this.branding           = branding;
     }
 
     // -------------------------------------------------------------------------
@@ -148,7 +160,7 @@ public class StockTransferController {
                                          @RequestParam(defaultValue = "PDF") ExportFormat format) {
         StockTransferDto dto = transferService.getByUid(uid);
         ReportCompanyHeaderDto company = companyHeaderQuery.forCompany(dto.companyId());
-        ExportResult result = exporter.export(flatten(dto, company), format);
+        ExportResult result = exporter.export(flatten(dto, company, logoOf(dto.companyId())), format);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(result.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -161,7 +173,22 @@ public class StockTransferController {
      * receiving, when, and in which mode — then the goods. A storekeeper hands this to a driver,
      * so the two locations and the date matter as much as the line items.
      */
-    private TabularRenderModel flatten(StockTransferDto dto, ReportCompanyHeaderDto company) {
+    /**
+     * The company's logo, or null when it has never uploaded one — in which case the document
+     * prints text-only, which is what it did before. A branding lookup must never be the reason a
+     * storekeeper cannot print a transfer note, so any failure degrades to no logo.
+     */
+    private String logoOf(Long companyId) {
+        try {
+            DocumentBrandingDto b = branding.getForCompany(companyId);
+            return b != null ? b.logoDataUri() : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private TabularRenderModel flatten(StockTransferDto dto, ReportCompanyHeaderDto company,
+                                       String logoDataUri) {
         List<String> headerLines = new ArrayList<>();
         if (company != null && company.name() != null) {
             headerLines.add(company.name());
@@ -179,12 +206,18 @@ public class StockTransferController {
             headerLines.add("Notes: " + dto.notes());
         }
 
+        // Columns carry what the client's own note carries, in their words: Package is the unit a
+        // line is counted in, and Price is the cost of ONE of them — the figure that was missing.
+        // The title stays "Stock Transfer" rather than their "Inter-Branch Transfer": these move
+        // between LOCATIONS, which are often inside one branch, and the narrower name would be a
+        // lie on most of them.
         List<Column> columns = List.of(
                 new Column("Code", Align.LEFT),
-                new Column("Description", Align.LEFT),
-                new Column("Unit", Align.LEFT),
+                new Column("Product Description", Align.LEFT),
+                new Column("Package", Align.LEFT),
                 new Column("Qty", Align.RIGHT),
-                new Column("Value", Align.RIGHT));
+                new Column("Price", Align.RIGHT),
+                new Column("Total Amount", Align.RIGHT));
 
         List<StockTransferLineDto> lines = dto.lines() != null ? dto.lines() : List.of();
         List<List<String>> rows = new ArrayList<>(lines.size());
@@ -198,6 +231,7 @@ public class StockTransferController {
                     nullToEmpty(l.productName()),
                     nullToEmpty(l.unitName()),
                     fmtQty(l.qtyTransferred()),
+                    fmtMoney(l.unitCost()),
                     fmtMoney(l.valueAmount())));
             if (l.qtyTransferred() != null) {
                 totalQty = totalQty.add(l.qtyTransferred());
@@ -219,17 +253,51 @@ public class StockTransferController {
         // An uncosted line prints blank, never 0.00, and the foot says how many it left out — a
         // total that silently drops them would understate what is moving.
         List<String> totalsRow = List.of(
-                "", "TOTAL", "", fmtQty(totalQty),
+                "", "Total Amount", "", fmtQty(totalQty), "",
                 anyValued ? fmtMoney(totalValue) : "");
+
+        // The foot carries INFORMATION only. No sign-off rules and no Net/Vat/Rounding block: the
+        // client's own note has them, but a transfer charges nobody, so a "Vat Amount: 0.00" line
+        // would be a tax statement about a movement that has no tax in it.
+        List<String> footerLines = new ArrayList<>();
         if (unvalued > 0) {
-            headerLines.add("Note: " + unvalued + " of " + lines.size()
+            footerLines.add("Note: " + unvalued + " of " + lines.size()
                     + (lines.size() == 1 ? " line has" : " lines have")
                     + " no cost on record, and " + (unvalued == 1 ? "is" : "are")
                     + " left out of the total value.");
         }
+        ZonedDateTime now = ZonedDateTime.now();
+        footerLines.add(printFootprint(company, now));
 
+        // generatedAt is rendered as "Generated: <value>" at the head. It gets the plain timestamp;
+        // the full "Printed On / At / By / From" line belongs at the FOOT, where the client's own
+        // note carries it. Passing the footprint to both printed "Generated: Printed On: ..." twice
+        // over — which is what reading the rendered PDF, rather than trusting it, turned up.
         return new TabularRenderModel("Stock Transfer", headerLines,
-                Instant.now().toString(), columns, rows, totalsRow);
+                now.format(DATE_FMT) + " " + now.format(TIME_FMT),
+                columns, rows, totalsRow, footerLines, logoDataUri);
+    }
+
+    /**
+     * Who produced this document and when — the client's note carries it and theirs does not, which
+     * is how an argument about which copy is current gets settled.
+     *
+     * <p>The name is the caller's username: it is what {@code RequestContext} carries, it is what
+     * the person signs the paper with, and resolving a display name here would mean a user lookup on
+     * every export for a line of text.
+     */
+    private String printFootprint(ReportCompanyHeaderDto company, ZonedDateTime now) {
+        RequestContext.Principal p = RequestContext.get();
+        StringBuilder sb = new StringBuilder()
+                .append("Printed On: ").append(now.format(DATE_FMT))
+                .append("    Printed At: ").append(now.format(TIME_FMT));
+        if (p != null && p.username() != null && !p.username().isBlank()) {
+            sb.append("    Printed By: ").append(p.username());
+        }
+        if (company != null && company.name() != null && !company.name().isBlank()) {
+            sb.append("    Printed From: ").append(company.name());
+        }
+        return sb.toString();
     }
 
     private String describeEnd(String branchName, String locationName) {
