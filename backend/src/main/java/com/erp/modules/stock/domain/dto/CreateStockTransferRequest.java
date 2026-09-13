@@ -43,9 +43,18 @@ public record CreateStockTransferRequest(
         @Size(max = 500) String notes,
         @NotEmpty @Valid List<LineRequest> lines
 ) {
-    /** A single line item: product + quantity. */
+    /**
+     * A single line item: product, quantity, and the unit that quantity is counted in.
+     *
+     * @param unitUid the unit {@code qty} is expressed in. NULL means the product's base unit,
+     *                which is what every transfer raised before 2026-09-13 meant implicitly — so
+     *                existing callers keep working unchanged. Otherwise it must be one of the
+     *                product's configured bulk packs; anything else is refused rather than
+     *                guessed at, because a silent mis-conversion moves the wrong amount of stock.
+     */
     public record LineRequest(
             @NotBlank String productUid,
-            @NotNull @Positive BigDecimal qty
+            @NotNull @Positive BigDecimal qty,
+            String unitUid
     ) {}
 }

@@ -12,7 +12,7 @@ import { Observable, map } from 'rxjs';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
 import { Branch } from '../../models/branch.model';
 import { Company } from '../../models/company.model';
-import { ProductModel } from '../../models/product.model';
+import { ProductModel, UnitOfMeasureDto } from '../../models/product.model';
 import {
   CreateStockTransferRequest,
   StockLocationDto,
@@ -22,6 +22,16 @@ import { StockTransferService } from './stock-transfer.service';
 interface LineEntry {
   productUid: string;
   qty: string;
+  /** Empty until a product is picked; then the product's base unit, which the user may change. */
+  unitUid: string;
+  /** The units this product may be counted in — base first, then its configured pack sizes. */
+  units: UnitOfMeasureDto[];
+  unitsState: 'idle' | 'loading' | 'error';
+}
+
+/** A fresh, empty line. Units arrive only once a product is chosen. */
+function blankLine(): LineEntry {
+  return { productUid: '', qty: '', unitUid: '', units: [], unitsState: 'idle' };
 }
 
 /**
@@ -94,7 +104,7 @@ export class StockTransferCreateComponent {
   );
 
   // ── Lines ─────────────────────────────────────────────────────────────────────
-  readonly lines = signal<LineEntry[]>([{ productUid: '', qty: '' }]);
+  readonly lines = signal<LineEntry[]>([blankLine()]);
 
   // ── Reference-data availability ───────────────────────────────────────────────
   /** True when the branch list could not be loaded (non-fatal; user sees notice and can retry). */
@@ -198,7 +208,7 @@ export class StockTransferCreateComponent {
   }
 
   addLine(): void {
-    this.lines.update((ls) => [...ls, { productUid: '', qty: '' }]);
+    this.lines.update((ls) => [...ls, blankLine()]);
   }
 
   removeLine(index: number): void {
@@ -206,9 +216,55 @@ export class StockTransferCreateComponent {
   }
 
   updateLineProduct(index: number, uid: string): void {
+    // A new product invalidates the unit beside it: "Carton" on the old product means nothing on
+    // the new one, and leaving it there would submit a unit the backend refuses — or worse, one it
+    // accepts with a different factor.
     this.lines.update((ls) => {
       const copy = [...ls];
-      copy[index] = { ...copy[index], productUid: uid };
+      copy[index] = { ...copy[index], productUid: uid, unitUid: '', units: [], unitsState: 'idle' };
+      return copy;
+    });
+    if (uid) this.loadUnitsForLine(index, uid);
+  }
+
+  /**
+   * Fetch the units this product may be counted in and default to the first, which the endpoint
+   * guarantees is the base unit. Defaulting matters: a blank unit would be sent as "base" anyway,
+   * so showing the base unit is the honest version of what will happen.
+   *
+   * A failed lookup leaves the line on its base unit rather than blocking the transfer — the line
+   * still submits, and submitting with no unit means base, which is what it would have meant
+   * before units existed at all.
+   */
+  private loadUnitsForLine(index: number, productUid: string): void {
+    this.patchLine(index, { unitsState: 'loading' });
+    this.productService.listProductUnits(productUid).subscribe({
+      next: (units) => {
+        const current = this.lines()[index];
+        if (!current || current.productUid !== productUid) return;   // superseded by a newer pick
+        this.patchLine(index, {
+          units,
+          unitUid: units.length > 0 ? units[0].uid : '',
+          unitsState: 'idle',
+        });
+      },
+      error: () => {
+        const current = this.lines()[index];
+        if (!current || current.productUid !== productUid) return;
+        this.patchLine(index, { units: [], unitUid: '', unitsState: 'error' });
+      },
+    });
+  }
+
+  updateLineUnit(index: number, unitUid: string): void {
+    this.patchLine(index, { unitUid });
+  }
+
+  private patchLine(index: number, patch: Partial<LineEntry>): void {
+    this.lines.update((ls) => {
+      const copy = [...ls];
+      if (!copy[index]) return ls;
+      copy[index] = { ...copy[index], ...patch };
       return copy;
     });
   }
@@ -284,7 +340,12 @@ export class StockTransferCreateComponent {
       transferDate,
       transferMode: this.transferMode(),
       notes: this.notes().trim() || undefined,
-      lines: currentLines.map((l) => ({ productUid: l.productUid, qty: l.qty })),
+      lines: currentLines.map((l) => ({
+        productUid: l.productUid,
+        qty: l.qty,
+        // Omitted rather than sent empty: the backend reads absent as "the product's base unit".
+        ...(l.unitUid ? { unitUid: l.unitUid } : {}),
+      })),
     };
 
     this.transferService.create(request).subscribe({

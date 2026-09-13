@@ -183,26 +183,50 @@ public class StockTransferController {
                 new Column("Code", Align.LEFT),
                 new Column("Description", Align.LEFT),
                 new Column("Unit", Align.LEFT),
-                new Column("Qty", Align.RIGHT));
+                new Column("Qty", Align.RIGHT),
+                new Column("Value", Align.RIGHT));
 
         List<StockTransferLineDto> lines = dto.lines() != null ? dto.lines() : List.of();
         List<List<String>> rows = new ArrayList<>(lines.size());
-        BigDecimal totalQty = BigDecimal.ZERO;
+        BigDecimal totalQty   = BigDecimal.ZERO;
+        BigDecimal totalValue = BigDecimal.ZERO;
+        boolean anyValued     = false;
+        int unvalued          = 0;
         for (StockTransferLineDto l : lines) {
             rows.add(List.of(
                     nullToEmpty(l.productCode()),
                     nullToEmpty(l.productName()),
                     nullToEmpty(l.unitName()),
-                    fmtQty(l.qtyTransferred())));
+                    fmtQty(l.qtyTransferred()),
+                    fmtMoney(l.valueAmount())));
             if (l.qtyTransferred() != null) {
                 totalQty = totalQty.add(l.qtyTransferred());
             }
+            if (l.valueAmount() != null) {
+                totalValue = totalValue.add(l.valueAmount());
+                anyValued = true;
+            } else {
+                unvalued++;
+            }
         }
 
-        // Value is deliberately absent. A transfer moves stock at cost between two of the
-        // company's own locations, so a money column on a document that travels with the goods
-        // would put internal cost in front of whoever receives them, and it settles nothing.
-        List<String> totalsRow = List.of("", "TOTAL", "", fmtQty(totalQty));
+        // Value used to be omitted on the grounds that a document travelling with the goods should
+        // not show internal cost to whoever receives them. That reasoning does not survive contact
+        // with who actually receives a transfer: both ends are the company's own store, and the
+        // person signing for the goods is the one who has to account for them. The client asked for
+        // the amount and the total, and they are the only reader. (Kilimanjaro 2026-09-13.)
+        //
+        // An uncosted line prints blank, never 0.00, and the foot says how many it left out — a
+        // total that silently drops them would understate what is moving.
+        List<String> totalsRow = List.of(
+                "", "TOTAL", "", fmtQty(totalQty),
+                anyValued ? fmtMoney(totalValue) : "");
+        if (unvalued > 0) {
+            headerLines.add("Note: " + unvalued + " of " + lines.size()
+                    + (lines.size() == 1 ? " line has" : " lines have")
+                    + " no cost on record, and " + (unvalued == 1 ? "is" : "are")
+                    + " left out of the total value.");
+        }
 
         return new TabularRenderModel("Stock Transfer", headerLines,
                 Instant.now().toString(), columns, rows, totalsRow);
@@ -223,5 +247,15 @@ public class StockTransferController {
 
     private String fmtQty(BigDecimal qty) {
         return qty != null ? qty.stripTrailingZeros().toPlainString() : "";
+    }
+
+    /**
+     * Money at 2 dp. A null is an UNKNOWN cost, not a free one, so it prints blank — a 0.00 in a
+     * value column tells whoever signs for the goods that they are worth nothing.
+     */
+    private String fmtMoney(BigDecimal amount) {
+        return amount != null
+                ? amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+                : "";
     }
 }
