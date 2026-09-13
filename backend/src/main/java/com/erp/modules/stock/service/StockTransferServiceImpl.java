@@ -426,6 +426,20 @@ public class StockTransferServiceImpl implements StockTransferService {
                         + ". Choose the item's own unit or one of its pack sizes."));
     }
 
+    /**
+     * Cost of one of whatever the line is counted in — {@code value / qty}, so a line of cartons
+     * gets the price of a carton. Null (not zero) when the line was never costed or the quantity is
+     * zero: both are unknowns, and a 0.00 in a price column reads as "we got these for nothing".
+     */
+    private static BigDecimal unitCostOf(StockTransferLine l) {
+        BigDecimal value = l.getValueAmount();
+        BigDecimal qty   = l.getQtyTransferred();
+        if (value == null || qty == null || qty.signum() == 0) {
+            return null;
+        }
+        return value.divide(qty, SCALE, RM);
+    }
+
     private BigDecimal resolveAvgCost(Long companyId, Long productId) {
         // The company-product avg_cost is the same across all location rows (D-2).
         // Find any on-hand row for this product in this company to get the running average.
@@ -448,7 +462,7 @@ public class StockTransferServiceImpl implements StockTransferService {
                         l.getId(), l.getUid(), l.getLineNo(),
                         l.getProductId(), l.getProductCode(), l.getProductName(),
                         l.getUnitName(), l.getQtyTransferred(), l.getQtyTransferredBase(),
-                        l.getValueAmount(), l.getCurrency()))
+                        unitCostOf(l), l.getValueAmount(), l.getCurrency()))
                 .toList();
 
         Branch srcBranch = branches.findById(t.getSourceBranchId()).orElse(null);

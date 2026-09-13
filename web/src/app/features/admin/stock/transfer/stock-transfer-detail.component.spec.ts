@@ -177,7 +177,7 @@ describe('StockTransferDetailComponent — line value', () => {
       productId: '5', productCode: 'KON500', productName: 'Konyagi 500ml',
       unitName: 'Bottle',
       qtyTransferred: '4', qtyTransferredBase: '4',
-      valueAmount: 6000, currency: 'TZS',
+      unitCost: 1500, valueAmount: 6000, currency: 'TZS',
       ...overrides,
     } as never;
   }

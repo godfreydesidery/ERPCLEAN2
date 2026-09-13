@@ -80,6 +80,10 @@ public class TabularXlsxRenderer {
                 }
             }
 
+            for (String line : model.footerLines()) {
+                rowIdx = writeTextRow(sheet, rowIdx, line != null ? line : "", normalStyle);
+            }
+
             for (int c = 0; c < columnCount; c++) {
                 sheet.setColumnWidth(c, 4500);
             }

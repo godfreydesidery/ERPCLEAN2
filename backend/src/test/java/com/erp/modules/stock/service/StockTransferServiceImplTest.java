@@ -236,6 +236,51 @@ class StockTransferServiceImplTest {
                 .hasMessageContaining("Choose the item's own unit or one of its pack sizes");
     }
 
+    // -------------------------------------------------------------------------
+    // Unit cost on the read model (Kilimanjaro 2026-09-13: "bado haionyeshi unit price")
+    // -------------------------------------------------------------------------
+
+    /**
+     * The printed note showed a total but no price per item. The price has to be per whatever the
+     * line is COUNTED in — a carton line priced per bottle beside a carton quantity is a document
+     * that does not add up.
+     */
+    @Test
+    void toDto_pricesOneOfWhateverTheLineIsCountedIn() {
+        StockTransfer t = transferWithId(700L, "STUID00000000000000000001");
+        when(transfers.findByUid("STUID00000000000000000001")).thenReturn(Optional.of(t));
+        when(transferLines.findByStockTransferIdOrderByLineNoAsc(700L)).thenReturn(List.of(
+                // 2 cartons, 36,000 in total -> 18,000 a carton (not 1,500 a bottle).
+                lineOf(new BigDecimal("2"), new BigDecimal("24"), new BigDecimal("36000.0000"))));
+
+        StockTransferDto dto = service.getByUid("STUID00000000000000000001");
+
+        assertThat(dto.lines().get(0).unitCost()).isEqualByComparingTo("18000");
+        assertThat(dto.lines().get(0).valueAmount()).isEqualByComparingTo("36000.0000");
+    }
+
+    /** An uncosted line has no price either — null, never 0.00, which would read as "free". */
+    @Test
+    void toDto_leavesThePriceUnknownWhenTheLineWasNeverCosted() {
+        StockTransfer t = transferWithId(700L, "STUID00000000000000000001");
+        when(transfers.findByUid("STUID00000000000000000001")).thenReturn(Optional.of(t));
+        when(transferLines.findByStockTransferIdOrderByLineNoAsc(700L)).thenReturn(List.of(
+                lineOf(new BigDecimal("2"), new BigDecimal("24"), null)));
+
+        StockTransferDto dto = service.getByUid("STUID00000000000000000001");
+
+        assertThat(dto.lines().get(0).unitCost()).isNull();
+    }
+
+    private static StockTransferLine lineOf(BigDecimal qty, BigDecimal qtyBase, BigDecimal value) {
+        StockTransferLine l = new StockTransferLine(
+                700L, COMPANY_ID, (short) 1, 5L, "P001", "Konyagi 500ml",
+                null, "Carton", qty, qtyBase, value, "TZS", 1L);
+        ReflectionTestUtils.setField(l, "id", 1L);
+        ReflectionTestUtils.setField(l, "uid", "STLUID0000000000000000001");
+        return l;
+    }
+
     /**
      * Stubs everything create() touches and captures the lines it saves.
      *
