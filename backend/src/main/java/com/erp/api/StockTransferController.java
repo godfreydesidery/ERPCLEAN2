@@ -266,10 +266,16 @@ public class StockTransferController {
                     + " no cost on record, and " + (unvalued == 1 ? "is" : "are")
                     + " left out of the total value.");
         }
-        footerLines.add(printFootprint(company));
+        ZonedDateTime now = ZonedDateTime.now();
+        footerLines.add(printFootprint(company, now));
 
+        // generatedAt is rendered as "Generated: <value>" at the head. It gets the plain timestamp;
+        // the full "Printed On / At / By / From" line belongs at the FOOT, where the client's own
+        // note carries it. Passing the footprint to both printed "Generated: Printed On: ..." twice
+        // over — which is what reading the rendered PDF, rather than trusting it, turned up.
         return new TabularRenderModel("Stock Transfer", headerLines,
-                printFootprint(company), columns, rows, totalsRow, footerLines, logoDataUri);
+                now.format(DATE_FMT) + " " + now.format(TIME_FMT),
+                columns, rows, totalsRow, footerLines, logoDataUri);
     }
 
     /**
@@ -280,9 +286,8 @@ public class StockTransferController {
      * the person signs the paper with, and resolving a display name here would mean a user lookup on
      * every export for a line of text.
      */
-    private String printFootprint(ReportCompanyHeaderDto company) {
+    private String printFootprint(ReportCompanyHeaderDto company, ZonedDateTime now) {
         RequestContext.Principal p = RequestContext.get();
-        ZonedDateTime now = ZonedDateTime.now();
         StringBuilder sb = new StringBuilder()
                 .append("Printed On: ").append(now.format(DATE_FMT))
                 .append("    Printed At: ").append(now.format(TIME_FMT));
