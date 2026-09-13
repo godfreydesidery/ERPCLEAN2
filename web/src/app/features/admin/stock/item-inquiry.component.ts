@@ -2,7 +2,6 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { Subject, catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -37,12 +36,21 @@ type LoadState = 'idle' | 'loading' | 'error';
  * withheld (`costVisible`), so a hidden cost is never rendered as "this item has no cost" — the
  * screen says "hidden" and means it.
  *
+ * <b>Read-only by design</b> (Kilimanjaro 2026-09-13). The screen answers a question and offers no
+ * way to act on the answer. It used to carry an "Open" button per row into the Product Master,
+ * which is an EDIT screen — so a lookup that a cashier opens mid-sale was one click from changing
+ * the catalogue. The client asked for display only, and that is now the rule for this screen: no
+ * links, no buttons, no navigation out of a result row. The search box and the branch picker stay;
+ * they steer the question, they do not change anything. A regression test asserts the results table
+ * contains no interactive element at all, because the natural instinct of the next person here is
+ * to add the convenient link back.
+ *
  * Route: /admin/stock/item-inquiry. Guard = PRODUCT.VIEW AND STOCK.VIEW, identical to the endpoint's
  * @PreAuthorize.
  */
 @Component({
   selector: 'app-item-inquiry',
-  imports: [FormsModule, RouterLink, UidPickerComponent],
+  imports: [FormsModule, UidPickerComponent],
   templateUrl: './item-inquiry.component.html',
   styleUrl: './item-inquiry.component.scss',
 })

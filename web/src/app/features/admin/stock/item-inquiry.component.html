@@ -126,7 +126,6 @@
                       }
                     </th>
                     <th scope="col" class="num">{{ sellingHeader() }}</th>
-                    <th scope="col"><span class="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -153,12 +152,6 @@
                         }
                       </td>
                       <td class="num">{{ fmtAmount(row.sellingPrice) }}</td>
-                      <td>
-                        <a class="btn btn-sm btn-outline-secondary"
-                           [routerLink]="['/admin/products/uid', row.productUid]">
-                          Open
-                        </a>
-                      </td>
                     </tr>
                   }
                 </tbody>
