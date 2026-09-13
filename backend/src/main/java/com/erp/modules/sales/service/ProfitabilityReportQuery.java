@@ -8,6 +8,8 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import com.erp.modules.sales.domain.dto.ProfitabilityDepartmentRowDto;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -49,6 +51,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @Transactional(readOnly = true)
 public class ProfitabilityReportQuery {
+
+    /** Percentage scale on the department view, matching the client's own report (two decimals). */
+    private static final int PCT_SCALE = 2;
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private static final String DEFAULT_TIME_ZONE = "Africa/Dar_es_Salaam";
 
@@ -92,7 +98,8 @@ public class ProfitabilityReportQuery {
             filterParams.add(branch.id());
         }
 
-        List<ProfitabilityRowDto> rows = queryRows(companyId, from, to, filterSql, filterParams);
+        Views views = queryRows(companyId, from, to, filterSql, filterParams);
+        List<ProfitabilityRowDto> rows = views.products();
 
         ReportCompanyHeaderDto companyDto = new ReportCompanyHeaderDto(
                 header.name(), header.legalName(),
@@ -108,15 +115,20 @@ public class ProfitabilityReportQuery {
                 branch != null ? branch.name() : null,
                 header.baseCurrency(),
                 rows,
+                views.departments(),
                 totalsOf(rows),
                 Instant.now().toString());
     }
 
     // -------------------------------------------------------------------------
 
-    private List<ProfitabilityRowDto> queryRows(Long companyId, OffsetDateTime from,
-                                                 OffsetDateTime to, String filterSql,
-                                                 List<Object> filterParams) {
+    /** Both views of the same figures, built from one pass over the data. */
+    record Views(List<ProfitabilityRowDto> products,
+                 List<ProfitabilityDepartmentRowDto> departments) {}
+
+    private Views queryRows(Long companyId, OffsetDateTime from,
+                            OffsetDateTime to, String filterSql,
+                            List<Object> filterParams) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(from);
@@ -127,19 +139,31 @@ public class ProfitabilityReportQuery {
                 SELECT l.product_id                AS product_id,
                        l.product_code              AS product_code,
                        l.product_name              AS product_name,
+                       COALESCE(NULLIF(TRIM(p.category), ''), '(no department)') AS department,
                        SUM(l.quantity)             AS qty_sold,
                        SUM(l.gross_amount)         AS gross_sales,
                        SUM(l.vat_amount)           AS vat_amount,
-                       SUM(l.net_amount)           AS net_amount
+                       SUM(l.net_amount)           AS net_amount,
+                       SUM(COALESCE(l.line_discount_amount, 0)) AS discount,
+                       -- The sale, split by how it is taxed. Summed over net (VAT-exclusive)
+                       -- amounts so the three add back to net_amount exactly, which is the
+                       -- identity the client's own report reconciles on.
+                       SUM(CASE WHEN l.vat_status = 'STANDARD'   THEN l.net_amount ELSE 0 END)
+                                                   AS vat_portion,
+                       SUM(CASE WHEN l.vat_status = 'EXEMPT'     THEN l.net_amount ELSE 0 END)
+                                                   AS exempt_portion,
+                       SUM(CASE WHEN l.vat_status = 'ZERO_RATED' THEN l.net_amount ELSE 0 END)
+                                                   AS zero_rated_portion
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id
+                LEFT JOIN products p ON p.id = l.product_id AND p.company_id = i.company_id
                 WHERE i.company_id = ?
                   AND i.status = 'FINALISED'
                   AND i.finalised_at >= ?
                   AND i.finalised_at <  ?
                 """ + filterSql + """
 
-                GROUP BY l.product_id, l.product_code, l.product_name
+                GROUP BY l.product_id, l.product_code, l.product_name, p.category
                 ORDER BY l.product_code NULLS LAST
                 """;
 
@@ -151,13 +175,19 @@ public class ProfitabilityReportQuery {
                         rs.getBigDecimal("qty_sold"),
                         rs.getBigDecimal("gross_sales"),
                         rs.getBigDecimal("vat_amount"),
-                        rs.getBigDecimal("net_amount")
+                        rs.getBigDecimal("net_amount"),
+                        rs.getString("department"),
+                        rs.getBigDecimal("discount"),
+                        rs.getBigDecimal("vat_portion"),
+                        rs.getBigDecimal("exempt_portion"),
+                        rs.getBigDecimal("zero_rated_portion")
                 },
                 params.toArray());
 
         Map<Long, Cogs> cogsByProduct = queryCogsByProduct(companyId, from, to, filterSql, filterParams);
 
         List<ProfitabilityRowDto> rows = new ArrayList<>(raw.size());
+        Map<String, DeptAcc> dept = new java.util.LinkedHashMap<>();
         for (Object[] r : raw) {
             Long       productId = (Long) r[0];
             BigDecimal netAmount = zeroIfNull((BigDecimal) r[6]);
@@ -182,8 +212,69 @@ public class ProfitabilityReportQuery {
                     netAmount,
                     costOfSales,
                     profit));
+
+            dept.computeIfAbsent((String) r[7], DeptAcc::new).add(r, costOfSales);
         }
-        return rows;
+        return new Views(rows, dept.values().stream().map(DeptAcc::toRow).toList());
+    }
+
+    /**
+     * Accumulates one department. Kept as a mutable accumulator rather than a stream collector
+     * because an unknown cost has to poison the department's cost and every figure drawn from it,
+     * and that is a rule, not a sum.
+     *
+     * <p>Package-private so the identities the client reconciles on can be pinned against their own
+     * figures without a database standing in the way.
+     */
+    static final class DeptAcc {
+        private final String name;
+        private BigDecimal gross = BigDecimal.ZERO;
+        private BigDecimal discount = BigDecimal.ZERO;
+        private BigDecimal vat = BigDecimal.ZERO;
+        private BigDecimal net = BigDecimal.ZERO;
+        private BigDecimal vatPortion = BigDecimal.ZERO;
+        private BigDecimal exemptPortion = BigDecimal.ZERO;
+        private BigDecimal zeroPortion = BigDecimal.ZERO;
+        private BigDecimal cost = BigDecimal.ZERO;
+        private int unknownCost = 0;
+
+        DeptAcc(String name) {
+            this.name = name;
+        }
+
+        void add(Object[] r, BigDecimal costOfSales) {
+            gross         = gross.add(zeroIfNull((BigDecimal) r[4]));
+            vat           = vat.add(zeroIfNull((BigDecimal) r[5]));
+            net           = net.add(zeroIfNull((BigDecimal) r[6]));
+            discount      = discount.add(zeroIfNull((BigDecimal) r[8]));
+            vatPortion    = vatPortion.add(zeroIfNull((BigDecimal) r[9]));
+            exemptPortion = exemptPortion.add(zeroIfNull((BigDecimal) r[10]));
+            zeroPortion   = zeroPortion.add(zeroIfNull((BigDecimal) r[11]));
+            if (costOfSales == null) {
+                unknownCost++;
+            } else {
+                cost = cost.add(costOfSales);
+            }
+        }
+
+        ProfitabilityDepartmentRowDto toRow() {
+            // One uncosted product makes the whole department's cost an understatement of unknown
+            // size. Reporting a contribution drawn from it would overstate profit, which is the
+            // exact failure the honest-margin fix existed to end.
+            BigDecimal costOut = unknownCost > 0 ? null : cost;
+            BigDecimal contribution = costOut != null ? net.subtract(costOut) : null;
+            BigDecimal margin = contribution != null && net.signum() != 0
+                    ? contribution.multiply(HUNDRED).divide(net, PCT_SCALE, RoundingMode.HALF_UP)
+                    : null;
+            // Markup on a zero cost is unanswerable, not infinite.
+            BigDecimal markup = contribution != null && costOut != null && costOut.signum() != 0
+                    ? contribution.multiply(HUNDRED).divide(costOut, PCT_SCALE, RoundingMode.HALF_UP)
+                    : null;
+            return new ProfitabilityDepartmentRowDto(
+                    name, gross, discount, gross.subtract(discount), net, vat,
+                    vatPortion, exemptPortion, zeroPortion,
+                    costOut, contribution, margin, markup, unknownCost);
+        }
     }
 
     /**

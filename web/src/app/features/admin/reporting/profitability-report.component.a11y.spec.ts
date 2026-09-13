@@ -47,6 +47,7 @@ const MOCK_REPORT: ProfitabilityReportDto = {
       costOfSales: null, profit: null,
     },
   ],
+  departments: [],
   totals: {
     qtySold: 130, grossSales: 1298000, vatAmount: 198000, netAmount: 1100000,
     costOfSales: 700000, profit: 300000, rowsWithUnknownCost: 1,

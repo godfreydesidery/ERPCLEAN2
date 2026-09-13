@@ -195,6 +195,66 @@
             </div>
           </div>
 
+          <!-- By department first: this is the view the client reconciles, and the one their own
+               report uses. The per-item table below it is unchanged. -->
+          @if (r.departments && r.departments.length > 0) {
+            <h3 class="erp-section-title mt-3">By department</h3>
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">
+                  Sales, tax split, cost and contribution for each department in the period
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Department</th>
+                    <th scope="col" class="num">Gross sales</th>
+                    <th scope="col" class="num">Discount</th>
+                    <th scope="col" class="num">Net sales</th>
+                    <th scope="col" class="num">Net amount</th>
+                    <th scope="col" class="num">VAT amount</th>
+                    <th scope="col" class="num">Vatable</th>
+                    <th scope="col" class="num">Exempt</th>
+                    <th scope="col" class="num">Zero rated</th>
+                    <th scope="col" class="num">Cost less VAT</th>
+                    <th scope="col" class="num">Net contribution</th>
+                    <th scope="col" class="num">Margin %</th>
+                    <th scope="col" class="num">Markup %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (d of r.departments; track d.department) {
+                    <tr>
+                      <td>{{ d.department }}</td>
+                      <td class="num">{{ fmtAmount(d.grossSales) }}</td>
+                      <td class="num">{{ fmtAmount(d.discount) }}</td>
+                      <td class="num">{{ fmtAmount(d.netSales) }}</td>
+                      <td class="num">{{ fmtAmount(d.netAmount) }}</td>
+                      <td class="num">{{ fmtAmount(d.vatAmount) }}</td>
+                      <td class="num">{{ fmtAmount(d.vatPortion) }}</td>
+                      <td class="num">{{ fmtAmount(d.exemptPortion) }}</td>
+                      <td class="num">{{ fmtAmount(d.zeroRatedPortion) }}</td>
+                      <!-- Withheld, not zero: one uncosted product makes the whole column a guess. -->
+                      <td class="num">{{ fmtAmount(d.costOfSales) }}</td>
+                      <td class="num">{{ fmtAmount(d.netContribution) }}</td>
+                      <td class="num">{{ fmtAmount(d.marginPercent) }}</td>
+                      <td class="num">{{ fmtAmount(d.markupPercent) }}</td>
+                    </tr>
+                    @if (d.productsWithUnknownCost > 0) {
+                      <tr>
+                        <td colspan="13" class="small text-muted">
+                          {{ d.department }}: {{ d.productsWithUnknownCost }}
+                          {{ d.productsWithUnknownCost === 1 ? 'product has' : 'products have' }}
+                          no cost on record, so cost and contribution cannot be reported for it.
+                        </td>
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <h3 class="erp-section-title mt-4">By item</h3>
           <div class="erp-table-wrap">
             <table class="erp-table">
               <caption class="visually-hidden">
