@@ -18,8 +18,10 @@
     </div>
   } @else {
 
-    <!-- Search -->
-    <div class="erp-card mb-3">
+    <!-- Search. overflow-visible because the item picker below drops an absolutely-positioned
+         list past the bottom edge of this card, and the default `overflow: clip` slices it off
+         mid-list — which reads as a dropdown that appears and then vanishes as you reach for it. -->
+    <div class="erp-card erp-card--overflow-visible mb-3">
       <div class="erp-card__body">
         <div class="row g-3 align-items-end">
           <div class="col-sm-12 col-lg-6">
