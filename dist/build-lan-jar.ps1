@@ -11,6 +11,9 @@
     and copy it to dist\lan\resources\orbixerp.jar with an orbixerp.jar.version.txt beside it
     (commit + build time - so you can tell what a client is running when they call).
 
+    It warns if the working tree has uncommitted changes: they are built into the jar, and the
+    version file then reads "<commit>+uncommitted" so the jar is never mistaken for a clean build.
+
     The old jar is kept as orbixerp.jar.bak-<timestamp>. Delete it before handing the folder
     over - it is ~90 MB.
 
