@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class SupplierImportHandler implements BulkImportHandler {
 
-    private static final int EXPORT_MAX = 2000;
+    private static final int EXPORT_MAX = 50_000;
 
     private static final String COL_CODE = "Code";
     private static final String COL_PARTY_TYPE = "Party Type";

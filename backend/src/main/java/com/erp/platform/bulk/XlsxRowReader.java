@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 public class XlsxRowReader {
 
     /** Hard cap on data rows in one upload. */
-    public static final int MAX_ROWS = 2000;
+    public static final int MAX_ROWS = 50_000;
 
     private final DataFormatter formatter = new DataFormatter();
 

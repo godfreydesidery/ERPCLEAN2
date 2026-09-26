@@ -71,7 +71,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class StockImportHandler implements BulkImportHandler {
 
-    private static final int EXPORT_MAX = 2000;
+    private static final int EXPORT_MAX = 50_000;
 
     private static final String COL_PRODUCT = "Product Code";
     private static final String COL_NAME    = "Product Name";

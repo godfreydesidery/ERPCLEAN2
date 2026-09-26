@@ -1,6 +1,6 @@
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, map, switchMap } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
@@ -92,9 +92,16 @@ export class ProductService {
     return this.http.put<ProductModel>(`${this.base}/uid/${uid}/restore`, {});
   }
 
+  /**
+   * Resolve a scanned barcode to its product. The lookup endpoint answers with the barcode row
+   * (ProductBarcodeDto), not the product — so follow its productUid to load the product itself.
+   * A 404 from either call surfaces unchanged (the caller shows "not found").
+   */
   barcodeLookup(companyId: string, barcode: string): Observable<ProductModel> {
     const params = new HttpParams().set('companyId', companyId).set('barcode', barcode);
-    return this.http.get<ProductModel>(`${this.base}/barcode-lookup`, { params });
+    return this.http
+      .get<ProductBarcodeDto>(`${this.base}/barcode-lookup`, { params })
+      .pipe(switchMap((row) => this.getByUid(row.productUid ?? '')));
   }
 
   // ── Barcodes ──────────────────────────────────────────────────────────────

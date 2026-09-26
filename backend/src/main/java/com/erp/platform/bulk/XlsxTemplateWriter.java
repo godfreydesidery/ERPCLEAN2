@@ -16,7 +16,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddressList;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,8 +28,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class XlsxTemplateWriter {
 
-    /** How many data rows get dropdowns wired up (well above any sane hand-import). */
+    /**
+     * Minimum number of data rows that get dropdowns wired up (well above any sane hand-import);
+     * an export longer than this gets dropdowns on every exported row.
+     */
     private static final int VALIDATED_ROWS = 2000;
+
+    /** Rows kept in memory by the streaming workbook before older rows are flushed to disk. */
+    private static final int STREAM_WINDOW = 100;
 
     /** A blank fill-in template. */
     public byte[] write(String title, List<ColumnSpec> columns) {
@@ -42,7 +48,9 @@ public class XlsxTemplateWriter {
      */
     public byte[] write(String title, List<ColumnSpec> columns,
                         List<? extends Map<String, String>> dataRows) {
-        try (Workbook wb = new XSSFWorkbook()) {
+        // Streaming workbook: an export can run to tens of thousands of rows, so only a small window
+        // of rows is held in memory and the rest is flushed to a temp file (deleted on close).
+        try (SXSSFWorkbook wb = new SXSSFWorkbook(STREAM_WINDOW)) {
             writeDataSheet(wb, columns, dataRows);
             writeInstructionsSheet(wb, title, columns);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -57,7 +65,7 @@ public class XlsxTemplateWriter {
                                 List<? extends Map<String, String>> dataRows) {
         Sheet sheet = wb.createSheet("Data");
         Styles styles = new Styles(wb);
-        writeHeaderRow(sheet, columns, styles);
+        writeHeaderRow(sheet, columns, styles, Math.max(VALIDATED_ROWS, dataRows.size()));
         sheet.createFreezePane(0, 1);
         int r = 1;
         for (Map<String, String> data : dataRows) {
@@ -65,7 +73,8 @@ public class XlsxTemplateWriter {
         }
     }
 
-    private void writeHeaderRow(Sheet sheet, List<ColumnSpec> columns, Styles styles) {
+    private void writeHeaderRow(Sheet sheet, List<ColumnSpec> columns, Styles styles,
+                                int validatedRows) {
         Row header = sheet.createRow(0);
         for (int c = 0; c < columns.size(); c++) {
             ColumnSpec col = columns.get(c);
@@ -79,7 +88,7 @@ public class XlsxTemplateWriter {
                 sheet.setDefaultColumnStyle(c, col.reference() ? styles.refNumeric : styles.numeric);
             }
             if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
-                addDropdown(sheet, c, col.allowedValues());
+                addDropdown(sheet, c, col.allowedValues(), validatedRows);
             }
         }
     }
@@ -180,11 +189,11 @@ public class XlsxTemplateWriter {
         }
     }
 
-    private void addDropdown(Sheet sheet, int colIndex, List<String> values) {
+    private void addDropdown(Sheet sheet, int colIndex, List<String> values, int validatedRows) {
         DataValidationHelper helper = sheet.getDataValidationHelper();
         DataValidationConstraint constraint =
                 helper.createExplicitListConstraint(values.toArray(new String[0]));
-        CellRangeAddressList range = new CellRangeAddressList(1, VALIDATED_ROWS, colIndex, colIndex);
+        CellRangeAddressList range = new CellRangeAddressList(1, validatedRows, colIndex, colIndex);
         DataValidation validation = helper.createValidation(constraint, range);
         validation.setSuppressDropDownArrow(true);
         validation.setShowErrorBox(true);

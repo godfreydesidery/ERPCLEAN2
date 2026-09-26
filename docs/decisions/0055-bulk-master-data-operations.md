@@ -212,6 +212,11 @@ A renamed or hand-built file is not second-guessed there; the backend header che
   fails alone; user-safe row messages only (no exception text leaks — error-message-hygiene rule).
 - **Bounded:** 2000 rows/file, synchronous — simple, no job table, no async infra; the cap is
   reported, not silent.
+  *Amended 2026-09-26 (owner):* raised to **50,000 rows** for both import (`XlsxRowReader.MAX_ROWS`)
+  and export (each handler's `EXPORT_MAX`) — a client catalogue of 30k+ products could neither be
+  exported whole nor re-imported. The writer now streams (`SXSSFWorkbook`) so a large export does
+  not hold the whole workbook in heap; upload limit raised to 32 MB. Still synchronous and
+  per-row-transactional, so a 30k-row commit takes minutes, not seconds.
 - **Contract additions:** `com.erp.platform.bulk.*`; `BulkImportController`
   (`/bulk/entities`, `/bulk/{key}/template|export|validate|commit`); `PriceMassChangeController`
   (`/prices/mass-change`); handlers in products/parties; web Bulk-Import and Mass-Price-Change screens.

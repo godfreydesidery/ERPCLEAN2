@@ -55,7 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class PriceImportHandler implements BulkImportHandler {
 
-    private static final int EXPORT_MAX = 2000;
+    private static final int EXPORT_MAX = 50_000;
     private static final String DEFAULT_CURRENCY = "TZS";
 
     private static final String COL_PRODUCT = "Product Code";
