@@ -101,6 +101,27 @@ window reads as a crashed one.
 
 ---
 
+## Building the LAN / Windows-service jar
+
+The LAN package (`dist/lan/`, gitignored) runs OrbixERP as one jar with the web app inside it —
+no Docker. To rebuild that jar from the current checkout:
+
+```powershell
+.\dist\build-lan-jar.ps1              # build and drop into dist\lan\resources\orbixerp.jar
+.\dist\build-lan-jar.ps1 -RunTests    # run the backend unit tests first
+.\dist\build-lan-jar.ps1 -NoBackup    # don't keep the previous jar as orbixerp.jar.bak-<timestamp>
+```
+
+It builds the Angular bundle, copies it into `backend/src/main/resources/static/`, packages the
+Spring Boot jar, refuses to continue if the web app is missing from it, and writes
+`orbixerp.jar.version.txt` (commit, branch, build time) beside the jar. It warns if the working
+tree has uncommitted changes, since those end up in the jar.
+
+Before handing the folder over, delete any `orbixerp.jar.bak-*` (~90 MB each). To update a
+running install: stop the service, replace `orbixerp.jar`, start it, then Ctrl+F5 in the browser.
+
+---
+
 ## Why the build is split in two
 
 | | |
