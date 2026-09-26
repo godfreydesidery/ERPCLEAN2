@@ -217,6 +217,8 @@ export interface ProductBarcodeDto {
   id: string;
   uid: string;
   productId: string;
+  /** The owning product's external uid — what a barcode lookup uses to load the product. */
+  productUid?: string;
   companyId: string;
   barcode: string;
   /** Symbology (EAN_13, QR, UPC_A, …). Null when the row was stored without one. */

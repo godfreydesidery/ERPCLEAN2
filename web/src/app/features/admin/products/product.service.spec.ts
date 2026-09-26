@@ -159,3 +159,49 @@ describe('ProductService — bulk packs', () => {
     expect(received).toEqual(['A Carton smaller than one Piece is unusual — check the direction.']);
   });
 });
+
+describe('ProductService — barcode lookup', () => {
+  let service: ProductService;
+  let httpMock: HttpTestingController;
+  const base = `${environment.apiBaseUrl}/products`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    service = TestBed.inject(ProductService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('follows the barcode row to its product, so the caller gets the product itself', () => {
+    let result: { uid: string; code: string; name: string } | undefined;
+    service.barcodeLookup('7', '6002323018469').subscribe((p) => (result = p));
+
+    const lookup = httpMock.expectOne(
+      (r) => r.url === `${base}/barcode-lookup`
+        && r.params.get('companyId') === '7'
+        && r.params.get('barcode') === '6002323018469',
+    );
+    // The endpoint answers with the barcode row — its own uid is NOT the product's.
+    lookup.flush({ id: '90', uid: 'BARCODE-ROW-UID', productId: '12', productUid: 'PROD-UID',
+      companyId: '7', barcode: '6002323018469', primary: true });
+
+    const product = httpMock.expectOne(`${base}/uid/PROD-UID`);
+    expect(product.request.method).toBe('GET');
+    product.flush({ uid: 'PROD-UID', code: 'PROD-0042', name: 'Cooking Oil 1L' });
+
+    expect(result).toEqual(expect.objectContaining({ uid: 'PROD-UID', code: 'PROD-0042', name: 'Cooking Oil 1L' }));
+  });
+
+  it('passes a 404 through without a second call, so the screen can say "not found"', () => {
+    let status: number | undefined;
+    service.barcodeLookup('7', '000').subscribe({ error: (e: { status: number }) => (status = e.status) });
+
+    httpMock.expectOne((r) => r.url === `${base}/barcode-lookup`)
+      .flush({ errors: ['Not found.'] }, { status: 404, statusText: 'Not Found' });
+
+    expect(status).toBe(404);
+  });
+});
