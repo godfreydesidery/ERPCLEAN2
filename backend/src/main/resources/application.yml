@@ -1,4 +1,13 @@
 spring:
+  # Single-jar / Windows-service deployment: load a `.env` sitting next to the jar (the
+  # service's working directory). Spring Boot does not read `.env` natively — this is what
+  # makes one work. `optional:` keeps a missing file harmless, so the Docker/QA/compose
+  # stacks, which inject the same keys as real environment variables, are unaffected.
+  # `[.properties]` declares the format, since `.env` is not a recognised extension:
+  # plain KEY=value lines, no `export`, no surrounding quotes (a properties parser would
+  # keep the quotes as part of the value). Real env vars still win over the file.
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: erp-api
   servlet:

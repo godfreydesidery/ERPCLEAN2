@@ -6,3 +6,6 @@ release/
 # Image tarballs are produced into the assembled bundle, never into the templates.
 bundle/images/*.tar
 bundle/images/*.tar.gz
+
+# LAN / Windows-service package - contains the built jar and the WinSW binary.
+lan/
