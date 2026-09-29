@@ -52,12 +52,29 @@ export class AuthService {
     );
   }
 
+  /**
+   * Swaps the refresh token for a new token pair. Callers should go through {@link TokenRefresher},
+   * which keeps it to one request at a time (the server treats a reused refresh token as theft).
+   *
+   * The response names the user's DEFAULT branch, because the server re-issues the session from
+   * scratch. A user who switched branch works in that branch through the X-Branch-Uid header, so
+   * storing the response as-is would silently move them back to their default branch mid-work. The
+   * branch they are in is kept.
+   */
   refresh(): Observable<TokenResponse> {
+    const branchUid = this.session.activeBranchUid();
     return this.http
       .post<TokenResponse>(`${this.base}/refresh`, {
         refreshToken: this.session.refreshToken(),
       })
-      .pipe(tap((res) => this.session.setSession(res.accessToken, res.refreshToken, res.user)));
+      .pipe(
+        tap((res) => {
+          this.session.setSession(res.accessToken, res.refreshToken, res.user);
+          if (branchUid) {
+            this.session.setActiveBranchUid(branchUid);
+          }
+        }),
+      );
   }
 
   logout(): Observable<void> {
