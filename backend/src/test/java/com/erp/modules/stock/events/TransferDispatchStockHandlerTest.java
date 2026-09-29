@@ -1,6 +1,7 @@
 package com.erp.modules.stock.events;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -11,7 +12,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.stock.domain.dto.TransferDispatchedPayload;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.platform.events.DomainEvent;
@@ -21,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -41,12 +45,15 @@ class TransferDispatchStockHandlerTest {
     private IdempotencyGuard          guard;
     private StockPostingService       posting;
     private InventoryValuationService valuation;
+    private StockLocationRepository   locations;
     private ObjectMapper              objectMapper;
 
     private TransferDispatchStockHandler handler;
 
     private static final Long   COMPANY_ID       = 1L;
     private static final Long   BRANCH_ID        = 2L;
+    /** The destination branch — owns the in-transit location (LocationResolver picks dest's). */
+    private static final Long   DEST_BRANCH_ID   = 3L;
     private static final Long   SRC_LOCATION_ID  = 10L;
     private static final Long   TRANSIT_LOC_ID   = 99L;
     private static final Long   PRODUCT_ID       = 100L;
@@ -61,10 +68,17 @@ class TransferDispatchStockHandlerTest {
         guard        = mock(IdempotencyGuard.class);
         posting      = mock(StockPostingService.class);
         valuation    = mock(InventoryValuationService.class);
+        locations    = mock(StockLocationRepository.class);
         objectMapper = new ObjectMapper()
                 .findAndRegisterModules(); // needed for Instant serialisation
 
-        handler = new TransferDispatchStockHandler(guard, posting, valuation, objectMapper);
+        handler = new TransferDispatchStockHandler(guard, posting, valuation, locations, objectMapper);
+
+        // Cross-branch by default: the in-transit location belongs to the destination branch.
+        StockLocation transit = mock(StockLocation.class);
+        when(transit.getCompanyId()).thenReturn(COMPANY_ID);
+        when(transit.getBranchId()).thenReturn(DEST_BRANCH_ID);
+        when(locations.findById(TRANSIT_LOC_ID)).thenReturn(Optional.of(transit));
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
         when(posting.post(anyLong(), anyLong(), anyLong(), anyLong(), any(BigDecimal.class),
@@ -237,8 +251,49 @@ class TransferDispatchStockHandlerTest {
         verify(valuation).transferCost(
                 COMPANY_ID,
                 BRANCH_ID, SRC_LOCATION_ID,
-                BRANCH_ID, TRANSIT_LOC_ID,
+                DEST_BRANCH_ID, TRANSIT_LOC_ID,
                 PRODUCT_ID, new BigDecimal("5"));
+    }
+
+    /**
+     * Cross-branch regression: the in-transit IN must be booked under the branch that OWNS the
+     * in-transit location (the destination's), because that is the branch the receive handler clears
+     * it under. Booking it under the source branch put dispatch and receive on different on-hand
+     * rows — transit never cleared and the destination received the goods without their value.
+     */
+    @Test
+    void handle_crossBranch_booksTransitLegUnderTheTransitLocationsBranch() throws Exception {
+        handler.handle(buildEvent(EVENT_UID, buildPayload()));
+
+        ArgumentCaptor<Long> branchCaptor   = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<Long> locationCaptor = ArgumentCaptor.forClass(Long.class);
+        verify(posting, times(2)).post(
+                anyLong(), branchCaptor.capture(), locationCaptor.capture(), anyLong(),
+                any(BigDecimal.class), any(MovementType.class),
+                anyString(), anyString(), anyString(),
+                any(), any(), any(Instant.class), any(), any(), any());
+
+        // OUT at the source stays under the source branch.
+        assertThat(branchCaptor.getAllValues().get(0)).isEqualTo(BRANCH_ID);
+        assertThat(locationCaptor.getAllValues().get(0)).isEqualTo(SRC_LOCATION_ID);
+        // IN at transit goes under the destination branch that owns the transit location.
+        assertThat(branchCaptor.getAllValues().get(1)).isEqualTo(DEST_BRANCH_ID);
+        assertThat(locationCaptor.getAllValues().get(1)).isEqualTo(TRANSIT_LOC_ID);
+    }
+
+    @Test
+    void handle_transitLocationFromAnotherCompany_isRefusedAndPostsNothing() throws Exception {
+        StockLocation foreign = mock(StockLocation.class);
+        when(foreign.getCompanyId()).thenReturn(COMPANY_ID + 1);
+        when(foreign.getBranchId()).thenReturn(DEST_BRANCH_ID);
+        when(locations.findById(TRANSIT_LOC_ID)).thenReturn(Optional.of(foreign));
+
+        DomainEvent event = buildEvent(EVENT_UID, buildPayload());
+
+        assertThatThrownBy(() -> handler.handle(event)).isInstanceOf(IllegalStateException.class);
+        verify(posting, never()).post(anyLong(), anyLong(), anyLong(), anyLong(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(guard, never()).markProcessed(anyString(), anyString());
     }
 
     @Test

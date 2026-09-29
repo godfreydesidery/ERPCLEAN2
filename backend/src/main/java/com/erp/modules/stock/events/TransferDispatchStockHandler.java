@@ -1,7 +1,9 @@
 package com.erp.modules.stock.events;
 
 import com.erp.modules.stock.domain.dto.TransferDispatchedPayload;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.enums.MovementType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.platform.events.DomainEvent;
@@ -31,6 +33,16 @@ import org.springframework.transaction.annotation.Transactional;
  * the value for both. Keys come from {@link MovementSourceKeys} (leg {@code 'D'} = source OUT,
  * {@code 'd'} = in-transit IN), which also explains why the 26-char column forbids simply appending
  * a suffix to the 26-char ULID.
+ *
+ * <p><strong>The in-transit leg is booked under the branch that owns the in-transit location</strong>
+ * — the destination branch's, as {@code LocationResolver.inTransitLocationId} picks it — not under the
+ * source branch. {@link TransferReceiveStockHandler} clears transit under the destination branch, and
+ * on-hand is keyed by (company, branch, location, product), so the two legs must name the same branch
+ * or they land on different rows. They used to disagree: on a cross-branch transfer, dispatch parked
+ * +N under the source branch, receive took -N from a fresh row under the destination branch, transit
+ * never cleared, and {@code transferCost} on receive found no cost on that fresh row and skipped the
+ * value move — the destination got the goods but not their value. The branch is read off the location
+ * row rather than the payload, so events already queued before this change are booked correctly too.
  */
 @Component
 public class TransferDispatchStockHandler implements DomainEventHandler {
@@ -42,15 +54,18 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
     private final IdempotencyGuard         guard;
     private final StockPostingService      posting;
     private final InventoryValuationService valuation;
+    private final StockLocationRepository  locations;
     private final ObjectMapper             objectMapper;
 
     public TransferDispatchStockHandler(IdempotencyGuard guard,
                                          StockPostingService posting,
                                          InventoryValuationService valuation,
+                                         StockLocationRepository locations,
                                          ObjectMapper objectMapper) {
         this.guard        = guard;
         this.posting      = posting;
         this.valuation    = valuation;
+        this.locations    = locations;
         this.objectMapper = objectMapper;
     }
 
@@ -69,6 +84,7 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
         }
 
         TransferDispatchedPayload payload = deserialise(event.getPayload());
+        final Long transitBranchId = transitBranchOf(payload);
 
         // Deterministic 26-char per-leg, per-LINE source_event_uid keys (see MovementSourceKeys).
         // Per-leg alone was not enough: a transfer listing the same product on two lines reused the
@@ -110,7 +126,7 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
                 // Uses the 'd' leg key — distinct from the source OUT leg above so both movements
                 // are written and the in-transit holding balance is established correctly.
                 posting.post(
-                        payload.companyId(), payload.sourceBranchId(), payload.inTransitLocationId(),
+                        payload.companyId(), transitBranchId, payload.inTransitLocationId(),
                         line.productId(), line.qtyInBase(),
                         MovementType.TRANSFER_IN,
                         legInKey, "STOCK_TRANSFER", payload.transferUid(),
@@ -122,7 +138,7 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
                 valuation.transferCost(
                         payload.companyId(),
                         payload.sourceBranchId(), payload.sourceLocationId(),
-                        payload.sourceBranchId(), payload.inTransitLocationId(),
+                        transitBranchId, payload.inTransitLocationId(),
                         line.productId(), line.qtyInBase());
             }
         } finally {
@@ -134,6 +150,20 @@ public class TransferDispatchStockHandler implements DomainEventHandler {
         }
 
         guard.markProcessed(CONSUMER, event.getUid());
+    }
+
+    /** The branch that owns the in-transit location — the branch its on-hand row is keyed under. */
+    private Long transitBranchOf(TransferDispatchedPayload payload) {
+        return locations.findById(payload.inTransitLocationId())
+                .filter(l -> l.getCompanyId().equals(payload.companyId()))
+                .map(StockLocation::getBranchId)
+                .orElseThrow(() -> {
+                    log.warn("TransferDispatchStockHandler: in-transit locationId={} not found in company={}"
+                                    + " for transfer uid={}",
+                            payload.inTransitLocationId(), payload.companyId(), payload.transferUid());
+                    return new IllegalStateException(
+                            "The in-transit location for this transfer could not be found.");
+                });
     }
 
     private TransferDispatchedPayload deserialise(String json) {
