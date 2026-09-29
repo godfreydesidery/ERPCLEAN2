@@ -614,12 +614,15 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
                     return onHands.save(fresh);
                 });
 
-        BigDecimal destPreQty   = destSoh.getQuantity();
         BigDecimal destPreValue = destSoh.getOnHandValue() != null ? destSoh.getOnHandValue() : BigDecimal.ZERO;
 
-        // Post-transfer qty on the dest row (the posting service applies the qty delta AFTER this
-        // method returns, so current qty is pre-transfer; add qty to get post-transfer total).
-        BigDecimal destPostQty   = destPreQty.add(qty);
+        // Every caller posts the TRANSFER_IN before calling this, so the dest row's qty ALREADY
+        // includes the transferred units — it is the post-transfer total as it stands. This used to
+        // add qty on top (on the belief that the posting ran afterwards), counting the moved units
+        // twice: 24 units worth 6,000 landing on an empty row got an avg of 125, not 250, and the
+        // next move out of that row — the receive leg of an in-transit transfer — carried half the
+        // value, leaving the other half stranded on the transit row.
+        BigDecimal destPostQty   = destSoh.getQuantity();
         BigDecimal destPostValue = destPreValue.add(transferValue);
 
         BigDecimal newDestAvg;
