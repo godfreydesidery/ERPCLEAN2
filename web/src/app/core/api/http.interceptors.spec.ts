@@ -112,6 +112,106 @@ describe('http interceptors', () => {
     });
   });
 
+  describe('expired access token (refresh)', () => {
+    const api = environment.apiBaseUrl;
+    const user = {
+      uid: 'U1', username: 'amina', displayName: 'Amina', isRoot: false,
+      activeCompanyUid: 'C1', activeBranchUid: 'DEFAULT-BRANCH', hasBranch: true,
+    };
+    const unauthorized = { status: 401, statusText: 'Unauthorized' };
+    const tokens = (access: string, refresh: string) => ({
+      data: { accessToken: access, accessTokenExpiresAt: 0, refreshToken: refresh, user },
+      errors: [],
+    });
+
+    beforeEach(() => session.setSession('old-access', 'refresh-1', user));
+
+    it('refreshes once and retries the request with the new token — the user stays signed in', () => {
+      let result: unknown;
+      http.get(`${api}/companies`).subscribe((r) => (result = r));
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: ['expired'] }, unauthorized);
+      const refresh = httpMock.expectOne(`${api}/auth/refresh`);
+      expect(refresh.request.body).toEqual({ refreshToken: 'refresh-1' });
+      refresh.flush(tokens('new-access', 'refresh-2'));
+
+      const retry = httpMock.expectOne(`${api}/companies`);
+      expect(retry.request.headers.get('Authorization')).toBe('Bearer new-access');
+      retry.flush({ data: ['ok'], errors: [] });
+
+      expect(result).toEqual(['ok']);
+      expect(session.accessToken()).toBe('new-access');
+      expect(session.refreshToken()).toBe('refresh-2');
+      expect(navigate).not.toHaveBeenCalled();
+      expect(toastError).not.toHaveBeenCalled();
+    });
+
+    it('shares ONE refresh between requests that expire together (a reused token revokes every session)', () => {
+      const results: unknown[] = [];
+      http.get(`${api}/companies`).subscribe((r) => results.push(r));
+      http.get(`${api}/branches`).subscribe((r) => results.push(r));
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: [] }, unauthorized);
+      httpMock.expectOne(`${api}/branches`).flush({ data: null, errors: [] }, unauthorized);
+      httpMock.expectOne(`${api}/auth/refresh`).flush(tokens('new-access', 'refresh-2'));
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: 'c', errors: [] });
+      httpMock.expectOne(`${api}/branches`).flush({ data: 'b', errors: [] });
+      expect(results.sort()).toEqual(['b', 'c']);
+    });
+
+    it('keeps the branch the user switched to — a refresh names only their DEFAULT branch', () => {
+      session.setActiveBranchUid('SWITCHED-BRANCH');
+      http.get(`${api}/companies`).subscribe();
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: [] }, unauthorized);
+      httpMock.expectOne(`${api}/auth/refresh`).flush(tokens('new-access', 'refresh-2'));
+
+      const retry = httpMock.expectOne(`${api}/companies`);
+      expect(retry.request.headers.get('X-Branch-Uid')).toBe('SWITCHED-BRANCH');
+      retry.flush({ data: {}, errors: [] });
+      expect(session.activeBranchUid()).toBe('SWITCHED-BRANCH');
+    });
+
+    it('when the refresh is refused, ends the session and sends the user to login', () => {
+      let failed: unknown;
+      http.get(`${api}/companies`).subscribe({ error: (e) => (failed = e) });
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: [] }, unauthorized);
+      httpMock
+        .expectOne(`${api}/auth/refresh`)
+        .flush({ data: null, errors: ['Refresh token expired. Please sign in again.'] }, unauthorized);
+
+      expect((failed as { status: number }).status).toBe(401);
+      expect(session.isAuthenticated()).toBe(false);
+      expect(toastError).toHaveBeenCalledWith('Your session has expired. Please sign in again.');
+      expect(navigate).toHaveBeenCalledWith(['/login'], {
+        queryParams: { returnUrl: currentUrl },
+        replaceUrl: true,
+      });
+    });
+
+    it('does not loop: a retried request that is still 401 ends the session, with no second refresh', () => {
+      http.get(`${api}/companies`).subscribe({ error: () => undefined });
+
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: [] }, unauthorized);
+      httpMock.expectOne(`${api}/auth/refresh`).flush(tokens('new-access', 'refresh-2'));
+      httpMock.expectOne(`${api}/companies`).flush({ data: null, errors: [] }, unauthorized);
+
+      httpMock.expectNone(`${api}/auth/refresh`);
+      expect(session.isAuthenticated()).toBe(false);
+      expect(navigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('never refreshes a logout — renewing a session only to revoke it is pointless', () => {
+      http.post(`${api}/auth/logout`, { refreshToken: 'refresh-1' }).subscribe({ error: () => undefined });
+
+      httpMock.expectOne(`${api}/auth/logout`).flush({ data: null, errors: [] }, unauthorized);
+
+      httpMock.expectNone(`${api}/auth/refresh`);
+    });
+  });
+
   it('does NOT redirect on a 401 from the login endpoint (bad credentials is the caller\'s concern)', () => {
     http.post(`${environment.apiBaseUrl}/auth/login`, { username: 'x', password: 'bad' }).subscribe({
       error: () => undefined,

@@ -1,9 +1,15 @@
-import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
+import {
+  HttpContextToken,
+  HttpErrorResponse,
+  HttpInterceptorFn,
+  HttpResponse,
+} from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, finalize, map, throwError } from 'rxjs';
+import { Observable, catchError, finalize, map, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SessionStore } from '../auth/session.store';
+import { TokenRefresher } from '../auth/token-refresher';
 import { AlertService } from '../feedback/alert.service';
 import { LoadingService } from '../feedback/loading.service';
 import { ToastService } from '../feedback/toast.service';
@@ -68,12 +74,29 @@ export const apiResponseInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 /**
- * Catches a 401 from an authenticated API call — the signal that the stored session is expired or
- * invalid — clears the dead session and sends the user to the login page. Without this, a stale
- * token in storage leaves the user stranded in a half-logged-in shell (every call 401s, the API
- * badge shows "error") instead of being bounced to a clean sign-in. The unauthenticated auth
- * endpoints (login/refresh) are exempt: a 401 there is a normal "bad credentials"/"expired refresh"
- * result the caller handles itself, not a dead session to clear.
+ * Marks a request that has already been retried after a token refresh, so a second 401 on it ends
+ * the session instead of refreshing again — no refresh loop, whatever the server says.
+ */
+const RETRIED_AFTER_REFRESH = new HttpContextToken<boolean>(() => false);
+
+/**
+ * Handles a 401 from an authenticated API call — the access token (15 minutes) has expired or is
+ * invalid.
+ *
+ * First it renews the session with the refresh token (7 days) and retries the request once, so the
+ * user never notices: the retry goes back through {@link authHeaderInterceptor}, which attaches the
+ * new token. Before this, the first 401 went straight to the login page, which signed every user out
+ * fifteen minutes after they signed in, however busy they were. Refreshes are single-flight via
+ * {@link TokenRefresher} — see there for why that matters.
+ *
+ * Only when the session cannot be renewed (no refresh token, refresh refused, or the retried request
+ * is still 401) does it clear the dead session and send the user to the login page. Without that, a
+ * stale token in storage leaves the user stranded in a half-logged-in shell (every call 401s, the
+ * API badge shows "error") instead of being bounced to a clean sign-in.
+ *
+ * The auth endpoints are exempt: a 401 from login/refresh is a normal "bad credentials" / "expired
+ * refresh" result the caller handles itself, not a dead session to clear. Logout is also never
+ * refreshed — renewing a session only to revoke it would be pointless — and it clears locally anyway.
  */
 export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
   if (!req.url.startsWith(environment.apiBaseUrl)) {
@@ -83,45 +106,77 @@ export const authErrorInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const toasts = inject(ToastService);
   const alerts = inject(AlertService);
+  const refresher = inject(TokenRefresher);
+  const isAuthEndpoint = UNAUTHENTICATED_PATHS.some((path) => req.url.includes(path));
+
+  const endSession = (): void => {
+    if (session.isAuthenticated()) {
+      session.clear();
+      // Mid-redirect to /login — a lightweight toast, not a blocking modal.
+      toasts.error('Your session has expired. Please sign in again.');
+      // Preserve the page the user was on so login can send them back there, not to the
+      // dashboard. replaceUrl keeps the dead page out of history so Back doesn't loop.
+      void router.navigate(['/login'], {
+        queryParams: { returnUrl: router.url },
+        replaceUrl: true,
+      });
+    }
+  };
+
+  const canRefresh =
+    !isAuthEndpoint &&
+    !req.url.includes('/auth/logout') &&
+    !req.context.get(RETRIED_AFTER_REFRESH);
+
+  const handle = (err: unknown): Observable<never> => {
+    if (err instanceof HttpErrorResponse && err.status === 401 && !isAuthEndpoint) {
+      endSession();
+      return throwError(() => err);
+    }
+    // A 403 is an authorization fact, not a system failure — do NOT pop the red modal. The
+    // screen renders its own calm "no permission" state, and route guards keep users off pages
+    // they can't use. (The rejected request still propagates so the component's error handler runs.)
+    if (err instanceof HttpErrorResponse && err.status === 403) {
+      return throwError(() => err);
+    }
+    // Surface every other API error — but match the SEVERITY to the kind of failure, and let a
+    // screen that shows its own message opt out entirely (SILENT_ERROR).
+    //   • Expected, user-correctable business validations (400/409/422) → a calm, non-blocking
+    //     toast. These are normal outcomes ("over-receipt: reduce the quantity"), not crashes,
+    //     so they must NOT wear the alarming "Something went wrong" modal.
+    //   • Genuine/unexpected failures (5xx, network/0, anything else) → the centered modal the
+    //     user must acknowledge, so a real fault can't be missed.
+    // Auth endpoints (login/refresh) are exempt — the login form shows its own inline message.
+    if (err instanceof HttpErrorResponse && !isAuthEndpoint && !req.context.get(SILENT_ERROR)) {
+      if (isBusinessValidation(err.status)) {
+        toasts.error(errorMessageOf(err));
+      } else {
+        alerts.error('Something went wrong', errorMessageOf(err));
+      }
+    }
+    return throwError(() => err);
+  };
+
   return next(req).pipe(
     catchError((err: unknown) => {
-      const isAuthEndpoint = UNAUTHENTICATED_PATHS.some((path) => req.url.includes(path));
-      if (err instanceof HttpErrorResponse && err.status === 401 && !isAuthEndpoint) {
-        if (session.isAuthenticated()) {
-          session.clear();
-          // Mid-redirect to /login — a lightweight toast, not a blocking modal.
-          toasts.error('Your session has expired. Please sign in again.');
-          // Preserve the page the user was on so login can send them back there, not to the
-          // dashboard. replaceUrl keeps the dead page out of history so Back doesn't loop.
-          void router.navigate(['/login'], {
-            queryParams: { returnUrl: router.url },
-            replaceUrl: true,
-          });
-        }
-        return throwError(() => err);
+      const expired = err instanceof HttpErrorResponse && err.status === 401;
+      if (!expired || !canRefresh || !session.refreshToken()) {
+        return handle(err);
       }
-      // A 403 is an authorization fact, not a system failure — do NOT pop the red modal. The
-      // screen renders its own calm "no permission" state, and route guards keep users off pages
-      // they can't use. (The rejected request still propagates so the component's error handler runs.)
-      if (err instanceof HttpErrorResponse && err.status === 403) {
-        return throwError(() => err);
-      }
-      // Surface every other API error — but match the SEVERITY to the kind of failure, and let a
-      // screen that shows its own message opt out entirely (SILENT_ERROR).
-      //   • Expected, user-correctable business validations (400/409/422) → a calm, non-blocking
-      //     toast. These are normal outcomes ("over-receipt: reduce the quantity"), not crashes,
-      //     so they must NOT wear the alarming "Something went wrong" modal.
-      //   • Genuine/unexpected failures (5xx, network/0, anything else) → the centered modal the
-      //     user must acknowledge, so a real fault can't be missed.
-      // Auth endpoints (login/refresh) are exempt — the login form shows its own inline message.
-      if (err instanceof HttpErrorResponse && !isAuthEndpoint && !req.context.get(SILENT_ERROR)) {
-        if (isBusinessValidation(err.status)) {
-          toasts.error(errorMessageOf(err));
-        } else {
-          alerts.error('Something went wrong', errorMessageOf(err));
-        }
-      }
-      return throwError(() => err);
+      return refresher.refresh().pipe(
+        // The session could not be renewed — expired, already used, or the user was deactivated.
+        // The caller sees the ORIGINAL 401, exactly as before refresh existed.
+        catchError(() => {
+          endSession();
+          return throwError(() => err);
+        }),
+        // Retried once. Its own failure (including a second 401) takes the ordinary path.
+        switchMap(() =>
+          next(req.clone({ context: req.context.set(RETRIED_AFTER_REFRESH, true) })).pipe(
+            catchError(handle),
+          ),
+        ),
+      );
     }),
   );
 };
