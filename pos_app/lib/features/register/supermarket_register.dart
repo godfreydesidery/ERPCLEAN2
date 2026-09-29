@@ -175,6 +175,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   Future<void> _onSubmit(String raw) async {
     final value = raw.trim();
     if (value.isEmpty) return;
+    // Enter resolves the input itself, so the search-as-you-type still waiting
+    // on its debounce is redundant — and harmful: a scanner types the symbol and
+    // presses Enter within milliseconds, so that search would fire AFTER the item
+    // is added and re-open the dropdown over an empty box.
+    _debounce?.cancel();
     setState(() => _busyScan = true);
     try {
       // 1) barcode lookup (exact or embedded weight/price) — only when the input
@@ -275,15 +280,20 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       final hits = await ref
           .read(catalogServiceProvider)
           .searchProducts(_companyId, q: q, size: 60);
-      if (mounted) {
+      // A reply for text that is no longer in the box is stale — the box was
+      // cleared by an add, or a scan replaced it while this was in flight.
+      // Showing it would open a dropdown nobody asked for.
+      if (mounted && _isCurrentQuery(q)) {
         _setResults(hits, q);
         _refreshStock(q);
         _refreshPrices(hits);
       }
     } catch (_) {
-      if (mounted) _setResults(const [], q);
+      if (mounted && _isCurrentQuery(q)) _setResults(const [], q);
     }
   }
+
+  bool _isCurrentQuery(String q) => _search.text.trim() == q;
 
   /// Replace the results dropdown and highlight the first row. [query] is the
   /// search these rows answered — the stock hint needs it to distinguish "none
@@ -343,6 +353,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   }
 
   void _resetSearch() {
+    // Clearing the controller from code does not fire onChanged, so a pending
+    // debounce would survive the reset and repopulate the dropdown.
+    _debounce?.cancel();
     _search.clear();
     _setResults(const [], '');
     _searchFocus.requestFocus();
@@ -468,7 +481,14 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   ),
                   onChanged: _onChanged,
                   onSubmitted: (v) {
-                    if (_results.isNotEmpty && _resultIndex >= 0) {
+                    // Only pick from the dropdown when it answers what is in the
+                    // box now. A scan lands and submits before its own search
+                    // has run, so rows still showing belong to the PREVIOUS
+                    // input — picking one would add the last item again instead
+                    // of the one just scanned.
+                    if (_results.isNotEmpty &&
+                        _resultIndex >= 0 &&
+                        _resultsQuery == v.trim()) {
                       _addHighlighted();
                     } else {
                       _onSubmit(v);
