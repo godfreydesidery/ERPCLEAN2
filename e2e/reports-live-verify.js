@@ -1250,14 +1250,24 @@ async function phaseArithmetic() {
       const row = rows.find((x) => (x.currency || 'TZS') === cur) || (rows.length === 1 ? rows[0] : null);
       const exp = await req('GET', url('/ar/statement/export', { ...co, customerUid: c.uid, currency: cur, format: 'CSV' }), C.root);
       const open = sql1(`select coalesce(sum(outstanding_amount),0) from ar_invoices where customer_id=${c.id} and currency='${cur}' and status not in ('VOID','VOIDED','WRITTEN_OFF')`);
-      cmp(`math.ar.${c.displayName}: export-closing==statement==balance==ageing`, 'math', [['export-closing(customer currency) vs statement', csvClosing(exp.raw), st?.totalOutstanding], ['statement vs balance', st?.totalOutstanding, bal?.balance],
-        ['ageing(by-customer) vs statement', row ? row.total : 0, st?.totalOutstanding], ['statement ageing buckets', sumBy(st?.ageing, 'amount'), st?.totalOutstanding]],
+      // Per-currency rules (owner ruling 2026-10-02): the statement's totalOutstanding is the BASE
+      // currency only and totalsByCurrency carries each currency; /ar/balance is a base-currency
+      // total in which a reliable foreign row counts at its stored base value.
+      const stCur = cur === (st?.currency || 'TZS') ? st?.totalOutstanding : (st?.totalsByCurrency || {})[cur];
+      const baseBal = sql1(`select coalesce(sum(case when i.currency=c.base_currency then i.outstanding_amount else coalesce(i.base_outstanding_amount, i.outstanding_amount*i.fx_rate) end),0)
+        from ar_invoices i join companies c on c.id=i.company_id where i.customer_id=${c.id} and (i.currency=c.base_currency or i.fx_rate<>1) and i.status not in ('VOID','VOIDED','WRITTEN_OFF')`);
+      const unalloc = sql1(`select coalesce(sum(case when r.currency=c.base_currency then r.unallocated_amount else r.unallocated_amount*r.fx_rate end),0)
+        from ar_receipts r join companies c on c.id=r.company_id where r.customer_id=${c.id} and (r.currency=c.base_currency or r.fx_rate<>1) and r.unallocated_amount<>0 and r.reversed_at is null`);
+      const unapplied = sql1(`select coalesce(sum(case when n.currency=c.base_currency then n.unapplied_amount else coalesce(n.base_unapplied_amount, n.unapplied_amount*n.fx_rate) end),0)
+        from ar_credit_notes n join companies c on c.id=n.company_id where n.customer_id=${c.id} and (n.currency=c.base_currency or n.fx_rate<>1) and n.unapplied_amount<>0`);
+      cmp(`math.ar.${c.displayName}: export-closing==statement==balance==ageing`, 'math', [['export-closing(customer currency) vs statement', csvClosing(exp.raw), stCur], ['statement(base-currency) vs balance-in-base (SQL)', bal?.balance, num(baseBal[0]) - num(unalloc[0]) - num(unapplied[0])],
+        ['ageing(by-customer) vs statement', row ? row.total : 0, stCur], ['statement ageing buckets (customer currency)', sumBy((st?.ageing || []).filter((a) => (a.currency || st?.currency || 'TZS') === cur), 'amount'), stCur]],
         { currency: cur, statementCurrency: st?.currency, ageingRowCurrencies: rows.map((x) => x.currency), sqlOpenInvoices: open[0], exportStatus: exp.status });
       if (cur !== 'TZS') {
         const e0 = await req('GET', url('/ar/statement/export', { ...co, customerUid: c.uid, format: 'CSV' }), C.root);
         check(`math.ar.${c.displayName}: default export shows the customer's own currency`, 'math', new RegExp(`Currency: ${cur}`).test(e0.raw) || near(csvClosing(e0.raw), csvClosing(exp.raw)),
           { defaultExportClosing: csvClosing(e0.raw), currencyLine: (e0.raw.match(/Currency: \w+/) || [])[0], closingInOwnCurrency: csvClosing(exp.raw) });
-        check(`math.ar.${c.displayName}: statement + ageing labelled in ${cur}`, 'math', st?.currency === cur && rows.length > 0 && rows.every((x) => x.currency === cur),
+        check(`math.ar.${c.displayName}: statement + ageing carry ${cur} separately`, 'math', (st?.totalsByCurrency || {})[cur] !== undefined && rows.length > 0 && rows.every((x) => x.currency === cur),
           { statementCurrency: st?.currency, statementTotal: st?.totalOutstanding, ageingRows: rows.map((x) => ({ currency: x.currency, total: x.total })), sqlOpenInDocCurrency: open[0] });
       }
     }
