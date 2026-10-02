@@ -13,6 +13,9 @@ import {
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 import { formatMoney } from '../../../shared/money.util';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage, firstOfMonthIso, todayIso } from '../reporting/ledger-export.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -54,6 +57,14 @@ export class CashAccountStatementComponent {
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('CASH.VIEW'));
+  /** The export endpoint also requires REPORT.EXPORT server-side — distinct from the view code. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+
+  // ── Printable statement (export) ───────────────────────────────────────────
+  readonly exportFrom = signal(firstOfMonthIso());
+  readonly exportTo = signal(todayIso());
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   // ── Computed ───────────────────────────────────────────────────────────────
 
@@ -154,6 +165,26 @@ export class CashAccountStatementComponent {
   refresh(): void {
     const uid = this.selectedAccountUid();
     if (uid) this.loadStatement(uid);
+  }
+
+  /** Download the account statement for the chosen period (balance b/f + running balance). */
+  exportStatement(format: ExportFormat): void {
+    const uid = this.selectedAccountUid();
+    if (!uid || this.exporting()) return;
+    const from = String(this.exportFrom() ?? '').trim();
+    const to = String(this.exportTo() ?? '').trim();
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.cashbankService.exportAccountStatement(uid, from, to, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `cash-statement_${to || todayIso()}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────

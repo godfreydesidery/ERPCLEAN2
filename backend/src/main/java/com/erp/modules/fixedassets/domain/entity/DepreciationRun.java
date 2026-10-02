@@ -94,6 +94,18 @@ public class DepreciationRun extends UidEntity {
         // JPA
     }
 
+    /**
+     * Fix this run's uid BEFORE it is persisted, so the GL journals the run posts can carry it as
+     * their {@code source_ref} (one journal per asset branch — the run row itself is written after
+     * them because {@code gl_entry_uid} is NOT NULL). {@code @PrePersist} keeps a uid already set.
+     */
+    public String reserveUid() {
+        if (getUid() == null) {
+            setUid(com.erp.platform.common.domain.Ulid.next());
+        }
+        return getUid();
+    }
+
     public DepreciationRun(Long companyId, String runNumber, Long fiscalPeriodId,
                             LocalDate postingDate, String currency, Long createdBy) {
         this.companyId      = companyId;

@@ -65,6 +65,26 @@
             <i class="bi bi-inbox"></i> No ageing data found.
           </div>
         } @else {
+          <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+          @if (canExport()) {
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('PDF')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('XLSX')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('CSV')" [disabled]="exporting()">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+              </button>
+            </div>
+            @if (exportError(); as msg) {
+              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+          }
           <div class="erp-table-wrap mb-4">
             <table class="erp-table">
               <caption class="visually-hidden">AR ageing by customer</caption>
@@ -81,7 +101,7 @@
                 </tr>
               </thead>
               <tbody>
-                @for (row of ageingRows(); track row.customerId) {
+                @for (row of ageingRows(); track row.customerId + ':' + row.currency) {
                   <tr>
                     <td>
                       <span class="fw-semibold">{{ row.customerCode }}</span><br>
@@ -140,6 +160,15 @@
           <span class="mono">{{ b.currency }} {{ fmtMoney(b.balance) }}</span>
         </span>
       </div>
+      @if (b.unconverted?.length) {
+        <div class="alert alert-warning mb-3" role="note">
+          <i class="bi bi-currency-exchange me-1" aria-hidden="true"></i>
+          Not included above — older foreign-currency items with no reliable exchange rate:
+          @for (u of b.unconverted; track u.currency; let last = $last) {
+            <span class="mono">{{ u.currency }} {{ fmtMoney(u.amount) }}</span>{{ last ? '' : ', ' }}
+          }
+        </div>
+      }
     }
 
   }

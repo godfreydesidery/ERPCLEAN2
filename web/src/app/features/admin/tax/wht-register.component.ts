@@ -8,6 +8,11 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { WhtRegisterDto } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage } from '../reporting/ledger-export.util';
+
+type WhtPeriod = { year: number; month: number } | { periodStart: string; periodEnd: string };
 
 /**
  * WHT Register screen (FR-WHT-04 / US-VAT-06).
@@ -50,6 +55,14 @@ export class WhtRegisterComponent {
 
   // ── Permissions ───────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('WHT.VIEW'));
+  /** The export endpoint also requires REPORT.EXPORT server-side — distinct from the view code. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  /** The company + period the register on screen was loaded for, so the export matches it. */
+  private readonly loadedFor = signal<{ companyId: string; period: WhtPeriod } | null>(null);
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   readonly months = [
     { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
@@ -93,21 +106,45 @@ export class WhtRegisterComponent {
     this.state.set('loading');
     this.register.set(null);
 
-    const obs = this.periodMode() === 'month'
-      ? this.taxService.getWhtRegisterByMonth(companyId, this.periodYear(), this.periodMonth())
-      : this.taxService.getWhtRegisterByRange(
-          companyId,
-          String(this.periodStart() ?? '').trim(),
-          String(this.periodEnd() ?? '').trim(),
-        );
+    const period: WhtPeriod = this.periodMode() === 'month'
+      ? { year: this.periodYear(), month: this.periodMonth() }
+      : {
+          periodStart: String(this.periodStart() ?? '').trim(),
+          periodEnd: String(this.periodEnd() ?? '').trim(),
+        };
+    const obs = 'year' in period
+      ? this.taxService.getWhtRegisterByMonth(companyId, period.year, period.month)
+      : this.taxService.getWhtRegisterByRange(companyId, period.periodStart, period.periodEnd);
 
     obs.subscribe({
       next: (reg) => {
         this.register.set(reg);
+        this.loadedFor.set({ companyId, period });
+        this.exportError.set(null);
         this.state.set('idle');
       },
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+    });
+  }
+
+  /** Download the register exactly as loaded on screen (same company, same period). */
+  exportRegister(format: ExportFormat): void {
+    const loaded = this.loadedFor();
+    if (!loaded || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.taxService.exportWhtRegister(loaded.companyId, loaded.period, format).subscribe({
+      next: (blob) => {
+        const reg = this.register();
+        const suffix = reg ? `${reg.periodStart}_${reg.periodEnd}` : 'period';
+        downloadBlob(blob, `wht-register_${suffix}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
     });
   }
 

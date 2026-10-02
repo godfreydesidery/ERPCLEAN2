@@ -96,6 +96,35 @@
       </p>
     }
 
+    <!--
+      ── Export (BI.VIEW + BI.EXPORT, exactly the endpoint's gate) ──────────────────────
+      Sits under the filters rather than at the foot of a long page, so it is found. Exports the
+      same company / branch / date range the panels below show.
+    -->
+    @if (canExport()) {
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <label class="form-label mb-0 small text-muted" for="exportFormat">Export</label>
+        <select id="exportFormat" name="exportFormat" class="form-select form-select-sm w-auto"
+                [ngModel]="exportFormat()" (ngModelChange)="exportFormat.set($event)">
+          <option value="PDF">PDF</option>
+          <option value="XLSX">Excel</option>
+          <option value="CSV">CSV</option>
+        </select>
+        <button type="button" class="btn btn-outline-primary btn-sm"
+                (click)="exportDashboard()"
+                [disabled]="exporting()">
+          @if (exporting()) {
+            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exporting…
+          } @else {
+            <i class="bi bi-download me-1" aria-hidden="true"></i>Download
+          }
+        </button>
+        @if (exportError(); as msg) {
+          <output class="text-danger small" role="alert">{{ msg }}</output>
+        }
+      </div>
+    }
+
     <!-- ── Health strip ──────────────────────────────────────────────────────── -->
     @if (health().length > 0) {
       <output class="mb-4 d-flex flex-wrap gap-2" aria-label="Reconciliation health indicators">
@@ -320,6 +349,14 @@
                   </span>
                 </div>
                 <div class="erp-kpi__value">{{ +wc.arOutstanding | number:'1.2-2' }}</div>
+                @if (wc.arUnconverted?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of wc.arUnconverted; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <a routerLink="/admin/ar/invoices" class="small">View Receivables<span class="sr-only"> (AR invoices)</span></a>
                 </div>
@@ -337,6 +374,14 @@
                   </span>
                 </div>
                 <div class="erp-kpi__value">{{ +wc.apOutstanding | number:'1.2-2' }}</div>
+                @if (wc.apUnconverted?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of wc.apUnconverted; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <a routerLink="/admin/ap/supplier-bills" class="small">View Payables<span class="sr-only"> (AP supplier bills)</span></a>
                 </div>
@@ -715,28 +760,6 @@
           </div>
         }
       }
-    }
-
-    <!-- ── Export ─────────────────────────────────────────────────────────────── -->
-    @if (canExport()) {
-      <div class="d-flex gap-2 align-items-center mt-2 mb-4 pt-2 border-top">
-        <label class="form-label mb-0 small text-muted" for="exportFormat">Export</label>
-        <select id="exportFormat" name="exportFormat" class="form-select form-select-sm w-auto"
-                [ngModel]="exportFormat()" (ngModelChange)="exportFormat.set($event)">
-          <option value="PDF">PDF</option>
-          <option value="XLSX">Excel</option>
-          <option value="CSV">CSV</option>
-        </select>
-        <button type="button" class="btn btn-outline-primary btn-sm"
-                (click)="exportDashboard()"
-                [disabled]="exporting()">
-          @if (exporting()) {
-            <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Exporting…
-          } @else {
-            <i class="bi bi-download me-1" aria-hidden="true"></i>Download
-          }
-        </button>
-      </div>
     }
 
   }

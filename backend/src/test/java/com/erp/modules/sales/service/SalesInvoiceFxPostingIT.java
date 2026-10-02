@@ -398,6 +398,93 @@ class SalesInvoiceFxPostingIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Test 2b: live defect — a USD invoice's VAT was rounded to whole units (TZS's 0 dp).
+    // Net USD 12.00 @ 18% must carry VAT 2.16 (not 2.00), and the base GL must still balance.
+    // =========================================================================
+
+    @Test
+    void usdInvoice_vatIsRoundedInCents_andTheBaseJournalStillBalances() {
+        String productUid = productService.create(new CreateProductRequest(
+                company.getUid(), null, "USD Cents Widget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
+        productService.setPrice(productUid,
+                new SetProductPriceRequest(priceListUid, new MoneyDto("12.00", "USD")));
+
+        SalesInvoiceDto invoice = createAndFinaliseInvoice("USD", productUid, "14.16");
+
+        SalesInvoice entity = salesInvoiceRepo.findByUid(invoice.uid()).orElseThrow();
+        assertThat(entity.getNetTotalAmount()).isEqualByComparingTo("12.00");
+        assertThat(entity.getVatTotalAmount()).as("18% of USD 12.00, in cents")
+                .isEqualByComparingTo("2.16");
+        assertThat(entity.getGrossTotalAmount()).isEqualByComparingTo("14.16");
+        // 14.16 × 2 500 = 35 400 TZS
+        assertThat(entity.getBaseGrossTotalAmount()).isEqualByComparingTo("35400");
+
+        List<java.util.Map<String, Object>> legs = postAndReadJournal(invoice.uid());
+        assertBalancedInBase(legs);
+        assertThat(sumOf(legs, "debit_amount")).isEqualByComparingTo("35400");
+        // CR revenue 12.00 × 2 500 = 30 000 · CR VAT 2.16 × 2 500 = 5 400
+        assertThat(legs).extracting(m -> ((BigDecimal) m.get("credit_amount")).stripTrailingZeros())
+                .contains(new BigDecimal("30000").stripTrailingZeros(),
+                        new BigDecimal("5400").stripTrailingZeros());
+    }
+
+    @Test
+    void foreignInvoice_atAFractionalRate_centsConvertPerLeg_andTheJournalBalances() {
+        currencyRateRepo.save(new CurrencyRate(
+                company.getId(), branch.getId(), "EUR", "TZS",
+                new BigDecimal("2712.45000000"), LocalDate.now(), "SPOT", "MANUAL", rootId));
+        String productUid = productService.create(new CreateProductRequest(
+                company.getUid(), null, "EUR Cents Widget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null)).uid();
+        productService.setPrice(productUid,
+                new SetProductPriceRequest(priceListUid, new MoneyDto("12.00", "EUR")));
+
+        SalesInvoiceDto invoice = createAndFinaliseInvoice("EUR", productUid, "14.16");
+
+        SalesInvoice entity = salesInvoiceRepo.findByUid(invoice.uid()).orElseThrow();
+        assertThat(entity.getVatTotalAmount()).isEqualByComparingTo("2.16");
+        assertThat(entity.getFxRate()).isEqualByComparingTo("2712.45");
+
+        List<java.util.Map<String, Object>> legs = postAndReadJournal(invoice.uid());
+        assertBalancedInBase(legs);
+        // revenue round(12.00 × 2712.45) = 32 549 · VAT round(2.16 × 2712.45 = 5 858.892) = 5 859
+        // · DR plug = 38 408. Every leg is whole shillings: TZS has no minor unit.
+        assertThat(sumOf(legs, "debit_amount")).isEqualByComparingTo("38408");
+        assertThat(legs).allSatisfy(m -> {
+            assertThat(((BigDecimal) m.get("debit_amount")).stripTrailingZeros().scale())
+                    .isLessThanOrEqualTo(0);
+            assertThat(((BigDecimal) m.get("credit_amount")).stripTrailingZeros().scale())
+                    .isLessThanOrEqualTo(0);
+        });
+    }
+
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    private List<java.util.Map<String, Object>> postAndReadJournal(String invoiceUid) {
+        dispatcher.dispatchOne(getPendingFinalisedEvent(invoiceUid).getId());
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "fx_root", true, company.getId(), branch.getId(), null));
+        List<java.util.Map<String, Object>> legs = jdbc.queryForList(
+                "SELECT jl.debit_amount, jl.credit_amount, jl.currency FROM journal_lines jl "
+                        + "JOIN journal_entries je ON je.id = jl.entry_id "
+                        + "WHERE je.source_ref = ?", invoiceUid);
+        assertThat(legs).as("a GL journal was posted for " + invoiceUid).isNotEmpty();
+        return legs;
+    }
+
+    private static void assertBalancedInBase(List<java.util.Map<String, Object>> legs) {
+        assertThat(legs).allSatisfy(m -> assertThat(m.get("currency")).isEqualTo("TZS"));
+        assertThat(sumOf(legs, "debit_amount")).isEqualByComparingTo(sumOf(legs, "credit_amount"));
+    }
+
+    private static BigDecimal sumOf(List<java.util.Map<String, Object>> legs, String col) {
+        return legs.stream().map(m -> (BigDecimal) m.get(col))
+                .map(v -> v != null ? v : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    // =========================================================================
     // Test 3: Unknown/inactive currency → rejected on create (OQ-FX-06)
     // =========================================================================
 

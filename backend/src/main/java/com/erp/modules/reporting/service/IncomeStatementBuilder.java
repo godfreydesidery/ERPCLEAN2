@@ -51,17 +51,34 @@ public class IncomeStatementBuilder {
     public IncomeStatementDto build(Long companyId, String companyName, String currency,
                                      LocalDate from, LocalDate to,
                                      LocalDate cmpFrom, LocalDate cmpTo) {
+        return build(companyId, companyName, currency, StatementScope.companyWide(),
+                from, to, cmpFrom, cmpTo);
+    }
+
+    /**
+     * Builds the P&amp;L inside a {@link StatementScope} — the whole company, one branch, or the
+     * company-level entries that carry no branch. The three slices add up to the company P&amp;L
+     * line for line, because every journal line is in exactly one of them.
+     *
+     * <p>Year-end close journals are left out of every figure (and of the self-check aggregate, so
+     * the bar still compares like with like): the close moves the year's result into retained
+     * earnings, it is not income or expense of the year.
+     */
+    public IncomeStatementDto build(Long companyId, String companyName, String currency,
+                                     StatementScope scope,
+                                     LocalDate from, LocalDate to,
+                                     LocalDate cmpFrom, LocalDate cmpTo) {
 
         // Account metadata
         Map<Long, ChartOfAccount> accountMap = movementQuery.accountMapForCompany(companyId);
 
-        // (a) Period movements
-        Map<Long, BigDecimal[]> current     = movementQuery.periodMovementByAccount(companyId, from, to);
-        Map<Long, BigDecimal[]> comparative = movementQuery.periodMovementByAccount(companyId, cmpFrom, cmpTo);
+        // (a) Period movements — closing journals excluded
+        Map<Long, BigDecimal[]> current     = movementQuery.periodMovementByAccount(companyId, scope, from, to, true);
+        Map<Long, BigDecimal[]> comparative = movementQuery.periodMovementByAccount(companyId, scope, cmpFrom, cmpTo, true);
 
-        // (c) Type-level aggregates for the self-check
-        Map<AccountType, BigDecimal[]> typesCurrent     = movementQuery.periodMovementByAccountType(companyId, from, to);
-        Map<AccountType, BigDecimal[]> typesComparative = movementQuery.periodMovementByAccountType(companyId, cmpFrom, cmpTo);
+        // (c) Type-level aggregates for the self-check — same exclusion
+        Map<AccountType, BigDecimal[]> typesCurrent     = movementQuery.periodMovementByAccountType(companyId, scope, from, to, true);
+        Map<AccountType, BigDecimal[]> typesComparative = movementQuery.periodMovementByAccountType(companyId, scope, cmpFrom, cmpTo, true);
 
         // Classify lines into sections
         Map<StatementSection, List<StatementLineDto>> sections = new EnumMap<>(StatementSection.class);
@@ -120,7 +137,7 @@ public class IncomeStatementBuilder {
                 from + " – " + to,
                 cmpFrom + " – " + cmpTo,
                 from, to, null,
-                Instant.now());
+                Instant.now(), scope.branchUid(), scope.label());
 
         return new IncomeStatementDto(header, sectionList, grossProfit, netProfit, recon);
     }

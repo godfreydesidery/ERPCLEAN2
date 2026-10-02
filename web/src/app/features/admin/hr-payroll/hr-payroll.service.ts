@@ -20,6 +20,11 @@ import {
   PayslipDto,
   SubmitLeaveRequest,
 } from './models/hr-payroll.model';
+import {
+  PayrollRunStatutoryReportDto,
+  PayrollStatutoryPeriodReportDto,
+  StatutoryExportFormat,
+} from './models/payroll-statutory.model';
 
 export interface EmployeePage {
   rows: EmployeeDto[];
@@ -57,6 +62,7 @@ export class HrPayrollService {
   private readonly leaveBase = `${environment.apiBaseUrl}/hr/leave-requests`;
   private readonly loanBase = `${environment.apiBaseUrl}/hr/loans`;
   private readonly payslipBase = `${environment.apiBaseUrl}/hr/payslips`;
+  private readonly statutoryReportBase = `${environment.apiBaseUrl}/reports/payroll-statutory`;
 
   // ── Employees ─────────────────────────────────────────────────────────────────
 
@@ -165,6 +171,44 @@ export class HrPayrollService {
 
   reversePayrollRun(uid: string): Observable<PayrollRunDto> {
     return this.http.post<PayrollRunDto>(`${this.payRunBase}/uid/${uid}/reverse`, {});
+  }
+
+  // ── Statutory summary (FR-HR-23) + bank file ───────────────────────────────────
+
+  /** Per-run statutory summary: PAYE / NSSF / WCF / SDL / HESLB totals + per-employee lines. */
+  getStatutorySummary(runUid: string): Observable<PayrollRunStatutoryReportDto> {
+    return this.http.get<PayrollRunStatutoryReportDto>(`${this.payRunBase}/uid/${runUid}/statutory-summary`);
+  }
+
+  /** Statutory summary as a file. Gated HR.PAYROLL.VIEW + REPORT.EXPORT server-side. */
+  exportStatutorySummary(runUid: string, format: StatutoryExportFormat): Observable<Blob> {
+    return this.http.get(`${this.payRunBase}/uid/${runUid}/statutory-summary/export`, {
+      params: new HttpParams().set('format', format),
+      responseType: 'blob',
+    });
+  }
+
+  /**
+   * Bank (EFT) file for the run — CSV of each employee's net pay and payee details.
+   * Gated HR.PAYROLL.DISBURSE server-side (the same code as Disburse).
+   */
+  downloadEftFile(runUid: string): Observable<Blob> {
+    return this.http.get(`${this.payRunBase}/uid/${runUid}/eft-export`, { responseType: 'blob' });
+  }
+
+  /** Payroll Statutory report over a pay-date range — one row per approved / posted / paid run. */
+  getStatutoryPeriodReport(fromDate: string, toDate: string): Observable<PayrollStatutoryPeriodReportDto> {
+    const params = new HttpParams().set('fromDate', fromDate).set('toDate', toDate);
+    return this.http.get<PayrollStatutoryPeriodReportDto>(this.statutoryReportBase, { params });
+  }
+
+  exportStatutoryPeriodReport(
+    fromDate: string,
+    toDate: string,
+    format: StatutoryExportFormat,
+  ): Observable<Blob> {
+    const params = new HttpParams().set('fromDate', fromDate).set('toDate', toDate).set('format', format);
+    return this.http.get(`${this.statutoryReportBase}/export`, { params, responseType: 'blob' });
   }
 
   // ── Payslips ───────────────────────────────────────────────────────────────────

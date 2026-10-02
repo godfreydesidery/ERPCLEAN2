@@ -24,4 +24,11 @@ public record ArInvoiceDto(
         LocalDate settlementDiscountDueDate,
         BigDecimal settlementDiscountAmount,
         ArInvoiceStatus status
-) {}
+) {
+    /** A copy carrying {@code number} as its document number (read-time fill for older items). */
+    public ArInvoiceDto withDocumentNo(String number) {
+        return new ArInvoiceDto(id, uid, companyId, branchId, customerId, source, sourceInvoiceUid,
+                number, originalAmount, outstandingAmount, currency, invoiceDate, dueDate,
+                settlementDiscountDueDate, settlementDiscountAmount, status);
+    }
+}

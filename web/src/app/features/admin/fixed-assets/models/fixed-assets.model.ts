@@ -256,7 +256,10 @@ export interface DepreciationRunDto {
   status: DepreciationRunStatus;
   totalChargeAmount: string;
   assetCount: number;
+  /** The first of the run's journals (kept for existing links). */
   glEntryUid: string;
+  /** Every journal the run posted — one per asset branch. Optional for older API builds. */
+  glEntryUids?: string[];
   currency: string;
   executedAt: string;
   lines: DepreciationRunLineDto[];
@@ -287,4 +290,65 @@ export interface DepreciationRunPreviewDto {
   assetCount: number;
   totalChargeAmount: string;
   lines: DepreciationRunPreviewLineDto[];
+}
+
+// ── Fixed Asset Register (FR-FA-17) ─────────────────────────────────────────────
+// BigDecimal amounts arrive as JSON numbers (typed `number`); ids/uids as strings.
+
+export type FaExportFormat = 'PDF' | 'XLSX' | 'CSV';
+
+export interface FixedAssetRegisterRowDto {
+  assetUid: string;
+  assetNumber: string;
+  name: string;
+  categoryCode: string;
+  categoryName: string;
+  branchName: string | null;
+  location: string | null;
+  costCentreName: string | null;
+  acquisitionDate: string;
+  acquisitionCost: number;
+  /** Carrying cost as at the date (after any revaluation dated on or before it). */
+  cost: number;
+  accumulatedDepreciation: number;
+  /** Null when the asset was not in service at the date (draft / disposed / written off). */
+  nbv: number | null;
+  /** Status AS AT the date. */
+  status: FixedAssetStatus;
+  disposedAt: string | null;
+  inTotals: boolean;
+}
+
+export interface FixedAssetRegisterTotalDto {
+  categoryCode: string | null;
+  categoryName: string | null;
+  assetCount: number;
+  cost: number;
+  accumulatedDepreciation: number;
+  nbv: number;
+}
+
+export interface FixedAssetRegisterDto {
+  asOf: string;
+  categoryName: string | null;
+  branchName: string | null;
+  status: FixedAssetStatus | null;
+  location: string | null;
+  costCentreName: string | null;
+  rows: FixedAssetRegisterRowDto[];
+  categoryTotals: FixedAssetRegisterTotalDto[];
+  grandTotal: FixedAssetRegisterTotalDto;
+  /** Listed rows left out of the totals (not in service at the date). */
+  rowsNotInTotals: number;
+  currency: string;
+  generatedAt: string;
+}
+
+export interface FixedAssetRegisterFilter {
+  asOf: string;
+  categoryUid?: string | null;
+  status?: FixedAssetStatus | null;
+  branchUid?: string | null;
+  location?: string | null;
+  costCentreUid?: string | null;
 }

@@ -369,6 +369,43 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./purchases/goods-receipt-detail.component').then((m) => m.GoodsReceiptDetailComponent),
   },
+  // ── Purchase reports ──────────────────────────────────────────────────────
+  // Each guard is IDENTICAL to its endpoint's @PreAuthorize on PurchaseReportController (and to
+  // the nav entry), and reuses the code of the screen that already shows the same figures:
+  // receipts at PURCHASE.GOODS_RECEIPT.VIEW, orders at PURCHASE.ORDER.VIEW, and price variance —
+  // order prices beside receipt costs — at both.
+  {
+    path: 'reports/purchases/goods-received',
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/goods-received-register.component').then(
+        (m) => m.GoodsReceivedRegisterComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/by-supplier',
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/purchases-by-supplier.component').then(
+        (m) => m.PurchasesBySupplierComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/open-orders',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/open-purchase-orders.component').then(
+        (m) => m.OpenPurchaseOrdersComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/price-variance',
+    canActivate: [requireAllPermissions('PURCHASE.ORDER.VIEW', 'PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/purchase-price-variance.component').then(
+        (m) => m.PurchasePriceVarianceComponent,
+      ),
+  },
   // ── General Ledger (Accounting) ───────────────────────────────────────────
   {
     path: 'gl/accounts',
@@ -600,6 +637,20 @@ export const ADMIN_ROUTES: Routes = [
       import('./reporting/cash-flow-statement.component').then((m) => m.CashFlowStatementComponent),
   },
   {
+    // Same gate as the Balance Sheet — its closing column IS the Balance Sheet's equity.
+    path: 'reporting/changes-in-equity',
+    canActivate: [requirePermission('REPORT.BS.VIEW')],
+    loadComponent: () =>
+      import('./reporting/changes-in-equity.component').then((m) => m.ChangesInEquityComponent),
+  },
+  {
+    // Built from the P&L AND the Balance Sheet — the endpoint requires both, so does the route.
+    path: 'reporting/ratios',
+    canActivate: [requireAllPermissions('REPORT.PL.VIEW', 'REPORT.BS.VIEW')],
+    loadComponent: () =>
+      import('./reporting/financial-ratios.component').then((m) => m.FinancialRatiosComponent),
+  },
+  {
     path: 'reporting/account-ledger',
     canActivate: [requirePermission('REPORT.LEDGER.VIEW')],
     loadComponent: () =>
@@ -623,6 +674,43 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/profitability-report.component').then(
         (m) => m.ProfitabilityReportComponent,
+      ),
+  },
+  // Sales Summary (sales by customer / agent / route / branch / day / cashier) — same guard as the
+  // Sales Report, which already discloses margin at it; equal to the endpoint's @PreAuthorize.
+  {
+    path: 'reports/sales-summary',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./reporting/sales-summary-report.component').then(
+        (m) => m.SalesSummaryReportComponent,
+      ),
+  },
+  // Daily cash-up by payment method — POS.CASHUP.VIEW (managers): it shows every cashier's takings.
+  {
+    path: 'reports/payment-summary',
+    canActivate: [requirePermission('POS.CASHUP.VIEW')],
+    loadComponent: () =>
+      import('./reporting/payment-summary-report.component').then(
+        (m) => m.PaymentSummaryReportComponent,
+      ),
+  },
+  // Reorder Report — STOCK.VIEW (cost columns appear only with INVENTORY.VALUATION.VIEW).
+  {
+    path: 'reports/reorder',
+    canActivate: [requirePermission('STOCK.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/reorder-report.component').then(
+        (m) => m.ReorderReportComponent,
+      ),
+  },
+  // Stock Ageing — discloses stock value, so INVENTORY.VALUATION.VIEW like the other value reports.
+  {
+    path: 'reports/stock-ageing',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-ageing-report.component').then(
+        (m) => m.StockAgeingReportComponent,
       ),
   },
   {
@@ -805,6 +893,13 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./fixed-assets/fa-reconciliation.component').then((m) => m.FaReconciliationComponent),
   },
+  // FR-FA-17. Same gate as GET /api/v1/fixed-assets/register.
+  {
+    path: 'fixed-assets/register',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fa-register-report.component').then((m) => m.FaRegisterReportComponent),
+  },
   {
     path: 'depreciation-runs',
     canActivate: [requirePermission('FA.VIEW')],
@@ -902,6 +997,15 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('HR.PAYROLL.VIEW')],
     loadComponent: () =>
       import('./hr-payroll/payroll-run-detail.component').then((m) => m.PayrollRunDetailComponent),
+  },
+  // FR-HR-23. Same gate as the payroll-run screens and GET /api/v1/reports/payroll-statutory.
+  {
+    path: 'reports/payroll-statutory',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-statutory-report.component').then(
+        (m) => m.PayrollStatutoryReportComponent,
+      ),
   },
   {
     path: 'hr/payslips/uid/:uid',

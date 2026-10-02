@@ -74,8 +74,10 @@ public class FixedAssetGlPoster {
     // -------------------------------------------------------------------------
 
     /**
-     * Post the depreciation run journal.
-     * One journal per run; per-category leg pairs (DR dep expense / CR accum dep).
+     * Post a depreciation journal for ONE branch's assets.
+     * The run calls this once per asset branch (the engine stamps a single branch on a journal and
+     * all its lines, so mixing branches in one journal would book every asset to one branch);
+     * per-category leg pairs (DR dep expense / CR accum dep) within it.
      *
      * @param categoryCharges map of (categoryId → (category, summedCharge))
      */

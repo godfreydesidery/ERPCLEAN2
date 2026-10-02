@@ -4,7 +4,6 @@ import com.erp.modules.approvals.domain.dto.ApprovalRequestDto;
 import com.erp.modules.approvals.domain.dto.SubmitForApprovalRequest;
 import com.erp.modules.approvals.domain.enums.ApprovalRequestStatus;
 import com.erp.modules.approvals.service.ApprovalEngine;
-import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
@@ -98,6 +97,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final AuditService             audit;
     /** ADR-0040 D-5: credit-limit + status check at SO confirm (mirrors SalesInvoiceServiceImpl). */
     private final ArBalanceService         arBalanceService;
+    /** Base-currency credit exposure (owner ruling 2026-10-02: per currency, reliable rows only). */
+    private final CreditExposureCalculator creditExposure;
     private final PermissionResolver       permissionResolver;
     private final ApprovalEngine           approvalEngine;
     /** D-4: automatic amount-threshold approval gate (extends the PR #189 engine-derived flow). */
@@ -126,7 +127,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  ArBalanceService arBalanceService,
                                  PermissionResolver permissionResolver,
                                  ApprovalEngine approvalEngine,
-                                 SalesApprovalGate salesApprovalGate) {
+                                 SalesApprovalGate salesApprovalGate,
+                                 CreditExposureCalculator creditExposure) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
@@ -151,6 +153,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.permissionResolver = permissionResolver;
         this.approvalEngine   = approvalEngine;
         this.salesApprovalGate = salesApprovalGate;
+        this.creditExposure   = creditExposure;
     }
 
     @Override
@@ -856,17 +859,19 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         boolean manualBlocked = customer.isManualHold();
 
         // --- Block condition 3: credit-limit breach ---
+        // All in BASE currency (owner ruling 2026-10-02): unconverted (V62-filled) foreign AR and
+        // a foreign order gross count at today's rate; a missing rate fails closed (= breached).
         boolean limitBreached = false;
         BigDecimal projectedBalance = null;
+        CreditExposureCalculator.Assessment exposure = null;
         Money creditLimit = customer.getCreditLimit();
         if (creditLimit != null && creditLimit.isPresent()
                 && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
-            ArBalanceDto balance = arBalanceService.currentBalance(
-                    order.getCompanyId(), order.getCustomerId());
-            projectedBalance = balance.balance().add(order.getGrossTotalAmount());
-            if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
-                limitBreached = true;
-            }
+            exposure = creditExposure.assess(order.getCompanyId(), order.getCustomerId(),
+                    order.getGrossTotalAmount(), CurrencyCode.value(order.getCurrency()),
+                    creditLimit, LocalDate.now());
+            projectedBalance = exposure.exposure();
+            limitBreached = exposure.breached();
         }
 
         if (!statusBlocked && !manualBlocked && !limitBreached) {
@@ -894,7 +899,10 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 }
                 msg.append(".");
             }
-            if (limitBreached && creditLimit != null) {
+            if (limitBreached && exposure != null && exposure.rateMissing()) {
+                msg.append(' ').append(CreditExposureCalculator.missingRateSentence(
+                        exposure.missingRateCurrencies()));
+            } else if (limitBreached && creditLimit != null) {
                 msg.append(" Confirming this order would exceed the customer's credit limit.");
             }
             msg.append(" You do not have permission to override the credit restriction.");
@@ -910,6 +918,11 @@ public class SalesOrderServiceImpl implements SalesOrderService {
             detail.put("creditLimit", creditLimit.getAmount().toPlainString());
             detail.put("creditLimitCurrency", CurrencyCode.value(creditLimit.getCurrency()));
             detail.put("projectedBalance", projectedBalance.toPlainString());
+            detail.put("projectedBalanceCurrency", exposure.baseCurrency());
+            if (exposure.rateMissing()) {
+                detail.put("rateMissingCurrencies",
+                        String.join(",", exposure.missingRateCurrencies()));
+            }
         }
         audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_orders",
                 order.getId(), order.getUid())

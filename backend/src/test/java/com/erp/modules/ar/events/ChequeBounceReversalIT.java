@@ -1,8 +1,10 @@
 package com.erp.modules.ar.events;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ar.domain.dto.ArInvoiceDto;
+import com.erp.modules.ar.domain.dto.ArReconciliationDto;
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest;
 import com.erp.modules.ar.domain.dto.SetOpeningBalanceRequest;
@@ -10,9 +12,11 @@ import com.erp.modules.ar.domain.entity.ArReceipt;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
+import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.ar.service.ArGlSeeder;
 import com.erp.modules.ar.service.ArOpeningBalanceService;
 import com.erp.modules.ar.service.ArReceiptService;
+import com.erp.modules.ar.service.ArReconciliationQuery;
 import com.erp.modules.cashbank.domain.entity.CashBankAccount;
 import com.erp.modules.cashbank.domain.entity.Cheque;
 import com.erp.modules.cashbank.domain.enums.ChequeStatus;
@@ -44,6 +48,7 @@ import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventDispatcher;
 import com.erp.platform.events.DomainEventRepository;
 import com.erp.platform.events.DomainEventType;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
@@ -76,6 +81,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class ChequeBounceReversalIT extends PostgresIntegrationTest {
 
     @Autowired private ArReceiptService          receiptService;
+    @Autowired private ArReconciliationQuery     reconciliationQuery;
+    @Autowired private ArBalanceService          balanceService;
     @Autowired private ArOpeningBalanceService   openingBalanceService;
     @Autowired private ArGlSeeder                arGlSeeder;
     @Autowired private CustomerService           customerService;
@@ -105,6 +112,7 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
     private Long    rootId;
     private String  companyUid;
     private String  customerUid;
+    private Long    customerId;
 
     private static final String TZS = "TZS";
     /** Full open-item / receipt face. */
@@ -127,10 +135,12 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
 
         setContext();
 
-        customerUid = customerService.create(new CreateCustomerRequest(
+        var customer = customerService.create(new CreateCustomerRequest(
                 company.getId(), PartyType.INDIVIDUAL, "Bounce Customer",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
+        customerUid = customer.uid();
+        customerId  = customer.id();
 
         chartOfAccountService.seedDefaults(company.getId());
         fiscalCalendarService.seedCurrentYear(company.getId());
@@ -232,6 +242,56 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 3: a bounced receipt that left money ON ACCOUNT. The GL reversal returns the WHOLE
+    // receipt to AR-control (allocated + on-account), so the on-account remainder must stop
+    // netting the sub-ledger, or the AR reconciliation reads short by exactly that remainder.
+    // =========================================================================
+
+    @Test
+    void bounce_receiptWithOnAccountRemainder_reconciliationStaysZero_andCannotBeReallocated() {
+        BigDecimal invoiceAmount = new BigDecimal("1000");
+        BigDecimal receiptAmount = new BigDecimal("1500");     // 1000 to the invoice, 500 on account
+        ArInvoiceDto inv = openItem(invoiceAmount);
+        ArReceiptDto receipt = receiptService.recordAndAllocate(new RecordReceiptRequest(
+                companyUid, customerUid, receiptAmount, TZS, LocalDate.now(), "CHEQUE", null, List.of()));
+        assertThat(receipt.unallocatedAmount()).isEqualByComparingTo("500");
+        assertArReconciles("before the bounce", "-500");
+
+        Cheque cheque = depositedInboundCheque(receipt.uid(), receiptAmount);
+        chequeService.bounce(cheque.getUid(), "Insufficient funds");
+        dispatchBounceEvent(cheque.getUid());
+        setContext();
+
+        assertThat(arInvoiceRepo.findByUid(inv.uid()).orElseThrow().getOutstandingAmount())
+                .as("the bounce restores the invoice").isEqualByComparingTo(invoiceAmount);
+        assertThat(arReceiptRepo.findByUid(receipt.uid()).orElseThrow().getUnallocatedAmount())
+                .as("a reversed receipt has nothing left on account").isEqualByComparingTo("0");
+        assertArReconciles("after the bounce", "1000");
+
+        // A bounced receipt brought in no money: re-allocating it would relieve invoices with cash
+        // that never arrived (and restore the invoice a second time). Refused with a friendly 409.
+        assertThatThrownBy(() -> receiptService.reallocate(receipt.uid(), List.of(
+                new RecordReceiptRequest.AllocationLineRequest(inv.uid(), invoiceAmount, null, null))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("bounced")
+                .hasMessageNotContaining(receipt.uid());
+        assertThat(arInvoiceRepo.findByUid(inv.uid()).orElseThrow().getOutstandingAmount())
+                .isEqualByComparingTo(invoiceAmount);
+        assertArReconciles("after the refused re-allocation", "1000");
+    }
+
+    private void assertArReconciles(String when, String expected) {
+        setContext();
+        ArReconciliationDto recon = reconciliationQuery.reconcile(company.getId());
+        assertThat(recon.glControlBalance()).as("GL 1200 %s", when).isEqualByComparingTo(expected);
+        assertThat(recon.subLedgerTotal()).as("AR sub-ledger %s", when).isEqualByComparingTo(expected);
+        assertThat(recon.difference()).as("AR reconciliation difference %s", when)
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(balanceService.currentBalance(company.getId(), customerId).balance())
+                .as("customer balance %s", when).isEqualByComparingTo(expected);
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -243,11 +303,15 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
 
     /** Builds + saves an INBOUND cheque (linked to the receipt) directly in DEPOSITED state. */
     private Cheque depositedInboundCheque(String arReceiptUid) {
+        return depositedInboundCheque(arReceiptUid, AMOUNT);
+    }
+
+    private Cheque depositedInboundCheque(String arReceiptUid, BigDecimal amount) {
         CashBankAccount account = cashAccountRepo.findByCompanyIdAndIsDefaultTrue(company.getId())
                 .orElseThrow(() -> new AssertionError("default cash account not seeded"));
         Cheque cheque = new Cheque(
                 company.getId(), branch.getId(), account.getId(),
-                "INB-" + System.nanoTime(), "Bounce Customer", AMOUNT, TZS,
+                "INB-" + System.nanoTime(), "Bounce Customer", amount, TZS,
                 LocalDate.now(), LocalDate.now(),
                 arReceiptUid, rootId);
         cheque.setStatus(ChequeStatus.DEPOSITED);

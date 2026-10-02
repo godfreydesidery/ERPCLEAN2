@@ -107,11 +107,17 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
      * <p>{@code branchId} is optional — pass {@code null} to aggregate across all branches.
      * Grouped by branchId; result is a constructor-expression into {@link BranchSalesAggregateDto}.
      * Used by {@code SalesByBranchQuery} (BI dashboard branch-sales panel, ADR-0037).
+     *
+     * <p>The total is in the company's BASE currency: {@code baseGrossTotalAmount} is the gross
+     * converted at the rate stamped at finalise (ADR-0036 D-4). Summing {@code grossTotalAmount}
+     * instead added a USD invoice into the TZS panel at 1:1. Every FINALISED row carries a base
+     * amount (stamped at finalise, back-filled = face for pre-FX rows); the COALESCE only guards a
+     * row that somehow lacks one, where face is the best figure available.
      */
     @Query("""
             SELECT new com.erp.modules.sales.domain.dto.BranchSalesAggregateDto(
                        i.branchId,
-                       COALESCE(SUM(i.grossTotalAmount), 0),
+                       COALESCE(SUM(COALESCE(i.baseGrossTotalAmount, i.grossTotalAmount)), 0),
                        COUNT(i))
             FROM SalesInvoice i
             WHERE i.companyId   = :companyId

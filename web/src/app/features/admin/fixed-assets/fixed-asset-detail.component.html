@@ -76,7 +76,7 @@
               <dt class="col-sm-3">Depreciation Method</dt><dd class="col-sm-9">{{ a.depreciationMethod === 'STRAIGHT_LINE' ? 'Straight Line' : 'Reducing Balance' }}</dd>
               <dt class="col-sm-3">Life Periods</dt><dd class="col-sm-9">{{ a.lifePeriods }}</dd>
               @if (a.reducingRate) {
-                <dt class="col-sm-3">Reducing Rate</dt><dd class="col-sm-9">{{ a.reducingRate }}%</dd>
+                <dt class="col-sm-3">Reducing Rate</dt><dd class="col-sm-9">{{ a.reducingRate }}% per month</dd>
               }
               <dt class="col-sm-3">Acquisition Date</dt><dd class="col-sm-9">{{ a.acquisitionDate }}</dd>
               <dt class="col-sm-3">Dep. Start Date</dt><dd class="col-sm-9">{{ a.depreciationStartDate }}</dd>
@@ -460,7 +460,26 @@
         <!-- ── Depreciation Schedule ──────────────────────────────────────── -->
         @if (isInService() || schedule().length > 0) {
           <section aria-labelledby="scheduleHeading" class="mb-4">
-            <h2 id="scheduleHeading" class="erp-section-title">Depreciation Schedule</h2>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <h2 id="scheduleHeading" class="erp-section-title mb-0 me-auto">Depreciation Schedule</h2>
+              @if (canExportSchedule() && schedule().length > 0) {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportSchedule('PDF')" [disabled]="exportingSchedule()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportSchedule('XLSX')" [disabled]="exportingSchedule()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportSchedule('CSV')" [disabled]="exportingSchedule()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              }
+            </div>
+            @if (scheduleExportError(); as msg) {
+              <p class="text-danger small" role="alert">{{ msg }}</p>
+            }
             @switch (scheduleState()) {
               @case ('loading') {
                 <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">

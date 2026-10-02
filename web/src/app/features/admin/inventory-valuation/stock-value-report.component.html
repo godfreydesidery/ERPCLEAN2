@@ -43,21 +43,23 @@
               </p>
             }
           </div>
-          <div class="col-sm-6 col-lg-3">
-            <label class="form-label" for="psv-supplier">
-              Supplier <span class="text-muted small">(optional)</span>
-            </label>
-            <app-uid-picker id="psv-supplier" name="psv-supplier"
-                            [(ngModel)]="supplierUid"
-                            [options]="supplierOptions()"
-                            placeholder="All suppliers" />
-            <!-- Plain sibling help text: the uid-picker forwards id/aria-label* to its inner
-                 <select> but has no aria-describedby input, so an id here would promise an
-                 association that never reaches the control. -->
-            <p class="form-text small mb-0">
-              Pick one supplier for a supplier-wise stock value.
-            </p>
-          </div>
+          @if (canFilterSupplier()) {
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label" for="psv-supplier">
+                Supplier <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="psv-supplier" name="psv-supplier"
+                              [(ngModel)]="supplierUid"
+                              [options]="supplierOptions()"
+                              placeholder="All suppliers" />
+              <!-- Plain sibling help text: the uid-picker forwards id/aria-label* to its inner
+                   <select> but has no aria-describedby input, so an id here would promise an
+                   association that never reaches the control. -->
+              <p class="form-text small mb-0">
+                Pick one supplier for a supplier-wise stock value.
+              </p>
+            </div>
+          }
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()" [disabled]="state() === 'loading'">

@@ -1,0 +1,4 @@
+// stock-ageing-report — the foot is the line the owner reads, so it gets a rule above it.
+.erp-table tfoot .totals-row td {
+  border-top: 2px solid var(--erp-text-3);
+}

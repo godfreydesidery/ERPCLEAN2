@@ -17,24 +17,30 @@ import {
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { AgeingCurrencyGroup, groupAgeingByCurrency } from '../../../shared/ageing-currency.util';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage, firstOfMonthIso, todayIso } from '../reporting/ledger-export.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
 const BUCKET_ORDER: AgeingBucket[] = [
-  'CURRENT', 'DAYS_1_30', 'DAYS_31_60', 'DAYS_61_90', 'DAYS_91_PLUS',
+  'CURRENT', 'D1_30', 'D31_60', 'D61_90', 'D90_PLUS',
 ];
 
 const BUCKET_LABEL: Record<AgeingBucket, string> = {
   CURRENT:      'Current',
-  DAYS_1_30:    '1 – 30 days',
-  DAYS_31_60:   '31 – 60 days',
-  DAYS_61_90:   '61 – 90 days',
-  DAYS_91_PLUS: '90+ days',
+  D1_30:    '1 – 30 days',
+  D31_60:   '31 – 60 days',
+  D61_90:   '61 – 90 days',
+  D90_PLUS: '90+ days',
 };
 
 /**
  * Supplier Statement screen. Gated AP.VIEW.
  * Pick company + supplier → load balance + ageing + open bills.
+ * The AP-to-GL reconciliation is company-wide, so it loads with the company — before any supplier
+ * is picked — and says plainly whether the sub-ledger agrees with the GL control account.
  *
  * Money arrives as number|string on wire; coerce with +v throughout.
  */
@@ -66,18 +72,42 @@ export class SupplierStatementComponent {
   readonly ageing = signal<ApAgeingRowDto[]>([]);
   readonly openBills = signal<SupplierBillDto[]>([]);
   readonly reconciliation = signal<ApReconciliationDto | null>(null);
+  readonly reconState = signal<LoadState>('idle');
   readonly state = signal<LoadState>('idle');
+
+  // ── Printable statement (export) ───────────────────────────────────────────
+  /** Statement period. An empty From runs the statement from the supplier's first transaction. */
+  readonly exportFrom = signal(firstOfMonthIso());
+  readonly exportTo = signal(todayIso());
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('AP.VIEW'));
+  /** The export endpoints also require REPORT.EXPORT server-side — distinct from the view code. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+
+  /** |difference| below half a cent counts as agreeing (rounding on the two sides). */
+  readonly reconDifference = computed(() => +(this.reconciliation()?.difference ?? 0));
+  readonly absDifference = computed(() => Math.abs(this.reconDifference()));
+  readonly reconciled = computed(
+    () => this.reconciliation() !== null && Math.abs(this.reconDifference()) < 0.005,
+  );
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  readonly sortedAgeing = computed<ApAgeingRowDto[]>(() =>
-    [...this.ageing()].sort((a, b) =>
-      BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket),
-    ),
+  /** Ageing, one five-bucket group per currency (base first) — never summed across currencies. */
+  readonly ageingGroups = computed<AgeingCurrencyGroup<ApAgeingRowDto>[]>(() =>
+    groupAgeingByCurrency(this.ageing(), BUCKET_ORDER),
   );
+
+  readonly multiCurrency = computed(() => this.ageingGroups().length > 1);
+
+  /** The base-currency buckets (the server lists base first) — drives the headers and the bar. */
+  readonly sortedAgeing = computed<ApAgeingRowDto[]>(() => this.ageingGroups()[0]?.buckets ?? []);
+
+  /** Total of the base-currency buckets — the bar's denominator. */
+  readonly baseAgeingTotal = computed(() => this.ageingGroups()[0]?.total ?? 0);
 
   readonly outstandingBalance = computed(() => +(this.balance()?.outstandingBalance ?? 0));
 
@@ -118,7 +148,10 @@ export class SupplierStatementComponent {
           next: (list) => {
             this.companies.set(list);
             this.companyState.set('idle');
-            if (list.length > 0) this.selectedCompanyId.set(list[0].id);
+            if (list.length > 0) {
+              this.selectedCompanyId.set(list[0].id);
+              this.loadReconciliation(list[0].id);
+            }
           },
           error: () => this.companyState.set('error'),
         });
@@ -133,6 +166,19 @@ export class SupplierStatementComponent {
     this.supplierSearchQ.set('');
     this.clearData();
     this.state.set('idle');
+    this.reconciliation.set(null);
+    if (id) this.loadReconciliation(id);
+  }
+
+  /** Sub-ledger vs GL 2100 for the whole company (same gate as the screen: AP.VIEW). */
+  loadReconciliation(companyId: string = this.selectedCompanyId()): void {
+    if (!companyId) return;
+    this.reconState.set('loading');
+    this.apService.getReconciliation(companyId).subscribe({
+      next: (r) => { this.reconciliation.set(r); this.reconState.set('idle'); },
+      error: (err) =>
+        this.reconState.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+    });
   }
 
   onSupplierSearchChange(q: string): void {
@@ -159,7 +205,6 @@ export class SupplierStatementComponent {
     this.balance.set(null);
     this.ageing.set([]);
     this.openBills.set([]);
-    this.reconciliation.set(null);
   }
 
   private loadStatement(supplierUid: string): void {
@@ -168,15 +213,15 @@ export class SupplierStatementComponent {
     this.state.set('loading');
     this.clearData();
 
-    // Load balance, ageing, open bills, and reconciliation in parallel.
+    // Load balance, ageing and open bills in parallel (the reconciliation is company-wide and
+    // loads with the company).
     let balanceDone = false;
     let ageingDone = false;
     let billsDone = false;
-    let reconciliationDone = false;
     let errored = false;
 
     const checkDone = () => {
-      if (!errored && balanceDone && ageingDone && billsDone && reconciliationDone) {
+      if (!errored && balanceDone && ageingDone && billsDone) {
         this.state.set('idle');
       }
     };
@@ -208,17 +253,52 @@ export class SupplierStatementComponent {
       },
       error: handleError,
     });
-
-    // Reconciliation is company-scoped (not supplier-scoped) — load once per company.
-    this.apService.getReconciliation(companyId).subscribe({
-      next: (r) => { this.reconciliation.set(r); reconciliationDone = true; checkDone(); },
-      error: () => { reconciliationDone = true; checkDone(); }, // non-fatal — don't block the rest
-    });
   }
 
   refresh(): void {
     const s = this.selectedSupplier();
     if (s) this.loadStatement(s.uid);
+    this.loadReconciliation();
+  }
+
+  /** Download the supplier statement (balance b/f, movements with running balance, closing). */
+  exportStatement(format: ExportFormat): void {
+    const s = this.selectedSupplier();
+    const companyId = this.selectedCompanyId();
+    if (!s || !companyId || this.exporting()) return;
+    const from = String(this.exportFrom() ?? '').trim();
+    const to = String(this.exportTo() ?? '').trim();
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.apService.exportStatement(companyId, s.uid, from, to, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `supplier-statement_${to || 'today'}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
+  }
+
+  /** Download this supplier's ageing buckets as at today. */
+  exportAgeing(format: ExportFormat): void {
+    const s = this.selectedSupplier();
+    const companyId = this.selectedCompanyId();
+    if (!s || !companyId || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.apService.exportAgeing(companyId, s.uid, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `supplier-ageing_${todayIso()}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────
@@ -232,10 +312,10 @@ export class SupplierStatementComponent {
   bucketBadgeClass(bucket: AgeingBucket): string {
     switch (bucket) {
       case 'CURRENT':      return 'text-bg-success';
-      case 'DAYS_1_30':    return 'text-bg-warning';
-      case 'DAYS_31_60':   return 'text-bg-orange';
-      case 'DAYS_61_90':   return 'text-bg-danger';
-      case 'DAYS_91_PLUS': return 'text-bg-dark';
+      case 'D1_30':    return 'text-bg-warning';
+      case 'D31_60':   return 'text-bg-orange';
+      case 'D61_90':   return 'text-bg-danger';
+      case 'D90_PLUS': return 'text-bg-dark';
       default:             return 'text-bg-secondary';
     }
   }

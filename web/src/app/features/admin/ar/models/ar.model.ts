@@ -12,7 +12,7 @@
 
 export type ArInvoiceStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'WRITTEN_OFF';
 export type ArInvoiceSource = 'SALE' | 'OPENING_BALANCE';
-export type AgeingBucket = 'CURRENT' | 'DAYS_1_30' | 'DAYS_31_60' | 'DAYS_61_90' | 'DAYS_91_PLUS';
+export type AgeingBucket = 'CURRENT' | 'D1_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
 export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'OTHER';
 
 // ── AR Invoice ────────────────────────────────────────────────────────────────
@@ -159,12 +159,19 @@ export interface ArStatementDto {
   /** Wire: number or string */
   totalOutstanding: number | string;
   currency: string;
+  /** One five-bucket block per currency, base currency first. */
   ageing: ArAgeingBucketDto[];
   openItems: ArInvoiceDto[];
   recentReceipts: ArReceiptDto[];
+  /**
+   * Outstanding per currency, base first. `totalOutstanding` is the base-currency part only;
+   * amounts in different currencies are never added together. Wire: numbers.
+   */
+  totalsByCurrency?: Record<string, number | string>;
 }
 
 // ── Ageing row (standalone ageing endpoint) ───────────────────────────────────
+// One row per customer PER CURRENCY: a customer owing in TZS and USD has two rows.
 
 export interface ArAgeingRowDto {
   customerId: string;
@@ -187,9 +194,22 @@ export interface ArAgeingRowDto {
 
 // ── Balance ───────────────────────────────────────────────────────────────────
 
+/**
+ * A foreign-currency amount with no reliable base-currency value (old rows whose stored rate is
+ * the V62 back-fill of 1). Shown in its own currency; never part of a base-currency total.
+ */
+export interface ArUnconvertedAmountDto {
+  currency: string;
+  /** Wire: number */
+  amount: number;
+  itemCount: number;
+}
+
 export interface ArBalanceDto {
   customerId: string;
-  /** Wire: number or string */
+  /** Base-currency total over reliable rows. Wire: number or string */
   balance: number | string;
   currency: string;
+  /** Foreign amounts left out of balance (per currency). Absent on older servers. */
+  unconverted?: ArUnconvertedAmountDto[];
 }

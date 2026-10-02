@@ -16,7 +16,13 @@ public record DepreciationRunDto(
         DepreciationRunStatus status,
         BigDecimal totalChargeAmount,
         int assetCount,
+        /** The first of the run's journals (kept for existing links; see {@link #glEntryUids}). */
         String glEntryUid,
+        /**
+         * Every journal the run posted - one per asset branch (an asset's depreciation is booked to
+         * the asset's branch). Runs posted before the per-branch split carry their single journal.
+         */
+        List<String> glEntryUids,
         String currency,
         Instant executedAt,
         List<DepreciationRunLineDto> lines

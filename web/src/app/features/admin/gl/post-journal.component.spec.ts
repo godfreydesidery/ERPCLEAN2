@@ -13,6 +13,7 @@
  *  9. post() validation: each line must have a debit or credit (not zero both).
  * 10. post() validation: a line cannot have both debit and credit.
  * 11. String(v??'').trim() path: amount signal holding non-string value doesn't crash.
+ * 12. Branch: omitted by default (company-level journal); the picked branch uid is sent.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -24,6 +25,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { ReportFilterOptionsService } from '../reporting/report-filter-options.service';
 import { GlService } from './gl.service';
 import { PostJournalComponent } from './post-journal.component';
 
@@ -77,6 +79,15 @@ function makeBed(canPost = true) {
       {
         provide: CompanyService,
         useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) },
+      },
+      {
+        provide: ReportFilterOptionsService,
+        useValue: {
+          branchOptions: vi.fn(() => of([
+            { uid: 'BR1', label: 'Dar', hint: 'BR-01' },
+            { uid: 'BR2', label: 'Arusha', hint: 'BR-02' },
+          ])),
+        },
       },
       {
         provide: AlertService,
@@ -188,6 +199,29 @@ describe('PostJournalComponent — post() payload', () => {
     expect(req.lines[0].debitAmount).toBe('1000');
     expect(req.lines[1].accountUid).toBe('ACC2');
     expect(req.lines[1].creditAmount).toBe('1000');
+    // No branch picked = a company-level journal: the field is left out, not sent empty.
+    expect(req.branchUid).toBeUndefined();
+  });
+
+  it('offers the caller branches and sends the picked branchUid', async () => {
+    const comp = TestBed.createComponent(PostJournalComponent).componentInstance;
+    const svc = TestBed.inject(GlService) as any;
+    await vi.runAllTimersAsync();
+
+    expect(comp.branchOptions().map((b) => b.uid)).toEqual(['BR1', 'BR2']);
+
+    comp.description.set('Arusha rent');
+    comp.postingDate.set('2025-06-01');
+    comp.branchUid.set('BR2');
+    const ids = comp.lines().map((l) => l.localId);
+    comp.updateLine(ids[0], 'accountUid', 'ACC1');
+    comp.updateLine(ids[0], 'debitAmount', '500');
+    comp.updateLine(ids[1], 'accountUid', 'ACC2');
+    comp.updateLine(ids[1], 'creditAmount', '500');
+
+    comp.post();
+
+    expect(svc.postJournal.mock.calls[0][0].branchUid).toBe('BR2');
   });
 
   it('post() skips submit when not balanced (balance guard enforced client-side)', async () => {

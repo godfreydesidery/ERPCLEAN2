@@ -518,3 +518,41 @@ describe('DashboardComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Branch: All branches');
   });
 });
+
+describe('DashboardComponent — export', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('canExport needs BI.VIEW as well as BI.EXPORT (the endpoint requires both)', () => {
+    makeBed(of(MOCK_DTO), makeSession(['BI.EXPORT']));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(comp.canExport()).toBe(false);
+  });
+
+  it('downloads with the current company, dates and branch', () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    makeBed(of(MOCK_DTO), makeSession(['BI.VIEW', 'BI.EXPORT']));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    const comp = fixture.componentInstance;
+    const svc = TestBed.inject(DashboardService) as unknown as { exportDashboard: ReturnType<typeof vi.fn> };
+    comp.exportFormat.set('XLSX');
+    comp.exportDashboard();
+    expect(svc.exportDashboard).toHaveBeenCalledWith(
+      comp.selectedCompanyId(), 'XLSX', comp.fromDate(), comp.toDate(), undefined,
+    );
+    expect(comp.exportError()).toBeNull();
+  });
+
+  it('shows a friendly message when the export is refused', () => {
+    makeBed(of(MOCK_DTO), makeSession(['BI.VIEW', 'BI.EXPORT']));
+    const svc = TestBed.inject(DashboardService) as unknown as { exportDashboard: ReturnType<typeof vi.fn> };
+    svc.exportDashboard.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 403 })));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    comp.exportDashboard();
+    expect(comp.exportError()).toBe("You don't have permission to export the dashboard.");
+    expect(comp.exporting()).toBe(false);
+  });
+});

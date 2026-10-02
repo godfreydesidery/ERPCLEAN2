@@ -78,6 +78,154 @@
       }
     }
 
+    <!-- ── AP Sub-ledger vs GL Reconciliation (company-wide; loads with the company) ── -->
+    @if (companyState() === 'idle' && selectedCompanyId()) {
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2 class="erp-section-title mb-0">
+            <i class="bi bi-bank me-1" aria-hidden="true"></i>AP Sub-ledger vs GL Control Account
+          </h2>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="loadReconciliation()" [disabled]="reconState() === 'loading'">
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Re-check
+          </button>
+        </div>
+        <div class="erp-card__body">
+          @switch (reconState()) {
+            @case ('loading') {
+              <p class="text-muted d-flex align-items-center gap-2 mb-0" aria-live="polite">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Checking the AP control account…
+              </p>
+            }
+            @case ('error') {
+              <p class="text-danger mb-0" role="alert">
+                <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+                Could not check the reconciliation. Please try again.
+              </p>
+            }
+            @case ('forbidden') {
+              <p class="text-muted mb-0">
+                <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+                You don't have permission to view the reconciliation.
+              </p>
+            }
+            @default {
+              @if (reconciliation(); as rec) {
+                <p class="mb-3" role="status">
+                  @if (reconciled()) {
+                    <span class="status-tag status-tag--ok">
+                      <span class="status-tag__dot" aria-hidden="true"></span>Reconciled
+                    </span>
+                    <span class="ms-2 small text-muted">
+                      The supplier balances add up to the GL control account.
+                    </span>
+                  } @else {
+                    <span class="status-tag status-tag--danger">
+                      <span class="status-tag__dot" aria-hidden="true"></span>Out by {{ rec.currency }} {{ fmtMoney(absDifference()) }}
+                    </span>
+                    <span class="ms-2 small text-muted">
+                      @if (reconDifference() > 0) {
+                        The supplier sub-ledger is higher than the GL control account.
+                      } @else {
+                        The GL control account is higher than the supplier sub-ledger.
+                      }
+                      Ask your accountant to review postings to the AP control account.
+                    </span>
+                  }
+                </p>
+                <dl class="row mb-0">
+                  <dt class="col-sm-4">Supplier sub-ledger total</dt>
+                  <dd class="col-sm-8 mono">{{ rec.currency }} {{ fmtMoney(rec.subLedgerTotal) }}</dd>
+                  <dt class="col-sm-4">GL control account balance</dt>
+                  <dd class="col-sm-8 mono">{{ rec.currency }} {{ fmtMoney(rec.glControlBalance) }}</dd>
+                  <dt class="col-sm-4">Difference</dt>
+                  <dd class="col-sm-8 mono"
+                      [class.text-danger]="!reconciled()"
+                      [class.text-success]="reconciled()">
+                    {{ rec.currency }} {{ fmtMoney(rec.difference) }}
+                  </dd>
+                  @if (rec.unconverted?.length) {
+                    <dt class="col-sm-4">Unconverted (per currency)</dt>
+                    <dd class="col-sm-8">
+                      @for (u of rec.unconverted; track u.currency; let last = $last) {
+                        <span class="mono">{{ u.currency }} {{ fmtMoney(u.amount) }}</span>{{ last ? '' : ', ' }}
+                      }
+                      <div class="small text-muted">
+                        Older foreign-currency items with no reliable exchange rate. They are
+                        excluded from the comparison above.
+                      </div>
+                    </dd>
+                  }
+                </dl>
+              }
+            }
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Printable statement + ageing (REPORT.EXPORT — distinct from the view permission) -->
+    @if (selectedSupplier() && canExport()) {
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2 class="erp-section-title mb-0">
+            <i class="bi bi-printer me-1" aria-hidden="true"></i>Printable Statement
+          </h2>
+        </div>
+        <div class="erp-card__body">
+          <p class="text-muted small mb-2">
+            Balance brought forward, every bill, payment and debit note in the period with a running
+            balance, and the closing balance. Leave From empty to start from the supplier's first
+            transaction.
+          </p>
+          <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+              <label class="form-label small text-muted mb-1" for="stmtFrom">From</label>
+              <input id="stmtFrom" name="stmtFrom" type="date" class="form-control form-control-sm"
+                     [ngModel]="exportFrom()" (ngModelChange)="exportFrom.set($event)" />
+            </div>
+            <div>
+              <label class="form-label small text-muted mb-1" for="stmtTo">To</label>
+              <input id="stmtTo" name="stmtTo" type="date" class="form-control form-control-sm"
+                     [ngModel]="exportTo()" (ngModelChange)="exportTo.set($event)" />
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportStatement('PDF')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Statement PDF
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportStatement('XLSX')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Statement Excel
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportStatement('CSV')" [disabled]="exporting()">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Statement CSV
+              </button>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('PDF')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Ageing PDF
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('XLSX')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Ageing Excel
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('CSV')" [disabled]="exporting()">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Ageing CSV
+              </button>
+            </div>
+          </div>
+          @if (exportError(); as msg) {
+            <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+          }
+        </div>
+      </div>
+    }
+
     <!-- Statement states -->
     @switch (state()) {
       @case ('loading') {
@@ -115,6 +263,14 @@
                 {{ fmtMoney(bal.outstandingBalance) }}
               </div>
               <div class="erp-kpi__delta">{{ bal.currency }}</div>
+              @if (bal.unconverted?.length) {
+                <div class="erp-kpi__delta text-warning-emphasis">
+                  Plus, not converted:
+                  @for (u of bal.unconverted; track u.currency; let last = $last) {
+                    <span class="mono">{{ u.currency }} {{ fmtMoney(u.amount) }}</span>{{ last ? '' : ', ' }}
+                  }
+                </div>
+              }
             </div>
             <div class="erp-kpi">
               <div class="erp-kpi__label">Open Bills</div>
@@ -140,6 +296,9 @@
                     <caption class="visually-hidden">Ageing buckets for this supplier</caption>
                     <thead>
                       <tr>
+                        @if (multiCurrency()) {
+                          <th scope="col">Currency</th>
+                        }
                         @for (b of sortedAgeing(); track b.bucket) {
                           <th scope="col" class="num">{{ bucketLabel(b.bucket) }}</th>
                         }
@@ -147,8 +306,12 @@
                       </tr>
                     </thead>
                     <tbody>
+                      @for (g of ageingGroups(); track g.currency) {
                       <tr>
-                        @for (b of sortedAgeing(); track b.bucket) {
+                        @if (multiCurrency()) {
+                          <th scope="row">{{ g.currency }}</th>
+                        }
+                        @for (b of g.buckets; track b.bucket) {
                           <td class="num"
                               [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
                               [class.text-muted]="+(b.amount) === 0">
@@ -156,19 +319,20 @@
                           </td>
                         }
                         <td class="num fw-bold"
-                            [class.text-danger]="outstandingBalance() > 0">
-                          {{ fmtMoney(bal.outstandingBalance) }}
+                            [class.text-danger]="multiCurrency() ? g.total > 0 : outstandingBalance() > 0">
+                          {{ multiCurrency() ? fmtMoney(g.total) : fmtMoney(bal.outstandingBalance) }}
                         </td>
                       </tr>
+                      }
                     </tbody>
                   </table>
                 </div>
 
                 <!-- Ageing bar visualisation -->
-                @if (outstandingBalance() > 0) {
+                @if (baseAgeingTotal() > 0) {
                   <div class="d-flex" style="height:8px; overflow:hidden" aria-hidden="true">
                     @for (b of sortedAgeing(); track b.bucket) {
-                      @let pct = outstandingBalance() > 0 ? (+(b.amount) / outstandingBalance() * 100) : 0;
+                      @let pct = baseAgeingTotal() > 0 ? (+(b.amount) / baseAgeingTotal() * 100) : 0;
                       @if (+(b.amount) > 0) {
                         <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
                              [style.width.%]="pct"
@@ -244,43 +408,6 @@
             </div>
           }
 
-          <!-- ── AP Sub-ledger vs GL Reconciliation ───────────────────────── -->
-          @if (reconciliation(); as rec) {
-            <div class="erp-card mb-4">
-              <div class="erp-card__head">
-                <h2 class="erp-section-title mb-0">
-                  <i class="bi bi-bank me-1" aria-hidden="true"></i>AP Sub-ledger vs GL Reconciliation
-                </h2>
-              </div>
-              <div class="erp-card__body">
-                <dl class="row mb-0">
-                  <dt class="col-sm-4">Sub-ledger Total</dt>
-                  <dd class="col-sm-8 mono">
-                    {{ rec.currency }} {{ fmtMoney(rec.subLedgerTotal) }}
-                  </dd>
-                  <dt class="col-sm-4">GL Control Balance</dt>
-                  <dd class="col-sm-8 mono">
-                    {{ rec.currency }} {{ fmtMoney(rec.glControlBalance) }}
-                  </dd>
-                  <dt class="col-sm-4">Difference</dt>
-                  <dd class="col-sm-8 mono"
-                      [class.text-danger]="+(rec.difference) !== 0"
-                      [class.text-success]="+(rec.difference) === 0">
-                    {{ rec.currency }} {{ fmtMoney(rec.difference) }}
-                    @if (+(rec.difference) === 0) {
-                      <span class="status-tag status-tag--ok ms-2">
-                        <span class="status-tag__dot"></span>Reconciled
-                      </span>
-                    } @else {
-                      <span class="status-tag status-tag--danger ms-2">
-                        <span class="status-tag__dot"></span>Out of Balance
-                      </span>
-                    }
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          }
 
         }
       }

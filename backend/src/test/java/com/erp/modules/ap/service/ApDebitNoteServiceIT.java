@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ap.domain.dto.ApDebitNoteDto;
+import com.erp.modules.ap.domain.dto.ApplyDebitNoteRequest;
+import com.erp.modules.ap.domain.dto.ApplyDebitNoteRequest.AllocationLineRequest;
 import com.erp.modules.ap.domain.dto.RaiseDebitNoteRequest;
 import com.erp.modules.ap.domain.dto.SetApOpeningBalanceRequest;
 import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.entity.SupplierBill;
+import com.erp.modules.ap.domain.enums.ApDebitNoteStatus;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.fx.domain.entity.CurrencyRate;
@@ -37,6 +40,7 @@ import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,6 +84,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class ApDebitNoteServiceIT extends PostgresIntegrationTest {
 
     @Autowired private ApDebitNoteService       debitNoteService;
+    @Autowired private ApReconciliationQuery    reconciliationQuery;
     @Autowired private ApOpeningBalanceService  openingBalanceService;
     @Autowired private ApGlSeeder               apGlSeeder;
     @Autowired private SupplierService          supplierService;
@@ -306,6 +311,225 @@ class ApDebitNoteServiceIT extends PostgresIntegrationTest {
                 .map(l -> l.getDebitAmount() != null ? l.getDebitAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(sumDebit).isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    // =========================================================================
+    // Bar 6: applying MORE of a part-applied debit note to the SAME bill (one allocation row per
+    // note/bill pair is a DB rule) tops up the existing row instead of failing on the constraint.
+    // Bill outstanding, note unapplied/status and the AP reconciliation all stay consistent.
+    // =========================================================================
+
+    @Test
+    void apply_sameBillAgain_topsUpTheExistingAllocation_andStaysReconciled() {
+        SupplierBillDto bill = openingBalance("TZS-DN-TOPUP-001", new BigDecimal("1000"));
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, null, LocalDate.now(),
+                new BigDecimal("500"), BigDecimal.ZERO, "General credit", null));
+
+        debitNoteService.apply(applyLines(dn.uid(), bill.uid(), "200"));
+        ApDebitNoteDto again = debitNoteService.apply(applyLines(dn.uid(), bill.uid(), "100"));
+        assertThat(again.unappliedAmount()).isEqualByComparingTo("200");
+        assertThat(again.status()).isEqualTo(ApDebitNoteStatus.PARTIAL);
+
+        // Two slices for the same bill inside ONE request are folded together as well.
+        debitNoteService.apply(applyLines(dn.uid(), bill.uid(), "50", "50"));
+
+        assertThat(dnAllocationRows(dn.uid()))
+                .as("still one allocation row for the note/bill pair").isEqualTo(1);
+        assertThat(dnAllocatedTotal(dn.uid())).isEqualByComparingTo("400");
+        ApDebitNoteDto read = debitNoteService.getByUid(dn.uid());
+        assertThat(read.unappliedAmount()).isEqualByComparingTo("100");
+        assertThat(read.amount().subtract(read.unappliedAmount()))
+                .as("allocated + unapplied == amount")
+                .isEqualByComparingTo(dnAllocatedTotal(dn.uid()));
+        SupplierBill refreshed = billRepo.findByUid(bill.uid()).orElseThrow();
+        assertThat(refreshed.getOutstandingAmount()).isEqualByComparingTo("600");
+        assertThat(refreshed.getBaseOutstandingAmount()).isEqualByComparingTo("600");
+        assertThat(refreshed.getStatus()).isEqualTo(SupplierBillStatus.PARTIALLY_PAID);
+        assertApReconciled();
+
+        // Reapply with a duplicated bill line: one row, totals rebuilt from scratch.
+        debitNoteService.reapply(applyLines(dn.uid(), bill.uid(), "150", "150"));
+        assertThat(dnAllocationRows(dn.uid())).isEqualTo(1);
+        assertThat(dnAllocatedTotal(dn.uid())).isEqualByComparingTo("300");
+        assertThat(billRepo.findByUid(bill.uid()).orElseThrow().getOutstandingAmount())
+                .isEqualByComparingTo("700");
+        assertThat(debitNoteService.getByUid(dn.uid()).unappliedAmount()).isEqualByComparingTo("200");
+        assertApReconciled();
+    }
+
+    /**
+     * Foreign bill: the top-up posts the realized-FX plug for the TOP-UP slice only (the merge
+     * changes which row holds the amount, never the GL), and the merged row's base equals the sum
+     * of the slices at the note's rate. The note is raised against the bill (auto-applied in full),
+     * then re-applied to 30 so 10 is free to top up.
+     */
+    @Test
+    void apply_sameForeignBillAgain_topUpPostsFxPlugForTheSliceOnly() {
+        seedRate(RATE_BILL,  BILL_DATE);
+        seedRate(RATE_LOWER, LocalDate.now());
+        String billUid = foreignOpenBill("USD-DN-TOPUP-001", "100", RATE_BILL, "250000");
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, billUid, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, "USD credit", null));
+        debitNoteService.reapply(applyLines(dn.uid(), billUid, "30"));
+        long dnEntriesBefore = dnJournalCount();
+
+        debitNoteService.apply(applyLines(dn.uid(), billUid, "10"));
+
+        assertThat(dnJournalCount()).as("the top-up posts one FX plug entry")
+                .isEqualTo(dnEntriesBefore + 1);
+        // 10 USD x (2500 bill - 2400 note) = 1,000 realized gain, on the latest DN entry
+        assertThat(latestDnEntryAccountCr("4920")).isEqualByComparingTo("1000");
+        assertThat(dnAllocationRows(dn.uid())).isEqualTo(1);
+        assertThat(dnAllocatedTotal(dn.uid())).isEqualByComparingTo("40");
+        assertThat(jdbc.queryForObject("""
+                SELECT a.base_allocated_amount FROM ap_debit_note_allocations a
+                JOIN ap_debit_notes d ON d.id = a.debit_note_id WHERE d.uid = ?
+                """, BigDecimal.class, dn.uid()))
+                .as("merged base = 40 x 2400").isEqualByComparingTo("96000");
+        SupplierBill refreshed = billRepo.findByUid(billUid).orElseThrow();
+        assertThat(refreshed.getOutstandingAmount()).isEqualByComparingTo("60");
+        assertThat(refreshed.getBaseOutstandingAmount()).isEqualByComparingTo("150000");
+        ApDebitNoteDto read = debitNoteService.getByUid(dn.uid());
+        assertThat(read.unappliedAmount()).isEqualByComparingTo("0");
+        assertThat(read.status()).isEqualTo(ApDebitNoteStatus.APPLIED);
+    }
+
+    // =========================================================================
+    // Bar 7: reapply of a foreign note must leave realized FX for what is applied NOW only.
+    // The earlier apply's FX plug is reversed (a new, append-only GL entry — the GL engine's own
+    // reversal), then the new allocation set books its own plug.
+    //   USD 40 note at 2400 against a bill at 2500, auto-applied in full → FX gain 40 × 100 = 4,000
+    //   reapply as 30                                                    → FX gain must be 3,000
+    // =========================================================================
+
+    @Test
+    void reapply_foreignNote_fxIsBookedOnlyForWhatIsAppliedNow() {
+        seedRate(RATE_BILL,  BILL_DATE);
+        seedRate(RATE_LOWER, LocalDate.now());
+        String billUid = foreignOpenBill("USD-DN-REAPPLY-001", "100", RATE_BILL, "250000");
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, billUid, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, "USD credit", null));
+        assertThat(dnAccountNetCr("4920")).as("FX gain after the full apply").isEqualByComparingTo("4000");
+
+        debitNoteService.reapply(applyLines(dn.uid(), billUid, "30"));
+
+        assertThat(dnAccountNetCr("4920")).as("FX gain = 30 x (2500 - 2400) only")
+                .isEqualByComparingTo("3000");
+        assertThat(dnAccountNetCr("5190")).as("no FX loss").isEqualByComparingTo("0");
+        // AP relieved by the note in the GL = 30 at the bill rate + 10 still unapplied at the note rate
+        assertThat(dnAccountNetDr("2100")).isEqualByComparingTo("99000");
+        assertApControlEqualsBaseSubLedger("151000");
+        assertThat(billRepo.findByUid(billUid).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("175000");
+    }
+
+    /**
+     * Reapply that MOVES the note from bill A (2500) to bill B (2600), then splits it across both:
+     * each step reverses the plugs still live and books FX for the new allocation set only.
+     */
+    @Test
+    void reapply_foreignNote_movedBetweenBills_fxFollowsEachBillsRate() {
+        seedRate(RATE_BILL,  BILL_DATE);
+        seedRate(RATE_LOWER, LocalDate.now());
+        String billA = foreignOpenBill("USD-DN-MOVE-A", "100", RATE_BILL, "250000");
+        String billB = foreignOpenBill("USD-DN-MOVE-B", "100", RATE_HIGHER, "260000");
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, billA, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, "USD credit", null));
+        assertThat(dnAccountNetCr("4920")).isEqualByComparingTo("4000");   // 40 x (2500 - 2400)
+
+        debitNoteService.reapply(applyLines(dn.uid(), billB, "40"));
+        assertThat(dnAccountNetCr("4920")).as("FX now follows bill B only: 40 x (2600 - 2400)")
+                .isEqualByComparingTo("8000");
+        assertThat(billRepo.findByUid(billA).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("250000");
+        assertThat(billRepo.findByUid(billB).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("156000");
+        assertApControlEqualsBaseSubLedger("406000");
+
+        // Second reapply: the plug being replaced is the one from the FIRST reapply (the original
+        // plug and its reversal are both already settled and must not be touched again).
+        debitNoteService.reapply(new ApplyDebitNoteRequest(dn.uid(), List.of(
+                new AllocationLineRequest(billA, new BigDecimal("20")),
+                new AllocationLineRequest(billB, new BigDecimal("20")))));
+        assertThat(dnAccountNetCr("4920")).as("20 x 100 on A + 20 x 200 on B")
+                .isEqualByComparingTo("6000");
+        assertThat(dnAccountNetCr("5190")).isEqualByComparingTo("0");
+        // 510,000 billed − 96,000 note − 6,000 FX = 408,000 (A 200,000 + B 208,000 base outstanding)
+        assertApControlEqualsBaseSubLedger("408000");
+    }
+
+    /**
+     * GL 2100 must equal the BASE-currency AP sub-ledger (Σ bill base outstanding − Σ DN base
+     * unapplied). The reconciliation endpoint sums document-currency faces, so with USD documents
+     * it cannot be the yardstick here; the GL figure is taken from it all the same.
+     */
+    private void assertApControlEqualsBaseSubLedger(String expected) {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "apdn_root", true, company.getId(), branch.getId(), null));
+        BigDecimal billsBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_outstanding_amount), 0) FROM supplier_bills
+                WHERE company_id = ? AND status IN ('MATCHED', 'APPROVED', 'PARTIALLY_PAID')
+                """, BigDecimal.class, company.getId());
+        BigDecimal dnBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_unapplied_amount), 0) FROM ap_debit_notes WHERE company_id = ?
+                """, BigDecimal.class, company.getId());
+        BigDecimal gl = reconciliationQuery.reconcile(company.getId()).glControlBalance();
+        assertThat(gl).as("GL 2100").isEqualByComparingTo(expected);
+        assertThat(billsBase.subtract(dnBase)).as("base sub-ledger == GL 2100").isEqualByComparingTo(gl);
+    }
+
+    private BigDecimal dnAccountNetCr(String code) {
+        return dnAccountCr(code).subtract(dnAccountDr(code));
+    }
+
+    private static ApplyDebitNoteRequest applyLines(String dnUid, String billUid, String... amounts) {
+        return new ApplyDebitNoteRequest(dnUid, java.util.Arrays.stream(amounts)
+                .map(a -> new AllocationLineRequest(billUid, new BigDecimal(a))).toList());
+    }
+
+    private int dnAllocationRows(String dnUid) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM ap_debit_note_allocations a
+                JOIN ap_debit_notes d ON d.id = a.debit_note_id WHERE d.uid = ?
+                """, Integer.class, dnUid);
+    }
+
+    private BigDecimal dnAllocatedTotal(String dnUid) {
+        return jdbc.queryForObject("""
+                SELECT COALESCE(SUM(a.allocated_amount), 0) FROM ap_debit_note_allocations a
+                JOIN ap_debit_notes d ON d.id = a.debit_note_id WHERE d.uid = ?
+                """, BigDecimal.class, dnUid);
+    }
+
+    private long dnJournalCount() {
+        return journalEntryRepo.findByCompanyId(company.getId(),
+                        org.springframework.data.domain.Pageable.unpaged()).stream()
+                .filter(e -> e.getSourceType() == JournalSourceType.AP_DEBIT_NOTE).count();
+    }
+
+    private BigDecimal latestDnEntryAccountCr(String accountCode) {
+        Long acctId = accountRepo.findByCompanyIdAndAccountCode(company.getId(), accountCode)
+                .map(ChartOfAccount::getId).orElseThrow();
+        var latest = journalEntryRepo.findByCompanyId(company.getId(),
+                        org.springframework.data.domain.Pageable.unpaged()).stream()
+                .filter(e -> e.getSourceType() == JournalSourceType.AP_DEBIT_NOTE)
+                .max(java.util.Comparator.comparing(
+                        com.erp.modules.gl.domain.entity.JournalEntry::getId)).orElseThrow();
+        return journalLineRepo.findByEntryIdOrderByLineNo(latest.getId()).stream()
+                .filter(l -> acctId.equals(l.getAccountId()))
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private void assertApReconciled() {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "apdn_root", true, company.getId(), branch.getId(), null));
+        assertThat(reconciliationQuery.reconcile(company.getId()).difference())
+                .as("AP sub-ledger == GL 2100").isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     // =========================================================================

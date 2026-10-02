@@ -1,0 +1,235 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-hourglass-split me-2" aria-hidden="true"></i>Stock Ageing
+      </h1>
+      <p class="subtitle">
+        How long the stock on your shelves has been there, item by item, and how long since each
+        item last sold — to find slow and dead stock.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Stock Ageing report.
+    </div>
+  } @else {
+
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sa-asof">As of</label>
+            <input id="sa-asof" name="sa-asof" type="date" class="form-control"
+                   [ngModel]="asOf()" (ngModelChange)="asOf.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="sa-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sa-branch" name="sa-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading'">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+          <div class="col-auto">
+            <div class="form-check mb-2">
+              <input id="sa-slow" name="sa-slow" type="checkbox" class="form-check-input"
+                     [ngModel]="slowOnly()" (ngModelChange)="slowOnly.set($event)" />
+              <label class="form-check-label" for="sa-slow">
+                Only items not sold in {{ slowDays }} days or more
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- The age is inferred, and the reader must be told how before reading it. -->
+    <div class="alert alert-info small d-flex gap-2" role="note">
+      <i class="bi bi-info-circle" aria-hidden="true"></i>
+      <span>
+        Ages assume <strong>first in, first out</strong>: the stock on hand is taken to be the most
+        recently received units. Stock is costed at moving average, so each age band is valued at
+        the item's average cost — the ageing itself is about quantities.
+      </span>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Working out the ages…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ loadError() }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (report(); as r) {
+
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (r.uncoveredProducts > 0 || r.unvaluedProducts > 0 || r.negativeStockProducts > 0) {
+            <div class="alert alert-warning" role="alert">
+              <ul class="mb-0 ps-3">
+                @if (r.uncoveredProducts > 0) {
+                  <li>
+                    <strong>{{ r.uncoveredProducts }}</strong> item(s) hold more stock than their
+                    recorded receipts explain, so part of it has no known age. That part is shown
+                    in the oldest band, marked <span aria-hidden="true">*</span><span class="visually-hidden">with an asterisk</span>.
+                  </li>
+                }
+                @if (r.unvaluedProducts > 0) {
+                  <li>
+                    <strong>{{ r.unvaluedProducts }}</strong> item(s) have no cost on record and are
+                    left out of the value totals.
+                  </li>
+                }
+                @if (r.negativeStockProducts > 0) {
+                  <li>
+                    <strong>{{ r.negativeStockProducts }}</strong> item(s) have negative stock,
+                    which has no age, and are not listed.
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+
+          <h2 class="h5">Stock ageing as of {{ r.asOf }}</h2>
+          <p class="text-muted small mb-3">
+            Branch: {{ r.branchName ?? 'All branches' }}
+            · Currency: {{ r.currency }}
+            · Never sold: {{ r.neverSoldProducts }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+            @if (r.valuedAtCurrentCost) {
+              <br />Quantities are as of {{ r.asOf }}; values use today's average cost.
+            }
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                On-hand quantity per item split by how long it has been in stock, with value and
+                days since last sale
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col" class="num">On hand</th>
+                  <th scope="col" class="num">Value</th>
+                  @for (b of r.buckets; track b) {
+                    <th scope="col" class="num">{{ b }}</th>
+                  }
+                  <th scope="col" class="num">Days since sale</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of visibleRows(); track row.productUid) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="num">{{ fmtQty(row.onHand) }}</td>
+                    <td class="num">{{ fmtAmount(row.value) }}</td>
+                    @for (q of row.bucketQty; track $index) {
+                      <td class="num">
+                        {{ fmtQty(q) }}
+                        @if ($index === oldestBucket() && row.uncoveredQty > 0) {
+                          <span aria-hidden="true">*</span>
+                          <span class="visually-hidden">(includes stock of unknown age)</span>
+                        }
+                      </td>
+                    }
+                    <td class="num">{{ lastSold(row) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td [attr.colspan]="r.buckets.length + 5" class="text-muted text-center py-4">
+                      @if (slowOnly()) {
+                        Every item in stock has sold within the last {{ slowDays }} days.
+                      } @else {
+                        There is no stock on hand.
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              @if (r.rows.length > 0) {
+                <tfoot>
+                  <tr class="fw-semibold totals-row">
+                    <td></td>
+                    <td>TOTAL QTY</td>
+                    <td class="num">{{ fmtQty(r.totalOnHand) }}</td>
+                    <td class="num">{{ fmtAmount(r.totalValue) }}</td>
+                    @for (q of r.totalBucketQty; track $index) {
+                      <td class="num">{{ fmtQty(q) }}</td>
+                    }
+                    <td></td>
+                  </tr>
+                  <tr class="fw-semibold">
+                    <td></td>
+                    <td>VALUE</td>
+                    <td></td>
+                    <td></td>
+                    @for (v of r.totalBucketValue; track $index) {
+                      <td class="num">{{ fmtAmount(v) }}</td>
+                    }
+                    <td></td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+
+          <p class="text-muted small mt-2">
+            Totals always cover every item, whatever the "only items not sold" filter shows.
+            Receipts, opening balances, production, positive adjustments (including count gains) and stock transferred in from
+            another branch all count as stock arriving; moves between your own locations do not
+            change an item's age.
+          </p>
+        }
+      }
+    }
+  }
+</section>

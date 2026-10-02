@@ -15,6 +15,7 @@ import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -109,7 +110,46 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
                             + "for a direct cash entry. Please choose a regular income or expense account.");
         }
 
-        Long branchId = branchId();
+        return persistAndPost(companyId, currency, account, counterGlAcct, req, branchId());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The counter account here is resolved by the calling module from its own gl_config (payroll's
+     * NET_WAGES_PAYABLE), not picked by a user — so the two counter-account guards above, which
+     * exist to stop a USER from corrupting a sub-ledger through this endpoint, do not apply. They
+     * would in fact refuse every legitimate settlement of a control account: 2550 Net Wages Payable
+     * is PAYROLL_CLEARING with allowManualPosting=false on every provisioned company, which is how
+     * payroll disbursement could never reach PAID. The GL engine itself never applied the manual-
+     * posting gate to a CASH_DIRECT entry; only this service-level copy did. Everything else —
+     * tenancy, active accounts, period gate, balanced posting — is identical to the user path.
+     */
+    @Override
+    public CashTransactionDto recordSystemEntry(RecordDirectEntryRequest req, Long branchId) {
+        Company company = companies.findByUid(req.companyUid())
+                .orElseThrow(() -> new NotFoundException("Company not found."));
+        Long companyId = company.getId();
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String currency = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
+
+        CashBankAccount account = accounts.findByCompanyIdAndUid(companyId, req.cashBankAccountUid())
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
+        if (!account.isActive())
+            throw new IllegalStateException("The selected cash/bank account is inactive and cannot accept new entries.");
+
+        ChartOfAccount counterGlAcct = glAccounts.findByCompanyIdAndUid(companyId, req.counterGlAccountUid())
+                .orElseThrow(() -> new NotFoundException("Counter GL account not found."));
+        if (!counterGlAcct.isActive())
+            throw new IllegalStateException("Counter GL account " + counterGlAcct.getAccountCode() + " is inactive.");
+
+        return persistAndPost(companyId, currency, account, counterGlAcct, req,
+                branchId != null ? branchId : branchId());
+    }
+
+    private CashTransactionDto persistAndPost(Long companyId, String currency, CashBankAccount account,
+                                              ChartOfAccount counterGlAcct, RecordDirectEntryRequest req,
+                                              Long branchId) {
         Long actor    = actorId();
         String txnNumber = numbers.nextTransaction(companyId);
 

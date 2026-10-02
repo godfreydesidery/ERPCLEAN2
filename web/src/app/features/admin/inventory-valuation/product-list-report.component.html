@@ -43,15 +43,17 @@
               </p>
             }
           </div>
-          <div class="col-sm-6 col-lg-3">
-            <label class="form-label" for="pl-supplier">
-              Supplier <span class="text-muted small">(optional)</span>
-            </label>
-            <app-uid-picker id="pl-supplier" name="pl-supplier"
-                            [(ngModel)]="supplierUid"
-                            [options]="supplierOptions()"
-                            placeholder="All suppliers" />
-          </div>
+          @if (canFilterSupplier()) {
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label" for="pl-supplier">
+                Supplier <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="pl-supplier" name="pl-supplier"
+                              [(ngModel)]="supplierUid"
+                              [options]="supplierOptions()"
+                              placeholder="All suppliers" />
+            </div>
+          }
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()" [disabled]="state() === 'loading'">

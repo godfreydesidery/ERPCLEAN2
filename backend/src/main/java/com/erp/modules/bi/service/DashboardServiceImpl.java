@@ -43,6 +43,7 @@ import com.erp.modules.stock.service.StockValuationQuery;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -122,6 +123,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final FiscalPeriodRepository   fiscalPeriods;
     private final SalesByBranchQuery       salesByBranchQuery;
     private final BranchRepository         branchRepository;
+    private final BranchReadGuard          branchGuard;
 
     public DashboardServiceImpl(ScopeGuard scopeGuard,
                                  PermissionChecks permChecks,
@@ -137,7 +139,8 @@ public class DashboardServiceImpl implements DashboardService {
                                  PipelineQuery pipeline,
                                  FiscalPeriodRepository fiscalPeriods,
                                  SalesByBranchQuery salesByBranchQuery,
-                                 BranchRepository branchRepository) {
+                                 BranchRepository branchRepository,
+                                 BranchReadGuard branchGuard) {
         this.scopeGuard          = scopeGuard;
         this.permChecks          = permChecks;
         this.companyRepo         = companyRepo;
@@ -153,6 +156,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.fiscalPeriods       = fiscalPeriods;
         this.salesByBranchQuery  = salesByBranchQuery;
         this.branchRepository    = branchRepository;
+        this.branchGuard         = branchGuard;
     }
 
     // =========================================================================
@@ -163,6 +167,10 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardDto dashboard(Long companyId, LocalDate from, LocalDate to, Long branchId) {
         // D-5: assertCanActIn FIRST — before any panel call
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // A branch filter must also be a branch the caller is assigned to — the same bar every
+        // report clears (BranchReadGuard); company membership alone let a one-branch user read
+        // any sibling branch's sales and pipeline here.
+        branchGuard.assertMayRead(RequestContext.get(), branchId);
 
         // REPORTING-BI-041/062: validate company existence before building any panel; a bogus
         // companyId must 404 here rather than degrade silently or NPE inside a downstream query.
@@ -310,7 +318,8 @@ public class DashboardServiceImpl implements DashboardService {
 
         return new WorkingCapitalDto(
                 ar.subLedgerTotal(), arTies, ar.difference(),
-                ap.subLedgerTotal(), apTies, ap.difference());
+                ap.subLedgerTotal(), apTies, ap.difference(),
+                ar.unconverted(), ap.unconverted());
     }
 
     // =========================================================================
@@ -338,6 +347,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public CrmSnapshotDto crmSnapshot(Long companyId, Long branchId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        branchGuard.assertMayRead(RequestContext.get(), branchId);
         requireCompanyExists(companyId);
         return buildCrm(companyId, branchId, from, to);
     }
@@ -416,6 +426,7 @@ public class DashboardServiceImpl implements DashboardService {
     public SalesByBranchDto salesByBranch(Long companyId, Long branchId,
                                           LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        branchGuard.assertMayRead(RequestContext.get(), branchId);
         com.erp.modules.iam.domain.entity.Company company = requireCompanyExists(companyId);
         String currency = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);

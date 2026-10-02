@@ -1,6 +1,7 @@
 package com.erp.modules.hr.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +31,7 @@ import com.erp.modules.hr.repository.PayrollStatutorySnapshotRepository;
 import com.erp.modules.hr.repository.PayslipRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -42,6 +44,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * Unit tests for PayrollRunServiceImpl — payee snapshot resolution (ADR-0040 D-11)
@@ -254,6 +258,7 @@ class PayrollRunServiceImplTest {
         @Test
         void exportEftBatch_emptyRun_returnsHeaderOnly() {
             PayrollRun run = makeRun("RUN-UID-001", 10L);
+            run.setStatus(PayrollRunStatus.POSTED);
             when(runs.findByUid("RUN-UID-001")).thenReturn(Optional.of(run));
             when(lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId())).thenReturn(List.of());
 
@@ -267,6 +272,7 @@ class PayrollRunServiceImplTest {
         @Test
         void exportEftBatch_singleLine_correctColumns() {
             PayrollRun run = makeRun("RUN-UID-002", 10L);
+            run.setStatus(PayrollRunStatus.POSTED);
             when(runs.findByUid("RUN-UID-002")).thenReturn(Optional.of(run));
 
             PayrollLine line = makePayrollLine();
@@ -300,6 +306,7 @@ class PayrollRunServiceImplTest {
         @Test
         void exportEftBatch_nameWithComma_wrapsInQuotes() {
             PayrollRun run = makeRun("RUN-UID-003", 10L);
+            run.setStatus(PayrollRunStatus.POSTED);
             when(runs.findByUid("RUN-UID-003")).thenReturn(Optional.of(run));
 
             PayrollLine line = makePayrollLine();
@@ -321,6 +328,7 @@ class PayrollRunServiceImplTest {
         @Test
         void exportEftBatch_multipleLines_correctRowCount() {
             PayrollRun run = makeRun("RUN-UID-004", 10L);
+            run.setStatus(PayrollRunStatus.POSTED);
             when(runs.findByUid("RUN-UID-004")).thenReturn(Optional.of(run));
 
             PayrollLine l1 = makePayrollLine();
@@ -345,6 +353,72 @@ class PayrollRunServiceImplTest {
             assertThat(csvLines).hasSize(3); // header + 2 data rows
             assertThat(csvLines[1]).contains("EMP-000001");
             assertThat(csvLines[2]).contains("EMP-000002");
+        }
+    }
+
+    // =========================================================================
+    // exportEftBatch — status gate (a bank file is a payment instruction)
+    // =========================================================================
+
+    @Nested
+    class ExportEftBatchStatusGateTests {
+
+        @ParameterizedTest
+        @EnumSource(value = PayrollRunStatus.class, names = {"POSTED", "PAID"})
+        void exportEftBatch_postedOrPaid_allowed(PayrollRunStatus status) {
+            PayrollRun run = makeRun("RUN-UID-OK", 10L);
+            run.setStatus(status);
+            when(runs.findByUid("RUN-UID-OK")).thenReturn(Optional.of(run));
+            when(lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId())).thenReturn(List.of());
+
+            assertThat(service.exportEftBatch("RUN-UID-OK")).startsWith("employee_number,");
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = PayrollRunStatus.class, names = {"DRAFT", "CALCULATED", "APPROVED"})
+        void exportEftBatch_notYetPosted_refusedWithConflict(PayrollRunStatus status) {
+            PayrollRun run = makeRun("RUN-UID-EARLY", 10L);
+            run.setStatus(status);
+            when(runs.findByUid("RUN-UID-EARLY")).thenReturn(Optional.of(run));
+
+            assertThatThrownBy(() -> service.exportEftBatch("RUN-UID-EARLY"))
+                    .isInstanceOf(ConflictException.class)
+                    .hasMessageContaining("posted")
+                    // friendly: no uid, no enum name, no internal detail
+                    .hasMessageNotContaining("RUN-UID-EARLY")
+                    .hasMessageNotContaining(status.name());
+            verify(lines, never()).findByPayrollRunIdOrderByEmployeeIdAsc(any());
+        }
+
+        @Test
+        void exportEftBatch_reversed_refusedWithConflict() {
+            PayrollRun run = makeRun("RUN-UID-REV", 10L);
+            run.setStatus(PayrollRunStatus.REVERSED);
+            when(runs.findByUid("RUN-UID-REV")).thenReturn(Optional.of(run));
+
+            assertThatThrownBy(() -> service.exportEftBatch("RUN-UID-REV"))
+                    .isInstanceOf(ConflictException.class)
+                    .hasMessageContaining("reversed")
+                    .hasMessageNotContaining("RUN-UID-REV");
+            verify(lines, never()).findByPayrollRunIdOrderByEmployeeIdAsc(any());
+        }
+
+        @Test
+        void everyStatusIsEitherAllowedOrRefused_noneSlipsThrough() {
+            // Guards against a future status being added and silently allowed.
+            for (PayrollRunStatus status : PayrollRunStatus.values()) {
+                PayrollRun run = makeRun("RUN-UID-ALL", 10L);
+                run.setStatus(status);
+                when(runs.findByUid("RUN-UID-ALL")).thenReturn(Optional.of(run));
+                boolean allowed = status == PayrollRunStatus.POSTED || status == PayrollRunStatus.PAID;
+                if (allowed) {
+                    assertThat(service.exportEftBatch("RUN-UID-ALL")).isNotNull();
+                } else {
+                    assertThatThrownBy(() -> service.exportEftBatch("RUN-UID-ALL"))
+                            .as("status %s must be refused", status)
+                            .isInstanceOf(ConflictException.class);
+                }
+            }
         }
     }
 

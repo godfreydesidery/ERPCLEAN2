@@ -263,6 +263,11 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 && req.whtAmount() != null
                 && req.whtAmount().compareTo(BigDecimal.ZERO) > 0;
 
+        if (hasWht && req.whtAmount().compareTo(receipt.getAmount()) >= 0) {
+            throw new IllegalArgumentException(
+                    "The withholding tax must be less than the amount received.");
+        }
+
         // Capture WHT certificate before building the draft so we have glAccountId.
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
@@ -352,11 +357,16 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
         }
 
-        // 10c. Append cash_transaction row for this settlement (ADR-0016 D-13).
+        // 10c. Append cash_transaction row for this settlement (ADR-0016 D-13). The cash that
+        //      actually arrives is the receipt NET of the tax the customer withheld — the same
+        //      figure the GL debits to the bank above. Recording the gross made the cash book run
+        //      ahead of the GL by the WHT amount.
+        BigDecimal cashIn = hasWht
+                ? receipt.getAmount().subtract(req.whtAmount()) : receipt.getAmount();
         cashTxnRecorder.recordSettlement(
                 companyId, receipt.getBranchId(), cashRes.cashBankAccountId(),
                 CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
-                receipt.getAmount(), currency,
+                cashIn, currency,
                 receipt.getUid(), posted.uid(),
                 receipt.getReceiptDate(), actorId());
 
@@ -387,6 +397,15 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     public ArReceiptDto reallocate(String receiptUid, List<AllocationLineRequest> newAllocations) {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(receiptUid), "ArReceipt", receiptUid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
+
+        // A bounced receipt brought in no money and its invoices were already restored by the
+        // reversal. Re-allocating it would restore them a second time and then relieve them with
+        // cash that never arrived.
+        if (receipt.getReversedAt() != null) {
+            throw new ConflictException(
+                    "This receipt's cheque bounced and the receipt has been reversed, so it cannot be"
+                    + " allocated to invoices. Record a new receipt when the customer pays.");
+        }
 
         // FX adversarial-review MEDIUM: BASE-amount scale must come from the company BASE currency's
         // minor units, never the foreign invoice/receipt currency. Resolve it once here.

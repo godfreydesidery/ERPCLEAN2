@@ -362,3 +362,75 @@ describe('FixedAssetDetailComponent — status helpers', () => {
     expect(fixture.componentInstance.isInService()).toBe(true);
   });
 });
+
+// ── Depreciation schedule (FR-FA-18): reachable + exportable ───────────────────
+
+describe('FixedAssetDetailComponent — schedule export', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  const scheduleLine = {
+    id: '1', uid: 'sl-1', fixedAssetId: '1', periodSeq: 1, scheduleVersion: 1,
+    periodDate: '2024-02-01', plannedCharge: '30555.56', accumulatedAfter: '30555.56',
+    nbvAfter: '1169444.44', posted: true, depreciationRunId: '9',
+  };
+
+  function withPermissions(perms: string[]): void {
+    TestBed.overrideProvider(SessionStore, {
+      useValue: {
+        hasPermission: vi.fn((p: string) => perms.includes(p)),
+        isAuthenticated: signal(true),
+        user: signal(null),
+        permissions: signal([]),
+        activeBranchUid: signal(null),
+      },
+    });
+  }
+
+  async function mount() {
+    const fixture = TestBed.createComponent(FixedAssetDetailComponent);
+    fixture.componentRef.setInput('uid', 'fa-1');
+    vi.runAllTimers();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('still loads the schedule of a DISPOSED asset', async () => {
+    const svc = makeBed({
+      getByUid: vi.fn(() => of(makeAsset({ status: 'DISPOSED', disposedAt: '2024-06-30' }))),
+      listSchedule: vi.fn(() => of([scheduleLine as never])),
+    });
+    await mount();
+    expect(svc.listSchedule).toHaveBeenCalledOnce();
+  });
+
+  it('offers export with FA.VIEW + REPORT.EXPORT and calls the export endpoint', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const exportSchedule = vi.fn(() => of(new Blob()));
+    const svc = makeBed({
+      getByUid: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
+      listSchedule: vi.fn(() => of([scheduleLine as never])),
+    });
+    Object.assign(svc, { exportSchedule });
+    withPermissions(['FA.VIEW', 'REPORT.EXPORT']);
+    const fixture = await mount();
+
+    const btn = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find((b) => (b.textContent ?? '').includes('Export Excel'));
+    expect(btn).toBeDefined();
+    btn!.click();
+    expect(exportSchedule).toHaveBeenCalledWith('fa-1', 'XLSX');
+  });
+
+  it('hides export without REPORT.EXPORT', async () => {
+    makeBed({
+      getByUid: vi.fn(() => of(makeAsset({ status: 'IN_SERVICE' }))),
+      listSchedule: vi.fn(() => of([scheduleLine as never])),
+    });
+    withPermissions(['FA.VIEW']);
+    const fixture = await mount();
+    expect(fixture.componentInstance.canExportSchedule()).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).innerHTML).not.toContain('Export Excel');
+  });
+});

@@ -35,8 +35,9 @@ public interface PayrollRunService {
     List<PayrollLineDto> listLines(String uid);
 
     /**
-     * Export the per-employee EFT batch as CSV text for a run that has been disbursed (PAID status
-     * is not enforced — callers may export from POSTED onwards). Columns:
+     * Export the per-employee EFT batch as CSV text. Only a POSTED or PAID run may be exported (the
+     * statuses in which disbursement is legitimate); any other status is refused with a
+     * {@link com.erp.platform.common.api.ConflictException} (HTTP 409). Columns:
      * employee_number, employee_name, payee_method, payee_bank_name, payee_account_name,
      * payee_account_ref, net_amount, currency (ADR-0040 D-11).
      */

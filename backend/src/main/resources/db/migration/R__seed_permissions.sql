@@ -132,6 +132,7 @@ INSERT INTO permissions (code, module, description) VALUES
     ('PERMISSION.VIEW', 'iam', 'View the permission catalogue'),
     ('PETTY_CASH.MANAGE', 'cashbank', 'Create/edit petty cash funds and record disbursements, replenishments and adjustments'),
     ('PETTY_CASH.VIEW', 'cashbank', 'View petty cash funds and their transactions'),
+    ('POS.CASHUP.VIEW', 'sales', 'View the company-wide cash-up / payment summary across every cashier (managers)'),
     ('POS.EXPENSE.RECORD', 'sales', 'Record a categorised expense paid out of the till drawer'),
     ('POS.EXPENSE.VIEW', 'sales', 'View the till-expense report across sessions'),
     ('POS.SALE.AGE_OVERRIDE', 'pos', 'Sell an age-restricted item without an age-verification acknowledgement'),
@@ -500,7 +501,7 @@ SELECT r.id, p.id FROM (VALUES
   ('STOREKEEPER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('STOREKEEPER','DOCUMENT.RENDER'),
   ('STOREKEEPER','BRANCH.VIEW'),
-  -- ACCOUNTANT (57 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- ACCOUNTANT (59 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('ACCOUNTANT','GL.VIEW'),
   ('ACCOUNTANT','GL.POST'),
   ('ACCOUNTANT','AR.VIEW'),
@@ -556,6 +557,8 @@ SELECT r.id, p.id FROM (VALUES
   -- require BOTH, so a user who cannot see a report can no longer download it.
   ('ACCOUNTANT','INVENTORY.VALUATION.VIEW'),
   ('ACCOUNTANT','BI.VIEW'),
+  ('ACCOUNTANT','BI.EXPORT'),  -- export renders only the panels the caller may view (owner-approved 2026-10-02)
+  ('ACCOUNTANT','POS.CASHUP.VIEW'),
   ('ACCOUNTANT','BI.FINANCE.VIEW'),
   ('ACCOUNTANT','CUSTOMER.VIEW'),
   ('ACCOUNTANT','SUPPLIER.VIEW'),
@@ -569,7 +572,7 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','NOTIFICATION.PREFERENCE.MANAGE'),
   ('ACCOUNTANT','DOCUMENT.RENDER'),
   ('ACCOUNTANT','BRANCH.VIEW'),
-  -- SALES_MANAGER (74 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- SALES_MANAGER (76 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('SALES_MANAGER','SALES.QUOTE.CREATE'),
   ('SALES_MANAGER','SALES.QUOTE.SEND'),
   ('SALES_MANAGER','SALES.QUOTE.ACCEPT'),
@@ -633,6 +636,7 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','APPROVALS.DECIDE'),
   ('SALES_MANAGER','APPROVALS.REQUEST.VIEW'),
   ('SALES_MANAGER','BI.VIEW'),
+  ('SALES_MANAGER','BI.EXPORT'),  -- export renders only the panels the caller may view (owner-approved 2026-10-02)
   ('SALES_MANAGER','BI.CRM.VIEW'),
   ('SALES_MANAGER','TAXRATE.VIEW'),
   ('SALES_MANAGER','PRODUCT.VIEW'),
@@ -653,8 +657,9 @@ SELECT r.id, p.id FROM (VALUES
   -- then refused permission to read. An approver who cannot see what they approved is an audit
   -- failure, not a security posture.
   ('SALES_MANAGER','POS.SESSION.VIEW'),
+  ('SALES_MANAGER','POS.CASHUP.VIEW'),
   ('SALES_MANAGER','BRANCH.VIEW'),
-  -- BRANCH_MANAGER (54 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- BRANCH_MANAGER (56 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
   ('BRANCH_MANAGER','SALES.INVOICE.VIEW'),
@@ -665,6 +670,7 @@ SELECT r.id, p.id FROM (VALUES
   -- line prices out at or below cost (V93 APPROVE mode) -- without it the till waits for head office.
   ('BRANCH_MANAGER','SALES.BELOW_COST.OVERRIDE'),
   ('BRANCH_MANAGER','POS.SESSION.VIEW'),
+  ('BRANCH_MANAGER','POS.CASHUP.VIEW'),
   -- POS.SESSION.CLOSE: a branch manager must be able to close a session a cashier left open
   -- (till stranded by an ended shift / lost device) before reconciling it -- without it CASHIER
   -- was the only bundle holding the code, so a stranded till waited for a cashier to come back.
@@ -698,6 +704,7 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','APPROVALS.REQUEST.VIEW'),
   ('BRANCH_MANAGER','APPROVALS.POLICY.VIEW'),
   ('BRANCH_MANAGER','BI.VIEW'),
+  ('BRANCH_MANAGER','BI.EXPORT'),  -- export renders only the panels the caller may view (owner-approved 2026-10-02)
   ('BRANCH_MANAGER','BI.OPS.VIEW'),
   ('BRANCH_MANAGER','BI.FINANCE.VIEW'),
   ('BRANCH_MANAGER','REPORT.VIEW'),
@@ -748,7 +755,7 @@ SELECT r.id, p.id FROM (VALUES
   ('PROCUREMENT_OFFICER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('PROCUREMENT_OFFICER','DOCUMENT.RENDER'),
   ('PROCUREMENT_OFFICER','BRANCH.VIEW'),
-  -- PROCUREMENT_MANAGER (34 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- PROCUREMENT_MANAGER (35 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('PROCUREMENT_MANAGER','PURCHASE.REQUISITION.CREATE'),
   ('PROCUREMENT_MANAGER','PURCHASE.REQUISITION.VIEW'),
   ('PROCUREMENT_MANAGER','PURCHASE.RFQ.MANAGE'),
@@ -780,12 +787,13 @@ SELECT r.id, p.id FROM (VALUES
   ('PROCUREMENT_MANAGER','APPROVALS.DECIDE'),
   ('PROCUREMENT_MANAGER','APPROVALS.REQUEST.VIEW'),
   ('PROCUREMENT_MANAGER','BI.VIEW'),
+  ('PROCUREMENT_MANAGER','BI.EXPORT'),  -- export renders only the panels the caller may view (owner-approved 2026-10-02)
   ('PROCUREMENT_MANAGER','BI.OPS.VIEW'),
   ('PROCUREMENT_MANAGER','NOTIFICATION.VIEW'),
   ('PROCUREMENT_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('PROCUREMENT_MANAGER','DOCUMENT.RENDER'),
   ('PROCUREMENT_MANAGER','BRANCH.VIEW'),
-  -- HR_PAYROLL_MANAGER (23 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- HR_PAYROLL_MANAGER (24 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('HR_PAYROLL_MANAGER','HR.EMPLOYEE.MANAGE'),
   ('HR_PAYROLL_MANAGER','HR.EMPLOYEE.VIEW'),
   ('HR_PAYROLL_MANAGER','HR.EMPLOYEE.PAYEE.VIEW'),
@@ -800,6 +808,8 @@ SELECT r.id, p.id FROM (VALUES
   ('HR_PAYROLL_MANAGER','HR.PAYROLL.DISBURSE'),
   ('HR_PAYROLL_MANAGER','HR.PAYROLL.REVERSE'),
   ('HR_PAYROLL_MANAGER','HR.PAYROLL.VIEW'),
+  -- Export the payroll statutory reports this role already reads (owner-approved 2026-10-02).
+  ('HR_PAYROLL_MANAGER','REPORT.EXPORT'),
   ('HR_PAYROLL_MANAGER','HR.PAYSLIP.VIEW'),
   ('HR_PAYROLL_MANAGER','HR.STATUTORY.MANAGE'),
   ('HR_PAYROLL_MANAGER','HR.SELF.VIEW'),
@@ -809,7 +819,7 @@ SELECT r.id, p.id FROM (VALUES
   ('HR_PAYROLL_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('HR_PAYROLL_MANAGER','DOCUMENT.RENDER'),
   ('HR_PAYROLL_MANAGER','BRANCH.VIEW'),
-  -- FINANCE_DIRECTOR (83 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
+  -- FINANCE_DIRECTOR (86 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('FINANCE_DIRECTOR','GL.VIEW'),
   ('FINANCE_DIRECTOR','GL.POST'),
   ('FINANCE_DIRECTOR','AR.VIEW'),
@@ -853,6 +863,10 @@ SELECT r.id, p.id FROM (VALUES
   ('FINANCE_DIRECTOR','REPORT.CASHFLOW.VIEW'),
   ('FINANCE_DIRECTOR','REPORT.LEDGER.VIEW'),
   ('FINANCE_DIRECTOR','REPORT.EXPORT'),
+  -- Stock value / product list / stock ageing: the CFO signs the inventory figure (owner-approved 2026-10-02).
+  ('FINANCE_DIRECTOR','INVENTORY.VALUATION.VIEW'),
+  ('FINANCE_DIRECTOR','BI.EXPORT'),
+  ('FINANCE_DIRECTOR','POS.CASHUP.VIEW'),
   ('FINANCE_DIRECTOR','BI.VIEW'),
   ('FINANCE_DIRECTOR','BI.FINANCE.VIEW'),
   ('FINANCE_DIRECTOR','CUSTOMER.VIEW'),

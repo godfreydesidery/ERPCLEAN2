@@ -725,3 +725,51 @@ Finance officer David opens **Accounting › Record Payment** (`/admin/ap/paymen
 **Step 12 — Purchase return (if needed)**
 
 If 20 bags arrived damaged, John opens **Purchasing › Purchase Returns** (`/admin/purchase-returns`), creates a return against GRN-0061 for 20 bags, and the manager confirms it — stock decreases by 20 bags and the AP module raises a TZS 290,000 debit note against Simba Cement.
+
+---
+
+## 10. Purchase Reports
+
+Four reports under **Purchasing** answer the questions a buyer, storekeeper or owner asks about what was bought. Each one can be printed or downloaded as **PDF**, **Excel** or **CSV** by a user who also holds **REPORT.EXPORT** (the buttons are hidden otherwise). The **Branch** filter offers only the branches you are assigned to; choosing a branch you are not assigned to is refused with a message saying so — clear the filter to see the whole company. Figures in a foreign currency are listed in their own currency and left out of the totals, and the screen tells you how many.
+
+### 10.1 Goods Received Register
+
+**Purchasing › Goods Received Register** (`/admin/reports/purchases/goods-received`) — permission **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+Every item received from suppliers over a period, one line per goods-receipt line: date, GRN number, order number (or **Direct** for stock taken in with **Receive Without Order**), supplier, branch, item, quantity, unit cost and value, with the total at the foot.
+
+- **Filters:** From / To date (required), Branch, Supplier, Product (all optional; type in the supplier or product box to search).
+- **Voided receipts:** the receipt stays on the day it was received, and appears again in red, as a **negative** line marked *Voided*, on the day it was voided — the same way the Stock Movement report shows it. A month's register therefore never changes after the month is over.
+- **Values exclude VAT.** A goods receipt does not hold VAT (VAT comes from the supplier's bill), and landed costs added later are not included.
+- Long registers are paged; the total at the foot always covers **all** pages.
+
+### 10.2 Purchases by Supplier
+
+**Purchasing › Purchases by Supplier** (`/admin/reports/purchases/by-supplier`) — permission **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+One line per supplier for a period, largest first: number of receipts, value **received** (less receipts voided in the period — it agrees with the Goods Received Register total for the same period and branch), **returns** (confirmed purchase returns at receipt cost), **net purchases** (received − returns), **billed** (supplier bills dated in the period, excluding VAT) and **unpaid** (what is still owed today on those bills, including VAT).
+
+- **Filters:** From / To date, Branch.
+- **Returns / Net purchases** are shown only to users who can see purchase returns (**PURCHASE.RETURN.VIEW**); **Billed / Unpaid** only to users who can see supplier bills (**AP.VIEW**). Hidden columns are left off the report, never shown as zero, and the screen says which are hidden and why.
+- Billing happens separately from receiving, so Billed is not expected to equal Received in any one period.
+
+### 10.3 Open Purchase Orders
+
+**Purchasing › Open Purchase Orders** (`/admin/reports/purchases/open-orders`) — permission **PURCHASE.ORDER.VIEW**.
+
+Goods ordered and still to come: each placed order line with quantity outstanding — order number, order date, expected date (marked **Late** once it has passed), supplier, item, ordered / received / outstanding quantity in the unit ordered, unit price, outstanding value (excluding VAT) and age in days. Opens straight away, as at today.
+
+- **Filters:** As at date (blank = today), Branch, Supplier.
+- Only **placed** orders appear — an order above the approval threshold cannot be placed until it is approved, so drafts and orders awaiting approval are never listed. Closed and voided orders drop off.
+- **As at** really looks back: run it for an earlier date and receipts, voids and closings after that date are treated as not having happened yet.
+- Orders created automatically behind a **Receive Without Order** receipt are never listed — nobody is going to deliver against them.
+
+### 10.4 Purchase Price Variance
+
+**Purchasing › Purchase Price Variance** (`/admin/reports/purchases/price-variance`) — permissions **PURCHASE.ORDER.VIEW** *and* **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+Receipts in a period where you paid a different price from the purchase order: order price, receipt cost and receipt variance; and — for users with **AP.VIEW** — the price on the supplier bill(s) matched to that receipt line, the variance per unit, in total and as a percentage. A **positive** variance means you paid more than the order price.
+
+- **Filters:** From / To date, Branch, Supplier.
+- A receipt takes its cost from its order, so the receipt variance is normally zero; the bill is where price changes show. Two bills against one receipt line are combined at their quantity-weighted average price. Draft bills and voided receipts are ignored.
+- Without **AP.VIEW** the bill columns are hidden and only receipts whose cost differs from the order are listed.

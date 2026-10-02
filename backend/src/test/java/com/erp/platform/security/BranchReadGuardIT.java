@@ -3,6 +3,7 @@ package com.erp.platform.security;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.erp.modules.bi.service.DashboardService;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
@@ -59,6 +60,7 @@ class BranchReadGuardIT extends PostgresIntegrationTest {
     @Autowired private StockMovementReportQuery stockMovementReport;
     @Autowired private ProductStockReportQuery  productStockReport;
     @Autowired private ItemInquiryQuery         itemInquiry;
+    @Autowired private DashboardService         dashboard;
 
     private Company company;
     private Branch  ownBranch;
@@ -124,6 +126,22 @@ class BranchReadGuardIT extends PostgresIntegrationTest {
     @Test
     void itemInquiry() {
         assertBranchGuarded(uid -> itemInquiry.inquire(company.getId(), "anything", uid, false));
+    }
+
+    /** The BI dashboard takes a raw branch id rather than a uid; the same rule applies to it. */
+    @Test
+    void biDashboardBranchPanels() {
+        LocalDate from = LocalDate.now().minusDays(1);
+        LocalDate to   = LocalDate.now();
+        assertThatCode(() -> dashboard.salesByBranch(company.getId(), ownBranch.getId(), from, to))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> dashboard.salesByBranch(company.getId(), otherBranch.getId(), from, to))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessage(BranchReadGuard.branchNotAssigned().getMessage());
+        assertThatThrownBy(() -> dashboard.crmSnapshot(company.getId(), otherBranch.getId(), from, to))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> dashboard.dashboard(company.getId(), from, to, otherBranch.getId()))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     /** Own branch and no branch both read; the unassigned branch is refused with the branch wording. */

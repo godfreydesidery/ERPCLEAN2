@@ -173,7 +173,9 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         ArInvoice inv = new ArInvoice(
                 companyId, branchId, totals.customerId(),
-                ArInvoiceSource.SALE, payload.invoiceUid(), null,
+                // The open item carries the sales invoice number as its own document number, so
+                // statements, the AR invoice list and receipt allocation can name it.
+                ArInvoiceSource.SALE, payload.invoiceUid(), payload.invoiceNumber(),
                 receivable, totals.currency(),
                 invoiceDate, dueDate, null /* SYSTEM — no user actor */);
 

@@ -238,6 +238,61 @@ class AccountLedgerIT extends PostgresIntegrationTest {
                 .isGreaterThanOrEqualTo(running0);
     }
 
+    // =========================================================================
+    // Bar 3: Running balance carries across pages — page N's brought-forward is the movement of
+    // exactly the rows on pages 0..N-1 (regression: the prior-pages SUM had a LIMIT applied to an
+    // aggregate, which summed the WHOLE period, so page 2 onward started from the closing).
+    // =========================================================================
+
+    @Test
+    void accountLedger_runningBalance_carriesAcrossPages_andLastPageClosesOnTheAccountClosing() {
+        for (int i = 0; i < 5; i++) {
+            finaliseAndDispatch();
+        }
+
+        LocalDate from = LocalDate.now().withDayOfMonth(1);
+        LocalDate to   = LocalDate.now();
+
+        AccountLedgerDto full = reportingService.accountLedger(
+                company.getId(), cashGlUid, from, to, 0, 500);
+        assertThat(full.totalElements())
+                .as("five cash sales must give more than two pages of size 2")
+                .isGreaterThan(4);
+
+        int size = 2;
+        int pages = (int) ((full.totalElements() + size - 1) / size);
+        List<AccountLedgerRowDto> paged = new java.util.ArrayList<>();
+        BigDecimal previousLast = full.openingBalance();
+        for (int p = 0; p < pages; p++) {
+            AccountLedgerDto page = reportingService.accountLedger(
+                    company.getId(), cashGlUid, from, to, p, size);
+            assertThat(page.rows()).as("page %d must not be empty", p).isNotEmpty();
+            AccountLedgerRowDto first = page.rows().get(0);
+            BigDecimal broughtForward = first.runningBalance()
+                    .subtract(first.debit()).add(first.credit());
+            assertThat(broughtForward)
+                    .as("page %d must start from page %d's last running balance", p, p - 1)
+                    .isEqualByComparingTo(previousLast);
+            previousLast = page.rows().get(page.rows().size() - 1).runningBalance();
+            paged.addAll(page.rows());
+        }
+
+        assertThat(previousLast)
+                .as("the last page's last running balance is the account's period closing")
+                .isEqualByComparingTo(full.closingBalance());
+
+        // Paging must neither repeat nor skip a line: the pages, stitched, are the one-page ledger.
+        assertThat(paged).hasSize(full.rows().size());
+        for (int i = 0; i < paged.size(); i++) {
+            assertThat(paged.get(i).runningBalance())
+                    .as("row %d running balance, paged vs unpaged", i)
+                    .isEqualByComparingTo(full.rows().get(i).runningBalance());
+            assertThat(paged.get(i).entryUid())
+                    .as("row %d is the same journal line, paged vs unpaged", i)
+                    .isEqualTo(full.rows().get(i).entryUid());
+        }
+    }
+
     // -------------------------------------------------------------------------
 
     private void finaliseAndDispatch() {
