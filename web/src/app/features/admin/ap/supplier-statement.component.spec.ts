@@ -128,6 +128,24 @@ describe('SupplierStatementComponent', () => {
     expect(sorted[2].bucket).toBe('D90_PLUS');
   });
 
+  it('ages each currency on its own — a USD block is never added into the TZS figures', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
+    comp.ageing.set([
+      ...MOCK_AGEING,
+      { bucket: 'D31_60', amount: 400, currency: 'USD' },
+      { bucket: 'CURRENT', amount: 0, currency: 'USD' },
+    ]);
+    const groups = comp.ageingGroups();
+    expect(comp.multiCurrency()).toBe(true);
+    expect(groups.map((g: { currency: string }) => g.currency)).toEqual(['TZS', 'USD']);
+    expect(groups[0].total).toBe(7000);
+    expect(groups[1].total).toBe(400);
+    expect(comp.baseAgeingTotal()).toBe(7000);
+    expect(comp.sortedAgeing().every((b: { currency: string }) => b.currency === 'TZS')).toBe(true);
+  });
+
   it('outstandingBalance coerces number from balance signal', () => {
     vi.useFakeTimers();
     makeBed();

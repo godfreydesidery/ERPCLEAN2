@@ -17,6 +17,7 @@ import {
   AgeingBucket,
 } from './models/ar.model';
 import { ArService } from './ar.service';
+import { AgeingCurrencyGroup, groupAgeingByCurrency } from '../../../shared/ageing-currency.util';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { exportErrorMessage, firstOfMonthIso, todayIso } from '../reporting/ledger-export.util';
@@ -84,13 +85,24 @@ export class CustomerStatementComponent {
 
   // ── Derived display ────────────────────────────────────────────────────────
 
-  /** Ageing buckets sorted by canonical bucket order. */
+  /** Ageing, one five-bucket group per currency (base first) — never summed across currencies. */
+  readonly ageingGroups = computed<AgeingCurrencyGroup<ArAgeingBucketDto>[]>(() =>
+    groupAgeingByCurrency(this.statement()?.ageing ?? [], BUCKET_ORDER),
+  );
+
+  readonly multiCurrency = computed(() => this.ageingGroups().length > 1);
+
+  /** The statement-currency (base) buckets, canonical order — drives the headers and the bar. */
   readonly sortedAgeing = computed<ArAgeingBucketDto[]>(() => {
-    const buckets = this.statement()?.ageing ?? [];
-    return [...buckets].sort((a, b) =>
-      BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket),
-    );
+    const groups = this.ageingGroups();
+    const base = groups.find((g) => g.currency === this.statement()?.currency) ?? groups[0];
+    return base ? base.buckets : [];
   });
+
+  /** Balances owed in a currency other than the statement's — shown beside, never added in. */
+  readonly otherCurrencyGroups = computed(() =>
+    this.ageingGroups().filter((g) => g.currency !== this.statement()?.currency),
+  );
 
   readonly openItems = computed<ArInvoiceDto[]>(() => this.statement()?.openItems ?? []);
   readonly recentReceipts = computed<ArReceiptDto[]>(() => this.statement()?.recentReceipts ?? []);

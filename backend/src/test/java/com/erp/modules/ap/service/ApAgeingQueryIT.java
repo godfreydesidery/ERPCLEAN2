@@ -30,6 +30,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -58,6 +59,7 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository      users;
     @Autowired private PasswordEncoder        passwordEncoder;
     @Autowired private IamTestData            testData;
+    @Autowired private JdbcTemplate           jdbc;
 
     private Company company;
     private Branch  branch;
@@ -174,8 +176,44 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 5: Currencies are never mixed — a TZS bill and a USD bill from the SAME supplier are
+    // aged each in its own currency (regression: both were summed into one TZS-labelled figure).
+    // =========================================================================
+
+    @Test
+    void ageing_baseAndUsdBillForOneSupplier_areAgedPerCurrency_neverSummed() {
+        openingBalance("OB-AGE-CCY-TZS", new BigDecimal("1000.00"), LocalDate.now().plusDays(5));
+        openingBalance("OB-AGE-CCY-USD", new BigDecimal("400.00"), LocalDate.now().minusDays(40));
+        int patched = jdbc.update(
+                "UPDATE supplier_bills SET currency = 'USD', fx_rate = 2500,"
+                        + " base_outstanding_amount = outstanding_amount * 2500"
+                        + " WHERE company_id = ? AND supplier_id = ? AND outstanding_amount = 400",
+                company.getId(), supplierId);
+        assertThat(patched).as("the USD marker bill was re-stamped").isEqualTo(1);
+
+        List<ApAgeingRowDto> rows = ageingQuery.ageing(company.getId(), supplierId, LocalDate.now());
+
+        assertThat(rows).as("five TZS rows then five USD rows").hasSize(10);
+        assertThat(rows.subList(0, 5)).allMatch(r -> "TZS".equals(r.currency()));
+        assertThat(rows.subList(5, 10)).allMatch(r -> "USD".equals(r.currency()));
+        assertThat(amount(rows, AgeingBucket.CURRENT, "TZS")).isEqualByComparingTo("1000.00");
+        assertThat(amount(rows, AgeingBucket.D31_60, "TZS"))
+                .as("the USD bill must not land in a TZS bucket").isEqualByComparingTo("0");
+        assertThat(amount(rows, AgeingBucket.D31_60, "USD")).isEqualByComparingTo("400.00");
+        assertThat(amount(rows, AgeingBucket.CURRENT, "USD")).isEqualByComparingTo("0");
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
+
+    private static BigDecimal amount(List<ApAgeingRowDto> rows, AgeingBucket bucket, String ccy) {
+        return rows.stream()
+                .filter(r -> r.bucket() == bucket && ccy.equals(r.currency()))
+                .map(ApAgeingRowDto::amount)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No " + ccy + " row for bucket " + bucket));
+    }
 
     private void openingBalance(String ref, BigDecimal amount, LocalDate dueDate) {
         // billDate must be <= dueDate (chk_supplier_bill_dates); use the earlier of today or dueDate

@@ -157,6 +157,31 @@ class LedgerExportFlattenTest {
                 "", "TOTAL (2 customers)", "100.00", "70.00", "30.00", "40.00", "10.00", "250.00");
     }
 
+    @Test
+    void arAgeing_twoCurrencies_getACurrencyColumn_andATotalPerCurrency_neverOneMixedSum() {
+        List<ArCustomerAgeingRowDto> rows = List.of(
+                new ArCustomerAgeingRowDto(1L, "C001", "Duka A", bd("1000"), BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, bd("1000"), "TZS"),
+                new ArCustomerAgeingRowDto(1L, "C001", "Duka A", BigDecimal.ZERO, BigDecimal.ZERO,
+                        bd("500"), BigDecimal.ZERO, BigDecimal.ZERO, bd("500"), "USD"),
+                new ArCustomerAgeingRowDto(2L, "C002", "Duka B", bd("200"), BigDecimal.ZERO,
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, bd("200"), "TZS"));
+
+        TabularRenderModel m = ArStatementController.flattenAgeing(rows, LocalDate.of(2026, 9, 30), HEAD, NOW);
+
+        assertThat(m.headerLines()).noneMatch(l -> l.startsWith("Currency:"));
+        assertThat(m.columns()).hasSize(9);
+        assertThat(m.columns().get(2).header()).isEqualTo("Currency");
+        assertThat(m.rows().get(1)).containsExactly(
+                "C001", "Duka A", "USD", "0.00", "0.00", "500.00", "0.00", "0.00", "500.00");
+        assertThat(m.totalsRow()).as("no grand total across currencies").isNull();
+        assertThat(m.rows()).hasSize(5);
+        assertThat(m.rows().get(3)).containsExactly(
+                "", "TOTAL TZS (2 customers)", "TZS", "1,200.00", "0.00", "0.00", "0.00", "0.00", "1,200.00");
+        assertThat(m.rows().get(4)).containsExactly(
+                "", "TOTAL USD (1 customer)", "USD", "0.00", "0.00", "500.00", "0.00", "0.00", "500.00");
+    }
+
     // -------------------------------------------------------------------------
     // Supplier statement + ageing
     // -------------------------------------------------------------------------
@@ -201,6 +226,28 @@ class LedgerExportFlattenTest {
                 "Current (not yet due)", "1-30 days", "31-60 days", "61-90 days", "Over 90 days");
         assertThat(m.totalsRow()).containsExactly("TOTAL OUTSTANDING", "175.00");
         assertThat(m.headerLines()).contains("Supplier: S001 — Mbasha", "Ageing as at 2026-09-30");
+    }
+
+    @Test
+    void supplierAgeing_twoCurrencies_areTotalledSeparately() {
+        List<ApAgeingRowDto> ageing = new java.util.ArrayList<>();
+        for (AgeingBucket b : AgeingBucket.values()) {
+            ageing.add(new ApAgeingRowDto(b, b == AgeingBucket.CURRENT ? bd("1000") : BigDecimal.ZERO, "TZS"));
+        }
+        for (AgeingBucket b : AgeingBucket.values()) {
+            ageing.add(new ApAgeingRowDto(b, b == AgeingBucket.D31_60 ? bd("400") : BigDecimal.ZERO, "USD"));
+        }
+        ApSupplierRefDto supplier = new ApSupplierRefDto(7L, "SUID", "S001", "Mbasha", null, null);
+
+        TabularRenderModel m = ApStatementController.flattenAgeing(
+                ageing, supplier, LocalDate.of(2026, 9, 30), HEAD, NOW);
+
+        assertThat(m.columns()).extracting(TabularRenderModel.Column::header)
+                .containsExactly("Age (days past due)", "Currency", "Amount");
+        assertThat(m.rows().get(7)).containsExactly("31-60 days", "USD", "400.00");
+        assertThat(m.totalsRow()).isNull();
+        assertThat(m.rows().get(10)).containsExactly("TOTAL OUTSTANDING TZS", "TZS", "1,000.00");
+        assertThat(m.rows().get(11)).containsExactly("TOTAL OUTSTANDING USD", "USD", "400.00");
     }
 
     // -------------------------------------------------------------------------

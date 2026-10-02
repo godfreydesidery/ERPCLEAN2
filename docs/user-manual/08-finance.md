@@ -508,6 +508,8 @@ One statement is in one currency (your base currency). If the customer also has 
 
 **Ageing export.** On **AR Ageing**, users with export permission see **Export PDF / Excel / CSV** above the table: one row per customer with the five buckets and their total, and a totals row at the bottom, as at today.
 
+**Invoices in another currency.** Every ageing figure is in the invoice's own currency. A customer who owes you in TZS and in USD appears on **two rows** — one per currency, each with its own **Ccy** — and the two are never added together. On the customer statement the headline **Total Outstanding** is the base-currency amount only, with any foreign-currency balance shown beside it ("and USD 500.00"), and the ageing table gets one line per currency. In the ageing export, a single currency prints exactly as before; when more than one currency is present the document gains a **Currency** column and a total line per currency instead of one grand total. Amounts are not converted to TZS: the system ages what the customer actually owes, in the currency they owe it.
+
 Both exports need the screen's permission (`AR.STATEMENT.VIEW`) **and** `REPORT.EXPORT`. A user without `REPORT.EXPORT` does not see the buttons.
 
 ---
@@ -671,7 +673,7 @@ Pick a supplier by name to view:
 - **Payment** and **Debit note** lines in the Debit column. A payment's line says how much of it was WHT withheld and paid to TRA on the supplier's behalf. For a payment run that paid several suppliers at once, only this supplier's share is shown.
 - A **Reversal** line (Credit) when a cheque to the supplier came back unpaid.
 
-**Ageing PDF / Excel / CSV** prints this supplier's five ageing buckets and the total outstanding, as at today.
+**Ageing PDF / Excel / CSV** prints this supplier's five ageing buckets and the total outstanding, as at today. Bills in a foreign currency are aged in that currency on their own line (and their own total) — they are never added into the TZS figures.
 
 Both exports need `AP.VIEW` **and** `REPORT.EXPORT`.
 

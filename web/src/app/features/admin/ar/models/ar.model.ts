@@ -159,12 +159,19 @@ export interface ArStatementDto {
   /** Wire: number or string */
   totalOutstanding: number | string;
   currency: string;
+  /** One five-bucket block per currency, base currency first. */
   ageing: ArAgeingBucketDto[];
   openItems: ArInvoiceDto[];
   recentReceipts: ArReceiptDto[];
+  /**
+   * Outstanding per currency, base first. `totalOutstanding` is the base-currency part only;
+   * amounts in different currencies are never added together. Wire: numbers.
+   */
+  totalsByCurrency?: Record<string, number | string>;
 }
 
 // ── Ageing row (standalone ageing endpoint) ───────────────────────────────────
+// One row per customer PER CURRENCY: a customer owing in TZS and USD has two rows.
 
 export interface ArAgeingRowDto {
   customerId: string;

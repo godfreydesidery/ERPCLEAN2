@@ -5,8 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ar.domain.dto.ArAgeingRowDto;
+import com.erp.modules.ar.domain.dto.ArCustomerAgeingRowDto;
+import com.erp.modules.ar.domain.dto.ArStatementDto;
 import com.erp.modules.ar.domain.dto.SetOpeningBalanceRequest;
+import com.erp.modules.ar.domain.entity.ArInvoice;
 import com.erp.modules.ar.domain.enums.AgeingBucket;
+import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.gl.service.ChartOfAccountService;
 import com.erp.modules.gl.service.FiscalCalendarService;
 import com.erp.modules.gl.service.GlConfigService;
@@ -64,6 +68,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class ArAgeingQueryIT extends PostgresIntegrationTest {
 
     @Autowired private ArAgeingQuery ageingQuery;
+    @Autowired private ArInvoiceRepository arInvoiceRepo;
     @Autowired private ArOpeningBalanceService openingBalanceService;
     @Autowired private ArGlSeeder arGlSeeder;
     @Autowired private CustomerService customerService;
@@ -333,8 +338,77 @@ class ArAgeingQueryIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Bar 8: Currencies are never mixed — a TZS and a USD invoice for the SAME customer are aged
+    // each in its own currency (regression: both were summed into one figure labelled TZS).
+    // =========================================================================
+
+    @Test
+    void ageing_baseAndUsdInvoiceForOneCustomer_areAgedPerCurrency_neverSummed() {
+        openItem(new BigDecimal("1000"), AS_AT);          // TZS, CURRENT
+        openItem(new BigDecimal("500"), AS_AT.minusDays(45)); // re-stamped as USD 500, D31_60
+        stampUsd(new BigDecimal("500"), new BigDecimal("2500"));
+
+        for (Long custFilter : new Long[]{customerId, null}) {
+            List<ArAgeingRowDto> rows = ageingQuery.ageing(companyId, custFilter, AS_AT);
+            assertThat(rows).as("five TZS rows then five USD rows").hasSize(10);
+            assertThat(rows.subList(0, 5)).allMatch(r -> TZS.equals(r.currency()));
+            assertThat(rows.subList(5, 10)).allMatch(r -> "USD".equals(r.currency()));
+            assertThat(amount(rows, AgeingBucket.CURRENT, TZS)).isEqualByComparingTo("1000");
+            assertThat(amount(rows, AgeingBucket.D31_60, TZS)).isEqualByComparingTo("0");
+            assertThat(amount(rows, AgeingBucket.D31_60, "USD")).isEqualByComparingTo("500");
+            assertThat(amount(rows, AgeingBucket.CURRENT, "USD")).isEqualByComparingTo("0");
+        }
+
+        List<ArCustomerAgeingRowDto> byCustomer = ageingQuery.customerAgeing(companyId, AS_AT);
+        assertThat(byCustomer).as("one row per customer per currency").hasSize(2);
+        ArCustomerAgeingRowDto tzs = byCustomer.get(0);
+        ArCustomerAgeingRowDto usd = byCustomer.get(1);
+        assertThat(tzs.currency()).isEqualTo(TZS);
+        assertThat(tzs.customerId()).isEqualTo(customerId);
+        assertThat(tzs.current()).isEqualByComparingTo("1000");
+        assertThat(tzs.total()).as("TZS total must not include the USD 500").isEqualByComparingTo("1000");
+        assertThat(usd.currency()).isEqualTo("USD");
+        assertThat(usd.customerId()).isEqualTo(customerId);
+        assertThat(usd.days31to60()).isEqualByComparingTo("500");
+        assertThat(usd.total()).isEqualByComparingTo("500");
+
+        // The customer statement: the TZS-labelled total is TZS only; USD is totalled on its own.
+        ArStatementDto stmt = ageingQuery.statement(companyId, customerId, AS_AT);
+        assertThat(stmt.currency()).isEqualTo(TZS);
+        assertThat(stmt.totalOutstanding())
+                .as("TZS total must not include the USD 500").isEqualByComparingTo("1000");
+        assertThat(stmt.totalsByCurrency()).containsOnlyKeys(TZS, "USD");
+        assertThat(stmt.totalsByCurrency().get(TZS)).isEqualByComparingTo("1000");
+        assertThat(stmt.totalsByCurrency().get("USD")).isEqualByComparingTo("500");
+        assertThat(stmt.ageing()).hasSize(10);
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
+
+    /**
+     * Re-stamps the customer's open item whose outstanding is {@code usdOutstanding} as a USD
+     * item of the same face (currency is not updatable through JPA; the repository's test-support
+     * patch does it).
+     */
+    private void stampUsd(BigDecimal usdOutstanding, BigDecimal fxRate) {
+        BigDecimal faceMarker = usdOutstanding;
+        ArInvoice inv = arInvoiceRepo.findOpenForStatement(companyId, customerId).stream()
+                .filter(i -> i.getOutstandingAmount().compareTo(faceMarker) == 0)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("marker open item not found"));
+        BigDecimal base = usdOutstanding.multiply(fxRate);
+        arInvoiceRepo.patchForFxTest(inv.getId(), "USD", usdOutstanding, fxRate, base, base);
+    }
+
+    private static BigDecimal amount(List<ArAgeingRowDto> rows, AgeingBucket bucket, String ccy) {
+        return rows.stream()
+                .filter(r -> bucket.equals(r.bucket()) && ccy.equals(r.currency()))
+                .map(ArAgeingRowDto::amount)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No " + ccy + " row for bucket " + bucket));
+    }
 
     /** Creates an OPEN ar_invoice via opening balance with the given amount and due date. */
     private void openItem(BigDecimal amount, LocalDate dueDate) {
