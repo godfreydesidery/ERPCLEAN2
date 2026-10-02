@@ -1,0 +1,218 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-hourglass-split me-2" aria-hidden="true"></i>Open Purchase Orders
+      </h1>
+      <p class="subtitle">
+        Goods you have ordered and are still waiting for: what was ordered, what has arrived, what
+        is still to come, and how long the order has been open.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view Open Purchase Orders.
+    </div>
+  } @else {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="opo-asof">As at</label>
+            <input id="opo-asof" name="opo-asof" type="date" class="form-control"
+                   [ngModel]="asOfDate()" (ngModelChange)="asOfDate.set($event)"
+                   aria-describedby="opo-asof-help" />
+            <p id="opo-asof-help" class="form-text small mb-0">Leave blank for today.</p>
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="opo-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="opo-branch" name="opo-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="opo-supplier">
+              Supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="opo-supplier" name="opo-supplier"
+                            [(ngModel)]="supplierUid"
+                            [options]="supplierOptions()"
+                            [search]="pickers.searchSuppliers"
+                            placeholder="All suppliers" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading'">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Finding open orders…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not build Open Purchase Orders. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+            Click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Open Purchase Orders</h2>
+          <p class="text-muted small mb-1">
+            As at {{ r.asOfDate }}
+            @if (r.branchName) { · Branch: {{ r.branchName }} } @else { · All branches }
+            @if (r.supplierName) { · Supplier: {{ r.supplierName }} }
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <p class="text-muted small mb-3">
+            Quantities are in the unit ordered. Values exclude VAT.
+            @if (overdueCount() > 0) { {{ overdueCount() }} line(s) are past their expected date. }
+          </p>
+
+          @if (r.totals.rowsInOtherCurrency > 0) {
+            <div class="alert alert-warning" role="status">
+              {{ r.totals.rowsInOtherCurrency }} line(s) are in another currency and are not included
+              in the {{ r.currency }} total.
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Open purchase orders — quantity and value still to be received
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Ordered on</th>
+                  <th scope="col">Expected</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Branch</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="num">Ordered</th>
+                  <th scope="col" class="num">Received</th>
+                  <th scope="col" class="num">Outstanding</th>
+                  <th scope="col" class="num">Unit price</th>
+                  <th scope="col" class="num">Value</th>
+                  <th scope="col" class="num">Age (days)</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="14" class="text-center text-muted py-4">
+                      No orders are waiting for goods.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track $index) {
+                  <tr>
+                    <td class="mono">
+                      <a [routerLink]="['/admin/purchase-orders/uid', row.orderUid]">{{ row.orderNumber }}</a>
+                    </td>
+                    <td class="small">{{ row.orderDate ?? '—' }}</td>
+                    <td class="small">
+                      {{ row.expectedDate ?? '—' }}
+                      @if (row.overdue) { <span class="status-tag status-tag--warn ms-1">Late</span> }
+                    </td>
+                    <td>{{ row.supplierName }}</td>
+                    <td class="small">{{ row.branchName }}</td>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="small text-muted">{{ row.unitName ?? '—' }}</td>
+                    <td class="num mono">{{ fmtQty(row.orderedQty) }}</td>
+                    <td class="num mono">{{ fmtQty(row.receivedQty) }}</td>
+                    <td class="num mono fw-semibold">{{ fmtQty(row.outstandingQty) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.unitCost) }}</td>
+                    <td class="num mono">
+                      {{ fmtMoney(row.outstandingValue) }}
+                      @if (row.currency !== r.currency) { <span class="small text-muted">{{ row.currency }}</span> }
+                    </td>
+                    <td class="num mono">{{ row.ageDays }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="12" class="text-end">
+                    Total — {{ r.totals.orders }} order(s), {{ r.totals.lines }} line(s)
+                  </td>
+                  <td class="num mono">{{ fmtMoney(r.totals.outstandingValue) }} {{ r.currency }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

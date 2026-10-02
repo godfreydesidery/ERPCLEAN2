@@ -255,6 +255,13 @@ export class ShellComponent {
         { label: 'RFQs / Sourcing', route: '/admin/rfqs', icon: 'bi-search', available: true, permission: 'PURCHASE.RFQ.VIEW' },
         { label: 'Purchase Returns', route: '/admin/purchase-returns', icon: 'bi-arrow-return-left', available: true, permission: 'PURCHASE.RETURN.VIEW' },
         { label: 'Landed Costs', route: '/admin/landed-costs', icon: 'bi-box-arrow-in-right', available: true, permission: 'PURCHASE.LANDEDCOST.VIEW' },
+        // Purchase reports. Each gate equals its route guard (admin.routes.ts) and the endpoint's
+        // @PreAuthorize. Keywords carry the words a shopkeeper types — "grn report", "what is
+        // still to come", "manunuzi" — not the report's formal name.
+        { label: 'Goods Received Register', route: '/admin/reports/purchases/goods-received', icon: 'bi-journal-arrow-down', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW', keywords: ['grn report', 'goods received', 'receipts report', 'purchases report', 'stock received', 'bidhaa zilizopokelewa', 'ripoti ya manunuzi'] },
+        { label: 'Purchases by Supplier', route: '/admin/reports/purchases/by-supplier', icon: 'bi-people', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW', keywords: ['supplier purchases', 'supplier wise', 'top suppliers', 'purchase returns', 'net purchases', 'manunuzi kwa msambazaji'] },
+        { label: 'Open Purchase Orders', route: '/admin/reports/purchases/open-orders', icon: 'bi-hourglass-split', available: true, permission: 'PURCHASE.ORDER.VIEW', keywords: ['open lpo', 'pending orders', 'outstanding orders', 'not yet received', 'still to come', 'oda zilizobaki'] },
+        { label: 'Purchase Price Variance', route: '/admin/reports/purchases/price-variance', icon: 'bi-arrow-down-up', available: true, allPermissions: ['PURCHASE.ORDER.VIEW', 'PURCHASE.GOODS_RECEIPT.VIEW'], keywords: ['ppv', 'price difference', 'price change', 'bill price', 'cost variance', 'tofauti ya bei'] },
         { label: 'Purchase Settings', route: '/admin/purchase-settings', icon: 'bi-gear', available: true, permission: 'PURCHASE.SETTINGS.MANAGE' },
       ],
     },
