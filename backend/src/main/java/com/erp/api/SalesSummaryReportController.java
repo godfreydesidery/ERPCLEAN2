@@ -102,6 +102,12 @@ public class SalesSummaryReportController {
                 ? dto.branchName() : "All branches (whole company)"));
         headerLines.add("Finalised invoices only. Returns and credit notes are not deducted. "
                 + "Qty is in base units.");
+        long foreignInvoices = dto.rows().stream()
+                .mapToLong(SalesSummaryRowDto::foreignCurrencyInvoices).sum();
+        if (foreignInvoices > 0) {
+            headerLines.add("Amounts in " + text(dto.currency()) + ". " + foreignInvoices
+                    + " invoice(s) in another currency are converted at the rate on each invoice.");
+        }
         SalesSummaryTotalsDto t = dto.totals();
         if (t.groupsWithUnknownCost() > 0) {
             // Printed on the page itself: a foot that leaves cost out must say so, or the margin

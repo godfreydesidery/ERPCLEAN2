@@ -31,7 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>Same figures as the Sales Report and the Profitability Report.</b> Only FINALISED invoices
  * count (drafts are not sales, voided ones were undone), windowed on {@code finalised_at} in the
  * company's time zone. Gross, discount, VAT and net are read from {@code sales_invoice_lines}
- * exactly as those reports read them. Sales returns and AR credit notes are NOT deducted — neither
+ * exactly as those reports read them, and — like them — converted to the company's BASE currency
+ * line by line at the rate stamped on each invoice at finalise ({@link BaseCurrencySql}), so a
+ * foreign-currency sale is neither added at 1:1 nor margined against a base-currency cost. Sales returns and AR credit notes are NOT deducted — neither
  * of those reports deducts them either, and a summary that disagreed with the register it summarises
  * would be worse than one that shares its known limitation. Quantity is summed in BASE units
  * ({@code qty_in_base}) so a pack and a single are not added together as two of the same thing.
@@ -161,16 +163,28 @@ public class SalesSummaryReportQuery {
             params.add(branch.id());
         }
 
+        // Money is converted to BASE line by line at the rate stamped on each invoice
+        // (BaseCurrencySql) — the report is headed in the base currency and its cost of sales is
+        // base, so a USD invoice summed at face would be mislabelled AND margined against TZS cost.
+        int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
+        String rate = "i.fx_rate";
         String sql = "SELECT " + g.keyExpr() + " AS gkey, "
                 + g.labelExpr() + " AS glabel, "
                 + g.codeExpr() + " AS gcode, "
                 + """
                        COUNT(DISTINCT i.id)                              AS invoices,
                        COALESCE(SUM(l.qty_in_base), 0)                   AS qty,
-                       COALESCE(SUM(l.gross_amount), 0)                  AS gross,
-                       COALESCE(SUM(COALESCE(l.line_discount_amount, 0)), 0) AS discount,
-                       COALESCE(SUM(l.vat_amount), 0)                    AS vat,
-                       COALESCE(SUM(l.net_amount), 0)                    AS net
+                """
+                + "       COALESCE(SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount",
+                        rate, baseScale) + "), 0) AS gross,\n"
+                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)",
+                        rate, baseScale) + "), 0) AS discount,\n"
+                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
+                + "), 0) AS vat,\n"
+                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
+                + "), 0) AS net,\n"
+                + "       COUNT(DISTINCT i.id) FILTER (WHERE " + rate + " <> 1) AS foreign_invoices\n"
+                + """
                 FROM sales_invoices i
                 JOIN sales_invoice_lines l ON l.invoice_id = i.id
                 """
@@ -213,7 +227,8 @@ public class SalesSummaryReportQuery {
                     cost,
                     margin,
                     percentOf(margin, net),
-                    unknown);
+                    unknown,
+                    rs.getLong("foreign_invoices"));
         }, params.toArray());
 
         Comparator<SalesSummaryRowDto> order = by == SalesSummaryGroupBy.DAY

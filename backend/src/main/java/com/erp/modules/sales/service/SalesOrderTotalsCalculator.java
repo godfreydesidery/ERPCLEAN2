@@ -4,10 +4,12 @@ import com.erp.modules.sales.domain.entity.Quotation;
 import com.erp.modules.sales.domain.entity.QuotationLine;
 import com.erp.modules.sales.domain.entity.SalesOrder;
 import com.erp.modules.sales.domain.entity.SalesOrderLine;
+import com.erp.platform.common.money.CurrencyMinorUnits;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,12 +21,27 @@ import org.springframework.stereotype.Component;
  * lines add VAT on top of net (unchanged); INCLUSIVE lines treat the raw amount as GROSS and strip
  * VAT out (gross-preserving: {@code net + vat = gross} exactly). HALF_UP at each boundary. Ensures
  * SO ↔ invoice agreement to the cent (NFR-SO-03).
+ *
+ * <p>Rounds to the minor units of the document's own currency ({@link CurrencyMinorUnits}) —
+ * exactly as {@link InvoiceTotalsCalculator} does, so an order and the invoice billed from it agree
+ * in USD cents as well as in whole shillings.
  */
 @Component
 public class SalesOrderTotalsCalculator {
 
-    private static final int SCALE = 0;
     private static final RoundingMode MODE = RoundingMode.HALF_UP;
+
+    private final CurrencyMinorUnits minorUnits;
+
+    @Autowired
+    public SalesOrderTotalsCalculator(CurrencyMinorUnits minorUnits) {
+        this.minorUnits = minorUnits;
+    }
+
+    /** Database-free construction (unit tests): minor units from {@link CurrencyMinorUnits#FALLBACK}. */
+    public SalesOrderTotalsCalculator() {
+        this(CurrencyMinorUnits.FALLBACK);
+    }
 
     // -------------------------------------------------------------------------
     // SalesOrder overload
@@ -45,7 +62,8 @@ public class SalesOrderTotalsCalculator {
         )).toList();
 
         Totals totals = compute(data,
-                order.getDocDiscountAmount(), order.getDocDiscountPercent());
+                order.getDocDiscountAmount(), order.getDocDiscountPercent(),
+                minorUnits.of(order.getCurrency()));
 
         // Push computed values back onto line entities
         for (int i = 0; i < lines.size(); i++) {
@@ -79,7 +97,8 @@ public class SalesOrderTotalsCalculator {
         )).toList();
 
         Totals totals = compute(data,
-                quote.getDocDiscountAmount(), quote.getDocDiscountPercent());
+                quote.getDocDiscountAmount(), quote.getDocDiscountPercent(),
+                minorUnits.of(quote.getCurrency()));
 
         for (int i = 0; i < lines.size(); i++) {
             QuotationLine line = lines.get(i);
@@ -98,18 +117,19 @@ public class SalesOrderTotalsCalculator {
     // -------------------------------------------------------------------------
 
     private Totals compute(List<LineData> lines,
-                           BigDecimal docDiscountAmount, BigDecimal docDiscountPercent) {
+                           BigDecimal docDiscountAmount, BigDecimal docDiscountPercent,
+                           int scale) {
         // Step 1: raw amount per line (NET for an exclusive line, GROSS for an inclusive one —
         // ADR-0056 D-5; the math is identical, only the step-3 derivation differs).
         List<BigDecimal> rawNets = new ArrayList<>(lines.size());
         for (LineData l : lines) {
             BigDecimal gross = l.unitPrice.multiply(l.qty);
-            BigDecimal lineDis = resolveLineDiscount(l, gross);
-            rawNets.add(gross.subtract(lineDis).max(BigDecimal.ZERO).setScale(SCALE, MODE));
+            BigDecimal lineDis = resolveLineDiscount(l, gross, scale);
+            rawNets.add(gross.subtract(lineDis).max(BigDecimal.ZERO).setScale(scale, MODE));
         }
 
         // Step 2: apportion doc discount
-        BigDecimal docDiscount = resolveDocDiscount(rawNets, docDiscountAmount, docDiscountPercent);
+        BigDecimal docDiscount = resolveDocDiscount(rawNets, docDiscountAmount, docDiscountPercent, scale);
         BigDecimal sumRaw = rawNets.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<BigDecimal> discountedNets = new ArrayList<>(lines.size());
@@ -123,11 +143,11 @@ public class SalesOrderTotalsCalculator {
                     share = docDiscount.subtract(allocated);
                 } else {
                     share = docDiscount.multiply(rawNets.get(i))
-                            .divide(sumRaw, SCALE + 4, MODE)
-                            .setScale(SCALE, MODE);
+                            .divide(sumRaw, scale + 4, MODE)
+                            .setScale(scale, MODE);
                     allocated = allocated.add(share);
                 }
-                discountedNets.add(rawNets.get(i).subtract(share).max(BigDecimal.ZERO).setScale(SCALE, MODE));
+                discountedNets.add(rawNets.get(i).subtract(share).max(BigDecimal.ZERO).setScale(scale, MODE));
             }
         }
 
@@ -142,12 +162,12 @@ public class SalesOrderTotalsCalculator {
             BigDecimal vat;
             if (l.priceInclusive) {
                 // discountedRaw is GROSS — strip VAT out so net + vat reproduces it exactly.
-                net = stripVat(discountedRaw, l.vatRate);
+                net = stripVat(discountedRaw, l.vatRate, scale);
                 vat = discountedRaw.subtract(net);
             } else {
                 // Unchanged pre-ADR-0056 behaviour: discountedRaw is NET, VAT added on top.
                 net = discountedRaw;
-                vat = net.multiply(l.vatRate).setScale(SCALE, MODE);
+                vat = net.multiply(l.vatRate).setScale(scale, MODE);
             }
             results.add(new LineResult(net, vat));
             netTotal = netTotal.add(net);
@@ -161,28 +181,28 @@ public class SalesOrderTotalsCalculator {
      * {@code rate = 0} (ZERO_RATED/EXEMPT) is the identity case: {@code net = gross}, no division
      * anomaly. The caller derives {@code vat = gross − net} so {@code net + vat = gross} exactly.
      */
-    private static BigDecimal stripVat(BigDecimal gross, BigDecimal vatRate) {
-        return gross.divide(BigDecimal.ONE.add(vatRate), SCALE, MODE);
+    private static BigDecimal stripVat(BigDecimal gross, BigDecimal vatRate, int scale) {
+        return gross.divide(BigDecimal.ONE.add(vatRate), scale, MODE);
     }
 
-    private BigDecimal resolveLineDiscount(LineData l, BigDecimal gross) {
+    private BigDecimal resolveLineDiscount(LineData l, BigDecimal gross, int scale) {
         if (l.discountAmount != null && l.discountAmount.compareTo(BigDecimal.ZERO) > 0) {
-            return l.discountAmount.setScale(SCALE, MODE);
+            return l.discountAmount.setScale(scale, MODE);
         }
         if (l.discountPercent != null && l.discountPercent.compareTo(BigDecimal.ZERO) > 0) {
-            return gross.multiply(l.discountPercent).divide(BigDecimal.valueOf(100), SCALE, MODE);
+            return gross.multiply(l.discountPercent).divide(BigDecimal.valueOf(100), scale, MODE);
         }
         return BigDecimal.ZERO;
     }
 
     private BigDecimal resolveDocDiscount(List<BigDecimal> rawNets,
-                                          BigDecimal amount, BigDecimal percent) {
+                                          BigDecimal amount, BigDecimal percent, int scale) {
         if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
-            return amount.setScale(SCALE, MODE);
+            return amount.setScale(scale, MODE);
         }
         if (percent != null && percent.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal sum = rawNets.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-            return sum.multiply(percent).divide(BigDecimal.valueOf(100), SCALE, MODE);
+            return sum.multiply(percent).divide(BigDecimal.valueOf(100), scale, MODE);
         }
         return BigDecimal.ZERO;
     }

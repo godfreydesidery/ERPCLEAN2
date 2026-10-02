@@ -29,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Where the figures come from.</b> Finalised sales invoices give gross, VAT and net directly
  * ({@code sales_invoice_lines} carries all three, so net is read rather than re-derived and cannot
- * disagree with the invoice the customer holds). Cost of sales is the value of the
+ * disagree with the invoice the customer holds), then converted to the company's BASE currency line
+ * by line at the rate stamped on the invoice at finalise ({@link BaseCurrencySql}) — the report is
+ * headed in the base currency, and profit is base net less base cost. Cost of sales is the value of the
  * {@code SALE_ISSUE} stock movement posted for the same invoice — the cost at the moment of sale,
  * not today's average, which is what makes the profit reproducible months later.
  *
@@ -141,25 +143,36 @@ public class ProfitabilityReportQuery {
         params.add(to);
         params.addAll(filterParams);
 
+        // Money is converted to BASE line by line at the rate stamped on each invoice
+        // (BaseCurrencySql). Cost of sales is already base, so profit = base net − base cost; summing
+        // a USD line at face would subtract a TZS cost from USD revenue.
+        int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
+        String rate = "i.fx_rate";
+        String net = BaseCurrencySql.toBase("l.net_amount", rate, baseScale);
         String sql = """
                 SELECT l.product_id                AS product_id,
                        l.product_code              AS product_code,
                        l.product_name              AS product_name,
                        COALESCE(NULLIF(TRIM(p.category), ''), '(no department)') AS department,
                        SUM(l.quantity)             AS qty_sold,
-                       SUM(l.gross_amount)         AS gross_sales,
-                       SUM(l.vat_amount)           AS vat_amount,
-                       SUM(l.net_amount)           AS net_amount,
-                       SUM(COALESCE(l.line_discount_amount, 0)) AS discount,
-                       -- The sale, split by how it is taxed. Summed over net (VAT-exclusive)
-                       -- amounts so the three add back to net_amount exactly, which is the
-                       -- identity the client's own report reconciles on.
-                       SUM(CASE WHEN l.vat_status = 'STANDARD'   THEN l.net_amount ELSE 0 END)
-                                                   AS vat_portion,
-                       SUM(CASE WHEN l.vat_status = 'EXEMPT'     THEN l.net_amount ELSE 0 END)
-                                                   AS exempt_portion,
-                       SUM(CASE WHEN l.vat_status = 'ZERO_RATED' THEN l.net_amount ELSE 0 END)
-                                                   AS zero_rated_portion
+                """
+                + "       SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate,
+                        baseScale) + ") AS gross_sales,\n"
+                + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
+                + ") AS vat_amount,\n"
+                + "       SUM(" + net + ") AS net_amount,\n"
+                + "       SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)", rate,
+                        baseScale) + ") AS discount,\n"
+                // The sale, split by how it is taxed. Summed over the same converted net amounts so
+                // the three add back to net_amount exactly, which is the identity the client's own
+                // report reconciles on.
+                + "       SUM(CASE WHEN l.vat_status = 'STANDARD'   THEN " + net
+                + " ELSE 0 END) AS vat_portion,\n"
+                + "       SUM(CASE WHEN l.vat_status = 'EXEMPT'     THEN " + net
+                + " ELSE 0 END) AS exempt_portion,\n"
+                + "       SUM(CASE WHEN l.vat_status = 'ZERO_RATED' THEN " + net
+                + " ELSE 0 END) AS zero_rated_portion\n"
+                + """
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id
                 LEFT JOIN products p ON p.id = l.product_id AND p.company_id = i.company_id

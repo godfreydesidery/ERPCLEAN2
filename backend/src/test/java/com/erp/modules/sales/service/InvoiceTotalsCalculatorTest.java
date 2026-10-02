@@ -183,11 +183,97 @@ class InvoiceTotalsCalculatorTest {
     }
 
     // -------------------------------------------------------------------------
+    // T7 — DOCUMENT-CURRENCY ROUNDING (live defect): a USD invoice rounds in cents, not in
+    // TZS's whole units. Net 12.00 @ 18% must give VAT 2.16 — it used to give 2.00.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void t7_usdInvoice_vatIsRoundedToCents_notToWholeUnits() {
+        SalesInvoice invoice = newInvoice("USD");
+        SalesInvoiceLine line = line(invoice, 1, "12.0000", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, false);
+
+        calculator.recompute(invoice, List.of(line));
+
+        assertThat(line.getNetAmount()).isEqualByComparingTo("12.00");
+        assertThat(line.getVatAmount()).isEqualByComparingTo("2.16");
+        assertThat(line.getGrossAmount()).isEqualByComparingTo("14.16");
+        assertThat(invoice.getNetTotalAmount()).isEqualByComparingTo("12.00");
+        assertThat(invoice.getVatTotalAmount()).isEqualByComparingTo("2.16");
+        assertThat(invoice.getGrossTotalAmount()).isEqualByComparingTo("14.16");
+        assertThat(invoice.getTaxSummary()).contains("\"vat\":\"2.1600\"");
+    }
+
+    @Test
+    void t7b_usdInvoice_fractionalPrice_discountAndInclusiveStayInternallyConsistent() {
+        SalesInvoice invoice = newInvoice("USD");
+        // 3 × 4.99 = 14.97, less a 10% line discount (1.497 → 1.50) = 13.47 net; VAT 2.4246 → 2.42.
+        SalesInvoiceLine excl = line(invoice, 1, "4.9900", new BigDecimal("3"),
+                VatStatus.STANDARD, STANDARD_RATE, false);
+        excl.setLineDiscountPercent(new BigDecimal("10"));
+        // Inclusive 9.99 gross: net = 9.99 / 1.18 = 8.4661 → 8.47; VAT = 1.52 (gross preserved).
+        SalesInvoiceLine incl = line(invoice, 2, "9.9900", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, true);
+        // Doc discount 1.01 apportioned pro-rata over raw 13.47 / 9.99 (last line absorbs residual).
+        invoice.setDocDiscountAmount(new BigDecimal("1.01"));
+
+        calculator.recompute(invoice, List.of(excl, incl));
+
+        // share(line 1) = 1.01 × 13.47 / 23.46 = 0.5799 → 0.58; line 2 absorbs 0.43.
+        assertThat(excl.getNetAmount()).isEqualByComparingTo("12.89");
+        assertThat(excl.getVatAmount()).isEqualByComparingTo("2.32");   // 2.3202
+        assertThat(incl.getGrossAmount()).isEqualByComparingTo("9.56");
+        assertThat(incl.getNetAmount()).isEqualByComparingTo("8.10");    // 9.56 / 1.18 = 8.1017
+        assertThat(incl.getVatAmount()).isEqualByComparingTo("1.46");
+        for (SalesInvoiceLine l : List.of(excl, incl)) {
+            assertThat(l.getNetAmount().add(l.getVatAmount())).isEqualByComparingTo(l.getGrossAmount());
+            assertThat(l.getNetAmount().scale()).isLessThanOrEqualTo(2);
+        }
+        assertThat(invoice.getNetTotalAmount()).isEqualByComparingTo("20.99");
+        assertThat(invoice.getVatTotalAmount()).isEqualByComparingTo("3.78");
+        assertThat(invoice.getGrossTotalAmount())
+                .isEqualByComparingTo(invoice.getNetTotalAmount().add(invoice.getVatTotalAmount()))
+                .isEqualByComparingTo("24.77");
+    }
+
+    @Test
+    void t7c_tzsInvoice_stillRoundsToWholeShillings() {
+        SalesInvoice invoice = newInvoice("TZS");
+        SalesInvoiceLine line = line(invoice, 1, "12.0000", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, false);
+
+        calculator.recompute(invoice, List.of(line));
+
+        // 12 × 0.18 = 2.16 → 2 shillings: TZS has no minor unit (V61 currencies seed).
+        assertThat(line.getVatAmount()).isEqualByComparingTo("2");
+        assertThat(invoice.getGrossTotalAmount()).isEqualByComparingTo("14");
+    }
+
+    @Test
+    void t7d_minorUnitsComeFromTheInjectedResolver_notAConstant() {
+        // A master that says USD has 3 places must be honoured (the master is authoritative).
+        InvoiceTotalsCalculator threePlaces = new InvoiceTotalsCalculator(new ObjectMapper(),
+                code -> "USD".equals(code) ? 3 : 0);
+        SalesInvoice invoice = newInvoice("USD");
+        SalesInvoiceLine line = line(invoice, 1, "1.2345", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, false);
+
+        threePlaces.recompute(invoice, List.of(line));
+
+        assertThat(line.getNetAmount()).isEqualByComparingTo("1.235");
+        assertThat(line.getVatAmount()).isEqualByComparingTo("0.222");   // 0.2223
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
 
     private static SalesInvoice newInvoice() {
-        return new SalesInvoice(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, "TZS", 1L);
+        return newInvoice("TZS");
+    }
+
+    private static SalesInvoice newInvoice(String currency) {
+        return new SalesInvoice(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, currency, 1L);
     }
 
     private static SalesInvoiceLine line(SalesInvoice invoice, int lineNo, String unitPrice,
