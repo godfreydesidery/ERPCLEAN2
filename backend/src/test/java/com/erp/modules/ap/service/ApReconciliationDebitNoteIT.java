@@ -169,7 +169,7 @@ class ApReconciliationDebitNoteIT extends PostgresIntegrationTest {
                 .as("bounced payment restores the bill outstanding").isEqualByComparingTo("900");
         assertReconciles("after the payment cheque bounced", "700");
 
-        // Apply the rest of the DN to a second bill (one allocation per DN/bill pair is a DB rule):
+        // Apply the rest of the DN to a second bill (same-bill top-ups are covered in ApDebitNoteServiceIT):
         // still zero, and the fully applied DN no longer contributes on its own.
         SupplierBillDto bill2 = openingBalance("OB-RDN-001B", new BigDecimal("500"));
         assertReconciles("after a second bill", "1200");

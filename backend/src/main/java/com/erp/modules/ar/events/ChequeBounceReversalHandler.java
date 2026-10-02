@@ -33,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * follow-up). Posts an APPEND-ONLY reversing JournalEntry of the owning AR receipt's cash leg
  * (DR AR-control / CR Cash|Bank — the exact inverse of the receipt, produced by the GL engine's
  * {@code postReversal}, so ΣDR == ΣCR by construction). It then stamps {@code reversed_at} on the
- * receipt and restores the relieved invoice outstanding (face + base).
+ * receipt, restores the relieved invoice outstanding (face + base), and zeroes the receipt's
+ * on-account remainder (the reversal returned that to AR-control too).
  *
  * <p>Never mutates or deletes the original receipt journal — the reversal is a new entry.
  *
@@ -178,6 +179,10 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
             });
         }
 
+        // The GL reversal put the WHOLE receipt back on AR-control (allocated + on-account), so
+        // nothing of it is on account any more. Leaving a remainder would keep netting it off the
+        // sub-ledger and the AR reconciliation would read short by exactly that amount.
+        receipt.setUnallocatedAmount(BigDecimal.ZERO);
         // Stamp reversal markers (append-only on the header; the journal itself is never mutated).
         receipt.setReversedAt(Instant.now());
         receipt.setUpdatedAt(Instant.now());

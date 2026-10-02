@@ -39,6 +39,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -394,7 +396,12 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         BigDecimal totalApplied     = BigDecimal.ZERO;
         BigDecimal sumBaseRelieved  = BigDecimal.ZERO;
         BigDecimal sumBaseSettled   = BigDecimal.ZERO;
-        List<ArCreditNoteAllocation> saved = new ArrayList<>();
+        // The note's existing rows, keyed by invoice (empty after reapply's delete) + rows touched here.
+        Map<Long, ArCreditNoteAllocation> byInvoice = new HashMap<>();
+        for (ArCreditNoteAllocation existing : cnAllocations.findByCreditNoteId(note.getId())) {
+            byInvoice.put(existing.getArInvoiceId(), existing);
+        }
+        Map<Long, ArCreditNoteAllocation> touched = new LinkedHashMap<>();
 
         for (AllocationLineRequest line : lines) {
             ArInvoice inv = invoices.findByCompanyIdAndUid(companyId, line.arInvoiceUid())
@@ -439,13 +446,26 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
             inv.setUpdatedBy(actorId());
             invoices.save(inv);
 
-            // Persist junction row
-            ArCreditNoteAllocation alloc = new ArCreditNoteAllocation(
-                    companyId, note.getId(), inv.getId(),
-                    line.allocatedAmount(), actorId());
-            alloc.setBaseAllocatedAmount(baseSettledSlice);
-            alloc.setSettlementRate(cnRate);
-            saved.add(cnAllocations.save(alloc));
+            // Persist junction row — or top up the note's existing row for this invoice. The table
+            // holds ONE row per (note, invoice) pair (uq_ar_credit_note_allocation_pair), so applying
+            // more of a part-applied note to an invoice it already reduced — or two slices for the
+            // same invoice in one request — adds to that row. The settlement rate is the note's own
+            // rate, identical on every slice, so the merged row's base is the sum of the slices'.
+            ArCreditNoteAllocation alloc = byInvoice.get(inv.getId());
+            if (alloc == null) {
+                alloc = new ArCreditNoteAllocation(
+                        companyId, note.getId(), inv.getId(),
+                        line.allocatedAmount(), actorId());
+                alloc.setBaseAllocatedAmount(baseSettledSlice);
+                alloc.setSettlementRate(cnRate);
+            } else {
+                alloc.setAllocatedAmount(alloc.getAllocatedAmount().add(line.allocatedAmount()));
+                alloc.setBaseAllocatedAmount((alloc.getBaseAllocatedAmount() != null
+                        ? alloc.getBaseAllocatedAmount() : BigDecimal.ZERO).add(baseSettledSlice));
+            }
+            alloc = cnAllocations.save(alloc);
+            byInvoice.put(inv.getId(), alloc);
+            touched.put(inv.getId(), alloc);
 
             totalApplied    = totalApplied.add(line.allocatedAmount());
             sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
@@ -508,7 +528,8 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         note.setUpdatedBy(actorId());
         creditNotes.save(note);
 
-        return saved;
+        // The allocation rows this call created or topped up (a topped-up row carries its new total).
+        return new ArrayList<>(touched.values());
     }
 
     // =========================================================================

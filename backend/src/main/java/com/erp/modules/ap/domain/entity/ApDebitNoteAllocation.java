@@ -12,7 +12,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Junction: debit note ↔ open bill (ADR-0041 D3). No uid (no external URL). Append-only —
+ * Junction: debit note ↔ open bill (ADR-0041 D3). No uid (no external URL). One row per
+ * (note, bill) pair — applying more of the note to the same bill tops this row up;
  * reapply is delete + re-insert; allocation itself posts nothing to GL except the realized-FX
  * plug per allocation when settlement_rate differs from bill rate. Mirrors
  * {@link com.erp.modules.ar.domain.entity.ArCreditNoteAllocation} exactly.
