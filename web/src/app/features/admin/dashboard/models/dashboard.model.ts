@@ -75,6 +75,9 @@ export interface WorkingCapitalDto {
   apOutstanding: string;
   apTies: boolean;
   apDifference: string;
+  /** Foreign AR/AP with no reliable base value, per currency — excluded from the totals above. */
+  arUnconverted?: { currency: string; amount: number; itemCount: number }[];
+  apUnconverted?: { currency: string; amount: number; itemCount: number }[];
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────────────

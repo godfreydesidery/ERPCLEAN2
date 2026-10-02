@@ -349,6 +349,14 @@
                   </span>
                 </div>
                 <div class="erp-kpi__value">{{ +wc.arOutstanding | number:'1.2-2' }}</div>
+                @if (wc.arUnconverted?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of wc.arUnconverted; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <a routerLink="/admin/ar/invoices" class="small">View Receivables<span class="sr-only"> (AR invoices)</span></a>
                 </div>
@@ -366,6 +374,14 @@
                   </span>
                 </div>
                 <div class="erp-kpi__value">{{ +wc.apOutstanding | number:'1.2-2' }}</div>
+                @if (wc.apUnconverted?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of wc.apUnconverted; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <a routerLink="/admin/ap/supplier-bills" class="small">View Payables<span class="sr-only"> (AP supplier bills)</span></a>
                 </div>

@@ -318,7 +318,8 @@ public class DashboardServiceImpl implements DashboardService {
 
         return new WorkingCapitalDto(
                 ar.subLedgerTotal(), arTies, ar.difference(),
-                ap.subLedgerTotal(), apTies, ap.difference());
+                ap.subLedgerTotal(), apTies, ap.difference(),
+                ar.unconverted(), ap.unconverted());
     }
 
     // =========================================================================

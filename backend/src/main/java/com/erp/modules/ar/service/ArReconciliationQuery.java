@@ -1,9 +1,6 @@
 package com.erp.modules.ar.service;
 
 import com.erp.modules.ar.domain.dto.ArReconciliationDto;
-import com.erp.modules.ar.repository.ArCreditNoteRepository;
-import com.erp.modules.ar.repository.ArInvoiceRepository;
-import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.gl.domain.dto.TrialBalanceDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRowDto;
 import com.erp.modules.gl.service.TrialBalanceQuery;
@@ -25,27 +22,25 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Proof: raise posts CR AR for full CN base; apply posts nothing → at every committed state
  * the GL 1200 balance = Σ invoice postings − Σ receipt cash CR − Σ CN raise CR.
  * The sub-ledger must mirror this: outstanding − unallocated_receipts − unapplied_CNs.
+ *
+ * <p>Owner ruling 2026-10-02: compared in BASE currency using stored base amounts for reliable
+ * rows (see {@link ArFxSplitQuery}); V62-filled foreign rows are excluded and listed per currency
+ * in {@code unconverted}.
  */
 @Component
 @Transactional(readOnly = true)
 public class ArReconciliationQuery {
 
-    private final ArInvoiceRepository invoices;
-    private final ArReceiptRepository receipts;
-    private final ArCreditNoteRepository creditNoteRepo;
+    private final ArFxSplitQuery fxSplit;
     private final CompanyRepository companies;
     private final TrialBalanceQuery trialBalance;
     private final ScopeGuard scopeGuard;
 
-    public ArReconciliationQuery(ArInvoiceRepository invoices,
-                                  ArReceiptRepository receipts,
-                                  ArCreditNoteRepository creditNoteRepo,
+    public ArReconciliationQuery(ArFxSplitQuery fxSplit,
                                   CompanyRepository companies,
                                   TrialBalanceQuery trialBalance,
                                   ScopeGuard scopeGuard) {
-        this.invoices       = invoices;
-        this.receipts       = receipts;
-        this.creditNoteRepo = creditNoteRepo;
+        this.fxSplit        = fxSplit;
         this.companies      = companies;
         this.trialBalance   = trialBalance;
         this.scopeGuard     = scopeGuard;
@@ -58,11 +53,12 @@ public class ArReconciliationQuery {
                 .map(c -> c.getBaseCurrency())
                 .orElseThrow(() -> new NotFoundException("Company not found."));
 
-        BigDecimal outstanding = invoices.sumOutstandingByCompany(companyId);
-        BigDecimal unallocated = receipts.sumUnallocatedByCompany(companyId);
-        // ADR-0040 D-6: net unapplied CNs — raise posts CR AR full; apply posts nothing.
-        BigDecimal cnUnapplied = creditNoteRepo.sumUnappliedByCompany(companyId);
-        BigDecimal subLedger   = outstanding.subtract(unallocated).subtract(cnUnapplied);
+        // outstanding − unallocated receipts − unapplied CNs (ADR-0040 D-6: raise posts CR AR
+        // full; apply posts nothing) — in BASE currency over reliable rows only. Foreign rows
+        // still carrying the V62 fill (fx_rate = 1) have no trustworthy base value: they are
+        // excluded from the comparison and reported per currency (owner ruling 2026-10-02).
+        ArFxSplitQuery.Split split = fxSplit.split(companyId, null);
+        BigDecimal subLedger   = split.baseTotal();
 
         // GL 1200 balance from the trial balance (net = debit - credit for an asset account)
         TrialBalanceDto tb = trialBalance.compute(companyId);
@@ -74,6 +70,7 @@ public class ArReconciliationQuery {
 
         BigDecimal difference = subLedger.subtract(glControl);
 
-        return new ArReconciliationDto(companyId, subLedger, glControl, difference, currency);
+        return new ArReconciliationDto(companyId, subLedger, glControl, difference, currency,
+                split.unconverted());
     }
 }

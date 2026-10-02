@@ -330,12 +330,25 @@ export interface ApAgeingRowDto {
   currency: string;
 }
 
+/**
+ * A foreign-currency amount with no reliable base-currency value (old rows whose stored rate is
+ * the V62 back-fill of 1). Shown in its own currency; never part of a base-currency total.
+ */
+export interface ApUnconvertedAmountDto {
+  currency: string;
+  /** Wire: number */
+  amount: number;
+  itemCount: number;
+}
+
 export interface ApBalanceDto {
   companyId: string;
   supplierId: string;
-  /** Wire: number — coerce with +v */
+  /** Base-currency total over reliable rows. Wire: number — coerce with +v */
   outstandingBalance: number | string;
   currency: string;
+  /** Foreign amounts left out of outstandingBalance (per currency). Absent on older servers. */
+  unconverted?: ApUnconvertedAmountDto[];
 }
 
 export interface ApReconciliationDto {
@@ -347,4 +360,6 @@ export interface ApReconciliationDto {
   /** Wire: number — coerce with +v */
   difference: number | string;
   currency: string;
+  /** Foreign amounts EXCLUDED from the base comparison (per currency). */
+  unconverted?: ApUnconvertedAmountDto[];
 }
