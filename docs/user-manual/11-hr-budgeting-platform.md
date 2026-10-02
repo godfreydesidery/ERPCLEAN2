@@ -322,7 +322,7 @@ A POSTED or PAID run can be reversed if needed (for example, a posting error). C
 
 **Download bank file (requires `HR.PAYROLL.DISBURSE`):**
 
-Once a run is **POSTED** (and still after it is **PAID**), the run detail shows **Download bank file**. It downloads a CSV with one row per employee — employee number and name, payment method, bank name, account name, account / mobile-money number, net pay and currency — ready to upload to your bank. The button is not shown before posting (net pay can still change) or for a reversed run. If the download is refused, a short message explains why.
+Once a run is **POSTED** (and still after it is **PAID**), the run detail shows **Download bank file**. It downloads a CSV with one row per employee — employee number and name, payment method, bank name, account name, account / mobile-money number, net pay and currency — ready to upload to your bank. The button is not shown before posting (net pay can still change) or for a reversed run, and the system itself refuses the file for any other status — so a bank file can never be produced for an unapproved or reversed run, even outside this screen. If the download is refused (for example because the run was reversed in another window after you opened it), a short message explains why; refresh the page to see the run's current status.
 
 **Statutory Summary on the run (requires `HR.PAYROLL.VIEW`):**
 

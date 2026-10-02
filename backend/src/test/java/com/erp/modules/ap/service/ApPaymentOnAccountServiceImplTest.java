@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.erp.modules.ap.domain.dto.ApBalanceDto;
 import com.erp.modules.ap.domain.enums.ApPaymentStatus;
+import com.erp.modules.ap.repository.ApDebitNoteRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
 import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.iam.domain.entity.Company;
@@ -27,6 +28,7 @@ class ApPaymentOnAccountServiceImplTest {
 
     private SupplierBillRepository billRepo;
     private ApPaymentRepository    paymentRepo;
+    private ApDebitNoteRepository  debitNoteRepo;
     private CompanyRepository      companyRepo;
     private ScopeGuard             scopeGuard;
     private ApBalanceServiceImpl   balanceService;
@@ -35,9 +37,13 @@ class ApPaymentOnAccountServiceImplTest {
     void setUp() {
         billRepo    = mock(SupplierBillRepository.class);
         paymentRepo = mock(ApPaymentRepository.class);
+        debitNoteRepo = mock(ApDebitNoteRepository.class);
         companyRepo = mock(CompanyRepository.class);
         scopeGuard  = mock(ScopeGuard.class);
-        balanceService = new ApBalanceServiceImpl(billRepo, paymentRepo, companyRepo, scopeGuard);
+        balanceService = new ApBalanceServiceImpl(billRepo, paymentRepo, debitNoteRepo, companyRepo,
+                scopeGuard);
+        // No debit notes unless a test says so (a Mockito mock would return null for BigDecimal).
+        when(debitNoteRepo.sumUnappliedByCompanyAndSupplier(10L, 5L)).thenReturn(BigDecimal.ZERO);
 
         RequestContext.set(new RequestContext.Principal(1L, "user", false, 10L, 20L, null));
 
@@ -104,6 +110,20 @@ class ApPaymentOnAccountServiceImplTest {
                 .as("balance must net out the on-account prepayment")
                 .isEqualByComparingTo(new BigDecimal("3800.00"));
         assertThat(dto.currency()).isEqualTo("TZS");
+    }
+
+    @Test
+    void currentBalance_netsUnappliedDebitNotes() {
+        // Outstanding 5000; on-account 1200; unapplied debit-note credit 300 → 3500
+        when(billRepo.sumOutstandingBySupplier(10L, 5L)).thenReturn(new BigDecimal("5000.00"));
+        when(paymentRepo.sumUnallocatedByCompanyAndSupplier(10L, 5L)).thenReturn(new BigDecimal("1200.00"));
+        when(debitNoteRepo.sumUnappliedByCompanyAndSupplier(10L, 5L)).thenReturn(new BigDecimal("300.00"));
+
+        ApBalanceDto dto = balanceService.currentBalance(10L, 5L);
+
+        assertThat(dto.outstandingBalance())
+                .as("an unapplied debit note is credit we hold against the supplier")
+                .isEqualByComparingTo(new BigDecimal("3500.00"));
     }
 
     @Test
