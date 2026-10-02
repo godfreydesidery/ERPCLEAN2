@@ -1,0 +1,239 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-box-arrow-in-down me-2" aria-hidden="true"></i>Goods Received Register
+      </h1>
+      <p class="subtitle">
+        Every item received from suppliers over a period, with or without an order. Values are the
+        receipt cost, excluding VAT.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Goods Received Register.
+    </div>
+  } @else {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="grr-from">From</label>
+            <input id="grr-from" name="grr-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="grr-to">To</label>
+            <input id="grr-to" name="grr-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="grr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="grr-branch" name="grr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="grr-supplier">
+              Supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="grr-supplier" name="grr-supplier"
+                            [(ngModel)]="supplierUid"
+                            [options]="supplierOptions()"
+                            [search]="pickers.searchSuppliers"
+                            placeholder="All suppliers" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="grr-product">
+              Product <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="grr-product" name="grr-product"
+                            [(ngModel)]="productUid"
+                            [options]="productOptions()"
+                            [search]="pickers.searchProducts"
+                            placeholder="All products" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading' || !datesValid()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+        @if (!datesValid()) {
+          <p class="text-danger small mb-0 mt-2" role="alert">
+            Choose a start date and an end date, with the end date on or after the start.
+          </p>
+        }
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the register…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not build the Goods Received Register. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i>
+            Choose a period, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Goods Received Register</h2>
+          <p class="text-muted small mb-1">
+            Period: {{ r.fromDate }} to {{ r.toDate }}
+            @if (r.branchName) { · Branch: {{ r.branchName }} } @else { · All branches }
+            @if (r.supplierName) { · Supplier: {{ r.supplierName }} }
+            @if (r.productName) { · Product: {{ r.productName }} }
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <p class="text-muted small mb-3">
+            A receipt that was voided shows again in red, as a negative line, on the day it was
+            voided. Values exclude VAT and any landed cost added later.
+          </p>
+
+          @if (r.totals.rowsInOtherCurrency > 0) {
+            <div class="alert alert-warning" role="status">
+              {{ r.totals.rowsInOtherCurrency }} line(s) are in another currency. They are listed in
+              their own currency and are not included in the {{ r.currency }} total.
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Goods Received Register — goods-receipt lines in the period with their cost
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">GRN</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Branch</th>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="num">Qty</th>
+                  <th scope="col" class="num">Unit cost</th>
+                  <th scope="col" class="num">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="11" class="text-center text-muted py-4">
+                      Nothing was received in this period.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track $index) {
+                  <tr [class.row-void]="row.entryType === 'VOID'">
+                    <td class="small">{{ fmtDay(row.entryAt) }}</td>
+                    <td class="mono">
+                      <a [routerLink]="['/admin/goods-receipts/uid', row.receiptUid]">{{ row.receiptNumber }}</a>
+                      @if (row.entryType === 'VOID') {
+                        <span class="status-tag status-tag--warn ms-1">Voided</span>
+                      }
+                    </td>
+                    <td class="small">
+                      @if (row.direct) {
+                        <span class="status-tag">Direct</span>
+                      } @else {
+                        {{ row.orderNumber ?? '—' }}
+                      }
+                    </td>
+                    <td>{{ row.supplierName }}</td>
+                    <td class="small">{{ row.branchName }}</td>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td class="small text-muted">{{ row.unitName ?? '—' }}</td>
+                    <td class="num mono">{{ fmtQty(row.quantity) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.unitCost) }}</td>
+                    <td class="num mono">
+                      {{ fmtMoney(row.value) }}
+                      @if (row.currency !== r.currency) { <span class="small text-muted">{{ row.currency }}</span> }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="10" class="text-end">
+                    Total (all pages) — {{ r.totals.receipts }} receipt(s)
+                    @if (r.totals.voids > 0) { , {{ r.totals.voids }} void(s) }
+                  </td>
+                  <td class="num mono">{{ fmtMoney(r.totals.value) }} {{ r.currency }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <app-paginator [meta]="meta()" label="Goods received rows" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+  }
+</section>

@@ -369,6 +369,43 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./purchases/goods-receipt-detail.component').then((m) => m.GoodsReceiptDetailComponent),
   },
+  // ── Purchase reports ──────────────────────────────────────────────────────
+  // Each guard is IDENTICAL to its endpoint's @PreAuthorize on PurchaseReportController (and to
+  // the nav entry), and reuses the code of the screen that already shows the same figures:
+  // receipts at PURCHASE.GOODS_RECEIPT.VIEW, orders at PURCHASE.ORDER.VIEW, and price variance —
+  // order prices beside receipt costs — at both.
+  {
+    path: 'reports/purchases/goods-received',
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/goods-received-register.component').then(
+        (m) => m.GoodsReceivedRegisterComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/by-supplier',
+    canActivate: [requirePermission('PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/purchases-by-supplier.component').then(
+        (m) => m.PurchasesBySupplierComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/open-orders',
+    canActivate: [requirePermission('PURCHASE.ORDER.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/open-purchase-orders.component').then(
+        (m) => m.OpenPurchaseOrdersComponent,
+      ),
+  },
+  {
+    path: 'reports/purchases/price-variance',
+    canActivate: [requireAllPermissions('PURCHASE.ORDER.VIEW', 'PURCHASE.GOODS_RECEIPT.VIEW')],
+    loadComponent: () =>
+      import('./purchases/reports/purchase-price-variance.component').then(
+        (m) => m.PurchasePriceVarianceComponent,
+      ),
+  },
   // ── General Ledger (Accounting) ───────────────────────────────────────────
   {
     path: 'gl/accounts',
