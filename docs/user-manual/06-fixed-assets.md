@@ -123,7 +123,7 @@ Open any asset from the list. The detail screen shows:
 - Header: asset number, name, and status badge.
 - A **key-metrics row** of four figures: **Acquisition Cost**, **Carrying Cost**, **Accumulated Depreciation**, and **NBV (Net Book Value)**. Carrying Cost equals the acquisition cost until the asset is revalued, after which it diverges to reflect the revised carrying value; NBV is the carrying cost less accumulated depreciation.
 - An **Asset Details** panel listing category, branch, depreciation method, life periods, dates, and (where set) salvage value, the revaluation reserve balance, location, and asset tag. If the asset was capitalised from an AP supplier bill, this panel also shows a **Source Bill** link (**View Source Bill**) to the originating bill.
-- **Depreciation Schedule** (shown when In Service, or once a schedule exists) — a line for each period showing the planned charge, accumulated depreciation after, NBV after, and a posted flag.
+- **Depreciation Schedule** (shown when In Service, Disposed or Written Off — any asset that has a schedule) — a line for each period showing the planned charge, accumulated depreciation after, NBV after, and a posted flag. Holders of `FA.VIEW` **and** `REPORT.EXPORT` see **Export PDF / Export Excel / Export CSV** buttons beside the heading; the file lists every schedule version (a revaluation starts a new version), the posted-to-date total, and the asset's current accumulated depreciation and NBV.
 - **Revaluation History** (shown when revaluations exist) — every revaluation in date order with its direction, delta, carrying-before and carrying-after values, and reason.
 
 The asset number is the human identifier shown throughout the UI. The internal identifier appears only in the browser address bar.
@@ -297,6 +297,28 @@ Navigate to **Finance / Fixed Assets > FA Reconciliation** (`/admin/fixed-assets
      - **Difference** — register figure minus GL figure.
 
 Each card shows a green **TIED** badge when its register and GL figures agree, or a red **MISMATCH** badge when they do not. A mismatch typically indicates a manual GL journal was posted directly to an asset account, which bypasses the register.
+
+### 9.1 Fixed Asset Register report
+
+Navigate to **Finance / Fixed Assets > Fixed Asset Register** (`/admin/fixed-assets/register`). Requires `FA.VIEW`; exporting also requires `REPORT.EXPORT`.
+
+**What it shows.** Every asset acquired on or before the **As at** date — asset number, name, category, branch, location, acquisition date, **cost**, **accumulated depreciation**, **NBV** and **status** — grouped by category with a **subtotal** per category and a **grand total**.
+
+**Filters.** **As at** (required, defaults to today), and optionally **Category**, **Status**, **Branch**, **Location** (matches any part of the location text) and **Cost centre**. Click **Run report**.
+
+**How the "as at" figures are worked out.**
+
+- **Cost** is the carrying cost on that date — the acquisition cost, adjusted by any revaluation dated on or before it.
+- **Accumulated depreciation** counts only the depreciation charges posted for periods on or before that date.
+- **Status** is the status the asset had on that date: an asset sold in March shows as *In service* in a February register; an asset capitalised after the date shows as *Draft*.
+- **NBV** is cost less accumulated depreciation for assets in service on the date. Draft, disposed and written-off assets show **no book value** (not 0.00) and are **left out of the totals** — a note under the table says how many.
+- **Branch and location** are where each asset is *now* (transfers keep no history).
+
+**Agreement with the reconciliation.** Run as at today (or any date after the last posting), the grand-total cost and accumulated depreciation equal the *Register* figures on the FA Reconciliation screen.
+
+**Export.** **Export PDF / Excel / CSV** download the same rows with category subtotal lines, the grand total and the company letterhead.
+
+If you filter by a branch you are not assigned to, the report says so: choose a branch you work in, or clear the branch filter to see the whole company.
 
 ---
 

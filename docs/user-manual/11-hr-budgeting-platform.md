@@ -320,6 +320,24 @@ A POSTED or PAID run can be reversed if needed (for example, a posting error). C
 | PAID | Blocked | Blocked | Blocked | Blocked | Allowed |
 | REVERSED | Blocked | Blocked | Blocked | Blocked | Blocked |
 
+**Download bank file (requires `HR.PAYROLL.DISBURSE`):**
+
+Once a run is **POSTED** (and still after it is **PAID**), the run detail shows **Download bank file**. It downloads a CSV with one row per employee — employee number and name, payment method, bank name, account name, account / mobile-money number, net pay and currency — ready to upload to your bank. The button is not shown before posting (net pay can still change) or for a reversed run. If the download is refused, a short message explains why.
+
+**Statutory Summary on the run (requires `HR.PAYROLL.VIEW`):**
+
+From CALCULATED onwards the run detail shows a **Statutory Summary**: totals for **PAYE** and **SDL** (paid to TRA), **NSSF** employee + employer, **WCF** and **HESLB**, and a per-employee table with each employee's **TIN** and **NSSF number** (blank where none was captured), gross, each deduction/contribution and net. While the run is not yet approved the summary is marked **Provisional** — do not file it; a reversed run is marked likewise. Holders of `REPORT.EXPORT` also see **Export PDF / Excel / CSV**.
+
+### Payroll Statutory Report
+
+Navigate to **HR & Payroll > Payroll Statutory Report** (`/admin/reports/payroll-statutory`). Requires `HR.PAYROLL.VIEW`; exporting also requires `REPORT.EXPORT`.
+
+Choose a **Pay date from / to** range and click **Run report**. The report lists one row per payroll run whose **pay date** falls in the range — period, pay date, status, number of staff, gross, PAYE, SDL, NSSF (employee and employer), WCF, HESLB and net — with totals, plus three summary figures: **Due to TRA (PAYE + SDL)**, **Due to NSSF (employee + employer)** and **Employer cost (NSSF + WCF + SDL)**.
+
+Only **APPROVED**, **POSTED** and **PAID** runs are counted, because their figures are final. Runs still in DRAFT or CALCULATED, and REVERSED runs, are left out; a note under the table says how many, so nothing is silently missing. Click a run number to open that run.
+
+> **Note for administrators:** the seeded *HR Payroll Manager* role holds `HR.PAYROLL.VIEW` but not `REPORT.EXPORT`, so it sees the reports but not the export buttons until `REPORT.EXPORT` is granted.
+
 ---
 
 ### Statutory Setup

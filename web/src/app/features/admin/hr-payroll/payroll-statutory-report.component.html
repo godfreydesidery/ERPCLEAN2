@@ -1,0 +1,214 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1><i class="bi bi-shield-check me-2" aria-hidden="true"></i>Payroll Statutory Report</h1>
+    <p class="subtitle">
+      PAYE, SDL, NSSF, WCF and HESLB per payroll run for a period — the figures you file with TRA,
+      NSSF, WCF and HESLB.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Payroll Statutory Report.
+    </div>
+  } @else {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ps-from">
+              Pay date from <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="ps-from" name="ps-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ps-to">
+              Pay date to <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="ps-to" name="ps-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()"
+                    [disabled]="state() === 'loading' || !fromDate() || !toDate()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Payroll Statutory Report. Please try again.
+        </p>
+      }
+      @case ('invalid') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ errorMessage() }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            Choose a pay-date range, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+            @if (exportError(); as msg) {
+              <p class="text-danger small" role="alert">{{ msg }}</p>
+            }
+          }
+
+          <h2 class="h5">Payroll Statutory Report</h2>
+          <p class="text-muted small mb-3">
+            Pay dates {{ r.fromDate }} to {{ r.toDate }}
+            · Currency: {{ r.currency }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Statutory deductions and contributions per payroll run</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Run</th>
+                  <th scope="col">Period</th>
+                  <th scope="col">Pay date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="num">Staff</th>
+                  <th scope="col" class="num">Gross</th>
+                  <th scope="col" class="num">PAYE</th>
+                  <th scope="col" class="num">SDL</th>
+                  <th scope="col" class="num">NSSF (Emp.)</th>
+                  <th scope="col" class="num">NSSF (Empr.)</th>
+                  <th scope="col" class="num">WCF</th>
+                  <th scope="col" class="num">HESLB</th>
+                  <th scope="col" class="num">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.runs.length === 0) {
+                  <tr>
+                    <td colspan="13" class="text-center text-muted py-4">
+                      No approved payroll runs with a pay date in this period.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.runs; track row.runUid) {
+                  <tr>
+                    <td class="mono">
+                      <a [routerLink]="['/admin/hr/payroll-runs/uid', row.runUid]">{{ row.runNumber }}</a>
+                    </td>
+                    <td>{{ period(row.periodYear, row.periodMonth) }}</td>
+                    <td>{{ row.payDate }}</td>
+                    <td>{{ row.status }}</td>
+                    <td class="num mono">{{ row.employeeCount }}</td>
+                    <td class="num mono">{{ fmtMoney(row.grossTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.payeTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.sdlTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.nssfEmployeeTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.nssfEmployerTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.wcfTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.heslbTotal) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.netTotal) }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <th scope="row" colspan="4" class="text-end">Totals ({{ r.totals.runCount }} runs)</th>
+                  <td class="num mono">{{ r.totals.payslipCount }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.grossTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.payeTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.sdlTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.nssfEmployeeTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.nssfEmployerTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.wcfTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.heslbTotal) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.netTotal) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="row g-3 mt-2">
+            <div class="col-sm-4">
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Due to TRA (PAYE + SDL)</span>
+                <span class="erp-kpi__value mono">{{ r.currency }} {{ fmtMoney(add(r.totals.payeTotal, r.totals.sdlTotal)) }}</span>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Due to NSSF (employee + employer)</span>
+                <span class="erp-kpi__value mono">{{ r.currency }} {{ fmtMoney(add(r.totals.nssfEmployeeTotal, r.totals.nssfEmployerTotal)) }}</span>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <div class="erp-kpi">
+                <span class="erp-kpi__label">Employer cost (NSSF + WCF + SDL)</span>
+                <span class="erp-kpi__value mono">{{ r.currency }} {{ fmtMoney(r.totals.employerCostTotal) }}</span>
+              </div>
+            </div>
+          </div>
+
+          @if (r.pendingRunCount > 0 || r.reversedRunCount > 0) {
+            <p class="small text-muted mt-3 mb-0">
+              Not included:
+              @if (r.pendingRunCount > 0) {
+                {{ r.pendingRunCount }} {{ r.pendingRunCount === 1 ? 'run' : 'runs' }} not approved yet (the figures can still change).
+              }
+              @if (r.reversedRunCount > 0) {
+                {{ r.reversedRunCount }} reversed {{ r.reversedRunCount === 1 ? 'run' : 'runs' }}.
+              }
+              Approve a run on its Payroll Run screen to include it.
+            </p>
+          }
+        }
+      }
+    }
+  }
+</section>

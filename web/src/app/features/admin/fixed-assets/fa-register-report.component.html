@@ -1,0 +1,242 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1><i class="bi bi-journal-bookmark me-2" aria-hidden="true"></i>Fixed Asset Register</h1>
+    <p class="subtitle">
+      Every asset with its cost, accumulated depreciation and net book value as at a date, with
+      totals per category.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Fixed Asset Register.
+    </div>
+  } @else {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-asof">
+              As at <span class="text-danger" aria-hidden="true">*</span>
+            </label>
+            <input id="far-asof" name="far-asof" type="date" class="form-control"
+                   [ngModel]="asOf()" (ngModelChange)="asOf.set($event)" required />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-category">
+              Category <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="far-category" name="far-category"
+                            [(ngModel)]="categoryUid"
+                            [options]="categoryOptions()"
+                            placeholder="All categories" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-status">
+              Status <span class="text-muted small">(optional)</span>
+            </label>
+            <select id="far-status" name="far-status" class="form-select"
+                    [ngModel]="status()" (ngModelChange)="status.set($event)">
+              <option value="">All statuses</option>
+              @for (o of statusOptions; track o.value) {
+                <option [value]="o.value">{{ o.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="far-branch" name="far-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-location">
+              Location <span class="text-muted small">(contains)</span>
+            </label>
+            <input id="far-location" name="far-location" type="text" class="form-control"
+                   [ngModel]="location()" (ngModelChange)="location.set($event)" autocomplete="off" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="far-cc">
+              Cost centre <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="far-cc" name="far-cc"
+                            [(ngModel)]="costCentreUid"
+                            [options]="costCentres()"
+                            placeholder="All cost centres" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()"
+                    [disabled]="state() === 'loading' || !asOf()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the register…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ errorMessage() ?? 'Could not load the Fixed Asset Register. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ errorMessage() ?? "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-journal-bookmark" aria-hidden="true"></i>
+            Choose an as-at date, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+            @if (exportError(); as msg) {
+              <p class="text-danger small" role="alert">{{ msg }}</p>
+            }
+          }
+
+          <h2 class="h5">Fixed Asset Register</h2>
+          <p class="text-muted small mb-3">
+            As at {{ r.asOf }}
+            @if (r.categoryName) { · Category: {{ r.categoryName }} }
+            @if (r.branchName) { · Branch: {{ r.branchName }} }
+            @if (r.status) { · Status: {{ statusLabel(r.status) }} }
+            @if (r.location) { · Location contains “{{ r.location }}” }
+            @if (r.costCentreName) { · Cost centre: {{ r.costCentreName }} }
+            · Currency: {{ r.currency }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Fixed asset register as at {{ r.asOf }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Asset No.</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Branch</th>
+                  <th scope="col">Location</th>
+                  <th scope="col">Acquired</th>
+                  <th scope="col" class="num">Cost</th>
+                  <th scope="col" class="num">Accum. Dep.</th>
+                  <th scope="col" class="num">NBV</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td colspan="10" class="text-center text-muted py-4">
+                      No assets match these filters at this date.
+                    </td>
+                  </tr>
+                }
+                @for (g of groups(); track g.code) {
+                  @for (row of g.rows; track row.assetUid) {
+                    <tr>
+                      <td class="mono">
+                        <a [routerLink]="['/admin/fixed-assets/uid', row.assetUid]">{{ row.assetNumber }}</a>
+                      </td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.categoryName }}</td>
+                      <td>{{ row.branchName ?? '—' }}</td>
+                      <td>{{ row.location ?? '—' }}</td>
+                      <td>{{ row.acquisitionDate }}</td>
+                      <td class="num mono">{{ fmtMoney(row.cost) }}</td>
+                      <td class="num mono">{{ fmtMoney(row.accumulatedDepreciation) }}</td>
+                      <td class="num mono">
+                        @if (row.nbv === null) {
+                          <span class="text-muted fst-italic"
+                                title="Not in service at this date, so it carries no book value.">no book value</span>
+                        } @else {
+                          {{ fmtMoney(row.nbv) }}
+                        }
+                      </td>
+                      <td>
+                        {{ statusLabel(row.status) }}
+                        @if (row.disposedAt) { <span class="text-muted small">({{ row.disposedAt }})</span> }
+                      </td>
+                    </tr>
+                  }
+                  @if (g.total; as t) {
+                    <tr class="subtotal-row">
+                      <th scope="row" colspan="6" class="text-end">
+                        Subtotal — {{ t.categoryName }} ({{ t.assetCount }} in service)
+                      </th>
+                      <td class="num mono">{{ fmtMoney(t.cost) }}</td>
+                      <td class="num mono">{{ fmtMoney(t.accumulatedDepreciation) }}</td>
+                      <td class="num mono">{{ fmtMoney(t.nbv) }}</td>
+                      <td></td>
+                    </tr>
+                  }
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <th scope="row" colspan="6" class="text-end">
+                    Grand total ({{ r.grandTotal.assetCount }} in service)
+                  </th>
+                  <td class="num mono">{{ fmtMoney(r.grandTotal.cost) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.grandTotal.accumulatedDepreciation) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.grandTotal.nbv) }}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="small text-muted mt-2 mb-0">
+            Totals cover assets in service at the date; NBV is cost less accumulated depreciation.
+            @if (r.rowsNotInTotals > 0) {
+              {{ r.rowsNotInTotals }} listed {{ r.rowsNotInTotals === 1 ? 'asset was' : 'assets were' }}
+              draft, disposed or written off at the date and {{ r.rowsNotInTotals === 1 ? 'is' : 'are' }}
+              left out of the totals.
+            }
+            Branch and location are where each asset is now.
+          </p>
+        }
+      }
+    }
+  }
+</section>

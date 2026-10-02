@@ -9,6 +9,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { Company } from '../models/company.model';
 import { Branch } from '../models/branch.model';
+import { downloadBlob } from '../reporting/reporting.utils';
 import { DashboardService } from './dashboard.service';
 import {
   BiHeaderDto,
@@ -98,7 +99,13 @@ export class DashboardComponent {
   readonly canFinance = computed(() => this.session.hasPermission('BI.FINANCE.VIEW'));
   readonly canOps = computed(() => this.session.hasPermission('BI.OPS.VIEW'));
   readonly canCrm = computed(() => this.session.hasPermission('BI.CRM.VIEW'));
-  readonly canExport = computed(() => this.session.hasPermission('BI.EXPORT'));
+  /**
+   * Exact parity with GET /bi/dashboard/export, which requires BI.VIEW AND BI.EXPORT. (The route
+   * guard already demands BI.VIEW; stating it here keeps the button honest if the guard changes.)
+   */
+  readonly canExport = computed(
+    () => this.session.hasPermission('BI.VIEW') && this.session.hasPermission('BI.EXPORT'),
+  );
 
   // ── Derived: branch-filter scope (honesty labelling — UPR "silently doesn't
   // scope most panels") ────────────────────────────────────────────────────────
@@ -131,6 +138,7 @@ export class DashboardComponent {
   // ── Export state ──────────────────────────────────────────────────────────────
   readonly exporting = signal(false);
   readonly exportFormat = signal<'PDF' | 'XLSX' | 'CSV'>('PDF');
+  readonly exportError = signal<string | null>(null);
 
   constructor() {
     this.loadCompanies();
@@ -356,22 +364,28 @@ export class DashboardComponent {
     const companyId = this.selectedCompanyId();
     if (!companyId || this.exporting()) return;
     this.exporting.set(true);
+    this.exportError.set(null);
     const branchId = this.selectedBranchId() || undefined;
     const from = this.fromDate() || undefined;
     const to = this.toDate() || undefined;
     const fmt = this.exportFormat();
     this.dashboardService.exportDashboard(companyId, fmt, from, to, branchId).subscribe({
       next: (blob) => {
-        const ext = fmt.toLowerCase();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `dashboard.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `dashboard_${from ?? ''}_${to ?? ''}.${fmt.toLowerCase()}`);
         this.exporting.set(false);
       },
-      error: () => this.exporting.set(false),
+      error: (err: unknown) => {
+        this.exporting.set(false);
+        // A blob error body is not the JSON envelope — choose the wording by status, never echo it.
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        this.exportError.set(
+          status === 401 || status === 403
+            ? "You don't have permission to export the dashboard."
+            : status >= 400 && status < 500
+              ? 'The dashboard could not be exported with these filters. Check the dates and try again.'
+              : 'Could not export the dashboard. Please try again.',
+        );
+      },
     });
   }
 }

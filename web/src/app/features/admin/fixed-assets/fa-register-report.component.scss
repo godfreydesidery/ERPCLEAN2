@@ -1,0 +1,5 @@
+// Fixed Asset Register — subtotal rows read as a band, not as another asset.
+.subtotal-row {
+  font-weight: 600;
+  background: var(--erp-surface-muted, rgba(0, 0, 0, 0.03));
+}

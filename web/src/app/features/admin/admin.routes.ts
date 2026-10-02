@@ -819,6 +819,13 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./fixed-assets/fa-reconciliation.component').then((m) => m.FaReconciliationComponent),
   },
+  // FR-FA-17. Same gate as GET /api/v1/fixed-assets/register.
+  {
+    path: 'fixed-assets/register',
+    canActivate: [requirePermission('FA.VIEW')],
+    loadComponent: () =>
+      import('./fixed-assets/fa-register-report.component').then((m) => m.FaRegisterReportComponent),
+  },
   {
     path: 'depreciation-runs',
     canActivate: [requirePermission('FA.VIEW')],
@@ -916,6 +923,15 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('HR.PAYROLL.VIEW')],
     loadComponent: () =>
       import('./hr-payroll/payroll-run-detail.component').then((m) => m.PayrollRunDetailComponent),
+  },
+  // FR-HR-23. Same gate as the payroll-run screens and GET /api/v1/reports/payroll-statutory.
+  {
+    path: 'reports/payroll-statutory',
+    canActivate: [requirePermission('HR.PAYROLL.VIEW')],
+    loadComponent: () =>
+      import('./hr-payroll/payroll-statutory-report.component').then(
+        (m) => m.PayrollStatutoryReportComponent,
+      ),
   },
   {
     path: 'hr/payslips/uid/:uid',
