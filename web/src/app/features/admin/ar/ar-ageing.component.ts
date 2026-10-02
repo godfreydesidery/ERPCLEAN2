@@ -12,6 +12,9 @@ import { CustomerService } from '../parties/customer.service';
 import { ArAgeingRowDto, ArBalanceDto } from './models/ar.model';
 import { ArService } from './ar.service';
 import { formatMoney } from '../../../shared/money.util';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage, todayIso } from '../reporting/ledger-export.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -50,7 +53,13 @@ export class ArAgeingComponent {
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('AR.STATEMENT.VIEW'));
+  /** The export endpoint also requires REPORT.EXPORT server-side — distinct from the view code. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.ageingRows().length === 0);
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   private readonly balanceCustomerSearch$ = new Subject<string>();
 
@@ -111,6 +120,24 @@ export class ArAgeingComponent {
       next: (rows) => { this.ageingRows.set(rows); this.state.set('idle'); },
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+    });
+  }
+
+  /** Download the per-customer ageing (buckets per customer + totals) as at today. */
+  exportAgeing(format: ExportFormat): void {
+    const companyId = this.selectedCompanyId();
+    if (!companyId || this.exporting()) return;
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.arService.exportAgeing(companyId, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `ar-ageing_${todayIso()}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
     });
   }
 

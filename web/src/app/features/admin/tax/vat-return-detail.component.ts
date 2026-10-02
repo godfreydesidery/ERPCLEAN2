@@ -14,6 +14,9 @@ import {
 } from './models/tax.model';
 import { TaxService } from './tax.service';
 import { formatMoney } from '../../../shared/money.util';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage } from '../reporting/ledger-export.util';
 
 /**
  * VAT Return detail / face screen (FR-VAT-02/08 / US-VAT-02/03/04).
@@ -82,6 +85,26 @@ export class VatReturnDetailComponent implements OnInit {
   readonly canPrepare = computed(() => this.session.hasPermission('VAT.RETURN.PREPARE'));
   readonly canFile = computed(() => this.session.hasPermission('VAT.RETURN.FILE'));
   readonly canAdjust = computed(() => this.session.hasPermission('VAT.ADJUST'));
+  /** The export endpoint requires VAT.VIEW (the route gate) AND REPORT.EXPORT server-side. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+  readonly exporting = signal(false);
+
+  /** Download the return face (bands + summary boxes) under the company letterhead. */
+  exportReturn(format: ExportFormat): void {
+    const ret = this.vatReturn();
+    if (!ret || this.exporting()) return;
+    this.exporting.set(true);
+    this.taxService.exportReturn(this.uid(), format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `vat-return_${ret.returnNumber}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.alerts.error('Export failed', exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
+  }
 
   readonly isDraft = computed(() => this.vatReturn()?.status === 'DRAFT');
 

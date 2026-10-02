@@ -73,6 +73,51 @@
             </button>
           }
         </div>
+
+        <!-- Printable statement (REPORT.EXPORT — distinct from the view permission) -->
+        @if (selectedCustomer() && canExport()) {
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2><i class="bi bi-printer me-1" aria-hidden="true"></i>Printable Statement</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="text-muted small mb-2">
+                Balance brought forward, every invoice, receipt, credit note and write-off in the period
+                with a running balance, and the closing balance. Leave From empty to start from the
+                customer's first transaction.
+              </p>
+              <div class="d-flex flex-wrap gap-3 align-items-end">
+                <div>
+                  <label class="form-label small text-muted mb-1" for="stmtFrom">From</label>
+                  <input id="stmtFrom" name="stmtFrom" type="date" class="form-control form-control-sm"
+                         [ngModel]="exportFrom()" (ngModelChange)="exportFrom.set($event)" />
+                </div>
+                <div>
+                  <label class="form-label small text-muted mb-1" for="stmtTo">To</label>
+                  <input id="stmtTo" name="stmtTo" type="date" class="form-control form-control-sm"
+                         [ngModel]="exportTo()" (ngModelChange)="exportTo.set($event)" />
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="exportStatement('PDF')" [disabled]="exporting()">
+                    <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="exportStatement('XLSX')" [disabled]="exporting()">
+                    <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          (click)="exportStatement('CSV')" [disabled]="exporting()">
+                    <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                  </button>
+                </div>
+              </div>
+              @if (exportError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+            </div>
+          </div>
+        }
       }
     }
 

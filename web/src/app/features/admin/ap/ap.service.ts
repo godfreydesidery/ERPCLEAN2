@@ -19,6 +19,7 @@ import {
   SetApOpeningBalanceRequest,
   SupplierBillDto,
 } from './models/ap.model';
+import { ExportFormat } from '../reporting/models/reporting.model';
 
 export interface SupplierBillPage {
   rows: SupplierBillDto[];
@@ -197,5 +198,37 @@ export class ApService {
     return this.http.get<ApReconciliationDto>(`${this.base}/statement/reconciliation`, {
       params: { companyId },
     });
+  }
+
+  // ── Exports (binary download; gated AP.VIEW + REPORT.EXPORT) ──────────────
+
+  /**
+   * Supplier statement document: balance b/f, every bill / payment / debit note in the period with
+   * a running balance, closing balance. An empty fromDate runs from the first transaction.
+   */
+  exportStatement(
+    companyId: string,
+    supplierUid: string,
+    fromDate: string,
+    toDate: string,
+    format: ExportFormat,
+  ): Observable<Blob> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('supplierUid', supplierUid)
+      .set('format', format);
+    if (fromDate) params = params.set('fromDate', fromDate);
+    if (toDate) params = params.set('toDate', toDate);
+    return this.http.get(`${this.base}/statement/export`, { params, responseType: 'blob' });
+  }
+
+  /** The supplier's ageing buckets as a document. */
+  exportAgeing(companyId: string, supplierUid: string, format: ExportFormat, asAt?: string): Observable<Blob> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('supplierUid', supplierUid)
+      .set('format', format);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get(`${this.base}/statement/ageing/export`, { params, responseType: 'blob' });
   }
 }

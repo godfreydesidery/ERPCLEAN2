@@ -1,14 +1,32 @@
 package com.erp.api;
 
+import static com.erp.api.ExportLetterhead.fmtAmt;
+import static com.erp.api.ExportLetterhead.fmtAmtOrBlank;
+import static com.erp.api.ExportLetterhead.nullToEmpty;
+
 import com.erp.modules.ar.domain.dto.ArAgeingRowDto;
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.domain.dto.ArCustomerAgeingRowDto;
+import com.erp.modules.ar.domain.dto.ArCustomerLedgerDto;
+import com.erp.modules.ar.domain.dto.ArCustomerLedgerRowDto;
 import com.erp.modules.ar.domain.dto.ArStatementDto;
+import com.erp.modules.ar.domain.enums.ArLedgerEntryType;
 import com.erp.modules.ar.service.ArAgeingQuery;
 import com.erp.modules.ar.service.ArBalanceService;
+import com.erp.modules.ar.service.ArCustomerLedgerQuery;
+import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
+import com.erp.modules.reporting.domain.enums.ExportFormat;
+import com.erp.modules.reporting.export.TabularExporter;
+import com.erp.modules.reporting.export.TabularRenderModel;
+import com.erp.modules.reporting.export.TabularRenderModel.Align;
+import com.erp.modules.reporting.export.TabularRenderModel.Column;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,17 +37,29 @@ import org.springframework.web.bind.annotation.RestController;
  * AR customer statement, ageing, and balance read endpoints (ADR-0014, FR-AR-08/12/19).
  * All computed on demand — not stored. companyId and customerId are Long ids.
  * Permission codes seeded in V11__accounts_receivable.sql: AR.STATEMENT.VIEW, AR.VIEW.
+ *
+ * <p>The customer may also be named by {@code customerUid} — what the web screen sends. It is
+ * resolved inside {@code companyId} (a uid from another company is "not found"); the original
+ * {@code customerId} form is unchanged.
  */
 @RestController
 @RequestMapping("/api/v1/ar")
 public class ArStatementController {
 
-    private final ArAgeingQuery ageingQuery;
-    private final ArBalanceService balanceService;
+    private final ArAgeingQuery         ageingQuery;
+    private final ArBalanceService      balanceService;
+    private final ArCustomerLedgerQuery ledgerQuery;
+    private final TabularExporter       exporter;
+    private final ExportLetterhead      letterhead;
 
-    public ArStatementController(ArAgeingQuery ageingQuery, ArBalanceService balanceService) {
+    public ArStatementController(ArAgeingQuery ageingQuery, ArBalanceService balanceService,
+                                 ArCustomerLedgerQuery ledgerQuery, TabularExporter exporter,
+                                 ExportLetterhead letterhead) {
         this.ageingQuery    = ageingQuery;
         this.balanceService = balanceService;
+        this.ledgerQuery    = ledgerQuery;
+        this.exporter       = exporter;
+        this.letterhead     = letterhead;
     }
 
     /**
@@ -40,11 +70,42 @@ public class ArStatementController {
     @PreAuthorize("@perm.has('AR.STATEMENT.VIEW')")
     public ArStatementDto statement(
             @RequestParam Long companyId,
-            @RequestParam Long customerId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
-        return ageingQuery.statement(companyId, customerId,
+        return ageingQuery.statement(companyId, customerIdOf(companyId, customerId, customerUid),
                 asAt != null ? asAt : LocalDate.now());
+    }
+
+    /**
+     * The customer statement as a printable document: company letterhead, the customer, the period,
+     * balance brought forward, every invoice / receipt / credit note / write-off in the period with
+     * a running balance, and the closing balance.
+     *
+     * <p>{@code toDate} defaults to {@code asAt}, then today; {@code fromDate} omitted runs the
+     * statement from the customer's first transaction. Gated on the on-screen code AND
+     * {@code REPORT.EXPORT}: a download leaves the system.
+     */
+    @GetMapping("/statement/export")
+    @PreAuthorize("@perm.has('AR.STATEMENT.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> exportStatement(
+            @RequestParam Long companyId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String currency,
+            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+        ArCustomerLedgerDto dto = ledgerQuery.ledger(companyId, customerId, customerUid,
+                fromDate, toDate != null ? toDate : asAt, currency);
+        ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
+        return ExportLetterhead.download(exporter.export(
+                flattenStatement(dto, head, ZonedDateTime.now()), format));
     }
 
     /**
@@ -78,6 +139,25 @@ public class ArStatementController {
     }
 
     /**
+     * The per-customer ageing as a printable / spreadsheet document: one row per customer with its
+     * five buckets and total, and a totals row. Same gate as the screen plus {@code REPORT.EXPORT}.
+     */
+    @GetMapping("/ageing/by-customer/export")
+    @PreAuthorize("@perm.has('AR.STATEMENT.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> exportAgeingByCustomer(
+            @RequestParam Long companyId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
+            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+        LocalDate at = asAt != null ? asAt : LocalDate.now();
+        // The read runs (and passes its tenant check) BEFORE the letterhead is loaded.
+        List<ArCustomerAgeingRowDto> rows = ageingQuery.customerAgeing(companyId, at);
+        ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
+        return ExportLetterhead.download(exporter.export(
+                flattenAgeing(rows, at, head, ZonedDateTime.now()), format));
+    }
+
+    /**
      * Current AR balance (outstanding − unallocated) for a customer.
      * Used by the Sales module at invoice finalise for the credit-limit check (FR-AR-19).
      */
@@ -85,7 +165,185 @@ public class ArStatementController {
     @PreAuthorize("@perm.has('AR.VIEW')")
     public ArBalanceDto balance(
             @RequestParam Long companyId,
-            @RequestParam Long customerId) {
-        return balanceService.currentBalance(companyId, customerId);
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid) {
+        return balanceService.currentBalance(companyId,
+                customerIdOf(companyId, customerId, customerUid));
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * The id form passes straight through, exactly as before; the uid form is resolved inside the
+     * company (and the company's tenant check runs first).
+     */
+    private Long customerIdOf(Long companyId, Long customerId, String customerUid) {
+        if (customerUid == null || customerUid.isBlank()) {
+            if (customerId == null) {
+                throw new IllegalArgumentException("Choose a customer.");
+            }
+            return customerId;
+        }
+        return ledgerQuery.resolveCustomer(companyId, null, customerUid).id();
+    }
+
+    static TabularRenderModel flattenStatement(ArCustomerLedgerDto dto,
+                                               ExportLetterhead.Letterhead head,
+                                               ZonedDateTime now) {
+        ReportCompanyHeaderDto company = head != null && head.company() != null
+                ? head.company() : dto.company();
+        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
+        headerLines.add("Customer: " + party(dto.customerCode(), dto.customerName()));
+        if (dto.customerTin() != null && !dto.customerTin().isBlank()) {
+            headerLines.add("Customer TIN: " + dto.customerTin());
+        }
+        if (dto.customerVrn() != null && !dto.customerVrn().isBlank()) {
+            headerLines.add("Customer VRN: " + dto.customerVrn());
+        }
+        headerLines.add(period(dto.fromDate(), dto.toDate()));
+        headerLines.add("Currency: " + dto.currency());
+
+        List<Column> columns = ledgerColumns();
+        List<List<String>> rows = new ArrayList<>(dto.rows().size() + 1);
+        if (dto.fromDate() != null) {
+            rows.add(List.of(dto.fromDate().toString(), "", "", "Balance brought forward",
+                    "", "", fmtAmt(dto.openingBalance())));
+        }
+        for (ArCustomerLedgerRowDto r : dto.rows()) {
+            rows.add(List.of(
+                    r.date() != null ? r.date().toString() : "",
+                    typeLabel(r.type()),
+                    nullToEmpty(r.reference()),
+                    nullToEmpty(r.description()),
+                    fmtAmtOrBlank(r.debit()),
+                    fmtAmtOrBlank(r.credit()),
+                    fmtAmt(r.balance())));
+        }
+        List<String> totalsRow = List.of("", "", "", "Closing balance",
+                fmtAmt(dto.totalDebit()), fmtAmt(dto.totalCredit()), fmtAmt(dto.closingBalance()));
+
+        List<String> footer = new ArrayList<>();
+        if (dto.rows().isEmpty()) {
+            footer.add("No transactions in this period.");
+        }
+        footer.add(closingSentence(dto.closingBalance(), dto.currency(),
+                "Amount due from customer", "Customer in credit"));
+        if (dto.otherCurrencyCount() > 0) {
+            footer.add("Note: " + dto.otherCurrencyCount() + " transaction"
+                    + (dto.otherCurrencyCount() == 1 ? " is" : "s are")
+                    + " in another currency and not included in this " + dto.currency()
+                    + " statement.");
+        }
+        footer.add(ExportLetterhead.printFootprint(company, now));
+
+        return new TabularRenderModel("Customer Statement", headerLines,
+                ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
+                head != null ? head.logoDataUri() : null);
+    }
+
+    static TabularRenderModel flattenAgeing(List<ArCustomerAgeingRowDto> ageing, LocalDate asAt,
+                                            ExportLetterhead.Letterhead head, ZonedDateTime now) {
+        ReportCompanyHeaderDto company = head != null ? head.company() : null;
+        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
+        headerLines.add("Ageing as at " + asAt);
+        String currency = ageing.isEmpty() ? null : ageing.get(0).currency();
+        if (currency != null) {
+            headerLines.add("Currency: " + currency);
+        }
+
+        List<Column> columns = List.of(
+                new Column("Code", Align.LEFT),
+                new Column("Customer", Align.LEFT),
+                new Column("Current", Align.RIGHT),
+                new Column("1-30 days", Align.RIGHT),
+                new Column("31-60 days", Align.RIGHT),
+                new Column("61-90 days", Align.RIGHT),
+                new Column("Over 90 days", Align.RIGHT),
+                new Column("Total", Align.RIGHT));
+
+        BigDecimal[] sums = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
+        List<List<String>> rows = new ArrayList<>(ageing.size());
+        for (ArCustomerAgeingRowDto r : ageing) {
+            BigDecimal[] cells = {r.current(), r.days1to30(), r.days31to60(),
+                    r.days61to90(), r.days91Plus(), r.total()};
+            List<String> row = new ArrayList<>(8);
+            row.add(nullToEmpty(r.customerCode()));
+            row.add(nullToEmpty(r.customerName()));
+            for (int i = 0; i < cells.length; i++) {
+                BigDecimal v = cells[i] != null ? cells[i] : BigDecimal.ZERO;
+                sums[i] = sums[i].add(v);
+                row.add(fmtAmt(v));
+            }
+            rows.add(row);
+        }
+        List<String> totalsRow = new ArrayList<>(8);
+        totalsRow.add("");
+        totalsRow.add("TOTAL (" + ageing.size() + " customer" + (ageing.size() == 1 ? ")" : "s)"));
+        for (BigDecimal s : sums) {
+            totalsRow.add(fmtAmt(s));
+        }
+
+        List<String> footer = new ArrayList<>();
+        if (ageing.isEmpty()) {
+            footer.add("No customer has an open balance.");
+        }
+        footer.add("Buckets count days past each invoice's due date.");
+        footer.add(ExportLetterhead.printFootprint(company, now));
+
+        return new TabularRenderModel("AR Ageing by Customer", headerLines,
+                ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
+                head != null ? head.logoDataUri() : null);
+    }
+
+    static List<Column> ledgerColumns() {
+        return List.of(
+                new Column("Date", Align.LEFT),
+                new Column("Type", Align.LEFT),
+                new Column("Reference", Align.LEFT),
+                new Column("Description", Align.LEFT),
+                new Column("Debit", Align.RIGHT),
+                new Column("Credit", Align.RIGHT),
+                new Column("Balance", Align.RIGHT));
+    }
+
+    static String period(LocalDate from, LocalDate to) {
+        return from != null
+                ? "Period: " + from + " to " + to
+                : "Period: all transactions up to " + to;
+    }
+
+    static String party(String code, String name) {
+        String c = nullToEmpty(code);
+        String n = nullToEmpty(name);
+        if (c.isEmpty()) {
+            return n;
+        }
+        return n.isEmpty() ? c : c + " — " + n;
+    }
+
+    /** "Amount due from customer: TZS 1,250.00" / "Customer in credit: TZS 300.00" / nothing due. */
+    static String closingSentence(BigDecimal closing, String currency,
+                                  String positiveLabel, String negativeLabel) {
+        BigDecimal c = closing != null ? closing : BigDecimal.ZERO;
+        if (c.signum() == 0) {
+            return "Nothing outstanding at the end of the period.";
+        }
+        return (c.signum() > 0 ? positiveLabel : negativeLabel) + ": " + currency + " "
+                + fmtAmt(c.abs());
+    }
+
+    private static String typeLabel(ArLedgerEntryType type) {
+        if (type == null) {
+            return "";
+        }
+        return switch (type) {
+            case OPENING_BALANCE  -> "Opening balance";
+            case INVOICE          -> "Invoice";
+            case RECEIPT          -> "Receipt";
+            case RECEIPT_REVERSAL -> "Reversal";
+            case CREDIT_NOTE      -> "Credit note";
+            case WRITE_OFF        -> "Write-off";
+        };
     }
 }

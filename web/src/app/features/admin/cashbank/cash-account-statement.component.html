@@ -59,6 +59,47 @@
       </div>
     } @else {
 
+      <!-- Printable statement (REPORT.EXPORT — distinct from the view permission) -->
+      @if (canExport()) {
+        <div class="erp-card mb-3">
+          <div class="erp-card__body">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+              <div>
+                <label class="form-label small text-muted mb-1" for="cashStmtFrom">From</label>
+                <input id="cashStmtFrom" name="cashStmtFrom" type="date" class="form-control form-control-sm"
+                       [ngModel]="exportFrom()" (ngModelChange)="exportFrom.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small text-muted mb-1" for="cashStmtTo">To</label>
+                <input id="cashStmtTo" name="cashStmtTo" type="date" class="form-control form-control-sm"
+                       [ngModel]="exportTo()" (ngModelChange)="exportTo.set($event)" />
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatement('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatement('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatement('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+            <p class="text-muted small mt-2 mb-0">
+              The printed statement starts with the balance brought forward on the From date.
+              Leave both dates empty for the whole history.
+            </p>
+            @if (exportError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+          </div>
+        </div>
+      }
+
       <!-- Balance KPIs -->
       <div class="d-flex flex-wrap gap-3 mb-3">
         <div class="erp-kpi" style="min-width:200px">

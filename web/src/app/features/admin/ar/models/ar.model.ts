@@ -12,7 +12,7 @@
 
 export type ArInvoiceStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'WRITTEN_OFF';
 export type ArInvoiceSource = 'SALE' | 'OPENING_BALANCE';
-export type AgeingBucket = 'CURRENT' | 'DAYS_1_30' | 'DAYS_31_60' | 'DAYS_61_90' | 'DAYS_91_PLUS';
+export type AgeingBucket = 'CURRENT' | 'D1_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
 export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'OTHER';
 
 // ── AR Invoice ────────────────────────────────────────────────────────────────

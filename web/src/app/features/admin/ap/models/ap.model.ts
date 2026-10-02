@@ -55,10 +55,10 @@ export type ApPaymentKind = 'SINGLE' | 'PAYMENT_RUN';
 
 export type AgeingBucket =
   | 'CURRENT'
-  | 'DAYS_1_30'
-  | 'DAYS_31_60'
-  | 'DAYS_61_90'
-  | 'DAYS_91_PLUS';
+  | 'D1_30'
+  | 'D31_60'
+  | 'D61_90'
+  | 'D90_PLUS';
 
 export type TenderType =
   | 'CASH'

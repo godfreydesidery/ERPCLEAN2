@@ -32,6 +32,21 @@
         </h1>
       </div>
       <div class="erp-page-head__actions">
+        <!-- Export (REPORT.EXPORT — distinct from the view permission) -->
+        @if (canExport()) {
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportReturn('PDF')" [disabled]="exporting()">
+            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> Export PDF
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportReturn('XLSX')" [disabled]="exporting()">
+            <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i> Export Excel
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportReturn('CSV')" [disabled]="exporting()">
+            <i class="bi bi-filetype-csv" aria-hidden="true"></i> Export CSV
+          </button>
+        }
         <!-- DRAFT actions -->
         @if (isDraft()) {
           @if (canPrepare()) {
