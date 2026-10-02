@@ -440,13 +440,24 @@ public class DocumentModelBuilder {
         rows.add(Row.sectionHeader("Open Invoices"));
         if (stmt.openItems() != null) {
             for (ArInvoiceDto inv : stmt.openItems()) {
+                // An invoice in another currency says so — its amount is not in the base total.
+                boolean foreign = inv.currency() != null && !inv.currency().equals(stmt.currency());
                 rows.add(Row.line(
-                        inv.documentNo() + " due " + inv.dueDate(),
+                        inv.documentNo() + " due " + inv.dueDate()
+                                + (foreign ? " (" + inv.currency() + ")" : ""),
                         inv.outstandingAmount(),
                         null));
             }
         }
         rows.add(Row.total("Total Outstanding", stmt.totalOutstanding(), null));
+        // Foreign-currency balances are totalled separately, never added into the base total.
+        if (stmt.totalsByCurrency() != null) {
+            stmt.totalsByCurrency().forEach((ccy, amount) -> {
+                if (!ccy.equals(stmt.currency())) {
+                    rows.add(Row.total("Total Outstanding (" + ccy + ")", amount, null));
+                }
+            });
+        }
 
         String companyName = branding != null ? branding.getDisplayName() : "";
         return new StatementRenderModel(

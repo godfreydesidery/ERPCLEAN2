@@ -24,7 +24,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -246,30 +248,50 @@ public class ArStatementController {
         ReportCompanyHeaderDto company = head != null ? head.company() : null;
         List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
         headerLines.add("Ageing as at " + asAt);
-        String currency = ageing.isEmpty() ? null : ageing.get(0).currency();
-        if (currency != null) {
-            headerLines.add("Currency: " + currency);
+
+        // Rows arrive one per customer PER CURRENCY. One currency: the document is exactly as it
+        // always was (currency in the header, one totals row). More than one: a Currency column,
+        // and one total per currency, because amounts in different currencies cannot be added.
+        List<String> currencies = ageing.stream()
+                .map(ArCustomerAgeingRowDto::currency).distinct().toList();
+        boolean multiCurrency = currencies.size() > 1;
+        if (!multiCurrency && !currencies.isEmpty() && currencies.get(0) != null) {
+            headerLines.add("Currency: " + currencies.get(0));
+        }
+        if (multiCurrency) {
+            headerLines.add("Amounts are in each invoice's own currency; totals are per currency.");
         }
 
-        List<Column> columns = List.of(
+        List<Column> columns = new ArrayList<>(List.of(
                 new Column("Code", Align.LEFT),
-                new Column("Customer", Align.LEFT),
+                new Column("Customer", Align.LEFT)));
+        if (multiCurrency) {
+            columns.add(new Column("Currency", Align.LEFT));
+        }
+        columns.addAll(List.of(
                 new Column("Current", Align.RIGHT),
                 new Column("1-30 days", Align.RIGHT),
                 new Column("31-60 days", Align.RIGHT),
                 new Column("61-90 days", Align.RIGHT),
                 new Column("Over 90 days", Align.RIGHT),
-                new Column("Total", Align.RIGHT));
+                new Column("Total", Align.RIGHT)));
 
-        BigDecimal[] sums = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
-        List<List<String>> rows = new ArrayList<>(ageing.size());
+        Map<String, BigDecimal[]> sumsByCurrency = new LinkedHashMap<>();
+        Map<String, Integer> countByCurrency = new LinkedHashMap<>();
+        List<List<String>> rows = new ArrayList<>(ageing.size() + currencies.size());
         for (ArCustomerAgeingRowDto r : ageing) {
             BigDecimal[] cells = {r.current(), r.days1to30(), r.days31to60(),
                     r.days61to90(), r.days91Plus(), r.total()};
-            List<String> row = new ArrayList<>(8);
+            BigDecimal[] sums = sumsByCurrency.computeIfAbsent(nullToEmpty(r.currency()),
+                    c -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            countByCurrency.merge(nullToEmpty(r.currency()), 1, Integer::sum);
+            List<String> row = new ArrayList<>(columns.size());
             row.add(nullToEmpty(r.customerCode()));
             row.add(nullToEmpty(r.customerName()));
+            if (multiCurrency) {
+                row.add(nullToEmpty(r.currency()));
+            }
             for (int i = 0; i < cells.length; i++) {
                 BigDecimal v = cells[i] != null ? cells[i] : BigDecimal.ZERO;
                 sums[i] = sums[i].add(v);
@@ -277,11 +299,33 @@ public class ArStatementController {
             }
             rows.add(row);
         }
-        List<String> totalsRow = new ArrayList<>(8);
-        totalsRow.add("");
-        totalsRow.add("TOTAL (" + ageing.size() + " customer" + (ageing.size() == 1 ? ")" : "s)"));
-        for (BigDecimal s : sums) {
-            totalsRow.add(fmtAmt(s));
+
+        List<String> totalsRow;
+        if (!multiCurrency) {
+            BigDecimal[] sums = sumsByCurrency.isEmpty()
+                    ? new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                            BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO}
+                    : sumsByCurrency.values().iterator().next();
+            totalsRow = new ArrayList<>(8);
+            totalsRow.add("");
+            totalsRow.add("TOTAL (" + ageing.size() + " customer" + (ageing.size() == 1 ? ")" : "s)"));
+            for (BigDecimal s : sums) {
+                totalsRow.add(fmtAmt(s));
+            }
+        } else {
+            // One total line per currency, in the table body; no single grand total exists.
+            totalsRow = null;
+            for (Map.Entry<String, BigDecimal[]> e : sumsByCurrency.entrySet()) {
+                int n = countByCurrency.getOrDefault(e.getKey(), 0);
+                List<String> line = new ArrayList<>(columns.size());
+                line.add("");
+                line.add("TOTAL " + e.getKey() + " (" + n + " customer" + (n == 1 ? ")" : "s)"));
+                line.add(e.getKey());
+                for (BigDecimal s : e.getValue()) {
+                    line.add(fmtAmt(s));
+                }
+                rows.add(line);
+            }
         }
 
         List<String> footer = new ArrayList<>();

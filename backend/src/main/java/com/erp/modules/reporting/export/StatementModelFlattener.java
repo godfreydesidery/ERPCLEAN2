@@ -102,6 +102,19 @@ public class StatementModelFlattener {
                     row.debit().subtract(row.credit()),
                     BigDecimal.ZERO));
         }
+        // The export is one bounded page from the first line. When the period has more lines than
+        // fit, say so and carry their net movement on one line — otherwise the printed lines would
+        // not add up to the (true, whole-period) closing balance.
+        long notShown = dto.totalElements() - dto.rows().size();
+        if (notShown > 0) {
+            BigDecimal shown = dto.rows().stream()
+                    .map(r -> r.debit().subtract(r.credit()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal rest = dto.closingBalance().subtract(dto.openingBalance()).subtract(shown);
+            rows.add(Row.line(notShown + " further line" + (notShown == 1 ? "" : "s")
+                    + " not listed (net movement) — narrow the date range to see them",
+                    rest, BigDecimal.ZERO));
+        }
         rows.add(Row.total("Closing Balance", dto.closingBalance(), BigDecimal.ZERO));
 
         return new StatementRenderModel("Account Ledger — " + dto.accountName(),

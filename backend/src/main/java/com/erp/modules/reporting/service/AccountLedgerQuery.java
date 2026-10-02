@@ -33,6 +33,16 @@ public class AccountLedgerQuery {
     private static final String P_FROM     = "fromDate";
     private static final String P_TO       = "toDate";
 
+    /**
+     * The ledger's one row order — a TOTAL order, so a row lands on exactly one page. The page
+     * query (JPQL) and the brought-forward query (SQL) must sort identically, or the
+     * brought-forward would count a row twice or skip one. Keep these two in step.
+     */
+    static final String LINE_ORDER_JPQL =
+            "e.postingDate ASC, e.entryNo ASC, e.id ASC, l.lineNo ASC, l.id ASC";
+    static final String LINE_ORDER_SQL =
+            "e.posting_date ASC, e.entry_no ASC, e.id ASC, l.line_no ASC, l.id ASC";
+
     private final EntityManager            em;
     private final ChartOfAccountRepository accountRepo;
     private final AccountMovementQuery     movementQuery;
@@ -96,29 +106,35 @@ public class AccountLedgerQuery {
                 .setParameter(P_TO, toDate)
                 .getSingleResult();
 
-        // Running balance up to (but not including) this page's first row
+        // Running balance up to (but not including) this page's first row = opening + the movement
+        // of EXACTLY the rows on pages 0..page-1, in the same order the row query pages through.
+        // (A LIMIT on an aggregate does not limit the rows summed — it would add the whole period.)
         BigDecimal runningBalance = openingBal;
-        if (page > 0) {
-            Object[] priorTotals = (Object[]) em.createQuery("""
-                    SELECT SUM(l.debitAmount), SUM(l.creditAmount)
-                    FROM JournalLine l
-                    JOIN JournalEntry e ON e.id = l.entryId
-                    WHERE l.companyId  = :companyId
-                      AND l.accountId  = :accountId
-                      AND e.postingDate BETWEEN :fromDate AND :toDate
-                    """)
+        long priorRows = (long) page * size;
+        if (priorRows > 0) {
+            Object[] priorTotals = (Object[]) em.createNativeQuery("""
+                    SELECT COALESCE(SUM(p.debit_amount), 0), COALESCE(SUM(p.credit_amount), 0)
+                    FROM (
+                        SELECT l.debit_amount, l.credit_amount
+                        FROM journal_lines l
+                        JOIN journal_entries e ON e.id = l.entry_id
+                        WHERE l.company_id = :companyId
+                          AND l.account_id = :accountId
+                          AND e.posting_date BETWEEN :fromDate AND :toDate
+                        ORDER BY\s""" + LINE_ORDER_SQL + " LIMIT :priorRows) p")
                     .setParameter(P_COMPANY, companyId)
                     .setParameter(P_ACCOUNT, accountId)
                     .setParameter(P_FROM, fromDate)
                     .setParameter(P_TO, toDate)
-                    .setMaxResults(page * size)
+                    .setParameter("priorRows", priorRows)
                     .getSingleResult();
             BigDecimal priorD = AccountMovementQuery.toBD(priorTotals[0]);
             BigDecimal priorC = AccountMovementQuery.toBD(priorTotals[1]);
             runningBalance = runningBalance.add(priorD).subtract(priorC);
         }
 
-        // This page's rows — ordered by date, entry sequence, line number
+        // This page's rows — ordered by date, entry sequence, line number, with the entry and line
+        // ids as tie-breakers (entry_no restarts in every batch, so it alone is not unique).
         List<Object[]> lineRows = em.createQuery("""
                 SELECT l.debitAmount, l.creditAmount, l.lineMemo,
                        e.postingDate, e.sourceType, e.sourceRef, e.uid
@@ -127,8 +143,7 @@ public class AccountLedgerQuery {
                 WHERE l.companyId  = :companyId
                   AND l.accountId  = :accountId
                   AND e.postingDate BETWEEN :fromDate AND :toDate
-                ORDER BY e.postingDate ASC, e.entryNo ASC, l.lineNo ASC
-                """, Object[].class)
+                ORDER BY\s""" + LINE_ORDER_JPQL, Object[].class)
                 .setParameter(P_COMPANY, companyId)
                 .setParameter(P_ACCOUNT, accountId)
                 .setParameter(P_FROM, fromDate)

@@ -276,6 +276,9 @@
                     <caption class="visually-hidden">Ageing buckets for this supplier</caption>
                     <thead>
                       <tr>
+                        @if (multiCurrency()) {
+                          <th scope="col">Currency</th>
+                        }
                         @for (b of sortedAgeing(); track b.bucket) {
                           <th scope="col" class="num">{{ bucketLabel(b.bucket) }}</th>
                         }
@@ -283,8 +286,12 @@
                       </tr>
                     </thead>
                     <tbody>
+                      @for (g of ageingGroups(); track g.currency) {
                       <tr>
-                        @for (b of sortedAgeing(); track b.bucket) {
+                        @if (multiCurrency()) {
+                          <th scope="row">{{ g.currency }}</th>
+                        }
+                        @for (b of g.buckets; track b.bucket) {
                           <td class="num"
                               [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
                               [class.text-muted]="+(b.amount) === 0">
@@ -292,19 +299,20 @@
                           </td>
                         }
                         <td class="num fw-bold"
-                            [class.text-danger]="outstandingBalance() > 0">
-                          {{ fmtMoney(bal.outstandingBalance) }}
+                            [class.text-danger]="multiCurrency() ? g.total > 0 : outstandingBalance() > 0">
+                          {{ multiCurrency() ? fmtMoney(g.total) : fmtMoney(bal.outstandingBalance) }}
                         </td>
                       </tr>
+                      }
                     </tbody>
                   </table>
                 </div>
 
                 <!-- Ageing bar visualisation -->
-                @if (outstandingBalance() > 0) {
+                @if (baseAgeingTotal() > 0) {
                   <div class="d-flex" style="height:8px; overflow:hidden" aria-hidden="true">
                     @for (b of sortedAgeing(); track b.bucket) {
-                      @let pct = outstandingBalance() > 0 ? (+(b.amount) / outstandingBalance() * 100) : 0;
+                      @let pct = baseAgeingTotal() > 0 ? (+(b.amount) / baseAgeingTotal() * 100) : 0;
                       @if (+(b.amount) > 0) {
                         <div [class]="'flex-shrink-0 ' + bucketBadgeClass(b.bucket)"
                              [style.width.%]="pct"

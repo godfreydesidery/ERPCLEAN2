@@ -157,6 +157,9 @@
                 {{ fmtMoney(stmt.totalOutstanding) }}
               </span>
               <span class="erp-kpi__label">{{ stmt.currency }}</span>
+              @for (g of otherCurrencyGroups(); track g.currency) {
+                <span class="erp-kpi__label">and {{ g.currency }} {{ fmtMoney(g.total) }}</span>
+              }
             </div>
             <div class="erp-kpi">
               <span class="erp-kpi__label">As At</span>
@@ -180,6 +183,9 @@
                     <caption class="visually-hidden">Ageing buckets for this customer</caption>
                     <thead>
                       <tr>
+                        @if (multiCurrency()) {
+                          <th scope="col">Currency</th>
+                        }
                         @for (b of sortedAgeing(); track b.bucket) {
                           <th scope="col" class="num">{{ bucketLabel(b.bucket) }}</th>
                         }
@@ -187,8 +193,12 @@
                       </tr>
                     </thead>
                     <tbody>
+                      @for (g of ageingGroups(); track g.currency) {
                       <tr>
-                        @for (b of sortedAgeing(); track b.bucket) {
+                        @if (multiCurrency()) {
+                          <th scope="row">{{ g.currency }}</th>
+                        }
+                        @for (b of g.buckets; track b.bucket) {
                           <td class="num"
                               [class.text-danger]="+(b.amount) > 0 && b.bucket !== 'CURRENT'"
                               [class.text-muted]="+(b.amount) === 0">
@@ -200,10 +210,11 @@
                           </td>
                         }
                         <td class="num fw-bold"
-                            [class.text-danger]="totalOutstanding() > 0">
-                          {{ fmtMoney(stmt.totalOutstanding) }}
+                            [class.text-danger]="g.total > 0">
+                          {{ fmtMoney(g.total) }}
                         </td>
                       </tr>
+                      }
                     </tbody>
                   </table>
                 </div>

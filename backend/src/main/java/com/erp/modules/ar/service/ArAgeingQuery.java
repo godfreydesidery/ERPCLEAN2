@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Computes ageing and customer statement on demand (ADR-0014 D-7, FR-AR-08/12).
  * Not stored — computed from ar_invoices filtered by status IN (OPEN,PARTIAL).
+ *
+ * <p>Every amount is in the open item's OWN currency and is grouped by that currency: an invoice
+ * raised in USD is never added to TZS ones under the TZS label. Converting to base was rejected:
+ * the only persisted rate is the open item's booked {@code fx_rate} / {@code
+ * base_outstanding_amount}, and V62 back-filled every pre-existing row at rate 1 (base = face)
+ * whatever its currency, so for older foreign items the stored base figure IS the face amount and
+ * converting with it would repeat this very defect.
  */
 @Component
 @Transactional(readOnly = true)
@@ -74,17 +82,23 @@ public class ArAgeingQuery {
                 ? invoices.findOpenForStatement(companyId, customerId)
                 : invoices.findOpenForCompany(companyId);
 
-        Map<AgeingBucket, BigDecimal> buckets = new EnumMap<>(AgeingBucket.class);
-        for (AgeingBucket b : AgeingBucket.values()) buckets.put(b, BigDecimal.ZERO);
-
+        // One five-bucket block PER CURRENCY: an open item is aged in its own currency and is never
+        // added to an amount in another one. The base-currency block always comes first and is
+        // always present (all zero when nothing is open), so a single-currency company sees exactly
+        // the five rows it always did; each foreign currency adds its own five rows after it.
+        Map<String, Map<AgeingBucket, BigDecimal>> byCurrency = new TreeMap<>(baseFirst(currency));
+        byCurrency.put(currency, zeroBuckets());
         for (ArInvoice inv : openItems) {
             AgeingBucket bucket = classify(inv.getDueDate(), asAt);
-            buckets.merge(bucket, inv.getOutstandingAmount(), BigDecimal::add);
+            byCurrency.computeIfAbsent(currencyOf(inv, currency), c -> zeroBuckets())
+                    .merge(bucket, inv.getOutstandingAmount(), BigDecimal::add);
         }
 
         List<ArAgeingRowDto> rows = new ArrayList<>();
-        for (AgeingBucket b : AgeingBucket.values()) {
-            rows.add(new ArAgeingRowDto(b, buckets.get(b), currency));
+        for (Map.Entry<String, Map<AgeingBucket, BigDecimal>> e : byCurrency.entrySet()) {
+            for (AgeingBucket bk : AgeingBucket.values()) {
+                rows.add(new ArAgeingRowDto(bk, e.getValue().get(bk), e.getKey()));
+            }
         }
         return rows;
     }
@@ -100,9 +114,16 @@ public class ArAgeingQuery {
         List<ArInvoiceDto> openDtos = openItems.stream()
                 .map(ArInvoiceServiceImpl::toDto).toList();
 
-        BigDecimal total = openItems.stream()
-                .map(ArInvoice::getOutstandingAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Outstanding per currency (base first). totalOutstanding is labelled with the base
+        // currency, so it is the base-currency open items only; a foreign invoice is counted in
+        // totalsByCurrency under its own code, never added in at par.
+        Map<String, BigDecimal> totalsByCurrency = new TreeMap<>(baseFirst(currency));
+        totalsByCurrency.put(currency, BigDecimal.ZERO);
+        for (ArInvoice inv : openItems) {
+            totalsByCurrency.merge(currencyOf(inv, currency), inv.getOutstandingAmount(),
+                    BigDecimal::add);
+        }
+        BigDecimal total = totalsByCurrency.get(currency);
 
         List<ArAgeingRowDto> ageingRows = ageing(companyId, customerId, asAt);
 
@@ -114,7 +135,7 @@ public class ArAgeingQuery {
                 .toList();
 
         return new ArStatementDto(companyId, customerId, asAt, total, currency,
-                ageingRows, openDtos, receiptDtos);
+                ageingRows, openDtos, receiptDtos, new LinkedHashMap<>(totalsByCurrency));
     }
 
     /**
@@ -130,17 +151,20 @@ public class ArAgeingQuery {
 
         List<ArInvoice> openItems = invoices.findOpenForCompany(companyId);
 
-        Map<Long, Map<AgeingBucket, BigDecimal>> byCustomer = new LinkedHashMap<>();
+        // One row per (customer, currency): a customer owing in two currencies gets two rows, each
+        // in its own currency; the amounts are never added together under one label.
+        Map<CustomerCurrency, Map<AgeingBucket, BigDecimal>> byCustomer = new LinkedHashMap<>();
         for (ArInvoice inv : openItems) {
             Map<AgeingBucket, BigDecimal> buckets = byCustomer.computeIfAbsent(
-                    inv.getCustomerId(), id -> new EnumMap<>(AgeingBucket.class));
+                    new CustomerCurrency(inv.getCustomerId(), currencyOf(inv, currency)),
+                    k -> new EnumMap<>(AgeingBucket.class));
             AgeingBucket bucket = classify(inv.getDueDate(), asAt);
             buckets.merge(bucket, inv.getOutstandingAmount(), BigDecimal::add);
         }
 
         List<ArCustomerAgeingRowDto> rows = new ArrayList<>();
-        for (Map.Entry<Long, Map<AgeingBucket, BigDecimal>> entry : byCustomer.entrySet()) {
-            Long custId = entry.getKey();
+        for (Map.Entry<CustomerCurrency, Map<AgeingBucket, BigDecimal>> entry : byCustomer.entrySet()) {
+            Long custId = entry.getKey().customerId();
             Map<AgeingBucket, BigDecimal> buckets = entry.getValue();
 
             BigDecimal current  = buckets.getOrDefault(AgeingBucket.CURRENT,  BigDecimal.ZERO);
@@ -155,14 +179,15 @@ public class ArAgeingQuery {
             String name = customer.map(Customer::getDisplayName).orElse(null);
 
             rows.add(new ArCustomerAgeingRowDto(custId, code, name,
-                    current, d1to30, d31to60, d61to90, d91plus, total, currency));
+                    current, d1to30, d31to60, d61to90, d91plus, total, entry.getKey().currency()));
         }
 
         rows.sort(Comparator
                 .comparing(ArCustomerAgeingRowDto::customerName,
                         Comparator.nullsLast(String::compareTo))
                 .thenComparing(ArCustomerAgeingRowDto::customerCode,
-                        Comparator.nullsLast(String::compareTo)));
+                        Comparator.nullsLast(String::compareTo))
+                .thenComparing(ArCustomerAgeingRowDto::currency, baseFirst(currency)));
 
         return rows;
     }
@@ -180,6 +205,26 @@ public class ArAgeingQuery {
     }
 
     // -------------------------------------------------------------------------
+
+    /** Grouping key of the per-customer ageing: one row per customer per currency. */
+    private record CustomerCurrency(Long customerId, String currency) {}
+
+    /** The open item's own currency; an item with none recorded is in the company's base. */
+    static String currencyOf(ArInvoice inv, String baseCurrency) {
+        return inv.getCurrency() != null ? inv.getCurrency().value() : baseCurrency;
+    }
+
+    /** Base currency first, then the others A to Z: the order of every per-currency list. */
+    static Comparator<String> baseFirst(String baseCurrency) {
+        return Comparator.comparing((String c) -> !c.equals(baseCurrency))
+                .thenComparing(Comparator.naturalOrder());
+    }
+
+    private static Map<AgeingBucket, BigDecimal> zeroBuckets() {
+        Map<AgeingBucket, BigDecimal> buckets = new EnumMap<>(AgeingBucket.class);
+        for (AgeingBucket b : AgeingBucket.values()) buckets.put(b, BigDecimal.ZERO);
+        return buckets;
+    }
 
     private static AgeingBucket classify(LocalDate dueDate, LocalDate asAt) {
         long daysOverdue = ChronoUnit.DAYS.between(dueDate, asAt);

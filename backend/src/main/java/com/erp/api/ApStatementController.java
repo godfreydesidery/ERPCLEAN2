@@ -26,7 +26,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -222,22 +224,41 @@ public class ApStatementController {
         List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
         headerLines.add("Supplier: " + ArStatementController.party(supplier.code(), supplier.name()));
         headerLines.add("Ageing as at " + asAt);
-        String currency = ageing.isEmpty() ? null : ageing.get(0).currency();
-        if (currency != null) {
-            headerLines.add("Currency: " + currency);
+        // Rows arrive as one five-bucket block per currency. A single currency prints exactly as
+        // before; several get a Currency column and a total per currency (no mixed grand total).
+        List<String> currencies = ageing.stream()
+                .map(ApAgeingRowDto::currency).distinct().toList();
+        boolean multiCurrency = currencies.size() > 1;
+        if (!multiCurrency && !currencies.isEmpty() && currencies.get(0) != null) {
+            headerLines.add("Currency: " + currencies.get(0));
+        }
+        if (multiCurrency) {
+            headerLines.add("Amounts are in each bill's own currency; totals are per currency.");
         }
 
-        List<Column> columns = List.of(
-                new Column("Age (days past due)", Align.LEFT),
-                new Column("Amount", Align.RIGHT));
-        List<List<String>> rows = new ArrayList<>(ageing.size());
-        BigDecimal total = BigDecimal.ZERO;
+        List<Column> columns = multiCurrency
+                ? List.of(new Column("Age (days past due)", Align.LEFT),
+                        new Column("Currency", Align.LEFT),
+                        new Column("Amount", Align.RIGHT))
+                : List.of(new Column("Age (days past due)", Align.LEFT),
+                        new Column("Amount", Align.RIGHT));
+        List<List<String>> rows = new ArrayList<>(ageing.size() + currencies.size());
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
         for (ApAgeingRowDto r : ageing) {
             BigDecimal v = r.amount() != null ? r.amount() : BigDecimal.ZERO;
-            total = total.add(v);
-            rows.add(List.of(bucketLabel(r.bucket()), fmtAmt(v)));
+            totals.merge(nullToEmpty(r.currency()), v, BigDecimal::add);
+            rows.add(multiCurrency
+                    ? List.of(bucketLabel(r.bucket()), nullToEmpty(r.currency()), fmtAmt(v))
+                    : List.of(bucketLabel(r.bucket()), fmtAmt(v)));
         }
-        List<String> totalsRow = List.of("TOTAL OUTSTANDING", fmtAmt(total));
+        List<String> totalsRow;
+        if (!multiCurrency) {
+            BigDecimal total = totals.isEmpty() ? BigDecimal.ZERO : totals.values().iterator().next();
+            totalsRow = List.of("TOTAL OUTSTANDING", fmtAmt(total));
+        } else {
+            totalsRow = null;
+            totals.forEach((ccy, t) -> rows.add(List.of("TOTAL OUTSTANDING " + ccy, ccy, fmtAmt(t))));
+        }
 
         List<String> footer = new ArrayList<>();
         footer.add("Open bills only; payments not yet allocated to a bill are not in these buckets.");

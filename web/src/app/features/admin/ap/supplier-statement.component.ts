@@ -17,6 +17,7 @@ import {
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { AgeingCurrencyGroup, groupAgeingByCurrency } from '../../../shared/ageing-currency.util';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { exportErrorMessage, firstOfMonthIso, todayIso } from '../reporting/ledger-export.util';
@@ -95,11 +96,18 @@ export class SupplierStatementComponent {
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  readonly sortedAgeing = computed<ApAgeingRowDto[]>(() =>
-    [...this.ageing()].sort((a, b) =>
-      BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket),
-    ),
+  /** Ageing, one five-bucket group per currency (base first) — never summed across currencies. */
+  readonly ageingGroups = computed<AgeingCurrencyGroup<ApAgeingRowDto>[]>(() =>
+    groupAgeingByCurrency(this.ageing(), BUCKET_ORDER),
   );
+
+  readonly multiCurrency = computed(() => this.ageingGroups().length > 1);
+
+  /** The base-currency buckets (the server lists base first) — drives the headers and the bar. */
+  readonly sortedAgeing = computed<ApAgeingRowDto[]>(() => this.ageingGroups()[0]?.buckets ?? []);
+
+  /** Total of the base-currency buckets — the bar's denominator. */
+  readonly baseAgeingTotal = computed(() => this.ageingGroups()[0]?.total ?? 0);
 
   readonly outstandingBalance = computed(() => +(this.balance()?.outstandingBalance ?? 0));
 
