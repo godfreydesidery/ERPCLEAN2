@@ -27,6 +27,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyMinorUnits;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -76,6 +77,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final OutboxPublisher            outbox;
+    private final CurrencyMinorUnits         minorUnits;
 
     public SalesReturnServiceImpl(SalesReturnRepository returns,
                                    SalesReturnLineRepository returnLines,
@@ -89,7 +91,8 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                                    OrderToCashNumberGenerator numberGen,
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
-                                   OutboxPublisher outbox) {
+                                   OutboxPublisher outbox,
+                                   CurrencyMinorUnits minorUnits) {
         this.returns          = returns;
         this.returnLines      = returnLines;
         this.deliveries       = deliveries;
@@ -103,6 +106,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
         this.outbox           = outbox;
+        this.minorUnits       = minorUnits;
     }
 
     // -------------------------------------------------------------------------
@@ -144,6 +148,9 @@ public class SalesReturnServiceImpl implements SalesReturnService {
         BigDecimal totalVat   = BigDecimal.ZERO;
         BigDecimal totalGross = BigDecimal.ZERO;
         short lineNo = 1;
+        // Credit-note amounts round in the ORDER currency's minor units (TZS 0 dp, USD 2 dp),
+        // exactly as the invoice they reverse did.
+        final int scale = minorUnits.of(order.getCurrency());
 
         for (CreateSalesReturnRequest.ReturnLineRequest lineReq : req.lines()) {
             DeliveryLine dl = dlByUid.get(lineReq.deliveryLineUid());
@@ -179,11 +186,12 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                     .orElseThrow(() -> new NotFoundException(
                             "Sales order line not found."));
 
-            // Compute return line amounts (HALF_UP — BR-SO-10 / ADR-0005)
-            BigDecimal lineNet   = computeLineNet(sol, qtyReturnedBase);
+            // Return line amounts = the order line's own net and VAT, pro-rated by base quantity
+            // and rounded in the order currency (see proRateAmounts).
             BigDecimal vatRate   = sol.getVatRate() != null ? sol.getVatRate() : BigDecimal.ZERO;
-            BigDecimal lineVat   = lineNet.multiply(vatRate)
-                    .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            ReturnAmounts amounts = proRateAmounts(sol, qtyReturnedBase, scale);
+            BigDecimal lineNet   = amounts.net();
+            BigDecimal lineVat   = amounts.vat();
             BigDecimal lineGross = lineNet.add(lineVat);
 
             SalesReturnLine rl = new SalesReturnLine(
@@ -338,11 +346,46 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                 .divide(dl.getQtyDeliveredBase(), 4, RoundingMode.HALF_UP);
     }
 
+    /** Net and VAT of one return line, in the order currency. */
+    record ReturnAmounts(BigDecimal net, BigDecimal vat) {}
+
     /**
-     * Computes line net for the return credit note:
+     * Net and VAT for returning {@code qtyReturnedBase} of an order line.
+     *
+     * <p>The order line already carries the net and VAT the customer was charged, computed by
+     * {@link SalesOrderTotalsCalculator} with every discount (line and apportioned document
+     * discount) and the VAT-inclusive stance applied. A return credits back the same share of
+     * those: {@code net = lineNet × returned / ordered}, {@code vat = lineVat × returned / ordered},
+     * both in BASE units on both sides and rounded HALF_UP to {@code scale} (the order currency's
+     * minor units). This replaces {@code net × vatRate / 100}, which treated the stored FRACTION
+     * (0.18) as a percentage and credited about one hundredth of the VAT.
+     *
+     * <p>A line that was never totalled (net and VAT both zero on a priced line) falls back to
+     * {@code unitPrice × qty − discount} with VAT at the line's fractional rate on top.
+     *
+     * <p>Package-private and static so the arithmetic is testable without a database.
+     */
+    static ReturnAmounts proRateAmounts(SalesOrderLine sol, BigDecimal qtyReturnedBase, int scale) {
+        BigDecimal orderedBase = sol.getQtyOrderedBase();
+        BigDecimal solNet = sol.getNetAmount();
+        BigDecimal solVat = sol.getVatAmount();
+        boolean totalled = orderedBase != null && orderedBase.signum() > 0
+                && solNet != null && solVat != null && solNet.add(solVat).signum() > 0;
+        if (totalled) {
+            return new ReturnAmounts(
+                    solNet.multiply(qtyReturnedBase).divide(orderedBase, scale, RoundingMode.HALF_UP),
+                    solVat.multiply(qtyReturnedBase).divide(orderedBase, scale, RoundingMode.HALF_UP));
+        }
+        BigDecimal net = computeLineNet(sol, qtyReturnedBase).setScale(scale, RoundingMode.HALF_UP);
+        BigDecimal rate = sol.getVatRate() != null ? sol.getVatRate() : BigDecimal.ZERO;
+        return new ReturnAmounts(net, net.multiply(rate).setScale(scale, RoundingMode.HALF_UP));
+    }
+
+    /**
+     * Fallback line net for an order line that carries no computed totals:
      * {@code net = unitPrice × qtyReturned − proportional lineDiscount}, HALF_UP.
      */
-    private BigDecimal computeLineNet(SalesOrderLine sol, BigDecimal qtyReturnedBase) {
+    private static BigDecimal computeLineNet(SalesOrderLine sol, BigDecimal qtyReturnedBase) {
         BigDecimal unitPrice = sol.getUnitPriceAmount() != null
                 ? sol.getUnitPriceAmount() : BigDecimal.ZERO;
         BigDecimal gross = unitPrice.multiply(qtyReturnedBase).setScale(4, RoundingMode.HALF_UP);
@@ -357,7 +400,7 @@ public class SalesReturnServiceImpl implements SalesReturnService {
      * If the SOL has a fixed discount amount, pro-rate it proportionally.
      * If it has a percent, compute it against the gross.
      */
-    private BigDecimal proRateDiscountAmount(SalesOrderLine sol, BigDecimal qtyReturnedBase) {
+    private static BigDecimal proRateDiscountAmount(SalesOrderLine sol, BigDecimal qtyReturnedBase) {
         BigDecimal discAmt = sol.getLineDiscountAmount();
         BigDecimal discPct = sol.getLineDiscountPercent();
 

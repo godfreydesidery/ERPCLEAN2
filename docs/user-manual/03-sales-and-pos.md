@@ -472,6 +472,8 @@ The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "
 
 Returns are created directly in **CONFIRMED** status. Stock is returned to the branch. A credit note is raised automatically (pro-rated to the returned quantity).
 
+**How the credit is worked out.** The credit note gives back the same share of the order line's net and VAT as the share of goods returned — returning 2 of 5 credits 2/5 of what the customer was charged for that line, discounts and VAT-inclusive prices included. Amounts are rounded in the order's currency (whole shillings for TZS, cents for USD).
+
 ### 5.2 Returnable quantity
 
 Each return reduces the returnable balance for that delivery line. You can process multiple returns against the same delivery line until the full delivered quantity has been returned.
