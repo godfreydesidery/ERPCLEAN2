@@ -1,0 +1,8 @@
+// Statement-grid overrides — global erp-table handles density/hover/borders.
+.soce-grid {
+  th[scope='row'] { min-width: 14rem; }
+  .total-row td,
+  .total-row th { background: var(--erp-primary-soft); }
+}
+
+.soce-notes li + li { margin-top: 0.25rem; }

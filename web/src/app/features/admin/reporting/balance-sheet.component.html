@@ -61,6 +61,17 @@
                        [ngModel]="compareAsAt()" (ngModelChange)="compareAsAt.set($event)" />
               </div>
 
+              <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="bs-branch">
+                  Branch <span class="text-muted small">(optional)</span>
+                </label>
+                <app-uid-picker id="bs-branch" name="bs-branch"
+                                [ngModel]="branch.value()"
+                                (ngModelChange)="onBranchChange($event)"
+                                [options]="branch.options()"
+                                placeholder="All branches" />
+              </div>
+
               <div class="col-auto">
                 <button type="button" class="btn btn-primary"
                         (click)="run()"
@@ -111,7 +122,12 @@
           <div class="erp-page-head mb-3">
             <div class="erp-page-head__titles">
               <h1>{{ s.header.companyName }}</h1>
-              <p class="subtitle">{{ s.header.periodLabel }} · {{ s.header.currency }}</p>
+              <p class="subtitle">
+                {{ s.header.periodLabel }} · {{ s.header.branchLabel }} · {{ s.header.currency }}
+              </p>
+              @if (s.header.branchLabel !== 'All branches') {
+                <p class="small text-muted mb-0 branch-note">{{ branchNote }}</p>
+              }
             </div>
             @if (canExport()) {
               <div class="erp-page-head__actions">

@@ -6,8 +6,11 @@ import {
   AccountLedgerDto,
   BalanceSheetDto,
   CashFlowStatementDto,
+  ChangesInEquityDto,
   ExportFormat,
+  FinancialRatiosDto,
   IncomeStatementDto,
+  StatementBranchFilter,
 } from './models/reporting.model';
 import {
   ProfitabilityReportDto,
@@ -41,6 +44,7 @@ export class ReportingService {
     toDate: string,
     cmpFrom?: string | null,
     cmpTo?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<IncomeStatementDto> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -48,6 +52,7 @@ export class ReportingService {
       .set('toDate', toDate);
     if (cmpFrom) params = params.set('cmpFrom', cmpFrom);
     if (cmpTo) params = params.set('cmpTo', cmpTo);
+    params = withBranch(params, branch);
     return this.http.get<IncomeStatementDto>(`${this.base}/income-statement`, { params });
   }
 
@@ -58,6 +63,7 @@ export class ReportingService {
     format: ExportFormat,
     cmpFrom?: string | null,
     cmpTo?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<Blob> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -66,6 +72,7 @@ export class ReportingService {
       .set('format', format);
     if (cmpFrom) params = params.set('cmpFrom', cmpFrom);
     if (cmpTo) params = params.set('cmpTo', cmpTo);
+    params = withBranch(params, branch);
     return this.http.get(`${this.base}/income-statement/export`, {
       params,
       responseType: 'blob',
@@ -78,11 +85,13 @@ export class ReportingService {
     companyId: string,
     asAtDate: string,
     compareAsAt?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<BalanceSheetDto> {
     let params = new HttpParams()
       .set('companyId', companyId)
       .set('asAtDate', asAtDate);
     if (compareAsAt) params = params.set('compareAsAt', compareAsAt);
+    params = withBranch(params, branch);
     return this.http.get<BalanceSheetDto>(`${this.base}/balance-sheet`, { params });
   }
 
@@ -91,12 +100,14 @@ export class ReportingService {
     asAtDate: string,
     format: ExportFormat,
     compareAsAt?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<Blob> {
     let params = new HttpParams()
       .set('companyId', companyId)
       .set('asAtDate', asAtDate)
       .set('format', format);
     if (compareAsAt) params = params.set('compareAsAt', compareAsAt);
+    params = withBranch(params, branch);
     return this.http.get(`${this.base}/balance-sheet/export`, {
       params,
       responseType: 'blob',
@@ -111,6 +122,7 @@ export class ReportingService {
     toDate: string,
     cmpFrom?: string | null,
     cmpTo?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<CashFlowStatementDto> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -118,6 +130,7 @@ export class ReportingService {
       .set('toDate', toDate);
     if (cmpFrom) params = params.set('cmpFrom', cmpFrom);
     if (cmpTo) params = params.set('cmpTo', cmpTo);
+    params = withBranch(params, branch);
     return this.http.get<CashFlowStatementDto>(`${this.base}/cash-flow`, { params });
   }
 
@@ -128,6 +141,7 @@ export class ReportingService {
     format: ExportFormat,
     cmpFrom?: string | null,
     cmpTo?: string | null,
+    branch?: StatementBranchFilter,
   ): Observable<Blob> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -136,10 +150,67 @@ export class ReportingService {
       .set('format', format);
     if (cmpFrom) params = params.set('cmpFrom', cmpFrom);
     if (cmpTo) params = params.set('cmpTo', cmpTo);
+    params = withBranch(params, branch);
     return this.http.get(`${this.base}/cash-flow/export`, {
       params,
       responseType: 'blob',
     });
+  }
+
+  // ── Statement of Changes in Equity (company-wide) ─────────────────────────
+
+  changesInEquity(companyId: string, fromDate: string, toDate: string): Observable<ChangesInEquityDto> {
+    const params = new HttpParams()
+      .set('companyId', companyId)
+      .set('fromDate', fromDate)
+      .set('toDate', toDate);
+    return this.http.get<ChangesInEquityDto>(`${this.base}/changes-in-equity`, { params });
+  }
+
+  exportChangesInEquity(
+    companyId: string,
+    fromDate: string,
+    toDate: string,
+    format: ExportFormat,
+  ): Observable<Blob> {
+    const params = new HttpParams()
+      .set('companyId', companyId)
+      .set('fromDate', fromDate)
+      .set('toDate', toDate)
+      .set('format', format);
+    return this.http.get(`${this.base}/changes-in-equity/export`, { params, responseType: 'blob' });
+  }
+
+  // ── Financial Ratios (optionally one branch) ──────────────────────────────
+
+  financialRatios(
+    companyId: string,
+    fromDate: string,
+    toDate: string,
+    branchUid?: string | null,
+  ): Observable<FinancialRatiosDto> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('fromDate', fromDate)
+      .set('toDate', toDate);
+    if (branchUid) params = params.set('branchUid', branchUid);
+    return this.http.get<FinancialRatiosDto>(`${this.base}/ratios`, { params });
+  }
+
+  exportFinancialRatios(
+    companyId: string,
+    fromDate: string,
+    toDate: string,
+    format: ExportFormat,
+    branchUid?: string | null,
+  ): Observable<Blob> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('fromDate', fromDate)
+      .set('toDate', toDate)
+      .set('format', format);
+    if (branchUid) params = params.set('branchUid', branchUid);
+    return this.http.get(`${this.base}/ratios/export`, { params, responseType: 'blob' });
   }
 
   // ── Account Ledger drill-down ─────────────────────────────────────────────
@@ -232,4 +303,11 @@ export class ReportingService {
     if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
     return params;
   }
+}
+
+/** Adds the optional branch narrowing of a statement read/export (none = the whole company). */
+function withBranch(params: HttpParams, branch?: StatementBranchFilter): HttpParams {
+  if (branch?.branchUid) return params.set('branchUid', branch.branchUid);
+  if (branch?.unassigned) return params.set('unassigned', 'true');
+  return params;
 }

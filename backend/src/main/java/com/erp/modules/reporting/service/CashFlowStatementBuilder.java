@@ -54,20 +54,36 @@ public class CashFlowStatementBuilder {
     public CashFlowStatementDto build(Long companyId, String companyName, String currency,
                                        LocalDate from, LocalDate to,
                                        LocalDate cmpFrom, LocalDate cmpTo) {
+        return build(companyId, companyName, currency, StatementScope.companyWide(),
+                from, to, cmpFrom, cmpTo);
+    }
+
+    /**
+     * Builds the Cash-Flow Statement inside a {@link StatementScope}. For a branch, every figure —
+     * net income, working-capital changes and the cash movement it ties to — is read from that
+     * branch's journal lines on the same company cash/bank GL accounts. Should any entry carry
+     * lines of different branches, the change in the branch's inter-branch balance
+     * ({@link BalanceSheetBuilder#INTER_BRANCH_LINE}) is shown as an explicit financing line rather
+     * than leaving the tie-out silently broken; it is zero for everything the application posts.
+     */
+    public CashFlowStatementDto build(Long companyId, String companyName, String currency,
+                                       StatementScope scope,
+                                       LocalDate from, LocalDate to,
+                                       LocalDate cmpFrom, LocalDate cmpTo) {
 
         Map<Long, ChartOfAccount> accountMap  = movementQuery.accountMapForCompany(companyId);
         Set<Long> cashAccountIds = Set.copyOf(cashResolver.cashAccountIds(companyId));
 
         // Net income (from P&L builder)
         // Use type aggregates directly to avoid double-building
-        BigDecimal netIncomeCur = movementQuery.netIncomeForPeriod(companyId, from, to);
-        BigDecimal netIncomeCmp = movementQuery.netIncomeForPeriod(companyId, cmpFrom, cmpTo);
+        BigDecimal netIncomeCur = movementQuery.netIncomeForPeriod(companyId, scope, from, to, false);
+        BigDecimal netIncomeCmp = movementQuery.netIncomeForPeriod(companyId, scope, cmpFrom, cmpTo, false);
 
         // Period changes per account: balanceAsAt(to) − balanceAsAt(from−1)
-        Map<Long, BigDecimal[]> cumTo    = movementQuery.cumulativeByAccountAsAt(companyId, to);
-        Map<Long, BigDecimal[]> cumFrom1 = movementQuery.cumulativeByAccountAsAt(companyId, from.minusDays(1));
-        Map<Long, BigDecimal[]> cumCmpTo    = movementQuery.cumulativeByAccountAsAt(companyId, cmpTo);
-        Map<Long, BigDecimal[]> cumCmpFrom1 = movementQuery.cumulativeByAccountAsAt(companyId, cmpFrom.minusDays(1));
+        Map<Long, BigDecimal[]> cumTo    = movementQuery.cumulativeByAccountAsAt(companyId, scope, to);
+        Map<Long, BigDecimal[]> cumFrom1 = movementQuery.cumulativeByAccountAsAt(companyId, scope, from.minusDays(1));
+        Map<Long, BigDecimal[]> cumCmpTo    = movementQuery.cumulativeByAccountAsAt(companyId, scope, cmpTo);
+        Map<Long, BigDecimal[]> cumCmpFrom1 = movementQuery.cumulativeByAccountAsAt(companyId, scope, cmpFrom.minusDays(1));
 
         // Opening / closing cash balances
         BigDecimal openingCashCur  = sumCash(cashAccountIds, cumFrom1);
@@ -115,6 +131,19 @@ public class CashFlowStatementBuilder {
         sections.values().forEach(lines -> lines.sort(
                 (a, b) -> nullSafeCode(a).compareTo(nullSafeCode(b))));
 
+        // Inter-branch balance movement (branch / company-level slices only; normally zero)
+        if (!scope.isCompanyWide()) {
+            BigDecimal interCur = movementQuery.scopeNetDebitAsAt(companyId, scope, to)
+                    .subtract(movementQuery.scopeNetDebitAsAt(companyId, scope, from.minusDays(1)));
+            BigDecimal interCmp = movementQuery.scopeNetDebitAsAt(companyId, scope, cmpTo)
+                    .subtract(movementQuery.scopeNetDebitAsAt(companyId, scope, cmpFrom.minusDays(1)));
+            if (interCur.signum() != 0 || interCmp.signum() != 0) {
+                sections.get(StatementSection.FINANCING).add(new StatementLineDto(
+                        null, null, null, "Change in " + BalanceSheetBuilder.INTER_BRANCH_LINE,
+                        AmountPairDto.of(interCur, interCmp)));
+            }
+        }
+
         AmountPairDto opSubtotal  = sumLines(sections.get(StatementSection.OPERATING));
         AmountPairDto invSubtotal = sumLines(sections.get(StatementSection.INVESTING));
         AmountPairDto finSubtotal = sumLines(sections.get(StatementSection.FINANCING));
@@ -144,7 +173,7 @@ public class CashFlowStatementBuilder {
                 from + " – " + to,
                 cmpFrom + " – " + cmpTo,
                 from, to, null,
-                Instant.now());
+                Instant.now(), scope.branchUid(), scope.label());
 
         return new CashFlowStatementDto(header, sectionList, netChange, openingCash, closingCash, recon);
     }

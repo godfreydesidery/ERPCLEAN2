@@ -9,6 +9,8 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { CashFlowStatementDto, ExportFormat } from './models/reporting.model';
 import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
+import { UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
+import { BRANCH_STATEMENT_NOTE, StatementBranchFilterState } from './statement-branch-filter';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -20,7 +22,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  */
 @Component({
   selector: 'app-cash-flow-statement',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, UidPickerComponent],
   templateUrl: './cash-flow-statement.component.html',
   styleUrl: './cash-flow-statement.component.scss',
 })
@@ -48,6 +50,10 @@ export class CashFlowStatementComponent implements OnInit {
   // ── Export ────────────────────────────────────────────────────────────────
   readonly exporting = signal(false);
 
+  // ── Branch filter (optional): a branch, the company-level entries, or all ──
+  readonly branch = new StatementBranchFilterState(true);
+  protected readonly branchNote = BRANCH_STATEMENT_NOTE;
+
   // ── Permissions ───────────────────────────────────────────────────────────
   readonly canView = computed(() =>
     this.session.hasPermission('REPORT.CASHFLOW.VIEW') || this.session.hasPermission('REPORT.VIEW'),
@@ -70,6 +76,7 @@ export class CashFlowStatementComponent implements OnInit {
             this.companyState.set('idle');
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
+              this.branch.loadFor(list[0].uid);
             }
           },
           error: () => this.companyState.set('error'),
@@ -81,6 +88,12 @@ export class CashFlowStatementComponent implements OnInit {
 
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
+    this.statement.set(null);
+    this.branch.loadFor(this.companies().find((c) => c.id === id)?.uid);
+  }
+
+  onBranchChange(value: string | null): void {
+    this.branch.value.set(value ?? '');
     this.statement.set(null);
   }
 
@@ -94,7 +107,7 @@ export class CashFlowStatementComponent implements OnInit {
     this.statement.set(null);
 
     this.reportingService
-      .cashFlow(companyId, from, to, this.cmpFrom() || null, this.cmpTo() || null)
+      .cashFlow(companyId, from, to, this.cmpFrom() || null, this.cmpTo() || null, this.branch.filter())
       .subscribe({
         next: (dto) => {
           this.statement.set(dto);
@@ -115,7 +128,7 @@ export class CashFlowStatementComponent implements OnInit {
 
     this.exporting.set(true);
     this.reportingService
-      .exportCashFlow(companyId, from, to, format, this.cmpFrom() || null, this.cmpTo() || null)
+      .exportCashFlow(companyId, from, to, format, this.cmpFrom() || null, this.cmpTo() || null, this.branch.filter())
       .subscribe({
         next: (blob) => {
           downloadBlob(blob, `cash-flow_${from}_${to}.${format.toLowerCase()}`);
