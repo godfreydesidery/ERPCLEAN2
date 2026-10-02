@@ -11,6 +11,7 @@ library;
 import 'package:intl/intl.dart';
 
 import '../../core/money.dart';
+import '../../models/enums.dart';
 import '../../models/sale.dart';
 
 /// Standard column counts for the two supported paper widths.
@@ -64,6 +65,22 @@ String leftRight(String left, String right, int width) {
 /// A full-width horizontal rule of dashes.
 String rule(int width) => '-' * width;
 
+/// A full-width section divider of equals signs.
+String doubleRule(int width) => '=' * width;
+
+/// A `LABEL: value` field line. Kept on one line, value flush-right, while
+/// both fit; otherwise the label gets its own line and the value is wrapped
+/// flush-right beneath it, so a long customer name is never cut short.
+List<String> labelValue(String label, String value, int width) {
+  if (label.length + 1 + value.length <= width) {
+    return [leftRight(label, value, width)];
+  }
+  return [
+    label,
+    for (final part in wrapText(value, width)) part.padLeft(width),
+  ];
+}
+
 /// Word-wraps [text] to lines no wider than [width]. Words longer than [width]
 /// are hard-split. Always returns at least one (possibly empty) line.
 List<String> wrapText(String text, int width) {
@@ -100,14 +117,40 @@ List<String> wrapText(String text, int width) {
 String _qty(double q) =>
     formatAmount(q, decimals: q % 1 == 0 ? 0 : 3);
 
+/// The tax-category letter printed beside a line, using the TRA letter codes:
+/// A = standard rate, C = zero-rated, E = exempt. A line journalled before
+/// [InvoiceLine.vatStatus] was carried falls back to its rate: taxed means A,
+/// untaxed is left blank because zero-rated and exempt cannot be told apart.
+String taxCodeFor(InvoiceLine l) => switch (l.vatStatus) {
+      VatStatus.standard => 'A',
+      VatStatus.zeroRated => 'C',
+      VatStatus.exempt => 'E',
+      VatStatus.unknown => l.vatRate > 0 ? 'A' : '',
+    };
+
+/// A VAT rate as a percentage label. The API has sent both 18 and 0.18.
+String _ratePercent(double rate) {
+  final pct = rate <= 1 ? rate * 100 : rate;
+  final rounded = (pct * 100).round() / 100;
+  return rounded % 1 == 0
+      ? '${rounded.toInt()}%'
+      : '${rounded.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '')}%';
+}
+
 /// Builds the full receipt as a newline-joined string for [width] columns.
 ///
-/// Mirrors the on-screen receipt dialog: centred company/branch header, the
-/// invoice/date/cashier/customer field lines, the line items, the Net/VAT/TOTAL
-/// block, the tender lines and change, then a thank-you footer with the invoice
-/// number. When [gift] is true all prices are hidden (line amounts, unit prices
-/// and the totals block) — only item names and quantities remain, as a returns
-/// slip. When [reversed] is true a `*** REVERSED ***` banner is appended.
+/// Laid out after the TRA-style supermarket receipt: centred company header
+/// (name, address/contacts/TIN/VRN, branch), a customer block, the receipt
+/// number/date/time/cashier block, an item table (Description / Qty / Amount
+/// plus the tax letter), the tax totals, the tenders and change, then a
+/// thank-you footer. This is an ordinary sales receipt: it carries none of the
+/// fiscal markings (legal-receipt banners, serial/UIN, Z number, verification
+/// code, QR) — those may only be printed from a real TRA fiscalisation.
+///
+/// When [gift] is true all prices are hidden (line amounts, unit prices and the
+/// totals block) — only item names and quantities remain, as a returns slip.
+/// When [reversed] is true a `*** REVERSED ***` banner is appended, followed by
+/// the approver when [reversedBy] is given.
 String buildReceiptText({
   required Receipt receipt,
   required String companyName,
@@ -116,17 +159,20 @@ String buildReceiptText({
   required int width,
   required bool gift,
   bool reversed = false,
+  String? reversedBy,
   DateTime? now,
   List<String> companyDetailLines = const [],
 }) {
   final inv = receipt.invoice;
   final lines = <String>[];
-  final df = DateFormat('yyyy-MM-dd HH:mm');
   final when = (inv.finalisedAt ?? now ?? DateTime.now()).toLocal();
 
-  // Header: company name, then the fiscal detail block (address/contacts/
-  // TIN/VRN, each centred and wrapped to width), then the branch name.
-  lines.add(centered(companyName.isEmpty ? 'OrbixPOS' : companyName, width));
+  // Header: company name, then the detail block (address/contacts/TIN/VRN,
+  // each centred and wrapped to width), then the branch name.
+  final name = companyName.isEmpty ? 'OrbixPOS' : companyName.toUpperCase();
+  for (final wrapped in wrapText(name, width)) {
+    lines.add(centered(wrapped, width));
+  }
   for (final detail in companyDetailLines) {
     if (detail.isEmpty) continue;
     for (final wrapped in wrapText(detail, width)) {
@@ -134,65 +180,121 @@ String buildReceiptText({
     }
   }
   if (branchName.isNotEmpty) lines.add(centered(branchName, width));
-  lines.add('');
 
-  // Field lines
-  lines.add(leftRight('Invoice', inv.invoiceNumber, width));
-  lines.add(leftRight('Date', df.format(when), width));
+  // Customer block
+  lines.add(doubleRule(width));
+  final customer = (inv.customerName ?? '').trim();
+  lines.addAll(labelValue(
+      'CUSTOMER NAME:', customer.isEmpty ? 'n/a' : customer, width));
+
+  // Receipt block
+  lines.add(doubleRule(width));
+  lines.addAll(labelValue('RECEIPT NO:', inv.invoiceNumber, width));
+  lines.addAll(labelValue(
+      'RECEIPT DATE:', DateFormat('dd-MM-yyyy').format(when), width));
+  lines.addAll(labelValue(
+      'RECEIPT TIME:', DateFormat('HH:mm:ss').format(when), width));
   if (cashierName.isNotEmpty) {
-    lines.add(leftRight('Cashier', cashierName, width));
+    lines.addAll(labelValue('CASHIER:', cashierName, width));
   }
-  final customer = inv.customerName ?? inv.customerId;
-  if (customer.isNotEmpty) {
-    lines.add(leftRight('Customer', customer, width));
-  }
-  lines.add(rule(width));
+  lines.add(doubleRule(width));
 
-  // Line items
+  // Item table. Qty and Amount columns are sized to the widest value on this
+  // receipt so a large total never pushes a row past the paper edge.
   if (receipt.lines.isEmpty) {
     lines.add(centered('(line detail not loaded)', width));
   } else {
+    final qtyW = receipt.lines
+        .map((l) => _qty(l.quantity).length + 1)
+        .fold<int>(4, (a, b) => a > b ? a : b);
+    final amtW = gift
+        ? 0
+        : receipt.lines
+            .map((l) => formatAmount(l.grossAmount).length + 1)
+            .fold<int>(7, (a, b) => a > b ? a : b);
+    final codeW = gift ? 0 : 2;
+    final numbersW = qtyW + amtW + codeW;
+    // Too little room left for a readable name (a huge amount on 58 mm paper):
+    // stack instead — the name on its own full-width line(s), the numbers
+    // flush-right beneath it.
+    // 12 = the 'Description' heading plus a space.
+    final stacked = width - numbersW < 12;
+    final nameW = stacked ? width : width - numbersW;
+    String numbers(String qty, String amt, String code) =>
+        qty.padLeft(qtyW) +
+        (gift ? '' : amt.padLeft(amtW) + code.padLeft(codeW));
+
+    lines.add(stacked
+        ? leftRight('Description', numbers('Qty', 'Amount', ''), width)
+        : 'Description'.padRight(nameW) + numbers('Qty', 'Amount', ''));
     for (final l in receipt.lines) {
-      lines.addAll(wrapText(l.productName, width));
-      if (gift) {
-        lines.add('  Qty ${_qty(l.quantity)}');
+      final nameLines = wrapText(l.productName, nameW);
+      final row = numbers(_qty(l.quantity), formatAmount(l.grossAmount),
+          gift ? '' : taxCodeFor(l));
+      if (stacked) {
+        lines.addAll(nameLines);
+        lines.add(row.padLeft(width));
       } else {
-        lines.add(leftRight(
-            '  ${_qty(l.quantity)} x ${formatAmount(l.unitPriceAmount)}',
-            formatAmount(l.grossAmount),
-            width));
+        lines.add(nameLines.first.padRight(nameW) + row);
+        lines.addAll(nameLines.skip(1));
+      }
+      if (!gift) {
+        if (l.quantity != 1) {
+          lines.add('  @ ${formatAmount(l.unitPriceAmount)}');
+        }
         if (l.lineDiscountAmount > 0) {
           lines.add('  less disc ${formatAmount(l.lineDiscountAmount)}');
         }
       }
     }
   }
-  lines.add(rule(width));
+  lines.add(doubleRule(width));
 
   // Totals + tenders (hidden on a gift receipt)
   if (gift) {
     lines.add(centered('* gift receipt - prices hidden *', width));
   } else {
-    lines.add(leftRight('Net', formatAmount(inv.netTotalAmount), width));
-    lines.add(leftRight('VAT', formatAmount(inv.vatTotalAmount), width));
-    lines.add(leftRight('TOTAL ${inv.currency}',
-        formatAmount(inv.grossTotalAmount), width));
-    lines.add(rule(width));
+    // labelValue, not leftRight: at 58 mm a multi-million total leaves no room
+    // beside its label, and leftRight would cut the label short.
+    lines.addAll(labelValue(
+        'TOTAL EXCL OF TAX:', formatAmount(inv.netTotalAmount), width));
+    // One line per standard rate on the receipt, in first-seen order.
+    final byRate = <String, double>{};
+    for (final l in receipt.lines) {
+      if (taxCodeFor(l) != 'A') continue;
+      final key = _ratePercent(l.vatRate);
+      byRate[key] = (byRate[key] ?? 0) + l.vatAmount;
+    }
+    for (final e in byRate.entries) {
+      lines.addAll(labelValue('TAX A-${e.key}', formatAmount(e.value), width));
+    }
+    lines.addAll(
+        labelValue('TOTAL TAX:', formatAmount(inv.vatTotalAmount), width));
+    lines.addAll(labelValue('TOTAL INCL OF TAX:',
+        '${inv.currency} ${formatAmount(inv.grossTotalAmount)}', width));
+    lines.add(doubleRule(width));
     for (final p in receipt.payments) {
-      lines.add(leftRight(p.tenderType.label, formatAmount(p.amount), width));
+      // The wire token spelled out (MOBILE MONEY), not the till's short label.
+      lines.addAll(labelValue(p.tenderType.wire.replaceAll('_', ' '),
+          formatAmount(p.amount), width));
     }
     if (receipt.changeDue > 0) {
-      lines.add(leftRight('Change', formatAmount(receipt.changeDue), width));
+      lines.addAll(
+          labelValue('CHANGE', formatAmount(receipt.changeDue), width));
     }
   }
 
   // Footer
   lines.add('');
   lines.add(centered('Thank you!', width));
-  lines.add(centered(inv.invoiceNumber, width));
   if (reversed) {
     lines.add('');
     lines.add(centered('*** REVERSED ***', width));
+    if (reversedBy != null && reversedBy.isNotEmpty) {
+      for (final wrapped in wrapText('Approved by $reversedBy', width)) {
+        lines.add(centered(wrapped, width));
+      }
+    }
   }
 
   return lines.join('\n');
@@ -274,6 +376,7 @@ List<int> buildReceiptBytes({
   required String mode,
   required bool gift,
   bool reversed = false,
+  String? reversedBy,
   bool kickDrawer = false,
   DateTime? now,
   List<String> companyDetailLines = const [],
@@ -286,6 +389,7 @@ List<int> buildReceiptBytes({
     width: width,
     gift: gift,
     reversed: reversed,
+    reversedBy: reversedBy,
     now: now,
     companyDetailLines: companyDetailLines,
   );
