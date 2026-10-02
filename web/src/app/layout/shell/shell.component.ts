@@ -243,7 +243,7 @@ export class ShellComponent {
       label: 'Purchasing',
       items: [
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
-        { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
+        { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW' },
         // Sits directly under Goods Receipts and reuses the exact wording of the "Receive Without
         // Order" button on the receipts list, so the two read as the same action reached two ways
         // rather than as two different features. It is not redundant: goods arriving with no LPO
