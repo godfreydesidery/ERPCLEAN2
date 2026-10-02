@@ -129,6 +129,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final InternalAgentProvisioner internalAgents;
     /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
     private final UserLookupService userLookup;
+    /** Base-currency minor units for the VAT-return output summary (converted per document). */
+    private final com.erp.platform.common.money.CurrencyMinorUnits minorUnits;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -157,7 +159,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    BelowCostGuard belowCostGuard,
                                    DiscountAuthorisationGuard discountGuard,
                                    InternalAgentProvisioner internalAgents,
-                                   UserLookupService userLookup) {
+                                   UserLookupService userLookup,
+                                   com.erp.platform.common.money.CurrencyMinorUnits minorUnits) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -186,6 +189,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.discountGuard = discountGuard;
         this.internalAgents = internalAgents;
         this.userLookup = userLookup;
+        this.minorUnits = minorUnits;
     }
 
     // -------------------------------------------------------------------------
@@ -1059,12 +1063,25 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         // Direct JPQL projection — finalised invoices with finalised_at::date in [start, end].
         // Sum vat_total_amount and parse tax_summary JSONB band breakdown per invoice.
-        // The tax_summary JSONB has the structure: { "STANDARD": {"taxableBase":..., "vatAmount":...}, ... }
-        // We read each invoice's vat_total_amount + tax_summary and aggregate per band in Java.
+        //
+        // BASE CURRENCY (live defect: USD VAT was added to a TZS return as if it were TZS). Every
+        // amount on the invoice is in the DOCUMENT currency; the return is in the company's base
+        // currency. Each document is converted at the rate stamped on it at finalise
+        // (sales_invoices.fx_rate, ADR-0036 D-4 — the same effective rate the GL sale posting
+        // re-applies on the same posting date), rounded HALF_UP to the base currency's minor units
+        // PER DOCUMENT, exactly as GLPostingSafeInvoker converts the invoice's VAT header total for
+        // the CR VAT Payable leg. So totalOutputVat equals the VAT Payable credits the sales
+        // postings made. A base-currency invoice (fx_rate = 1) passes through untouched, so a
+        // single-currency company's figures are unchanged.
         List<SalesInvoice> finalisedInPeriod = invoices.findFinalisedInPeriod(
                 companyId,
                 start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
                 end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+
+        // findScopedById: companyId was scope-asserted above (assertCanActIn) — self-scope lookup.
+        final int baseScale = minorUnits.of(companies.findScopedById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElse(null));
 
         java.util.Map<String, BigDecimal> bandTaxableBase = new java.util.LinkedHashMap<>();
         java.util.Map<String, BigDecimal> bandOutputVat   = new java.util.LinkedHashMap<>();
@@ -1073,7 +1090,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
         for (SalesInvoice inv : finalisedInPeriod) {
-            totalOutput = totalOutput.add(inv.getVatTotalAmount());
+            final BigDecimal rate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            totalOutput = totalOutput.add(toBaseAtRate(inv.getVatTotalAmount(), rate, baseScale));
 
             if (inv.getTaxSummary() != null && !inv.getTaxSummary().isBlank()) {
                 try {
@@ -1087,8 +1105,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         if (band == null) {
                             continue;
                         }
-                        BigDecimal base = new BigDecimal(node.path("net").asText("0"));
-                        BigDecimal vat  = new BigDecimal(node.path("vat").asText("0"));
+                        BigDecimal base = toBaseAtRate(
+                                new BigDecimal(node.path("net").asText("0")), rate, baseScale);
+                        BigDecimal vat  = toBaseAtRate(
+                                new BigDecimal(node.path("vat").asText("0")), rate, baseScale);
                         bandTaxableBase.merge(band, base, BigDecimal::add);
                         bandOutputVat.merge(band, vat, BigDecimal::add);
                     }
@@ -1110,6 +1130,21 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * A document-currency amount in base at the document's stamped rate, HALF_UP to the base
+     * currency's minor units — the same arithmetic as {@code CurrencyConversionServiceImpl.convert}.
+     * Rate 1 (a base-currency document) is the identity: the face amount, unrounded, unchanged.
+     */
+    static BigDecimal toBaseAtRate(BigDecimal face, BigDecimal rate, int baseScale) {
+        if (face == null) {
+            return BigDecimal.ZERO;
+        }
+        if (rate == null || rate.compareTo(BigDecimal.ONE) == 0) {
+            return face;
+        }
+        return face.multiply(rate).setScale(baseScale, java.math.RoundingMode.HALF_UP);
+    }
 
     private SalesInvoice requireInvoice(String uid) {
         return Lookups.orNotFound(invoices.findByUid(uid), "SalesInvoice", uid);
