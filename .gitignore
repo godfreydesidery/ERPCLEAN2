@@ -76,6 +76,11 @@ pos_app/screenshots/
 dist/orbixhq/*.apk
 dist/orbixhq/*.aab
 
+# OrbixPOS Windows zips — built by dist/build-pos.ps1, published as GitHub Releases
+# (tag pos-v<version>), never committed: a zip cannot delta-compress, so each one would sit
+# in history forever and be downloaded by every clone.
+dist/OrbixPOS-*.zip
+
 # Python bytecode from the docs tooling (docs/tools/*.py) — a build artefact.
 __pycache__/
 *.pyc
