@@ -14,8 +14,11 @@ import {
   DepreciationRunPreviewDto,
   DepreciationScheduleLineDto,
   DisposeAssetRequest,
+  FaExportFormat,
   FixedAssetDto,
   FixedAssetReconciliationDto,
+  FixedAssetRegisterDto,
+  FixedAssetRegisterFilter,
   FixedAssetStatus,
   PlaceInServiceRequest,
   RegisterAssetRequest,
@@ -135,6 +138,38 @@ export class FixedAssetsService {
   /** Child: revaluation history for an asset. */
   listRevaluations(uid: string): Observable<AssetRevaluationDto[]> {
     return this.http.get<AssetRevaluationDto[]>(`${this.base}/uid/${uid}/revaluations`);
+  }
+
+  /** Depreciation schedule as a file (FR-FA-18). Gated FA.VIEW + REPORT.EXPORT server-side. */
+  exportSchedule(uid: string, format: FaExportFormat): Observable<Blob> {
+    return this.http.get(`${this.base}/uid/${uid}/schedule/export`, {
+      params: new HttpParams().set('format', format),
+      responseType: 'blob',
+    });
+  }
+
+  /** Report: Fixed Asset Register as at a date (FR-FA-17). Company comes from the session. */
+  getRegister(filter: FixedAssetRegisterFilter): Observable<FixedAssetRegisterDto> {
+    return this.http.get<FixedAssetRegisterDto>(`${this.base}/register`, {
+      params: this.registerParams(filter),
+    });
+  }
+
+  exportRegister(filter: FixedAssetRegisterFilter, format: FaExportFormat): Observable<Blob> {
+    return this.http.get(`${this.base}/register/export`, {
+      params: this.registerParams(filter).set('format', format),
+      responseType: 'blob',
+    });
+  }
+
+  private registerParams(filter: FixedAssetRegisterFilter): HttpParams {
+    let params = new HttpParams().set('asOf', filter.asOf);
+    if (filter.categoryUid) params = params.set('categoryUid', filter.categoryUid);
+    if (filter.status) params = params.set('status', filter.status);
+    if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
+    if (filter.location?.trim()) params = params.set('location', filter.location.trim());
+    if (filter.costCentreUid) params = params.set('costCentreUid', filter.costCentreUid);
+    return params;
   }
 
   /** Report: FA-to-GL reconciliation bars. */

@@ -298,12 +298,14 @@ The target screen has its own permission guard. If you do not hold the necessary
 
 ### Exporting the Dashboard
 
-Requires `BI.EXPORT`. An export toolbar appears at the foot of the dashboard, below the trend panels.
+Requires both `BI.VIEW` and `BI.EXPORT` — the same pair the export endpoint checks. The **Export** control sits just under the filters (company, branch, dates), above the panels.
 
 1. Choose a format from the dropdown: **PDF**, **Excel**, or **CSV**.
 2. Click **Download**.
 
-The file is named `dashboard.<ext>` and includes the currently visible panel data for the selected company, branch, and date range.
+The file is named `dashboard_<from>_<to>.<ext>` and includes the panel data for the selected company, branch, and date range. If the export is refused or fails, a short message appears beside the button (for example "You don't have permission to export the dashboard.").
+
+> **Note for administrators:** no seeded role holds `BI.EXPORT` today, so only root users see the control until a role is granted it.
 
 ---
 
