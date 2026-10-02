@@ -1,0 +1,232 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1>
+      <i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Statement of Changes in Equity
+    </h1>
+    <p class="subtitle">
+      How the owners' equity moved over a period — profit, capital put in, drawings and dividends
+      taken out — from the opening Balance Sheet to the closing one.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Statement of Changes in Equity.
+    </div>
+  } @else {
+
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Filters</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="row g-3 align-items-end">
+              @if (companies().length > 1) {
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="soce-company">Company</label>
+                  <select id="soce-company" name="soce-company" class="form-select"
+                          [ngModel]="selectedCompanyId()"
+                          (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="soce-from">Period from</label>
+                <input id="soce-from" name="soce-from" type="date" class="form-control"
+                       [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="soce-to">Period to</label>
+                <input id="soce-to" name="soce-to" type="date" class="form-control"
+                       [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+              </div>
+              <div class="col-auto">
+                <button type="button" class="btn btn-primary"
+                        (click)="run()"
+                        [disabled]="state() === 'loading' || !selectedCompanyId() || !datesValid()">
+                  @if (state() === 'loading') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+                  } @else {
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+                  }
+                </button>
+              </div>
+            </div>
+            @if (!datesValid()) {
+              <p class="text-danger small mt-2 mb-0" role="alert">
+                Choose a start date that is on or before the end date.
+              </p>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the statement…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the Statement of Changes in Equity. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this statement.
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-diagram-3" aria-hidden="true"></i>
+            Select a company and period, then click Run.
+          </div>
+        }
+
+        @if (statement(); as s) {
+          <div class="erp-page-head mb-3">
+            <div class="erp-page-head__titles">
+              <h2 class="h4 mb-1">{{ s.header.companyName }}</h2>
+              <p class="subtitle">
+                {{ s.header.periodLabel }} · {{ s.header.branchLabel }} · {{ s.header.currency }}
+              </p>
+            </div>
+            @if (canExport()) {
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (s.reconciliation.ties && s.transfersCheck.ties) {
+            <output class="d-flex align-items-center gap-2 mb-3">
+              <span class="status-tag status-tag--ok">
+                <span class="status-tag__dot"></span>Ties to the Balance Sheet
+              </span>
+              <span class="text-muted small">
+                Closing equity {{ fmtMoney(s.balanceSheetClosingEquity) }} equals the Balance Sheet
+                at the period end.
+              </span>
+            </output>
+          } @else {
+            <div class="d-flex align-items-center gap-2 mb-3" role="alert">
+              <span class="status-tag status-tag--danger">
+                <span class="status-tag__dot"></span>Does not tie
+              </span>
+              <span class="text-muted small">
+                Opening plus movements differ from the Balance Sheet by
+                {{ fmtMoney(s.reconciliation.difference.current) }}. Investigate the equity postings.
+              </span>
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table soce-grid">
+              <caption class="visually-hidden">Statement of Changes in Equity</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Component</th>
+                  <th scope="col" class="num">Opening</th>
+                  <th scope="col" class="num">Profit for the period</th>
+                  <th scope="col" class="num">Opening balances posted</th>
+                  <th scope="col" class="num">Capital introduced &amp; other credits</th>
+                  <th scope="col" class="num">Drawings, dividends &amp; other debits</th>
+                  <th scope="col" class="num">Transfers</th>
+                  <th scope="col" class="num">Closing</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of s.rows; track componentLabel(r)) {
+                  <tr [class.text-danger]="!r.ties">
+                    <th scope="row" class="small fw-normal">
+                      @if (r.earningsFold) {
+                        <em>{{ componentLabel(r) }}</em>
+                      } @else {
+                        {{ componentLabel(r) }}
+                      }
+                      @if (!r.ties) {
+                        <span class="badge text-bg-danger ms-1">does not add up</span>
+                      }
+                    </th>
+                    <td class="num small">{{ fmtMoney(r.opening) }}</td>
+                    <td class="num small">{{ fmtMovement(r.profitForPeriod) }}</td>
+                    <td class="num small">{{ fmtMovement(r.openingBalancesPosted) }}</td>
+                    <td class="num small">{{ fmtMovement(r.capitalIntroduced) }}</td>
+                    <td class="num small">{{ fmtMovement(r.drawingsAndDividends) }}</td>
+                    <td class="num small">{{ fmtMovement(r.transfers) }}</td>
+                    <td class="num small fw-semibold">{{ fmtMoney(r.closing) }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="total-row fw-semibold">
+                  <th scope="row">Total equity</th>
+                  <td class="num">{{ fmtMoney(s.totals.opening) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.profitForPeriod) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.openingBalancesPosted) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.capitalIntroduced) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.drawingsAndDividends) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.transfers) }}</td>
+                  <td class="num">{{ fmtMoney(s.totals.closing) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <ul class="small text-muted mt-3 mb-0 soce-notes">
+            <li>
+              Opening is the Balance Sheet equity the day before the period starts; closing is the
+              Balance Sheet equity on its last day.
+            </li>
+            <li>
+              Profit for the period ({{ fmtMoney(s.profitForPeriod) }}) is the Income Statement's net
+              profit for the same dates.
+            </li>
+            <li>
+              The ledger records which journal moved an equity account, not why, so a capital
+              injection and any other credit share one column, and drawings, dividends and any other
+              debit share another.
+            </li>
+            <li>
+              Transfers move equity between lines without creating any: the year-end close moves the
+              year's earnings into Retained Earnings, and a new financial year turns "current-year
+              earnings" into "prior years". The column always totals zero.
+            </li>
+          </ul>
+        }
+      }
+    }
+  }
+</section>

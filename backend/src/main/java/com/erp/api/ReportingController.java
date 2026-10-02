@@ -3,11 +3,15 @@ package com.erp.api;
 import com.erp.modules.reporting.domain.dto.AccountLedgerDto;
 import com.erp.modules.reporting.domain.dto.BalanceSheetDto;
 import com.erp.modules.reporting.domain.dto.CashFlowStatementDto;
+import com.erp.modules.reporting.domain.dto.ChangesInEquityDto;
+import com.erp.modules.reporting.domain.dto.FinancialRatiosDto;
 import com.erp.modules.reporting.domain.dto.IncomeStatementDto;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
+import com.erp.modules.reporting.export.FinancialAnalysisFlattener;
 import com.erp.modules.reporting.export.ReportExporter;
 import com.erp.modules.reporting.export.StatementModelFlattener;
+import com.erp.modules.reporting.export.TabularExporter;
 import com.erp.modules.reporting.service.ReportingService;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -28,21 +32,32 @@ import org.springframework.web.bind.annotation.RestController;
  * P&amp;L net == INCOME−EXPENSE movement). assertCanActIn(companyId) runs inside the service.
  *
  * <p>Distinct from {@code CashFlowController} (Cash &amp; Bank). Permissions: REPORT.* (V15).
+ *
+ * <p>The P&amp;L, Balance Sheet and Cash-Flow take an optional {@code branchUid} (that branch's
+ * journal lines only — refused when the caller is not assigned to the branch) or
+ * {@code unassigned=true} (the company-level lines that carry no branch). The Statement of Changes
+ * in Equity and the Financial Ratios are assembled from the same statement builders.
  */
 @RestController
 @RequestMapping("/api/v1/reports")
 public class ReportingController {
 
-    private final ReportingService        reporting;
-    private final StatementModelFlattener flattener;
-    private final ReportExporter          exporter;
+    private final ReportingService           reporting;
+    private final StatementModelFlattener    flattener;
+    private final ReportExporter             exporter;
+    private final FinancialAnalysisFlattener analysisFlattener;
+    private final TabularExporter            tabularExporter;
 
     public ReportingController(ReportingService reporting,
                                StatementModelFlattener flattener,
-                               ReportExporter exporter) {
-        this.reporting = reporting;
-        this.flattener = flattener;
-        this.exporter  = exporter;
+                               ReportExporter exporter,
+                               FinancialAnalysisFlattener analysisFlattener,
+                               TabularExporter tabularExporter) {
+        this.reporting         = reporting;
+        this.flattener         = flattener;
+        this.exporter          = exporter;
+        this.analysisFlattener = analysisFlattener;
+        this.tabularExporter   = tabularExporter;
     }
 
     // -------------------------------------------------------------------------
@@ -56,8 +71,10 @@ public class ReportingController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo) {
-        return reporting.incomeStatement(companyId, fromDate, toDate, cmpFrom, cmpTo);
+            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned) {
+        return reporting.incomeStatement(companyId, fromDate, toDate, cmpFrom, cmpTo, branchUid, unassigned);
     }
 
     // Every export below requires its statement's own VIEW gate AS WELL AS REPORT.EXPORT. A download
@@ -71,8 +88,11 @@ public class ReportingController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        IncomeStatementDto dto = reporting.incomeStatement(companyId, fromDate, toDate, cmpFrom, cmpTo);
+        IncomeStatementDto dto = reporting.incomeStatement(
+                companyId, fromDate, toDate, cmpFrom, cmpTo, branchUid, unassigned);
         return download(exporter.export(flattener.flatten(dto), format));
     }
 
@@ -85,8 +105,10 @@ public class ReportingController {
     public BalanceSheetDto balanceSheet(
             @RequestParam Long companyId,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate asAtDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate compareAsAt) {
-        return reporting.balanceSheet(companyId, asAtDate, compareAsAt);
+            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate compareAsAt,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned) {
+        return reporting.balanceSheet(companyId, asAtDate, compareAsAt, branchUid, unassigned);
     }
 
     @GetMapping("/balance-sheet/export")
@@ -95,8 +117,10 @@ public class ReportingController {
             @RequestParam Long companyId,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate asAtDate,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate compareAsAt,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        BalanceSheetDto dto = reporting.balanceSheet(companyId, asAtDate, compareAsAt);
+        BalanceSheetDto dto = reporting.balanceSheet(companyId, asAtDate, compareAsAt, branchUid, unassigned);
         return download(exporter.export(flattener.flatten(dto), format));
     }
 
@@ -111,8 +135,10 @@ public class ReportingController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo) {
-        return reporting.cashFlow(companyId, fromDate, toDate, cmpFrom, cmpTo);
+            @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned) {
+        return reporting.cashFlow(companyId, fromDate, toDate, cmpFrom, cmpTo, branchUid, unassigned);
     }
 
     @GetMapping("/cash-flow/export")
@@ -123,9 +149,63 @@ public class ReportingController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate cmpTo,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "false") boolean unassigned,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        CashFlowStatementDto dto = reporting.cashFlow(companyId, fromDate, toDate, cmpFrom, cmpTo);
+        CashFlowStatementDto dto = reporting.cashFlow(
+                companyId, fromDate, toDate, cmpFrom, cmpTo, branchUid, unassigned);
         return download(exporter.export(flattener.flatten(dto), format));
+    }
+
+    // -------------------------------------------------------------------------
+    // Statement of Changes in Equity — same gate as the Balance Sheet (its closing column IS the
+    // Balance Sheet's equity)
+    // -------------------------------------------------------------------------
+
+    @GetMapping("/changes-in-equity")
+    @PreAuthorize("@perm.has('REPORT.BS.VIEW')")
+    public ChangesInEquityDto changesInEquity(
+            @RequestParam Long companyId,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate) {
+        return reporting.changesInEquity(companyId, fromDate, toDate);
+    }
+
+    @GetMapping("/changes-in-equity/export")
+    @PreAuthorize("@perm.has('REPORT.BS.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> changesInEquityExport(
+            @RequestParam Long companyId,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+        ChangesInEquityDto dto = reporting.changesInEquity(companyId, fromDate, toDate);
+        return download(tabularExporter.export(analysisFlattener.flatten(dto), format));
+    }
+
+    // -------------------------------------------------------------------------
+    // Financial Ratios — built from the P&L AND the Balance Sheet, so it needs both view gates
+    // -------------------------------------------------------------------------
+
+    @GetMapping("/ratios")
+    @PreAuthorize("@perm.has('REPORT.PL.VIEW') and @perm.has('REPORT.BS.VIEW')")
+    public FinancialRatiosDto ratios(
+            @RequestParam Long companyId,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String branchUid) {
+        return reporting.financialRatios(companyId, fromDate, toDate, branchUid);
+    }
+
+    @GetMapping("/ratios/export")
+    @PreAuthorize("@perm.has('REPORT.PL.VIEW') and @perm.has('REPORT.BS.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> ratiosExport(
+            @RequestParam Long companyId,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String branchUid,
+            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+        FinancialRatiosDto dto = reporting.financialRatios(companyId, fromDate, toDate, branchUid);
+        return download(tabularExporter.export(analysisFlattener.flatten(dto), format));
     }
 
     // -------------------------------------------------------------------------

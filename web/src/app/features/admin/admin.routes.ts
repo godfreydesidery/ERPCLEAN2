@@ -600,6 +600,20 @@ export const ADMIN_ROUTES: Routes = [
       import('./reporting/cash-flow-statement.component').then((m) => m.CashFlowStatementComponent),
   },
   {
+    // Same gate as the Balance Sheet — its closing column IS the Balance Sheet's equity.
+    path: 'reporting/changes-in-equity',
+    canActivate: [requirePermission('REPORT.BS.VIEW')],
+    loadComponent: () =>
+      import('./reporting/changes-in-equity.component').then((m) => m.ChangesInEquityComponent),
+  },
+  {
+    // Built from the P&L AND the Balance Sheet — the endpoint requires both, so does the route.
+    path: 'reporting/ratios',
+    canActivate: [requireAllPermissions('REPORT.PL.VIEW', 'REPORT.BS.VIEW')],
+    loadComponent: () =>
+      import('./reporting/financial-ratios.component').then((m) => m.FinancialRatiosComponent),
+  },
+  {
     path: 'reporting/account-ledger',
     canActivate: [requirePermission('REPORT.LEDGER.VIEW')],
     loadComponent: () =>

@@ -21,6 +21,7 @@ The four financial statements are available from the **Accounting** navigation g
 - **Run button** — computes and displays the statement.
 - **Export buttons** (PDF, Excel, CSV) — download the statement in the chosen format. Requires the additional `REPORT.EXPORT` permission. The buttons are hidden if you do not hold that permission.
 - **Comparative period** — most statements accept an optional comparative period or date to populate a second column.
+- **Branch** (Income Statement, Balance Sheet, Cash-Flow Statement and Financial Ratios) — leave it on *All branches* for the whole company, or pick a branch to see only the journals posted at that branch. The list offers only the branches you are assigned to; asking for another branch is refused with *"You are not assigned to that branch…"*. The statements also offer **Company-level entries (no branch)** — the journals that carry no branch: manual journals, opening balances, FX revaluation runs and the year-end close. The branches plus the company-level entries always add up exactly to the whole-company statement. The statement header names what you are looking at (a branch name, *All branches*, or *Company-level entries*), and so does the company line of every export.
 - **Reconciliation indicator** — a green **"Reconciled"** bar confirms the computed figures tie back to the underlying GL movement. A red **data-integrity alarm** means the figures do not agree and the books require investigation; the report is shown but no automatic correction is made.
 
 ---
@@ -50,6 +51,8 @@ The statement shows:
 **Drill-through to the account ledger:** any account name shown as a link in the detail rows can be clicked to open the Account Ledger pre-filtered to that account and period.
 
 **Export:** after running the statement, click **PDF**, **Excel**, or **CSV** in the export toolbar. The downloaded file is named `income-statement_<from>_<to>.<ext>`.
+
+**Year-end close:** the closing journal that moves a year's result into Retained Earnings is not income or expense, so the Income Statement leaves it out — a closed year still shows the profit it made.
 
 ---
 
@@ -99,6 +102,13 @@ The statement shows sections for Current Assets, Non-Current Assets, Current Lia
 
 **Export:** file is named `balance-sheet_<asAt>.<ext>`.
 
+**A branch Balance Sheet** balances on its own, because every journal is posted to exactly one branch (or to none). Read it with two caveats, which the screen also prints under a branch statement:
+
+- **Stock transfers between branches move quantities, not ledger value.** No journal is posted for a transfer, so a branch's *Inventory* reflects what it bought and sold, not what it holds — a branch that sells stock it received by transfer can show low or even negative Inventory, and the sender too much. The company total is right.
+- **Company-level journals carry no branch.** After a year-end close, each branch keeps its closed years under *Retained earnings — prior years (unclosed)* because the close itself is company-level; the *Company-level entries* statement carries the matching opposite.
+
+If a journal ever carried lines for different branches, the branch statement would show an explicit **Inter-branch balance (entries spanning branches)** line under Current Liabilities instead of silently failing to balance. Nothing the system posts today produces one.
+
 ---
 
 **Example — Run a comparative balance sheet at year-end:**
@@ -137,6 +147,8 @@ The opening position is shown as a body row at the top of the table (**Opening c
 
 **Export:** file is named `cash-flow_<from>_<to>.<ext>`.
 
+A branch Cash-Flow Statement is read from that branch's journals on the company's cash and bank accounts, and ties to the movement on those accounts at that branch.
+
 ---
 
 **Example — Cash-flow analysis for H1 2026:**
@@ -146,6 +158,72 @@ The opening position is shown as a body row at the top of the table (**Opening c
 3. Click **Run**.
 
 Results show Opening Cash: TZS 6,800,000; Operating inflow: TZS 11,250,000; Investing outflow: TZS −4,200,000 (purchase of delivery van); Financing outflow: TZS −1,500,000 (loan repayment); Net Change: TZS 5,550,000; Closing Cash & Bank Balance: TZS 12,350,000. The green **Cash Tie-out: Reconciled** bar confirms the net change ties to the actual movement in the bank account GL balances.
+
+---
+
+### Statement of Changes in Equity
+
+**What is the Statement of Changes in Equity?**
+It is the fourth primary financial statement. Where the Balance Sheet shows the owners' equity at one date, this statement explains how it got from the opening figure to the closing one over a period: the profit earned, capital the owners put in, drawings and dividends they took out, and transfers between equity lines such as the year-end close moving the year's result into Retained Earnings. Auditors and banks expect it alongside the other three.
+
+Navigate to **Accounting › Changes in Equity** (`/admin/reporting/changes-in-equity`). Permission required: `REPORT.BS.VIEW` (the same as the Balance Sheet, because its closing column *is* the Balance Sheet's equity). Export also requires `REPORT.EXPORT`.
+
+1. Select the company by name.
+2. Set **Period from** and **Period to**.
+3. Click **Run**.
+
+One row per equity component — each equity account (e.g. 3000 Owner's Equity / Capital, 3900 Retained Earnings) plus the two earnings lines the Balance Sheet shows (*Retained earnings — prior years (unclosed)* and *Current-year earnings*) — with these columns:
+
+| Column | What it holds |
+|---|---|
+| Opening | the Balance Sheet figure the day before the period starts |
+| Profit for the period | the Income Statement's net profit for the same dates (on the current-year earnings line) |
+| Opening balances posted | equity posted by opening-balance journals |
+| Capital introduced & other credits | every other credit to the account — capital injected, and any other credit |
+| Drawings, dividends & other debits | every other debit to the account, shown as a negative amount |
+| Transfers | the year-end close (out of earnings, into Retained Earnings) and, when the period crosses the start of a financial year, last year's "current-year earnings" becoming "prior years". The column always totals zero. |
+| Closing | the Balance Sheet figure on the last day of the period |
+
+The ledger records *which journal* moved an equity account, not *why*, so a capital injection and a correcting credit share one column — the column names say so.
+
+A green **Ties to the Balance Sheet** bar confirms that opening plus every movement equals the Balance Sheet's equity at the period end. A component whose movements do not add up is flagged *does not add up* on its row, and the bar turns red with the difference — nothing is adjusted to make it tie.
+
+The statement is company-wide (no branch filter). **Export:** PDF, Excel or CSV, named `changes-in-equity_<from>_<to>.<ext>`; the export footer repeats the tie-out result.
+
+---
+
+### Financial Ratios
+
+**What are the financial ratios for?**
+They turn the statements into a handful of numbers a manager or a bank can compare from one period to the next: can the business pay its short-term debts, how much of each sale it keeps, how geared it is, what return the owners earn, and how fast stock, customers and suppliers turn over.
+
+Navigate to **Accounting › Financial Ratios** (`/admin/reporting/ratios`). Permission required: **both** `REPORT.PL.VIEW` and `REPORT.BS.VIEW` (the ratios disclose figures from both statements). Export also requires `REPORT.EXPORT`.
+
+1. Select the company by name.
+2. Set **Period from** and **Period to**.
+3. Optionally pick a **Branch** (only branches you are assigned to are offered).
+4. Click **Run**.
+
+Every ratio is shown with its formula, the statement figures it was worked out from, and the result. The figures come from the Income Statement for the period and the Balance Sheet at its closing date and the day before it opens; "average" means (opening + closing) ÷ 2.
+
+| Ratio | Formula |
+|---|---|
+| Current ratio | Current assets ÷ Current liabilities |
+| Quick ratio | (Current assets − Inventory) ÷ Current liabilities |
+| Gross margin | Gross profit ÷ Revenue × 100 |
+| Net margin | Net profit ÷ Revenue × 100 |
+| Debt-to-equity | Total liabilities ÷ Total equity |
+| Return on equity | Net profit ÷ Average equity × 100 (for the period, not annualised) |
+| Inventory turnover | Cost of sales ÷ Average inventory |
+| Inventory days | Average inventory ÷ Cost of sales × Days in period |
+| Debtor days (DSO) | Average receivables ÷ Revenue × Days in period |
+| Creditor days (DPO) | Average payables ÷ Cost of sales × Days in period |
+
+Inventory, receivables and payables are the accounts marked as Inventory, Accounts Receivable and Accounts Payable control accounts in the chart of accounts. Debtor days use total revenue because the ledger does not separate credit sales from cash sales (a shop with many cash sales shows fewer days than its credit customers really take); creditor days use cost of sales in place of credit purchases.
+
+A ratio that cannot be worked out — because what it divides by is zero (no revenue, no cost of sales, no current liabilities…) — shows a dash and the reason, never 0.00. If the Income Statement or the Balance Sheet underneath fails its own check, a red warning says so.
+
+For a branch, the ratios are that branch's and inherit the branch caveats above — in particular, inventory ratios are distorted by stock transfers. **Export:** PDF, Excel or CSV, named `financial-ratios_<from>_<to>.<ext>`.
 
 ---
 
