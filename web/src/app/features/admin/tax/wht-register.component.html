@@ -100,6 +100,27 @@
     </div>
   } @else if (register()) {
 
+    <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+    @if (canExport()) {
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="exportRegister('PDF')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="exportRegister('XLSX')" [disabled]="exporting()">
+          <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                (click)="exportRegister('CSV')" [disabled]="exporting()">
+          <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+        </button>
+      </div>
+      @if (exportError(); as msg) {
+        <p class="text-danger small mb-3" role="alert">{{ msg }}</p>
+      }
+    }
+
     <!-- Payable section (WHT_ON_PAYMENT) -->
     <div class="erp-card mb-4">
       <div class="erp-card__head">

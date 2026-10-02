@@ -17,6 +17,7 @@ import {
   SetOpeningBalanceRequest,
   WriteOffRequest,
 } from './models/ar.model';
+import { ExportFormat } from '../reporting/models/reporting.model';
 
 export interface ArInvoicePage {
   rows: ArInvoiceDto[];
@@ -137,6 +138,35 @@ export class ArService {
   getAgeing(companyId: string): Observable<ArAgeingRowDto[]> {
     const params = new HttpParams().set('companyId', companyId);
     return this.http.get<ArAgeingRowDto[]>(`${this.base}/ageing/by-customer`, { params });
+  }
+
+  // ── Exports (binary download; gated AR.STATEMENT.VIEW + REPORT.EXPORT) ─────
+
+  /**
+   * Customer statement document: balance b/f, every movement in the period with a running
+   * balance, closing balance. An empty fromDate runs from the customer's first transaction.
+   */
+  exportStatement(
+    companyId: string,
+    customerUid: string,
+    fromDate: string,
+    toDate: string,
+    format: ExportFormat,
+  ): Observable<Blob> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('customerUid', customerUid)
+      .set('format', format);
+    if (fromDate) params = params.set('fromDate', fromDate);
+    if (toDate) params = params.set('toDate', toDate);
+    return this.http.get(`${this.base}/statement/export`, { params, responseType: 'blob' });
+  }
+
+  /** Per-customer ageing document (buckets per customer + totals). */
+  exportAgeing(companyId: string, format: ExportFormat, asAt?: string): Observable<Blob> {
+    let params = new HttpParams().set('companyId', companyId).set('format', format);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get(`${this.base}/ageing/by-customer/export`, { params, responseType: 'blob' });
   }
 
   // ── Balance ───────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { Observable, map } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
+import { ExportFormat } from '../reporting/models/reporting.model';
 import {
   BankReconciliationDto,
   CashAccountBalanceDto,
@@ -251,6 +252,25 @@ export class CashbankService {
   getAccountStatement(accountUid: string): Observable<CashAccountStatementDto> {
     return this.http.get<CashAccountStatementDto>(
       `${this.base}/statements/accounts/uid/${accountUid}/statement`,
+    );
+  }
+
+  /**
+   * Account statement document (binary; gated CASH.VIEW + REPORT.EXPORT). Empty dates run from the
+   * first transaction / to the last.
+   */
+  exportAccountStatement(
+    accountUid: string,
+    fromDate: string,
+    toDate: string,
+    format: ExportFormat,
+  ): Observable<Blob> {
+    let params = new HttpParams().set('format', format);
+    if (fromDate) params = params.set('fromDate', fromDate);
+    if (toDate) params = params.set('toDate', toDate);
+    return this.http.get(
+      `${this.base}/statements/accounts/uid/${accountUid}/statement/export`,
+      { params, responseType: 'blob' },
     );
   }
 

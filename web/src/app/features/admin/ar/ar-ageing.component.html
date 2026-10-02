@@ -65,6 +65,26 @@
             <i class="bi bi-inbox"></i> No ageing data found.
           </div>
         } @else {
+          <!-- Export toolbar (REPORT.EXPORT — distinct from the view permission) -->
+          @if (canExport()) {
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('PDF')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('XLSX')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('CSV')" [disabled]="exporting()">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+              </button>
+            </div>
+            @if (exportError(); as msg) {
+              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+          }
           <div class="erp-table-wrap mb-4">
             <table class="erp-table">
               <caption class="visually-hidden">AR ageing by customer</caption>
