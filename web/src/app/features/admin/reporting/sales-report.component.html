@@ -34,33 +34,39 @@
             <input id="sr-to" name="sr-to" type="date" class="form-control"
                    [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
           </div>
-          <div class="col-sm-6 col-lg-2">
-            <label class="form-label" for="sr-agent">
-              Agent <span class="text-muted small">(optional)</span>
-            </label>
-            <app-uid-picker id="sr-agent" name="sr-agent"
-                            [(ngModel)]="agentUid"
-                            [options]="agentOptions()"
-                            placeholder="All agents" />
-          </div>
-          <div class="col-sm-6 col-lg-2">
-            <label class="form-label" for="sr-route">
-              Route <span class="text-muted small">(optional)</span>
-            </label>
-            <app-uid-picker id="sr-route" name="sr-route"
-                            [(ngModel)]="routeUid"
-                            [options]="routeOptions()"
-                            placeholder="All routes" />
-          </div>
-          <div class="col-sm-6 col-lg-2">
-            <label class="form-label" for="sr-supplier">
-              Supplier <span class="text-muted small">(optional)</span>
-            </label>
-            <app-uid-picker id="sr-supplier" name="sr-supplier"
-                            [(ngModel)]="supplierUid"
-                            [options]="supplierOptions()"
-                            placeholder="All suppliers" />
-          </div>
+          @if (canFilterAgent()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="sr-agent">
+                Agent <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="sr-agent" name="sr-agent"
+                              [(ngModel)]="agentUid"
+                              [options]="agentOptions()"
+                              placeholder="All agents" />
+            </div>
+          }
+          @if (canFilterRoute()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="sr-route">
+                Route <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="sr-route" name="sr-route"
+                              [(ngModel)]="routeUid"
+                              [options]="routeOptions()"
+                              placeholder="All routes" />
+            </div>
+          }
+          @if (canFilterSupplier()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="sr-supplier">
+                Supplier <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="sr-supplier" name="sr-supplier"
+                              [(ngModel)]="supplierUid"
+                              [options]="supplierOptions()"
+                              placeholder="All suppliers" />
+            </div>
+          }
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()"

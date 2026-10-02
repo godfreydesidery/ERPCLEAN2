@@ -77,6 +77,11 @@ export class SalesReportComponent implements OnInit {
   readonly exporting = signal(false);
 
   readonly canView = computed(() => this.session.hasPermission('SALES.INVOICE.VIEW'));
+  // Each optional filter is offered only to a caller who may read its list. Without the code the
+  // list endpoint 403s; the filter would sit empty and the console would log a refusal.
+  readonly canFilterAgent = computed(() => this.session.hasPermission('AGENT.VIEW'));
+  readonly canFilterRoute = computed(() => this.session.hasPermission('ROUTE.VIEW'));
+  readonly canFilterSupplier = computed(() => this.session.hasPermission('SUPPLIER.VIEW'));
   /** The export endpoint is gated REPORT.EXPORT server-side — distinct from the view permission. */
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.report() === null);
@@ -94,18 +99,24 @@ export class SalesReportComponent implements OnInit {
           next: (list) => {
             if (list.length === 0) return;
             const companyId = list[0].id;
-            this.agentService.list(companyId, undefined, 0, 200).subscribe({
-              next: ({ rows }) => this.agents.set(rows),
-              error: () => undefined,
-            });
-            this.routesService.list(companyId, undefined, 0, 200).subscribe({
-              next: ({ rows }) => this.routeList.set(rows),
-              error: () => undefined,
-            });
-            this.supplierService.list(companyId, undefined, 0, 200).subscribe({
-              next: ({ rows }) => this.suppliers.set(rows),
-              error: () => undefined,
-            });
+            if (this.canFilterAgent()) {
+              this.agentService.list(companyId, undefined, 0, 200).subscribe({
+                next: ({ rows }) => this.agents.set(rows),
+                error: () => undefined,
+              });
+            }
+            if (this.canFilterRoute()) {
+              this.routesService.list(companyId, undefined, 0, 200).subscribe({
+                next: ({ rows }) => this.routeList.set(rows),
+                error: () => undefined,
+              });
+            }
+            if (this.canFilterSupplier()) {
+              this.supplierService.list(companyId, undefined, 0, 200).subscribe({
+                next: ({ rows }) => this.suppliers.set(rows),
+                error: () => undefined,
+              });
+            }
           },
           error: () => undefined,
         });
