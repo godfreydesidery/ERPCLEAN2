@@ -24,21 +24,32 @@ public interface ArReceiptRepository extends JpaRepository<ArReceipt, Long> {
 
     Page<ArReceipt> findByCompanyIdAndCustomerId(Long companyId, Long customerId, Pageable pageable);
 
-    /** On-account (unallocated) receipts for a customer. */
+    /**
+     * On-account (unallocated) receipts for a customer. A reversed (bounced) receipt is left out:
+     * its money never arrived, so none of it is on account.
+     */
     @Query("""
             SELECT r FROM ArReceipt r
             WHERE r.companyId = :companyId
               AND r.customerId = :customerId
               AND r.unallocatedAmount > 0
+              AND r.reversedAt IS NULL
             """)
     List<ArReceipt> findOnAccountByCompanyAndCustomer(@Param("companyId") Long companyId,
                                                        @Param("customerId") Long customerId);
 
-    /** Sum of unallocated_amount for a company — used in reconciliation. */
+    /**
+     * Sum of unallocated_amount for a company — used in reconciliation.
+     *
+     * <p>A reversed (bounced) receipt is left out: its GL reversal put the WHOLE receipt back on
+     * AR-control, so none of it is on account any more. (The bounce handler also zeroes the
+     * remainder; the filter keeps this right for any receipt reversed before it did.)
+     */
     @Query("""
             SELECT COALESCE(SUM(r.unallocatedAmount), 0)
             FROM ArReceipt r
             WHERE r.companyId = :companyId
+              AND r.reversedAt IS NULL
             """)
     BigDecimal sumUnallocatedByCompany(@Param("companyId") Long companyId);
 
@@ -48,6 +59,7 @@ public interface ArReceiptRepository extends JpaRepository<ArReceipt, Long> {
             FROM ArReceipt r
             WHERE r.companyId = :companyId
               AND r.customerId = :customerId
+              AND r.reversedAt IS NULL
             """)
     BigDecimal sumUnallocatedByCompanyAndCustomer(@Param("companyId") Long companyId,
                                                    @Param("customerId") Long customerId);

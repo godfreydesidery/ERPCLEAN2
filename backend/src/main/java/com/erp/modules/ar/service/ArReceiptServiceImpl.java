@@ -388,6 +388,15 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(receiptUid), "ArReceipt", receiptUid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
 
+        // A bounced receipt brought in no money and its invoices were already restored by the
+        // reversal. Re-allocating it would restore them a second time and then relieve them with
+        // cash that never arrived.
+        if (receipt.getReversedAt() != null) {
+            throw new ConflictException(
+                    "This receipt's cheque bounced and the receipt has been reversed, so it cannot be"
+                    + " allocated to invoices. Record a new receipt when the customer pays.");
+        }
+
         // FX adversarial-review MEDIUM: BASE-amount scale must come from the company BASE currency's
         // minor units, never the foreign invoice/receipt currency. Resolve it once here.
         int baseScaleForReceipt = baseMinorUnits(companies.findById(receipt.getCompanyId())

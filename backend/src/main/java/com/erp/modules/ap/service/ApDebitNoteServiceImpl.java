@@ -37,6 +37,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -376,7 +378,8 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     // =========================================================================
 
     /**
-     * Appends {@code ap_debit_note_allocations}, decrements bill outstanding and DN unapplied,
+     * Appends {@code ap_debit_note_allocations} (or tops up the note's existing row for a bill it
+     * already reduced), decrements bill outstanding and DN unapplied,
      * posts realized-FX plug per allocation when settlement_rate differs from bill rate.
      * Mirrors {@link com.erp.modules.ar.service.ArCreditNoteServiceImpl#doApplyAllocations} with
      * signs inverted for the AP side (DR AP / CR bill-base).
@@ -393,7 +396,12 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         BigDecimal totalApplied    = BigDecimal.ZERO;
         BigDecimal sumBaseRelieved = BigDecimal.ZERO; // Σ(face × bill_rate)  — original AP base
         BigDecimal sumBaseSettled  = BigDecimal.ZERO; // Σ(face × dn_rate)    — DN base
-        List<ApDebitNoteAllocation> saved = new ArrayList<>();
+        // The note's existing rows, keyed by bill (empty after reapply's delete) + rows this call touched.
+        Map<Long, ApDebitNoteAllocation> byBill = new HashMap<>();
+        for (ApDebitNoteAllocation existing : dnAllocations.findByDebitNoteId(note.getId())) {
+            byBill.put(existing.getSupplierBillId(), existing);
+        }
+        Map<Long, ApDebitNoteAllocation> touched = new LinkedHashMap<>();
 
         for (AllocationLineRequest line : lines) {
             SupplierBill bill = bills.findByCompanyIdAndUid(companyId, line.supplierBillUid())
@@ -432,13 +440,26 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             bill.setUpdatedBy(actorId());
             bills.save(bill);
 
-            // Persist junction row
-            ApDebitNoteAllocation alloc = new ApDebitNoteAllocation(
-                    companyId, note.getId(), bill.getId(),
-                    line.allocatedAmount(), actorId());
-            alloc.setBaseAllocatedAmount(baseSettledSlice);
-            alloc.setSettlementRate(dnRate);
-            saved.add(dnAllocations.save(alloc));
+            // Persist junction row — or top up the note's existing row for this bill. The table holds
+            // ONE row per (note, bill) pair (uq_ap_debit_note_allocation_pair), so applying more of a
+            // part-applied note to a bill it already reduced — or two slices for the same bill in one
+            // request — adds to that row. The settlement rate is the note's own rate, identical on
+            // every slice, so the merged row's base is simply the sum of the slices' bases.
+            ApDebitNoteAllocation alloc = byBill.get(bill.getId());
+            if (alloc == null) {
+                alloc = new ApDebitNoteAllocation(
+                        companyId, note.getId(), bill.getId(),
+                        line.allocatedAmount(), actorId());
+                alloc.setBaseAllocatedAmount(baseSettledSlice);
+                alloc.setSettlementRate(dnRate);
+            } else {
+                alloc.setAllocatedAmount(alloc.getAllocatedAmount().add(line.allocatedAmount()));
+                alloc.setBaseAllocatedAmount((alloc.getBaseAllocatedAmount() != null
+                        ? alloc.getBaseAllocatedAmount() : BigDecimal.ZERO).add(baseSettledSlice));
+            }
+            alloc = dnAllocations.save(alloc);
+            byBill.put(bill.getId(), alloc);
+            touched.put(bill.getId(), alloc);
 
             totalApplied    = totalApplied.add(line.allocatedAmount());
             sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
@@ -505,7 +526,8 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         note.setUpdatedBy(actorId());
         notes.save(note);
 
-        return saved;
+        // The allocation rows this call created or topped up (a topped-up row carries its new total).
+        return new ArrayList<>(touched.values());
     }
 
     // =========================================================================

@@ -3,10 +3,12 @@ package com.erp.modules.ar.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.erp.modules.ar.domain.dto.ApplyCreditNoteRequest;
 import com.erp.modules.ar.domain.dto.ArCreditNoteDto;
 import com.erp.modules.ar.domain.dto.ArInvoiceDto;
 import com.erp.modules.ar.domain.dto.RaiseCreditNoteRequest;
 import com.erp.modules.ar.domain.dto.SetOpeningBalanceRequest;
+import com.erp.modules.ar.domain.enums.ArCreditNoteStatus;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
 import com.erp.modules.fx.domain.dto.UpsertRateRequest;
@@ -71,6 +73,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class ArCreditNoteServiceIT extends PostgresIntegrationTest {
 
     @Autowired private ArCreditNoteService creditNoteService;
+    @Autowired private ArReconciliationQuery reconciliationQuery;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired private ArOpeningBalanceService openingBalanceService;
     @Autowired private ArGlSeeder arGlSeeder;
     @Autowired private CustomerService customerService;
@@ -294,6 +298,78 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
                 .map(l -> l.getDebitAmount() != null ? l.getDebitAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(sumDebit).isEqualByComparingTo(new BigDecimal("500"));
+    }
+
+    // =========================================================================
+    // Bar 6: applying MORE of a part-applied credit note to the SAME invoice (one allocation row
+    // per note/invoice pair is a DB rule) tops up the existing row instead of failing on the
+    // constraint. Invoice outstanding, note unapplied/status and the AR reconciliation stay right.
+    // =========================================================================
+
+    @Test
+    void apply_sameInvoiceAgain_topsUpTheExistingAllocation_andStaysReconciled() {
+        ArInvoiceDto inv = openingBalanceService.setOpeningBalance(new SetOpeningBalanceRequest(
+                companyUid, customerUid, new BigDecimal("1000"), TZS,
+                LocalDate.now(), LocalDate.now().plusDays(30), null));
+        ArCreditNoteDto cn = creditNoteService.raise(new RaiseCreditNoteRequest(
+                companyUid, customerUid, null, LocalDate.now(),
+                new BigDecimal("500"), BigDecimal.ZERO, TZS, "General credit"));
+
+        creditNoteService.apply(applyLines(cn.uid(), inv.uid(), "200"));
+        ArCreditNoteDto again = creditNoteService.apply(applyLines(cn.uid(), inv.uid(), "100"));
+        assertThat(again.unappliedAmount()).isEqualByComparingTo("200");
+        assertThat(again.status()).isEqualTo(ArCreditNoteStatus.PARTIAL);
+
+        // Two slices for the same invoice inside ONE request are folded together as well.
+        creditNoteService.apply(applyLines(cn.uid(), inv.uid(), "50", "50"));
+
+        assertThat(cnAllocationRows(cn.uid())).as("one row per note/invoice pair").isEqualTo(1);
+        assertThat(cnAllocatedTotal(cn.uid())).isEqualByComparingTo("400");
+        ArCreditNoteDto read = creditNoteService.getByUid(cn.uid());
+        assertThat(read.unappliedAmount()).isEqualByComparingTo("100");
+        assertThat(read.amount().subtract(read.unappliedAmount()))
+                .as("allocated + unapplied == amount").isEqualByComparingTo(cnAllocatedTotal(cn.uid()));
+        var refreshed = arInvoiceRepo.findByUid(inv.uid()).orElseThrow();
+        assertThat(refreshed.getOutstandingAmount()).isEqualByComparingTo("600");
+        assertThat(refreshed.getBaseOutstandingAmount()).isEqualByComparingTo("600");
+        assertThat(refreshed.getStatus()).isEqualTo(ArInvoiceStatus.PARTIAL);
+        assertArReconciled();
+
+        // Reapply with a duplicated invoice line: one row, totals rebuilt from scratch.
+        creditNoteService.reapply(applyLines(cn.uid(), inv.uid(), "150", "150"));
+        assertThat(cnAllocationRows(cn.uid())).isEqualTo(1);
+        assertThat(cnAllocatedTotal(cn.uid())).isEqualByComparingTo("300");
+        assertThat(arInvoiceRepo.findByUid(inv.uid()).orElseThrow().getOutstandingAmount())
+                .isEqualByComparingTo("700");
+        assertThat(creditNoteService.getByUid(cn.uid()).unappliedAmount()).isEqualByComparingTo("200");
+        assertArReconciled();
+    }
+
+    private static ApplyCreditNoteRequest applyLines(String cnUid, String invUid, String... amounts) {
+        return new ApplyCreditNoteRequest(cnUid, java.util.Arrays.stream(amounts)
+                .map(a -> new ApplyCreditNoteRequest.AllocationLineRequest(invUid, new BigDecimal(a)))
+                .toList());
+    }
+
+    private int cnAllocationRows(String cnUid) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM ar_credit_note_allocations a
+                JOIN ar_credit_notes n ON n.id = a.credit_note_id WHERE n.uid = ?
+                """, Integer.class, cnUid);
+    }
+
+    private BigDecimal cnAllocatedTotal(String cnUid) {
+        return jdbc.queryForObject("""
+                SELECT COALESCE(SUM(a.allocated_amount), 0) FROM ar_credit_note_allocations a
+                JOIN ar_credit_notes n ON n.id = a.credit_note_id WHERE n.uid = ?
+                """, BigDecimal.class, cnUid);
+    }
+
+    private void assertArReconciled() {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "arcn_root", true, company.getId(), branch.getId(), null));
+        assertThat(reconciliationQuery.reconcile(company.getId()).difference())
+                .as("AR sub-ledger == GL 1200").isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     // =========================================================================
