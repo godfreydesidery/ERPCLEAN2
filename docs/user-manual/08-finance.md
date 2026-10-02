@@ -504,7 +504,7 @@ To load balances brought forward from a prior system, navigate to **Accounting >
 - A running **Balance** after every line, and a **Closing balance** row with the period's debit and credit totals.
 - At the foot: "Amount due from customer" (or "Customer in credit"), and who printed it and when.
 
-One statement is in one currency (your base currency). If the customer also has transactions in another currency, the foot says how many were left off rather than adding them in.
+**Which currency.** The statement covers every currency the customer actually trades in, one section each — a US-dollar customer gets a USD statement, not an empty TZS one. A customer who has transactions in more than one currency gets one block per currency (the customer's own default currency first, then your base currency), each with its own balance brought forward, closing balance and "amount due" line; the amounts are never added together and there is no grand total. Each **Invoice** line's **Reference** is the sales invoice number.
 
 **Ageing export.** On **AR Ageing**, users with export permission see **Export PDF / Excel / CSV** above the table: one row per customer with the five buckets and their total, and a totals row at the bottom, as at today.
 
@@ -672,6 +672,8 @@ Pick a supplier by name to view:
 - **Bill** and **Opening balance** lines in the Credit column — only bills that are on the ledger (matched, approved, part-paid or paid). A bill still **HELD** for a price or quantity variance, or still a **DRAFT**, is not on the statement.
 - **Payment** and **Debit note** lines in the Debit column. A payment's line says how much of it was WHT withheld and paid to TRA on the supplier's behalf. For a payment run that paid several suppliers at once, only this supplier's share is shown.
 - A **Reversal** line (Credit) when a cheque to the supplier came back unpaid.
+
+As with the customer statement, a supplier you deal with in more than one currency gets one section per currency (the supplier's default currency first), never added together.
 
 **Ageing PDF / Excel / CSV** prints this supplier's five ageing buckets and the total outstanding, as at today. Bills in a foreign currency are aged in that currency on their own line (and their own total) — they are never added into the TZS figures.
 
@@ -1047,6 +1049,8 @@ A nil-activity return (output and input both zero) files and locks without posti
 **Why WHT types exist.** Different categories of payment attract different WHT rates under Tanzanian tax law (professional fees, rent, interest, etc.). WHT types let you configure the rate for each category once and select the appropriate type on each payment or receipt, ensuring the correct amount is withheld and the correct GL accounts are used.
 
 **When they are used.** WHT types are maintained by a user with `WHT.MANAGE` permission during initial setup or when a new rate category is needed. WHT is applied optionally on individual AP payments and AR receipts by selecting a WHT type and amount during recording.
+
+**What WHT does to the cash.** The payment **amount** is what the bill is relieved by; the WHT is held back from it. Paying a 400,000 bill with 20,000 WHT clears the whole 400,000 from the supplier's account, but only **380,000** leaves the bank — that is what the cash book and the GL both record, and the other 20,000 sits on WHT payable until you remit it to TRA. A receipt the customer withheld from works the same way in reverse. The WHT must be less than the amount paid, and an amount withheld needs its WHT type. A payment run can deduct WHT only when it pays a single supplier (the certificate is issued to one supplier) — run each supplier separately.
 
 **What the register shows.** The WHT register is the period summary of all WHT certificates — how much was withheld on supplier payments (payable to TRA) and how much was withheld by customers from your receipts (a receivable credit against your tax bill). It is the data source for preparing the WHT remittance to TRA.
 

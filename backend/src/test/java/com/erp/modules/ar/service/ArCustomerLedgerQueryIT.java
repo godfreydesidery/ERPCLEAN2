@@ -6,10 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.erp.modules.ar.domain.dto.ArCustomerLedgerDto;
 import com.erp.modules.ar.domain.dto.ArCustomerLedgerRowDto;
 import com.erp.modules.ar.domain.enums.ArLedgerEntryType;
+import com.erp.modules.ar.domain.dto.ArInvoiceDto;
 import com.erp.modules.iam.domain.entity.AppUser;
+import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.Organisation;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.modules.parties.domain.dto.CreateCustomerRequest;
@@ -22,6 +25,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
+import com.erp.support.ReportSeed;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -31,6 +35,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -59,6 +64,8 @@ class ArCustomerLedgerQueryIT extends PostgresIntegrationTest {
     @Autowired private JdbcTemplate           jdbc;
 
     @Autowired private ArCustomerLedgerQuery  ledgerQuery;
+    @Autowired private ArInvoiceService       arInvoiceService;
+    @Autowired private BranchRepository       branches;
 
     private Company company;
     private Company otherCompany;
@@ -194,6 +201,101 @@ class ArCustomerLedgerQueryIT extends PostgresIntegrationTest {
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 9, 1), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("The start date must be on or before the end date.");
+    }
+
+    // ---- Live-test defect 1: an invoice raised from a sale printed a blank Reference ----------
+
+    @Test
+    void aCreditSaleOpenItem_withoutItsOwnNumber_isNamedBySalesInvoiceNumber_onStatementAndList() {
+        String siNumber = creditSaleWithoutDocumentNo("750", LocalDate.of(2026, 9, 7));
+
+        ArCustomerLedgerDto dto = ledgerQuery.ledger(company.getId(), null, customer.uid(),
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "TZS");
+        ArCustomerLedgerRowDto row = dto.rows().stream()
+                .filter(r -> r.debit().compareTo(new BigDecimal("750")) == 0)
+                .findFirst().orElseThrow();
+        assertThat(row.type()).isEqualTo(ArLedgerEntryType.INVOICE);
+        assertThat(row.reference()).as("the sales invoice number, never blank").isEqualTo(siNumber);
+
+        // The AR invoice list (and the on-screen statement's open items) name it too.
+        List<ArInvoiceDto> listed = arInvoiceService
+                .listByCustomer(company.getId(), customer.id(), PageRequest.of(0, 50)).getContent();
+        assertThat(listed).filteredOn(i -> i.originalAmount().compareTo(new BigDecimal("750")) == 0)
+                .extracting(ArInvoiceDto::documentNo).containsExactly(siNumber);
+        // An item that carries its own number keeps it.
+        assertThat(listed).extracting(ArInvoiceDto::documentNo).contains("INV-1", "OB-1");
+    }
+
+    // ---- Live-test defect 2: a foreign-currency customer's statement defaulted to TZS ---------
+
+    @Test
+    void noCurrencyNamed_aCustomerTradingInTwoCurrencies_getsOneSectionEach_baseFirst() {
+        List<ArCustomerLedgerDto> sections = ledgerQuery.statements(company.getId(), null,
+                customer.uid(), LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null);
+
+        assertThat(sections).extracting(ArCustomerLedgerDto::currency).containsExactly("TZS", "USD");
+        assertThat(sections.get(0).closingBalance()).isEqualByComparingTo("1025");
+        assertThat(sections.get(1).closingBalance()).isEqualByComparingTo("200");
+    }
+
+    @Test
+    void noCurrencyNamed_theCustomersOwnDefaultCurrency_comesFirst() {
+        jdbc.update("UPDATE customers SET default_currency = 'USD' WHERE id = ?", customer.id());
+
+        List<ArCustomerLedgerDto> sections = ledgerQuery.statements(company.getId(), null,
+                customer.uid(), LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null);
+        assertThat(sections).extracting(ArCustomerLedgerDto::currency).containsExactly("USD", "TZS");
+        // The single-currency read now defaults to the customer's own currency, not TZS.
+        assertThat(ledgerQuery.ledger(company.getId(), null, customer.uid(),
+                null, LocalDate.of(2026, 9, 30), null).currency()).isEqualTo("USD");
+    }
+
+    @Test
+    void noCurrencyNamed_aCustomerWhoOnlyTradesInDollars_getsADollarStatement_notAnEmptyTzsOne() {
+        actAs(root, company);
+        CustomerDto usdOnly = customerService.create(new CreateCustomerRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Dollar Lodge", null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                CustomerKind.CREDIT_ACCOUNT, null, null, null));
+        invoice(company.getId(), usdOnly.id(), "SALE", "INV-D1", "1200", "USD",
+                LocalDate.of(2026, 9, 2));
+
+        List<ArCustomerLedgerDto> sections = ledgerQuery.statements(company.getId(), null,
+                usdOnly.uid(), null, LocalDate.of(2026, 9, 30), null);
+        assertThat(sections).hasSize(1);
+        assertThat(sections.get(0).currency()).isEqualTo("USD");
+        assertThat(sections.get(0).rows()).hasSize(1);
+        assertThat(sections.get(0).closingBalance()).isEqualByComparingTo("1200");
+        assertThat(sections.get(0).otherCurrencyCount()).isZero();
+    }
+
+    @Test
+    void aNamedCurrency_isStillExactlyOneSection() {
+        assertThat(ledgerQuery.statements(company.getId(), null, customer.uid(),
+                null, LocalDate.of(2026, 9, 30), "TZS"))
+                .singleElement().satisfies(d -> {
+                    assertThat(d.currency()).isEqualTo("TZS");
+                    assertThat(d.otherCurrencyCount()).isEqualTo(1);
+                });
+    }
+
+    /** A finalised sales invoice and the credit-sale open item raised from it, with no document_no. */
+    private String creditSaleWithoutDocumentNo(String amount, LocalDate date) {
+        ReportSeed seed = new ReportSeed(jdbc);
+        Branch branch = branches.save(new Branch(company, "ARLGB" + SEQ.incrementAndGet(), "Main"));
+        long agent = seed.agent(company.getId(), "AG" + SEQ.incrementAndGet(), "Agent");
+        ReportSeed.Invoice si = seed.invoice(company.getId(), branch.getId(), customer.id(), agent,
+                null, root.getId(), "FINALISED", date.atStartOfDay().atOffset(java.time.ZoneOffset.UTC));
+        String number = jdbc.queryForObject("SELECT invoice_number FROM sales_invoices WHERE id = ?",
+                String.class, si.id());
+        jdbc.update("""
+                INSERT INTO ar_invoices (uid, company_id, customer_id, source, source_invoice_uid,
+                    document_no, original_amount, outstanding_amount, currency, invoice_date,
+                    due_date, status)
+                VALUES (?, ?, ?, 'SALE', ?, NULL, ?, ?, 'TZS', ?, ?, 'OPEN')
+                """, uid(), company.getId(), customer.id(), si.uid(),
+                new BigDecimal(amount), new BigDecimal(amount), date, date.plusDays(30));
+        return number;
     }
 
     // -------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import com.erp.modules.ap.domain.dto.ApSupplierRefDto;
 import com.erp.modules.ap.domain.enums.ApLedgerEntryType;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.StatementCurrencies;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -45,8 +46,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Settlement discounts / write-offs recorded on a payment allocation are data-only — they never
  * reduce the bill outstanding — so they are not movements here either.
  *
- * <p>One currency per statement (default: the company's base currency). Movements in other
- * currencies are counted and left off. Cross-module reads (suppliers, companies) are scalar native
+ * <p>One currency per section: a named currency gives one section (movements in other currencies
+ * are counted and left off); none named gives one section per currency the supplier trades in
+ * ({@link #statements}). Cross-module reads (suppliers, companies) are scalar native
  * SQL — no parties/iam entity or repository import.
  */
 @Component
@@ -74,9 +76,11 @@ public class ApSupplierLedgerQuery {
                        b.id        AS src_id,
                        CASE WHEN b.source = 'OPENING_BALANCE' THEN 'OPENING_BALANCE'
                             ELSE 'BILL' END AS entry_type,
-                       b.bill_number AS reference,
+                       -- our bill number (chk_supplier_bill_number_when_posted guarantees one
+                       -- on every posted bill); the supplier's invoice number is a defensive fallback
+                       COALESCE(NULLIF(b.bill_number, ''), b.supplier_invoice_no) AS reference,
                        CASE WHEN b.source = 'OPENING_BALANCE' THEN 'Opening balance'
-                            ELSE 'Bill, supplier invoice ' || b.supplier_invoice_no
+                            ELSE 'Bill, supplier invoice ' || COALESCE(b.supplier_invoice_no, '-')
                                  || ', due ' || to_char(b.due_date, 'DD-Mon-YYYY') END AS description,
                        b.currency     AS currency,
                        CAST(0 AS NUMERIC) AS debit,
@@ -163,14 +167,29 @@ public class ApSupplierLedgerQuery {
     }
 
     /**
-     * The statement for one supplier.
+     * The statement for one supplier, in ONE currency.
      *
      * @param fromDate first day shown; null = from the supplier's first movement (no b/f balance)
      * @param toDate   last day shown (inclusive); null = today
-     * @param currency the statement currency; null/blank = the company's base currency
+     * @param currency the statement currency; null/blank = the supplier's primary currency (the
+     *                 first section {@link #statements} would print)
      */
     public ApSupplierLedgerDto ledger(Long companyId, Long supplierId, String supplierUid,
                                       LocalDate fromDate, LocalDate toDate, String currency) {
+        return statements(companyId, supplierId, supplierUid, fromDate, toDate, currency).get(0);
+    }
+
+    /**
+     * The supplier statement as one section per currency — what the printed statement shows. A
+     * named {@code currency} gives exactly that section; none named gives one section per currency
+     * the supplier has movements in up to {@code toDate} (supplier's default currency first, then
+     * base, then others), never summed together — see {@link StatementCurrencies}.
+     *
+     * @return never empty
+     */
+    public List<ApSupplierLedgerDto> statements(Long companyId, Long supplierId, String supplierUid,
+                                                LocalDate fromDate, LocalDate toDate,
+                                                String currency) {
         ApSupplierRefDto supplier = resolveSupplier(companyId, supplierId, supplierUid);
         CompanyRow co = loadCompany(companyId);
 
@@ -178,16 +197,39 @@ public class ApSupplierLedgerQuery {
         if (fromDate != null && fromDate.isAfter(to)) {
             throw new IllegalArgumentException("The start date must be on or before the end date.");
         }
-        String ccy = currency != null && !currency.isBlank()
-                ? currency.trim().toUpperCase() : co.baseCurrency();
-
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("companyId", companyId)
                 .addValue("supplierId", supplier.id())
                 .addValue("tz", co.timeZone())
-                .addValue("currency", ccy)
                 .addValue("toDate", to)
                 .addValue("fromDate", fromDate);
+
+        if (currency != null && !currency.isBlank()) {
+            return List.of(section(supplier, co, p, fromDate, to, currency.trim().toUpperCase()));
+        }
+
+        List<String> present = jdbc.queryForList(ENTRIES_CTE + """
+                SELECT DISTINCT currency FROM entries
+                WHERE entry_date <= :toDate AND currency IS NOT NULL
+                """, p, String.class);
+        List<String> own = jdbc.queryForList(
+                "SELECT default_currency FROM suppliers"
+                        + " WHERE company_id = :companyId AND id = :supplierId",
+                p, String.class);
+        List<String> order = StatementCurrencies.order(present,
+                own.isEmpty() ? null : own.get(0), co.baseCurrency());
+        List<ApSupplierLedgerDto> sections = new ArrayList<>(order.size());
+        for (String ccy : order) {
+            sections.add(section(supplier, co, p, fromDate, to, ccy));
+        }
+        return sections;
+    }
+
+    private ApSupplierLedgerDto section(ApSupplierRefDto supplier, CompanyRow co,
+                                        MapSqlParameterSource base, LocalDate fromDate,
+                                        LocalDate to, String ccy) {
+        MapSqlParameterSource p = new MapSqlParameterSource(base.getValues())
+                .addValue("currency", ccy);
 
         // Balance = what we owe = credits − debits.
         BigDecimal opening = BigDecimal.ZERO;

@@ -136,6 +136,13 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                     "dueDate (" + dueDate + ") must not be before billDate (" + req.billDate() + ").");
         }
 
+        // The VAT rate is a fraction (0.18 = 18%), the scale of the tax-rate master and of every
+        // other VAT rate in the system. "18" would be 1800% VAT — refuse it before anything is saved.
+        int lineNo1 = 1;
+        for (BillLineRequest lr : req.lines()) {
+            assertVatRate(lr.vatRate(), lineNo1++);
+        }
+
         // Compute net amount from lines and per-line VAT (D-8).
         // lineVatAmount = lineNetAmount × vatRate (zero when vatStatus is null/ZERO_RATED/EXEMPT).
         BigDecimal netAmount     = BigDecimal.ZERO;
@@ -387,6 +394,20 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 // NEVER_MATCHED, never to "compared" — an unknown must never read as verified.
                 comparisonState != null ? comparisonState : BillComparisonState.NEVER_MATCHED,
                 lineDtos);
+    }
+
+    /**
+     * A bill line's VAT rate must be a fraction from 0 up to (not including) 1 — 0.18 for 18%. The
+     * tax-rate master holds the same scale (0–0.9999).
+     */
+    static void assertVatRate(BigDecimal vatRate, int lineNo) {
+        if (vatRate == null) {
+            return;
+        }
+        if (vatRate.signum() < 0 || vatRate.compareTo(BigDecimal.ONE) >= 0) {
+            throw new IllegalArgumentException("Line " + lineNo + ": the VAT rate must be a fraction"
+                    + " between 0 and 1 — enter 0.18 for 18%.");
+        }
     }
 
     /**

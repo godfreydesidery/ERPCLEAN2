@@ -48,7 +48,9 @@ class ArAgeingQueryCustomerAgeingTest {
         customers   = mock(CustomerRepository.class);
         scopeGuard  = mock(ScopeGuard.class);
 
-        query = new ArAgeingQuery(invoices, receipts, allocations, companies, customers, scopeGuard);
+        query = new ArAgeingQuery(invoices, receipts, allocations, companies, customers, scopeGuard,
+                new ArDocumentNumberResolver(org.mockito.Mockito.mock(
+                        org.springframework.jdbc.core.JdbcTemplate.class)));
 
         RequestContext.set(new RequestContext.Principal(
                 1L, "user@test.com", false, COMPANY_ID, 20L, null));

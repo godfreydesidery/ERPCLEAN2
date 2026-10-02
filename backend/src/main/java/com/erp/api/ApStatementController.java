@@ -137,11 +137,12 @@ public class ApStatementController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) String currency,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        ApSupplierLedgerDto dto = ledgerQuery.ledger(companyId, supplierId, supplierUid,
-                fromDate, toDate != null ? toDate : asAt, currency);
+        // No currency named: one section per currency the supplier trades in (their own first).
+        List<ApSupplierLedgerDto> sections = ledgerQuery.statements(companyId, supplierId,
+                supplierUid, fromDate, toDate != null ? toDate : asAt, currency);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(dto, head, ZonedDateTime.now()), format));
+                flattenStatement(sections, head, ZonedDateTime.now()), format));
     }
 
     /** Sub-ledger vs GL 2100 reconciliation. */
@@ -167,54 +168,44 @@ public class ApStatementController {
     static TabularRenderModel flattenStatement(ApSupplierLedgerDto dto,
                                                ExportLetterhead.Letterhead head,
                                                ZonedDateTime now) {
+        return flattenStatement(List.of(dto), head, now);
+    }
+
+    /** The supplier statement document: one section per currency (one section = the classic layout). */
+    static TabularRenderModel flattenStatement(List<ApSupplierLedgerDto> sections,
+                                               ExportLetterhead.Letterhead head,
+                                               ZonedDateTime now) {
+        ApSupplierLedgerDto dto = sections.get(0);
         ReportCompanyHeaderDto company = head != null && head.company() != null
                 ? head.company() : dto.company();
-        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
-        headerLines.add("Supplier: " + ArStatementController.party(dto.supplierCode(), dto.supplierName()));
+        List<String> partyLines = new ArrayList<>();
+        partyLines.add("Supplier: " + ArStatementController.party(dto.supplierCode(), dto.supplierName()));
         if (dto.supplierTin() != null && !dto.supplierTin().isBlank()) {
-            headerLines.add("Supplier TIN: " + dto.supplierTin());
+            partyLines.add("Supplier TIN: " + dto.supplierTin());
         }
         if (dto.supplierVrn() != null && !dto.supplierVrn().isBlank()) {
-            headerLines.add("Supplier VRN: " + dto.supplierVrn());
+            partyLines.add("Supplier VRN: " + dto.supplierVrn());
         }
-        headerLines.add(ArStatementController.period(dto.fromDate(), dto.toDate()));
-        headerLines.add("Currency: " + dto.currency());
-
-        List<List<String>> rows = new ArrayList<>(dto.rows().size() + 1);
-        if (dto.fromDate() != null) {
-            rows.add(List.of(dto.fromDate().toString(), "", "", "Balance brought forward",
-                    "", "", fmtAmt(dto.openingBalance())));
+        List<ArStatementController.LedgerSection> printable = new ArrayList<>(sections.size());
+        for (ApSupplierLedgerDto s : sections) {
+            List<List<String>> rows = new ArrayList<>(s.rows().size());
+            for (ApSupplierLedgerRowDto r : s.rows()) {
+                rows.add(List.of(
+                        r.date() != null ? r.date().toString() : "",
+                        typeLabel(r.type()),
+                        nullToEmpty(r.reference()),
+                        nullToEmpty(r.description()),
+                        fmtAmtOrBlank(r.debit()),
+                        fmtAmtOrBlank(r.credit()),
+                        fmtAmt(r.balance())));
+            }
+            printable.add(new ArStatementController.LedgerSection(s.currency(), s.openingBalance(),
+                    rows, s.totalDebit(), s.totalCredit(), s.closingBalance(),
+                    s.otherCurrencyCount()));
         }
-        for (ApSupplierLedgerRowDto r : dto.rows()) {
-            rows.add(List.of(
-                    r.date() != null ? r.date().toString() : "",
-                    typeLabel(r.type()),
-                    nullToEmpty(r.reference()),
-                    nullToEmpty(r.description()),
-                    fmtAmtOrBlank(r.debit()),
-                    fmtAmtOrBlank(r.credit()),
-                    fmtAmt(r.balance())));
-        }
-        List<String> totalsRow = List.of("", "", "", "Closing balance",
-                fmtAmt(dto.totalDebit()), fmtAmt(dto.totalCredit()), fmtAmt(dto.closingBalance()));
-
-        List<String> footer = new ArrayList<>();
-        if (dto.rows().isEmpty()) {
-            footer.add("No transactions in this period.");
-        }
-        footer.add(ArStatementController.closingSentence(dto.closingBalance(), dto.currency(),
-                "Amount owed to supplier", "Supplier owes us (advance / credit)"));
-        if (dto.otherCurrencyCount() > 0) {
-            footer.add("Note: " + dto.otherCurrencyCount() + " transaction"
-                    + (dto.otherCurrencyCount() == 1 ? " is" : "s are")
-                    + " in another currency and not included in this " + dto.currency()
-                    + " statement.");
-        }
-        footer.add(ExportLetterhead.printFootprint(company, now));
-
-        return new TabularRenderModel("Supplier Statement", headerLines,
-                ExportLetterhead.generatedAt(now), ArStatementController.ledgerColumns(),
-                rows, totalsRow, footer, head != null ? head.logoDataUri() : null);
+        return ArStatementController.ledgerDocument("Supplier Statement", company, partyLines,
+                dto.fromDate(), dto.toDate(), printable, "Amount owed to supplier",
+                "Supplier owes us (advance / credit)", head, now);
     }
 
     static TabularRenderModel flattenAgeing(List<ApAgeingRowDto> ageing, ApSupplierRefDto supplier,
