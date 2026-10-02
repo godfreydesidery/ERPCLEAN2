@@ -174,15 +174,66 @@ class SalesOrderTotalsCalculatorTest {
     }
 
     // -------------------------------------------------------------------------
+    // Document-currency rounding (live defect): USD orders and quotes round in cents, exactly
+    // as the invoice billed from them does — never in TZS's whole units.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void usdOrder_vatIsRoundedToCents_andAgreesWithTheInvoiceCalculator() {
+        SalesOrder order = newOrder("USD");
+        SalesOrderLine line = orderLine(order, 1, "12.0000", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, false);
+
+        calculator.recompute(order, List.of(line));
+
+        assertThat(line.getNetAmount()).isEqualByComparingTo("12.00");
+        assertThat(line.getVatAmount()).isEqualByComparingTo("2.16");
+        assertThat(line.getGrossAmount()).isEqualByComparingTo("14.16");
+        assertThat(order.getGrossTotalAmount()).isEqualByComparingTo("14.16");
+    }
+
+    @Test
+    void usdQuotation_inclusiveLine_roundsInCents_grossPreserved() {
+        Quotation quote = newQuotation("USD");
+        QuotationLine line = quotationLine(quote, 1, "9.9900", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, true);
+
+        calculator.recompute(quote, List.of(line));
+
+        assertThat(line.getGrossAmount()).isEqualByComparingTo("9.99");
+        assertThat(line.getNetAmount()).isEqualByComparingTo("8.47");   // 8.4661
+        assertThat(line.getVatAmount()).isEqualByComparingTo("1.52");
+    }
+
+    @Test
+    void tzsOrder_stillRoundsToWholeShillings() {
+        SalesOrder order = newOrder("TZS");
+        SalesOrderLine line = orderLine(order, 1, "12.0000", BigDecimal.ONE,
+                VatStatus.STANDARD, STANDARD_RATE, false);
+
+        calculator.recompute(order, List.of(line));
+
+        assertThat(line.getVatAmount()).isEqualByComparingTo("2");
+    }
+
+    // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
 
     private static SalesOrder newOrder() {
-        return new SalesOrder(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, "TZS", LocalDate.now(), 1L);
+        return newOrder("TZS");
+    }
+
+    private static SalesOrder newOrder(String currency) {
+        return new SalesOrder(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, currency, LocalDate.now(), 1L);
     }
 
     private static Quotation newQuotation() {
-        return new Quotation(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, "TZS",
+        return newQuotation("TZS");
+    }
+
+    private static Quotation newQuotation(String currency) {
+        return new Quotation(COMPANY_ID, BRANCH_ID, CUSTOMER_ID, AGENT_ID, currency,
                 LocalDate.now(), LocalDate.now().plusDays(30), 1L);
     }
 

@@ -70,15 +70,28 @@ public final class ReportSeed {
     public Invoice invoice(long companyId, long branchId, long customerId, long agentId,
                            Long routeId, Long createdBy, String status,
                            OffsetDateTime finalisedAt) {
+        return invoice(companyId, branchId, customerId, agentId, routeId, createdBy, status,
+                finalisedAt, "TZS", BigDecimal.ONE);
+    }
+
+    /**
+     * A sales invoice header in {@code currency}, stamped with {@code fxRate} (units of base per 1
+     * document unit) as finalise would stamp it. Lines added with {@link #line(Invoice, int, long,
+     * long, BigDecimal, BigDecimal, BigDecimal, BigDecimal, BigDecimal)} carry the same currency.
+     */
+    public Invoice invoice(long companyId, long branchId, long customerId, long agentId,
+                           Long routeId, Long createdBy, String status,
+                           OffsetDateTime finalisedAt, String currency, BigDecimal fxRate) {
         String uid = Ulid.next();
         long id = id("INSERT INTO sales_invoices (uid, company_id, branch_id, invoice_number, "
-                + "status, customer_id, agent_id, currency, route_id, created_by, finalised_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'TZS', ?, ?, ?) RETURNING id",
+                + "status, customer_id, agent_id, currency, route_id, created_by, finalised_at, "
+                + "fx_rate) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 // A draft carries no number (chk_sales_invoice_number_when_finalised).
                 uid, companyId, branchId, "DRAFT".equals(status) ? null : "INV-" + uid.substring(16),
                 status, customerId,
-                agentId, routeId, createdBy, finalisedAt);
-        return new Invoice(id, uid, companyId, branchId);
+                agentId, currency, routeId, createdBy, finalisedAt, fxRate);
+        return new Invoice(id, uid, companyId, branchId, currency);
     }
 
     public void line(Invoice inv, int lineNo, long productId, long unitId, BigDecimal qty,
@@ -88,9 +101,9 @@ public final class ReportSeed {
                 + "qty_in_base, list_price_amount, unit_price_amount, vat_status, vat_rate, "
                 + "net_amount, vat_amount, gross_amount, line_discount_amount, currency) "
                 + "VALUES (?, ?, ?, ?, ?, ?, 'P', 'P', ?, 'PCS', ?, ?, 0, 0, 'STANDARD', 18, "
-                + "?, ?, ?, ?, 'TZS')",
+                + "?, ?, ?, ?, ?)",
                 Ulid.next(), inv.id(), inv.companyId(), inv.branchId(), lineNo, productId,
-                unitId, qty, qtyInBase, net, vat, net.add(vat), discount);
+                unitId, qty, qtyInBase, net, vat, net.add(vat), discount, inv.currency());
     }
 
     public void payment(Invoice inv, String tender, BigDecimal amount, BigDecimal change,
@@ -133,5 +146,5 @@ public final class ReportSeed {
         return id;
     }
 
-    public record Invoice(long id, String uid, long companyId, long branchId) {}
+    public record Invoice(long id, String uid, long companyId, long branchId, String currency) {}
 }

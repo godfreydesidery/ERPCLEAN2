@@ -23,7 +23,7 @@ class SalesSummaryTotalsTest {
         BigDecimal margin = c != null ? n.subtract(c) : null;
         return new SalesSummaryRowDto("K", "L", null, invoices, bd("1"), n.add(bd("18")),
                 BigDecimal.ZERO, bd("18"), n, c, margin,
-                SalesSummaryReportQuery.percentOf(margin, n), c != null ? 0 : 1);
+                SalesSummaryReportQuery.percentOf(margin, n), c != null ? 0 : 1, 0);
     }
 
     @Test
