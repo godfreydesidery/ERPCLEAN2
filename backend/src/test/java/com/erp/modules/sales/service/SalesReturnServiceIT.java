@@ -4,6 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ap.service.ApGlSeeder;
+import com.erp.modules.ar.domain.dto.ArCreditNoteDto;
+import com.erp.modules.ar.service.ArCreditNoteService;
+import com.erp.modules.fx.domain.entity.CurrencyRate;
+import com.erp.modules.fx.repository.CurrencyRateRepository;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.repository.GlConfigRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
@@ -68,6 +72,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -118,6 +123,9 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
     @Autowired private DomainEventDispatcher   dispatcher;
     @Autowired private OutboxPublisher         outboxPublisher;
     @Autowired private TransactionTemplate     txTemplate;
+    @Autowired private ArCreditNoteService     creditNoteService;
+    @Autowired private CurrencyRateRepository  currencyRateRepo;
+    @Autowired private JdbcTemplate            jdbc;
 
     private Company  company;
     private Branch   branch;
@@ -493,6 +501,89 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Live defect -- return VAT was net x 0.18 / 100 (vat_rate is a FRACTION), i.e. ~100x too
+    // small, and rounded to 4 dp rather than the order currency's minor units.
+    // =========================================================================
+
+    @Test
+    void partialReturn_vatIsTheOriginalLineVatProRata_andTheCreditNoteJournalBalances() {
+        ProductDto product = stockableProduct("VatRetWidget", "1500");
+        publishAndDispatchReceipt(product, new BigDecimal("10"), new BigDecimal("800"));
+        // 5 x 1 500 = 7 500 net, 18% VAT = 1 350
+        SalesOrderDto so = createAndConfirmOrder(product, new BigDecimal("5"));
+        SalesOrderLineDto sol = salesOrderService.listLines(so.uid()).get(0);
+        assertThat(sol.vatAmount()).isEqualByComparingTo("1350");
+        DeliveryDto delivery = deliverAll(so, new BigDecimal("5"));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+
+        setCtx();
+        SalesReturnDto ret = salesReturnService.create(new CreateSalesReturnRequest(
+                delivery.uid(), LocalDate.now(), "Two came back",
+                List.of(new CreateSalesReturnRequest.ReturnLineRequest(
+                        delivery.lines().get(0).uid(), new BigDecimal("2")))));
+
+        // 2/5 of the line: net 3 000, VAT 540 (was 5.4000), gross 3 540 -- whole shillings.
+        assertThat(ret.netAmount()).isEqualByComparingTo("3000");
+        assertThat(ret.vatAmount()).as("2/5 of the order line VAT of 1 350")
+                .isEqualByComparingTo("540");
+        assertThat(ret.grossAmount()).isEqualByComparingTo("3540");
+        assertThat(ret.lines().get(0).vatAmount()).isEqualByComparingTo("540");
+        assertThat(ret.vatAmount().stripTrailingZeros().scale()).isLessThanOrEqualTo(0);
+
+        setCtx();
+        ArCreditNoteDto cn = creditNoteService.getByUid(ret.creditNoteUid());
+        assertThat(cn.netAmount()).isEqualByComparingTo("3000");
+        assertThat(cn.vatAmount()).isEqualByComparingTo("540");
+        assertCreditNoteJournalBalances(cn, "3540");
+    }
+
+    @Test
+    void usdReturn_vatIsInCents_andTheCreditNoteJournalBalancesInBase() {
+        currencyRateRepo.save(new CurrencyRate(company.getId(), branch.getId(), "USD", "TZS",
+                new BigDecimal("2500.00000000"), LocalDate.now(), "SPOT", "MANUAL", rootId));
+        ProductDto product = stockableProduct("UsdRetWidget", "12.00", "USD");
+        publishAndDispatchReceipt(product, new BigDecimal("10"), new BigDecimal("20000"));
+        // 3 x USD 12.00 = 36.00 net, VAT 6.48
+        SalesOrderDto so = createAndConfirmOrder(product, new BigDecimal("3"), "USD");
+        assertThat(salesOrderService.listLines(so.uid()).get(0).vatAmount())
+                .isEqualByComparingTo("6.48");
+        DeliveryDto delivery = deliverAll(so, new BigDecimal("3"));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+
+        setCtx();
+        SalesReturnDto ret = salesReturnService.create(new CreateSalesReturnRequest(
+                delivery.uid(), LocalDate.now(), "One came back",
+                List.of(new CreateSalesReturnRequest.ReturnLineRequest(
+                        delivery.lines().get(0).uid(), BigDecimal.ONE))));
+
+        assertThat(ret.netAmount()).isEqualByComparingTo("12.00");
+        assertThat(ret.vatAmount()).isEqualByComparingTo("2.16");
+        assertThat(ret.grossAmount()).isEqualByComparingTo("14.16");
+
+        setCtx();
+        ArCreditNoteDto cn = creditNoteService.getByUid(ret.creditNoteUid());
+        assertThat(cn.currency()).isEqualTo("USD");
+        assertThat(cn.vatAmount()).isEqualByComparingTo("2.16");
+        // 12.00 x 2 500 = 30 000 + 2.16 x 2 500 = 5 400 -> CR AR 35 400 TZS
+        assertCreditNoteJournalBalances(cn, "35400");
+    }
+
+    private void assertCreditNoteJournalBalances(ArCreditNoteDto cn, String expectedTotal) {
+        List<java.util.Map<String, Object>> legs = jdbc.queryForList(
+                "SELECT jl.debit_amount, jl.credit_amount, jl.currency FROM journal_lines jl "
+                        + "JOIN journal_entries je ON je.id = jl.entry_id WHERE je.uid = ?",
+                cn.glEntryUid());
+        assertThat(legs).as("credit-note journal posted").isNotEmpty();
+        assertThat(legs).allSatisfy(m -> assertThat(m.get("currency")).isEqualTo("TZS"));
+        BigDecimal dr = legs.stream().map(m -> (BigDecimal) m.get("debit_amount"))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cr = legs.stream().map(m -> (BigDecimal) m.get("credit_amount"))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(dr).as("credit-note journal balances").isEqualByComparingTo(cr)
+                .isEqualByComparingTo(expectedTotal);
+    }
+
+    // =========================================================================
     // Private helpers (mirror DeliveryServiceIT)
     // =========================================================================
 
@@ -502,19 +593,28 @@ class SalesReturnServiceIT extends PostgresIntegrationTest {
     }
 
     private ProductDto stockableProduct(String name, String price) {
+        return stockableProduct(name, price, "TZS");
+    }
+
+    private ProductDto stockableProduct(String name, String price, String currency) {
         setCtx();
         ProductDto p = productService.create(new CreateProductRequest(
                 company.getUid(), null, name, null,
                 ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
         productService.setPrice(p.uid(),
-                new SetProductPriceRequest(priceListUid, new MoneyDto(price, "TZS")));
+                new SetProductPriceRequest(priceListUid, new MoneyDto(price, currency)));
         return p;
     }
 
     private SalesOrderDto createAndConfirmOrder(ProductDto product, BigDecimal qty) {
+        return createAndConfirmOrder(product, qty, "TZS");
+    }
+
+    private SalesOrderDto createAndConfirmOrder(ProductDto product, BigDecimal qty,
+                                                String currency) {
         setCtx();
         SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
-                company.getUid(), customerUid, agentUid, "TZS",
+                company.getUid(), customerUid, agentUid, currency,
                 LocalDate.now(), null, null, null, null));
         setCtx();
         salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
