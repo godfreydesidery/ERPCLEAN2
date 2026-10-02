@@ -5,9 +5,10 @@
 #   bash docs/tools/build-manual.sh
 #
 # Produces TWO versions:
-#   * docs/USER-MANUAL.md / .docx              — text-only, COMMITTED to git.
-#   * docs/USER-MANUAL.with-images.md / .docx  — embeds the screenshots, LOCAL-ONLY
-#                                                (gitignored, like docs/user-manual/images/).
+#   * docs/USER-MANUAL.md / .docx / .pdf              — text-only, COMMITTED to git.
+#   * docs/USER-MANUAL.with-images.md / .docx / .pdf  — embeds the screenshots, LOCAL-ONLY
+#                                                       (gitignored, like docs/user-manual/images/).
+# The PDFs need Microsoft Word (Windows); without it that step is skipped.
 # Keeping the heavy image-rich build + the PNGs out of git avoids large files in the repo.
 # Commit the text-only pair (chapters + USER-MANUAL.md + USER-MANUAL.docx) together so they
 # never drift; (re)generate the with-images pair locally — see the screenshot note in
@@ -38,4 +39,16 @@ if [ -d docs/user-manual/images ]; then
 else
   echo "Rebuilt (tracked, text-only):  docs/USER-MANUAL.md + docs/USER-MANUAL.docx"
   echo "Skipped with-images build: docs/user-manual/images/ not present (run web/e2e/capture-screenshots.mjs to (re)create it)."
+fi
+
+# 3) PDFs — exported from the .docx files through Microsoft Word (docs/tools/docx2pdf.ps1), so
+#    each PDF matches its .docx page for page. Text-only PDF is committed with its .docx; the
+#    with-images PDF stays local like the rest of the image-rich build. Skipped without Word.
+PDF_INPUTS=(docs/USER-MANUAL.docx)
+[ -f docs/USER-MANUAL.with-images.docx ] && PDF_INPUTS+=(docs/USER-MANUAL.with-images.docx)
+if command -v powershell >/dev/null 2>&1 && \
+   powershell -NoProfile -Command "try { [void](New-Object -ComObject Word.Application).Quit(); exit 0 } catch { exit 1 }" >/dev/null 2>&1; then
+  powershell -NoProfile -ExecutionPolicy Bypass -File docs/tools/docx2pdf.ps1 "${PDF_INPUTS[@]}"
+else
+  echo "Skipped PDFs: Microsoft Word is not available (open the .docx in Word and Save as PDF instead)."
 fi
