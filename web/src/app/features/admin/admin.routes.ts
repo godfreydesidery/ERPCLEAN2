@@ -625,6 +625,43 @@ export const ADMIN_ROUTES: Routes = [
         (m) => m.ProfitabilityReportComponent,
       ),
   },
+  // Sales Summary (sales by customer / agent / route / branch / day / cashier) — same guard as the
+  // Sales Report, which already discloses margin at it; equal to the endpoint's @PreAuthorize.
+  {
+    path: 'reports/sales-summary',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./reporting/sales-summary-report.component').then(
+        (m) => m.SalesSummaryReportComponent,
+      ),
+  },
+  // Daily cash-up by payment method — POS.SESSION.VIEW, the code the X/Z-reads are read on.
+  {
+    path: 'reports/payment-summary',
+    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    loadComponent: () =>
+      import('./reporting/payment-summary-report.component').then(
+        (m) => m.PaymentSummaryReportComponent,
+      ),
+  },
+  // Reorder Report — STOCK.VIEW (cost columns appear only with INVENTORY.VALUATION.VIEW).
+  {
+    path: 'reports/reorder',
+    canActivate: [requirePermission('STOCK.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/reorder-report.component').then(
+        (m) => m.ReorderReportComponent,
+      ),
+  },
+  // Stock Ageing — discloses stock value, so INVENTORY.VALUATION.VIEW like the other value reports.
+  {
+    path: 'reports/stock-ageing',
+    canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],
+    loadComponent: () =>
+      import('./inventory-valuation/stock-ageing-report.component').then(
+        (m) => m.StockAgeingReportComponent,
+      ),
+  },
   {
     path: 'reports/stock',
     canActivate: [requirePermission('INVENTORY.VALUATION.VIEW')],

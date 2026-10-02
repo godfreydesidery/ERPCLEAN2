@@ -577,6 +577,30 @@ Use this screen to assign an initial cost to products that have a quantity on-ha
 
 The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the product's average cost is established. Opening valuation is a one-time operation per on-hand row. Once a row has been valued it no longer appears on this screen.
 
+### 9.3 Reorder Report
+
+Navigate to **Inventory > Reorder Report** (`/admin/reports/reorder`). Requires `STOCK.VIEW`.
+
+Lists every stock line at or below its reorder level (set per item and location on the Stock On-Hand screen — see 2.4). Optional filters: **Branch** and **Preferred supplier** (type to search); filtering by supplier gives that supplier's order list. Columns: code, description, branch / location, on hand, reorder level, shortfall, **suggested quantity** and preferred supplier.
+
+- The suggested quantity fills the line back up to its maximum level when one is set; otherwise it uses the product's standard reorder quantity; otherwise it is just the shortfall. It is never less than the shortfall.
+- Users who also hold `INVENTORY.VALUATION.VIEW` see two more columns — **Last cost** (the unit cost of the latest goods receipt of the item) and **Order value** — plus an estimated order total. Without that permission the cost columns are not shown at all.
+- Only active products are listed. The reorder level on the product master is not used; the level on the stock line is (the same one the low-stock flag and notification use).
+- Exports additionally require `REPORT.EXPORT`.
+
+### 9.4 Stock Ageing
+
+Navigate to **Inventory > Stock Ageing** (`/admin/reports/stock-ageing`). Requires `INVENTORY.VALUATION.VIEW` (it shows stock value).
+
+Shows, per item, the quantity on hand split into five age bands — **0–30**, **31–60**, **61–90**, **91–180** and **over 180 days** — with the value, and the number of days since the item last sold ("Never" if it has not). Optional filters: **As of** date (defaults to today) and **Branch**. Tick **Only items not sold in 90 days or more** to see slow and dead stock; the totals still cover every item.
+
+**How the age is worked out.** Stock is not labelled with the day it arrived, so the report assumes **first in, first out**: the stock on hand is taken to be the most recently received units. Receipts, opening balances, production, positive adjustments (including count gains and bulk stock imports) and stock transferred in from another branch count as arrivals; moves between your own locations do not change an item's age, and reversals (a voided sale putting stock back) are not new arrivals. Stock is costed at moving average, so each band is valued at the item's average cost — ageing is a view of quantities, and the band values add up exactly to the stock value.
+
+- When the recorded arrivals do not explain all of an item's stock (stock older than the system's records), the unexplained part is put in the **over 180 days** band and marked with an asterisk.
+- Items with no cost show a dash for value and are left out of the value totals; items with negative stock have no age and are left out of the list. A banner counts both.
+- For a past **As of** date, quantities are rebuilt as of that date but valued at today's average cost.
+- Exports additionally require `REPORT.EXPORT`; the PDF prints the first-in, first-out note in its header.
+
 ---
 
 ## 10. Bills of Materials

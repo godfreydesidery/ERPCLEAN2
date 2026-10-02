@@ -911,3 +911,30 @@ Jane checks the X-Read: Sales Total TZS 25,100, Payouts TZS 20,000, Expected Cas
 At end of day Jane counts the drawer: TZS 105,200 (TZS 100 over). She clicks **Close Session**, enters Counted Cash **TZS 105,200** — Variance is **+TZS 100.00** (over).
 
 Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONCILED. Z-Read confirms the +TZS 100 variance and shows Journal **JNL-0519**: DR Cash 100 / CR Till Surplus (4900) 100.
+
+
+---
+
+## 10. Sales analysis reports
+
+### 10.1 Sales Summary (sales by customer, agent, route, branch, day or cashier)
+
+Navigate to **Sales > Sales Summary** (`/admin/reports/sales-summary`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "sales by customer", "agent performance", "sales by route", "daily sales" or "cashier sales".
+
+Pick a **From** and **To** date, a **Group by** option and, optionally, a **Branch**, then click **Run report**. Each row is one customer, sales agent, route, branch, day or cashier, showing: number of invoices, quantity (in base units, so a pack of 12 counts as 12), gross sales, discount, VAT, net sales, cost of sales, margin and margin %. A TOTAL row sums every group.
+
+- Only **finalised** invoices count; drafts and voided invoices do not. Returns and credit notes are **not** deducted — the same as the Sales Report.
+- **Cashier** means the user who created the invoice (at a till, the cashier who rang the sale). **Day** uses the company's time zone.
+- Cost of sales is what the goods cost at the moment of sale. When an item was sold before its stock had ever been costed, its group's cost, margin and margin % show a dash (unknown — not zero), the group is left out of the Cost and Margin totals, and a yellow banner says how many groups and items are affected.
+- Exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`.
+
+### 10.2 Payment Summary (daily cash-up)
+
+Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.SESSION.VIEW` — the permission the till's X-read and Z-read use.
+
+The screen opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
+
+- Amounts are what the business kept: tendered amount less change given back.
+- Payments are counted on the day they were taken, by the person who took them, for sales rung at a till or settled at the counter. A voided sale's payment is not counted.
+- Not included: payments received later against credit invoices (Receivables receipts), till payouts and expenses, and the opening float. To balance one drawer, use the session's X-read / Z-read.
+- Exports additionally require `REPORT.EXPORT`.
