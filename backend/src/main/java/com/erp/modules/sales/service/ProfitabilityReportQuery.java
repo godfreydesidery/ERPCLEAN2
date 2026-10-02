@@ -5,6 +5,7 @@ import com.erp.modules.sales.domain.dto.ProfitabilityReportDto;
 import com.erp.modules.sales.domain.dto.ProfitabilityRowDto;
 import com.erp.modules.sales.domain.dto.ProfitabilityTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -60,10 +61,13 @@ public class ProfitabilityReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public ProfitabilityReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public ProfitabilityReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     /**
@@ -90,6 +94,8 @@ public class ProfitabilityReportQuery {
         OffsetDateTime to   = toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
         NamedRef branch = resolveNamedRef("branches", "name", branchUid, companyId, "Branch");
+
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
 
         String filterSql = "";
         List<Object> filterParams = new ArrayList<>();

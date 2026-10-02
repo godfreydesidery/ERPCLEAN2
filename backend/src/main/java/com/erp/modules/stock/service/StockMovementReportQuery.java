@@ -8,6 +8,7 @@ import com.erp.modules.stock.domain.dto.StockMovementReportTotalsDto;
 import com.erp.modules.stock.domain.dto.StockMovementSummaryRowDto;
 import com.erp.modules.stock.domain.enums.StockMovementReportMode;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -85,10 +86,13 @@ public class StockMovementReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public StockMovementReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public StockMovementReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     /**
@@ -150,6 +154,8 @@ public class StockMovementReportQuery {
         OffsetDateTime to   = toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
         NamedRef branch  = resolveNamedRef("branches", "name", branchUid,  companyId, "Branch");
+
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
         NamedRef product = resolveNamedRef("products", "name", productUid, companyId, "Product");
 
         StringBuilder filterSql = new StringBuilder();

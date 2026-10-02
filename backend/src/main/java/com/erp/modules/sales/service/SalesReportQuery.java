@@ -5,6 +5,7 @@ import com.erp.modules.sales.domain.dto.SalesReportDto;
 import com.erp.modules.sales.domain.dto.SalesReportRowDto;
 import com.erp.modules.sales.domain.dto.SalesReportTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -45,10 +46,13 @@ public class SalesReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public SalesReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public SalesReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     public SalesReportDto report(Long companyId, LocalDate fromDate, LocalDate toDate,
@@ -70,6 +74,7 @@ public class SalesReportQuery {
         NamedRef route    = resolveNamedRef("routes",    "name",         routeUid,    companyId, "Route");
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
 
         StringBuilder filterSql = new StringBuilder();
         List<Object> filterParams = new ArrayList<>();

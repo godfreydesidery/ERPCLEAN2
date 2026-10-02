@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.erp.modules.stock.domain.dto.ProductStockRowDto;
 import com.erp.modules.stock.domain.dto.ProductStockTotalsDto;
 import com.erp.platform.common.api.ForbiddenException;
+import com.erp.platform.security.BranchReadGuard;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -228,7 +229,7 @@ class ProductStockReportQueryTest {
      */
     @Test
     void branchRefusal_namesTheRealReasonAndTheRemedy() {
-        String message = ProductStockReportQuery.branchNotAssigned().getMessage();
+        String message = BranchReadGuard.branchNotAssigned().getMessage();
 
         assertThat(message)
                 .as("the generic denial is the wrong answer here — the caller is not short of a "
@@ -241,7 +242,7 @@ class ProductStockReportQueryTest {
     /** User-facing text: no uids, no ids, no internal reference codes, no table names. */
     @Test
     void branchRefusal_leaksNothingInternal() {
-        String message = ProductStockReportQuery.branchNotAssigned().getMessage();
+        String message = BranchReadGuard.branchNotAssigned().getMessage();
 
         assertThat(message)
                 .doesNotContain("user_branch")

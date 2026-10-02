@@ -2,8 +2,8 @@ package com.erp.modules.stock.service;
 
 import com.erp.modules.stock.domain.dto.ItemInquiryDto;
 import com.erp.modules.stock.domain.dto.ItemInquiryRowDto;
-import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -61,10 +61,13 @@ public class ItemInquiryQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public ItemInquiryQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public ItemInquiryQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     /**
@@ -80,7 +83,7 @@ public class ItemInquiryQuery {
 
         CompanyRef company = loadCompany(companyId);
         NamedRef branch = resolveBranch(branchUid, companyId);
-        assertMayReadBranch(principal, branch);
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
         PriceList priceList = resolveDefaultPriceList(companyId);
 
         String currency = company.baseCurrency() != null ? company.baseCurrency() : CURRENCY_FALLBACK;
@@ -252,35 +255,6 @@ public class ItemInquiryQuery {
         return found.get(0);
     }
 
-    /**
-     * A branch uid on the query string is a filter the CALLER supplies, so it clears the same bar as
-     * the {@code X-Branch-Uid} session override: same company (already enforced by the resolve
-     * above) AND a live {@code user_branch} assignment. Identical to the register's rule — see
-     * {@code ProductStockReportQuery#assertMayReadBranch} — because the hole would be identical too:
-     * without it, a storekeeper assigned only to Arusha could read Dodoma's quantities by editing a
-     * URL, which the header path refuses.
-     */
-    private void assertMayReadBranch(RequestContext.Principal principal, NamedRef branch) {
-        if (branch == null || (principal != null && principal.root())) {
-            return;
-        }
-        Long userId = principal != null ? principal.userId() : null;
-        if (userId == null) {
-            throw ForbiddenException.notPermitted();
-        }
-        Integer assigned = jdbc.query(
-                """
-                SELECT 1
-                FROM user_branch
-                WHERE user_id = ? AND branch_id = ? AND active = true AND revoked_at IS NULL
-                LIMIT 1
-                """,
-                (ResultSetExtractor<Integer>) rs -> rs.next() ? 1 : null,
-                userId, branch.id());
-        if (assigned == null) {
-            throw ProductStockReportQuery.branchNotAssigned();
-        }
-    }
 
     private CompanyRef loadCompany(Long companyId) {
         List<CompanyRef> found = jdbc.query(
