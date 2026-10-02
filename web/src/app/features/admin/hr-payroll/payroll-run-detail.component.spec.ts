@@ -286,9 +286,27 @@ describe('PayrollRunDetailComponent — Download bank file', () => {
     expect(html()).not.toContain('AccessDeniedException');
   });
 
+  it('explains a 409 status refusal (run changed since the page loaded), never the server text', async () => {
+    const { fixture, html } = await mount(
+      {
+        downloadEftFile: vi.fn(() =>
+          throwError(() => new HttpErrorResponse({ status: 409, error: 'ConflictException REVERSED' })),
+        ),
+      },
+      ['HR.PAYROLL.DISBURSE'],
+    );
+    findButton(fixture, 'Download bank file')!.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.bankFileError()).toBe(
+      'A bank file can only be produced for a posted or paid payroll run, and this run is no'
+        + ' longer in that state. Refresh the page to see its current status.',
+    );
+    expect(html()).not.toContain('ConflictException');
+  });
+
   it('shows a friendly message on another 4xx', async () => {
     const { fixture } = await mount(
-      { downloadEftFile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 409 }))) },
+      { downloadEftFile: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 422 }))) },
       ['HR.PAYROLL.DISBURSE'],
     );
     findButton(fixture, 'Download bank file')!.click();

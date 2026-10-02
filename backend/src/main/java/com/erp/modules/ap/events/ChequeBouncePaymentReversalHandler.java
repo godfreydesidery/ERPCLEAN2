@@ -33,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link com.erp.modules.ar.events.ChequeBounceReversalHandler}: posts an APPEND-ONLY reversing
  * JournalEntry of the owning AP payment's cash leg (DR Cash|Bank / CR AP-control — the exact inverse
  * of the payment, produced by the GL engine's {@code postReversal}, so ΣDR == ΣCR by construction),
- * stamps {@code reversed_at}, and restores the relieved bill outstanding (face + base).
+ * stamps {@code reversed_at}, restores the relieved bill outstanding (face + base), and zeroes the
+ * payment's on-account remainder (the reversal returned it to AP-control too).
  *
  * <p>The bounce register transition is INBOUND-only in v1 (D-9); this handler is the ready,
  * provably-balanced consumer for the OUTBOUND path so no GL leg is ever left unbalanced when that
@@ -177,6 +178,10 @@ public class ChequeBouncePaymentReversalHandler implements DomainEventHandler {
             });
         }
 
+        // The GL reversal put the WHOLE payment back on AP-control (allocated + on-account), so
+        // nothing of it is on account any more. Leaving a remainder would keep netting it off the
+        // sub-ledger and the AP reconciliation would read short by exactly that amount.
+        payment.setUnallocatedAmount(BigDecimal.ZERO);
         payment.setReversedAt(Instant.now());
         payment.setUpdatedAt(Instant.now());
         payments.save(payment);

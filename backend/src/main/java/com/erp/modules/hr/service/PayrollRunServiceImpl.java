@@ -487,6 +487,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
     public String exportEftBatch(String runUid) {
         PayrollRun run = requireByUid(runUid);
         scopeGuard.assertCanActIn(RequestContext.get(), run.getCompanyId());
+        assertDisbursable(run);
 
         List<PayrollLine> runLines = lines.findByPayrollRunIdOrderByEmployeeIdAsc(run.getId());
 
@@ -510,6 +511,27 @@ public class PayrollRunServiceImpl implements PayrollRunService {
     }
 
     // --- private helpers ---
+
+    /**
+     * The bank file is an instruction to pay each employee's net — so it may only be produced for a
+     * run whose amounts are approved and on the books: POSTED (about to be disbursed, which itself
+     * requires POSTED) or PAID (re-download after disbursement). A DRAFT / CALCULATED / APPROVED run
+     * can still change and has not been posted; a REVERSED run must not be paid at all. Enforced
+     * here, not only on the screen, so a direct call to the endpoint cannot produce one either.
+     */
+    private static void assertDisbursable(PayrollRun run) {
+        PayrollRunStatus status = run.getStatus();
+        if (status == PayrollRunStatus.POSTED || status == PayrollRunStatus.PAID) {
+            return;
+        }
+        if (status == PayrollRunStatus.REVERSED) {
+            throw new ConflictException(
+                    "This payroll run has been reversed, so a bank payment file cannot be produced for it.");
+        }
+        throw new ConflictException(
+                "A bank payment file can only be produced once the payroll run has been approved and"
+                + " posted. Post this run first, then download the bank file.");
+    }
 
     /**
      * Snapshots the employee's payee details onto the payroll line.

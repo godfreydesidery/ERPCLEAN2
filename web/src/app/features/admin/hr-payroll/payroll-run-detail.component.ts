@@ -183,7 +183,16 @@ export class PayrollRunDetailComponent {
       },
       error: (err) => {
         this.downloadingBankFile.set(false);
-        this.bankFileError.set(this.downloadMessage(err, 'the bank file'));
+        // 409 = the server refused because of the run's status (only POSTED / PAID runs may produce
+        // a bank file). The button is only offered for those, so the run must have changed since the
+        // page loaded (e.g. reversed in another tab) — say so rather than "not available yet".
+        const conflict = err instanceof HttpErrorResponse && err.status === 409;
+        this.bankFileError.set(
+          conflict
+            ? 'A bank file can only be produced for a posted or paid payroll run, and this run is no'
+              + ' longer in that state. Refresh the page to see its current status.'
+            : this.downloadMessage(err, 'the bank file'),
+        );
       },
     });
   }

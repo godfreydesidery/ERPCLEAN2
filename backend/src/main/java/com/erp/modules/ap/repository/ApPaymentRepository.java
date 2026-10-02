@@ -46,6 +46,7 @@ public interface ApPaymentRepository extends JpaRepository<ApPayment, Long> {
             FROM ApPayment p
             WHERE p.companyId = :companyId
               AND p.supplierId = :supplierId
+              AND p.reversedAt IS NULL
             """)
     BigDecimal sumUnallocatedByCompanyAndSupplier(@Param("companyId") Long companyId,
                                                    @Param("supplierId") Long supplierId);
@@ -53,11 +54,16 @@ public interface ApPaymentRepository extends JpaRepository<ApPayment, Long> {
     /**
      * Sum of unallocated_amount across all payments for a company.
      * Used in AP reconciliation to net on-account balances from GL 2100.
+     *
+     * <p>A reversed (bounced) payment is left out: its GL reversal put the WHOLE payment back on
+     * AP-control, so none of it is on account any more. (The reversal handler also zeroes the
+     * remainder; the filter keeps this right for any row reversed before it did.)
      */
     @Query("""
             SELECT COALESCE(SUM(p.unallocatedAmount), 0)
             FROM ApPayment p
             WHERE p.companyId = :companyId
+              AND p.reversedAt IS NULL
             """)
     BigDecimal sumUnallocatedByCompany(@Param("companyId") Long companyId);
 
@@ -69,6 +75,7 @@ public interface ApPaymentRepository extends JpaRepository<ApPayment, Long> {
             WHERE p.companyId = :companyId
               AND p.supplierId = :supplierId
               AND p.unallocatedAmount > 0
+              AND p.reversedAt IS NULL
             ORDER BY p.paymentDate ASC, p.id ASC
             """)
     List<ApPayment> findOnAccountByCompanyAndSupplier(@Param("companyId") Long companyId,
