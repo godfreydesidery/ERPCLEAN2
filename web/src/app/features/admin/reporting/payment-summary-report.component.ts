@@ -29,7 +29,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
  * The cashier picker is filled from the report itself (everyone who took a payment in the period):
  * the full user list needs USER.VIEW, which a cash-up reader should not need.
  *
- * Route: /admin/reports/payment-summary. Gated POS.SESSION.VIEW (the X/Z-read code); export
+ * Route: /admin/reports/payment-summary. Gated POS.CASHUP.VIEW (managers); export
  * additionally REPORT.EXPORT.
  */
 @Component({
@@ -57,7 +57,7 @@ export class PaymentSummaryReportComponent implements OnInit {
   readonly exporting = signal(false);
   readonly loadError = signal<string | null>(null);
 
-  readonly canView = computed(() => this.session.hasPermission('POS.SESSION.VIEW'));
+  readonly canView = computed(() => this.session.hasPermission('POS.CASHUP.VIEW'));
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.report() === null);
 

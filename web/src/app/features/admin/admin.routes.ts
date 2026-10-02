@@ -686,10 +686,10 @@ export const ADMIN_ROUTES: Routes = [
         (m) => m.SalesSummaryReportComponent,
       ),
   },
-  // Daily cash-up by payment method — POS.SESSION.VIEW, the code the X/Z-reads are read on.
+  // Daily cash-up by payment method — POS.CASHUP.VIEW (managers): it shows every cashier's takings.
   {
     path: 'reports/payment-summary',
-    canActivate: [requirePermission('POS.SESSION.VIEW')],
+    canActivate: [requirePermission('POS.CASHUP.VIEW')],
     loadComponent: () =>
       import('./reporting/payment-summary-report.component').then(
         (m) => m.PaymentSummaryReportComponent,

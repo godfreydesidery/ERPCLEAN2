@@ -33,8 +33,9 @@ import org.springframework.web.bind.annotation.RestController;
  * Daily cash-up / Payment Summary — money taken for finalised sales per day, cashier and payment
  * method.
  *
- * <p>Gated {@code POS.SESSION.VIEW}: the code the till's X-read and Z-read are read on, which
- * already print these same per-tender takings for a session. Rules live in
+ * <p>Gated {@code POS.CASHUP.VIEW}, a managers' code (owner ruling 2026-10-02). It is deliberately
+ * NOT {@code POS.SESSION.VIEW}: a till's X/Z-read shows one session, but this report shows every
+ * cashier's takings company-wide, and CASHIER holds {@code POS.SESSION.VIEW}. Rules live in
  * {@link PaymentSummaryReportQuery}; this controller only flattens for export.
  */
 @RestController
@@ -51,7 +52,7 @@ public class PaymentSummaryReportController {
     }
 
     @GetMapping
-    @PreAuthorize("@perm.has('POS.SESSION.VIEW')")
+    @PreAuthorize("@perm.has('POS.CASHUP.VIEW')")
     public PaymentSummaryReportDto paymentSummary(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
@@ -63,7 +64,7 @@ public class PaymentSummaryReportController {
 
     /** On-screen gate AND {@code REPORT.EXPORT}, as on every report download. */
     @GetMapping("/export")
-    @PreAuthorize("@perm.has('POS.SESSION.VIEW') and @perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('POS.CASHUP.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportPaymentSummary(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,

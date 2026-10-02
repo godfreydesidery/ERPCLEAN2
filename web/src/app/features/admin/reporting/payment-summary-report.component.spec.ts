@@ -1,7 +1,7 @@
 /**
  * PaymentSummaryReportComponent — behaviour specs.
  *
- *  1. Opens on TODAY and runs; never calls the API without POS.SESSION.VIEW.
+ *  1. Opens on TODAY and runs; never calls the API without POS.CASHUP.VIEW.
  *  2. Lines and one total per currency reach the DOM.
  *  3. The cashier picker is filled from the report's own cashier list.
  *  4. Export sends the same filter; hidden without REPORT.EXPORT.
@@ -85,7 +85,7 @@ describe('PaymentSummaryReportComponent', () => {
     expect(f.toDate).toBe(todayIso());
   });
 
-  it('never calls the API without POS.SESSION.VIEW', () => {
+  it('never calls the API without POS.CASHUP.VIEW', () => {
     const { reportSpy } = makeBed({ hasPermission: () => false });
     const fixture = TestBed.createComponent(PaymentSummaryReportComponent);
     fixture.detectChanges();

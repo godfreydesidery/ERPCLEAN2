@@ -301,10 +301,10 @@ function hash(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)
 // =====================================================================================
 const MASTER_VIEW = ['PRODUCT.VIEW', 'CUSTOMER.VIEW', 'SUPPLIER.VIEW', 'AGENT.VIEW', 'ROUTE.VIEW', 'PRICELIST.VIEW', 'UOM.VIEW', 'BRANCH.VIEW', 'COMPANY.VIEW', 'TAXRATE.VIEW', 'CURRENCY.VIEW'];
 const ROLE_DEFS = {
-  RV_CLERK: ['SALES.INVOICE.VIEW', 'STOCK.VIEW', 'INVENTORY.VALUATION.VIEW', 'POS.SESSION.VIEW', 'BI.VIEW'],
+  RV_CLERK: ['SALES.INVOICE.VIEW', 'STOCK.VIEW', 'INVENTORY.VALUATION.VIEW', 'POS.SESSION.VIEW', 'POS.CASHUP.VIEW', 'BI.VIEW'],
   RV_FIN: ['AP.VIEW', 'AR.VIEW', 'AR.STATEMENT.VIEW', 'CASH.VIEW', 'VAT.VIEW', 'WHT.VIEW', 'FA.VIEW', 'HR.PAYROLL.VIEW', 'REPORT.PL.VIEW', 'REPORT.BS.VIEW',
     'REPORT.CASHFLOW.VIEW', 'REPORT.LEDGER.VIEW', 'REPORT.VIEW', 'REPORT.EXPORT', 'PURCHASE.ORDER.VIEW', 'PURCHASE.GOODS_RECEIPT.VIEW', 'SALES.INVOICE.VIEW', 'STOCK.VIEW',
-    'INVENTORY.VALUATION.VIEW', 'POS.SESSION.VIEW', 'BI.VIEW', 'BI.EXPORT', 'GL.VIEW', ...MASTER_VIEW],
+    'INVENTORY.VALUATION.VIEW', 'POS.SESSION.VIEW', 'POS.CASHUP.VIEW', 'BI.VIEW', 'BI.EXPORT', 'GL.VIEW', ...MASTER_VIEW],
   RV_CASHIER: ['SALES.INVOICE.CREATE', 'SALES.INVOICE.SETTLE', 'SALES.INVOICE.VIEW', 'POS.SALE.CREATE', 'POS.SESSION.OPEN', 'POS.SESSION.CLOSE', 'POS.SESSION.VIEW', 'POS.TILL.VIEW', 'STOCK.VIEW', ...MASTER_VIEW],
 };
 const USER_DEFS = [
@@ -862,6 +862,11 @@ async function phaseReports() {
           }
         }
       }
+    }
+    // --- cash-up is managers-only (POS.CASHUP.VIEW): a cashier holds POS.SESSION.VIEW but must be refused
+    if (e.id === 'payment-summary' && C.users.rv_cashier_br1?.token) {
+      const r = await req('GET', url(e.path, e.q), C.users.rv_cashier_br1.token);
+      check(`rbac.${e.id}.cashier-refused`, 'rbac', r.status === 403, { req: r.path, status: r.status, err: errs(r) });
     }
     // --- exports: clerk lacks REPORT.EXPORT -> 403; fin_user holds it -> 200 (one format suffices)
     if (e.exp && clerk) {

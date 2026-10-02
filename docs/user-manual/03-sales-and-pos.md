@@ -930,7 +930,7 @@ Pick a **From** and **To** date, a **Group by** option and, optionally, a **Bran
 
 ### 10.2 Payment Summary (daily cash-up)
 
-Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.SESSION.VIEW` — the permission the till's X-read and Z-read use.
+Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.CASHUP.VIEW` — a managers' permission (Sales Manager, Branch Manager, Accountant, Finance Director). Cashiers do not hold it: the till's X-read and Z-read show their own session, while this report shows every cashier's takings.
 
 The screen opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
 

@@ -188,7 +188,7 @@ export class ShellComponent {
         // One grouped report behind five questions people ask by name — the keywords carry those
         // names (and the Swahili) so the Ctrl+K palette finds it whichever one is typed.
         { label: 'Sales Summary', route: '/admin/reports/sales-summary', icon: 'bi-people', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['sales by customer', 'customer sales', 'sales by route', 'route sales', 'agent performance', 'sales by agent', 'daily sales', 'sales per day', 'cashier sales', 'sales by cashier', 'sales by branch', 'margin', 'mauzo kwa mteja', 'mauzo ya kila siku', 'mauzo ya wakala'] },
-        { label: 'Payment Summary (Cash-up)', route: '/admin/reports/payment-summary', icon: 'bi-wallet2', available: true, permission: 'POS.SESSION.VIEW', keywords: ['cash up', 'cash-up', 'daily cash', 'takings', 'payment method', 'mobile money', 'm-pesa', 'card', 'cashier takings', 'end of day', 'makusanyo', 'pesa taslimu'] },
+        { label: 'Payment Summary (Cash-up)', route: '/admin/reports/payment-summary', icon: 'bi-wallet2', available: true, permission: 'POS.CASHUP.VIEW', keywords: ['cash up', 'cash-up', 'daily cash', 'takings', 'payment method', 'mobile money', 'm-pesa', 'card', 'cashier takings', 'end of day', 'makusanyo', 'pesa taslimu'] },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
         { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
         { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
