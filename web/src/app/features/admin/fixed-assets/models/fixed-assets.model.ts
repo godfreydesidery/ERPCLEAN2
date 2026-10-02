@@ -256,7 +256,10 @@ export interface DepreciationRunDto {
   status: DepreciationRunStatus;
   totalChargeAmount: string;
   assetCount: number;
+  /** The first of the run's journals (kept for existing links). */
   glEntryUid: string;
+  /** Every journal the run posted — one per asset branch. Optional for older API builds. */
+  glEntryUids?: string[];
   currency: string;
   executedAt: string;
   lines: DepreciationRunLineDto[];

@@ -89,10 +89,11 @@
               </div>
               @if (newMethod() === 'REDUCING_BALANCE') {
                 <div class="erp-field">
-                  <label class="form-label" for="newReducingRate">Rate % <span class="text-danger" aria-hidden="true">*</span></label>
-                  <input id="newReducingRate" name="newReducingRate" type="number" step="0.01" class="form-control"
+                  <label class="form-label" for="newReducingRate">Rate % per month <span class="text-danger" aria-hidden="true">*</span></label>
+                  <input id="newReducingRate" name="newReducingRate" type="number" step="0.0001" class="form-control" aria-describedby="newReducingRateHelp"
                          [ngModel]="newReducingRate()" (ngModelChange)="newReducingRate.set(coerceNumStr($event))"
                          [disabled]="saving()" />
+                  <div id="newReducingRateHelp" class="form-text">Charged every month on what is left of the book value &mdash; this is not a yearly rate. For a yearly rate, divide it by 12 (25% a year = 2.0833).</div>
                 </div>
               }
               <div class="erp-field">

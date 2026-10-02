@@ -88,6 +88,25 @@
                        (ngModelChange)="sourceRef.set($event)"
                        [disabled]="posting()" autocomplete="off" />
               </div>
+              <div class="erp-field">
+                <label class="form-label" for="journalBranch">
+                  Branch <span class="text-muted small">(optional)</span>
+                </label>
+                <select id="journalBranch" name="journalBranch" class="form-select"
+                        aria-describedby="journalBranchHelp"
+                        [ngModel]="branchUid()"
+                        (ngModelChange)="branchUid.set($event)"
+                        [disabled]="posting()">
+                  <option value="">Company level (no branch)</option>
+                  @for (b of branchOptions(); track b.uid) {
+                    <option [value]="b.uid">{{ b.label }}</option>
+                  }
+                </select>
+                <div id="journalBranchHelp" class="form-text">
+                  Choose a branch to show this entry in that branch's statements. Leave it at
+                  company level for entries that belong to the whole company.
+                </div>
+              </div>
             </div>
           </div>
         </div>

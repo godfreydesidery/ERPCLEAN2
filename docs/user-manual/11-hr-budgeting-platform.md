@@ -303,7 +303,7 @@ You can recalculate from DRAFT, CALCULATED, or APPROVED status — recalculation
 1. With the run in POSTED status, click **Disburse**.
 2. Enter the **Cash / Bank Account UID** of the account from which the net wages will be paid. (This is a UID text field on this screen; obtain the account UID from your administrator or the Chart of Accounts.)
 3. Optionally enter a **Transaction Date** (defaults to the run's pay date).
-4. Click **Disburse**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account).
+4. Click **Disburse**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account), booked to the payroll run's branch. Net Wages Payable (2550) is a locked payroll control account — you cannot post to it with a manual journal or a direct cash entry — but disbursement is a system settlement and is allowed to clear it.
 
 **Reversing a run (requires `HR.PAYROLL.REVERSE`):**
 

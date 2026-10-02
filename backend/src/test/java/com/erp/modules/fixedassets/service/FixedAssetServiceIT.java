@@ -90,7 +90,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
     private String openPeriodUid;
     private LocalDate openPeriodDate;
 
-    // GL account IDs seeded by FixedAssetGlSeeder (1600/1700/5500)
+    // GL account IDs seeded by FixedAssetGlSeeder (1600/1700/5600)
     private Long assetAccountId;
     private Long accumDepAccountId;
     private Long depExpenseAccountId;
@@ -133,7 +133,7 @@ class FixedAssetServiceIT extends PostgresIntegrationTest {
                 .orElseThrow().getId();
         accumDepAccountId = coaRepo.findByCompanyIdAndAccountCode(companyId, "1700")
                 .orElseThrow().getId();
-        depExpenseAccountId = coaRepo.findByCompanyIdAndAccountCode(companyId, "5500")
+        depExpenseAccountId = coaRepo.findByCompanyIdAndAccountCode(companyId, "5600")
                 .orElseThrow().getId();
     }
 

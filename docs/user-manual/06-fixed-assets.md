@@ -41,12 +41,12 @@ The list shows each category's code, name, depreciation method, life (in periods
 2. Enter a unique **Code** (e.g. `MACH`) and a **Name** (e.g. Machinery).
 3. Choose the **Depreciation Method**:
    - **Straight Line** — equal charge each period.
-   - **Reducing Balance** — percentage of the remaining book value each period. Requires a **Reducing Rate** (e.g. `0.25` for 25%).
+   - **Reducing Balance** — percentage of the remaining book value each period. Requires a **Rate % per month**, entered as a percentage (`2.5` means 2.5%). The rate is charged **every month** — it is not a yearly rate. If your policy or tax schedule gives a yearly rate, divide it by 12: 25% a year is entered as `2.0833`. (Entering `25` charges 25% of the book value every month — a 48,000,000 van would lose 12,000,000 in its first month.)
 4. Enter the **Default Life Periods** — the standard useful life in accounting periods.
 5. Enter the three **GL Account IDs** by their numeric identifier:
    - Asset Account (the balance-sheet asset account, e.g. 1510)
    - Accumulated Depreciation Account (the contra account, e.g. 1515)
-   - Depreciation Expense Account (the P&L charge account, e.g. 6510)
+   - Depreciation Expense Account (the P&L charge account — on a newly provisioned company this is **5600 Depreciation Expense**, the account mapped to the `DEPRECIATION_EXPENSE` GL configuration key)
 6. Click **Create Category** (the button shows **Saving…** while the request is in flight).
 
 New categories are created with status **ACTIVE** (the status is shown throughout the UI as the raw uppercase value, `ACTIVE` or `INACTIVE`).
@@ -98,7 +98,7 @@ DISPOSED and WRITTEN_OFF are terminal states.
 6. Enter the **Acquisition Cost** (the purchase price, excluding VAT).
 7. Enter the **Salvage Value** (the estimated residual value at the end of useful life; enter 0 if none).
 8. Choose the **Depreciation Method** (defaults from the category, can be overridden).
-9. For Reducing Balance, enter the **Reducing Rate**.
+9. For Reducing Balance, enter the **Rate % per month** (a monthly rate — divide a yearly rate by 12; see section 2).
 10. Enter the **Life Periods** (can be overridden from the category default).
 11. Enter the **Acquisition Date** and **Depreciation Start Date** (ISO format yyyy-MM-dd).
 12. Optionally enter a **Location**, **Asset Tag**, and **Cost Centre ID**.
@@ -176,7 +176,7 @@ Depreciation is the systematic allocation of an asset's cost over its useful lif
 | Method | Behaviour |
 |---|---|
 | **Straight Line** | Equal charge each period: (Acquisition Cost − Salvage Value) / Life Periods |
-| **Reducing Balance** | Percentage of the closing book value each period: NBV × Reducing Rate |
+| **Reducing Balance** | Percentage of the opening book value each month: NBV × Rate % per month (the rate is monthly, not yearly) |
 
 **Straight Line** is simpler and produces equal charges — appropriate for assets that provide roughly equal benefit in each period (office furniture, computers). **Reducing Balance** produces a higher charge early and a lower charge later — appropriate for assets that lose value quickly in the first years of use (vehicles, plant). In both cases the final period's charge is a residual plug that ensures the asset reaches exactly its salvage value: there is no rounding drift over the asset's life.
 
@@ -197,14 +197,14 @@ The preview table lists each eligible asset with its planned charge for the peri
 ### 6.3 Posting a depreciation run
 
 **What happens when you post a depreciation run?**
-Posting a depreciation run does three things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts a single consolidated GL journal — one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category — covering every eligible asset; and (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance. Only one run is permitted per company per fiscal period: if a run already exists for that company and period, a second attempt is **hard-rejected** with the message *"Depreciation run already posted … Duplicate runs are not allowed"* (HTTP 409). The run is rejected, not silently returned — so always confirm a period has not already been run before posting, and use the preview step first.
+Posting a depreciation run does three things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts one GL journal **per branch** — each asset's depreciation is booked to the branch the asset belongs to, so each branch's profit and loss shows exactly the depreciation of that branch's assets; within each journal there is one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category; and (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance. Only one run is permitted per company per fiscal period: if a run already exists for that company and period, a second attempt is **hard-rejected** with the message *"Depreciation run already posted … Duplicate runs are not allowed"* (HTTP 409). The run is rejected, not silently returned — so always confirm a period has not already been run before posting, and use the preview step first.
 
 After reviewing the preview:
 
 1. Enter the **Posting Date** (must fall within the selected open fiscal period).
 2. Click **Post Run**.
 
-The system creates a depreciation run with status **Posted** and a run number (e.g. `DEPR-0001`). A single consolidated GL entry is posted covering all eligible assets. Each asset's accumulated depreciation balance increases. The schedule lines for the period are marked as posted.
+The system creates a depreciation run with status **Posted** and a run number (e.g. `DEPR-0001`). One GL entry is posted for each branch that has eligible assets (the run detail lists a **View GL Entry** link for each). Each asset's accumulated depreciation balance increases. The schedule lines for the period are marked as posted.
 
 **Validation.** Only one depreciation run is allowed per company per fiscal period. Attempting a second run for the same period is rejected with a 409 conflict ("Duplicate runs are not allowed"); it is not a safe no-op. The fiscal period containing the posting date must also be open.
 

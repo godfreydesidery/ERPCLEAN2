@@ -122,7 +122,7 @@ class FixedAssetRegisterQueryIT extends PostgresIntegrationTest {
 
         category = categoryService.create(new CreateAssetCategoryRequest(
                 company.getId(), "EQUIP", "Equipment", DepreciationMethod.STRAIGHT_LINE, 12, null,
-                account("1600"), account("1700"), account("5500")));
+                account("1600"), account("1700"), account("5600")));
 
         assetA = register("Forklift", "1200000", 12, ownBranch, "Head Office Yard");
         assetB = register("Delivery Van", "600000", 6, ownBranch, "Depot");

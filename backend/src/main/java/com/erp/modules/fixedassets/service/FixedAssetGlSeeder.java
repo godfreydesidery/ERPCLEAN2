@@ -22,6 +22,9 @@ public class FixedAssetGlSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(FixedAssetGlSeeder.class);
 
+    /** The Depreciation Expense account code a new company is provisioned with. */
+    public static final String DEPRECIATION_EXPENSE_CODE = "5600";
+
     private final ChartOfAccountRepository accounts;
     private final GlConfigRepository       configs;
 
@@ -42,7 +45,13 @@ public class FixedAssetGlSeeder {
                 AccountType.EQUITY, GlConfigKey.REVALUATION_RESERVE);
         seedAccount(companyId, "4200", "Gain / (Loss) on Asset Disposal",
                 AccountType.INCOME, GlConfigKey.GAIN_LOSS_ON_DISPOSAL);
-        seedAccount(companyId, "5500", "Depreciation Expense",
+        // 5600, NOT the 5500 ADR-0030 D-11 named: 5500 was already "Bad Debt Expense" (AR, V11 /
+        // ArGlSeeder), and provisioning seeds AR before FA, so the find-or-create below adopted Bad
+        // Debt Expense and mapped DEPRECIATION_EXPENSE onto it — every new company's depreciation
+        // landed in bad debts. 5600 is free in every seeded chart. Existing companies keep their
+        // mapping (this seeder never rewrites a gl_config that exists); re-provisioning one adds
+        // the 5600 account so an administrator can re-point the mapping to it on GL Configuration.
+        seedAccount(companyId, DEPRECIATION_EXPENSE_CODE, "Depreciation Expense",
                 AccountType.EXPENSE, GlConfigKey.DEPRECIATION_EXPENSE);
     }
 

@@ -13,8 +13,12 @@ import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalBatchRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
+import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -35,7 +39,9 @@ public class JournalServiceImpl implements JournalService {
     private final JournalBatchRepository batches;
     private final ChartOfAccountRepository accounts;
     private final CompanyRepository companies;
+    private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
+    private final BranchReadGuard branchGuard;
 
     public JournalServiceImpl(GLPostingService postingService,
                                JournalEntryRepository entries,
@@ -43,14 +49,18 @@ public class JournalServiceImpl implements JournalService {
                                JournalBatchRepository batches,
                                ChartOfAccountRepository accounts,
                                CompanyRepository companies,
-                               ScopeGuard scopeGuard) {
+                               BranchRepository branches,
+                               ScopeGuard scopeGuard,
+                               BranchReadGuard branchGuard) {
         this.postingService = postingService;
         this.entries        = entries;
         this.lineRepo       = lineRepo;
         this.batches        = batches;
         this.accounts       = accounts;
         this.companies      = companies;
+        this.branches       = branches;
         this.scopeGuard     = scopeGuard;
+        this.branchGuard    = branchGuard;
     }
 
     @Override
@@ -59,6 +69,10 @@ public class JournalServiceImpl implements JournalService {
                 .map(c -> c.getId())
                 .orElseThrow(() -> NotFoundException.of("Company", req.companyUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        // Optional branch: resolved INSIDE the company (a foreign or unknown uid is a 404, never a
+        // silent company-level post), then the caller's assignment is checked. No uid = company level.
+        Long branchId = resolveBranch(companyId, req.branchUid());
 
         // Resolve each line's account uid → id, scoped to company
         List<JournalEntryDraft.LineDraft> draftLines = req.lines().stream()
@@ -82,7 +96,7 @@ public class JournalServiceImpl implements JournalService {
         JournalSourceType sourceType = JournalSourceType.MANUAL;
 
         JournalEntryDraft draft = new JournalEntryDraft(
-                companyId, null, req.postingDate(), req.description(),
+                companyId, branchId, req.postingDate(), req.description(),
                 sourceType, req.sourceRef(), null, actorId(), draftLines);
 
         return postingService.post(draft);
@@ -117,6 +131,20 @@ public class JournalServiceImpl implements JournalService {
     }
 
     // -------------------------------------------------------------------------
+
+    private Long resolveBranch(Long companyId, String branchUid) {
+        if (branchUid == null || branchUid.isBlank()) {
+            return null;
+        }
+        Branch branch = branches.findByUidAndCompanyId(branchUid.trim(), companyId)
+                .orElseThrow(() -> NotFoundException.of("Branch", branchUid));
+        if (!branch.isUsableForSession()) {
+            throw new ConflictException(
+                    "That branch is no longer active, so journals cannot be posted to it.");
+        }
+        branchGuard.assertMayPostTo(RequestContext.get(), branch.getId());
+        return branch.getId();
+    }
 
     private String resolveCurrency(Long companyId) {
         return companies.findById(companyId)

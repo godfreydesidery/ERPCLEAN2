@@ -146,7 +146,7 @@ class FixedAssetTenantIsolationIT extends PostgresIntegrationTest {
         // Resolve Company A GL accounts and open period
         assetAccountAId     = coaRepo.findByCompanyIdAndAccountCode(companyAId, "1600").orElseThrow().getId();
         accumDepAccountAId  = coaRepo.findByCompanyIdAndAccountCode(companyAId, "1700").orElseThrow().getId();
-        depExpenseAccountAId= coaRepo.findByCompanyIdAndAccountCode(companyAId, "5500").orElseThrow().getId();
+        depExpenseAccountAId= coaRepo.findByCompanyIdAndAccountCode(companyAId, "5600").orElseThrow().getId();
 
         List<FiscalPeriodDto> periodsA = fiscalCalendarService.listPeriods(companyAId);
         FiscalPeriodDto firstA = periodsA.stream().findFirst()
@@ -157,7 +157,7 @@ class FixedAssetTenantIsolationIT extends PostgresIntegrationTest {
         // Resolve Company B GL accounts and open period (foreign ids)
         assetAccountBId     = coaRepo.findByCompanyIdAndAccountCode(companyBId, "1600").orElseThrow().getId();
         accumDepAccountBId  = coaRepo.findByCompanyIdAndAccountCode(companyBId, "1700").orElseThrow().getId();
-        depExpenseAccountBId= coaRepo.findByCompanyIdAndAccountCode(companyBId, "5500").orElseThrow().getId();
+        depExpenseAccountBId= coaRepo.findByCompanyIdAndAccountCode(companyBId, "5600").orElseThrow().getId();
 
         List<FiscalPeriodDto> periodsB = fiscalCalendarService.listPeriods(companyBId);
         FiscalPeriodDto firstB = periodsB.stream().findFirst()
