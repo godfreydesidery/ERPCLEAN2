@@ -8,6 +8,7 @@
  * jsdom; the REAL gate for that rule is the Playwright e2e run in a real browser. This
  * spec instead exercises the enhancer's own DOM logic directly.
  */
+import { vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { enhanceScrollWrap, ScrollableRegionService } from './scrollable-region.service';
 
@@ -15,29 +16,6 @@ import { enhanceScrollWrap, ScrollableRegionService } from './scrollable-region.
 function stubOverflow(el: HTMLElement, scrollWidth: number, clientWidth: number): void {
   Object.defineProperty(el, 'scrollWidth', { value: scrollWidth, configurable: true });
   Object.defineProperty(el, 'clientWidth', { value: clientWidth, configurable: true });
-}
-
-/**
- * Waits for `predicate` to hold, polling until `timeoutMs`.
- *
- * The service coalesces mutations behind a 50ms debounce, so a test that asserts on the result has
- * to wait for wall-clock time — microtask flushing will not do it. Waiting a fixed multiple of the
- * debounce is the obvious approach and is what this file did; it is also load-dependent, and it
- * produced a spec that failed in a full suite run and passed alone seconds later.
- *
- * Polling keeps the fast path fast (it returns on the first tick after the debounce fires) while
- * tolerating a machine that is busy, which is the normal condition in CI.
- */
-async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      // Fall through and let the assertion that follows report the real mismatch — a bare timeout
-      // error here would hide WHICH attribute was wrong.
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
 }
 
 function buildWrap(innerHtml: string): HTMLDivElement {
@@ -166,30 +144,32 @@ describe('ScrollableRegionService (app-wide scan)', () => {
   });
 
   it('re-scans and picks up a wrap added to the DOM after rows load asynchronously', async () => {
-    document.body.innerHTML = '<div id="host"></div>';
-    const service = TestBed.inject(ScrollableRegionService);
-    service.start();
+    // Deterministic, not wall-clock. The MutationObserver callback runs as a microtask and the
+    // service then debounces with setTimeout(50ms). Faking only the timers lets the test flush the
+    // microtask and step the clock past the debounce, so the outcome no longer depends on how
+    // busy the machine is. The previous version polled real time and timed out on GitHub Actions
+    // and under a full local run even with a 10s ceiling.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      document.body.innerHTML = '<div id="host"></div>';
+      const service = TestBed.inject(ScrollableRegionService);
+      service.start();
 
-    const host = document.getElementById('host')!;
-    host.innerHTML = '<div class="erp-table-wrap" id="late"><table><caption>Late rows</caption></table></div>';
-    const late = document.getElementById('late')!;
-    stubOverflow(late, 900, 400);
+      const host = document.getElementById('host')!;
+      host.innerHTML = '<div class="erp-table-wrap" id="late"><table><caption>Late rows</caption></table></div>';
+      const late = document.getElementById('late')!;
+      stubOverflow(late, 900, 400);
 
-    // MutationObserver callbacks + our 50ms debounce both fire on the macrotask queue, so this has
-    // to wait for a real delay rather than flushing microtasks. It used to wait a flat 100ms —
-    // twice the debounce, which is fine on an idle machine and not fine on a loaded one. It failed
-    // in a full run while the machine was busy and passed on its own moments later, which is the
-    // worst way for a gate to behave: it trains everyone to press retry, and the day it catches a
-    // real a11y regression nobody will believe it.
-    //
-    // Polling for the outcome instead is still fast in the normal case (one or two ticks) and
-    // survives a starved CPU, which is exactly the condition CI runs under.
-    await waitFor(() => late.getAttribute('tabindex') === '0');
+      await Promise.resolve(); // deliver the MutationObserver records (microtask)
+      vi.advanceTimersByTime(100); // past the 50ms debounce → scan()
 
-    expect(late.getAttribute('tabindex')).toBe('0');
-    expect(late.getAttribute('role')).toBe('region');
-    expect(late.getAttribute('aria-label')).toBe('Late rows');
+      expect(late.getAttribute('tabindex')).toBe('0');
+      expect(late.getAttribute('role')).toBe('region');
+      expect(late.getAttribute('aria-label')).toBe('Late rows');
 
-    service.ngOnDestroy();
+      service.ngOnDestroy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -5,14 +5,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.ap.domain.dto.ApBalanceDto;
+import com.erp.modules.ap.domain.dto.ApUnconvertedAmountDto;
 import com.erp.modules.ap.domain.enums.ApPaymentStatus;
-import com.erp.modules.ap.repository.ApPaymentRepository;
-import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,19 +25,17 @@ import org.junit.jupiter.api.Test;
  */
 class ApPaymentOnAccountServiceImplTest {
 
-    private SupplierBillRepository billRepo;
-    private ApPaymentRepository    paymentRepo;
+    private ApFxSplitQuery         fxSplit;
     private CompanyRepository      companyRepo;
     private ScopeGuard             scopeGuard;
     private ApBalanceServiceImpl   balanceService;
 
     @BeforeEach
     void setUp() {
-        billRepo    = mock(SupplierBillRepository.class);
-        paymentRepo = mock(ApPaymentRepository.class);
+        fxSplit     = mock(ApFxSplitQuery.class);
         companyRepo = mock(CompanyRepository.class);
         scopeGuard  = mock(ScopeGuard.class);
-        balanceService = new ApBalanceServiceImpl(billRepo, paymentRepo, companyRepo, scopeGuard);
+        balanceService = new ApBalanceServiceImpl(fxSplit, companyRepo, scopeGuard);
 
         RequestContext.set(new RequestContext.Principal(1L, "user", false, 10L, 20L, null));
 
@@ -89,43 +87,25 @@ class ApPaymentOnAccountServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
-    // ApBalanceServiceImpl — D-9 netting
+    // ApBalanceServiceImpl — the netting (Σ outstanding − Σ unallocated − Σ unapplied DN) now
+    // runs in ApFxSplitQuery's SQL (owner ruling 2026-10-02: base currency, reliable rows only)
+    // and is proven on real Postgres by ApFxBalanceIT; here only the pass-through is checked.
     // -------------------------------------------------------------------------
 
     @Test
-    void currentBalance_netsUnallocatedFromOutstanding() {
-        // Outstanding bills: 5000; on-account remainder: 1200 → net balance 3800
-        when(billRepo.sumOutstandingBySupplier(10L, 5L)).thenReturn(new BigDecimal("5000.00"));
-        when(paymentRepo.sumUnallocatedByCompanyAndSupplier(10L, 5L)).thenReturn(new BigDecimal("1200.00"));
+    void currentBalance_returnsBaseTotalAndUnconvertedFromTheSplit() {
+        when(fxSplit.split(10L, 5L)).thenReturn(new ApFxSplitQuery.Split(
+                new BigDecimal("-300.00"),
+                List.of(new ApUnconvertedAmountDto("USD", new BigDecimal("40.00"), 1))));
 
         ApBalanceDto dto = balanceService.currentBalance(10L, 5L);
 
-        assertThat(dto.outstandingBalance())
-                .as("balance must net out the on-account prepayment")
-                .isEqualByComparingTo(new BigDecimal("3800.00"));
+        assertThat(dto.outstandingBalance()).isEqualByComparingTo(new BigDecimal("-300.00"));
         assertThat(dto.currency()).isEqualTo("TZS");
-    }
-
-    @Test
-    void currentBalance_noUnallocated_returnsFullOutstanding() {
-        when(billRepo.sumOutstandingBySupplier(10L, 5L)).thenReturn(new BigDecimal("2000.00"));
-        when(paymentRepo.sumUnallocatedByCompanyAndSupplier(10L, 5L)).thenReturn(BigDecimal.ZERO);
-
-        ApBalanceDto dto = balanceService.currentBalance(10L, 5L);
-
-        assertThat(dto.outstandingBalance()).isEqualByComparingTo(new BigDecimal("2000.00"));
-    }
-
-    @Test
-    void currentBalance_unallocatedExceedsOutstanding_returnsNegative() {
-        // Prepayment > outstanding → credit balance (negative)
-        when(billRepo.sumOutstandingBySupplier(10L, 5L)).thenReturn(new BigDecimal("500.00"));
-        when(paymentRepo.sumUnallocatedByCompanyAndSupplier(10L, 5L)).thenReturn(new BigDecimal("800.00"));
-
-        ApBalanceDto dto = balanceService.currentBalance(10L, 5L);
-
-        assertThat(dto.outstandingBalance())
-                .as("supplier has a net credit (prepayment > outstanding)")
-                .isEqualByComparingTo(new BigDecimal("-300.00"));
+        assertThat(dto.unconverted()).singleElement()
+                .satisfies(u -> {
+                    assertThat(u.currency()).isEqualTo("USD");
+                    assertThat(u.amount()).isEqualByComparingTo("40.00");
+                });
     }
 }

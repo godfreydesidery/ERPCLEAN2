@@ -185,6 +185,10 @@ export class ShellComponent {
         { label: 'Deliveries', route: '/admin/deliveries', icon: 'bi-truck', available: true, permission: 'SALES.DELIVERY.VIEW' },
         { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
         { label: 'Sales Returns', route: '/admin/sales-returns', icon: 'bi-arrow-return-left', available: true, permission: 'SALES.RETURN.VIEW' },
+        // One grouped report behind five questions people ask by name — the keywords carry those
+        // names (and the Swahili) so the Ctrl+K palette finds it whichever one is typed.
+        { label: 'Sales Summary', route: '/admin/reports/sales-summary', icon: 'bi-people', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['sales by customer', 'customer sales', 'sales by route', 'route sales', 'agent performance', 'sales by agent', 'daily sales', 'sales per day', 'cashier sales', 'sales by cashier', 'sales by branch', 'margin', 'mauzo kwa mteja', 'mauzo ya kila siku', 'mauzo ya wakala'] },
+        { label: 'Payment Summary (Cash-up)', route: '/admin/reports/payment-summary', icon: 'bi-wallet2', available: true, permission: 'POS.CASHUP.VIEW', keywords: ['cash up', 'cash-up', 'daily cash', 'takings', 'payment method', 'mobile money', 'm-pesa', 'card', 'cashier takings', 'end of day', 'makusanyo', 'pesa taslimu'] },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
         { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
         { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
@@ -229,6 +233,8 @@ export class ShellComponent {
         // palette is where a user goes when the English label is not the word in their head.
         { label: 'Product List', route: '/admin/reports/product-list', icon: 'bi-list-columns-reverse', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['product list', 'item list', 'catalogue', 'catalog', 'buying price', 'selling price', 'supplier', 'orodha ya bidhaa', 'bei ya kununua', 'bei ya kuuza'] },
         { label: 'Stock Value', route: '/admin/reports/stock-value', icon: 'bi-cash-stack', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock value', 'cost value', 'sale value', 'supplier wise', 'by supplier', 'total value', 'grand total', 'thamani ya bidhaa', 'thamani ya stoo'] },
+        { label: 'Reorder Report', route: '/admin/reports/reorder', icon: 'bi-cart-plus', available: true, permission: 'STOCK.VIEW', keywords: ['reorder', 're-order', 'low stock', 'below reorder level', 'what to order', 'order list', 'running out', 'shortfall', 'bidhaa zinazoisha', 'agiza'] },
+        { label: 'Stock Ageing', route: '/admin/reports/stock-ageing', icon: 'bi-hourglass-split', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock ageing', 'stock aging', 'old stock', 'slow moving', 'dead stock', 'not selling', 'days since last sale', 'age analysis', 'bidhaa zisizouzika'] },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],
@@ -237,7 +243,7 @@ export class ShellComponent {
       label: 'Purchasing',
       items: [
         { label: 'Purchase Orders', route: '/admin/purchase-orders', icon: 'bi-cart', available: true, permission: 'PURCHASE.ORDER.VIEW' },
-        { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.ORDER.VIEW' },
+        { label: 'Goods Receipts', route: '/admin/goods-receipts', icon: 'bi-box-arrow-in-down', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW' },
         // Sits directly under Goods Receipts and reuses the exact wording of the "Receive Without
         // Order" button on the receipts list, so the two read as the same action reached two ways
         // rather than as two different features. It is not redundant: goods arriving with no LPO
@@ -249,6 +255,13 @@ export class ShellComponent {
         { label: 'RFQs / Sourcing', route: '/admin/rfqs', icon: 'bi-search', available: true, permission: 'PURCHASE.RFQ.VIEW' },
         { label: 'Purchase Returns', route: '/admin/purchase-returns', icon: 'bi-arrow-return-left', available: true, permission: 'PURCHASE.RETURN.VIEW' },
         { label: 'Landed Costs', route: '/admin/landed-costs', icon: 'bi-box-arrow-in-right', available: true, permission: 'PURCHASE.LANDEDCOST.VIEW' },
+        // Purchase reports. Each gate equals its route guard (admin.routes.ts) and the endpoint's
+        // @PreAuthorize. Keywords carry the words a shopkeeper types — "grn report", "what is
+        // still to come", "manunuzi" — not the report's formal name.
+        { label: 'Goods Received Register', route: '/admin/reports/purchases/goods-received', icon: 'bi-journal-arrow-down', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW', keywords: ['grn report', 'goods received', 'receipts report', 'purchases report', 'stock received', 'bidhaa zilizopokelewa', 'ripoti ya manunuzi'] },
+        { label: 'Purchases by Supplier', route: '/admin/reports/purchases/by-supplier', icon: 'bi-people', available: true, permission: 'PURCHASE.GOODS_RECEIPT.VIEW', keywords: ['supplier purchases', 'supplier wise', 'top suppliers', 'purchase returns', 'net purchases', 'manunuzi kwa msambazaji'] },
+        { label: 'Open Purchase Orders', route: '/admin/reports/purchases/open-orders', icon: 'bi-hourglass-split', available: true, permission: 'PURCHASE.ORDER.VIEW', keywords: ['open lpo', 'pending orders', 'outstanding orders', 'not yet received', 'still to come', 'oda zilizobaki'] },
+        { label: 'Purchase Price Variance', route: '/admin/reports/purchases/price-variance', icon: 'bi-arrow-down-up', available: true, allPermissions: ['PURCHASE.ORDER.VIEW', 'PURCHASE.GOODS_RECEIPT.VIEW'], keywords: ['ppv', 'price difference', 'price change', 'bill price', 'cost variance', 'tofauti ya bei'] },
         { label: 'Purchase Settings', route: '/admin/purchase-settings', icon: 'bi-gear', available: true, permission: 'PURCHASE.SETTINGS.MANAGE' },
       ],
     },
@@ -288,6 +301,25 @@ export class ShellComponent {
         { label: 'Income Statement', route: '/admin/reporting/income-statement', icon: 'bi-bar-chart-line', available: true, permission: 'REPORT.PL.VIEW' },
         { label: 'Balance Sheet', route: '/admin/reporting/balance-sheet', icon: 'bi-building-check', available: true, permission: 'REPORT.BS.VIEW' },
         { label: 'Cash-Flow Statement', route: '/admin/reporting/cash-flow', icon: 'bi-cash-stack', available: true, permission: 'REPORT.CASHFLOW.VIEW' },
+        {
+          label: 'Changes in Equity',
+          route: '/admin/reporting/changes-in-equity',
+          icon: 'bi-diagram-3',
+          available: true,
+          permission: 'REPORT.BS.VIEW',
+          keywords: ['equity', 'capital', 'drawings', 'dividends', 'retained earnings', 'owner', 'mtaji'],
+        },
+        {
+          label: 'Financial Ratios',
+          route: '/admin/reporting/ratios',
+          icon: 'bi-speedometer2',
+          available: true,
+          allPermissions: ['REPORT.PL.VIEW', 'REPORT.BS.VIEW'],
+          keywords: [
+            'ratios', 'current ratio', 'quick ratio', 'margin', 'gearing', 'debt to equity',
+            'return on equity', 'debtor days', 'creditor days', 'stock turnover', 'uwiano',
+          ],
+        },
         { label: 'Account Ledger', route: '/admin/reporting/account-ledger', icon: 'bi-journal-text', available: true, permission: 'REPORT.LEDGER.VIEW' },
         { label: 'Sales Report', route: '/admin/reports/sales', icon: 'bi-receipt-cutoff', available: true, permission: 'SALES.INVOICE.VIEW' },
         // K-2026-08-30 #2. Keywords carry the words a shopkeeper uses — they ask for "profit",
@@ -365,6 +397,14 @@ export class ShellComponent {
         { label: 'Fixed Assets', route: '/admin/fixed-assets', icon: 'bi-building-gear', available: true, permission: 'FA.VIEW' },
         { label: 'Register Asset', route: '/admin/fixed-assets/create', icon: 'bi-plus-circle', available: true, permission: 'FA.REGISTER.MANAGE' },
         { label: 'FA Reconciliation', route: '/admin/fixed-assets/reconciliation', icon: 'bi-bar-chart-steps', available: true, permission: 'FA.VIEW' },
+        {
+          label: 'Fixed Asset Register',
+          route: '/admin/fixed-assets/register',
+          icon: 'bi-journal-bookmark',
+          available: true,
+          permission: 'FA.VIEW',
+          keywords: ['asset register', 'nbv', 'net book value', 'book value', 'depreciation', 'mali', 'rejista ya mali'],
+        },
         { label: 'Depreciation Runs', route: '/admin/depreciation-runs', icon: 'bi-calendar3', available: true, permission: 'FA.VIEW' },
         { label: 'Run Depreciation', route: '/admin/depreciation-runs/post', icon: 'bi-play-circle', available: true, permission: 'FA.DEPRECIATE' },
       ],
@@ -389,6 +429,14 @@ export class ShellComponent {
         { label: 'Employee Contracts', route: '/admin/hr/contracts', icon: 'bi-file-earmark-person', available: true, permission: 'HR.EMPLOYEE.VIEW' },
         { label: 'Pay Components', route: '/admin/hr/pay-components', icon: 'bi-sliders', available: true, permission: 'HR.PAYCOMPONENT.MANAGE' },
         { label: 'Payroll Runs', route: '/admin/hr/payroll-runs', icon: 'bi-cash-stack', available: true, permission: 'HR.PAYROLL.VIEW' },
+        {
+          label: 'Payroll Statutory Report',
+          route: '/admin/reports/payroll-statutory',
+          icon: 'bi-shield-check',
+          available: true,
+          permission: 'HR.PAYROLL.VIEW',
+          keywords: ['paye', 'nssf', 'wcf', 'sdl', 'heslb', 'tra', 'statutory', 'payroll tax', 'kodi', 'makato'],
+        },
         { label: 'Leave Requests', route: '/admin/hr/leave-requests', icon: 'bi-calendar-check', available: true, permission: 'HR.LEAVE.VIEW' },
         { label: 'Employee Loans', route: '/admin/hr/loans', icon: 'bi-bank', available: true, permission: 'HR.LOAN.MANAGE' },
         { label: 'Statutory Setup', route: '/admin/hr/statutory', icon: 'bi-shield-check', available: true, permission: 'HR.STATUTORY.MANAGE' },

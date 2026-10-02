@@ -1,3 +1,5 @@
+import { ReportCompanyHeaderDto } from '../../models/report-company-header.model';
+
 /**
  * TypeScript models mirroring the backend reporting DTOs (ADR-0018 D-1).
  * Every numeric money field is typed `number` — BigDecimal serialises as JSON number.
@@ -15,6 +17,20 @@ export interface StatementHeaderDto {
   toDate: string | null;
   asAtDate: string | null;
   generatedAt: string;
+  /** The branch the statement is narrowed to, or null for the whole company. */
+  branchUid: string | null;
+  /** Branch name, "All branches", or "Company-level entries (no branch)". Never null. */
+  branchLabel: string;
+}
+
+/**
+ * Optional branch narrowing for the P&L / Balance Sheet / Cash-Flow reads (and their exports).
+ * `branchUid` = that branch's journal lines only; `unassigned` = the company-level lines that carry
+ * no branch. Neither = the whole company. Never both (the server answers 400).
+ */
+export interface StatementBranchFilter {
+  branchUid?: string | null;
+  unassigned?: boolean;
 }
 
 /** Every statement figure is a (current, comparative) pair (ADR-0018 D-1).
@@ -106,6 +122,71 @@ export interface AccountLedgerDto {
   page: number;
   size: number;
   totalElements: number;
+}
+
+// ── Statement of Changes in Equity ─────────────────────────────────────────
+
+/**
+ * One equity component (a 3xxx account, or one of the two earnings-fold lines). Amounts are
+ * credit-positive so a row adds across: opening + profit + opening balances + capital + drawings
+ * (negative) + transfers = closing. `ties` = that sum equals closing (the Balance Sheet's line).
+ */
+export interface EquityMovementRowDto {
+  accountId: string | null;
+  accountUid: string | null;
+  accountCode: string | null;
+  component: string;
+  earningsFold: boolean;
+  opening: number;
+  profitForPeriod: number;
+  openingBalancesPosted: number;
+  capitalIntroduced: number;
+  drawingsAndDividends: number;
+  transfers: number;
+  closing: number;
+  ties: boolean;
+}
+
+export interface ChangesInEquityDto {
+  header: StatementHeaderDto;
+  company: ReportCompanyHeaderDto | null;
+  rows: EquityMovementRowDto[];
+  totals: EquityMovementRowDto;
+  balanceSheetOpeningEquity: number;
+  balanceSheetClosingEquity: number;
+  profitForPeriod: number;
+  reconciliation: ReconciliationDto;
+  transfersCheck: ReconciliationDto;
+}
+
+// ── Financial Ratios ────────────────────────────────────────────────────────
+
+export interface RatioInputDto {
+  label: string;
+  amount: number;
+}
+
+/** `value` is null — NOT zero — when the denominator is zero; `unavailableReason` then says why. */
+export interface FinancialRatioDto {
+  key: string;
+  name: string;
+  formula: string;
+  inputs: RatioInputDto[];
+  value: number | null;
+  unit: 'x' | '%' | 'days';
+  unavailableReason: string | null;
+  note: string | null;
+}
+
+export interface FinancialRatiosDto {
+  header: StatementHeaderDto;
+  company: ReportCompanyHeaderDto | null;
+  /** Long on the server — arrives as a JSON string. */
+  periodDays: string | number;
+  ratios: FinancialRatioDto[];
+  incomeStatementTies: boolean;
+  balanceSheetTies: boolean;
+  notes: string[];
 }
 
 /** Export formats the backend accepts. */

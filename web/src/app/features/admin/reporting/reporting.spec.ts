@@ -56,6 +56,7 @@ function mockHeader(): StatementHeaderDto {
     periodLabel: 'Jan 2026', comparativeLabel: 'Dec 2025',
     fromDate: '2026-01-01', toDate: '2026-01-31',
     asAtDate: null, generatedAt: '2026-01-31T12:00:00Z',
+    branchUid: null, branchLabel: 'All branches',
   };
 }
 

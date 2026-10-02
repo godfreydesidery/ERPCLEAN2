@@ -1,0 +1,206 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1>
+      <i class="bi bi-speedometer2 me-2" aria-hidden="true"></i>Financial Ratios
+    </h1>
+    <p class="subtitle">
+      Liquidity, margins, gearing, return on equity and working-capital days — each worked out from
+      the Income Statement and the Balance Sheet, with its formula and figures shown.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You need permission to view both the Income Statement and the Balance Sheet to see the ratios.
+    </div>
+  } @else {
+
+    @switch (companyState()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger mb-3" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+        </p>
+      }
+      @default {
+        <div class="erp-card mb-3">
+          <div class="erp-card__head">
+            <h2>Filters</h2>
+          </div>
+          <div class="erp-card__body">
+            <div class="row g-3 align-items-end">
+              @if (companies().length > 1) {
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="fr-company">Company</label>
+                  <select id="fr-company" name="fr-company" class="form-select"
+                          [ngModel]="selectedCompanyId()"
+                          (ngModelChange)="onCompanyChange($event)">
+                    @for (c of companies(); track c.uid) {
+                      <option [value]="c.id">{{ c.name }}</option>
+                    }
+                  </select>
+                </div>
+              }
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="fr-from">Period from</label>
+                <input id="fr-from" name="fr-from" type="date" class="form-control"
+                       [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-2">
+                <label class="form-label" for="fr-to">Period to</label>
+                <input id="fr-to" name="fr-to" type="date" class="form-control"
+                       [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+              </div>
+              <div class="col-sm-6 col-lg-3">
+                <label class="form-label" for="fr-branch">
+                  Branch <span class="text-muted small">(optional)</span>
+                </label>
+                <app-uid-picker id="fr-branch" name="fr-branch"
+                                [ngModel]="branch.value()"
+                                (ngModelChange)="onBranchChange($event)"
+                                [options]="branch.options()"
+                                placeholder="All branches" />
+              </div>
+              <div class="col-auto">
+                <button type="button" class="btn btn-primary"
+                        (click)="run()"
+                        [disabled]="state() === 'loading' || !selectedCompanyId() || !datesValid()">
+                  @if (state() === 'loading') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+                  } @else {
+                    <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
+                  }
+                </button>
+              </div>
+            </div>
+            @if (!datesValid()) {
+              <p class="text-danger small mt-2 mb-0" role="alert">
+                Choose a start date that is on or before the end date.
+              </p>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Working out the ratios…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not load the financial ratios. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty" role="alert">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() ?? "You don't have permission to view these ratios." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-speedometer2" aria-hidden="true"></i>
+            Select a company and period, then click Run.
+          </div>
+        }
+
+        @if (report(); as r) {
+          <div class="erp-page-head mb-3">
+            <div class="erp-page-head__titles">
+              <h2 class="h4 mb-1">{{ r.header.companyName }}</h2>
+              <p class="subtitle">
+                {{ r.header.periodLabel }} ({{ r.periodDays }} days) · {{ r.header.branchLabel }}
+                · {{ r.header.currency }}
+              </p>
+              @if (r.header.branchUid) {
+                <p class="small text-muted mb-0">{{ branchNote }}</p>
+              }
+            </div>
+            @if (canExport()) {
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>CSV
+                </button>
+              </div>
+            }
+          </div>
+
+          @if (!r.incomeStatementTies || !r.balanceSheetTies) {
+            <div class="alert alert-danger" role="alert">
+              <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+              The Income Statement or the Balance Sheet these ratios come from does not pass its own
+              check. Investigate it before relying on the ratios.
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table ratio-grid">
+              <caption class="visually-hidden">Financial ratios</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Ratio</th>
+                  <th scope="col">Formula</th>
+                  <th scope="col">Worked from</th>
+                  <th scope="col" class="num">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (ratio of r.ratios; track ratio.key) {
+                  <tr>
+                    <th scope="row" class="fw-semibold small">
+                      {{ ratio.name }}
+                      @if (ratio.note) {
+                        <div class="fw-normal text-muted ratio-note">{{ ratio.note }}</div>
+                      }
+                    </th>
+                    <td class="small">{{ ratio.formula }}</td>
+                    <td class="small">
+                      <ul class="list-unstyled mb-0">
+                        @for (i of ratio.inputs; track i.label) {
+                          <li>{{ i.label }}: <span class="mono">{{ fmtMoney(i.amount) }}</span></li>
+                        }
+                      </ul>
+                    </td>
+                    <td class="num">
+                      @if (fmtResult(ratio); as text) {
+                        <span class="fw-semibold">{{ text }}</span>
+                      } @else {
+                        <span aria-hidden="true">—</span>
+                        <span class="d-block small text-muted">{{ ratio.unavailableReason }}</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <ul class="small text-muted mt-3 mb-0">
+            @for (n of r.notes; track n) {
+              <li>{{ n }}</li>
+            }
+          </ul>
+        }
+      }
+    }
+  }
+</section>

@@ -154,12 +154,22 @@ describe('ShellComponent — sidebar navigation', () => {
     expect(item?.label).toBe('Receive Without Order');
   });
 
-  it('hides Receive Without Order from a user who can only view purchase orders', () => {
-    // PURCHASE.ORDER.VIEW alone reaches Goods Receipts but NOT the direct-receipt endpoint.
-    const fixture = shellWithPermissions(['PURCHASE.ORDER.VIEW']);
+  it('hides Receive Without Order from a user who can only view goods receipts', () => {
+    // PURCHASE.GOODS_RECEIPT.VIEW alone reaches Goods Receipts but NOT the direct-receipt endpoint.
+    const fixture = shellWithPermissions(['PURCHASE.GOODS_RECEIPT.VIEW']);
     expect(routes(fixture)).toContain('/admin/goods-receipts');
     expect(routes(fixture)).not.toContain('/admin/goods-receipts/direct');
     expect(renderedNavHrefs(fixture)).not.toContain('/admin/goods-receipts/direct');
+  });
+
+  it('gates Goods Receipts on the same code as its route guard, not on purchase orders', () => {
+    // The entry used to be gated on PURCHASE.ORDER.VIEW while the route guard and the endpoint
+    // require PURCHASE.GOODS_RECEIPT.VIEW — a PO-only user saw a link that bounced them.
+    const poOnly = shellWithPermissions(['PURCHASE.ORDER.VIEW']);
+    expect(routes(poOnly)).not.toContain('/admin/goods-receipts');
+    const item = navItems(shellWithPermissions(['PURCHASE.GOODS_RECEIPT.VIEW']))
+      .find((i) => i.route === '/admin/goods-receipts');
+    expect(item?.permission).toBe('PURCHASE.GOODS_RECEIPT.VIEW');
   });
 
   it('gates Receive Without Order on the same code as its route guard', () => {

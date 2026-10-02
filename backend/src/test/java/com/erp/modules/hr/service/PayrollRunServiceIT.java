@@ -76,6 +76,7 @@ class PayrollRunServiceIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
     // For fix-verification tests
     @Autowired private PayrollLineRepository payrollLineRepository;
     @Autowired private PayslipRepository payslipRepository;
@@ -345,6 +346,52 @@ class PayrollRunServiceIT extends PostgresIntegrationTest {
         assertThat(lineList).anySatisfy(l ->
                 assertThat(l.departmentName()).isEqualTo("Engineering"))
                 .as("payroll line must snapshot the employee's department name");
+    }
+
+    // =========================================================================
+    // Bank (EFT) file: only a POSTED or PAID run may be exported. Every earlier status can still
+    // change and a REVERSED run must never be paid, so those are refused with a 409-style conflict.
+    // =========================================================================
+
+    @Test
+    void eftExport_refusedBeforePosting_allowedWhenPostedOrPaid_refusedOnceReversed() {
+        PayrollRunDto run = createRun();
+        String uid = run.uid();
+
+        assertEftRefused(uid, "DRAFT");
+        payrollRunService.calculate(uid);
+        assertEftRefused(uid, "CALCULATED");
+        payrollRunService.approve(uid);
+        assertEftRefused(uid, "APPROVED");
+
+        payrollRunService.post(uid);
+        String postedCsv = payrollRunService.exportEftBatch(uid);
+        assertThat(postedCsv.split("\n"))
+                .as("POSTED run exports the header plus one row for the one employee")
+                .hasSize(2);
+
+        // PAID: disbursement itself needs a cash/bank account; the gate under test is the status,
+        // so stamp it directly rather than drag the cash module into this test.
+        jdbc.update("UPDATE payroll_runs SET status = 'PAID', paid_at = now() WHERE uid = ?", uid);
+        assertThat(payrollRunService.exportEftBatch(uid))
+                .as("PAID run may be re-downloaded").isEqualTo(postedCsv);
+
+        jdbc.update("UPDATE payroll_runs SET status = 'POSTED', paid_at = NULL WHERE uid = ?", uid);
+        payrollRunService.reverse(uid);
+        assertThatThrownBy(() -> payrollRunService.exportEftBatch(uid))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("reversed")
+                .hasMessageNotContaining(uid);
+    }
+
+    private void assertEftRefused(String uid, String expectedStatus) {
+        assertThat(payrollRunService.getByUid(uid).status().name()).isEqualTo(expectedStatus);
+        assertThatThrownBy(() -> payrollRunService.exportEftBatch(uid))
+                .as("a %s run must not produce a bank file", expectedStatus)
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("posted")
+                .hasMessageNotContaining(uid)
+                .hasMessageNotContaining(expectedStatus);
     }
 
     // =========================================================================

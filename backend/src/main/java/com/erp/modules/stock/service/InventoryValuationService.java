@@ -79,6 +79,17 @@ public interface InventoryValuationService {
                          BigDecimal originalQty, BigDecimal originalValue);
 
     /**
+     * Location-aware {@link #reverseReceipt(Long, Long, Long, BigDecimal, BigDecimal)}: the
+     * quantity leaves {@code locationId} (the original receipt movement's own location; null =
+     * the branch default). Σ on_hand_value falls by exactly {@code originalValue} — the amount
+     * the GL credits to Inventory — and the company average is re-derived from what is left;
+     * when the remaining quantity is ≤ 0 or the remaining value negative, the last known
+     * average is kept and the value carries the residual (ADR-0020 D-5).
+     */
+    void reverseReceipt(Long companyId, Long branchId, Long locationId, Long productId,
+                         BigDecimal originalQty, BigDecimal originalValue);
+
+    /**
      * One-time opening valuation (ADR-0020 D-5b, FR-INV-06): set avg_cost + on_hand_value for
      * an existing quantity-only on-hand row, post DR INVENTORY / CR OPENING_BALANCE_EQUITY.
      * Gated {@code INVENTORY.OPENING.SET}; idempotency guard = avg_cost IS NOT NULL or value != 0.

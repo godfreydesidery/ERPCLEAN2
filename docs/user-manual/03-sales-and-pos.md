@@ -183,6 +183,8 @@ This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders
 
 The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` permission; every override is recorded in the audit trail. **Cash / walk-in customers are exempt** — this check never applies to them.
 
+**Credit limit and other currencies.** The limit is checked in your base currency. The customer's balance counts each foreign-currency item at the rate it was booked at; older foreign-currency items that have no reliable booked rate, and an order or invoice that is itself in a foreign currency, are converted at **today's** exchange rate (the latest rate on or before today). If a currency involved has **no exchange rate at all**, the system cannot work out the exposure, so it treats the limit as exceeded: the order or invoice is blocked with "The credit limit could not be checked because there is no exchange rate for USD. Add a USD rate under Currency rates and try again." A user with `SALES.CREDIT.OVERRIDE` can still proceed, and the audit record notes which rate was missing. The same rule applies to the credit-limit check at invoice finalisation.
+
 > A separate, advisory credit warning may also appear without blocking confirmation; it is informational only and the order still confirms.
 
 ### 2.4 Cancel an order
@@ -370,6 +372,8 @@ After finalisation:
 
 **Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
 
+**Rounding follows the invoice's currency.** Line amounts, VAT and totals are rounded to the decimal places of the invoice's own currency: whole shillings for a TZS invoice, cents for a USD, EUR or KES invoice (18% VAT on USD 12.00 is USD 2.16). The same applies to quotations, sales orders and POS sales. The accounting entry is always posted in the base currency, each amount converted at the invoice's exchange rate.
+
 **Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
 
 **Not enough stock (negative-stock block).** If your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The refusal is a plain message naming the product with how much is available versus requested — for example *"Not enough stock of Sukari 1kg to complete this sale — 3 available, 5 requested. To allow this, enable backorder in Sales Settings."* Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). When the setting is **off**, or the company has never saved any Sales Settings, sales are never blocked this way and stock is allowed to go negative. Invoices raised from a delivery are not checked here (their stock was issued and checked at the delivery — see below), and **the same block applies when you create a Delivery** against a sales order (section 3.1).
@@ -469,6 +473,8 @@ The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "
 4. Click **Confirm Return**.
 
 Returns are created directly in **CONFIRMED** status. Stock is returned to the branch. A credit note is raised automatically (pro-rated to the returned quantity).
+
+**How the credit is worked out.** The credit note gives back the same share of the order line's net and VAT as the share of goods returned — returning 2 of 5 credits 2/5 of what the customer was charged for that line, discounts and VAT-inclusive prices included. Amounts are rounded in the order's currency (whole shillings for TZS, cents for USD).
 
 ### 5.2 Returnable quantity
 
@@ -911,3 +917,31 @@ Jane checks the X-Read: Sales Total TZS 25,100, Payouts TZS 20,000, Expected Cas
 At end of day Jane counts the drawer: TZS 105,200 (TZS 100 over). She clicks **Close Session**, enters Counted Cash **TZS 105,200** — Variance is **+TZS 100.00** (over).
 
 Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONCILED. Z-Read confirms the +TZS 100 variance and shows Journal **JNL-0519**: DR Cash 100 / CR Till Surplus (4900) 100.
+
+
+---
+
+## 10. Sales analysis reports
+
+### 10.1 Sales Summary (sales by customer, agent, route, branch, day or cashier)
+
+Navigate to **Sales > Sales Summary** (`/admin/reports/sales-summary`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "sales by customer", "agent performance", "sales by route", "daily sales" or "cashier sales".
+
+Pick a **From** and **To** date, a **Group by** option and, optionally, a **Branch**, then click **Run report**. Each row is one customer, sales agent, route, branch, day or cashier, showing: number of invoices, quantity (in base units, so a pack of 12 counts as 12), gross sales, discount, VAT, net sales, cost of sales, margin and margin %. A TOTAL row sums every group.
+
+- Only **finalised** invoices count; drafts and voided invoices do not. Returns and credit notes are **not** deducted — the same as the Sales Report.
+- **All amounts are in the company's base currency** (e.g. TZS). An invoice raised in another currency (e.g. USD) is converted at the exchange rate stamped on that invoice when it was finalised — the same rate its accounting entry used — so a USD 14.16 sale at 2,500 shows as TZS 35,400, not 14.16. Each line is converted and rounded on its own, so every grouping adds up to the same total as the Sales Report and the Profitability Report. Margin is the converted net less the cost of sales (which is always recorded in base currency). The export notes how many invoices were converted.
+- **Cashier** means the user who created the invoice (at a till, the cashier who rang the sale). **Day** uses the company's time zone.
+- Cost of sales is what the goods cost at the moment of sale. When an item was sold before its stock had ever been costed, its group's cost, margin and margin % show a dash (unknown — not zero), the group is left out of the Cost and Margin totals, and a yellow banner says how many groups and items are affected.
+- Exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`.
+
+### 10.2 Payment Summary (daily cash-up)
+
+Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.CASHUP.VIEW` — a managers' permission (Sales Manager, Branch Manager, Accountant, Finance Director). Cashiers do not hold it: the till's X-read and Z-read show their own session, while this report shows every cashier's takings.
+
+The screen opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
+
+- Amounts are what the business kept: tendered amount less change given back.
+- Payments are counted on the day they were taken, by the person who took them, for sales rung at a till or settled at the counter. A voided sale's payment is not counted.
+- Not included: payments received later against credit invoices (Receivables receipts), till payouts and expenses, and the opening float. To balance one drawer, use the session's X-read / Z-read.
+- Exports additionally require `REPORT.EXPORT`.

@@ -74,6 +74,8 @@ export class StockValueReportComponent implements OnInit {
   readonly branchFilterError = signal<string | null>(null);
 
   readonly canView = computed(() => this.session.hasPermission('INVENTORY.VALUATION.VIEW'));
+  // Offered only to a caller who may read the supplier list; without SUPPLIER.VIEW the list 403s.
+  readonly canFilterSupplier = computed(() => this.session.hasPermission('SUPPLIER.VIEW'));
   /** The export endpoint is gated REPORT.EXPORT server-side — distinct from the view permission. */
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.report() === null);
@@ -141,15 +143,17 @@ export class StockValueReportComponent implements OnInit {
             // Non-fatal on failure: without BRANCH.VIEW / SUPPLIER.VIEW the picker simply stays
             // empty and the report covers every branch / supplier — the unfiltered default anyway.
             this.loadBranchOptions(company.uid);
-            this.supplierService.list(company.id, undefined, 0, 200).subscribe({
-              next: ({ rows }) =>
-                this.supplierOptions.set(
-                  rows
-                    .filter((s) => s.status === 'ACTIVE')
-                    .map((s) => ({ uid: s.uid, label: s.displayName, hint: s.code })),
-                ),
-              error: () => this.supplierOptions.set([]),
-            });
+            if (this.canFilterSupplier()) {
+              this.supplierService.list(company.id, undefined, 0, 200).subscribe({
+                next: ({ rows }) =>
+                  this.supplierOptions.set(
+                    rows
+                      .filter((s) => s.status === 'ACTIVE')
+                      .map((s) => ({ uid: s.uid, label: s.displayName, hint: s.code })),
+                  ),
+                error: () => this.supplierOptions.set([]),
+              });
+            }
           },
           error: () => undefined,
         });

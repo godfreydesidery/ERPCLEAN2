@@ -15,6 +15,7 @@ import {
   WhtRegisterDto,
   WhtTypeDto,
 } from './models/tax.model';
+import { ExportFormat } from '../reporting/models/reporting.model';
 
 export interface VatReturnPage {
   rows: VatReturnDto[];
@@ -55,6 +56,12 @@ export class TaxService {
 
   getReturn(uid: string): Observable<VatReturnDto> {
     return this.http.get<VatReturnDto>(`${this.vatBase}/returns/uid/${uid}`);
+  }
+
+  /** The return face as a document (binary; gated VAT.VIEW + REPORT.EXPORT). */
+  exportReturn(uid: string, format: ExportFormat): Observable<Blob> {
+    const params = new HttpParams().set('format', format);
+    return this.http.get(`${this.vatBase}/returns/uid/${uid}/export`, { params, responseType: 'blob' });
   }
 
   openReturn(request: OpenVatReturnRequest): Observable<VatReturnDto> {
@@ -118,5 +125,23 @@ export class TaxService {
       .set('periodStart', periodStart)
       .set('periodEnd', periodEnd);
     return this.http.get<WhtRegisterDto>(`${this.whtBase}/register`, { params });
+  }
+
+  /**
+   * The WHT register as a document (binary; gated WHT.VIEW + REPORT.EXPORT). Pass either
+   * year+month or periodStart+periodEnd — the same choice the screen makes.
+   */
+  exportWhtRegister(
+    companyId: string,
+    period: { year: number; month: number } | { periodStart: string; periodEnd: string },
+    format: ExportFormat,
+  ): Observable<Blob> {
+    let params = new HttpParams().set('companyId', companyId).set('format', format);
+    if ('year' in period) {
+      params = params.set('year', String(period.year)).set('month', String(period.month));
+    } else {
+      params = params.set('periodStart', period.periodStart).set('periodEnd', period.periodEnd);
+    }
+    return this.http.get(`${this.whtBase}/register/export`, { params, responseType: 'blob' });
   }
 }

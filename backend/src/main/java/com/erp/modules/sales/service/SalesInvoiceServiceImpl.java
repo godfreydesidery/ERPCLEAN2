@@ -8,7 +8,6 @@ import com.erp.modules.routes.domain.entity.Route;
 import com.erp.modules.routes.repository.RouteRepository;
 import com.erp.modules.routes.service.RouteService;
 import com.erp.modules.parties.repository.AgentRepository;
-import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
@@ -112,6 +111,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final RouteRepository routeRepository;
     /** ADR-0014 D-9: credit-limit check at finalise for CREDIT_ACCOUNT customers. */
     private final ArBalanceService arBalanceService;
+    /** Base-currency credit exposure (owner ruling 2026-10-02: per currency, reliable rows only). */
+    private final CreditExposureCalculator creditExposure;
     private final PermissionResolver permissionResolver;
     /** ADR-0036 D-3/D-4: converts face amounts to base and stamps the FX triple at finalise. */
     private final FxDocumentConverter fxConverter;
@@ -129,6 +130,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final InternalAgentProvisioner internalAgents;
     /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
     private final UserLookupService userLookup;
+    /** Base-currency minor units for the VAT-return output summary (converted per document). */
+    private final com.erp.platform.common.money.CurrencyMinorUnits minorUnits;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -157,7 +160,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    BelowCostGuard belowCostGuard,
                                    DiscountAuthorisationGuard discountGuard,
                                    InternalAgentProvisioner internalAgents,
-                                   UserLookupService userLookup) {
+                                   UserLookupService userLookup,
+                                   com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
+                                   CreditExposureCalculator creditExposure) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -186,6 +191,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.discountGuard = discountGuard;
         this.internalAgents = internalAgents;
         this.userLookup = userLookup;
+        this.minorUnits = minorUnits;
+        this.creditExposure = creditExposure;
     }
 
     // -------------------------------------------------------------------------
@@ -391,31 +398,47 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 }
             }
 
-            // Credit-limit check (ADR-0014 D-9): existing AR balance + this gross must not exceed limit.
+            // Credit-limit check (ADR-0014 D-9): existing AR balance + this gross must not exceed
+            // limit — all in BASE currency (owner ruling 2026-10-02). Unconverted (V62-filled)
+            // foreign AR and a foreign invoice gross count at today's rate; a missing rate fails
+            // closed (treated as over the limit).
             com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
             if (creditLimit != null && creditLimit.isPresent()
                     && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
-                ArBalanceDto balance = arBalanceService.currentBalance(
-                        inv.getCompanyId(), inv.getCustomerId());
-                BigDecimal projectedBalance = balance.balance().add(inv.getGrossTotalAmount());
-                if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
+                CreditExposureCalculator.Assessment exposure = creditExposure.assess(
+                        inv.getCompanyId(), inv.getCustomerId(), inv.getGrossTotalAmount(),
+                        com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
+                        creditLimit, LocalDate.now());
+                if (exposure.breached()) {
                     boolean hasOverride = permissionResolver.hasPermission(
                             RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
                     if (!hasOverride) {
                         // ADR-0014 D-9 / SALES.CREDIT.OVERRIDE permission required for override
+                        if (exposure.rateMissing()) {
+                            throw new IllegalStateException(
+                                    CreditExposureCalculator.missingRateSentence(
+                                            exposure.missingRateCurrencies())
+                                            + " You do not have permission to override the credit limit.");
+                        }
                         throw new IllegalStateException(
                                 "This customer's credit limit has been reached. "
                                         + "The outstanding balance would exceed the allowed limit "
                                         + "if this invoice is finalised. "
                                         + "You do not have permission to override the credit limit.");
                     }
+                    Map<String, Object> detail = new java.util.LinkedHashMap<>();
+                    detail.put("customerUid", customer.getUid());
+                    detail.put("creditLimit", creditLimit.getAmount().toPlainString());
+                    detail.put("creditLimitCurrency", creditLimit.getCurrency().value());
+                    detail.put("projectedBalance", exposure.exposure().toPlainString());
+                    detail.put("projectedBalanceCurrency", exposure.baseCurrency());
+                    if (exposure.rateMissing()) {
+                        detail.put("rateMissingCurrencies",
+                                String.join(",", exposure.missingRateCurrencies()));
+                    }
                     audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_invoices",
                                     inv.getId(), inv.getUid())
-                            .detail(Map.of(
-                                    "customerUid", customer.getUid(),
-                                    "creditLimit", creditLimit.getAmount().toPlainString(),
-                                    "creditLimitCurrency", creditLimit.getCurrency().value(),
-                                    "projectedBalance", projectedBalance.toPlainString())));
+                            .detail(detail));
                 }
             }
         } else {
@@ -1059,12 +1082,25 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         // Direct JPQL projection — finalised invoices with finalised_at::date in [start, end].
         // Sum vat_total_amount and parse tax_summary JSONB band breakdown per invoice.
-        // The tax_summary JSONB has the structure: { "STANDARD": {"taxableBase":..., "vatAmount":...}, ... }
-        // We read each invoice's vat_total_amount + tax_summary and aggregate per band in Java.
+        //
+        // BASE CURRENCY (live defect: USD VAT was added to a TZS return as if it were TZS). Every
+        // amount on the invoice is in the DOCUMENT currency; the return is in the company's base
+        // currency. Each document is converted at the rate stamped on it at finalise
+        // (sales_invoices.fx_rate, ADR-0036 D-4 — the same effective rate the GL sale posting
+        // re-applies on the same posting date), rounded HALF_UP to the base currency's minor units
+        // PER DOCUMENT, exactly as GLPostingSafeInvoker converts the invoice's VAT header total for
+        // the CR VAT Payable leg. So totalOutputVat equals the VAT Payable credits the sales
+        // postings made. A base-currency invoice (fx_rate = 1) passes through untouched, so a
+        // single-currency company's figures are unchanged.
         List<SalesInvoice> finalisedInPeriod = invoices.findFinalisedInPeriod(
                 companyId,
                 start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
                 end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+
+        // findScopedById: companyId was scope-asserted above (assertCanActIn) — self-scope lookup.
+        final int baseScale = minorUnits.of(companies.findScopedById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElse(null));
 
         java.util.Map<String, BigDecimal> bandTaxableBase = new java.util.LinkedHashMap<>();
         java.util.Map<String, BigDecimal> bandOutputVat   = new java.util.LinkedHashMap<>();
@@ -1073,7 +1109,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
         for (SalesInvoice inv : finalisedInPeriod) {
-            totalOutput = totalOutput.add(inv.getVatTotalAmount());
+            final BigDecimal rate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            totalOutput = totalOutput.add(toBaseAtRate(inv.getVatTotalAmount(), rate, baseScale));
 
             if (inv.getTaxSummary() != null && !inv.getTaxSummary().isBlank()) {
                 try {
@@ -1087,8 +1124,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         if (band == null) {
                             continue;
                         }
-                        BigDecimal base = new BigDecimal(node.path("net").asText("0"));
-                        BigDecimal vat  = new BigDecimal(node.path("vat").asText("0"));
+                        BigDecimal base = toBaseAtRate(
+                                new BigDecimal(node.path("net").asText("0")), rate, baseScale);
+                        BigDecimal vat  = toBaseAtRate(
+                                new BigDecimal(node.path("vat").asText("0")), rate, baseScale);
                         bandTaxableBase.merge(band, base, BigDecimal::add);
                         bandOutputVat.merge(band, vat, BigDecimal::add);
                     }
@@ -1110,6 +1149,21 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * A document-currency amount in base at the document's stamped rate, HALF_UP to the base
+     * currency's minor units — the same arithmetic as {@code CurrencyConversionServiceImpl.convert}.
+     * Rate 1 (a base-currency document) is the identity: the face amount, unrounded, unchanged.
+     */
+    static BigDecimal toBaseAtRate(BigDecimal face, BigDecimal rate, int baseScale) {
+        if (face == null) {
+            return BigDecimal.ZERO;
+        }
+        if (rate == null || rate.compareTo(BigDecimal.ONE) == 0) {
+            return face;
+        }
+        return face.multiply(rate).setScale(baseScale, java.math.RoundingMode.HALF_UP);
+    }
 
     private SalesInvoice requireInvoice(String uid) {
         return Lookups.orNotFound(invoices.findByUid(uid), "SalesInvoice", uid);

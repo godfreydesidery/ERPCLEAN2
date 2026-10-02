@@ -169,6 +169,19 @@
             </button>
           }
 
+          @if (canDisburse() && canBankFileAction()) {
+            <button type="button" class="btn btn-outline-success"
+                    (click)="downloadBankFile()"
+                    [disabled]="downloadingBankFile()">
+              @if (downloadingBankFile()) {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              } @else {
+                <i class="bi bi-bank me-1" aria-hidden="true"></i>
+              }
+              Download bank file
+            </button>
+          }
+
           @if (canReverse() && canReverseAction()) {
             <button type="button" class="btn btn-outline-danger ms-auto"
                     (click)="reverse()"
@@ -182,6 +195,12 @@
             </button>
           }
         </div>
+
+        @if (bankFileError(); as msg) {
+          <output class="d-block text-danger small mb-3" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ msg }}
+          </output>
+        }
 
         <!-- Disburse form -->
         @if (showDisburseForm()) {
@@ -287,6 +306,149 @@
               </div>
             }
           }
+        }
+
+        <!-- Statutory summary (FR-HR-23) -->
+        @if (r.status !== 'DRAFT') {
+          <section aria-labelledby="statutoryHeading">
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-4 mb-2">
+              <h2 id="statutoryHeading" class="erp-section-title mb-0 me-auto">Statutory Summary</h2>
+              @if (canExportStatutory() && statutory()) {
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatutory('PDF')" [disabled]="exportingStatutory()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatutory('XLSX')" [disabled]="exportingStatutory()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="exportStatutory('CSV')" [disabled]="exportingStatutory()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              }
+            </div>
+            @if (statutoryExportError(); as msg) {
+              <output class="d-block text-danger small mb-2" role="alert">{{ msg }}</output>
+            }
+
+            @switch (statutoryState()) {
+              @case ('loading') {
+                <output class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+                  <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading statutory summary…
+                </output>
+              }
+              @case ('error') {
+                <output class="d-block text-danger small" role="alert">Could not load the statutory summary.</output>
+              }
+              @default {
+                @if (statutory(); as st) {
+                  @if (st.provisional) {
+                    <p class="status-tag status-tag--warn mb-2">
+                      <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                      @if (st.summary.status === 'REVERSED') {
+                        This run was reversed — these figures must not be filed.
+                      } @else {
+                        Provisional — the run is not approved yet, so these figures can still change.
+                      }
+                    </p>
+                  }
+                  <div class="row g-3 mb-3">
+                    <div class="col-sm-3">
+                      <div class="erp-kpi">
+                        <span class="erp-kpi__label">PAYE (to TRA)</span>
+                        <span class="erp-kpi__value mono">{{ st.currency }} {{ fmtMoney(st.summary.payeTotal) }}</span>
+                      </div>
+                    </div>
+                    <div class="col-sm-3">
+                      <div class="erp-kpi">
+                        <span class="erp-kpi__label">SDL (to TRA)</span>
+                        <span class="erp-kpi__value mono">{{ st.currency }} {{ fmtMoney(st.summary.sdlTotal) }}</span>
+                      </div>
+                    </div>
+                    <div class="col-sm-3">
+                      <div class="erp-kpi">
+                        <span class="erp-kpi__label">NSSF (employee + employer)</span>
+                        <span class="erp-kpi__value mono">{{ st.currency }} {{ fmtMoney(+st.summary.nssfEmployeeTotal + +st.summary.nssfEmployerTotal) }}</span>
+                      </div>
+                    </div>
+                    <div class="col-sm-3">
+                      <div class="erp-kpi">
+                        <span class="erp-kpi__label">WCF</span>
+                        <span class="erp-kpi__value mono">{{ st.currency }} {{ fmtMoney(st.summary.wcfTotal) }}</span>
+                      </div>
+                    </div>
+                    <div class="col-sm-3">
+                      <div class="erp-kpi">
+                        <span class="erp-kpi__label">HESLB</span>
+                        <span class="erp-kpi__value mono">{{ st.currency }} {{ fmtMoney(st.summary.heslbTotal) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  @if (st.lines.length === 0) {
+                    <div class="erp-empty">
+                      <i class="bi bi-table" aria-hidden="true"></i>
+                      No lines yet — run Calculate to generate them.
+                    </div>
+                  } @else {
+                    <div class="erp-table-wrap">
+                      <table class="erp-table">
+                        <caption class="visually-hidden">Statutory deductions and contributions per employee</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">Employee #</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">TIN</th>
+                            <th scope="col">NSSF No.</th>
+                            <th scope="col" class="num">Gross</th>
+                            <th scope="col" class="num">PAYE</th>
+                            <th scope="col" class="num">NSSF (Emp.)</th>
+                            <th scope="col" class="num">NSSF (Empr.)</th>
+                            <th scope="col" class="num">WCF</th>
+                            <th scope="col" class="num">SDL</th>
+                            <th scope="col" class="num">HESLB</th>
+                            <th scope="col" class="num">Net</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (l of st.lines; track l.employeeNumber) {
+                            <tr>
+                              <td class="mono">{{ l.employeeNumber }}</td>
+                              <td>{{ l.employeeName }}</td>
+                              <td class="mono">{{ l.tin || '—' }}</td>
+                              <td class="mono">{{ l.nssfNumber || '—' }}</td>
+                              <td class="num mono">{{ fmtMoney(l.grossAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.payeAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.nssfEmployeeAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.nssfEmployerAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.wcfAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.sdlAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.heslbAmount) }}</td>
+                              <td class="num mono">{{ fmtMoney(l.netAmount) }}</td>
+                            </tr>
+                          }
+                        </tbody>
+                        <tfoot>
+                          <tr class="fw-semibold">
+                            <th scope="row" colspan="4" class="text-end">Totals ({{ st.summary.employeeCount }})</th>
+                            <td class="num mono">{{ fmtMoney(st.summary.grossTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.payeTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.nssfEmployeeTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.nssfEmployerTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.wcfTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.sdlTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.heslbTotal) }}</td>
+                            <td class="num mono">{{ fmtMoney(st.summary.netTotal) }}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  }
+                }
+              }
+            }
+          </section>
         }
 
         <!-- Payslips -->

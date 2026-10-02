@@ -17,17 +17,21 @@ import {
   AgeingBucket,
 } from './models/ar.model';
 import { ArService } from './ar.service';
+import { AgeingCurrencyGroup, groupAgeingByCurrency } from '../../../shared/ageing-currency.util';
+import { ExportFormat } from '../reporting/models/reporting.model';
+import { downloadBlob } from '../reporting/reporting.utils';
+import { exportErrorMessage, firstOfMonthIso, todayIso } from '../reporting/ledger-export.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
-const BUCKET_ORDER: AgeingBucket[] = ['CURRENT', 'DAYS_1_30', 'DAYS_31_60', 'DAYS_61_90', 'DAYS_91_PLUS'];
+const BUCKET_ORDER: AgeingBucket[] = ['CURRENT', 'D1_30', 'D31_60', 'D61_90', 'D90_PLUS'];
 
 const BUCKET_LABEL: Record<AgeingBucket, string> = {
   CURRENT: 'Current',
-  DAYS_1_30: '1 – 30 days',
-  DAYS_31_60: '31 – 60 days',
-  DAYS_61_90: '61 – 90 days',
-  DAYS_91_PLUS: '90+ days',
+  D1_30: '1 – 30 days',
+  D31_60: '31 – 60 days',
+  D61_90: '61 – 90 days',
+  D90_PLUS: '90+ days',
 };
 
 /**
@@ -69,16 +73,36 @@ export class CustomerStatementComponent {
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('AR.STATEMENT.VIEW'));
+  /** The export endpoint also requires REPORT.EXPORT server-side — distinct from the view code. */
+  readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+
+  // ── Printable statement (export) ───────────────────────────────────────────
+  /** Statement period. An empty From runs the statement from the customer's first transaction. */
+  readonly exportFrom = signal(firstOfMonthIso());
+  readonly exportTo = signal(todayIso());
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   // ── Derived display ────────────────────────────────────────────────────────
 
-  /** Ageing buckets sorted by canonical bucket order. */
+  /** Ageing, one five-bucket group per currency (base first) — never summed across currencies. */
+  readonly ageingGroups = computed<AgeingCurrencyGroup<ArAgeingBucketDto>[]>(() =>
+    groupAgeingByCurrency(this.statement()?.ageing ?? [], BUCKET_ORDER),
+  );
+
+  readonly multiCurrency = computed(() => this.ageingGroups().length > 1);
+
+  /** The statement-currency (base) buckets, canonical order — drives the headers and the bar. */
   readonly sortedAgeing = computed<ArAgeingBucketDto[]>(() => {
-    const buckets = this.statement()?.ageing ?? [];
-    return [...buckets].sort((a, b) =>
-      BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket),
-    );
+    const groups = this.ageingGroups();
+    const base = groups.find((g) => g.currency === this.statement()?.currency) ?? groups[0];
+    return base ? base.buckets : [];
   });
+
+  /** Balances owed in a currency other than the statement's — shown beside, never added in. */
+  readonly otherCurrencyGroups = computed(() =>
+    this.ageingGroups().filter((g) => g.currency !== this.statement()?.currency),
+  );
 
   readonly openItems = computed<ArInvoiceDto[]>(() => this.statement()?.openItems ?? []);
   readonly recentReceipts = computed<ArReceiptDto[]>(() => this.statement()?.recentReceipts ?? []);
@@ -181,6 +205,27 @@ export class CustomerStatementComponent {
     if (c) this.loadStatement(c.uid);
   }
 
+  /** Download the customer statement (balance b/f, movements with running balance, closing). */
+  exportStatement(format: ExportFormat): void {
+    const c = this.selectedCustomer();
+    const companyId = this.selectedCompanyId();
+    if (!c || !companyId || this.exporting()) return;
+    const from = String(this.exportFrom() ?? '').trim();
+    const to = String(this.exportTo() ?? '').trim();
+    this.exporting.set(true);
+    this.exportError.set(null);
+    this.arService.exportStatement(companyId, c.uid, from, to, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `customer-statement_${to || 'today'}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.exportError.set(exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
+  }
+
   // ── Display helpers ────────────────────────────────────────────────────────
 
   /** Coerce money — number or string on wire — to display string. */
@@ -193,10 +238,10 @@ export class CustomerStatementComponent {
   bucketBarColor(bucket: AgeingBucket): string {
     switch (bucket) {
       case 'CURRENT':    return 'var(--erp-ok)';
-      case 'DAYS_1_30':  return 'var(--erp-warn)';
-      case 'DAYS_31_60': return 'var(--erp-warn)';
-      case 'DAYS_61_90': return 'var(--erp-danger)';
-      case 'DAYS_91_PLUS': return 'var(--erp-danger)';
+      case 'D1_30':  return 'var(--erp-warn)';
+      case 'D31_60': return 'var(--erp-warn)';
+      case 'D61_90': return 'var(--erp-danger)';
+      case 'D90_PLUS': return 'var(--erp-danger)';
       default:           return 'var(--erp-neutral)';
     }
   }

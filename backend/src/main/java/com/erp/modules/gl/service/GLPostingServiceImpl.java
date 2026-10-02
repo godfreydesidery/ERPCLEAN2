@@ -203,6 +203,12 @@ public class GLPostingServiceImpl implements GLPostingService {
 
     /** Backwards-compatible overload; delegates to the reason-aware variant with null reason. */
     @Override
+    public List<String> findLiveEntryUids(Long companyId, JournalSourceType sourceType,
+                                          String sourceRef) {
+        return entries.findLiveUidsBySource(companyId, sourceType, sourceRef);
+    }
+
+    @Override
     public JournalEntryDto postReversal(String originalEntryUid, LocalDate reversalDate,
                                          JournalSourceType sourceType, String sourceRef,
                                          Long postedBy) {

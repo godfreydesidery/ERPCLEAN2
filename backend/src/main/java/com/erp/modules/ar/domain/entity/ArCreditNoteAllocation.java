@@ -12,7 +12,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Junction: credit note ↔ open item (ADR-0040 D-6). No uid (no external URL). Append-only —
+ * Junction: credit note ↔ open item (ADR-0040 D-6). No uid (no external URL). One row per
+ * (note, invoice) pair — applying more of the note to the same invoice tops this row up;
  * reapply is delete + re-insert; allocation itself posts nothing to GL except the realized-FX
  * plug per allocation when settlement_rate differs from invoice rate (mirrors AR receipt).
  */

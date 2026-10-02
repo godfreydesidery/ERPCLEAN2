@@ -273,6 +273,17 @@ body {
   color: var(--erp-text);
   vertical-align: middle;
 }
+/* Totals rows: the same cell box as the body, or each total sits a cell-padding to the right of
+   the column it totals (the browser pass caught it on the Sales Report). nowrap keeps a long
+   amount on one line instead of pushing the row out of the card. */
+.erp-table tfoot td {
+  padding: 0 0.85rem;
+  height: var(--erp-row-h);
+  border-top: 1px solid var(--erp-border);
+  color: var(--erp-text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
 .erp-table tbody tr:hover,
 .admin-page table.grid tbody tr:hover { background: #f8fafc; }
 .erp-table tbody tr:last-child td,

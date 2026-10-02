@@ -5,6 +5,7 @@ import com.erp.modules.sales.domain.dto.SalesReportDto;
 import com.erp.modules.sales.domain.dto.SalesReportRowDto;
 import com.erp.modules.sales.domain.dto.SalesReportTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -22,6 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Per-product Sales Register over a date range (SAM Electronix go-live).
+ *
+ * <p>Every money figure is in the company's BASE currency: line amounts are converted at the rate
+ * stamped on their invoice at finalise ({@link BaseCurrencySql}), so a foreign-currency sale is
+ * neither added at 1:1 nor margined against a base-currency cost.
  *
  * <p>{@code amount} is GROSS (VAT-inclusive) sales; {@code margin} = net sales less cost-of-sale
  * at time of sale, matched to the {@code SALE_ISSUE} stock movement posted for the same invoice
@@ -45,10 +50,13 @@ public class SalesReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public SalesReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public SalesReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     public SalesReportDto report(Long companyId, LocalDate fromDate, LocalDate toDate,
@@ -70,6 +78,7 @@ public class SalesReportQuery {
         NamedRef route    = resolveNamedRef("routes",    "name",         routeUid,    companyId, "Route");
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
 
         StringBuilder filterSql = new StringBuilder();
         List<Object> filterParams = new ArrayList<>();
@@ -152,15 +161,27 @@ public class SalesReportQuery {
         mainParams.add(to);
         mainParams.addAll(filterParams);
 
+        // Money columns are converted to BASE at the rate stamped on each invoice (BaseCurrencySql):
+        // the header says the report is in the company's base currency, and cost of sales below is
+        // already base, so a USD line summed at face would be both mislabelled and margined against
+        // a TZS cost.
+        int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
+        String rate = "i.fx_rate";
         String mainSql = """
                 SELECT l.product_id                              AS product_id,
                        l.product_code                             AS product_code,
                        l.product_name                             AS product_name,
                        SUM(l.quantity)                            AS qty_sold,
-                       SUM(COALESCE(l.line_discount_amount, 0))   AS discount,
-                       SUM(l.vat_amount)                          AS vat,
-                       SUM(l.net_amount)                          AS net_sales,
-                       SUM(l.gross_amount)                        AS amount,
+                """
+                + "       SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)", rate,
+                        baseScale) + ") AS discount,\n"
+                + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
+                + ") AS vat,\n"
+                + "       SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
+                + ") AS net_sales,\n"
+                + "       SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate,
+                        baseScale) + ") AS amount,\n"
+                + """
                        COALESCE(soh.qty, 0)                       AS current_stock
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id

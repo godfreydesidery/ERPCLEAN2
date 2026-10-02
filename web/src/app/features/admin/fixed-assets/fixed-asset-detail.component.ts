@@ -15,6 +15,7 @@ import {
   AssetRevaluationDto,
   DepreciationScheduleLineDto,
   DisposeAssetRequest,
+  FaExportFormat,
   FixedAssetDto,
   PlaceInServiceRequest,
   RevalueAssetRequest,
@@ -24,6 +25,7 @@ import {
   WriteOffAssetRequest,
 } from './models/fixed-assets.model';
 import { FixedAssetsService } from './fixed-assets.service';
+import { downloadBlob } from '../reporting/reporting.utils';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -110,6 +112,8 @@ export class FixedAssetDetailComponent {
   // ── Child: schedule ───────────────────────────────────────────────────────────
   readonly schedule = signal<DepreciationScheduleLineDto[]>([]);
   readonly scheduleState = signal<LoadState>('idle');
+  readonly exportingSchedule = signal(false);
+  readonly scheduleExportError = signal<string | null>(null);
 
   // ── Child: revaluations ───────────────────────────────────────────────────────
   readonly revaluations = signal<AssetRevaluationDto[]>([]);
@@ -118,6 +122,10 @@ export class FixedAssetDetailComponent {
   // ── Permissions ───────────────────────────────────────────────────────────────
   readonly canManage = computed(() => this.session.hasPermission('FA.REGISTER.MANAGE'));
   readonly canDispose = computed(() => this.session.hasPermission('FA.DISPOSE'));
+  /** Schedule export = this screen's gate (FA.VIEW) + REPORT.EXPORT, as the endpoint requires. */
+  readonly canExportSchedule = computed(
+    () => this.session.hasPermission('FA.VIEW') && this.session.hasPermission('REPORT.EXPORT'),
+  );
 
   // ── Status helpers ────────────────────────────────────────────────────────────
   readonly isDraft = computed(() => this.asset()?.status === 'DRAFT');
@@ -175,6 +183,9 @@ export class FixedAssetDetailComponent {
         if (asset.status === 'IN_SERVICE') {
           this.loadSchedule();
           this.loadRevaluations();
+        } else if (asset.status === 'DISPOSED' || asset.status === 'WRITTEN_OFF') {
+          // FR-FA-18: the schedule (what was charged before disposal) stays reachable.
+          this.loadSchedule();
         }
       },
       error: () => this.state.set('error'),
@@ -193,6 +204,29 @@ export class FixedAssetDetailComponent {
     this.faService.listSchedule(this.uid()).subscribe({
       next: (lines) => { this.schedule.set(lines); this.scheduleState.set('idle'); },
       error: () => this.scheduleState.set('error'),
+    });
+  }
+
+  /** FR-FA-18: the depreciation schedule (planned + posted) as a file. */
+  exportSchedule(format: FaExportFormat): void {
+    const a = this.asset();
+    if (!a || this.exportingSchedule()) return;
+    this.exportingSchedule.set(true);
+    this.scheduleExportError.set(null);
+    this.faService.exportSchedule(this.uid(), format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `depreciation-schedule_${a.assetNumber}.${format.toLowerCase()}`);
+        this.exportingSchedule.set(false);
+      },
+      error: (err: unknown) => {
+        this.exportingSchedule.set(false);
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        this.scheduleExportError.set(
+          status === 401 || status === 403
+            ? "You don't have permission to export the schedule."
+            : 'Could not export the schedule. Please try again.',
+        );
+      },
     });
   }
 

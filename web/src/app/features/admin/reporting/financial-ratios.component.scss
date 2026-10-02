@@ -1,0 +1,5 @@
+.ratio-grid {
+  th[scope='row'] { min-width: 12rem; }
+  .ratio-note { font-size: 0.8rem; max-width: 22rem; }
+  td ul li + li { margin-top: 0.125rem; }
+}

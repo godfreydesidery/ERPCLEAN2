@@ -1,12 +1,9 @@
 package com.erp.modules.ap.service;
 
 import com.erp.modules.ap.domain.dto.ApBalanceDto;
-import com.erp.modules.ap.repository.ApPaymentRepository;
-import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
-import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,22 +15,28 @@ import org.springframework.transaction.annotation.Transactional;
  * A negative balance means the supplier has a net prepayment credit, which reconciles
  * against GL 2100 because the on-account payment already reduced the control account
  * via its DR AP / CR Cash posting.
+ *
+ * <p>Unapplied debit notes are netted as well — the per-supplier mirror of
+ * {@code ApReconciliationQuery} (and of {@code ArBalanceServiceImpl} netting unapplied credit
+ * notes): {@code balance = Σ outstanding − Σ unallocated_payments − Σ unapplied_debit_notes}, so
+ * the supplier balances add up to the reconciled sub-ledger total.
+ *
+ * <p>Owner ruling 2026-10-02: the total is in BASE currency over reliable rows only (see
+ * {@link ApFxSplitQuery}); a foreign-currency row still carrying the V62 back-fill
+ * ({@code fx_rate = 1}) is listed per currency in {@code unconverted}, never summed into base.
  */
 @Service
 @Transactional(readOnly = true)
 public class ApBalanceServiceImpl implements ApBalanceService {
 
-    private final SupplierBillRepository bills;
-    private final ApPaymentRepository    payments;
-    private final CompanyRepository      companies;
-    private final ScopeGuard             scopeGuard;
+    private final ApFxSplitQuery    fxSplit;
+    private final CompanyRepository companies;
+    private final ScopeGuard        scopeGuard;
 
-    public ApBalanceServiceImpl(SupplierBillRepository bills,
-                                 ApPaymentRepository payments,
+    public ApBalanceServiceImpl(ApFxSplitQuery fxSplit,
                                  CompanyRepository companies,
                                  ScopeGuard scopeGuard) {
-        this.bills      = bills;
-        this.payments   = payments;
+        this.fxSplit    = fxSplit;
         this.companies  = companies;
         this.scopeGuard = scopeGuard;
     }
@@ -42,15 +45,16 @@ public class ApBalanceServiceImpl implements ApBalanceService {
     public ApBalanceDto currentBalance(Long companyId, Long supplierId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        BigDecimal outstanding  = bills.sumOutstandingBySupplier(companyId, supplierId);
-        // D-9: net out on-account remainder (mirror of ArBalanceServiceImpl)
-        BigDecimal unallocated  = payments.sumUnallocatedByCompanyAndSupplier(companyId, supplierId);
-        BigDecimal balance      = outstanding.subtract(unallocated);
+        // Σ outstanding − Σ unallocated payments (D-9) − Σ unapplied debit notes (raise already
+        // relieved GL 2100 in full) — in BASE currency, reliable rows only; V62-filled foreign
+        // rows are listed per currency (owner ruling 2026-10-02).
+        ApFxSplitQuery.Split split = fxSplit.split(companyId, supplierId);
 
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
                 .orElse("TZS");
 
-        return new ApBalanceDto(companyId, supplierId, balance, currency);
+        return new ApBalanceDto(companyId, supplierId, split.baseTotal(), currency,
+                split.unconverted());
     }
 }

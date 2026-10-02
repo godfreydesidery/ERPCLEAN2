@@ -4,6 +4,7 @@ import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.stock.domain.dto.StockReportDto;
 import com.erp.modules.stock.domain.dto.StockReportRowDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -45,10 +46,13 @@ public class StockReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public StockReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public StockReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     public StockReportDto report(Long companyId) {
@@ -71,6 +75,7 @@ public class StockReportQuery {
         CompanyHeader header = loadCompanyHeader(companyId);
         Long defaultPriceListId = resolveDefaultPriceListId(companyId);
         NamedRef branch = resolveNamedRef("branches", "name", branchUid, companyId, "Branch");
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
 
         List<Object> params = new ArrayList<>();
         params.add(defaultPriceListId);

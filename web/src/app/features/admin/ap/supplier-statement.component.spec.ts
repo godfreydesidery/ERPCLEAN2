@@ -14,14 +14,14 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { SessionStore } from '../../../core/auth/session.store';
 
 // Supplier Statement tests:
-//  1. Ageing bucket order is canonical (CURRENT first, DAYS_91_PLUS last).
+//  1. Ageing bucket order is canonical (CURRENT first, D90_PLUS last).
 //  2. Money fields coerced as numbers — +(b.amount) === 0 renders '—', positive renders formatted.
 //  3. outstandingBalance computed from balance.outstandingBalance (number on wire).
 
 const MOCK_AGEING = [
-  { bucket: 'DAYS_91_PLUS', amount: 5000, currency: 'TZS' },
+  { bucket: 'D90_PLUS', amount: 5000, currency: 'TZS' },
   { bucket: 'CURRENT', amount: 0, currency: 'TZS' },
-  { bucket: 'DAYS_1_30', amount: 2000, currency: 'TZS' },
+  { bucket: 'D1_30', amount: 2000, currency: 'TZS' },
 ];
 
 const MOCK_BALANCE = {
@@ -41,6 +41,18 @@ function makeSession(canView = true) {
   };
 }
 
+const MOCK_RECON = {
+  companyId: '10',
+  subLedgerTotal: 7000,
+  glControlBalance: 7000,
+  difference: 0,
+  currency: 'TZS',
+};
+
+let recon: typeof MOCK_RECON & {
+  unconverted?: { currency: string; amount: number; itemCount: number }[];
+} = MOCK_RECON;
+
 function makeBed() {
   TestBed.configureTestingModule({
     imports: [SupplierStatementComponent],
@@ -54,6 +66,9 @@ function makeBed() {
           getBalance: vi.fn(() => of(MOCK_BALANCE)),
           getAgeing: vi.fn(() => of(MOCK_AGEING)),
           listBills: vi.fn(() => of({ rows: [], meta: {} })),
+          getReconciliation: vi.fn(() => of(recon)),
+          exportStatement: vi.fn(() => of(new Blob())),
+          exportAgeing: vi.fn(() => of(new Blob())),
         },
       },
       { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
@@ -65,17 +80,83 @@ function makeBed() {
 }
 
 describe('SupplierStatementComponent', () => {
-  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); recon = MOCK_RECON; });
 
-  it('sortedAgeing orders buckets canonically (CURRENT first, DAYS_91_PLUS last)', () => {
+  it('loads the AP-to-GL reconciliation with the company, before any supplier is picked', () => {
+    makeBed();
+    const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
+    const ap = TestBed.inject(ApService) as any;
+    expect(ap.getReconciliation).toHaveBeenCalledWith('10');
+    expect(comp.selectedSupplier()).toBeNull();
+    expect(comp.reconciled()).toBe(true);
+  });
+
+  it('reads "out by X" when the sub-ledger and the GL control account disagree', () => {
+    recon = { ...MOCK_RECON, glControlBalance: 7150, difference: -150 };
+    makeBed();
+    const fixture = TestBed.createComponent(SupplierStatementComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance as any;
+    expect(comp.reconciled()).toBe(false);
+    expect(comp.absDifference()).toBe(150);
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Out by TZS 150.00');
+    expect(text).toContain('The GL control account is higher than the supplier sub-ledger.');
+  });
+
+  it('lists old foreign amounts with no reliable rate as unconverted, excluded from the comparison', () => {
+    recon = { ...MOCK_RECON, unconverted: [{ currency: 'USD', amount: 30, itemCount: 2 }] };
+    makeBed();
+    const fixture = TestBed.createComponent(SupplierStatementComponent);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Unconverted (per currency)');
+    expect(text).toContain('USD 30.00');
+    expect(text).toContain('excluded from the comparison above');
+  });
+
+  it('exportStatement sends the company, the picked supplier uid, the period and the format', () => {
+    makeBed();
+    const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
+    const ap = TestBed.inject(ApService) as any;
+    comp.selectedSupplier.set({ uid: 'SUPUID', label: 'S1 — Supplier' });
+    comp.exportFrom.set('2026-09-01');
+    comp.exportTo.set('2026-09-30');
+    const createObjectURL = vi.fn(() => 'blob:x');
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    comp.exportStatement('XLSX');
+    expect(ap.exportStatement).toHaveBeenCalledWith('10', 'SUPUID', '2026-09-01', '2026-09-30', 'XLSX');
+    expect(comp.exporting()).toBe(false);
+  });
+
+  it('sortedAgeing orders buckets canonically (CURRENT first, D90_PLUS last)', () => {
     vi.useFakeTimers();
     makeBed();
     const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
     comp.ageing.set(MOCK_AGEING);
     const sorted = comp.sortedAgeing();
     expect(sorted[0].bucket).toBe('CURRENT');
-    expect(sorted[1].bucket).toBe('DAYS_1_30');
-    expect(sorted[2].bucket).toBe('DAYS_91_PLUS');
+    expect(sorted[1].bucket).toBe('D1_30');
+    expect(sorted[2].bucket).toBe('D90_PLUS');
+  });
+
+  it('ages each currency on its own — a USD block is never added into the TZS figures', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
+    comp.ageing.set([
+      ...MOCK_AGEING,
+      { bucket: 'D31_60', amount: 400, currency: 'USD' },
+      { bucket: 'CURRENT', amount: 0, currency: 'USD' },
+    ]);
+    const groups = comp.ageingGroups();
+    expect(comp.multiCurrency()).toBe(true);
+    expect(groups.map((g: { currency: string }) => g.currency)).toEqual(['TZS', 'USD']);
+    expect(groups[0].total).toBe(7000);
+    expect(groups[1].total).toBe(400);
+    expect(comp.baseAgeingTotal()).toBe(7000);
+    expect(comp.sortedAgeing().every((b: { currency: string }) => b.currency === 'TZS')).toBe(true);
   });
 
   it('outstandingBalance coerces number from balance signal', () => {
@@ -110,6 +191,6 @@ describe('SupplierStatementComponent', () => {
     makeBed();
     const comp = TestBed.createComponent(SupplierStatementComponent).componentInstance as any;
     expect(comp.bucketLabel('CURRENT')).toBe('Current');
-    expect(comp.bucketLabel('DAYS_91_PLUS')).toBe('90+ days');
+    expect(comp.bucketLabel('D90_PLUS')).toBe('90+ days');
   });
 });

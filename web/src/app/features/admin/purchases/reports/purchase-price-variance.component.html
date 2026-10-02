@@ -1,0 +1,240 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-arrow-down-up me-2" aria-hidden="true"></i>Purchase Price Variance
+      </h1>
+      <p class="subtitle">
+        Where you paid a different price from the one on the purchase order — on the goods receipt,
+        or on the supplier's bill.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view Purchase Price Variance.
+    </div>
+  } @else {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="ppv-from">From</label>
+            <input id="ppv-from" name="ppv-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="ppv-to">To</label>
+            <input id="ppv-to" name="ppv-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ppv-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ppv-branch" name="ppv-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ppv-supplier">
+              Supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ppv-supplier" name="ppv-supplier"
+                            [(ngModel)]="supplierUid"
+                            [options]="supplierOptions()"
+                            [search]="pickers.searchSuppliers"
+                            placeholder="All suppliers" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading' || !datesValid()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+        @if (!datesValid()) {
+          <p class="text-danger small mb-0 mt-2" role="alert">
+            Choose a start date and an end date, with the end date on or after the start.
+          </p>
+        }
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Comparing prices…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          {{ loadError() ?? 'Could not build Purchase Price Variance. Please try again.' }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-arrow-down-up" aria-hidden="true"></i>
+            Choose a period, then click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+                @if (r.company.vrn) { <span>VRN: {{ r.company.vrn }}</span> }
+              </p>
+            </div>
+          </div>
+
+          <h2 class="h5">Purchase Price Variance</h2>
+          <p class="text-muted small mb-1">
+            Period: {{ r.fromDate }} to {{ r.toDate }}
+            @if (r.branchName) { · Branch: {{ r.branchName }} } @else { · All branches }
+            @if (r.supplierName) { · Supplier: {{ r.supplierName }} }
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <p class="text-muted small mb-3">
+            Variance = actual price − order price. A positive figure means you paid more than you
+            ordered at. A receipt takes its cost from its order, so the receipt variance is normally
+            zero; the bill is where price changes show.
+          </p>
+
+          @if (!r.billsShown) {
+            <p class="small text-muted" role="note">
+              Supplier-bill prices are hidden: they need Accounts Payable view access. Only receipts
+              whose cost differs from the order are listed.
+            </p>
+          }
+          @if (r.totals.rowsInOtherCurrency > 0) {
+            <div class="alert alert-warning" role="status">
+              {{ r.totals.rowsInOtherCurrency }} line(s) are in another currency and are not included
+              in the {{ r.currency }} totals.
+            </div>
+          }
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Purchase price variance — order price against receipt cost and bill price
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Received</th>
+                  <th scope="col">GRN</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Supplier</th>
+                  <th scope="col">Item</th>
+                  <th scope="col" class="num">Qty</th>
+                  <th scope="col" class="num">Order price</th>
+                  <th scope="col" class="num">Receipt cost</th>
+                  <th scope="col" class="num">Receipt variance</th>
+                  @if (r.billsShown) {
+                    <th scope="col" class="num">Bill price</th>
+                    <th scope="col" class="num">Bill variance / unit</th>
+                    <th scope="col" class="num">Bill variance</th>
+                    <th scope="col" class="num">Bill variance %</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @if (r.rows.length === 0) {
+                  <tr>
+                    <td [attr.colspan]="columnCount()" class="text-center text-muted py-4">
+                      Every price in this period matched its order.
+                    </td>
+                  </tr>
+                }
+                @for (row of r.rows; track $index) {
+                  <tr>
+                    <td class="small">{{ fmtDay(row.receivedAt) }}</td>
+                    <td class="mono">
+                      <a [routerLink]="['/admin/goods-receipts/uid', row.receiptUid]">{{ row.receiptNumber }}</a>
+                    </td>
+                    <td class="mono small">{{ row.orderNumber ?? '—' }}</td>
+                    <td>{{ row.supplierName }}</td>
+                    <td>
+                      <span class="mono">{{ row.productCode }}</span> {{ row.productName }}
+                      @if (row.unitName) { <span class="small text-muted">({{ row.unitName }})</span> }
+                    </td>
+                    <td class="num mono">{{ fmtQty(row.receivedQty) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.poPrice) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.receiptCost) }}</td>
+                    <td class="num mono" [class.neg]="isOver(row.receiptVarianceTotal)">
+                      {{ fmtMoney(row.receiptVarianceTotal) }}
+                      @if (row.currency !== r.currency) { <span class="small text-muted">{{ row.currency }}</span> }
+                    </td>
+                    @if (r.billsShown) {
+                      <td class="num mono">{{ fmtMoney(row.billPrice) }}</td>
+                      <td class="num mono">{{ fmtMoney(row.billVariancePerUnit) }}</td>
+                      <td class="num mono" [class.neg]="isOver(row.billVarianceTotal)">
+                        {{ fmtMoney(row.billVarianceTotal) }}
+                      </td>
+                      <td class="num mono">{{ fmtPct(row.billVariancePct) }}</td>
+                    }
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="8" class="text-end">Total ({{ r.currency }}) — {{ r.totals.lines }} line(s)</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.receiptVarianceTotal) }}</td>
+                  @if (r.billsShown) {
+                    <td></td>
+                    <td></td>
+                    <td class="num mono">{{ fmtMoney(r.totals.billVarianceTotal) }}</td>
+                    <td></td>
+                  }
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+      }
+    }
+  }
+</section>

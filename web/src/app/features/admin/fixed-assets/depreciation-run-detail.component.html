@@ -44,7 +44,15 @@
               <dd class="col-sm-9 mono fw-semibold">{{ r.currency }} {{ +r.totalChargeAmount | number:'1.2-2' }}</dd>
               <dt class="col-sm-3">Assets</dt><dd class="col-sm-9">{{ r.assetCount }}</dd>
               <dt class="col-sm-3">Executed</dt><dd class="col-sm-9 text-muted">{{ r.executedAt }}</dd>
-              @if (r.glEntryUid) {
+              @if (r.glEntryUids && r.glEntryUids.length > 1) {
+                <!-- One journal per asset branch: each branch's depreciation is booked to that branch. -->
+                <dt class="col-sm-3">GL Entries</dt><dd class="col-sm-9">
+                  @for (uid of r.glEntryUids; track uid; let i = $index) {
+                    <a class="me-3" [routerLink]="['/admin/gl/journals/uid', uid]">View GL Entry {{ i + 1 }}</a>
+                  }
+                  <div class="form-text">One journal per branch &mdash; each asset's depreciation is booked to its own branch.</div>
+                </dd>
+              } @else if (r.glEntryUid) {
                 <dt class="col-sm-3">GL Entry</dt><dd class="col-sm-9">
                   <a [routerLink]="['/admin/gl/journals/uid', r.glEntryUid]">View GL Entry</a>
                 </dd>

@@ -103,7 +103,8 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                                      "— avg recompute skipped for this row", line.goodsReceiptLineId());
                 }
 
-                // Post negative stock movement: qty leaves inventory
+                // Post negative stock movement: qty AND value leave inventory. The value used to be
+                // recorded positive on the negative quantity — the same sign defect as the GRN void.
                 posting.post(
                         payload.companyId(), payload.branchId(), line.productId(),
                         line.returnedQtyInBase().negate(),  // negative = stock out
@@ -114,7 +115,7 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                         null,
                         null,
                         line.unitCostAmount(),
-                        lineValue);
+                        lineValue != null ? lineValue.abs().negate() : null);
                 // movement uid recorded on the return header by PurchaseReturnService
             }
 

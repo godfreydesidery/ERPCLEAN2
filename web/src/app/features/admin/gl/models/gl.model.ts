@@ -82,6 +82,8 @@ export interface PostJournalRequest {
   sourceType: JournalSourceType;
   sourceRef?: string;
   lines: PostJournalLineRequest[];
+  /** Optional branch uid; omitted = a company-level journal. Must be a branch the caller works in. */
+  branchUid?: string;
 }
 
 // ── Fiscal Periods ───────────────────────────────────────────────────────────

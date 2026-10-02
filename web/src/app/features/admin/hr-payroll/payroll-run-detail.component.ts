@@ -6,8 +6,10 @@ import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { formatMoney } from '../../../shared/money.util';
+import { downloadBlob } from '../reporting/reporting.utils';
 import { HrPayrollService } from './hr-payroll.service';
 import { DisburseRequest, PayrollLineDto, PayrollRunDto, PayslipDto } from './models/hr-payroll.model';
+import { PayrollRunStatutoryReportDto, StatutoryExportFormat } from './models/payroll-statutory.model';
 
 /**
  * Payroll run detail screen with full lifecycle actions:
@@ -36,6 +38,16 @@ export class PayrollRunDetailComponent {
   readonly payslips = signal<PayslipDto[]>([]);
   readonly payslipsState = signal<'loading' | 'idle' | 'error'>('idle');
 
+  // ── Statutory summary (FR-HR-23) ─────────────────────────────────────────────
+  readonly statutory = signal<PayrollRunStatutoryReportDto | null>(null);
+  readonly statutoryState = signal<'loading' | 'idle' | 'error'>('idle');
+  readonly exportingStatutory = signal(false);
+  readonly statutoryExportError = signal<string | null>(null);
+
+  // ── Bank (EFT) file ──────────────────────────────────────────────────────────
+  readonly downloadingBankFile = signal(false);
+  readonly bankFileError = signal<string | null>(null);
+
   /** Coerce + format money with thousand separators (shared util). */
   readonly fmtMoney = formatMoney;
 
@@ -59,6 +71,10 @@ export class PayrollRunDetailComponent {
   readonly canPost = computed(() => this.session.hasPermission('HR.PAYROLL.POST'));
   readonly canDisburse = computed(() => this.session.hasPermission('HR.PAYROLL.DISBURSE'));
   readonly canReverse = computed(() => this.session.hasPermission('HR.PAYROLL.REVERSE'));
+  /** Statutory export = the screen's own gate (route guard HR.PAYROLL.VIEW) + REPORT.EXPORT. */
+  readonly canExportStatutory = computed(
+    () => this.session.hasPermission('HR.PAYROLL.VIEW') && this.session.hasPermission('REPORT.EXPORT'),
+  );
 
   // ── Status predicates for button visibility ──────────────────────────────────
   readonly canCalculate = computed(() => {
@@ -72,6 +88,16 @@ export class PayrollRunDetailComponent {
     return r?.status === 'POSTED' && parseFloat(r.netTotal ?? '0') > 0;
   });
   readonly canReverseAction = computed(() => {
+    const s = this.run()?.status;
+    return s === 'POSTED' || s === 'PAID';
+  });
+
+  /**
+   * The bank file is offered once the run is posted (POSTED, then PAID): before that the net pay can
+   * still change, and a reversed run must not be paid. The endpoint itself does not refuse earlier
+   * statuses, so this screen is where a premature bank upload is prevented.
+   */
+  readonly canBankFileAction = computed(() => {
     const s = this.run()?.status;
     return s === 'POSTED' || s === 'PAID';
   });
@@ -108,6 +134,85 @@ export class PayrollRunDetailComponent {
       },
       error: () => this.linesState.set('error'),
     });
+    this.loadStatutory();
+  }
+
+  /** Statutory summary — skipped for a DRAFT run, which has no lines to summarise yet. */
+  private loadStatutory(): void {
+    if (this.run()?.status === 'DRAFT') {
+      this.statutory.set(null);
+      this.statutoryState.set('idle');
+      return;
+    }
+    this.statutoryState.set('loading');
+    this.hrService.getStatutorySummary(this.uid()).subscribe({
+      next: (dto) => {
+        this.statutory.set(dto);
+        this.statutoryState.set('idle');
+      },
+      error: () => this.statutoryState.set('error'),
+    });
+  }
+
+  exportStatutory(format: StatutoryExportFormat): void {
+    const r = this.run();
+    if (!r || this.exportingStatutory()) return;
+    this.exportingStatutory.set(true);
+    this.statutoryExportError.set(null);
+    this.hrService.exportStatutorySummary(this.uid(), format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `payroll-statutory_${r.runNumber}.${format.toLowerCase()}`);
+        this.exportingStatutory.set(false);
+      },
+      error: (err) => {
+        this.exportingStatutory.set(false);
+        this.statutoryExportError.set(this.downloadMessage(err, 'the statutory summary'));
+      },
+    });
+  }
+
+  downloadBankFile(): void {
+    const r = this.run();
+    if (!r || this.downloadingBankFile()) return;
+    this.downloadingBankFile.set(true);
+    this.bankFileError.set(null);
+    this.hrService.downloadEftFile(this.uid()).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `bank-file_${r.runNumber}.csv`);
+        this.downloadingBankFile.set(false);
+      },
+      error: (err) => {
+        this.downloadingBankFile.set(false);
+        // 409 = the server refused because of the run's status (only POSTED / PAID runs may produce
+        // a bank file). The button is only offered for those, so the run must have changed since the
+        // page loaded (e.g. reversed in another tab) — say so rather than "not available yet".
+        const conflict = err instanceof HttpErrorResponse && err.status === 409;
+        this.bankFileError.set(
+          conflict
+            ? 'A bank file can only be produced for a posted or paid payroll run, and this run is no'
+              + ' longer in that state. Refresh the page to see its current status.'
+            : this.downloadMessage(err, 'the bank file'),
+        );
+      },
+    });
+  }
+
+  /**
+   * A blob download's error body is a Blob, not the JSON envelope, so the server's errors[] is not
+   * readable here — the message is chosen by status instead, and never echoes server detail.
+   */
+  private downloadMessage(err: unknown, what: string): string {
+    const status = err instanceof HttpErrorResponse ? err.status : 0;
+    if (status === 401 || status === 403) {
+      return `You don't have permission to download ${what}.`;
+    }
+    if (status === 404) {
+      return 'This payroll run could not be found. Refresh the page and try again.';
+    }
+    if (status >= 400 && status < 500) {
+      return `${what.charAt(0).toUpperCase()}${what.slice(1)} is not available for this payroll run yet.`;
+    }
+    return `Could not download ${what}. Please try again.`;
   }
 
   private loadPayslips(): void {
@@ -148,6 +253,7 @@ export class PayrollRunDetailComponent {
         this.run.set(updated);
         this.approving.set(false);
         this.alerts.success('Payroll approved', updated.runNumber);
+        this.loadStatutory(); // no longer provisional
       },
       error: (err) => {
         this.approving.set(false);
@@ -219,6 +325,7 @@ export class PayrollRunDetailComponent {
         this.run.set(updated);
         this.reversing.set(false);
         this.alerts.success('Payroll reversed', updated.runNumber);
+        this.loadStatutory(); // a reversed run's figures must not be filed
       },
       error: (err) => {
         this.reversing.set(false);

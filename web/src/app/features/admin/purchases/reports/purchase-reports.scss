@@ -1,0 +1,13 @@
+// Shared by the four purchase report screens — nothing beyond the global admin-page shell except
+// the company block width and the void / negative-row tint.
+.report-header {
+  max-width: 640px;
+}
+
+.row-void td {
+  color: var(--bs-danger-text-emphasis, #842029);
+}
+
+.num.neg {
+  color: var(--bs-danger-text-emphasis, #842029);
+}

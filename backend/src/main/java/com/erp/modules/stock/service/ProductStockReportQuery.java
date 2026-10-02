@@ -4,8 +4,8 @@ import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.stock.domain.dto.ProductStockReportDto;
 import com.erp.modules.stock.domain.dto.ProductStockRowDto;
 import com.erp.modules.stock.domain.dto.ProductStockTotalsDto;
-import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -97,10 +97,13 @@ public class ProductStockReportQuery {
 
     private final JdbcTemplate jdbc;
     private final ScopeGuard   scopeGuard;
+    private final BranchReadGuard branchGuard;
 
-    public ProductStockReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard) {
+    public ProductStockReportQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard,
+            BranchReadGuard branchGuard) {
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
+        this.branchGuard = branchGuard;
     }
 
     /**
@@ -115,7 +118,7 @@ public class ProductStockReportQuery {
 
         CompanyHeader header = loadCompanyHeader(companyId);
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
-        assertMayReadBranch(principal, branch);
+        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         PriceList priceList = resolveDefaultPriceList(companyId);
 
@@ -366,71 +369,7 @@ public class ProductStockReportQuery {
                 companyId);
     }
 
-    /**
-     * A branch uid on the query string is a filter the CALLER supplies, so it must clear the same bar
-     * as the {@code X-Branch-Uid} session override in {@code JwtRequestContextFilter} (ADR-0003):
-     * same company — already enforced by {@link #resolveNamedRef}, which resolves uid and company_id
-     * together — AND a live {@code user_branch} assignment. Without this a storekeeper assigned only
-     * to Arusha could read Dodoma's quantities, costs and margins by editing the URL, which the
-     * header path refuses. Scoped from the RESOLVED branch, never from the raw parameter.
-     *
-     * <p>Root is exempt (ScopeGuard already audits its cross-scope reads). Anything else fails closed.
-     *
-     * <p>This USED to be the stricter of the two paths: the header path checked only that an
-     * assignment row existed, so a revoked user could still switch session scope by header and was
-     * then refused the branch-filtered report — a revoked assignment reading as a broken screen.
-     * P3-14 (ADR-0062) narrowed the header path to require a live assignment too, so the two now
-     * agree and the asymmetry this paragraph used to warn about is gone. See
-     * {@link #branchNotAssigned()} on why the wording here stays about the assignment rather than
-     * about permissions.
-     *
-     * <p>Read with raw SQL rather than IAM's {@code UserBranchRepository}: this class is scalar-SQL
-     * throughout and importing another module's repository would breach the module boundary.
-     */
-    private void assertMayReadBranch(RequestContext.Principal principal, NamedRef branch) {
-        if (branch == null) {
-            return; // no branch filter — the company-wide read is already authorised
-        }
-        if (principal != null && principal.root()) {
-            return;
-        }
-        Long userId = principal != null ? principal.userId() : null;
-        if (userId == null) {
-            // A session with no user behind it is a broken session, not a branch problem — the
-            // generic wording is the honest one here.
-            throw ForbiddenException.notPermitted();
-        }
-        Integer assigned = jdbc.query(
-                """
-                SELECT 1
-                FROM user_branch
-                WHERE user_id = ? AND branch_id = ? AND active = true AND revoked_at IS NULL
-                LIMIT 1
-                """,
-                (ResultSetExtractor<Integer>) rs -> rs.next() ? 1 : null,
-                userId, branch.id());
-        if (assigned == null) {
-            throw branchNotAssigned();
-        }
-    }
 
-    /**
-     * What the caller reads when they filter to a branch they are not assigned to.
-     *
-     * <p>Deliberately NOT the generic "you do not have permission" wording. The caller holds the
-     * report permission — that is how they reached the screen — so a permission-shaped refusal sends
-     * them to an administrator to ask for something they already have, and leaves them believing the
-     * report is broken. The actual remedy is either a branch assignment or no branch filter, and both
-     * are worth saying. Naming the constraint that was applied is not a leak: it discloses nothing
-     * about the branch, its data, or anyone else's access.
-     *
-     * <p>Plain literal on purpose — the branch name and uid stay out of it (error-message hygiene).
-     */
-    static ForbiddenException branchNotAssigned() {
-        return new ForbiddenException(
-                "You are not assigned to that branch. Choose a branch you work in, or clear the "
-                        + "branch filter to see the whole company.");
-    }
 
     /** Resolve an optional uid filter to (id, name), scoped to the caller's company. */
     private NamedRef resolveNamedRef(String table, String nameColumn, String uid,
