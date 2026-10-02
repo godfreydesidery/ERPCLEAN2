@@ -29,6 +29,26 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
                               Pageable pageable);
 
     /**
+     * The till's "Today's sales": POS invoices of one branch finalised at or after {@code from},
+     * newest first. VOID is kept on purpose — a reversed sale still happened today and the till
+     * shows it as reversed. All parameters are required, so no null-typed bind can reach Postgres.
+     */
+    @Query("""
+            SELECT i FROM SalesInvoice i
+            WHERE i.companyId = :companyId
+              AND i.branchId  = :branchId
+              AND i.origin    = com.erp.modules.sales.domain.enums.DocumentOrigin.POS
+              AND i.status IN (com.erp.modules.sales.domain.enums.InvoiceStatus.FINALISED,
+                               com.erp.modules.sales.domain.enums.InvoiceStatus.VOID)
+              AND i.finalisedAt >= :from
+            ORDER BY i.finalisedAt DESC
+            """)
+    Page<SalesInvoice> findPosSalesSince(@Param("companyId") Long companyId,
+                                         @Param("branchId") Long branchId,
+                                         @Param("from") Instant from,
+                                         Pageable pageable);
+
+    /**
      * Resolves an invoice uid to its owning company id — used by {@code ScopeGuard.companyIdOf}
      * for case "invoice" (ADR-0008 D-10). Single-column JPQL projection.
      */

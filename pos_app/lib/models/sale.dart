@@ -89,6 +89,8 @@ class SalesInvoice {
     required this.taxSummary,
     required this.finalisedAt,
     required this.notes,
+    this.posSessionId,
+    this.createdByName,
   });
 
   final String id;
@@ -106,6 +108,15 @@ class SalesInvoice {
   final DateTime? finalisedAt;
   final String? notes;
 
+  /// The till session the sale was rung in (null off-till, or from a server
+  /// older than ERP 1.10.2). A cashier may refund only their own open shift's
+  /// sales, so the till compares this with its shift before offering a refund.
+  final String? posSessionId;
+
+  /// Who rang the sale. The receipt's CASHIER line prints this, so a reprint
+  /// names the person who made the sale rather than whoever is reprinting it.
+  final String? createdByName;
+
   factory SalesInvoice.fromJson(Map<String, dynamic> j) => SalesInvoice(
         id: asStrOr(j['id']),
         uid: asStrOr(j['uid']),
@@ -121,6 +132,8 @@ class SalesInvoice {
         taxSummary: asStr(j['taxSummary']),
         finalisedAt: asDate(j['finalisedAt']),
         notes: asStr(j['notes']),
+        posSessionId: asStr(j['posSessionId']),
+        createdByName: asStr(j['createdByName']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -138,6 +151,8 @@ class SalesInvoice {
         'taxSummary': taxSummary,
         'finalisedAt': finalisedAt?.toIso8601String(),
         'notes': notes,
+        'posSessionId': posSessionId,
+        'createdByName': createdByName,
       };
 }
 

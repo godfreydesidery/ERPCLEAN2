@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/version.dart';
 import '../../state/app_controller.dart';
 import '../../widgets/ui.dart';
 import 'setup_screen.dart';
@@ -106,6 +107,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 label: const Text('Server setup'),
                 style: TextButton.styleFrom(foregroundColor: AppColors.ink2),
               ),
+            ),
+            const SizedBox(height: 4),
+            const Center(
+              child: Text('OrbixPOS $kAppVersion',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
             ),
           ],
         ),

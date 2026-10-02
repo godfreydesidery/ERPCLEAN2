@@ -15,6 +15,7 @@ import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.VatOutputSummaryDto;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,14 @@ public interface SalesInvoiceService {
     SalesInvoiceDto getByUid(String uid);
 
     Page<SalesInvoiceDto> list(Long companyId, String q, Pageable pageable);
+
+    /**
+     * POS sales of one branch finalised at or after {@code from}, newest first — the till's
+     * "Today's sales". Reversed (VOID) sales are included: a refund is part of the day, and the
+     * till reprints it as REVERSED rather than letting it vanish from the list.
+     */
+    Page<SalesInvoiceDto> listPosSalesSince(Long companyId, Long branchId, Instant from,
+                                            Pageable pageable);
 
     void finalise(String uid, FinaliseInvoiceRequest req);
 

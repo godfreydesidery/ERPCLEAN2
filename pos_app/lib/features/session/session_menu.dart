@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/theme.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/config/app_config.dart';
 import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
+import '../../core/version.dart';
 import '../../models/auth.dart';
 import '../../models/context.dart';
 import '../../models/enums.dart';
@@ -144,6 +146,12 @@ class _SessionDrawer extends ConsumerWidget {
                       ref.read(appControllerProvider.notifier).logout();
                     }),
               ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text('OrbixPOS $kAppVersion',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
+              ),
             ],
           ),
         ),
@@ -180,6 +188,13 @@ class _SessionDrawer extends ConsumerWidget {
           enabled: s != null && s.status.isOpen,
           disabledNote: 'Only while the session is open',
           onTap: () => _payout(context, ref)));
+    }
+    if (app.can(Perms.expenseRecord)) {
+      out.add(_action(Icons.receipt_outlined, 'Till expense',
+          'Cash paid out for the business — by category',
+          enabled: s != null && s.status.isOpen,
+          disabledNote: 'Only while the session is open',
+          onTap: () => _expense(context, ref)));
     }
     if (app.can(Perms.salesInvoiceView)) {
       out.add(_action(Icons.receipt_long_outlined, "Today's sales",
@@ -455,13 +470,25 @@ class _SessionDrawer extends ConsumerWidget {
     ref.read(appControllerProvider.notifier).refreshShift();
   }
 
+  Future<void> _expense(BuildContext context, WidgetRef ref) async {
+    final app = ref.read(appControllerProvider);
+    final uid = app.shift?.uid;
+    if (uid == null) return;
+    await showDialog(
+      context: context,
+      builder: (_) => _ExpenseDialog(sessionUid: uid, currency: app.currency),
+    );
+    ref.read(appControllerProvider.notifier).refreshShift();
+  }
+
   Future<void> _todaysSales(BuildContext context, WidgetRef ref) async {
     final app = ref.read(appControllerProvider);
-    final companyId = app.context?.companyId;
-    if (companyId == null) return;
+    final ctx = app.context;
+    if (ctx == null) return;
     showDialog(
       context: context,
-      builder: (_) => _TodaysSalesDialog(companyId: companyId),
+      builder: (_) =>
+          _TodaysSalesDialog(companyId: ctx.companyId, branchId: ctx.branchId),
     );
   }
 
@@ -660,7 +687,13 @@ class _ZReadSheetState extends ConsumerState<_ZReadSheet> {
     // Already approved to open this copy? Then it is approved to print this copy.
     // Anyone who opened it on their own permission still meets the print gate as before.
     String? approverLabel = widget.approvedBy;
-    if (approverLabel == null) {
+    // A manager signed in at the till IS the authority the gate looks for. Asking them for a
+    // second manager deadlocked a one-manager shop - nobody may approve themselves, so a branch
+    // manager could never print their own Z-read. Same rule as the refund sheet.
+    final selfAuthorised = ref
+        .read(appControllerProvider)
+        .can(stepUpRuleFor(GatedAction.zReadPrint).permissionCode);
+    if (approverLabel == null && !selfAuthorised) {
       final outcome = await approveIfRequired(
         context,
         ref,
@@ -919,7 +952,11 @@ class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            children: PosPayoutType.values.map((t) {
+            // Not EXPENSE: the payouts endpoint refuses it, and an expense needs
+            // a category — it has its own form (Till expense).
+            children: PosPayoutType.values
+                .where((t) => t != PosPayoutType.expense)
+                .map((t) {
               final active = _type == t;
               return Expanded(
                 child: Padding(
@@ -976,11 +1013,143 @@ class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
   }
 }
 
+// ============================================================ till expense
+
+/// Records a categorised business expense paid out of the drawer (K8).
+///
+/// Unlike a plain paid-out, the expense keeps its category, so it prints as its
+/// own X/Z-read line and rolls up in the managers' expense report. The category
+/// is free text on the server; the chips are only the usual ones, one tap away.
+class _ExpenseDialog extends ConsumerStatefulWidget {
+  const _ExpenseDialog({required this.sessionUid, required this.currency});
+  final String sessionUid;
+  final String currency;
+  @override
+  ConsumerState<_ExpenseDialog> createState() => _ExpenseDialogState();
+}
+
+class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
+  static const _common = [
+    'Transport',
+    'Cleaning',
+    'Repairs',
+    'Meals',
+    'Utilities',
+    'Stationery',
+  ];
+
+  final _amount = TextEditingController();
+  final _category = TextEditingController();
+  final _reason = TextEditingController();
+  bool _busy = false;
+
+  /// One key for this expense entry, made once when the form opens and reused
+  /// on every retry, so a lost response re-sends the SAME expense and the
+  /// server replays it instead of taking the cash out of the ledger twice.
+  final String _entryId = ApiClient.newTxnId();
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _category.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amt = double.tryParse(_amount.text.trim()) ?? 0;
+    if (amt <= 0) {
+      showToast(context, 'Enter an amount.');
+      return;
+    }
+    // Mirror the server's rules so the cashier is told here, not after a trip.
+    final category = _category.text.trim();
+    if (category.length < 2 || category.length > 40) {
+      showToast(context, 'Choose or type a category (2 to 40 letters).');
+      return;
+    }
+    final reason = _reason.text.trim();
+    if (reason.length < 3) {
+      showToast(context, 'Say what the cash is for (at least a few words).');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref.read(sessionServiceProvider).recordExpense(widget.sessionUid,
+          amount: amt, category: category, reason: reason, entryId: _entryId);
+      if (mounted) {
+        Navigator.pop(context);
+        showToast(context, 'Expense recorded and posted to the ledger.',
+            ok: true);
+      }
+    } on ApiException catch (e) {
+      setState(() => _busy = false);
+      if (mounted) showToast(context, e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: const Text('Till expense'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            OrbixField(
+                label: 'Amount (${widget.currency})',
+                controller: _amount,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                ],
+                big: true),
+            const SizedBox(height: 12),
+            OrbixField(label: 'Category (required)', controller: _category),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final c in _common)
+                  ActionChip(
+                    label: Text(c),
+                    onPressed: () => setState(() => _category.text = c),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OrbixField(label: 'What was it for? (required)', controller: _reason),
+            const SizedBox(height: 6),
+            const Text(
+                'The cash leaves the drawer and is booked to the ledger as an '
+                'expense under this category. It shows on the X-read and '
+                'Z-read.',
+                style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        OrbixButton(label: 'Record', busy: _busy, onPressed: _submit),
+      ],
+    );
+  }
+}
+
 // ============================================================ today's sales
 
 class _TodaysSalesDialog extends ConsumerStatefulWidget {
-  const _TodaysSalesDialog({required this.companyId});
+  const _TodaysSalesDialog({required this.companyId, required this.branchId});
   final String companyId;
+  final String branchId;
   @override
   ConsumerState<_TodaysSalesDialog> createState() => _TodaysSalesDialogState();
 }
@@ -991,7 +1160,9 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
   @override
   void initState() {
     super.initState();
-    _future = ref.read(saleServiceProvider).listInvoices(widget.companyId);
+    _future = ref
+        .read(saleServiceProvider)
+        .listTodaysSales(widget.companyId, branchId: widget.branchId);
   }
 
   Future<void> _reprint(SalesInvoice inv) async {
@@ -1001,7 +1172,7 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
           .loadReceipt(inv.uid, clientTxnId: inv.uid);
       if (mounted) {
         Navigator.pop(context);
-        showReceiptSheet(context, ref, receipt);
+        showReceiptSheet(context, ref, receipt, reprint: true);
       }
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.message);
@@ -1046,15 +1217,18 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
                                 ? e.message
                                 : 'Could not load sales.')));
                   }
-                  // Only finalised sales — never reprint a void/draft as a clean
-                  // receipt from this list.
+                  // Today's finalised sales and the ones reversed since. A
+                  // reversed sale stays in the list (marked, and reprinting as
+                  // REVERSED) so a refund never makes a sale vanish from the
+                  // day. Drafts never appear.
                   final list = (snap.data ?? const <SalesInvoice>[])
-                      .where((i) => i.status.isFinalised)
+                      .where((i) => i.status.isFinalised || i.status.isVoid)
                       .toList();
                   if (list.isEmpty) {
                     return const Padding(
                         padding: EdgeInsets.all(40),
-                        child: Center(child: Text('No finalised sales yet.')));
+                        child: Center(
+                            child: Text('No sales at this branch today.')));
                   }
                   return ListView.separated(
                     shrinkWrap: true,
@@ -1062,11 +1236,15 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (context, i) {
                       final inv = list[i];
+                      final when = inv.finalisedAt == null
+                          ? (inv.customerName ?? '')
+                          : df.format(inv.finalisedAt!.toLocal());
+                      final who = inv.createdByName?.trim() ?? '';
                       return ListTile(
-                        title: Text(inv.invoiceNumber),
-                        subtitle: Text(inv.finalisedAt == null
-                            ? (inv.customerName ?? '')
-                            : df.format(inv.finalisedAt!.toLocal())),
+                        title: Text(inv.status.isVoid
+                            ? '${inv.invoiceNumber}  ·  Reversed'
+                            : inv.invoiceNumber),
+                        subtitle: Text(who.isEmpty ? when : '$when  ·  $who'),
                         trailing: Text(
                             formatMoneyParts(
                                 inv.grossTotalAmount, inv.currency),
@@ -1146,7 +1324,7 @@ class _RecentReceiptsDialog extends ConsumerWidget {
                               style: numStyle(weight: FontWeight.w700)),
                           onTap: () {
                             Navigator.pop(context);
-                            showReceiptSheet(context, ref, r);
+                            showReceiptSheet(context, ref, r, reprint: true);
                           },
                         );
                       },

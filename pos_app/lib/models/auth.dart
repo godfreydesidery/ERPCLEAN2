@@ -134,6 +134,7 @@ class Perms {
   static const sessionClose = 'POS.SESSION.CLOSE';
   static const sessionView = 'POS.SESSION.VIEW';
   static const sessionReconcile = 'POS.SESSION.RECONCILE';
+  static const expenseRecord = 'POS.EXPENSE.RECORD';
   static const tillView = 'POS.TILL.VIEW';
   static const tillManage = 'POS.TILL.MANAGE';
   // cross-module reads

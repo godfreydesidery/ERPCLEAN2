@@ -27,7 +27,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       final app = ref.read(appControllerProvider);
       ref.read(cartProvider.notifier).start(
             customer: app.defaultCustomer,
-            agent: app.defaultAgent,
             currency: app.currency,
           );
       // Surface an interrupted sale as soon as the till is back at the register,

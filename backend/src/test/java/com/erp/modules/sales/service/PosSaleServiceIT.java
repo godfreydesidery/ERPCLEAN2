@@ -68,11 +68,13 @@ import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -115,6 +117,7 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
     @Autowired private PosTillService          tillService;
     @Autowired private PosSessionService       sessionService;
     @Autowired private PosSaleService          saleService;
+    @Autowired private SalesInvoiceService     invoiceService;
     @Autowired private SalesSettingsService    salesSettingsService;
     @Autowired private SalesSettingsRepository salesSettingsRepo;
     @Autowired private SalesInvoiceRepository  invoiceRepo;
@@ -229,6 +232,46 @@ class PosSaleServiceIT extends PostgresIntegrationTest {
         assertThat(persisted.getPosSessionId())
                 .as("POS sale must be tagged to its session")
                 .isNotNull();
+    }
+
+    // =========================================================================
+    // The till's "Today's sales": names who rang each sale and which till session it
+    // belongs to, and keeps to the branch and the time window asked for.
+    // =========================================================================
+
+    @Test
+    void listPosSalesSince_namesTheCashierAndSession_andKeepsToBranchAndWindow() {
+        setRootCtx();
+        ProductDto product = productService.getByUid(pricedProduct("Milk 500ml", "1500"));
+        receiveStock(product, new BigDecimal("20"), new BigDecimal("500"));
+
+        setCashierCtx();
+        SalesInvoiceDto sale = saleService.processSale(null, cashSaleRequest(product.id()));
+        Long sessionId = invoiceRepo.findByUid(sale.uid()).orElseThrow().getPosSessionId();
+
+        Instant anHourAgo = Instant.now().minus(1, ChronoUnit.HOURS);
+        List<SalesInvoiceDto> today = invoiceService.listPosSalesSince(
+                company.getId(), branch.getId(), anHourAgo, PageRequest.of(0, 50)).getContent();
+
+        assertThat(today).extracting(SalesInvoiceDto::uid).containsExactly(sale.uid());
+        assertThat(today.get(0).createdByName())
+                .as("a reprint must name the cashier who rang the sale, not whoever reprints it")
+                .isEqualTo("POS Cashier");
+        assertThat(today.get(0).posSessionId())
+                .as("the till compares this with its own shift before offering a refund")
+                .isEqualTo(sessionId);
+
+        assertThat(invoiceService.listPosSalesSince(company.getId(), branch.getId(),
+                Instant.now().plus(1, ChronoUnit.HOURS), PageRequest.of(0, 50)).getContent())
+                .as("nothing finalised after the window start")
+                .isEmpty();
+
+        setRootCtx();
+        Branch otherBranch = branches.save(new Branch(company, "PS2", "Other Branch"));
+        assertThat(invoiceService.listPosSalesSince(company.getId(), otherBranch.getId(),
+                anHourAgo, PageRequest.of(0, 50)).getContent())
+                .as("another branch's list does not show this branch's sale")
+                .isEmpty();
     }
 
     // =========================================================================

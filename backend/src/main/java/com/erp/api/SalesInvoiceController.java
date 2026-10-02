@@ -13,6 +13,7 @@ import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -70,8 +71,21 @@ public class SalesInvoiceController {
     public ApiResponse<List<SalesInvoiceDto>> list(@RequestParam Long companyId,
                                                     @RequestParam(required = false) String q,
                                                     @RequestParam(required = false) String status,
+                                                    // The till's "Today's sales": POS sales of one
+                                                    // branch finalised since this instant (the
+                                                    // till's own local midnight), newest first.
+                                                    @RequestParam(required = false) Instant finalisedFrom,
+                                                    @RequestParam(required = false) Long branchId,
                                                     Pageable pageable) {
-        Page<SalesInvoiceDto> page = salesInvoiceService.list(companyId, q, pageable);
+        Page<SalesInvoiceDto> page;
+        if (finalisedFrom != null) {
+            if (branchId == null) {
+                throw new IllegalArgumentException("Choose a branch to list its sales.");
+            }
+            page = salesInvoiceService.listPosSalesSince(companyId, branchId, finalisedFrom, pageable);
+        } else {
+            page = salesInvoiceService.list(companyId, q, pageable);
+        }
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 

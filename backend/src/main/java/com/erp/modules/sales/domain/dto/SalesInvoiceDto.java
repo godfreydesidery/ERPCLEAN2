@@ -50,6 +50,12 @@ public record SalesInvoiceDto(
         String routeUid,
         String routeCode,
         String routeName,
+        // The till session a POS sale was rung in (null for any other origin). Lets a till tell its
+        // own shift's sales from a colleague's before it offers a refund the server would refuse.
+        Long posSessionId,
+        // Display name of the user who created the invoice — for a POS sale, the cashier who rang
+        // it, which is what a reprinted receipt must name (not whoever is signed in to reprint).
+        String createdByName,
         Long version,
         String createdAt,
         Long createdBy,
@@ -71,6 +77,14 @@ public record SalesInvoiceDto(
     public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
                                        String routeUid, String routeCode, String routeName,
                                        String postedGlEntryUid) {
+        return from(inv, customerName, agentName, routeUid, routeCode, routeName,
+                postedGlEntryUid, null);
+    }
+
+    /** As above, plus the creating user's display name (resolved by the service, batch-wise). */
+    public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
+                                       String routeUid, String routeCode, String routeName,
+                                       String postedGlEntryUid, String createdByName) {
         return new SalesInvoiceDto(
                 inv.getId(),
                 inv.getUid(),
@@ -105,6 +119,8 @@ public record SalesInvoiceDto(
                 routeUid,
                 routeCode,
                 routeName,
+                inv.getPosSessionId(),
+                createdByName,
                 inv.getVersion(),
                 inv.getCreatedAt() != null ? inv.getCreatedAt().toString() : null,
                 inv.getCreatedBy(),

@@ -17,10 +17,13 @@ enum TenderType {
       TenderType.values.firstWhere((t) => t.wire == w, orElse: () => cash);
 }
 
-/// `PosPayoutType` — REFUND / PAID_OUT. Both subtract from expected cash.
+/// `PosPayoutType` — REFUND / PAID_OUT / EXPENSE. All subtract from expected
+/// cash. EXPENSE is recorded only through the till-expense form (its own
+/// endpoint and permission); the Cash payout dialog offers the other two.
 enum PosPayoutType {
   refund('REFUND', 'Refund'),
-  paidOut('PAID_OUT', 'Paid out');
+  paidOut('PAID_OUT', 'Paid out'),
+  expense('EXPENSE', 'Expense');
 
   const PosPayoutType(this.wire, this.label);
   final String wire;

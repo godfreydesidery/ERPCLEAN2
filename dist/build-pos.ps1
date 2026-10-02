@@ -195,8 +195,9 @@ if ($SkipTests) {
 Write-Step 'Building the Windows release'
 # Clear the old output so a file the new build no longer produces cannot ride along into the zip.
 if (Test-Path $ReleaseDir) { Remove-Item -Recurse -Force $ReleaseDir }
-# Deliberately no --dart-define: POS_ALLOW_INSECURE_TLS must never be on in a shipped till.
-Invoke-In $PosDir 'flutter build windows' { & flutter build windows --release }
+# The one --dart-define is the version the app shows on screen. Never POS_ALLOW_INSECURE_TLS:
+# a till shipped with it accepts any certificate.
+Invoke-In $PosDir 'flutter build windows' { & flutter build windows --release "--dart-define=POS_VERSION=$Version" }
 
 $Exe = Join-Path $ReleaseDir 'pos_app.exe'
 if (-not (Test-Path $Exe)) { Stop-WithError "The build produced no pos_app.exe under $ReleaseDir." }

@@ -115,8 +115,11 @@ class StepUpRule {
 ///   next report asks again.
 ///
 /// The **Z-read** is the shift's closing statement, the document a variance is
-/// argued from, and reprintable after the fact — printing it takes a manager
-/// regardless, and its reprint reaches the report through the same two doors.
+/// argued from, and reprintable after the fact — printing it takes a manager,
+/// and its reprint reaches the report through the same two doors. A manager
+/// who is signed in at the till already is that manager: the print gate skips
+/// the prompt for someone holding the approver code, exactly as the refund
+/// sheet does, or a one-manager shop could never print its own Z-read.
 ///
 /// Both drawer reports therefore ask for the SAME approver code, so a manager
 /// who can approve one can approve the other and the prompt never has to
