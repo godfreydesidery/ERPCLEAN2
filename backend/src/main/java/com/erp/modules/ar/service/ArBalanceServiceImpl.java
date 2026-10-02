@@ -1,13 +1,10 @@
 package com.erp.modules.ar.service;
 
 import com.erp.modules.ar.domain.dto.ArBalanceDto;
-import com.erp.modules.ar.repository.ArCreditNoteRepository;
 import com.erp.modules.ar.repository.ArInvoiceRepository;
-import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
-import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,19 +13,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class ArBalanceServiceImpl implements ArBalanceService {
 
     private final ArInvoiceRepository invoices;
-    private final ArReceiptRepository receipts;
-    private final ArCreditNoteRepository creditNoteRepo;
+    private final ArFxSplitQuery fxSplit;
     private final CompanyRepository companies;
     private final ScopeGuard scopeGuard;
 
     public ArBalanceServiceImpl(ArInvoiceRepository invoices,
-                                 ArReceiptRepository receipts,
-                                 ArCreditNoteRepository creditNoteRepo,
+                                 ArFxSplitQuery fxSplit,
                                  CompanyRepository companies,
                                  ScopeGuard scopeGuard) {
         this.invoices        = invoices;
-        this.receipts        = receipts;
-        this.creditNoteRepo  = creditNoteRepo;
+        this.fxSplit         = fxSplit;
         this.companies       = companies;
         this.scopeGuard      = scopeGuard;
     }
@@ -44,18 +38,18 @@ public class ArBalanceServiceImpl implements ArBalanceService {
     public ArBalanceDto currentBalance(Long companyId, Long customerId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        BigDecimal outstanding  = invoices.sumOutstandingByCompanyAndCustomer(companyId, customerId);
-        BigDecimal unallocated  = receipts.sumUnallocatedByCompanyAndCustomer(companyId, customerId);
-        // ADR-0040 D-6: net unapplied CNs — raise posts CR AR full; apply posts nothing,
-        // so the sub-ledger must subtract CN unapplied to equal GL 1200.
-        BigDecimal cnUnapplied  = creditNoteRepo.sumUnappliedByCompanyAndCustomer(companyId, customerId);
-        BigDecimal balance      = outstanding.subtract(unallocated).subtract(cnUnapplied);
+        // balance = Σ outstanding − Σ unallocated receipts − Σ unapplied CNs (ADR-0040 D-6: raise
+        // posts CR AR full; apply posts nothing, so CN unapplied is netted to equal GL 1200) —
+        // in BASE currency, reliable rows only; V62-filled foreign rows are listed per currency
+        // (owner ruling 2026-10-02).
+        ArFxSplitQuery.Split split = fxSplit.split(companyId, customerId);
 
         // Derive the base currency — company record holds it (V10 ADD COLUMN).
         String currency = companies.findById(companyId)
                 .map(c -> c.getBaseCurrency())
                 .orElseThrow(() -> new IllegalStateException("Company not found."));
 
-        return new ArBalanceDto(companyId, customerId, balance, currency);
+        return new ArBalanceDto(companyId, customerId, split.baseTotal(), currency,
+                split.unconverted());
     }
 }

@@ -49,7 +49,9 @@ const MOCK_RECON = {
   currency: 'TZS',
 };
 
-let recon: typeof MOCK_RECON = MOCK_RECON;
+let recon: typeof MOCK_RECON & {
+  unconverted?: { currency: string; amount: number; itemCount: number }[];
+} = MOCK_RECON;
 
 function makeBed() {
   TestBed.configureTestingModule({
@@ -100,6 +102,17 @@ describe('SupplierStatementComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Out by TZS 150.00');
     expect(text).toContain('The GL control account is higher than the supplier sub-ledger.');
+  });
+
+  it('lists old foreign amounts with no reliable rate as unconverted, excluded from the comparison', () => {
+    recon = { ...MOCK_RECON, unconverted: [{ currency: 'USD', amount: 30, itemCount: 2 }] };
+    makeBed();
+    const fixture = TestBed.createComponent(SupplierStatementComponent);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Unconverted (per currency)');
+    expect(text).toContain('USD 30.00');
+    expect(text).toContain('excluded from the comparison above');
   });
 
   it('exportStatement sends the company, the picked supplier uid, the period and the format', () => {

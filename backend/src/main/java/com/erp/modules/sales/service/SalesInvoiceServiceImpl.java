@@ -8,7 +8,6 @@ import com.erp.modules.routes.domain.entity.Route;
 import com.erp.modules.routes.repository.RouteRepository;
 import com.erp.modules.routes.service.RouteService;
 import com.erp.modules.parties.repository.AgentRepository;
-import com.erp.modules.ar.domain.dto.ArBalanceDto;
 import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
@@ -112,6 +111,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final RouteRepository routeRepository;
     /** ADR-0014 D-9: credit-limit check at finalise for CREDIT_ACCOUNT customers. */
     private final ArBalanceService arBalanceService;
+    /** Base-currency credit exposure (owner ruling 2026-10-02: per currency, reliable rows only). */
+    private final CreditExposureCalculator creditExposure;
     private final PermissionResolver permissionResolver;
     /** ADR-0036 D-3/D-4: converts face amounts to base and stamps the FX triple at finalise. */
     private final FxDocumentConverter fxConverter;
@@ -160,7 +161,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    DiscountAuthorisationGuard discountGuard,
                                    InternalAgentProvisioner internalAgents,
                                    UserLookupService userLookup,
-                                   com.erp.platform.common.money.CurrencyMinorUnits minorUnits) {
+                                   com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
+                                   CreditExposureCalculator creditExposure) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -190,6 +192,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.internalAgents = internalAgents;
         this.userLookup = userLookup;
         this.minorUnits = minorUnits;
+        this.creditExposure = creditExposure;
     }
 
     // -------------------------------------------------------------------------
@@ -395,31 +398,47 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 }
             }
 
-            // Credit-limit check (ADR-0014 D-9): existing AR balance + this gross must not exceed limit.
+            // Credit-limit check (ADR-0014 D-9): existing AR balance + this gross must not exceed
+            // limit — all in BASE currency (owner ruling 2026-10-02). Unconverted (V62-filled)
+            // foreign AR and a foreign invoice gross count at today's rate; a missing rate fails
+            // closed (treated as over the limit).
             com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
             if (creditLimit != null && creditLimit.isPresent()
                     && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
-                ArBalanceDto balance = arBalanceService.currentBalance(
-                        inv.getCompanyId(), inv.getCustomerId());
-                BigDecimal projectedBalance = balance.balance().add(inv.getGrossTotalAmount());
-                if (projectedBalance.compareTo(creditLimit.getAmount()) > 0) {
+                CreditExposureCalculator.Assessment exposure = creditExposure.assess(
+                        inv.getCompanyId(), inv.getCustomerId(), inv.getGrossTotalAmount(),
+                        com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
+                        creditLimit, LocalDate.now());
+                if (exposure.breached()) {
                     boolean hasOverride = permissionResolver.hasPermission(
                             RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
                     if (!hasOverride) {
                         // ADR-0014 D-9 / SALES.CREDIT.OVERRIDE permission required for override
+                        if (exposure.rateMissing()) {
+                            throw new IllegalStateException(
+                                    CreditExposureCalculator.missingRateSentence(
+                                            exposure.missingRateCurrencies())
+                                            + " You do not have permission to override the credit limit.");
+                        }
                         throw new IllegalStateException(
                                 "This customer's credit limit has been reached. "
                                         + "The outstanding balance would exceed the allowed limit "
                                         + "if this invoice is finalised. "
                                         + "You do not have permission to override the credit limit.");
                     }
+                    Map<String, Object> detail = new java.util.LinkedHashMap<>();
+                    detail.put("customerUid", customer.getUid());
+                    detail.put("creditLimit", creditLimit.getAmount().toPlainString());
+                    detail.put("creditLimitCurrency", creditLimit.getCurrency().value());
+                    detail.put("projectedBalance", exposure.exposure().toPlainString());
+                    detail.put("projectedBalanceCurrency", exposure.baseCurrency());
+                    if (exposure.rateMissing()) {
+                        detail.put("rateMissingCurrencies",
+                                String.join(",", exposure.missingRateCurrencies()));
+                    }
                     audit.record(AuditEvent.of(AuditActions.SALES_CREDIT_OVERRIDE, "sales_invoices",
                                     inv.getId(), inv.getUid())
-                            .detail(Map.of(
-                                    "customerUid", customer.getUid(),
-                                    "creditLimit", creditLimit.getAmount().toPlainString(),
-                                    "creditLimitCurrency", creditLimit.getCurrency().value(),
-                                    "projectedBalance", projectedBalance.toPlainString())));
+                            .detail(detail));
                 }
             }
         } else {

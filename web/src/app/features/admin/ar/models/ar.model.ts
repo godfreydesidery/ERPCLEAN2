@@ -194,9 +194,22 @@ export interface ArAgeingRowDto {
 
 // ── Balance ───────────────────────────────────────────────────────────────────
 
+/**
+ * A foreign-currency amount with no reliable base-currency value (old rows whose stored rate is
+ * the V62 back-fill of 1). Shown in its own currency; never part of a base-currency total.
+ */
+export interface ArUnconvertedAmountDto {
+  currency: string;
+  /** Wire: number */
+  amount: number;
+  itemCount: number;
+}
+
 export interface ArBalanceDto {
   customerId: string;
-  /** Wire: number or string */
+  /** Base-currency total over reliable rows. Wire: number or string */
   balance: number | string;
   currency: string;
+  /** Foreign amounts left out of balance (per currency). Absent on older servers. */
+  unconverted?: ArUnconvertedAmountDto[];
 }
