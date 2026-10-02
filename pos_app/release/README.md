@@ -86,8 +86,11 @@ place.
    (make it the user's default branch) and give the role **Cashier**. Every cashier needs
    their own login. Do not share logins: every sale, refund and drawer count is recorded
    against the person signed in.
-4. **A sales-agent record for each cashier.** *Parties > Sales Agents*: add an **INTERNAL**
-   agent and link it to the cashier's user. Without it the till refuses to post sales.
+4. **Sales agents: nothing to do.** Every sale is credited to the person signed in at the till.
+   A cashier with no sales-agent record gets one automatically on their first sale, named after
+   them. Create it yourself in *Parties > Sales Agents* (an **INTERNAL** agent linked to the
+   user) only if you want a particular code or name. To stop someone selling, archive their
+   agent: the till then refuses their sales until it is reactivated.
 5. **At least one manager.** A user with the **Branch Manager** role (or another role that
    holds the same approvals). The till asks a manager to approve refunds, the X-read and
    Z-read drawer reports, and discounts larger than a cashier may give alone. The manager
@@ -205,8 +208,9 @@ once. Repeat the steps above with the new file.
 4. Start `pos_app.exe`. The server address, printer settings and sign-in are kept.
 5. Do a test sale and print a receipt before the shop gets busy.
 
-Check that the version in this guide's title is the one you meant to install. To go back,
-unzip the previous version's zip over the folder the same way.
+Check the version: it shows under *Server setup* on the sign-in screen and at the bottom of the
+Session menu, and must match this guide's title. To go back, unzip the previous version's zip
+over the folder the same way.
 
 The till and the ERP server are upgraded separately. Your supplier tells you when a new till
 version needs a newer server.
@@ -262,8 +266,9 @@ web app (section 3).
 
 ### The till signs in but will not open a shift, or will not post a sale
 
-Check section 3: a till for the branch, the cashier's default branch, the Cashier role, and
-the linked internal sales agent.
+Check section 3: a till for the branch, the cashier's default branch and the Cashier role. If
+the message says the sales agent record is no longer active, an administrator archived the
+cashier's agent: reactivate it in *Parties > Sales Agents*.
 
 ### "You do not have permission for this action."
 
@@ -313,7 +318,9 @@ The paper width setting does not match the paper (58 mm or 80 mm).
 ### The cash drawer does not open
 
 Tick "Open cash drawer after printing", use thermal mode, and check the drawer cable is in the
-printer's drawer port, not a phone socket.
+printer's drawer port, not a phone socket. The drawer opens on the first print of a sale's own
+receipt only - by design it stays shut for a reprint, a gift receipt, a reversed sale or a second
+copy.
 
 > **About receipts:** the OrbixPOS receipt is an ordinary sales receipt. It is **not** a TRA
 > fiscal (EFD/VFD) receipt and carries no TRA verification code. Issue fiscal receipts the way
@@ -325,7 +332,8 @@ printer's drawer port, not a phone socket.
 
 When you contact your supplier, send:
 
-- the version and *Build* line from the top of this guide;
+- the version (shown under *Server setup* on the sign-in screen) and the *Build* line from the
+  top of this guide;
 - the till name and branch, and the cashier signed in;
 - the date and time it happened;
 - a photo or screenshot of the message on the screen (the exact words matter);

@@ -32,7 +32,7 @@ OrbixPOS is one app that can run on three kinds of device. The screens, buttons,
 
 > **About the barcode scanner.** The scanner works as a *keyboard wedge*: a USB scanner that simply "types" the barcode into whatever field is focused and presses Enter, exactly as if you had typed it yourself very fast. You do not configure it in OrbixPOS — you just make sure the right field is focused (the app does this for you on the sell screen) and scan.
 
-> **About the printer and cash drawer.** On the Windows app, OrbixPOS prints receipts and drawer reports straight to a receipt printer installed in Windows — usually an 80 mm or 58 mm thermal printer. A cash drawer plugged into the printer's drawer port can be opened automatically each time a receipt prints. Both are set up once in **Setup & diagnostics** (see **Setting up the receipt printer** below). Weighing scales are not connected to OrbixPOS; weighed items come through weight barcodes or a typed quantity.
+> **About the printer and cash drawer.** On the Windows app, OrbixPOS prints receipts and drawer reports straight to a receipt printer installed in Windows — usually an 80 mm or 58 mm thermal printer. A cash drawer plugged into the printer's drawer port can be opened automatically when a sale's receipt prints. Both are set up once in **Setup & diagnostics** (see **Setting up the receipt printer** below). Weighing scales are not connected to OrbixPOS; weighed items come through weight barcodes or a typed quantity.
 
 ---
 
@@ -40,7 +40,7 @@ OrbixPOS is one app that can run on three kinds of device. The screens, buttons,
 
 *This section is for the person who sets up the till.*
 
-**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.5.3+11-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
+**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.5.4+12-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
 
 **Before you start.** Install the receipt printer in Windows first, using the driver that came with it (or the one your supplier recommends), and print a Windows test page so you know the printer itself works. Make sure the till PC is connected to the same network as the ERP server.
 
@@ -59,7 +59,7 @@ To upgrade to a new version:
 
 > **Keep your certificate files when you upgrade.** If you created a `certs` folder or an `erp-ca.pem` file in the OrbixPOS folder (see the next section), they are not part of the zip. Copy the new files *over* the old folder rather than deleting the folder first, or put the certificate files back afterwards.
 
-> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS does not show its version on screen. When reporting a problem, always say which version the till runs.
+> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — on the sign-in screen just under the **Server setup** link, and at the bottom of the **Session** menu — for example **OrbixPOS 1.5.4+12**. When reporting a problem, always say which version the till runs.
 
 > **One setup per Windows user.** OrbixPOS remembers its settings for the Windows user account that ran it. If the till PC has more than one Windows login, do the First-Run Setup under each login that will run the till.
 
@@ -132,7 +132,7 @@ Below the host, the **Receipt printer** section holds four settings. (On the web
 | **Printer** | The receipt printer, picked from the printers installed in Windows. **— none —** means no printer: the till still sells, but **Print** only reminds you to set one up. |
 | **Paper width** | **80 mm · 48 cols** or **58 mm · 32 cols** — match the paper roll in the printer. The wrong width makes lines wrap or look squashed. |
 | **Print mode** | **Thermal (ESC/POS + cut)** for a thermal receipt printer — it prints and cuts the paper. **Plain text** for any other printer that accepts plain text; it prints the text and ejects the page, with no cut. |
-| **Open cash drawer after printing** | Tick this if a cash drawer is plugged into the printer's drawer port. The drawer then opens each time a receipt prints. It works only with **Thermal (ESC/POS + cut)** mode. Drawer reports (X-read, Z-read) never open the drawer. |
+| **Open cash drawer after printing** | Tick this if a cash drawer is plugged into the printer's drawer port. The drawer then opens when a sale's receipt prints for the first time, straight after the sale. It does not open on a reprint, a gift receipt, a second copy or a reversed sale, and drawer reports (X-read, Z-read) never open it. It works only with **Thermal (ESC/POS + cut)** mode. |
 
 Then check it:
 
@@ -189,7 +189,7 @@ If something is wrong, a red banner appears just above the **Sign in** button wi
 | **You do not have permission for this action.** right after signing in | Your account lacks one of the basic rights the till needs to start (for example, to see your branch). Ask your administrator to check your role. |
 | An amber strip: "Using branch … — we couldn't confirm your usual branch. Check this is correct before selling." | The till could not confirm your usual branch and picked another. Make sure the branch named is the shop you are standing in before you sell; if it is wrong, sign out and ask your administrator. |
 
-> **You must be set up as a cashier to sell.** Every sale is recorded against a sales agent, and the shop links each selling cashier's user account to their own internal sales-agent record. Your administrator normally does this once; if nobody has, the system creates your sales-agent record for you on your first sale. The shop's top-level super-admin account is not a salesperson and cannot ring sales — sell with the personal cashier account your administrator gave you, never a shared admin login. If a sale is refused with a message about a sales agent, see the *Troubleshooting* chapter (Chapter 7).
+> **Every sale is credited to you.** Each sale is recorded against the person signed in at the till, as their own sale. There is nothing to set up first: if your account has never sold before, the system creates your sales-agent record for you on your first sale. The shop's top-level super-admin account is not a salesperson and cannot ring sales — sell with the personal cashier account your administrator gave you, never a shared admin login. If a sale is refused with a message about a sales agent, see the *Troubleshooting* chapter (Chapter 7).
 
 ---
 
@@ -203,7 +203,7 @@ From left to right, the top bar contains:
 - **The branch chip** — a small pill with a shop icon showing the **branch** you are working in, with your **company** name beside it. A branch is the specific shop or location this till belongs to. You do not switch branches from here.
 - **The session chip** — a green pill reading **Session** followed by your session number (for example `POS-0001`). It confirms your till session is open. If it shows a dash (**—**) instead of a number, the till reopened your shift without being able to load its details — see the *Starting and Ending a Shift* chapter (Chapter 2).
 - **The mode switcher** — a pill-shaped switch in the centre showing the three business modes (**🛒 Supermarket**, **💊 Pharmacy**, **🍽 Restaurant**). The mode you are in is highlighted.
-- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Today's sales**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
+- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Till expense**, **Today's sales**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
 - **Your avatar** — a small round badge on the far right showing your initials, so you can see at a glance who is signed in.
 
 > **Messages.** Short messages ("toasts") appear for a few seconds near the bottom of the screen — dark for information and problems, green when something succeeded. Read them; the *Troubleshooting* chapter (Chapter 7) explains each one.

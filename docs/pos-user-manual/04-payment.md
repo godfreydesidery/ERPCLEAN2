@@ -193,7 +193,7 @@ To take a split payment:
 
 > Only press **Age verified** once you have genuinely checked. Pressing it records that the check was done.
 
-> **Supervisors with the age-override right:** for an account allowed to override the age check, **Cancel** does not stop the sale — it goes ahead without the age confirmation. If you hold that right and do not want to sell, close the **Payment** screen and remove the item instead.
+> **Supervisors with the age-override right:** **Cancel** always stops the sale, for everyone. An account allowed to override the age check also sees a third button, **Override without check**, in the **Age-restricted items** prompt. Pressing it completes the sale without the age confirmation. Use it only when your shop's policy allows it.
 
 ### When the server refuses the sale
 
@@ -267,9 +267,9 @@ If a manager approves **Leave unresolved…**, the till says *"Left unresolved �
 
 ## After payment: the receipt
 
-When the sale completes, OrbixPOS shows the **Sale complete** receipt straight away — on screen, laid out exactly as it will print. It is **not printed automatically**: press **Print** to print it on the receipt printer. If the till is set to open the cash drawer, the drawer opens as the receipt prints.
+When the sale completes, OrbixPOS shows the **Sale complete** receipt straight away — on screen, laid out exactly as it will print. It is **not printed automatically**: press **Print** to print it on the receipt printer. If the till is set to open the cash drawer, the drawer opens as this first copy prints (it does not open again for a second copy or a reprint).
 
-From the same screen you can produce a **Gift receipt** (which hides prices), or — with the right permission and while the session is open — **Refund / reverse** the whole sale (a manager approves it). The receipt is also saved on this device so you can reprint it later without creating a new sale.
+From the same screen you can produce a **Gift receipt** (which hides prices), or — with the right permission and while your session is open — **Refund / reverse** the whole sale (for a cashier, a manager approves it). The receipt is also saved on this device so you can reprint it later without creating a new sale.
 
 If no printer is set up, **Print** shows **No receipt printer set — configure one in Setup.** The sale is still complete and the receipt can be reprinted later.
 

@@ -24,6 +24,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [Manager approval](#manager-approval)
     - [X-read — a mid-shift drawer report](#x-read--a-mid-shift-drawer-report)
     - [Recording a cash payout](#recording-a-cash-payout)
+    - [Recording a till expense](#recording-a-till-expense)
     - [Closing the session](#closing-the-session)
     - [Reconcile / Z-read (supervisor only)](#reconcile--z-read-supervisor-only)
     - [Printing drawer reports](#printing-drawer-reports)
@@ -124,7 +125,7 @@ OrbixPOS is one app that can run on three kinds of device. The screens, buttons,
 
 > **About the barcode scanner.** The scanner works as a *keyboard wedge*: a USB scanner that simply "types" the barcode into whatever field is focused and presses Enter, exactly as if you had typed it yourself very fast. You do not configure it in OrbixPOS — you just make sure the right field is focused (the app does this for you on the sell screen) and scan.
 
-> **About the printer and cash drawer.** On the Windows app, OrbixPOS prints receipts and drawer reports straight to a receipt printer installed in Windows — usually an 80 mm or 58 mm thermal printer. A cash drawer plugged into the printer's drawer port can be opened automatically each time a receipt prints. Both are set up once in **Setup & diagnostics** (see **Setting up the receipt printer** below). Weighing scales are not connected to OrbixPOS; weighed items come through weight barcodes or a typed quantity.
+> **About the printer and cash drawer.** On the Windows app, OrbixPOS prints receipts and drawer reports straight to a receipt printer installed in Windows — usually an 80 mm or 58 mm thermal printer. A cash drawer plugged into the printer's drawer port can be opened automatically when a sale's receipt prints. Both are set up once in **Setup & diagnostics** (see **Setting up the receipt printer** below). Weighing scales are not connected to OrbixPOS; weighed items come through weight barcodes or a typed quantity.
 
 ---
 
@@ -132,7 +133,7 @@ OrbixPOS is one app that can run on three kinds of device. The screens, buttons,
 
 *This section is for the person who sets up the till.*
 
-**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.5.3+11-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
+**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.5.4+12-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
 
 **Before you start.** Install the receipt printer in Windows first, using the driver that came with it (or the one your supplier recommends), and print a Windows test page so you know the printer itself works. Make sure the till PC is connected to the same network as the ERP server.
 
@@ -151,7 +152,7 @@ To upgrade to a new version:
 
 > **Keep your certificate files when you upgrade.** If you created a `certs` folder or an `erp-ca.pem` file in the OrbixPOS folder (see the next section), they are not part of the zip. Copy the new files *over* the old folder rather than deleting the folder first, or put the certificate files back afterwards.
 
-> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS does not show its version on screen. When reporting a problem, always say which version the till runs.
+> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — on the sign-in screen just under the **Server setup** link, and at the bottom of the **Session** menu — for example **OrbixPOS 1.5.4+12**. When reporting a problem, always say which version the till runs.
 
 > **One setup per Windows user.** OrbixPOS remembers its settings for the Windows user account that ran it. If the till PC has more than one Windows login, do the First-Run Setup under each login that will run the till.
 
@@ -224,7 +225,7 @@ Below the host, the **Receipt printer** section holds four settings. (On the web
 | **Printer** | The receipt printer, picked from the printers installed in Windows. **— none —** means no printer: the till still sells, but **Print** only reminds you to set one up. |
 | **Paper width** | **80 mm · 48 cols** or **58 mm · 32 cols** — match the paper roll in the printer. The wrong width makes lines wrap or look squashed. |
 | **Print mode** | **Thermal (ESC/POS + cut)** for a thermal receipt printer — it prints and cuts the paper. **Plain text** for any other printer that accepts plain text; it prints the text and ejects the page, with no cut. |
-| **Open cash drawer after printing** | Tick this if a cash drawer is plugged into the printer's drawer port. The drawer then opens each time a receipt prints. It works only with **Thermal (ESC/POS + cut)** mode. Drawer reports (X-read, Z-read) never open the drawer. |
+| **Open cash drawer after printing** | Tick this if a cash drawer is plugged into the printer's drawer port. The drawer then opens when a sale's receipt prints for the first time, straight after the sale. It does not open on a reprint, a gift receipt, a second copy or a reversed sale, and drawer reports (X-read, Z-read) never open it. It works only with **Thermal (ESC/POS + cut)** mode. |
 
 Then check it:
 
@@ -281,7 +282,7 @@ If something is wrong, a red banner appears just above the **Sign in** button wi
 | **You do not have permission for this action.** right after signing in | Your account lacks one of the basic rights the till needs to start (for example, to see your branch). Ask your administrator to check your role. |
 | An amber strip: "Using branch … — we couldn't confirm your usual branch. Check this is correct before selling." | The till could not confirm your usual branch and picked another. Make sure the branch named is the shop you are standing in before you sell; if it is wrong, sign out and ask your administrator. |
 
-> **You must be set up as a cashier to sell.** Every sale is recorded against a sales agent, and the shop links each selling cashier's user account to their own internal sales-agent record. Your administrator normally does this once; if nobody has, the system creates your sales-agent record for you on your first sale. The shop's top-level super-admin account is not a salesperson and cannot ring sales — sell with the personal cashier account your administrator gave you, never a shared admin login. If a sale is refused with a message about a sales agent, see the *Troubleshooting* chapter (Chapter 7).
+> **Every sale is credited to you.** Each sale is recorded against the person signed in at the till, as their own sale. There is nothing to set up first: if your account has never sold before, the system creates your sales-agent record for you on your first sale. The shop's top-level super-admin account is not a salesperson and cannot ring sales — sell with the personal cashier account your administrator gave you, never a shared admin login. If a sale is refused with a message about a sales agent, see the *Troubleshooting* chapter (Chapter 7).
 
 ---
 
@@ -295,7 +296,7 @@ From left to right, the top bar contains:
 - **The branch chip** — a small pill with a shop icon showing the **branch** you are working in, with your **company** name beside it. A branch is the specific shop or location this till belongs to. You do not switch branches from here.
 - **The session chip** — a green pill reading **Session** followed by your session number (for example `POS-0001`). It confirms your till session is open. If it shows a dash (**—**) instead of a number, the till reopened your shift without being able to load its details — see the *Starting and Ending a Shift* chapter (Chapter 2).
 - **The mode switcher** — a pill-shaped switch in the centre showing the three business modes (**🛒 Supermarket**, **💊 Pharmacy**, **🍽 Restaurant**). The mode you are in is highlighted.
-- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Today's sales**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
+- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Till expense**, **Today's sales**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
 - **Your avatar** — a small round badge on the far right showing your initials, so you can see at a glance who is signed in.
 
 > **Messages.** Short messages ("toasts") appear for a few seconds near the bottom of the screen — dark for information and problems, green when something succeeded. Read them; the *Troubleshooting* chapter (Chapter 7) explains each one.
@@ -360,7 +361,7 @@ Now that you can connect the till, sign in, read the screen, and choose a mode, 
 
 # Starting and Ending a Shift
 
-Every selling day at the till runs inside a *shift*. This chapter explains what a till and a cash session are, how to open your shift in the morning, how to get back into a shift that is still open after the app closed or the power went off, how to use the session menu through the day (mid-shift reports, cash payouts), and how to count down and close the drawer at the end. It is written for cashiers; the steps marked **supervisor** are for the person who is allowed to approve reports and finalise the day.
+Every selling day at the till runs inside a *shift*. This chapter explains what a till and a cash session are, how to open your shift in the morning, how to get back into a shift that is still open after the app closed or the power went off, how to use the session menu through the day (mid-shift reports, cash payouts, till expenses), and how to count down and close the drawer at the end. It is written for cashiers; the steps marked **supervisor** are for the person who is allowed to approve reports and finalise the day.
 
 You should already be signed in and at the **Open shift** screen. If you are not yet signed in — or the app is asking you to set the ERP host and **Test connection** — see the *Getting Started* chapter (Chapter 1) first, then come back here.
 
@@ -508,7 +509,7 @@ Once your shift is open, look at the **top bar** of the register. From the left 
 
 ## The session menu
 
-**What it is.** The session menu is a side panel that holds every shift-level action that is not part of ringing a sale: drawer reports, cash payouts, receipt look-ups, and closing or reconciling the drawer.
+**What it is.** The session menu is a side panel that holds every shift-level action that is not part of ringing a sale: drawer reports, cash payouts, till expenses, receipt look-ups, and closing or reconciling the drawer.
 
 **How to open it.** On the register's top bar, click the **Session menu** button — the ☰ icon near your avatar on the right. The **Session** panel slides in from the right. Click the **✕** at its top (tooltip "Close the session menu"), or click the dimmed area beside it, to close it again.
 
@@ -527,13 +528,14 @@ Below the facts is the list of actions. **You only see the actions your account 
 |---|---|---|
 | **X-read** | A mid-shift drawer report. Resets nothing. | Anyone working the till. A cashier without permission to view sessions needs a manager's approval each time. |
 | **Cash payout** | Records cash leaving the drawer — a refund or a paid-out. Reason required. | Cashiers allowed to open shifts. Only while the session is OPEN. |
-| **Today's sales** | Looks up recent sales on the server and reprints a receipt. | Anyone allowed to view sales invoices. |
+| **Till expense** | Records cash paid out of the drawer for a business expense, under a category (transport, cleaning, …). | Anyone allowed to record till expenses (the standard Cashier role is). Only while the session is OPEN. |
+| **Today's sales** | Lists today's sales at this branch and reprints a receipt. | Anyone allowed to view sales invoices. |
 | **Recent receipts** | Reprints a receipt saved on **this device** (works offline). | Everyone. |
 | **Close session** | Count the drawer; the server computes the variance. | Anyone allowed to close sessions. Only while OPEN. |
 | **Reconcile (Z-read)** | Posts the variance to the accounts and finalises the session. | **Supervisors only.** Only after the session is CLOSED. |
 | **Z-read (reprint)** | Shows and reprints the final figures again. | Anyone working the till (a manager's approval may be needed). Only after the session is RECONCILED. |
 
-At the very bottom of the panel is **Sign out**. Signing out does **not** close your session — your shift stays OPEN on the server until you actually close it.
+At the very bottom of the panel is **Sign out**. Signing out does **not** close your session — your shift stays OPEN on the server until you actually close it. Under **Sign out**, in small grey text, is the version of OrbixPOS on this till (for example **OrbixPOS 1.5.4+12**) — quote it when you call for support.
 
 ---
 
@@ -581,7 +583,7 @@ For drawer reports, the approver must be someone allowed to reconcile tills (a s
    | **Sales (all tenders)** | Everything taken on this session so far, whatever the payment type. Under it, **By tender** splits it — for example `Cash 32,020.00 · Mobile 14,000.00`. |
    | **Opening float** | The cash you declared at open. |
    | **Cash sales** | The cash part of your sales — the only part that ends up in the drawer. |
-   | **Payouts** | Cash that has left the drawer, shown as a negative, with a line for each type (for example **Refund (1)**, **Paid out (2)**). |
+   | **Payouts** | Cash that has left the drawer, shown as a negative, with a line for each type (for example **Refund (1)**, **Paid out (2)**, **Expense (1)**). |
    | **Expected cash** | What the server says should be in the drawer right now: float + cash sales − payouts. |
 
    The footer shows how many invoices have been rung (for example `23 invoices`) and the reminder "An X-read does not close the shift and resets nothing."
@@ -599,9 +601,11 @@ For drawer reports, the approver must be someone allowed to reconcile tills (a s
 | Type | Button | Use it for |
 |---|---|---|
 | **Refund** | **Refund** | Cash handed back to a customer outside a full sale reversal. |
-| **Paid out** | **Paid out** (selected by default) | Any other cash that leaves the drawer — a drop to the safe, or a small business expense paid from the till (for example transport or cleaning supplies). |
+| **Paid out** | **Paid out** (selected by default) | Any other cash that leaves the drawer and is not a business expense — for example a drop to the safe. |
 
 Both kinds **reduce** the cash the server expects in the drawer. A **Paid out** is booked to the ledger as an expense against the drawer, filed under the reason you type — so the reason matters.
+
+> Paying for something the business needs out of the till — transport, cleaning, a small repair — is a **till expense**, not a cash payout. Use **Till expense** (see **Recording a till expense** below) so the cost is filed under the right category.
 
 **Why it exists.** If you take cash out of the drawer without telling the system, your end-of-shift count will look short by that amount. Recording the payout keeps the expected figure matched to reality, so a genuine over/short is not masked.
 
@@ -613,7 +617,7 @@ Both kinds **reduce** the cash the server expects in the drawer. A **Paid out** 
 2. Open the **Session menu** and click **Cash payout** ("Refund or drawer drop — reason required").
 3. At the top of the **Cash payout** dialog, choose the type: **Refund** or **Paid out**.
 4. In **Amount (TZS)**, type how much cash is leaving, digits only. It must be greater than zero.
-5. In **Reason (required)**, type what the cash is for — for example `drawer-to-safe drop` or `taxi for stock delivery`. A few words at least.
+5. In **Reason (required)**, type what the cash is for — for example `drawer-to-safe drop` or `cash refund, receipt lost`. A few words at least.
 6. Click **Record**.
 
 You will see **Payout recorded.** (or **Payout recorded and posted to the ledger.**), and the dialog closes. The amount is now subtracted from your expected cash. To cancel without recording anything, click **Cancel**.
@@ -625,7 +629,40 @@ You will see **Payout recorded.** (or **Payout recorded and posted to the ledger
 | **Cash payout** is faded with "Only while the session is open" | The shift has already been closed or reconciled — payouts are only allowed while OPEN. |
 | A message saying the session is not OPEN | Same cause: the shift was closed. |
 
-> A cash payout is **not** the way to reverse a whole sale. To reverse a sale, open its receipt and use **Refund / reverse** (it needs a manager — see the *Receipts and Refunds* chapter, Chapter 6). Use a payout only for cash that leaves the drawer outside the normal sale flow.
+> A cash payout is **not** the way to reverse a whole sale. To reverse a sale, open its receipt and use **Refund / reverse** (a cashier needs a manager's approval — see the *Receipts and Refunds* chapter, Chapter 6). Use a payout only for cash that leaves the drawer outside the normal sale flow.
+
+---
+
+## Recording a till expense
+
+**What it is.** A *till expense* records cash you pay out of the drawer for something the business needs — a boda-boda for a stock run, cleaning supplies, a small repair, a meal for staff on a long day. Like a payout, it reduces the cash the server expects in the drawer. Unlike a payout, it is filed under a **category**, so the managers can see what the till money was spent on.
+
+**Why it exists.** Small expenses paid from the till add up. Recording each one under its category keeps your drawer count honest *and* tells the managers what the money was spent on, instead of a pile of "paid out" lines they have to read one by one.
+
+**When it happens.** Whenever you pay a business cost in cash from the drawer. The session must be **OPEN**. You see **Till expense** in the Session menu only if your account is allowed to record till expenses — the standard Cashier role is.
+
+### Step by step
+
+1. Pay the cash and keep the paper receipt from the seller, if there is one, for your supervisor.
+2. Open the **Session menu** and click **Till expense** ("Cash paid out for the business — by category").
+3. In the **Till expense** dialog, type the amount into **Amount (TZS)**, digits only. It must be greater than zero.
+4. Under **Category (required)**, tap one of the quick choices — **Transport**, **Cleaning**, **Repairs**, **Meals**, **Utilities**, **Stationery** — or type your own category (2 to 40 letters), for example `Security`.
+5. In **What was it for? (required)**, say in a few words what you paid for — for example `boda to collect sugar from depot`.
+6. Click **Record**.
+
+You will see **Expense recorded and posted to the ledger.** and the dialog closes. The amount is now subtracted from your expected cash. To back out without recording anything, click **Cancel**.
+
+The expense appears on the **X-read** and **Z-read** as its own **Expense** line under **Payouts**, and is posted to the ledger under its category.
+
+| What you see | What to do |
+|---|---|
+| **Enter an amount.** | The amount was blank or zero. Type a positive amount. |
+| **Choose or type a category (2 to 40 letters).** | The category is empty or too long. Tap a quick choice or type a short category. |
+| **Say what the cash is for (at least a few words).** | **What was it for?** is missing or too short. |
+| **Till expense** is faded with "Only while the session is open" | The shift has already been closed — expenses can only be recorded while it is OPEN. |
+| **Till expense** is not in the menu | Your account is not allowed to record till expenses. Ask your supervisor. |
+
+> **Cash payout** offers only **Refund** and **Paid out** — there is no expense choice there. Business expenses always go through **Till expense**.
 
 ---
 
@@ -711,7 +748,7 @@ The dialog now shows the **Z-read** report:
 
 The footer shows the invoice count for the session.
 
-5. To print the Z-read, click **Print**. Printing the Z-read always needs a manager's approval: a **Manager approval — Z-read** dialog opens ("Print the end-of-shift Z-read for this session."). The approver must be a different person from the one signed in. After printing you see **Approved by …** with the manager's name.
+5. To print the Z-read, click **Print**. Printing a Z-read is a manager's job, and since you are allowed to reconcile tills (a Branch Manager is, by default), you are that manager: it prints straight away, with no approval dialog. (A cashier who prints a Z-read *reprint* is asked for a manager's approval instead — see **Reprinting the Z-read** below.)
 6. Click **Finish shift**. The session is RECONCILED and OrbixPOS returns you to the **Open shift** screen, ready for the next shift.
 
 | What you see | What to do |
@@ -724,7 +761,15 @@ The footer shows the invoice count for the session.
 
 ### Reprinting the Z-read
 
-If the Z-read paper jams or you need another copy, use **Z-read (reprint)** in the Session menu ("The final figures for a reconciled session") **before** you click **Finish shift** — once you finish, the till moves on to the next shift. If you are not allowed to view sessions, a manager approves the reprint first, and that same approval covers printing it. The reprint shows the note "This is a reprint. The figures are identical to the original — the Z-read is read-only and posts nothing." and prints marked as a reprint. After **Finish shift**, the session's Z-read can still be viewed in the ERP, on the **POS Sessions** screen.
+If the Z-read paper jams or you need another copy, use **Z-read (reprint)** in the Session menu ("The final figures for a reconciled session") **before** you click **Finish shift** — once you finish, the till moves on to the next shift. If you are not allowed to view sessions, a manager approves opening the reprint first.
+
+When you click **Print** on the reprint:
+
+- If you are allowed to reconcile tills (a Branch Manager, by default), it prints straight away — no approval dialog.
+- If a manager already approved opening this reprint, that approval covers the print too.
+- Anyone else — for example a cashier who can view the session but not reconcile it — sees a **Manager approval — Z-read** dialog first ("Print the end-of-shift Z-read for this session."). The approver must be a different person, who is allowed to reconcile tills. After printing you see **Approved by …** with the manager's name.
+
+The reprint shows the note "This is a reprint. The figures are identical to the original — the Z-read is read-only and posts nothing." and prints marked as a reprint. After **Finish shift**, the session's Z-read can still be viewed in the ERP, on the **POS Sessions** screen.
 
 ---
 
@@ -744,14 +789,14 @@ The X-read and Z-read print on the same receipt printer as your receipts, at the
 Work through this every time you finish a shift:
 
 1. **Finish open work.** Complete or clear any sale in progress, and answer any **Unfinished sale** prompt.
-2. **Record any last payouts.** If you removed cash for a safe drop, a cash refund or a till expense, record it via **Cash payout** so the expected figure is right.
+2. **Record any last payouts and expenses.** If you removed cash for a safe drop or a cash refund, record it via **Cash payout**; if you paid a business cost from the till, record it via **Till expense** — so the expected figure is right.
 3. **(Optional) Run an X-read.** **Session menu → X-read** to preview the expected cash before you count.
 4. **Count the drawer.** Count all cash, including the opening float. Count twice.
 5. **Close the session.** **Session menu → Close session**, enter **Counted cash**, click **Close session**. Note the **Variance** (green = balanced/over, red = short), then **Done**.
-6. **Reconcile (supervisor).** A supervisor runs **Reconcile (Z-read) → Reconcile**, prints the Z-read with a manager's approval, and clicks **Finish shift** — or reconciles the session later in the ERP.
+6. **Reconcile (supervisor).** A supervisor runs **Reconcile (Z-read) → Reconcile**, prints the Z-read (no approval needed — the supervisor is the manager), and clicks **Finish shift** — or reconciles the session later in the ERP.
 7. **Hand over the cash** per your branch's procedure, then **Sign out** (from the **Session menu** or the **Open shift** screen).
 
-> Reprinting a receipt — from **Today's sales** or **Recent receipts** — never creates a new sale and never changes your drawer figures. (If your till opens the cash drawer when it prints, a reprint opens it too — see Chapter 6.)
+> Reprinting a receipt — from **Today's sales** or **Recent receipts** — never creates a new sale, never changes your drawer figures, and never opens the cash drawer. The drawer opens only on the first print of a sale's own receipt — see Chapter 6.
 
 ---
 
@@ -1051,7 +1096,7 @@ Taking payment, change, split tenders, and what to do when the outcome of a sale
 | The age-check box blocked the sale. | Verify the customer's age from photo ID. Press **Age verified** to continue, or **Cancel** and remove the restricted item. |
 | The payment screen refused the sale because of a discount. | Press **Get manager approval for the discount** and have a manager approve it, or reduce the discount. |
 
-> **If a sale is refused with a message about a sales agent.** Every cashier who rings sales must have a sales-agent record linked to their user account in the ERP. If you get a message that no agent is linked, you cannot ring sales until your administrator links one to you. (The top-level super-admin account cannot be a sales agent and so cannot ring sales; use your own cashier login.)
+> **If a sale is refused with a message about a sales agent.** Every sale is credited to you, the person signed in; if you have no sales-agent record yet, one is created for you on your first sale. A refusal means your sales agent was archived (ask your administrator to reactivate it) or you are signed in with an account that cannot sell, such as the top-level super-admin. Use your own cashier login.
 
 ---
 
@@ -1473,7 +1518,7 @@ To take a split payment:
 
 > Only press **Age verified** once you have genuinely checked. Pressing it records that the check was done.
 
-> **Supervisors with the age-override right:** for an account allowed to override the age check, **Cancel** does not stop the sale — it goes ahead without the age confirmation. If you hold that right and do not want to sell, close the **Payment** screen and remove the item instead.
+> **Supervisors with the age-override right:** **Cancel** always stops the sale, for everyone. An account allowed to override the age check also sees a third button, **Override without check**, in the **Age-restricted items** prompt. Pressing it completes the sale without the age confirmation. Use it only when your shop's policy allows it.
 
 ### When the server refuses the sale
 
@@ -1547,9 +1592,9 @@ If a manager approves **Leave unresolved…**, the till says *"Left unresolved �
 
 ## After payment: the receipt
 
-When the sale completes, OrbixPOS shows the **Sale complete** receipt straight away — on screen, laid out exactly as it will print. It is **not printed automatically**: press **Print** to print it on the receipt printer. If the till is set to open the cash drawer, the drawer opens as the receipt prints.
+When the sale completes, OrbixPOS shows the **Sale complete** receipt straight away — on screen, laid out exactly as it will print. It is **not printed automatically**: press **Print** to print it on the receipt printer. If the till is set to open the cash drawer, the drawer opens as this first copy prints (it does not open again for a second copy or a reprint).
 
-From the same screen you can produce a **Gift receipt** (which hides prices), or — with the right permission and while the session is open — **Refund / reverse** the whole sale (a manager approves it). The receipt is also saved on this device so you can reprint it later without creating a new sale.
+From the same screen you can produce a **Gift receipt** (which hides prices), or — with the right permission and while your session is open — **Refund / reverse** the whole sale (for a cashier, a manager approves it). The receipt is also saved on this device so you can reprint it later without creating a new sale.
 
 If no printer is set up, **Print** shows **No receipt printer set — configure one in Setup.** The sale is still complete and the receipt can be reprinted later.
 
@@ -1608,7 +1653,7 @@ The slip is laid out top to bottom like a paper till roll:
 | **CUSTOMER NAME:** | The customer on the sale, for example *Walk-in Customer*, or *n/a* if no name is available. |
 | **RECEIPT NO:** | The number the ERP gave the sale, for example `INV-2026-004218`. This is the unique reference for the sale — quote it on any query or refund. |
 | **RECEIPT DATE:** / **RECEIPT TIME:** | When the sale was finalised, as day-month-year and hours:minutes:seconds. |
-| **CASHIER:** | The name of the person signed in to the till (see the note in section 4). |
+| **CASHIER:** | The name of the person who rang the sale — also on a reprint (see the note in section 4). |
 | **Description · Qty · Amount** | One row per product: the name, the quantity, the line amount including VAT, and a **tax letter** at the end of the row (see below). A long name wraps onto the next line. |
 | `@ 1,000.00` under a row | The price for one unit, shown when the quantity is not 1. |
 | `less disc 500.00` under a row | A discount taken off that line. |
@@ -1698,7 +1743,7 @@ When you are done with the receipt, press **Done** (or the **✕** in the top-ri
 | *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, press **Server setup** on the sign-in screen, choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
 | *Could not print the receipt.* (or a message from the printer) | The printer did not accept the job. Check it is switched on, has paper and is connected, then press **Print** again. The sale is not affected. |
 
-> **The cash drawer.** If your till is set up to **Open cash drawer after printing**, the drawer opens every time a receipt prints — including a reprint or a gift receipt. Keep that in mind when reprinting for a customer at the counter.
+> **The cash drawer.** If your till is set up to **Open cash drawer after printing**, the drawer opens **once per sale**: on the first print of the sale's own receipt, straight after the sale, so you can put the money in and give change. It does **not** open when you print a second copy, a gift receipt, a reversed sale, or a reprint from **Today's sales** or **Recent receipts** — no money is going in, so the drawer stays shut. If the drawer is not set up to open, use its key or release lever as usual.
 
 > **Paper width.** The screen always shows the 80 mm layout. The printed copy follows the paper width chosen in setup, so on 58 mm paper some lines wrap differently from the screen — the figures are the same.
 
@@ -1729,20 +1774,20 @@ Sometimes a customer comes back later — they lost the slip, the printer jammed
 
 | Source | Where it looks | Use it when |
 |---|---|---|
-| **Today's sales** | The ERP server | You want a recent sale, even one rung on a different till or by a different cashier. Needs a network connection. |
+| **Today's sales** | The ERP server | You want a sale rung **today at this branch**, even one rung on a different till or by a different cashier. Needs a network connection. |
 | **Recent receipts** | This till only | You want a sale that was rung **on this till**, and you may be offline. Works without the network. |
 
-> **The CASHIER line on a reprint.** A reprint prints the name of the person signed in **now**, not necessarily the cashier who rang the sale. If you reprint a colleague's receipt, your own name appears on the **CASHIER:** line. The ERP still records who really made the sale.
+> **The CASHIER line on a reprint.** A reprint prints the name of the cashier who **rang** the sale, not the person reprinting it. If you reprint a colleague's receipt, their name appears on the **CASHIER:** line, not yours. On a reprint of an older receipt — one saved on the till before OrbixPOS 1.5.4 — the till may not know who rang it; it then leaves the **CASHIER:** line off rather than print the wrong name. The ERP still records who really made the sale.
 
 ### 4.1 Today's sales (look up on the ERP)
 
 1. Press **☰** to open the **Session** panel.
 2. Press **Today's sales** (*Look up & reprint a receipt*).
-3. OrbixPOS fetches the most recent finalised sales from the ERP (up to 50). Each row shows the receipt number, the time, and the total.
+3. OrbixPOS fetches **today's** till sales at **this branch** from the ERP — every sale since midnight on the till's clock, from any till and any cashier at the branch, newest first (up to the latest 100). Each row shows the receipt number, the time and the name of the cashier who rang it, and the total.
 4. Tap the sale you want. The full receipt loads and the receipt screen opens.
 5. Press **Print** (or **Gift receipt** then **Print**) as normal.
 
-> **Note.** **Today's sales** needs the network. If the connection is down, use **Recent receipts** instead. If the list shows *No finalised sales yet.*, there are no finalised sales to show. A sale that has been **reversed** is no longer listed here — find it under **Recent receipts** on the till that rang it, or ask the back office. If you do not see **Today's sales** in the menu at all, your account is not allowed to look up sales; ask your supervisor.
+> **Note.** **Today's sales** needs the network. If the connection is down, use **Recent receipts** instead. If the list shows *No sales at this branch today.*, nothing has been sold at this branch since midnight. A sale from an earlier day is not listed — find it under **Recent receipts** on the till that rang it, or ask the back office. A sale that has been **reversed** stays in the list, marked **· Reversed** after its receipt number, so a refund never makes a sale disappear from the day; it reprints with the header **Sale reversed** and the `*** REVERSED ***` stamp. If you do not see **Today's sales** in the menu at all, your account is not allowed to look up sales; ask your supervisor.
 
 ### 4.2 Recent receipts (this till, works offline)
 
@@ -1768,8 +1813,8 @@ Sometimes a customer comes back later — they lost the slip, the printer jammed
 
 **Who can do it.** A refund always involves a **manager**:
 
-- **A cashier** can start a refund on a sale rung on **their own** till session, but a manager must approve it on the spot by typing their username and password at the till.
-- **A supervisor or manager** whose account holds the invoice-void right (by default the **Sales Manager** and **Branch Manager** roles) is the approver. Normally they walk over and approve at the cashier's till. If a supervisor with this right is running a till shift themselves, they are not asked for a second approval — and they may reverse a sale from any cashier's shift that is still open.
+- **A cashier** can start a refund only on a sale rung on **their own** open till session, and a manager must approve it on the spot by typing their username and password at the till. On a colleague's sale the **Refund / reverse** button does not appear at all — fetch a supervisor instead.
+- **A supervisor or manager** whose account holds the invoice-void right (by default the **Sales Manager** and **Branch Manager** roles) is the approver. Normally they walk over and approve at the cashier's till. If a supervisor with this right is running a till shift themselves, they see **Refund / reverse** on any sale while their own shift is open, and they are not asked for a second approval. The ERP still accepts the reversal only while the shift that rang the sale is open.
 
 The approving manager must be a **different person** from the one signed in. Nobody can approve their own refund.
 
@@ -1796,13 +1841,14 @@ The **Refund / reverse** button only shows when **all** of these are true:
 |---|---|
 | Your account may start refunds (the till refund right, held by cashiers by default) **or** approve them (the invoice-void right, held by sales and branch managers) | Without either, the button is hidden. |
 | The shift on **this till** is still **open** | The refund comes out of the open drawer. Once the shift is closed, the cash is settled. |
+| **For a cashier:** the sale was rung on **your own** open shift. (A supervisor with the invoice-void right skips this check.) | A cashier may only reverse their own sales. On a colleague's sale the button is simply not shown, so nobody calls a manager over for a refund that would be refused. |
 | The sale has **not already** been reversed | A sale can only be reversed once. |
 
-Even when the button shows, the ERP checks two more things when you confirm:
+Even when the button shows, the ERP checks again when you confirm:
 
 | The ERP refuses with … | Meaning |
 |---|---|
-| *You can only reverse sales rung on your own till session. Ask a supervisor to reverse this one.* | A cashier tried to refund a colleague's sale. A supervisor must do it. (This message appears after the manager has approved, so check the sale is yours before calling the manager over.) |
+| *You can only reverse sales rung on your own till session. Ask a supervisor to reverse this one.* | A cashier tried to refund a colleague's sale. A supervisor must do it. Normally the till hides the button on a colleague's sale, so you should rarely see this — it can still appear, for example when the till is connected to an older ERP server that does not tell it which shift rang the sale. |
 | *This refund needs a supervisor's approval. Ask a supervisor to approve it at the till, then try again.* | The approval did not reach the ERP or was not accepted. Start again from **Refund / reverse**. |
 | A message saying the session is not open | The shift that rang this sale has already been closed. It must be cancelled in the back office instead (see below). |
 | A message saying the invoice is not a POS sale | The sale was not made at a till; it must be cancelled in the back office. |
@@ -1830,7 +1876,7 @@ When a customer wants to return just one item out of a larger basket, you have t
 
 ## 7. The cash-drawer refund payout (the alternative)
 
-**What it is.** A **cash payout** records cash physically leaving the drawer. One of its two types is **Refund** — money handed back to a customer that is **not** linked to reversing a particular sale. (The other type, **Paid out**, is for paying a business expense or dropping cash to the safe from the drawer.)
+**What it is.** A **cash payout** records cash physically leaving the drawer. One of its two types is **Refund** — money handed back to a customer that is **not** linked to reversing a particular sale. (The other type, **Paid out**, is for cash leaving the drawer for another reason, such as a drop to the safe. A business expense paid from the till is recorded with **Till expense** instead — see the *Starting and Ending a Shift* chapter, Chapter 2.)
 
 **When it happens.** Only when the proper whole-sale reversal (section 5) is not available or not appropriate. If the sale can be reversed, **always prefer Refund / reverse** — it handles cash *and* stock *and* tax, which a payout does not.
 
@@ -1857,14 +1903,14 @@ If the reason is too short you see *Say what the cash is for (at least a few wor
 | The **Sale complete** receipt appeared after payment | The sale is recorded. Press **Print** for paper, **Gift receipt** to hide prices, then **Done** to move on. |
 | A customer asks for a TRA / EFD receipt | The OrbixPOS receipt is not a fiscal receipt. Issue the fiscal receipt through your shop's EFD/VFD arrangement. |
 | A customer wants a present receipt with no prices | Press **Gift receipt**, then **Print**. Press **Show prices** to switch back. |
-| A customer lost a receipt from earlier (any till) | **☰** › **Today's sales** › tap the sale › **Print**. Needs the network. |
+| A customer lost a receipt from earlier today (any till at this branch) | **☰** › **Today's sales** › tap the sale › **Print**. Needs the network. |
 | A customer lost a receipt and you are offline | **☰** › **Recent receipts** › tap the sale › **Print**. Works without the network (this till's sales only). |
 | You reprinted a receipt — was the customer charged again? | No. Reprinting never creates a new sale and never charges anyone. |
 | *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen (usually an administrator's job). |
 | The company address, TIN or VRN is missing from the receipt | It has not been filled in on the company record in the ERP. Ask your administrator. |
 | You need to undo a whole sale and the shift is still open | On the receipt, press **Refund / reverse**, enter a reason, press **Continue**, and have a manager approve it. |
-| **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, or your account has no refund rights (ask a supervisor). |
-| *You can only reverse sales rung on your own till session.* | It is a colleague's sale. Ask a supervisor to reverse it. |
+| **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
+| *You can only reverse sales rung on your own till session.* | It is a colleague's sale. Ask a supervisor to reverse it. (Rare — normally the button is not shown on a colleague's sale.) |
 | *Not approved — the sale stands.* | The approval was cancelled. Nothing changed. |
 | Customer wants to return just one item from a bigger sale | Reverse the whole sale, then re-ring the items they are keeping (section 6). |
 | You must hand cash back but there is no reversible sale | **☰** › **Cash payout** › **Refund** › amount and reason › **Record** (section 7). |
@@ -2002,7 +2048,9 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 | **Session must be CLOSED before reconciliation.** | You tried to reconcile an open session. | Close it (count the drawer) first. |
 | A message that the session "has been reconciled — open its Z-read for the final figures" | X-read is not available after reconciling. | Use **Z-read (reprint)** instead. |
 | **Enter the counted cash.** / **Count the drawer and enter the cash total.** | The count field was empty. | Type the counted amount. |
-| **Enter an amount.** / **Say what the cash is for (at least a few words).** | A cash payout is missing its amount or reason. | Fill in both. |
+| **Enter an amount.** / **Say what the cash is for (at least a few words).** | A cash payout or till expense is missing its amount or reason. | Fill in both. |
+| **Choose or type a category (2 to 40 letters).** | A till expense has no category, or a very long one. | Tap a quick choice (**Transport**, **Cleaning**, …) or type a short category. |
+| **Till expense** is missing from the Session menu | Your account is not allowed to record till expenses. | Ask your supervisor how the expense should be recorded, or ask your administrator to review your role. |
 
 ---
 
@@ -2015,7 +2063,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 **How it shows.**
 
 - **Hidden actions.** An action your account may not use is simply **not shown** — for example **Reconcile (Z-read)** is missing from a cashier's Session menu, and **New till** is missing from the Open shift screen. That is by design, not a fault.
-- **Manager approval.** Some actions stay visible but ask a manager to approve at the till: a **Manager approval — …** dialog asks for the manager's username and password (X-read for a cashier who may not view sessions, printing the Z-read, refunds, large discounts, leaving an unfinished sale unresolved).
+- **Manager approval.** Some actions stay visible but ask a manager to approve at the till: a **Manager approval — …** dialog asks for the manager's username and password (X-read for a cashier who may not view sessions, printing the Z-read for someone who may not reconcile, a cashier's refund, large discounts, leaving an unfinished sale unresolved). A supervisor who holds the right for the action is not asked — they are the manager the dialog looks for.
 - **A refusal.** You click something and see **You do not have permission for this action.**
 
 | What you see | What to do |
@@ -2028,7 +2076,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 | **That approval was not accepted. Ask a supervisor who can reconcile the till.** | A drawer report was approved by someone who may not approve drawer reports. Ask a supervisor who can reconcile. |
 | **Not approved — the sale stands.** | A refund was cancelled or not approved. The sale is unchanged. |
 
-> **Printing the Z-read needs a second person.** Printing the Z-read always asks for a manager's approval, and nobody may approve their own action — so a supervisor who reconciled their own till needs another manager to approve the print. If no one else is available, read the Z-read on screen. While the reconciled shift is still on the till (before **Finish shift**), **Z-read (reprint)** in the Session menu lets you print it once another manager arrives; after that, the Z-read can be viewed in the ERP.
+> **Who can print the Z-read.** A user who is allowed to reconcile tills (a Branch Manager, by default) prints the Z-read straight away — no approval dialog, because they are the manager it would ask for. Anyone else, for example a cashier printing a **Z-read (reprint)**, sees the **Manager approval — Z-read** dialog and needs a manager — a different person who may reconcile tills — to approve the print. If no such manager is at the till, read the Z-read on screen; while the reconciled shift is still on the till (before **Finish shift**), **Z-read (reprint)** lets you print it once a manager arrives, and after that the Z-read can be viewed in the ERP.
 
 ---
 
@@ -2093,7 +2141,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 ### "No sales agent could be determined"
 
-**What it is.** Every sale is recorded against a sales agent — normally your own internal sales-agent record, linked to your user account. If you have none, the system creates one for you on your first sale. A sale is refused when that cannot happen.
+**What it is.** Every sale is credited to the person signed in, through their own sales-agent record. Nobody has to set this up: if you have no record yet, the system creates one for you on your first sale. So this message is rare — a sale is refused only when that cannot happen, for example because you are signed in on the super-admin account, your account is not an active member of this company, or your sales-agent record was archived.
 
 **When you see it.** The red banner reads **No sales agent could be determined for this sale. Select a sales agent, or ask an administrator to link an internal sales agent to your user account before ringing sales.** — or **Your sales agent record is no longer active, so sales cannot be recorded under it. Ask an administrator to reactivate your sales agent.**
 
@@ -2101,7 +2149,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 1. Note the message exactly as shown, and stop trying to ring on this account — pressing **Complete sale** again will fail the same way.
 2. If you are signed in with a shared or admin account, sign out and sign back in with your own cashier account. The **super-admin** account is not a salesperson and cannot ring sales.
-3. Otherwise ask your administrator to link (or reactivate) an internal sales-agent record for your user account. Once that is done, sign in and ring as normal.
+3. Otherwise show the message to your administrator. If it says your sales agent is **no longer active**, they reactivate it; if it says no sales agent could be determined, they check that your user account is active in this company. Once that is done, sign in and ring as normal.
 
 ### "Tendered … is less than the total …"
 
@@ -2115,7 +2163,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 **What to do.** Check the customer's age (ask for ID if in any doubt). If they qualify, press **Age verified**. If not, press **Cancel** — the till shows **Sale stopped: age not verified.** — then remove the restricted line and complete the rest of the sale.
 
-> **Warning.** Pressing **Age verified** is a statement that you checked. Never press it just to clear the dialog. (On an account with the age-override right, **Cancel** does not stop the sale — close the Payment screen and remove the item instead if you do not want to sell it.)
+> **Warning.** Pressing **Age verified** is a statement that you checked. Never press it just to clear the dialog. **Cancel** always stops the sale, whoever is signed in. (An account with the age-override right also sees **Override without check**, which completes the sale without the age confirmation — use it only when your shop's policy allows.)
 
 ---
 
@@ -2138,7 +2186,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 **Symptom.** After a scan the search list stays open over an empty box, and the *next* scan adds the **previous** item again instead of the one you just scanned.
 
-**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
+**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look under **Server setup** on the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.5.4+12**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
 
 ### The scanner is a "keyboard wedge" — keep the field focused
 
@@ -2172,8 +2220,8 @@ Printing works on the **Windows** till only. The printer, paper width, print mod
 | Lines wrap, totals break onto two lines, or the receipt looks squashed into the left half | The **Paper width** setting does not match the paper. | Choose **80 mm · 48 cols** or **58 mm · 32 cols** to match the roll, then **Test print**. |
 | Accented letters or symbols print as **?** | Receipts print plain letters, digits and punctuation only. | Expected. Names with special characters print with **?** in their place. |
 | The paper is not cut | **Plain text** mode does not cut, or the printer has no cutter. | Use **Thermal (ESC/POS + cut)** with a thermal printer that has a cutter. |
-| The cash drawer does not open | The drawer option is off, the mode is **Plain text**, the drawer cable is not in the printer's drawer port, or you did not press **Print**. | Tick **Open cash drawer after printing** with **Thermal (ESC/POS + cut)** mode, check the cable, and **Test print**. The drawer opens only when a receipt prints — use the drawer key if you are not printing. |
-| The drawer opens when you reprint a receipt | With the drawer option on, every receipt print opens it — including reprints and gift receipts. | Expected with that setting. Close the drawer and follow your branch's cash-handling rules. Drawer reports (X-read, Z-read) never open it. |
+| The cash drawer does not open after a sale | The drawer option is off, the mode is **Plain text**, the drawer cable is not in the printer's drawer port, or you did not press **Print**. | Tick **Open cash drawer after printing** with **Thermal (ESC/POS + cut)** mode, check the cable, and **Test print**. The drawer opens only when a sale's receipt prints — use the drawer key if you are not printing. |
+| The drawer does not open on a reprint, a gift receipt, a second copy or a reversed sale | By design. The drawer opens only once per sale: on the first print of the sale's own receipt, straight after the sale. A reprint from **Today's sales** or **Recent receipts**, a gift receipt, a second copy and a reversed sale put no money in, so the drawer stays shut. Drawer reports (X-read, Z-read) never open it either. | Nothing to fix. If you genuinely need the drawer open, use the drawer key and follow your branch's cash-handling rules. |
 | There is no **Print** button on the X-read or Z-read | You are on the web or Android version. | Use a Windows till to print reports. |
 
 > A printing problem never affects the sale. The sale is already complete on the server, and the receipt is saved on this device — reprint it from **Recent receipts** or **Today's sales** once the printer is fixed.
@@ -2185,11 +2233,13 @@ Printing works on the **Windows** till only. The printer, paper width, print mod
 **What it is.** You can reprint any receipt without creating a new sale. There are two sources, both in the **Session** menu (the **☰** icon in the top bar):
 
 - **Recent receipts** — the last 50 receipts saved on **this device**. Works even when the network is down. Click one to open it, then **Print**.
-- **Today's sales** — recent finalised sales looked up from the **server** (needs the network, and the right to view sales invoices). Click one to open it, then **Print**. Use this to confirm that a doubtful sale really went through before you consider ringing it again.
+- **Today's sales** — today's till sales at **this branch**, looked up from the **server** (needs the network, and the right to view sales invoices). It lists every sale since midnight, from any till at the branch, newest first, each with its time and the cashier who rang it; a reversed sale stays in the list marked **· Reversed** and reprints as REVERSED. Click one to open it, then **Print**. Use this to confirm that a doubtful sale really went through before you consider ringing it again. If it reads **No sales at this branch today.**, nothing has been sold at the branch since midnight.
+
+A reprint prints the name of the cashier who **rang** the sale on its **CASHIER:** line, not yours. (A reprint of an old receipt saved before OrbixPOS 1.5.4 may leave the **CASHIER:** line off.) A reprint never opens the cash drawer.
 
 **Why it matters.** Customers ask for a second copy; a receipt jams; you need to confirm a sale posted. Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
 
-> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open, with a manager's approval). It does not do partial or single-line refunds. To return one item from a multi-item sale, either reverse the whole sale and ring the rest again, or pay the cash back with a **Refund** cash payout in the **Session** menu, following your shop's policy. See Chapter 6.
+> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. It does not do partial or single-line refunds. To return one item from a multi-item sale, either reverse the whole sale and ring the rest again, or pay the cash back with a **Refund** cash payout in the **Session** menu, following your shop's policy. See Chapter 6.
 
 ---
 
@@ -2217,7 +2267,7 @@ Closing the app, signing out or switching the PC off leaves your shift open. At 
 
 ### Check, don't guess
 
-If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version, and hand it on.
+If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version (shown in small grey text under **Server setup** on the sign-in screen and at the bottom of the **Session** menu, for example **OrbixPOS 1.5.4+12**), and hand it on.
 
 ---
 
@@ -2249,9 +2299,9 @@ If a message stops you, read it and match it to a table in this chapter. If it i
 | **Unfinished sale** dialog | An earlier sale was interrupted. | **Check sale**, then follow what it says. |
 | **This basket is too old to complete. Nothing was charged — ring it again.** | The sale waited too long. | Ring it again. |
 | **Select a customer before completing the sale.** | No walk-in customer found. | Pick the walk-in customer; tell your supervisor if it repeats. |
-| **No sales agent could be determined for this sale…** | Your account has no usable sales agent, or you are on the super-admin account. | Use your own cashier account; ask your administrator to link or reactivate your sales agent. |
+| **No sales agent could be determined for this sale…** | You are on the super-admin account, or your account is not active in this company. (A missing sales agent is created automatically on your first sale.) | Use your own cashier account; otherwise ask your administrator to check your account. |
 | **Tendered … is less than the total …** | Underpaid. | Add tender until **Paid** covers **Total**. |
-| **Age-restricted items** / **Sale stopped: age not verified.** | Restricted item in basket. | Check ID → **Age verified**, or remove the line. |
+| **Age-restricted items** / **Sale stopped: age not verified.** | Restricted item in basket; **Cancel** was pressed. | Check ID → **Age verified**, or remove the line. |
 | **No match for "…".** | Barcode, code or name not found. | Re-scan, search by name, pick from the list; report missing barcodes. |
 | Next scan adds the previous item; list stays open | Fault in versions before 1.5.2. | Upgrade to 1.5.2 or later; check lines meanwhile. |
 | Scan does nothing / lands in the wrong box | Cursor not in the search field. | Click the search field, then scan. |
@@ -2259,7 +2309,9 @@ If a message stops you, read it and match it to a table in this chapter. If it i
 | **Cannot open printer "…"** / **did not accept the job** | Printer off, offline, out of paper, renamed. | Check power, paper, cable; reselect it in Setup. |
 | Receipt prints rubbish or symbols | Thermal mode on a non-thermal printer. | **Print mode → Plain text**, or use a proper receipt printer. |
 | Lines wrap or look squashed | Wrong paper width. | Match **Paper width** to the roll. |
-| Cash drawer does not open | Option off, plain mode, cable, or no print. | Tick the drawer option in thermal mode; check the cable; press **Print**. |
+| Cash drawer does not open after a sale | Option off, plain mode, cable, or no print. | Tick the drawer option in thermal mode; check the cable; press **Print**. |
+| Cash drawer does not open on a reprint or gift receipt | By design — it opens only on the first print of a sale's own receipt. | Nothing to fix; use the drawer key if needed. |
+| **Refund / reverse** missing on a colleague's sale | A cashier can reverse only sales from their own open shift. | Ask a supervisor to reverse it. |
 | **Finish or clear the current sale before switching mode.** | Sale in progress. | Finish or clear the sale, then switch. |
 
 When in doubt, remember the two anchors of safe till work: **the server is the truth**, and **retry the same sale, never a new one.**
@@ -2294,17 +2346,19 @@ The table shows what the **standard** roles can do. If your administrator has ch
 |---|---|---|---|
 | Open a shift and ring sales | Yes | No | No |
 | Record a **cash payout** (refund or paid-out) | Yes | No | No |
+| Record a **till expense** (by category) | Yes | No | No |
 | **Close** a session (count the drawer) | Own shift | No | Yes — any session, in the ERP web app |
 | Open the **X-read** and **Z-read (reprint)** without an approval | Yes | Yes | Yes |
 | Look up and reprint from **Today's sales** | Yes | Yes | Yes |
-| Start a **Refund / reverse** | Own shift, with a manager's approval | Yes, no second approval needed | Yes, no second approval needed |
+| Start a **Refund / reverse** | Only sales from their own open shift, with a manager's approval | Yes, on any sale while their shift is open; no second approval needed | Yes, on any sale while their shift is open; no second approval needed |
 | **Approve** a refund at a cashier's till | No | Yes | Yes |
 | **Approve** a discount above the company limit | No | Yes | Yes |
+| **Print** a Z-read without an approval | No | No | Yes |
 | **Approve** printing a Z-read, or an X-read for a cashier without report rights | No | No | Yes |
 | **Approve** leaving an unfinished sale unresolved | No | Yes | Yes |
 | **Reconcile (Z-read)** — post the variance to the books | No | No | Yes |
 | **Create** tills (**New till**) | No | No | Yes |
-| Sell age-restricted items without the age confirmation | No | No | Yes |
+| Sell age-restricted items without the age confirmation (**Override without check**) | No | No | Yes |
 
 > **A manager usually approves at the cashier's till rather than running one.** The standard Sales Manager and Branch Manager roles do not include opening a shift or ringing sales. A manager who also works a till needs the Cashier role as well — ask your administrator.
 
@@ -2316,7 +2370,7 @@ If you expect an action and it is not there, your account does not hold the perm
 
 **What it is.** Some actions a cashier can start but not finish alone. When the cashier gets to that point, OrbixPOS opens a **Manager approval** box on the cashier's own screen. A manager walks over, types **their own** username and password, and presses **Approve**. The cashier stays signed in the whole time.
 
-**Why it exists.** It puts a second person on every action that moves money or closes a shift's figures — a refund, a big discount, the Z-read — without the cashier having to sign out and the manager sign in.
+**Why it exists.** It puts a manager on every action that moves money or closes a shift's figures — a refund, a big discount, the Z-read — without the cashier having to sign out and the manager sign in.
 
 **How it works.**
 
@@ -2327,7 +2381,7 @@ If you expect an action and it is not there, your account does not hold the perm
 
 The rules the ERP enforces every time:
 
-- **A different person.** Nobody can approve their own action. If a manager is the one signed in, they cannot approve by typing their own password — they get *That user is not allowed to approve this action.*
+- **A different person.** Nobody can approve their own action. If a manager is the one signed in, they cannot approve by typing their own password — they get *That user is not allowed to approve this action.* In practice a manager who is signed in and already holds the right for a refund or a Z-read print is not shown the box at all: they are the manager it looks for.
 - **The right permission.** The approver must genuinely hold the permission for that action (see the table below), in this company, and their account must be active.
 - **One action only.** An approval covers that single action. Nothing is remembered — the next refund or report asks again. The manager is never signed in on the cashier's till.
 - **Mistyped details** show *Those details were not accepted. Check the username and password and try again.* The box stays open so the manager can retype. After several failures in a row you see *Too many failed approval attempts. Please wait a moment and try again.*
@@ -2340,16 +2394,16 @@ The rules the ERP enforces every time:
 | A line discount above the company's limit | **Manager approval — discount** | the discount-override permission | Sales Manager, Branch Manager |
 | Opening the **X-read** for a cashier whose role has no report rights | **Manager approval — X-read** | the session-reconcile permission | Branch Manager |
 | Opening the **Z-read (reprint)** for a cashier whose role has no report rights | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
-| **Printing** a Z-read (any copy, by anyone) | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
+| **Printing** a Z-read (any copy) when the person signed in does not hold the session-reconcile permission — for example a cashier printing a reprint | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
 | **Leave unresolved…** on an unfinished sale whose outcome is unknown | **Manager approval — leave a sale unresolved** | the invoice-void permission | Sales Manager, Branch Manager |
 
 Notes on the table:
 
-- **Refunds.** A supervisor who holds the invoice-void permission and is running a till shift themselves is not asked for a second approval when they reverse a sale. A cashier may only refund sales from **their own** shift, even with an approval. See the *Receipts and Refunds* chapter (Chapter 6).
+- **Refunds.** A supervisor who holds the invoice-void permission and is running a till shift themselves is not asked for a second approval when they reverse a sale. A cashier may only refund sales from **their own** open shift, even with an approval — on a colleague's sale the **Refund / reverse** button does not appear at all, so you will not be called over to approve a refund the ERP would then refuse. To reverse such a sale, either the cashier who rang it does so from their own shift (with your approval), or you do it yourself from a till where **your own** shift is open. See the *Receipts and Refunds* chapter (Chapter 6).
 - **Discounts.** The discount limit is set per company in the ERP and is **off** unless your administrator switches it on. The till does not know the limit; the ERP checks it when the sale is completed. See the *Selling — Supermarket* chapter (Chapter 3).
-- **Drawer reports.** By default the Cashier role *can* read its own X-read and Z-read, so the report approvals only appear if your shop has removed that right from cashiers. **Printing** a Z-read, however, always asks for an approval — including when a Branch Manager is the one who just reconciled it, because nobody can approve themselves. If you are the only manager on duty, view the Z-read in the ERP web app instead (see *Reconcile* below), or have a second manager approve the print.
+- **Drawer reports.** By default the Cashier role *can* read its own X-read and Z-read, so the report approvals only appear if your shop has removed that right from cashiers. **Printing** a Z-read is a manager's job. A user who holds the session-reconcile permission (a Branch Manager, by default) prints it straight away with no approval box — they *are* the manager the box would ask for, so a shop with only one manager on duty can still print its Z-read. Anyone else, such as a cashier printing a **Z-read (reprint)**, sees the **Manager approval — Z-read** box and needs a Branch Manager to approve.
 - **Unfinished sales.** The till first asks the ERP one last time whether the sale went through. An approval is only asked for when the ERP still cannot say.
-- **Age-restricted items** are not a manager approval: the cashier confirms the customer's age at **Complete sale**. A user whose role holds the age-override permission (Branch Manager by default) may complete the sale without that confirmation.
+- **Age-restricted items** are not a manager approval: the cashier confirms the customer's age at **Complete sale** in the **Age-restricted items** box. **Cancel** always stops the sale (*Sale stopped: age not verified.*). A user whose role holds the age-override permission (Branch Manager by default) also sees a third button, **Override without check**, which completes the sale without the age confirmation. A manager cannot approve the override for a cashier — only the person signed in can use it.
 
 ---
 
@@ -2408,18 +2462,18 @@ If your account holds the reconcile permission and you closed the session on thi
    | **Sales (all tenders)** | Total takings for the shift, all payment types. Under it, **By tender** splits it, for example *Cash 32,020.00 · Mobile 14,000.00*. |
    | **Opening float** | The cash the drawer started with. |
    | **Cash sales** | The cash part of the takings. |
-   | **Payouts** | Cash paid out of the drawer (shown as a deduction), with a split such as *Refund (1)* and *Paid out (2)*. |
+   | **Payouts** | Cash paid out of the drawer (shown as a deduction), with a split such as *Refund (1)*, *Paid out (2)* and *Expense (1)*. Till expenses have their own **Expense** line. |
    | **Expected** | Float + cash sales − payouts. |
    | **Counted** | What was counted at close. |
    | **Variance** | Counted − Expected. Shown in red if the drawer was short. |
    | **N invoices** | How many sales the shift rang. |
 
-5. To print it, tap **Print** — a different manager must approve the print (see *Manager approval at the till*).
+5. To print it, tap **Print**. Because you hold the reconcile permission, it prints straight away — no approval box.
 6. Tap **Finish shift**. The till returns to the **Open shift** screen and is free for the next shift.
 
 ### Reprinting a Z-read
 
-After reconciling on the till, **☰** › **Z-read (reprint)** (*The final figures for a reconciled session*) shows the same figures again, marked as a reprint: *This is a reprint. The figures are identical to the original — the Z-read is read-only and posts nothing.* Before reconciliation the row reads *Available once the session is reconciled*. Printing the reprint asks for a manager's approval, unless a manager already approved opening that copy.
+After reconciling on the till, **☰** › **Z-read (reprint)** (*The final figures for a reconciled session*) shows the same figures again, marked as a reprint: *This is a reprint. The figures are identical to the original — the Z-read is read-only and posts nothing.* Before reconciliation the row reads *Available once the session is reconciled*. Printing the reprint needs no approval if you hold the reconcile permission yourself, or if a manager already approved opening that copy; otherwise it asks for a manager's approval (**Manager approval — Z-read**).
 
 > **Tip.** A small variance (a coin or two) is normal. A large or repeated variance on the same till or cashier is worth investigating. Use **Today's sales** to review the shift's sales, and the **X-read** earlier in the shift to see whether the drawer drifted at a particular time.
 
@@ -2450,7 +2504,7 @@ An X-read works while the session is open or closed. Once it is reconciled, use 
 
 ### Cash payout — recording cash that leaves the drawer
 
-**What it is.** A record of money taken *out* of the drawer mid-shift. There are two kinds: **Paid out** (a business expense paid from the drawer, or a drop to the safe) and **Refund** (cash handed back to a customer). Any cash that leaves the drawer must be recorded, or the expected cash — and therefore the variance — will be wrong at close.
+**What it is.** A record of money taken *out* of the drawer mid-shift. There are two kinds: **Paid out** (for example a drop to the safe) and **Refund** (cash handed back to a customer). A business expense paid from the drawer is recorded separately, as a **Till expense** (below). Any cash that leaves the drawer must be recorded, or the expected cash — and therefore the variance — will be wrong at close.
 
 1. Open the session menu (**☰**).
 2. Tap **Cash payout** (*Refund or drawer drop — reason required*). It is only available while the shift is open.
@@ -2458,13 +2512,25 @@ An X-read works while the session is open or closed. Once it is reconciled, use 
 4. Enter the **Amount (TZS)** and the **Reason (required)** — a few words saying what the cash is for. *A paid-out is booked to the ledger as an expense against the drawer, so the reason is what the entry is filed under.*
 5. Tap **Record**. OrbixPOS confirms *Payout recorded.* or *Payout recorded and posted to the ledger.*
 
-> **Expenses.** The till records a business expense as a **Paid out** with its reason. There is no expense category to pick at the till.
-
 > A **Refund** payout is also the way to give money back when a whole-sale reverse is not possible — for example a return from a shift that has already closed. OrbixPOS does **not** do partial or single-line refunds; see the *Receipts and Refunds* chapter (Chapter 6).
+
+### Till expense — business costs paid from the drawer
+
+**What it is.** A record of cash paid out of the drawer for something the business needs — transport, cleaning, a small repair — filed under a **category**. It reduces the expected cash exactly like a payout, but because it carries a category, it appears as its own **Expense** line on the X-read and Z-read and is posted to the ledger under its category, so you can see what till money was spent on without reading every paid-out reason.
+
+**Who can record it.** Anyone whose role holds the till-expense permission — the standard Cashier role does. The **Till expense** row (*Cash paid out for the business — by category*) is only shown to those users, and only works while the session is open.
+
+1. Open the session menu (**☰**) and tap **Till expense**.
+2. Enter the **Amount (TZS)**.
+3. Under **Category (required)**, tap one of **Transport**, **Cleaning**, **Repairs**, **Meals**, **Utilities** or **Stationery**, or type another category (2 to 40 letters).
+4. Under **What was it for? (required)**, say in a few words what was bought.
+5. Tap **Record**. OrbixPOS confirms *Expense recorded and posted to the ledger.*
+
+> **Check the categories.** Ask cashiers to use the quick-pick categories wherever they fit. A category typed differently each time (for example *Taxi*, *taxi fare*, *Boda*) splits the same kind of cost into several categories. It also helps to have cashiers keep the seller's paper receipt for you.
 
 ### Reviewing a shift's sales
 
-- **Today's sales** (in the session menu) lists recent finalised sales from the **ERP**, with receipt number, time and total. Tap any line to reprint it. Reprinting never creates a new sale.
+- **Today's sales** (in the session menu) lists **today's** till sales at **this branch** from the **ERP** — every sale since midnight on the till's clock, from any till at the branch, newest first. Each line shows the receipt number, the time, the cashier who rang it, and the total. A reversed sale stays in the list, marked **· Reversed**, and reprints as REVERSED. If nothing has been sold yet it reads *No sales at this branch today.* Tap any line to reprint it; the reprint's **CASHIER:** line names the cashier who rang the sale. Reprinting never creates a new sale and never opens the cash drawer.
 - **Recent receipts** lists the last receipts stored on **this till**, so it works even if the network is down — but only for sales rung on this till.
 - For a full view of a session's sales, payouts and figures, open it in the ERP web app (**POS Sessions**).
 
@@ -2547,9 +2613,8 @@ A cashier can only ring sales when **all** of these are true:
 1. They have an **active user account**.
 2. They are **assigned to the branch** they will sell in (with that branch as their default).
 3. They have the **Cashier** role (or a role with the same till permissions).
-4. They have an **internal sales-agent record linked to their user account**.
 
-The fourth point is the one that catches people out. **Every user who rings sales must have an internal sales-agent record linked to their account.** Without it, the ERP refuses the sale.
+**Sales agents look after themselves.** Every sale is credited to the person signed in at the till. A cashier who has no sales-agent record gets one automatically on their first sale, named after them, so there is nothing to set up. An administrator can still create or rename the record in the ERP web app (**Parties → Sales Agents**). Archiving a cashier's sales agent is how you stop them selling: the till then refuses their sales until the agent is reactivated.
 
 > **The super-admin (root) cannot sell.** The top-level super-admin account cannot be a sales agent and therefore cannot ring sales. Do not run a register signed in as the root administrator — set up a real cashier user instead.
 
@@ -2565,7 +2630,8 @@ Three company-level settings also affect every till. Check them once when a shop
 
 | What you see | What to do |
 |---|---|
-| The sale is refused with a message about a missing sales agent | Ask your administrator to link an **internal sales-agent record** to that user in the ERP web app. |
+| The sale is refused: *Your sales agent record is no longer active…* | That cashier's sales agent was archived. If they should sell, ask your administrator to reactivate it in **Parties → Sales Agents**. |
+| The sale is refused: *No sales agent could be determined for this sale…* | The user is not an active member of this company (or is the root account). Check their user account and company membership in the ERP web app. |
 | The sale is refused while signed in as root / super-admin | The root account cannot sell. Sign in as a properly set-up cashier. |
 | A cashier sees no tills, or cannot open a shift | Check the user is assigned to this branch and has the Cashier role. |
 | An expected action is not in the menu | The user lacks that permission. Grant the appropriate role in the ERP. |
@@ -2614,6 +2680,7 @@ When every till's session is **RECONCILED**, the store's cash is accounted for t
 | Retire a till | ERP web app → **POS Tills** → **Deactivate** | Branch Manager / administrator |
 | Mid-shift drawer check | Session menu (**☰**) → **X-read** | Cashier (or with a Branch Manager's approval) |
 | Record cash leaving the drawer | Session menu → **Cash payout** | Cashier |
+| Record a business expense paid from the till | Session menu → **Till expense** | Cashier |
 | Review / reprint a sale | Session menu → **Today's sales** or **Recent receipts** | Anyone signed in |
 | Close (count) a drawer | Session menu → **Close session** | Cashier (own shift) |
 | Free a till a cashier left open | ERP web app → **POS Sessions** → **Close Session** | Branch Manager |
