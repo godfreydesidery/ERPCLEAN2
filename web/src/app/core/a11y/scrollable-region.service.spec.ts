@@ -184,12 +184,15 @@ describe('ScrollableRegionService (app-wide scan)', () => {
     //
     // Polling for the outcome instead is still fast in the normal case (one or two ticks) and
     // survives a starved CPU, which is exactly the condition CI runs under.
-    await waitFor(() => late.getAttribute('tabindex') === '0');
+    // The poll returns on the first tick where the wrap is tagged, so a long ceiling costs nothing
+    // on a normal run; it only matters on a starved CI runner, where 2s inside vitest's default 5s
+    // test timeout was not enough (seen on GitHub Actions, 2026-10-02).
+    await waitFor(() => late.getAttribute('tabindex') === '0', 10000);
 
     expect(late.getAttribute('tabindex')).toBe('0');
     expect(late.getAttribute('role')).toBe('region');
     expect(late.getAttribute('aria-label')).toBe('Late rows');
 
     service.ngOnDestroy();
-  });
+  }, 15000);
 });
