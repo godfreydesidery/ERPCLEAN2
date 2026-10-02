@@ -33,12 +33,15 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +61,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
     private final OutboxPublisher                   outbox;
     private final ScopeGuard                        scopeGuard;
     private final AuditService                      audit;
+    private final JdbcTemplate                      jdbc;
 
     public DepreciationRunServiceImpl(
             DepreciationRunRepository runs,
@@ -71,7 +75,8 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
             FixedAssetNumberGenerator numberGenerator,
             OutboxPublisher outbox,
             ScopeGuard scopeGuard,
-            AuditService audit) {
+            AuditService audit,
+            JdbcTemplate jdbc) {
         this.runs            = runs;
         this.runLines        = runLines;
         this.schedules       = schedules;
@@ -84,6 +89,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
         this.outbox          = outbox;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
+        this.jdbc            = jdbc;
     }
 
     @Override
@@ -140,8 +146,14 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
                     "No eligible assets were found for a depreciation run in the selected period.");
         }
 
-        // Build per-category charge map (ADR-0030 D-4, step 5)
-        Map<Long, CategoryCharge> categoryCharges = new LinkedHashMap<>();
+        // Build the per-BRANCH, per-category charge map (ADR-0030 D-4 step 5). The GL engine stamps
+        // one branch on a journal and all of its lines, so a run that spans branches must post one
+        // journal per asset branch - otherwise every branch's depreciation lands in whichever branch
+        // the first eligible asset happened to belong to (a BR-02 van booked to BR-01's P&L).
+        // TreeMap with nulls first: deterministic journal order, and a branch-less asset (legacy
+        // data) gets a company-level journal instead of borrowing another asset's branch.
+        Map<Long, Map<Long, CategoryCharge>> chargesByBranch =
+                new TreeMap<>(Comparator.nullsFirst(Comparator.<Long>naturalOrder()));
         Map<Long, FixedAsset>     assetMap        = new LinkedHashMap<>();
 
         for (DepreciationScheduleLine sl : eligibleLines) {
@@ -155,37 +167,52 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
                     .orElseThrow(() -> new IllegalStateException(
                             "An asset category referenced by the depreciation schedule could not be found. Please contact support."));
 
-            categoryCharges.merge(catId,
-                    new CategoryCharge(cat, sl.getPlannedCharge()),
-                    (existing2, next) -> new CategoryCharge(cat,
-                            existing2.charge().add(next.charge())));
+            chargesByBranch
+                    .computeIfAbsent(asset.getBranchId(), b -> new LinkedHashMap<>())
+                    .merge(catId,
+                            new CategoryCharge(cat, sl.getPlannedCharge()),
+                            (existing2, next) -> new CategoryCharge(cat,
+                                    existing2.charge().add(next.charge())));
         }
 
         // Allocate run number
         String runNumber = numberGenerator.nextRunNumber(req.companyId());
 
-        // Derive currency — use company base currency (simplified: "TZS")
+        // Derive currency - use company base currency (simplified: "TZS")
         String currency = "TZS";
-
-        // Post one GL journal (D-4 step 6)
-        JournalEntryDto journal = glPoster.postDepreciationRun(
-                req.companyId(),
-                eligibleLines.get(0) != null
-                        ? assetMap.get(eligibleLines.get(0).getFixedAssetId()).getBranchId() : null,
-                req.postingDate(), runNumber, null /* will fill after save */,
-                currency, actorId(), categoryCharges);
-
-        // Persist the run header
-        BigDecimal totalCharge = categoryCharges.values().stream()
-                .map(CategoryCharge::charge)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         DepreciationRun run = new DepreciationRun(
                 req.companyId(), runNumber, period.getId(),
                 req.postingDate(), currency, actorId());
+        String runUid = run.reserveUid();
+
+        // Post one GL journal per asset branch (D-4 step 6, per branch), each carrying the run uid
+        // as its source_ref so the run's journals can be found together.
+        List<String> journalUids = new ArrayList<>();
+        BigDecimal totalCharge = BigDecimal.ZERO;
+        for (Map.Entry<Long, Map<Long, CategoryCharge>> branchCharges : chargesByBranch.entrySet()) {
+            BigDecimal branchTotal = branchCharges.getValue().values().stream()
+                    .map(CategoryCharge::charge)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalCharge = totalCharge.add(branchTotal);
+            if (branchTotal.signum() == 0) {
+                continue; // nothing to book for this branch this period
+            }
+            JournalEntryDto journal = glPoster.postDepreciationRun(
+                    req.companyId(), branchCharges.getKey(),
+                    req.postingDate(), runNumber, runUid,
+                    currency, actorId(), branchCharges.getValue());
+            journalUids.add(journal.uid());
+        }
+        if (journalUids.isEmpty()) {
+            throw new IllegalStateException(
+                    "No eligible assets were found for a depreciation run in the selected period.");
+        }
+
+        // Persist the run header
         run.setTotalChargeAmount(totalCharge);
         run.setAssetCount(eligibleLines.size());
-        run.setGlEntryUid(journal.uid());
+        run.setGlEntryUid(journalUids.get(0));
         run = runs.save(run);
 
         // Persist run lines + update schedule lines + update asset accum dep
@@ -225,16 +252,17 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
                 new DepreciationRunExecutedPayload(
                         run.getUid(), req.companyId(), period.getId(),
                         req.postingDate(), totalCharge, eligibleLines.size(),
-                        journal.uid(), run.getExecutedAt()));
+                        run.getGlEntryUid(), run.getExecutedAt()));
 
         audit.record(AuditEvent.of(AuditActions.FA_DEPRECIATION_RUN, "depreciation_runs",
                         run.getId(), run.getUid())
                 .detail(Map.of("runNumber", runNumber,
                         "period", req.fiscalPeriodUid(),
                         "assetCount", String.valueOf(eligibleLines.size()),
+                        "journalCount", String.valueOf(journalUids.size()),
                         "totalCharge", totalCharge.toPlainString())));
 
-        return toDto(run, savedLines);
+        return toDto(run, savedLines, journalUids);
     }
 
     @Override
@@ -243,7 +271,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
         DepreciationRun run = runs.findByUid(uid)
                 .orElseThrow(() -> NotFoundException.of("DepreciationRun", uid));
         scopeGuard.assertCanActIn(RequestContext.get(), run.getCompanyId());
-        return toDto(run, runLines.findByDepreciationRunId(run.getId()));
+        return toDto(run, runLines.findByDepreciationRunId(run.getId()), journalUidsOf(run));
     }
 
     @Override
@@ -251,7 +279,7 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
     public Page<DepreciationRunDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return runs.findByCompanyId(companyId, pageable)
-                .map(r -> toDto(r, runLines.findByDepreciationRunId(r.getId())));
+                .map(r -> toDto(r, runLines.findByDepreciationRunId(r.getId()), journalUidsOf(r)));
     }
 
     // -------------------------------------------------------------------------
@@ -271,11 +299,31 @@ public class DepreciationRunServiceImpl implements DepreciationRunService {
         return p != null ? p.userId() : null;
     }
 
-    private DepreciationRunDto toDto(DepreciationRun r, List<DepreciationRunLine> lines) {
+    /**
+     * The run's journals, read back by the run uid every journal carries as its source_ref. A run
+     * posted before the per-branch split has a null source_ref on its single journal - it falls back
+     * to the header's gl_entry_uid. Scalar SQL: FA reads GL ids, it does not load GL entities.
+     */
+    private List<String> journalUidsOf(DepreciationRun r) {
+        List<String> uids = jdbc.queryForList(
+                """
+                SELECT uid FROM journal_entries
+                WHERE company_id = ? AND source_type = 'DEPRECIATION' AND source_ref = ?
+                ORDER BY id
+                """,
+                String.class, r.getCompanyId(), r.getUid());
+        if (uids.isEmpty() && r.getGlEntryUid() != null) {
+            return List.of(r.getGlEntryUid());
+        }
+        return uids;
+    }
+
+    private DepreciationRunDto toDto(DepreciationRun r, List<DepreciationRunLine> lines,
+                                     List<String> journalUids) {
         return new DepreciationRunDto(
                 r.getId(), r.getUid(), r.getCompanyId(), r.getRunNumber(),
                 r.getFiscalPeriodId(), r.getPostingDate(), r.getStatus(),
-                r.getTotalChargeAmount(), r.getAssetCount(), r.getGlEntryUid(),
+                r.getTotalChargeAmount(), r.getAssetCount(), r.getGlEntryUid(), journalUids,
                 CurrencyCode.value(r.getCurrency()), r.getExecutedAt(),
                 lines.stream().map(l -> new DepreciationRunLineDto(
                         l.getId(), l.getUid(), l.getFixedAssetId(), l.getScheduleLineId(),

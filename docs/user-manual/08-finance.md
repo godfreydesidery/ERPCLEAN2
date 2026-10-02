@@ -113,6 +113,7 @@ The Journal Entries list shows every posted batch — its batch number, posting 
 
 1. Set the **Posting Date** (defaults to today). Verify it falls within an open period.
 2. Enter a **Description** summarising the purpose of the entry. Optionally add a **Source Reference** (e.g. a supporting document number).
+   - Optionally pick a **Branch**. The journal then shows in that branch's financial statements (the statements run with that branch selected) instead of under *Company-level entries (no branch)*. Leave it at **Company level (no branch)** for entries that belong to the whole company — accruals, year-end adjustments, owner's capital. The picker lists only the branches you are assigned to; posting to any other branch is refused with *"You are not assigned to that branch, so you cannot post to it…"*. The branch you are currently switched into is **not** applied automatically — a journal is company level unless you choose a branch.
 3. Each line requires exactly one of a debit or credit amount (not both — business rule BR-GL-08).
    - Use the **Account** dropdown on each line to select an account (shown as `code — name`). Only active accounts are listed.
    - Enter the **Debit** or **Credit** amount for that line, and an optional line **Memo**.

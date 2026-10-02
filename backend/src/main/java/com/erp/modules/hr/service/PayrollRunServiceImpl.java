@@ -434,7 +434,11 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                 .resolve(run.getCompanyId(), GlConfigKey.NET_WAGES_PAYABLE)
                 .getUid();
         LocalDate txnDate = req.txnDate() != null ? req.txnDate() : run.getPayDate();
-        cashDirectEntryService.recordDirectEntry(new RecordDirectEntryRequest(
+        // System settlement, not a user's direct entry: the counter account is payroll's own
+        // NET_WAGES_PAYABLE control account, which the user-facing direct-entry guards refuse by
+        // design (it is PAYROLL_CLEARING, allowManualPosting=false). Booked to the run's branch so
+        // it clears the liability the run itself credited there.
+        cashDirectEntryService.recordSystemEntry(new RecordDirectEntryRequest(
                 companyUid,
                 req.cashBankAccountUid(),
                 CashTxnDirection.OUT,
@@ -442,7 +446,7 @@ public class PayrollRunServiceImpl implements PayrollRunService {
                 txnDate,
                 netWagesPayableUid,
                 "Net wages disbursement for " + run.getRunNumber()
-        ));
+        ), run.getBranchId());
 
         run.setStatus(PayrollRunStatus.PAID);
         run.setPaidAt(Instant.now());

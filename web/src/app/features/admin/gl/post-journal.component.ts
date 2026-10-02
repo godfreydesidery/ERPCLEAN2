@@ -7,6 +7,9 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { of } from 'rxjs';
+import { UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { ReportFilterOptionsService } from '../reporting/report-filter-options.service';
 import { AccountDto, PostJournalLineRequest, PostJournalRequest } from './models/gl.model';
 import { GlService } from './gl.service';
 
@@ -44,6 +47,7 @@ export class PostJournalComponent {
   private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly filterOptions = inject(ReportFilterOptionsService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -61,6 +65,12 @@ export class PostJournalComponent {
   readonly postingDate = signal('');
   readonly description = signal('');
   readonly sourceRef = signal('');
+
+  // ── Branch (optional) ──────────────────────────────────────────────────────
+  // Only branches the caller works in are offered (root: every branch) — the server refuses any
+  // other. '' = a company-level journal, the default.
+  readonly branchOptions = signal<UidOption[]>([]);
+  readonly branchUid = signal('');
 
   // ── Lines ──────────────────────────────────────────────────────────────────
   readonly lines = signal<DraftLine[]>([
@@ -125,6 +135,7 @@ export class PostJournalComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadAccounts(list[0].id);
+              this.loadBranches(list[0]);
             }
           },
           error: () => this.companyState.set('error'),
@@ -145,10 +156,23 @@ export class PostJournalComponent {
     });
   }
 
+  private loadBranches(company: Company): void {
+    this.filterOptions.branchOptions(of(company)).subscribe({
+      next: (options) => this.branchOptions.set(options),
+      error: () => this.branchOptions.set([]),
+    });
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.accounts.set([]);
-    if (id) this.loadAccounts(id);
+    this.branchUid.set('');
+    this.branchOptions.set([]);
+    if (id) {
+      this.loadAccounts(id);
+      const company = this.companies().find((c) => c.id === id);
+      if (company) this.loadBranches(company);
+    }
   }
 
   // ── Line editor ────────────────────────────────────────────────────────────
@@ -222,6 +246,7 @@ export class PostJournalComponent {
       sourceType: 'MANUAL',
       sourceRef: ref || undefined,
       lines: postLines,
+      branchUid: this.branchUid() || undefined,
     };
 
     this.posting.set(true);

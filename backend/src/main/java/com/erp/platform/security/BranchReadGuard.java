@@ -68,6 +68,45 @@ public class BranchReadGuard {
     }
 
     /**
+     * The same assignment rule for a WRITE that a caller stamps with a branch of their choosing — a
+     * manual journal posted to a branch. Root is exempt; a non-root caller must hold a live
+     * {@code user_branch} assignment. A {@code null} id means "no branch" (company level) and is
+     * not narrowed. The refusal names the remedy for a poster, not for a report reader.
+     *
+     * @param branchId the resolved branch id the caller asked to post to, or null
+     */
+    public void assertMayPostTo(RequestContext.Principal principal, Long branchId) {
+        if (branchId == null) {
+            return;
+        }
+        if (principal != null && principal.root()) {
+            return;
+        }
+        Long userId = principal != null ? principal.userId() : null;
+        if (userId == null) {
+            throw ForbiddenException.notPermitted();
+        }
+        if (!isAssigned(userId, branchId)) {
+            throw new ForbiddenException(
+                    "You are not assigned to that branch, so you cannot post to it. Choose a branch "
+                            + "you work in, or leave the branch empty to post at company level.");
+        }
+    }
+
+    private boolean isAssigned(Long userId, Long branchId) {
+        Integer assigned = jdbc.query(
+                """
+                SELECT 1
+                FROM user_branch
+                WHERE user_id = ? AND branch_id = ? AND active = true AND revoked_at IS NULL
+                LIMIT 1
+                """,
+                (ResultSetExtractor<Integer>) rs -> rs.next() ? 1 : null,
+                userId, branchId);
+        return assigned != null;
+    }
+
+    /**
      * What the caller reads when they filter to a branch they are not assigned to.
      *
      * <p>Deliberately NOT the generic "you do not have permission" wording. The caller holds the
