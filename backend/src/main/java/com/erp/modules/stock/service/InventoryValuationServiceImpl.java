@@ -14,8 +14,10 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -170,24 +172,31 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         // returns, so the row still holds its PRE-receipt qty here. We must pre-compute the
         // POST-receipt value: (preQty + receiptQty) × newAvg, so the row is consistent once
         // the qty increment lands. This is the key fix for the per-location recompute.
+        //
+        // The receiving row takes the balancing remainder (newTotalValue − Σ other rows) rather than
+        // its own qty × rounded avg: with the avg rounded to 4 dp, Σ(qty × avg) drifts from the
+        // value the GL debited by up to qty × 0.00005 (100 @ 2,250 + 30 @ 2,200 summed to
+        // 290,999.995 against a GL of 291,000), and a later void of either receipt then carried
+        // that drift into the recon. The remainder keeps Σ on_hand_value == the 1300 debit exactly.
         final Long receivingRowId = receivingRow.getId();
+        StockOnHand receivingInList = null;
+        BigDecimal othersValue = BigDecimal.ZERO;
         for (StockOnHand row : allRows) {
-            BigDecimal effectiveQty = row.getId().equals(receivingRowId)
-                    ? row.getQuantity().add(receiptQty)   // post-receipt qty for receiving row
-                    : row.getQuantity();                   // pre-receipt (stable) for all others
-            BigDecimal rowNewValue = round4(effectiveQty.multiply(newAvg));
+            if (row.getId().equals(receivingRowId)) {
+                receivingInList = row;
+                continue;
+            }
+            BigDecimal rowNewValue = round4(row.getQuantity().multiply(newAvg)); // pre-receipt (stable) qty
             row.applyCostRecompute(newAvg, rowNewValue, null);
             onHands.save(row);
+            othersValue = othersValue.add(rowNewValue);
         }
 
-        // If the receiving row is newly created (not yet in allRows at the time of the
-        // findByCompanyIdAndProductId call — the upsert save may not be visible yet),
-        // apply avg_cost + the post-receipt value directly.
-        if (allRows.stream().noneMatch(r -> r.getId().equals(receivingRowId))) {
-            BigDecimal rowNewValue = round4(receiptQty.multiply(newAvg));
-            receivingRow.applyCostRecompute(newAvg, rowNewValue, null);
-            onHands.save(receivingRow);
-        }
+        // If the receiving row is newly created it may not be in allRows yet (the upsert save may
+        // not be visible to the finder) — value it directly, the same way.
+        StockOnHand receiving = receivingInList != null ? receivingInList : receivingRow;
+        receiving.applyCostRecompute(newAvg, newTotalValue.subtract(othersValue), null);
+        onHands.save(receiving);
 
         return receiptValue;
     }
@@ -319,24 +328,66 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
     @Override
     public void reverseReceipt(Long companyId, Long branchId, Long productId,
                                 BigDecimal originalQty, BigDecimal originalValue) {
+        reverseReceipt(companyId, branchId, null, productId, originalQty, originalValue);
+    }
+
+    @Override
+    public void reverseReceipt(Long companyId, Long branchId, Long locationId, Long productId,
+                                BigDecimal originalQty, BigDecimal originalValue) {
         try {
-            doReverseReceipt(companyId, branchId, productId, originalQty, originalValue);
+            doReverseReceipt(companyId, branchId, locationId, productId, originalQty, originalValue);
         } catch (ObjectOptimisticLockingFailureException ex) {
             log.debug("InventoryValuation: optimistic lock clash on reverseReceipt " + RETRY_MSG,
                     companyId, productId);
-            doReverseReceipt(companyId, branchId, productId, originalQty, originalValue);
+            doReverseReceipt(companyId, branchId, locationId, productId, originalQty, originalValue);
         }
     }
 
     /**
-     * ADR-0028 D-2 FIX: aggregates ALL location rows to compute the post-reversal company-product
-     * avg, then syncs to all rows. FIX A: soh rows hold PRE-reversal quantities at call time
-     * (posting applies the delta after this returns), so postReversalQty = Σ qty − original qty.
+     * Takes a receipt back out of stock at the receipt's OWN value (ADR-0020 D-5).
+     *
+     * <p>The rule: Σ on_hand_value across the company falls by exactly {@code originalValue} —
+     * the same amount the GL credits to Inventory (DR GRNI / CR 1300) — so the
+     * {@code Σ on_hand_value == 1300} tie survives every void and purchase return. The company
+     * average is then re-derived from what is left ({@code Σvalue / Σqty}) and synced to every
+     * location row, exactly as {@link #doRecomputeOnReceipt} syncs it on the way in.
+     *
+     * <p>When nothing positive is left to average — the remaining quantity is ≤ 0 (part of the
+     * receipt was already sold) or the remaining value is negative (the voided receipt was dearer
+     * than the stock that is left could absorb) — the last known average is kept (an average is
+     * never negative, {@code chk_stock_on_hand_avg_nonneg}) and the on-hand value carries the
+     * residual, which the next receipt or the replacement GRN absorbs. The books still tie.
+     *
+     * <p>Rows hold PRE-reversal quantities here (the posting service applies the negative qty
+     * delta after this returns, FIX A). The row the quantity is about to leave — the original
+     * receipt's location — is therefore valued as the balancing remainder, so the post-posting
+     * state is right. It used to be re-valued at {@code pre-void qty × new avg}, which left the
+     * voided receipt's value sitting on a row whose quantity then dropped by the receipt's
+     * quantity whenever any stock remained (the live RV-P01 defect: phantom value, an average
+     * above every purchase price, COGS overstated); and when nothing remained the value was
+     * clamped at zero, dropping the tie to the GL instead.
      */
-    private void doReverseReceipt(Long companyId, Long branchId, Long productId,
+    private void doReverseReceipt(Long companyId, Long branchId, Long locationId, Long productId,
                                    BigDecimal originalQty, BigDecimal originalValue) {
-        List<StockOnHand> allRows = onHands.findByCompanyIdAndProductId(companyId, productId);
-        if (allRows.isEmpty()) return;
+        Long reversingLocId = locationId != null
+                ? locationId : locationResolver.defaultLocationId(companyId, branchId);
+        StockOnHand reversingRow = onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        companyId, branchId, reversingLocId, productId)
+                .orElseGet(() -> onHands.save(
+                        new StockOnHand(companyId, branchId, reversingLocId, productId)));
+
+        List<StockOnHand> allRows = new ArrayList<>(
+                onHands.findByCompanyIdAndProductId(companyId, productId));
+        final Long reversingRowId = reversingRow.getId();
+        StockOnHand target = allRows.stream()
+                .filter(r -> r.getId().equals(reversingRowId))
+                .findFirst()
+                .orElse(null);
+        if (target == null) {
+            allRows.add(reversingRow);
+            target = reversingRow;
+        }
 
         // Aggregate PRE-reversal totals across all locations.
         BigDecimal totalQty   = BigDecimal.ZERO;
@@ -346,36 +397,41 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
             totalValue = totalValue.add(row.getOnHandValue() != null ? row.getOnHandValue() : BigDecimal.ZERO);
         }
 
-        // FIX A: posting service applies the negative qty delta AFTER this method is called.
-        // PRE-reversal totals are used; subtract the original qty to derive POST-reversal total qty.
         BigDecimal postReversalTotalQty   = totalQty.subtract(originalQty.abs());
-        BigDecimal postReversalTotalValue = totalValue.subtract(originalValue);
+        BigDecimal postReversalTotalValue = totalValue.subtract(originalValue.abs());
+
+        BigDecimal lastKnownAvg = target.getAvgCost() != null
+                ? target.getAvgCost()
+                : allRows.stream().map(StockOnHand::getAvgCost)
+                        .filter(Objects::nonNull).findFirst().orElse(null);
 
         BigDecimal newAvg;
-        if (postReversalTotalQty.compareTo(BigDecimal.ZERO) > 0) {
+        if (postReversalTotalQty.signum() > 0 && postReversalTotalValue.signum() >= 0) {
             newAvg = round4(postReversalTotalValue.divide(postReversalTotalQty, SCALE, RM));
         } else {
-            // Aggregate went to <= 0 after reversal — keep last known avg (D-5)
-            newAvg = allRows.stream().filter(r -> r.getAvgCost() != null)
-                    .map(StockOnHand::getAvgCost).findFirst().orElse(BigDecimal.ZERO);
+            // Nothing positive left to average — keep last known (D-5); value carries the residual.
+            newAvg = lastKnownAvg;
+            if (postReversalTotalQty.signum() != 0 || postReversalTotalValue.signum() != 0) {
+                log.warn("InventoryValuation: receipt reversal leaves company={} product={} at qty={} " +
+                                 "value={} — last known avg {} kept; the next receipt absorbs the residual",
+                        companyId, productId, postReversalTotalQty, postReversalTotalValue, lastKnownAvg);
+            }
         }
 
-        // Sync new avg and re-attributed on_hand_value to every location row.
-        // When postReversalTotalQty > 0: distribute postReversalTotalValue by row proportion
-        // (row.qty × newAvg is equivalent since newAvg = postReversalTotalValue / postReversalTotalQty
-        //  and the rows not receiving the reversal still carry their pre-reversal qty, which is correct).
-        // When postReversalTotalQty <= 0: the aggregate value after reversal is postReversalTotalValue
-        // (nominally 0 for a full reversal). Set every row to that value (clamped ≥ 0) — do NOT
-        // multiply row.qty × newAvg because row.qty is still the PRE-reversal qty, giving a spurious
-        // positive value for a full reversal where the correct on_hand_value is zero (FIX A).
-        final boolean valueDepleted = postReversalTotalQty.compareTo(BigDecimal.ZERO) <= 0;
+        // Every other row: its (unchanged) qty × the new company average. The reversing row takes
+        // the remainder, so Σ on_hand_value == postReversalTotalValue exactly (no rounding drift).
+        BigDecimal othersValue = BigDecimal.ZERO;
         for (StockOnHand row : allRows) {
-            BigDecimal rowNewValue = valueDepleted
-                    ? postReversalTotalValue.max(BigDecimal.ZERO)
-                    : round4(row.getQuantity().multiply(newAvg));
+            if (row == target) continue;
+            BigDecimal rowNewValue = newAvg != null
+                    ? round4(row.getQuantity().multiply(newAvg))
+                    : (row.getOnHandValue() != null ? row.getOnHandValue() : BigDecimal.ZERO);
             row.applyCostRecompute(newAvg, rowNewValue, null);
             onHands.save(row);
+            othersValue = othersValue.add(rowNewValue);
         }
+        target.applyCostRecompute(newAvg, postReversalTotalValue.subtract(othersValue), null);
+        onHands.save(target);
     }
 
     // -------------------------------------------------------------------------

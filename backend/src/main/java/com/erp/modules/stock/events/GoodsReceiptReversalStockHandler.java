@@ -168,16 +168,21 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                             original.getUid());
                     anyCostNull = true;
                 } else {
-                    // Back out the receipt from the moving-average (ADR-0020 D-5).
+                    // Back out the receipt from the moving-average (ADR-0020 D-5), from the row the
+                    // receipt actually landed on — the same row the quantity leaves below.
                     valuation.reverseReceipt(
-                            original.getCompanyId(), original.getBranchId(), original.getProductId(),
-                            originalQty.abs(), originalValue);
+                            original.getCompanyId(), original.getBranchId(), original.getLocationId(),
+                            original.getProductId(), originalQty.abs(), originalValue);
                     totalOriginalValue = totalOriginalValue.add(originalValue);
                 }
 
-                // Post opposite-sign GOODS_RECEIPT_REVERSAL quantity movement.
+                // Post opposite-sign GOODS_RECEIPT_REVERSAL movement: quantity AND value leave
+                // stock (D-5 "value = −original.value"). It used to carry the receipt's positive
+                // value on a negative quantity, so the ledger read as stock leaving while value
+                // arrived. Posted to the original movement's own location (null = branch default).
                 posting.post(
-                        original.getCompanyId(), original.getBranchId(), original.getProductId(),
+                        original.getCompanyId(), original.getBranchId(), original.getLocationId(),
+                        original.getProductId(),
                         originalQty.negate(),             // GOODS_RECEIPT was +; reversal is −
                         MovementType.GOODS_RECEIPT_REVERSAL,
                         sourceKey,                        // per-movement key off the void event uid (D-5)
@@ -186,7 +191,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                         null,
                         null,
                         original.getUnitCostAmount(),
-                        originalValue);
+                        originalValue != null ? originalValue.abs().negate() : null);
 
                 // D-2: batch/serial reversal — soft, never fails the dispatch.
                 // FIX C: prefer the movement's OWN receipt-time location; fall back to the
