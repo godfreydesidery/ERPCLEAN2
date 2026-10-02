@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
@@ -169,116 +168,34 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
     );
   }
 
+  /// The on-screen receipt is the printed text itself, rendered monospaced at
+  /// the 80 mm width, so the screen and the paper can never disagree.
   Widget _receiptBody(AppData app) {
-    final inv = r.invoice;
     final ctx = app.context;
-    final df = DateFormat('yyyy-MM-dd HH:mm');
-    const mono = TextStyle(
-        fontFamily: 'Consolas', fontSize: 12.5, color: Color(0xFF1E293B));
-    Widget line(String l, String right, {bool bold = false}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 1),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                  child: Text(l,
-                      style: mono.copyWith(
-                          fontWeight:
-                              bold ? FontWeight.w800 : FontWeight.w400))),
-              Text(right,
-                  style: mono.copyWith(
-                      fontWeight: bold ? FontWeight.w800 : FontWeight.w400,
-                      fontFeatures: kTabular)),
-            ],
-          ),
-        );
-    Widget dashes() => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 6),
-          child: Text('--------------------------------',
-              style:
-                  TextStyle(color: Color(0xFF94A3B8), fontFamily: 'Consolas')),
-        );
-
+    final text = buildReceiptText(
+      receipt: r,
+      companyName: ctx?.company.name ?? 'OrbixPOS',
+      branchName: ctx?.branch.name ?? '',
+      cashierName: app.me?.displayName ?? '',
+      width: kCols80mm,
+      gift: _gift,
+      reversed: _reversed || r.invoice.status.isVoid,
+      reversedBy: _reversedBy,
+      companyDetailLines:
+          ctx == null ? const [] : companyReceiptLines(ctx.company),
+    );
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Text(ctx?.company.name ?? 'OrbixPOS',
-                style: mono.copyWith(fontSize: 15, fontWeight: FontWeight.w800)),
-          ),
-          if (ctx != null)
-            for (final detail in companyReceiptLines(ctx.company))
-              Center(
-                  child: Text(detail,
-                      style: mono.copyWith(color: const Color(0xFF64748B)))),
-          Center(child: Text(ctx?.branch.name ?? '', style: mono)),
-          const SizedBox(height: 8),
-          line('Invoice', inv.invoiceNumber, bold: true),
-          line('Date',
-              df.format((inv.finalisedAt ?? DateTime.now()).toLocal())),
-          line('Cashier', app.me?.displayName ?? ''),
-          line('Customer', inv.customerName ?? r.invoice.customerId),
-          dashes(),
-          if (r.lines.isEmpty)
-            Center(
-                child: Text('(line detail not loaded)',
-                    style: mono.copyWith(color: const Color(0xFF94A3B8))))
-          else
-            ...r.lines.map((l) => _receiptLine(l, mono)),
-          dashes(),
-          if (!_gift) ...[
-            line('Net', formatAmount(inv.netTotalAmount)),
-            line('VAT', formatAmount(inv.vatTotalAmount)),
-            line('TOTAL ${inv.currency}', formatAmount(inv.grossTotalAmount),
-                bold: true),
-            dashes(),
-            ...r.payments.map((p) =>
-                line(p.tenderType.label, formatAmount(p.amount))),
-            if (r.changeDue > 0) line('Change', formatAmount(r.changeDue)),
-          ] else
-            Center(
-                child: Text('* gift receipt — prices hidden *',
-                    style: mono.copyWith(color: const Color(0xFF64748B)))),
-          const SizedBox(height: 10),
-          Center(child: Text('Thank you!', style: mono)),
-          if (_reversed || r.invoice.status.isVoid)
-            Center(
-                child: Text('\n*** REVERSED ***',
-                    style: mono.copyWith(
-                        color: AppColors.danger, fontWeight: FontWeight.w800))),
-          if (_reversedBy != null)
-            Center(
-                child: Text('Approved by $_reversedBy',
-                    style: mono.copyWith(color: const Color(0xFF64748B)))),
-        ],
-      ),
-    );
-  }
-
-  Widget _receiptLine(InvoiceLine l, TextStyle mono) {
-    final qty = formatAmount(l.quantity, decimals: l.quantity % 1 == 0 ? 0 : 3);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(l.productName, style: mono),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('  $qty x ${formatAmount(l.unitPriceAmount)}',
-                  style: mono.copyWith(color: const Color(0xFF64748B))),
-              Text(formatAmount(l.grossAmount),
-                  style: mono.copyWith(fontFeatures: kTabular)),
-            ],
-          ),
-          if (l.lineDiscountAmount > 0)
-            Text('  less disc ${formatAmount(l.lineDiscountAmount)}',
-                style: mono.copyWith(color: AppColors.brand)),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topCenter,
+        child: Text(text,
+            style: const TextStyle(
+                fontFamily: 'Consolas',
+                fontSize: 12.5,
+                height: 1.3,
+                color: Color(0xFF1E293B))),
       ),
     );
   }
@@ -306,6 +223,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       mode: cfg.printMode,
       gift: _gift,
       reversed: _reversed || r.invoice.status.isVoid,
+      reversedBy: _reversedBy,
       kickDrawer: cfg.kickDrawer,
       companyDetailLines: company == null ? const [] : companyReceiptLines(company),
     );

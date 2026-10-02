@@ -155,6 +155,7 @@ class InvoiceLine {
     required this.vatAmount,
     required this.grossAmount,
     required this.vatRate,
+    this.vatStatus = VatStatus.unknown,
   });
 
   final int lineNo;
@@ -168,6 +169,7 @@ class InvoiceLine {
   final double vatAmount;
   final double grossAmount;
   final double vatRate;
+  final VatStatus vatStatus;
 
   factory InvoiceLine.fromJson(Map<String, dynamic> j) => InvoiceLine(
         lineNo: asIntOr(j['lineNo']),
@@ -181,6 +183,7 @@ class InvoiceLine {
         vatAmount: asNumOr(j['vatAmount']),
         grossAmount: asNumOr(j['grossAmount']),
         vatRate: asNumOr(j['vatRate']),
+        vatStatus: VatStatus.fromWire(asStr(j['vatStatus'])),
       );
 
   Map<String, dynamic> toJson() => {
@@ -195,6 +198,7 @@ class InvoiceLine {
         'vatAmount': vatAmount,
         'grossAmount': grossAmount,
         'vatRate': vatRate,
+        'vatStatus': vatStatus.wire,
       };
 }
 

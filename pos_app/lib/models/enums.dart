@@ -136,6 +136,21 @@ enum InvoiceStatus {
   bool get isVoid => this == voided;
 }
 
+/// `VatStatus` — a line's VAT classification (STANDARD / ZERO_RATED / EXEMPT).
+/// [unknown] covers receipts journalled before the field was carried.
+enum VatStatus {
+  standard('STANDARD'),
+  zeroRated('ZERO_RATED'),
+  exempt('EXEMPT'),
+  unknown('UNKNOWN');
+
+  const VatStatus(this.wire);
+  final String wire;
+
+  static VatStatus fromWire(String? w) =>
+      VatStatus.values.firstWhere((s) => s.wire == w, orElse: () => unknown);
+}
+
 /// `UnitPriceStatus` — why a batch-resolved price is present or absent
 /// (`POST /product-prices/resolve`, P2).
 enum UnitPriceStatus {
