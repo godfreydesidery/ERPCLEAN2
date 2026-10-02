@@ -345,6 +345,96 @@ class ArCreditNoteServiceIT extends PostgresIntegrationTest {
         assertArReconciled();
     }
 
+    // =========================================================================
+    // Bar 7: reapply of a foreign note must leave realized FX for what is applied NOW only.
+    // The earlier apply's FX plug is reversed (a new, append-only GL entry — the GL engine's own
+    // reversal), then the new allocation set books its own plug.
+    //   USD 40 note at 2400 against an invoice at 2500, auto-applied → FX loss 40 x 100 = 4,000
+    //   reapply as 30                                                → FX loss must be 3,000
+    // =========================================================================
+
+    @Test
+    void reapply_foreignNote_fxIsBookedOnlyForWhatIsAppliedNow() {
+        seedRate(RATE_INVOICE, LocalDate.now().minusDays(10));
+        seedRate(RATE_LOWER,   LocalDate.now());
+        String invUid = foreignOpenItem("100", RATE_INVOICE, "250000");
+        ArCreditNoteDto cn = creditNoteService.raise(new RaiseCreditNoteRequest(
+                companyUid, customerUid, invUid, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, USD, "USD credit"));
+        assertThat(cnAccountNetDr("5190")).as("FX loss after the full apply").isEqualByComparingTo("4000");
+
+        creditNoteService.reapply(applyLines(cn.uid(), invUid, "30"));
+
+        assertThat(cnAccountNetDr("5190")).as("FX loss = 30 x (2500 - 2400) only")
+                .isEqualByComparingTo("3000");
+        assertThat(cnAccountNetDr("4920")).as("no FX gain").isEqualByComparingTo("0");
+        // AR relieved by the note in the GL = 30 at the invoice rate + 10 still unapplied at the note rate
+        assertThat(cnAccountNetCr("1200")).isEqualByComparingTo("99000");
+        assertArControlEqualsBaseSubLedger("151000");
+        assertThat(arInvoiceRepo.findByUid(invUid).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("175000");
+    }
+
+    /**
+     * Reapply that MOVES the note from invoice A (2500) to invoice B (2600), then splits it across
+     * both: each step reverses the plugs still live and books FX for the new allocation set only.
+     */
+    @Test
+    void reapply_foreignNote_movedBetweenInvoices_fxFollowsEachInvoicesRate() {
+        seedRate(RATE_INVOICE, LocalDate.now().minusDays(10));
+        seedRate(RATE_LOWER,   LocalDate.now());
+        String invA = foreignOpenItem("100", RATE_INVOICE, "250000");
+        String invB = foreignOpenItem("100", RATE_HIGHER, "260000");
+        ArCreditNoteDto cn = creditNoteService.raise(new RaiseCreditNoteRequest(
+                companyUid, customerUid, invA, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, USD, "USD credit"));
+        assertThat(cnAccountNetDr("5190")).isEqualByComparingTo("4000");   // 40 x (2500 - 2400)
+
+        creditNoteService.reapply(applyLines(cn.uid(), invB, "40"));
+        assertThat(cnAccountNetDr("5190")).as("FX now follows invoice B only: 40 x (2600 - 2400)")
+                .isEqualByComparingTo("8000");
+        assertThat(arInvoiceRepo.findByUid(invA).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("250000");
+        assertThat(arInvoiceRepo.findByUid(invB).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("156000");
+        assertArControlEqualsBaseSubLedger("406000");
+
+        // Second reapply: only the plug from the FIRST reapply is still live and gets reversed.
+        creditNoteService.reapply(new ApplyCreditNoteRequest(cn.uid(), java.util.List.of(
+                new ApplyCreditNoteRequest.AllocationLineRequest(invA, new BigDecimal("20")),
+                new ApplyCreditNoteRequest.AllocationLineRequest(invB, new BigDecimal("20")))));
+        assertThat(cnAccountNetDr("5190")).as("20 x 100 on A + 20 x 200 on B")
+                .isEqualByComparingTo("6000");
+        assertThat(cnAccountNetDr("4920")).isEqualByComparingTo("0");
+        // 510,000 invoiced − 96,000 note − 6,000 FX = 408,000 (A 200,000 + B 208,000 base outstanding)
+        assertArControlEqualsBaseSubLedger("408000");
+    }
+
+    /**
+     * GL 1200 must equal the BASE-currency AR sub-ledger (Σ invoice base outstanding − Σ CN base
+     * unapplied). The reconciliation endpoint sums document-currency faces, so with USD documents
+     * it cannot be the yardstick here; the GL figure is taken from it all the same.
+     */
+    private void assertArControlEqualsBaseSubLedger(String expected) {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "arcn_root", true, company.getId(), branch.getId(), null));
+        BigDecimal invoicesBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_outstanding_amount), 0) FROM ar_invoices
+                WHERE company_id = ? AND status IN ('OPEN', 'PARTIAL')
+                """, BigDecimal.class, company.getId());
+        BigDecimal cnBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_unapplied_amount), 0) FROM ar_credit_notes WHERE company_id = ?
+                """, BigDecimal.class, company.getId());
+        BigDecimal gl = reconciliationQuery.reconcile(company.getId()).glControlBalance();
+        assertThat(gl).as("GL 1200").isEqualByComparingTo(expected);
+        assertThat(invoicesBase.subtract(cnBase)).as("base sub-ledger == GL 1200")
+                .isEqualByComparingTo(gl);
+    }
+
+    private BigDecimal cnAccountNetDr(String code) {
+        return cnAccountDr(code).subtract(cnAccountCr(code));
+    }
+
     private static ApplyCreditNoteRequest applyLines(String cnUid, String invUid, String... amounts) {
         return new ApplyCreditNoteRequest(cnUid, java.util.Arrays.stream(amounts)
                 .map(a -> new ApplyCreditNoteRequest.AllocationLineRequest(invUid, new BigDecimal(a)))

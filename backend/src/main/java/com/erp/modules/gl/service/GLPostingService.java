@@ -45,4 +45,15 @@ public interface GLPostingService {
     JournalEntryDto postReversal(String originalEntryUid, java.time.LocalDate reversalDate,
                                   com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
                                   String sourceRef, Long postedBy, String reason);
+
+    /**
+     * Uids of the entries posted for a source document that are still live — not reversed and not
+     * themselves a reversal — oldest first. Lets the owning module replace a derived posting (for
+     * example a credit/debit note's realized-FX plug on reapply) by reversing it with
+     * {@link #postReversal} and posting afresh, never by editing it (posting tables are
+     * append-only). Read-only; company-scoped.
+     */
+    java.util.List<String> findLiveEntryUids(Long companyId,
+                                             com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
+                                             String sourceRef);
 }

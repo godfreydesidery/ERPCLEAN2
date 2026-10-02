@@ -306,6 +306,9 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         int baseScale = baseMinorUnits(baseCurrency);
         BigDecimal cnRate = initial.getFxRate() != null ? initial.getFxRate() : BigDecimal.ONE;
 
+        // 0. Reverse the realized-FX plugs the current allocations booked (see reverseLiveFxPlugs).
+        reverseLiveFxPlugs(initial);
+
         // 1. Restore outstanding on currently allocated invoices
         List<ArCreditNoteAllocation> existing = cnAllocations.findByCreditNoteId(initial.getId());
         for (ArCreditNoteAllocation old : existing) {
@@ -378,6 +381,32 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     // =========================================================================
     // Core apply logic — shared by raise (auto-apply) + apply + reapply
     // =========================================================================
+
+    /**
+     * Each apply books a realized-FX plug for its slices (invoice rate vs note rate). Reapply throws
+     * those allocations away and applies a new set, which books its own plug — so the plugs of the
+     * old set must be retired first, or FX is realized twice.
+     *
+     * <p>Retired with the GL engine's own reversal ({@link GLPostingService#postReversal}): an
+     * append-only mirror entry that marks the original reversed (same as a bounced receipt or a
+     * voided sale). Every entry still live for this note is a plug except the raise contra, which
+     * stays. Plugs already reversed and the reversal entries themselves are not live, so repeated
+     * reapplies only ever retire the latest plug. Dated like the plugs (note date). The note's
+     * entries carry its NUMBER as source ref (raise and plug alike). Base-currency notes book no
+     * plug, so nothing is posted for them.
+     */
+    private void reverseLiveFxPlugs(ArCreditNote note) {
+        List<String> live = glPosting.findLiveEntryUids(
+                note.getCompanyId(), JournalSourceType.AR_CREDIT_NOTE, note.getCreditNoteNumber());
+        for (String entryUid : live) {
+            if (entryUid.equals(note.getGlEntryUid())) {
+                continue; // the raise contra stays
+            }
+            glPosting.postReversal(entryUid, note.getNoteDate(), JournalSourceType.AR_CREDIT_NOTE,
+                    note.getCreditNoteNumber(), actorId(),
+                    "Credit note " + note.getCreditNoteNumber() + " re-applied");
+        }
+    }
 
     /**
      * Appends {@code ar_credit_note_allocations}, decrements invoice outstanding and CN unapplied,

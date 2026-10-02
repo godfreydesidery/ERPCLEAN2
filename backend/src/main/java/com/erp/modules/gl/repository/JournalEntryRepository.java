@@ -2,6 +2,7 @@ package com.erp.modules.gl.repository;
 
 import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +24,23 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
      */
     Optional<JournalEntry> findByCompanyIdAndSourceTypeAndSourceRef(
             Long companyId, JournalSourceType sourceType, String sourceRef);
+
+    /**
+     * Uids of a source document's entries that are still live — not reversed and not themselves a
+     * reversal — oldest first. Hits ix_journal_entries_source.
+     */
+    @Query("""
+            SELECT e.uid FROM JournalEntry e
+            WHERE e.companyId = :companyId
+              AND e.sourceType = :sourceType
+              AND e.sourceRef = :sourceRef
+              AND e.reversed = false
+              AND e.reversalOfId IS NULL
+            ORDER BY e.id
+            """)
+    List<String> findLiveUidsBySource(@Param("companyId") Long companyId,
+                                      @Param("sourceType") JournalSourceType sourceType,
+                                      @Param("sourceRef") String sourceRef);
 
     /** Single-column projection for ScopeGuard case "journalentry" (ADR-0013 D-10). */
     @Query("SELECT e.companyId FROM JournalEntry e WHERE e.uid = :uid")
