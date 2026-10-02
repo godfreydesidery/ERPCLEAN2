@@ -40,6 +40,7 @@ import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -393,6 +394,96 @@ class ApDebitNoteServiceIT extends PostgresIntegrationTest {
         ApDebitNoteDto read = debitNoteService.getByUid(dn.uid());
         assertThat(read.unappliedAmount()).isEqualByComparingTo("0");
         assertThat(read.status()).isEqualTo(ApDebitNoteStatus.APPLIED);
+    }
+
+    // =========================================================================
+    // Bar 7: reapply of a foreign note must leave realized FX for what is applied NOW only.
+    // The earlier apply's FX plug is reversed (a new, append-only GL entry — the GL engine's own
+    // reversal), then the new allocation set books its own plug.
+    //   USD 40 note at 2400 against a bill at 2500, auto-applied in full → FX gain 40 × 100 = 4,000
+    //   reapply as 30                                                    → FX gain must be 3,000
+    // =========================================================================
+
+    @Test
+    void reapply_foreignNote_fxIsBookedOnlyForWhatIsAppliedNow() {
+        seedRate(RATE_BILL,  BILL_DATE);
+        seedRate(RATE_LOWER, LocalDate.now());
+        String billUid = foreignOpenBill("USD-DN-REAPPLY-001", "100", RATE_BILL, "250000");
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, billUid, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, "USD credit", null));
+        assertThat(dnAccountNetCr("4920")).as("FX gain after the full apply").isEqualByComparingTo("4000");
+
+        debitNoteService.reapply(applyLines(dn.uid(), billUid, "30"));
+
+        assertThat(dnAccountNetCr("4920")).as("FX gain = 30 x (2500 - 2400) only")
+                .isEqualByComparingTo("3000");
+        assertThat(dnAccountNetCr("5190")).as("no FX loss").isEqualByComparingTo("0");
+        // AP relieved by the note in the GL = 30 at the bill rate + 10 still unapplied at the note rate
+        assertThat(dnAccountNetDr("2100")).isEqualByComparingTo("99000");
+        assertApControlEqualsBaseSubLedger("151000");
+        assertThat(billRepo.findByUid(billUid).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("175000");
+    }
+
+    /**
+     * Reapply that MOVES the note from bill A (2500) to bill B (2600), then splits it across both:
+     * each step reverses the plugs still live and books FX for the new allocation set only.
+     */
+    @Test
+    void reapply_foreignNote_movedBetweenBills_fxFollowsEachBillsRate() {
+        seedRate(RATE_BILL,  BILL_DATE);
+        seedRate(RATE_LOWER, LocalDate.now());
+        String billA = foreignOpenBill("USD-DN-MOVE-A", "100", RATE_BILL, "250000");
+        String billB = foreignOpenBill("USD-DN-MOVE-B", "100", RATE_HIGHER, "260000");
+        ApDebitNoteDto dn = debitNoteService.raise(new RaiseDebitNoteRequest(
+                companyUid, supplierUid, billA, LocalDate.now(),
+                new BigDecimal("40"), BigDecimal.ZERO, "USD credit", null));
+        assertThat(dnAccountNetCr("4920")).isEqualByComparingTo("4000");   // 40 x (2500 - 2400)
+
+        debitNoteService.reapply(applyLines(dn.uid(), billB, "40"));
+        assertThat(dnAccountNetCr("4920")).as("FX now follows bill B only: 40 x (2600 - 2400)")
+                .isEqualByComparingTo("8000");
+        assertThat(billRepo.findByUid(billA).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("250000");
+        assertThat(billRepo.findByUid(billB).orElseThrow().getBaseOutstandingAmount())
+                .isEqualByComparingTo("156000");
+        assertApControlEqualsBaseSubLedger("406000");
+
+        // Second reapply: the plug being replaced is the one from the FIRST reapply (the original
+        // plug and its reversal are both already settled and must not be touched again).
+        debitNoteService.reapply(new ApplyDebitNoteRequest(dn.uid(), List.of(
+                new AllocationLineRequest(billA, new BigDecimal("20")),
+                new AllocationLineRequest(billB, new BigDecimal("20")))));
+        assertThat(dnAccountNetCr("4920")).as("20 x 100 on A + 20 x 200 on B")
+                .isEqualByComparingTo("6000");
+        assertThat(dnAccountNetCr("5190")).isEqualByComparingTo("0");
+        // 510,000 billed − 96,000 note − 6,000 FX = 408,000 (A 200,000 + B 208,000 base outstanding)
+        assertApControlEqualsBaseSubLedger("408000");
+    }
+
+    /**
+     * GL 2100 must equal the BASE-currency AP sub-ledger (Σ bill base outstanding − Σ DN base
+     * unapplied). The reconciliation endpoint sums document-currency faces, so with USD documents
+     * it cannot be the yardstick here; the GL figure is taken from it all the same.
+     */
+    private void assertApControlEqualsBaseSubLedger(String expected) {
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "apdn_root", true, company.getId(), branch.getId(), null));
+        BigDecimal billsBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_outstanding_amount), 0) FROM supplier_bills
+                WHERE company_id = ? AND status IN ('MATCHED', 'APPROVED', 'PARTIALLY_PAID')
+                """, BigDecimal.class, company.getId());
+        BigDecimal dnBase = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(base_unapplied_amount), 0) FROM ap_debit_notes WHERE company_id = ?
+                """, BigDecimal.class, company.getId());
+        BigDecimal gl = reconciliationQuery.reconcile(company.getId()).glControlBalance();
+        assertThat(gl).as("GL 2100").isEqualByComparingTo(expected);
+        assertThat(billsBase.subtract(dnBase)).as("base sub-ledger == GL 2100").isEqualByComparingTo(gl);
+    }
+
+    private BigDecimal dnAccountNetCr(String code) {
+        return dnAccountCr(code).subtract(dnAccountDr(code));
     }
 
     private static ApplyDebitNoteRequest applyLines(String dnUid, String billUid, String... amounts) {

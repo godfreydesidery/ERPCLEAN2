@@ -256,6 +256,9 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         String baseCurrency = company.getBaseCurrency();
         int baseScale = baseMinorUnits(baseCurrency);
 
+        // 0. Reverse the realized-FX plugs the current allocations booked (see reverseLiveFxPlugs).
+        reverseLiveFxPlugs(initial);
+
         // 1. Restore outstanding on currently allocated bills
         List<ApDebitNoteAllocation> existing = dnAllocations.findByDebitNoteId(initial.getId());
         for (ApDebitNoteAllocation old : existing) {
@@ -331,6 +334,38 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return notes.findByCompanyIdAndSupplierId(companyId, supplierId, pageable)
                 .map(n -> toDto(n, dnAllocations.findByDebitNoteId(n.getId()), bills));
+    }
+
+    // =========================================================================
+    // GL — reapply: retire the FX plugs of the allocations being replaced
+    // =========================================================================
+
+    /**
+     * Each apply books a realized-FX plug for its slices (bill rate vs note rate). Reapply throws
+     * those allocations away and applies a new set, which books its own plug — so the plugs of the
+     * old set must be retired first, or FX is realized twice (once for what was applied before and
+     * again for what is applied now).
+     *
+     * <p>They are retired with the GL engine's own reversal ({@link GLPostingService#postReversal}):
+     * an append-only mirror entry that marks the original reversed, exactly how a bounced payment or
+     * a voided sale is undone. Every entry still live for this note is a plug except the raise
+     * contra, which stays — the note's full DR AP-control does not change on reapply. A plug already
+     * reversed by an earlier reapply, and the reversal entries themselves, are not live, so repeated
+     * reapplies only ever retire the latest plug. The reversal is dated like the plugs (note date) so
+     * the retirement and its replacement fall in the same period. A base-currency note books no plug,
+     * so this posts nothing for it.
+     */
+    private void reverseLiveFxPlugs(ApDebitNote note) {
+        List<String> live = glPosting.findLiveEntryUids(
+                note.getCompanyId(), JournalSourceType.AP_DEBIT_NOTE, note.getUid());
+        for (String entryUid : live) {
+            if (entryUid.equals(note.getGlEntryUid())) {
+                continue; // the raise contra stays
+            }
+            glPosting.postReversal(entryUid, note.getNoteDate(), JournalSourceType.AP_DEBIT_NOTE,
+                    note.getUid(), actorId(),
+                    "Debit note " + note.getDebitNoteNumber() + " re-applied");
+        }
     }
 
     // =========================================================================
