@@ -6,6 +6,7 @@ import com.erp.modules.ar.domain.dto.ArCustomerRefDto;
 import com.erp.modules.ar.domain.enums.ArLedgerEntryType;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.StatementCurrencies;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -44,8 +45,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Settlement discounts recorded on a receipt allocation are data-only — they never reduce the
  * invoice outstanding — so they are not movements here either.
  *
- * <p>One currency per statement (default: the company's base currency). Movements in other
- * currencies are counted and left off rather than summed into a balance they do not belong to.
+ * <p>One currency per section. A named currency gives one section and counts the movements in other
+ * currencies rather than summing them into a balance they do not belong to; no currency named gives
+ * one section per currency the customer actually trades in ({@link #statements}).
  *
  * <p>Cross-module reads (customers, companies) are scalar native SQL — no parties/iam entity or
  * repository import (module boundary rule).
@@ -68,13 +70,17 @@ public class ArCustomerLedgerQuery {
                        i.id           AS src_id,
                        CASE WHEN i.source = 'OPENING_BALANCE' THEN 'OPENING_BALANCE'
                             ELSE 'INVOICE' END AS entry_type,
-                       i.document_no  AS reference,
+                       -- A credit sale's open item carries no document_no of its own: its
+                       -- number is the sales invoice it was raised from (source_invoice_uid).
+                       COALESCE(NULLIF(i.document_no, ''), si.invoice_number) AS reference,
                        CASE WHEN i.source = 'OPENING_BALANCE' THEN 'Opening balance'
                             ELSE 'Invoice, due ' || to_char(i.due_date, 'DD-Mon-YYYY') END AS description,
                        i.currency     AS currency,
                        i.original_amount AS debit,
                        CAST(0 AS NUMERIC) AS credit
                 FROM ar_invoices i
+                LEFT JOIN sales_invoices si
+                       ON si.uid = i.source_invoice_uid AND si.company_id = i.company_id
                 WHERE i.company_id = :companyId AND i.customer_id = :customerId
                 UNION ALL
                 SELECT r.receipt_date, 2, r.id, 'RECEIPT', r.receipt_number,
@@ -97,11 +103,14 @@ public class ArCustomerLedgerQuery {
                 FROM ar_credit_notes c
                 WHERE c.company_id = :companyId AND c.customer_id = :customerId
                 UNION ALL
-                SELECT w.write_off_date, 5, w.id, 'WRITE_OFF', inv.document_no,
+                SELECT w.write_off_date, 5, w.id, 'WRITE_OFF',
+                       COALESCE(NULLIF(inv.document_no, ''), wsi.invoice_number),
                        'Written off: ' || w.reason,
                        w.currency, CAST(0 AS NUMERIC), w.amount
                 FROM ar_write_offs w
                 LEFT JOIN ar_invoices inv ON inv.id = w.ar_invoice_id
+                LEFT JOIN sales_invoices wsi
+                       ON wsi.uid = inv.source_invoice_uid AND wsi.company_id = inv.company_id
                 WHERE w.company_id = :companyId AND w.customer_id = :customerId
             )
             """;
@@ -148,14 +157,35 @@ public class ArCustomerLedgerQuery {
     }
 
     /**
-     * The statement for one customer.
+     * The statement for one customer, in ONE currency.
      *
      * @param fromDate first day shown; null = from the customer's first movement (no b/f balance)
      * @param toDate   last day shown (inclusive); null = today
-     * @param currency the statement currency; null/blank = the company's base currency
+     * @param currency the statement currency; null/blank = the customer's primary currency (see
+     *                 {@link #statements}: the first section it would print)
      */
     public ArCustomerLedgerDto ledger(Long companyId, Long customerId, String customerUid,
                                       LocalDate fromDate, LocalDate toDate, String currency) {
+        return statements(companyId, customerId, customerUid, fromDate, toDate, currency).get(0);
+    }
+
+    /**
+     * The customer statement as one section per currency — what the printed statement shows.
+     *
+     * <p>A named {@code currency} gives exactly that one section (movements in other currencies are
+     * counted in {@code otherCurrencyCount}). With no currency named, the statement covers every
+     * currency the customer has movements in up to {@code toDate}, one section each, never summed
+     * together: the customer's own default currency first (when set), then the company's base
+     * currency, then any other alphabetically. A customer with no movements at all gets one empty
+     * section in their own default currency, or the base currency when they have none. This is what
+     * stops a US-dollar customer's statement printing "TZS — no transactions" when nobody chose a
+     * currency.
+     *
+     * @return never empty
+     */
+    public List<ArCustomerLedgerDto> statements(Long companyId, Long customerId, String customerUid,
+                                                LocalDate fromDate, LocalDate toDate,
+                                                String currency) {
         ArCustomerRefDto customer = resolveCustomer(companyId, customerId, customerUid);
         CompanyRow co = loadCompany(companyId);
 
@@ -163,16 +193,35 @@ public class ArCustomerLedgerQuery {
         if (fromDate != null && fromDate.isAfter(to)) {
             throw new IllegalArgumentException("The start date must be on or before the end date.");
         }
-        String ccy = currency != null && !currency.isBlank()
-                ? currency.trim().toUpperCase() : co.baseCurrency();
-
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("companyId", companyId)
                 .addValue("customerId", customer.id())
                 .addValue("tz", co.timeZone())
-                .addValue("currency", ccy)
                 .addValue("toDate", to)
                 .addValue("fromDate", fromDate);
+
+        if (currency != null && !currency.isBlank()) {
+            return List.of(section(customer, co, p, fromDate, to, currency.trim().toUpperCase()));
+        }
+
+        List<String> present = jdbc.queryForList(ENTRIES_CTE + """
+                SELECT DISTINCT currency FROM entries
+                WHERE entry_date <= :toDate AND currency IS NOT NULL
+                """, p, String.class);
+        String own = defaultCurrency(companyId, customer.id());
+        List<String> order = StatementCurrencies.order(present, own, co.baseCurrency());
+        List<ArCustomerLedgerDto> sections = new ArrayList<>(order.size());
+        for (String ccy : order) {
+            sections.add(section(customer, co, p, fromDate, to, ccy));
+        }
+        return sections;
+    }
+
+    private ArCustomerLedgerDto section(ArCustomerRefDto customer, CompanyRow co,
+                                        MapSqlParameterSource base, LocalDate fromDate,
+                                        LocalDate to, String ccy) {
+        MapSqlParameterSource p = new MapSqlParameterSource(base.getValues())
+                .addValue("currency", ccy);
 
         BigDecimal opening = BigDecimal.ZERO;
         if (fromDate != null) {
@@ -224,6 +273,15 @@ public class ArCustomerLedgerQuery {
                 customer.tin(), customer.vrn(), fromDate, to, ccy, opening, rows,
                 totalDebit, totalCredit, running, others != null ? others : 0,
                 Instant.now().toString());
+    }
+
+    /** The customer's own default transaction currency, or null when the record has none. */
+    private String defaultCurrency(Long companyId, Long customerId) {
+        List<String> found = jdbc.queryForList(
+                "SELECT default_currency FROM customers WHERE company_id = :companyId AND id = :id",
+                new MapSqlParameterSource("companyId", companyId).addValue("id", customerId),
+                String.class);
+        return found.isEmpty() ? null : found.get(0);
     }
 
     // -------------------------------------------------------------------------

@@ -103,11 +103,12 @@ public class ArStatementController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
             @RequestParam(required = false) String currency,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        ArCustomerLedgerDto dto = ledgerQuery.ledger(companyId, customerId, customerUid,
-                fromDate, toDate != null ? toDate : asAt, currency);
+        // No currency named: one section per currency the customer trades in (their own first).
+        List<ArCustomerLedgerDto> sections = ledgerQuery.statements(companyId, customerId,
+                customerUid, fromDate, toDate != null ? toDate : asAt, currency);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(dto, head, ZonedDateTime.now()), format));
+                flattenStatement(sections, head, ZonedDateTime.now()), format));
     }
 
     /**
@@ -192,54 +193,121 @@ public class ArStatementController {
     static TabularRenderModel flattenStatement(ArCustomerLedgerDto dto,
                                                ExportLetterhead.Letterhead head,
                                                ZonedDateTime now) {
+        return flattenStatement(List.of(dto), head, now);
+    }
+
+    /** The customer statement document: one section per currency (one section = the classic layout). */
+    static TabularRenderModel flattenStatement(List<ArCustomerLedgerDto> sections,
+                                               ExportLetterhead.Letterhead head,
+                                               ZonedDateTime now) {
+        ArCustomerLedgerDto dto = sections.get(0);
         ReportCompanyHeaderDto company = head != null && head.company() != null
                 ? head.company() : dto.company();
-        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
-        headerLines.add("Customer: " + party(dto.customerCode(), dto.customerName()));
+        List<String> partyLines = new ArrayList<>();
+        partyLines.add("Customer: " + party(dto.customerCode(), dto.customerName()));
         if (dto.customerTin() != null && !dto.customerTin().isBlank()) {
-            headerLines.add("Customer TIN: " + dto.customerTin());
+            partyLines.add("Customer TIN: " + dto.customerTin());
         }
         if (dto.customerVrn() != null && !dto.customerVrn().isBlank()) {
-            headerLines.add("Customer VRN: " + dto.customerVrn());
+            partyLines.add("Customer VRN: " + dto.customerVrn());
         }
-        headerLines.add(period(dto.fromDate(), dto.toDate()));
-        headerLines.add("Currency: " + dto.currency());
+        List<LedgerSection> printable = new ArrayList<>(sections.size());
+        for (ArCustomerLedgerDto s : sections) {
+            List<List<String>> rows = new ArrayList<>(s.rows().size());
+            for (ArCustomerLedgerRowDto r : s.rows()) {
+                rows.add(List.of(
+                        r.date() != null ? r.date().toString() : "",
+                        typeLabel(r.type()),
+                        nullToEmpty(r.reference()),
+                        nullToEmpty(r.description()),
+                        fmtAmtOrBlank(r.debit()),
+                        fmtAmtOrBlank(r.credit()),
+                        fmtAmt(r.balance())));
+            }
+            printable.add(new LedgerSection(s.currency(), s.openingBalance(), rows,
+                    s.totalDebit(), s.totalCredit(), s.closingBalance(), s.otherCurrencyCount()));
+        }
+        return ledgerDocument("Customer Statement", company, partyLines, dto.fromDate(),
+                dto.toDate(), printable, "Amount due from customer", "Customer in credit",
+                head, now);
+    }
 
-        List<Column> columns = ledgerColumns();
-        List<List<String>> rows = new ArrayList<>(dto.rows().size() + 1);
-        if (dto.fromDate() != null) {
-            rows.add(List.of(dto.fromDate().toString(), "", "", "Balance brought forward",
-                    "", "", fmtAmt(dto.openingBalance())));
+    /**
+     * One currency of a party statement, its movement rows already formatted.
+     *
+     * @param otherCurrencyCount movements in currencies NOT printed anywhere in this document
+     *                           (only meaningful when the caller named a single currency)
+     */
+    record LedgerSection(String currency, BigDecimal opening, List<List<String>> movementRows,
+                         BigDecimal totalDebit, BigDecimal totalCredit, BigDecimal closing,
+                         int otherCurrencyCount) {}
+
+    /**
+     * The shared customer/supplier statement layout. One section prints exactly as the statement
+     * always did (currency in the header, a closing totals row). Several sections — a party that
+     * trades in more than one currency — print one block per currency, each with its own balance
+     * brought forward and closing line, and no grand total: amounts in different currencies are
+     * never added together.
+     */
+    static TabularRenderModel ledgerDocument(String title, ReportCompanyHeaderDto company,
+                                             List<String> partyLines, LocalDate fromDate,
+                                             LocalDate toDate, List<LedgerSection> sections,
+                                             String positiveLabel, String negativeLabel,
+                                             ExportLetterhead.Letterhead head, ZonedDateTime now) {
+        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
+        headerLines.addAll(partyLines);
+        headerLines.add(period(fromDate, toDate));
+        boolean multi = sections.size() > 1;
+        if (multi) {
+            headerLines.add("Currencies: " + String.join(", ",
+                    sections.stream().map(LedgerSection::currency).toList())
+                    + " — one section per currency; amounts in different currencies are never"
+                    + " added together.");
+        } else {
+            headerLines.add("Currency: " + sections.get(0).currency());
         }
-        for (ArCustomerLedgerRowDto r : dto.rows()) {
-            rows.add(List.of(
-                    r.date() != null ? r.date().toString() : "",
-                    typeLabel(r.type()),
-                    nullToEmpty(r.reference()),
-                    nullToEmpty(r.description()),
-                    fmtAmtOrBlank(r.debit()),
-                    fmtAmtOrBlank(r.credit()),
-                    fmtAmt(r.balance())));
+
+        List<List<String>> rows = new ArrayList<>();
+        List<String> totalsRow = null;
+        boolean anyMovement = false;
+        for (LedgerSection s : sections) {
+            if (multi) {
+                rows.add(List.of("", "", "", "Currency: " + s.currency(), "", "", ""));
+            }
+            if (fromDate != null) {
+                rows.add(List.of(fromDate.toString(), "", "", "Balance brought forward",
+                        "", "", fmtAmt(s.opening())));
+            }
+            rows.addAll(s.movementRows());
+            anyMovement |= !s.movementRows().isEmpty();
+            List<String> closing = List.of("", "", "",
+                    multi ? "Closing balance " + s.currency() : "Closing balance",
+                    fmtAmt(s.totalDebit()), fmtAmt(s.totalCredit()), fmtAmt(s.closing()));
+            if (multi) {
+                rows.add(closing);
+            } else {
+                totalsRow = closing;
+            }
         }
-        List<String> totalsRow = List.of("", "", "", "Closing balance",
-                fmtAmt(dto.totalDebit()), fmtAmt(dto.totalCredit()), fmtAmt(dto.closingBalance()));
 
         List<String> footer = new ArrayList<>();
-        if (dto.rows().isEmpty()) {
+        if (!anyMovement) {
             footer.add("No transactions in this period.");
         }
-        footer.add(closingSentence(dto.closingBalance(), dto.currency(),
-                "Amount due from customer", "Customer in credit"));
-        if (dto.otherCurrencyCount() > 0) {
-            footer.add("Note: " + dto.otherCurrencyCount() + " transaction"
-                    + (dto.otherCurrencyCount() == 1 ? " is" : "s are")
-                    + " in another currency and not included in this " + dto.currency()
+        for (LedgerSection s : sections) {
+            footer.add(closingSentence(s.closing(), s.currency(), positiveLabel, negativeLabel));
+        }
+        if (!multi && sections.get(0).otherCurrencyCount() > 0) {
+            LedgerSection s = sections.get(0);
+            footer.add("Note: " + s.otherCurrencyCount() + " transaction"
+                    + (s.otherCurrencyCount() == 1 ? " is" : "s are")
+                    + " in another currency and not included in this " + s.currency()
                     + " statement.");
         }
         footer.add(ExportLetterhead.printFootprint(company, now));
 
-        return new TabularRenderModel("Customer Statement", headerLines,
-                ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
+        return new TabularRenderModel(title, headerLines,
+                ExportLetterhead.generatedAt(now), ledgerColumns(), rows, totalsRow, footer,
                 head != null ? head.logoDataUri() : null);
     }
 

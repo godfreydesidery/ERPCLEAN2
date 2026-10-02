@@ -159,6 +159,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         List<SupplierBill> open = bills.findOpenByUids(companyId,
                 List.of(req.supplierBillUid()));
         if (open.isEmpty()) {
+            // The bill exists but is not in a payable state (HELD, DRAFT, PAID): say why, as a
+            // business-rule refusal — "not found" sent the clerk looking for a bill that is there.
+            bills.findByCompanyIdAndUid(companyId, req.supplierBillUid())
+                    .ifPresent(b -> {
+                        throw new ConflictException(notPayableMessage(b.getStatus()));
+                    });
             // supplierBillUid intentionally not surfaced (error-hygiene rule)
             throw NotFoundException.of("SupplierBill", req.supplierBillUid());
         }
@@ -172,6 +178,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         if (toAllocate.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("This bill has zero outstanding amount.");
         }
+        assertWhtFits(req.whtTypeUid(), req.whtAmount(), toAllocate);
 
         String currency = bill.getCurrency().value();
         String payNum   = numbers.nextPayment(companyId);
@@ -267,6 +274,24 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             openBills = bills.findOpenForPaymentAllSuppliers(companyId, req.dueOnOrBefore());
         }
 
+        if (billsNamedByCaller) {
+            // The caller NAMED these bills: one that is on hold / not yet approved / already paid
+            // must be refused with the reason, never silently left out of the run.
+            java.util.Set<String> payable = openBills.stream()
+                    .map(SupplierBill::getUid).collect(Collectors.toSet());
+            for (String uid : req.billUids()) {
+                if (uid != null && !payable.contains(uid)) {
+                    final Long cid = companyId;
+                    bills.findByCompanyIdAndUid(cid, uid).ifPresent(b -> {
+                        throw new ConflictException(
+                                (b.getSupplierInvoiceNo() != null
+                                        ? "Bill " + b.getSupplierInvoiceNo() + ": " : "")
+                                        + notPayableMessage(b.getStatus()));
+                    });
+                }
+            }
+        }
+
         if (openBills.isEmpty()) {
             throw new IllegalStateException("No open bills selected by the payment run criteria.");
         }
@@ -324,6 +349,17 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         BigDecimal totalPaid = openBills.stream()
                 .map(SupplierBill::getOutstandingAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // WHT is withheld from ONE supplier and certified to that supplier. A run spanning several
+        // suppliers cannot carry one WHT figure (it used to be booked entirely against the first
+        // bill's supplier) — refuse it and have the operator run each supplier separately.
+        if (hasWht(req.whtTypeUid(), req.whtAmount())
+                && openBills.stream().map(SupplierBill::getSupplierId).distinct().count() > 1) {
+            throw new IllegalArgumentException(
+                    "Withholding tax can only be deducted in a payment run for a single supplier. "
+                            + "Run this supplier's bills on their own to withhold tax.");
+        }
+        assertWhtFits(req.whtTypeUid(), req.whtAmount(), totalPaid);
         String payNum = numbers.nextPayment(companyId);
 
         // ADR-0041 D3 — create the grouping PaymentRun (DRAFT) before the member payment. The run
@@ -511,21 +547,25 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // ADR-0016 D-8: resolve cash/bank account via CashBankAccountResolver (replaces glConfig.CASH)
         CashAccountGlResolutionDto cashRes = cashBankAccountResolver.resolve(companyId, cashBankAccountUid);
 
-        boolean hasWht = whtTypeUid != null
-                && whtAmount != null
-                && whtAmount.compareTo(BigDecimal.ZERO) > 0;
+        boolean hasWht = hasWht(whtTypeUid, whtAmount);
 
         // Capture WHT certificate before building the GL draft (ADR-0017 D-9).
-        // D-7: resolve supplier TIN snapshot from party master (no tax→parties import — done here in ap).
+        // D-7: resolve supplier TIN + name snapshot from party master (no tax→parties import — done
+        // here in ap). The certificate names the real supplier; it used to say "Supplier".
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
-            String supplierTin = supplierId != null
-                    ? suppliers.findById(supplierId).map(s -> s.getTin()).orElse(null)
+            var supplier = supplierId != null
+                    ? suppliers.findById(supplierId)
+                            .filter(sp -> companyId.equals(sp.getCompanyId())).orElse(null)
                     : null;
+            String supplierTin  = supplier != null ? supplier.getTin() : null;
+            String supplierName = supplier != null && supplier.getDisplayName() != null
+                    && !supplier.getDisplayName().isBlank()
+                    ? supplier.getDisplayName() : "Supplier";
             whtResult = whtCapture.captureOnPayment(
                     companyId, branchId,
                     whtTypeUid,
-                    supplierId, "Supplier",
+                    supplierId, supplierName,
                     supplierTin,
                     payment.getUid(),
                     payment.getAmount(), whtAmount,
@@ -598,14 +638,21 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // Back-link journal entry uid to WHT transaction (ADR-0017 D-9).
         if (hasWht && whtResult != null) {
             whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
+            // ADR-0040 D-7: the payment header records what was withheld and its certificate.
+            payment.setWhtAmount(whtAmount);
+            payment.setWhtTransactionUid(whtResult.whtTransactionUid());
         }
 
-        // Set the cash/bank account FK on the payment row and record the cash transaction
+        // Set the cash/bank account FK on the payment row and record the cash transaction.
+        // The cash that leaves the account is the payment NET of the tax withheld (the WHT stays
+        // with us until it is remitted to TRA) — the same figure the GL credits to the bank above.
+        // Recording the gross here made the cash book disagree with the GL by the WHT amount.
+        BigDecimal cashOut = hasWht ? payment.getAmount().subtract(whtAmount) : payment.getAmount();
         payment.setCashBankAccountId(cashRes.cashBankAccountId());
         cashTxnRecorder.recordSettlement(
                 companyId, branchId, cashRes.cashBankAccountId(),
                 CashTxnType.AP_PAYMENT, CashTxnDirection.OUT,
-                payment.getAmount(), currency,
+                cashOut, currency,
                 payment.getUid(), posted.uid(),
                 payment.getPaymentDate(), actorId());
 
@@ -613,6 +660,45 @@ public class ApPaymentServiceImpl implements ApPaymentService {
     }
 
     // -------------------------------------------------------------------------
+
+    private static boolean hasWht(String whtTypeUid, BigDecimal whtAmount) {
+        return whtTypeUid != null && !whtTypeUid.isBlank()
+                && whtAmount != null && whtAmount.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    /**
+     * A WHT amount must come with its type (otherwise it used to be ignored without a word) and must
+     * be less than the amount paid — the cash leaving the bank is the difference.
+     */
+    static void assertWhtFits(String whtTypeUid, BigDecimal whtAmount, BigDecimal paid) {
+        if (whtAmount == null || whtAmount.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+        if (whtAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("The withholding tax amount can't be negative.");
+        }
+        if (whtTypeUid == null || whtTypeUid.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Choose the withholding tax type for the amount withheld.");
+        }
+        if (whtAmount.compareTo(paid) >= 0) {
+            throw new IllegalArgumentException(
+                    "The withholding tax must be less than the amount paid.");
+        }
+    }
+
+    /** Why a bill that exists cannot be paid — friendly, names nothing internal. */
+    static String notPayableMessage(SupplierBillStatus status) {
+        if (status == null) {
+            return "This bill can't be paid in its current state.";
+        }
+        return switch (status) {
+            case HELD  -> "This bill is on hold and can't be paid until it is released.";
+            case DRAFT -> "This bill hasn't been matched or approved yet, so it can't be paid.";
+            case PAID  -> "This bill has already been paid in full.";
+            default    -> "This bill can't be paid in its current state.";
+        };
+    }
 
     private static SupplierBillStatus billStatusAfterPayment(BigDecimal outstanding) {
         return outstanding.compareTo(BigDecimal.ZERO) == 0

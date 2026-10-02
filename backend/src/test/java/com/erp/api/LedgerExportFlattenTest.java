@@ -134,6 +134,38 @@ class LedgerExportFlattenTest {
                 "Nothing outstanding at the end of the period.");
     }
 
+    @Test
+    void customerStatement_twoCurrencies_printOneSectionEach_withNoGrandTotal() {
+        ArCustomerLedgerDto usd = new ArCustomerLedgerDto(COMPANY, "CUID", "C009", "Dollar Lodge",
+                null, null, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "USD", bd("100"),
+                List.of(new ArCustomerLedgerRowDto(LocalDate.of(2026, 9, 4), ArLedgerEntryType.INVOICE,
+                        "INV-9", "Invoice, due 04-Oct-2026", bd("1200"), BigDecimal.ZERO, bd("1300"))),
+                bd("1200"), BigDecimal.ZERO, bd("1300"), 1, "x");
+        ArCustomerLedgerDto tzs = new ArCustomerLedgerDto(COMPANY, "CUID", "C009", "Dollar Lodge",
+                null, null, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "TZS", BigDecimal.ZERO,
+                List.of(), BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 1, "x");
+
+        TabularRenderModel m = ArStatementController.flattenStatement(List.of(usd, tzs), HEAD, NOW);
+
+        assertThat(m.headerLines()).noneMatch(l -> l.startsWith("Currency:"));
+        assertThat(m.headerLines()).anyMatch(l -> l.startsWith("Currencies: USD, TZS"));
+        assertThat(m.totalsRow()).as("no total across currencies").isNull();
+        assertThat(m.rows()).containsExactly(
+                List.of("", "", "", "Currency: USD", "", "", ""),
+                List.of("2026-09-01", "", "", "Balance brought forward", "", "", "100.00"),
+                List.of("2026-09-04", "Invoice", "INV-9", "Invoice, due 04-Oct-2026", "1,200.00", "",
+                        "1,300.00"),
+                List.of("", "", "", "Closing balance USD", "1,200.00", "0.00", "1,300.00"),
+                List.of("", "", "", "Currency: TZS", "", "", ""),
+                List.of("2026-09-01", "", "", "Balance brought forward", "", "", "0.00"),
+                List.of("", "", "", "Closing balance TZS", "0.00", "0.00", "0.00"));
+        assertThat(m.footerLines()).contains("Amount due from customer: USD 1,300.00",
+                "Nothing outstanding at the end of the period.");
+        // The other currency is IN this document, so no "not included" note.
+        assertThat(m.footerLines()).noneMatch(l -> l.startsWith("Note:"));
+        assertThat(m.footerLines()).doesNotContain("No transactions in this period.");
+    }
+
     // -------------------------------------------------------------------------
     // AR ageing by customer
     // -------------------------------------------------------------------------

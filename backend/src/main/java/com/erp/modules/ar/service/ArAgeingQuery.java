@@ -52,13 +52,16 @@ public class ArAgeingQuery {
     private final CompanyRepository companies;
     private final CustomerRepository customers;
     private final ScopeGuard scopeGuard;
+    private final ArDocumentNumberResolver documentNumbers;
 
     public ArAgeingQuery(ArInvoiceRepository invoices,
                           ArReceiptRepository receipts,
                           ArReceiptAllocationRepository allocations,
                           CompanyRepository companies,
                           CustomerRepository customers,
-                          ScopeGuard scopeGuard) {
+                          ScopeGuard scopeGuard,
+                          ArDocumentNumberResolver documentNumbers) {
+        this.documentNumbers = documentNumbers;
         this.invoices    = invoices;
         this.receipts    = receipts;
         this.allocations = allocations;
@@ -111,8 +114,8 @@ public class ArAgeingQuery {
                 .orElseThrow(() -> NotFoundException.of("Company", String.valueOf(companyId)));
 
         List<ArInvoice> openItems = invoices.findOpenForStatement(companyId, customerId);
-        List<ArInvoiceDto> openDtos = openItems.stream()
-                .map(ArInvoiceServiceImpl::toDto).toList();
+        List<ArInvoiceDto> openDtos = documentNumbers.fill(companyId, openItems.stream()
+                .map(ArInvoiceServiceImpl::toDto).toList());
 
         // Outstanding per currency (base first). totalOutstanding is labelled with the base
         // currency, so it is the base-currency open items only; a foreign invoice is counted in

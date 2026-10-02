@@ -263,6 +263,11 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 && req.whtAmount() != null
                 && req.whtAmount().compareTo(BigDecimal.ZERO) > 0;
 
+        if (hasWht && req.whtAmount().compareTo(receipt.getAmount()) >= 0) {
+            throw new IllegalArgumentException(
+                    "The withholding tax must be less than the amount received.");
+        }
+
         // Capture WHT certificate before building the draft so we have glAccountId.
         WhtCaptureResultDto whtResult = null;
         if (hasWht) {
@@ -352,11 +357,16 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             whtCapture.linkJournalEntry(whtResult.whtTransactionUid(), posted.uid());
         }
 
-        // 10c. Append cash_transaction row for this settlement (ADR-0016 D-13).
+        // 10c. Append cash_transaction row for this settlement (ADR-0016 D-13). The cash that
+        //      actually arrives is the receipt NET of the tax the customer withheld — the same
+        //      figure the GL debits to the bank above. Recording the gross made the cash book run
+        //      ahead of the GL by the WHT amount.
+        BigDecimal cashIn = hasWht
+                ? receipt.getAmount().subtract(req.whtAmount()) : receipt.getAmount();
         cashTxnRecorder.recordSettlement(
                 companyId, receipt.getBranchId(), cashRes.cashBankAccountId(),
                 CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
-                receipt.getAmount(), currency,
+                cashIn, currency,
                 receipt.getUid(), posted.uid(),
                 receipt.getReceiptDate(), actorId());
 

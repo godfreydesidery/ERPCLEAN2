@@ -171,6 +171,42 @@ class ApSupplierLedgerQueryIT extends PostgresIntegrationTest {
 
     // -------------------------------------------------------------------------
 
+    // ---- Live-test defects 1 + 2 (supplier side) ---------------------------------------------
+
+    @Test
+    void everyPostedBill_isReferencedByItsBillNumber() {
+        // chk_supplier_bill_number_when_posted guarantees a number on every bill on the ledger.
+        ApSupplierLedgerDto dto = ledgerQuery.ledger(company.getId(), null, supplier.uid(),
+                null, LocalDate.of(2026, 9, 30), "TZS");
+        assertThat(dto.rows()).filteredOn(r -> r.type() == ApLedgerEntryType.BILL
+                        || r.type() == ApLedgerEntryType.OPENING_BALANCE)
+                .extracting(ApSupplierLedgerRowDto::reference).containsExactly("OB-1", "BILL-1");
+    }
+
+    @Test
+    void noCurrencyNamed_oneSectionPerCurrency_supplierDefaultFirst() {
+        jdbc.update("""
+                INSERT INTO supplier_bills (uid, company_id, supplier_id, bill_number,
+                    supplier_invoice_no, source, bill_date, due_date, net_amount, gross_amount,
+                    outstanding_amount, currency, status)
+                VALUES (?, ?, ?, 'BILL-USD', 'SI-USD', 'BILL', ?, ?, 400, 400, 400, 'USD', 'APPROVED')
+                """, uid(), company.getId(), supplier.id(), LocalDate.of(2026, 9, 8),
+                LocalDate.of(2026, 10, 8));
+
+        List<ApSupplierLedgerDto> sections = ledgerQuery.statements(company.getId(), null,
+                supplier.uid(), LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null);
+        assertThat(sections).extracting(ApSupplierLedgerDto::currency).containsExactly("TZS", "USD");
+        assertThat(sections.get(0).closingBalance()).isEqualByComparingTo("1010");
+        assertThat(sections.get(1).closingBalance()).isEqualByComparingTo("400");
+
+        jdbc.update("UPDATE suppliers SET default_currency = 'USD' WHERE id = ?", supplier.id());
+        assertThat(ledgerQuery.statements(company.getId(), null, supplier.uid(),
+                null, LocalDate.of(2026, 9, 30), null))
+                .extracting(ApSupplierLedgerDto::currency).containsExactly("USD", "TZS");
+        assertThat(ledgerQuery.ledger(company.getId(), null, supplier.uid(),
+                null, LocalDate.of(2026, 9, 30), null).currency()).isEqualTo("USD");
+    }
+
     private void actAs(AppUser user, Company c) {
         RequestContext.set(new RequestContext.Principal(user.getId(), user.getUsername(), user.isRoot(),
                 c.getId(), null, null, c.getOrganisation().getId()));
