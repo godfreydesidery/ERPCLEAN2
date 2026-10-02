@@ -185,6 +185,10 @@ export class ShellComponent {
         { label: 'Deliveries', route: '/admin/deliveries', icon: 'bi-truck', available: true, permission: 'SALES.DELIVERY.VIEW' },
         { label: 'Invoices', route: '/admin/sales-invoices', icon: 'bi-receipt', available: true, permission: 'SALES.INVOICE.VIEW' },
         { label: 'Sales Returns', route: '/admin/sales-returns', icon: 'bi-arrow-return-left', available: true, permission: 'SALES.RETURN.VIEW' },
+        // One grouped report behind five questions people ask by name — the keywords carry those
+        // names (and the Swahili) so the Ctrl+K palette finds it whichever one is typed.
+        { label: 'Sales Summary', route: '/admin/reports/sales-summary', icon: 'bi-people', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['sales by customer', 'customer sales', 'sales by route', 'route sales', 'agent performance', 'sales by agent', 'daily sales', 'sales per day', 'cashier sales', 'sales by cashier', 'sales by branch', 'margin', 'mauzo kwa mteja', 'mauzo ya kila siku', 'mauzo ya wakala'] },
+        { label: 'Payment Summary (Cash-up)', route: '/admin/reports/payment-summary', icon: 'bi-wallet2', available: true, permission: 'POS.SESSION.VIEW', keywords: ['cash up', 'cash-up', 'daily cash', 'takings', 'payment method', 'mobile money', 'm-pesa', 'card', 'cashier takings', 'end of day', 'makusanyo', 'pesa taslimu'] },
         { label: 'Tax Rates', route: '/admin/tax-rates', icon: 'bi-percent', available: true, permission: 'TAXRATE.VIEW' },
         { label: 'Blanket Orders', route: '/admin/blanket-orders', icon: 'bi-file-earmark-ruled', available: true, permission: 'SALES.BLANKET.VIEW' },
         { label: 'Standing Orders', route: '/admin/standing-orders', icon: 'bi-arrow-repeat', available: true, permission: 'SALES.STANDING.VIEW' },
@@ -229,6 +233,8 @@ export class ShellComponent {
         // palette is where a user goes when the English label is not the word in their head.
         { label: 'Product List', route: '/admin/reports/product-list', icon: 'bi-list-columns-reverse', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['product list', 'item list', 'catalogue', 'catalog', 'buying price', 'selling price', 'supplier', 'orodha ya bidhaa', 'bei ya kununua', 'bei ya kuuza'] },
         { label: 'Stock Value', route: '/admin/reports/stock-value', icon: 'bi-cash-stack', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock value', 'cost value', 'sale value', 'supplier wise', 'by supplier', 'total value', 'grand total', 'thamani ya bidhaa', 'thamani ya stoo'] },
+        { label: 'Reorder Report', route: '/admin/reports/reorder', icon: 'bi-cart-plus', available: true, permission: 'STOCK.VIEW', keywords: ['reorder', 're-order', 'low stock', 'below reorder level', 'what to order', 'order list', 'running out', 'shortfall', 'bidhaa zinazoisha', 'agiza'] },
+        { label: 'Stock Ageing', route: '/admin/reports/stock-ageing', icon: 'bi-hourglass-split', available: true, permission: 'INVENTORY.VALUATION.VIEW', keywords: ['stock ageing', 'stock aging', 'old stock', 'slow moving', 'dead stock', 'not selling', 'days since last sale', 'age analysis', 'bidhaa zisizouzika'] },
         { label: 'Stock Counts', route: '/admin/stock-counts', icon: 'bi-clipboard2-check', available: true, permission: 'STOCK.COUNT.VIEW' },
         { label: 'Van Reconciliations', route: '/admin/van-reconciliations', icon: 'bi-truck', available: true, permission: 'STOCK.VAN_RECON.VIEW' },
       ],

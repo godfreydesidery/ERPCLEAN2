@@ -1,0 +1,183 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-cart-plus me-2" aria-hidden="true"></i>Reorder Report
+      </h1>
+      <p class="subtitle">
+        Items at or below their reorder level: how far short they are, how much to order and who
+        from. Pick a supplier to get that supplier's order list. Reorder levels are set on the Stock
+        On-Hand screen.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Reorder Report.
+    </div>
+  } @else {
+
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ro-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ro-branch" name="ro-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-4">
+            <label class="form-label" for="ro-supplier">
+              Preferred supplier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ro-supplier" name="ro-supplier"
+                            [(ngModel)]="supplierUid"
+                            [search]="searchSuppliers"
+                            placeholder="Type a supplier name…" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading'">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Checking stock levels…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ loadError() }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (report(); as r) {
+
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (costVisible() && r.rowsWithoutCost > 0) {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+              <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+              <span>
+                <strong>{{ r.rowsWithoutCost }}</strong> item(s) have never been received, so there
+                is no last cost for them and they are left out of the order value total.
+              </span>
+            </div>
+          }
+
+          <h2 class="h5">{{ r.itemCount }} item(s) to reorder</h2>
+          <p class="text-muted small mb-3">
+            Branch: {{ r.branchName ?? 'All branches' }}
+            @if (r.supplierName) { · Supplier: {{ r.supplierName }} }
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Items at or below their reorder level, with the quantity to order
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">Branch / location</th>
+                  <th scope="col" class="num">On hand</th>
+                  <th scope="col" class="num">Reorder level</th>
+                  <th scope="col" class="num">Shortfall</th>
+                  <th scope="col" class="num">Suggested qty</th>
+                  <th scope="col">Preferred supplier</th>
+                  @if (costVisible()) {
+                    <th scope="col" class="num">Last cost</th>
+                    <th scope="col" class="num">Order value</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track $index) {
+                  <tr>
+                    <td class="mono">{{ row.productCode }}</td>
+                    <td>{{ row.productName }}</td>
+                    <td>{{ row.branchName }} / {{ row.locationName }}</td>
+                    <td class="num">{{ fmtQty(row.onHand) }}</td>
+                    <td class="num">{{ fmtQty(row.reorderLevel) }}</td>
+                    <td class="num">{{ fmtQty(row.shortfall) }}</td>
+                    <td class="num fw-semibold">{{ fmtQty(row.suggestedOrderQty) }}</td>
+                    <td>{{ row.supplierName ?? '—' }}</td>
+                    @if (costVisible()) {
+                      <td class="num">{{ fmtAmount(row.lastCost) }}</td>
+                      <td class="num">{{ fmtAmount(row.estimatedOrderValue) }}</td>
+                    }
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td [attr.colspan]="columnCount()" class="text-muted text-center py-4">
+                      Nothing is at or below its reorder level.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              @if (costVisible() && r.rows.length > 0) {
+                <tfoot>
+                  <tr class="fw-semibold totals-row">
+                    <td colspan="9">Estimated order value ({{ r.currency }})</td>
+                    <td class="num">{{ fmtAmount(r.estimatedOrderValue) }}</td>
+                  </tr>
+                </tfoot>
+              }
+            </table>
+          </div>
+
+          <p class="text-muted small mt-2">
+            The suggested quantity fills the item back up to its maximum level when one is set,
+            otherwise uses the product's usual reorder quantity, otherwise just covers the shortfall.
+            @if (costVisible()) {
+              Last cost is what the latest goods receipt of the item cost.
+            }
+          </p>
+        }
+      }
+    }
+  }
+</section>

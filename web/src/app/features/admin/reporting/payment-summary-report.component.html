@@ -1,0 +1,206 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>
+        <i class="bi bi-wallet2 me-2" aria-hidden="true"></i>Payment Summary
+      </h1>
+      <p class="subtitle">
+        The daily cash-up: what was taken for sales, per day and cashier, split into cash, mobile
+        money, card and cheque. Amounts are after any change given back.
+      </p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the Payment Summary.
+    </div>
+  } @else {
+
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="ps-from">From</label>
+            <input id="ps-from" name="ps-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="ps-to">To</label>
+            <input id="ps-to" name="ps-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ps-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ps-branch" name="ps-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-sm-6 col-lg-3">
+            <label class="form-label" for="ps-cashier">
+              Cashier <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="ps-cashier" name="ps-cashier"
+                            [(ngModel)]="cashierUid"
+                            [options]="cashierOptions()"
+                            placeholder="All cashiers" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()" [disabled]="state() === 'loading' || !datesValid()">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+        @if (!datesValid()) {
+          <p class="text-danger small mb-0 mt-2" role="alert">
+            Choose a start date and an end date, with the end date on or after the start.
+          </p>
+        }
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Counting the takings…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ loadError() }}
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          {{ loadError() || "You don't have permission to view this report." }}
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-wallet2" aria-hidden="true"></i>
+            Choose a period and click Run report.
+          </div>
+        }
+
+        @if (report(); as r) {
+
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Print / PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="erp-card mb-3 report-header">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+            </div>
+          </div>
+
+          <h2 class="h5">Takings by payment method</h2>
+          <p class="text-muted small mb-3">
+            {{ r.fromDate }} to {{ r.toDate }}
+            · Branch: {{ r.branchName ?? 'All branches' }}
+            · Cashier: {{ r.cashierName ?? 'All cashiers' }}
+            · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">
+                Amounts taken per day and cashier, by payment method
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Cashier</th>
+                  <th scope="col">Currency</th>
+                  <th scope="col" class="num">Cash</th>
+                  <th scope="col" class="num">Mobile money</th>
+                  <th scope="col" class="num">Card</th>
+                  <th scope="col" class="num">Cheque</th>
+                  <th scope="col" class="num">Total</th>
+                  <th scope="col" class="num">Payments</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track $index) {
+                  <tr>
+                    <td>{{ row.date }}</td>
+                    <td>{{ row.cashierName }}</td>
+                    <td>{{ row.currency }}</td>
+                    <td class="num">{{ fmtAmount(row.cash) }}</td>
+                    <td class="num">{{ fmtAmount(row.mobileMoney) }}</td>
+                    <td class="num">{{ fmtAmount(row.card) }}</td>
+                    <td class="num">{{ fmtAmount(row.cheque) }}</td>
+                    <td class="num fw-semibold">{{ fmtAmount(row.total) }}</td>
+                    <td class="num">{{ row.payments }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="9" class="text-muted text-center py-4">
+                      No payments were taken in this period.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <!-- One total per currency: two currencies are never added into one figure. -->
+                @for (t of r.totals; track t.currency) {
+                  <tr class="fw-semibold totals-row">
+                    <td colspan="2">TOTAL</td>
+                    <td>{{ t.currency }}</td>
+                    <td class="num">{{ fmtAmount(t.cash) }}</td>
+                    <td class="num">{{ fmtAmount(t.mobileMoney) }}</td>
+                    <td class="num">{{ fmtAmount(t.card) }}</td>
+                    <td class="num">{{ fmtAmount(t.cheque) }}</td>
+                    <td class="num">{{ fmtAmount(t.total) }}</td>
+                    <td class="num">{{ t.payments }}</td>
+                  </tr>
+                }
+              </tfoot>
+            </table>
+          </div>
+
+          <p class="text-muted small mt-2">
+            Counts payments on finalised sales — at the till or at the counter — on the day they
+            were taken, by the person who took them. A voided sale's payment is not counted.
+            Payments received later against credit invoices (Receivables receipts), till payouts and
+            the opening float are not included; use the till's X-read / Z-read to balance a drawer.
+          </p>
+        }
+      }
+    }
+  }
+</section>

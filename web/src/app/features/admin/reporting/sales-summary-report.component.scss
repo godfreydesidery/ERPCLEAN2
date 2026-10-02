@@ -1,0 +1,8 @@
+// Sales Summary — the foot is the figure the owner reads, so it gets a rule above it.
+.report-header {
+  max-width: 640px;
+}
+
+.erp-table tfoot .totals-row td {
+  border-top: 2px solid var(--erp-text-3);
+}
