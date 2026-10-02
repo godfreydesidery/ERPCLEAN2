@@ -141,19 +141,21 @@ void main() {
     });
     test('shows header, fields, totals, tender, change and footer', () {
       final t = _text(width: 32);
-      expect(t, contains('Tembo Group'));
+      expect(t, contains('TEMBO GROUP'));
       expect(t, contains('Dar HQ'));
       expect(t, contains('INV-0001'));
-      expect(t, contains('2026-07-06 14:30'));
+      expect(t, contains('06-07-2026'));
+      expect(t, contains('14:30:00'));
       expect(t, contains('Amina Mwanga'));
       expect(t, contains('Walk-in Customer'));
       expect(t, contains('Sugar 1kg'));
-      expect(t, contains('Net'));
-      expect(t, contains('VAT'));
-      expect(t, contains('TOTAL TZS'));
-      expect(t, contains('3,540.00'));
-      expect(t, contains('Cash'));
-      expect(t, contains('Change'));
+      expect(t, contains('TOTAL EXCL OF TAX:'));
+      expect(t, contains('TAX A-18%'));
+      expect(t, contains('TOTAL TAX:'));
+      expect(t, contains('TOTAL INCL OF TAX:'));
+      expect(t, contains('TZS 3,540.00'));
+      expect(t, contains('CASH'));
+      expect(t, contains('CHANGE'));
       expect(t, contains('460.00'));
       expect(t, contains('Thank you!'));
     });
@@ -167,7 +169,7 @@ void main() {
       final t = _text(width: 32);
       final lines = t.split('\n');
       // Company name immediately followed by the branch name, then a blank line.
-      final nameIdx = lines.indexOf(centered('Tembo Group', 32));
+      final nameIdx = lines.indexOf(centered('TEMBO GROUP', 32));
       expect(nameIdx, isNonNegative);
       expect(lines[nameIdx + 1], centered('Dar HQ', 32));
     });
@@ -189,7 +191,7 @@ void main() {
       expect(t, contains('TIN: 123-456-789'));
       expect(t, contains('VRN: 40-123456-A'));
 
-      final nameIdx = lines.indexWhere((l) => l.contains('Tembo Group'));
+      final nameIdx = lines.indexWhere((l) => l.contains('TEMBO GROUP'));
       final branchIdx = lines.indexWhere((l) => l.contains('Dar HQ'));
       final tinIdx = lines.indexWhere((l) => l.contains('TIN: 123-456-789'));
       final vrnIdx = lines.indexWhere((l) => l.contains('VRN: 40-123456-A'));
@@ -206,7 +208,7 @@ void main() {
       ]);
       final lines = t.split('\n');
       // No stray blank line between the company name and the Tel line.
-      final nameIdx = lines.indexOf(centered('Tembo Group', 32));
+      final nameIdx = lines.indexOf(centered('TEMBO GROUP', 32));
       expect(lines[nameIdx + 1], contains('Tel: +255 22 123 4567'));
     });
 
@@ -227,8 +229,8 @@ void main() {
       for (final line in t.split('\n')) {
         expect(line.length, lessThanOrEqualTo(48));
       }
-      expect(t, contains('Tembo Group'));
-      expect(t, contains('TOTAL TZS'));
+      expect(t, contains('TEMBO GROUP'));
+      expect(t, contains('TOTAL INCL OF TAX:'));
     });
   });
 
@@ -248,6 +250,237 @@ void main() {
   group('reversed banner', () {
     test('appends the reversed marker', () {
       expect(_text(width: 32, reversed: true), contains('*** REVERSED ***'));
+    });
+  });
+
+  group('item table and tax letters', () {
+    InvoiceLine line(String name, VatStatus s,
+            {double rate = 18,
+            double qty = 1,
+            double gross = 1180,
+            double vat = 180}) =>
+        InvoiceLine(
+          lineNo: 1,
+          productCode: 'P',
+          productName: name,
+          unitName: 'pcs',
+          quantity: qty,
+          unitPriceAmount: gross / qty,
+          lineDiscountAmount: 0,
+          netAmount: gross - vat,
+          vatAmount: vat,
+          grossAmount: gross,
+          vatRate: rate,
+          vatStatus: s,
+        );
+    String render(List<InvoiceLine> lines,
+        {int width = kCols58mm, String? customerName = 'Walk-in Customer'}) {
+      final base = _receipt();
+      return buildReceiptText(
+        receipt: Receipt(
+          invoice: SalesInvoice(
+            id: '1',
+            uid: 'u',
+            invoiceNumber: 'INV-0009',
+            status: InvoiceStatus.finalised,
+            customerId: '424242',
+            customerName: customerName,
+            agentName: null,
+            currency: 'TZS',
+            netTotalAmount: 1000,
+            vatTotalAmount: 180,
+            grossTotalAmount: 1180,
+            taxSummary: null,
+            finalisedAt: DateTime(2026, 10, 2, 8, 36, 15),
+            notes: null,
+          ),
+          lines: lines,
+          payments: base.payments,
+          clientTxnId: 't',
+          tenderedAmount: null,
+        ),
+        companyName: 'Tembo Group',
+        branchName: 'Dar HQ',
+        cashierName: 'Amina Mwanga',
+        width: width,
+        gift: false,
+      );
+    }
+
+    test('maps VAT status to the TRA letters A / C / E', () {
+      expect(taxCodeFor(line('x', VatStatus.standard)), 'A');
+      expect(taxCodeFor(line('x', VatStatus.zeroRated, rate: 0)), 'C');
+      expect(taxCodeFor(line('x', VatStatus.exempt, rate: 0)), 'E');
+    });
+
+    test('a journalled line without a VAT status falls back to its rate', () {
+      expect(taxCodeFor(line('x', VatStatus.unknown, rate: 0.18)), 'A');
+      expect(taxCodeFor(line('x', VatStatus.unknown, rate: 0)), '');
+    });
+
+    test('prints the letter at the end of the item row', () {
+      final rows = render([
+        line('Soda', VatStatus.standard),
+        line('Sugar', VatStatus.exempt, rate: 0, vat: 0),
+      ]).split('\n');
+      expect(rows.firstWhere((l) => l.startsWith('Soda')), endsWith(' A'));
+      expect(rows.firstWhere((l) => l.startsWith('Sugar')), endsWith(' E'));
+    });
+
+    test('one TAX A line per standard rate, both 18 and 0.18 spellings', () {
+      final t = render([
+        line('One', VatStatus.standard, rate: 18, vat: 100),
+        line('Two', VatStatus.standard, rate: 0.18, vat: 80),
+        line('Three', VatStatus.zeroRated, rate: 0, vat: 0),
+      ]);
+      expect('TAX A-18%'.allMatches(t).length, 1);
+      expect(t, contains(leftRight('TAX A-18%', '180.00', kCols58mm)));
+    });
+
+    test('a large amount or fractional qty never pushes a row past the edge',
+        () {
+      for (final w in [kCols58mm, kCols80mm]) {
+        final t = render([
+          line('Generator 20 kVA diesel', VatStatus.standard,
+              gross: 12345678.90, vat: 1883239.15),
+          line('Rice loose', VatStatus.standard, qty: 1.255, gross: 3000),
+        ], width: w);
+        for (final l in t.split('\n')) {
+          expect(l.length, lessThanOrEqualTo(w), reason: 'overflow: "$l"');
+        }
+        expect(t, contains('12,345,678.90'));
+        expect(t, contains('1.255'));
+      }
+    });
+
+    test('a multi-million total on 58 mm keeps its whole label', () {
+      final base = _receipt();
+      final t = buildReceiptText(
+        receipt: Receipt(
+          invoice: SalesInvoice(
+            id: '1',
+            uid: 'u',
+            invoiceNumber: 'INV-1',
+            status: InvoiceStatus.finalised,
+            customerId: '1',
+            customerName: null,
+            agentName: null,
+            currency: 'TZS',
+            netTotalAmount: 19364406.78,
+            vatTotalAmount: 3485593.22,
+            grossTotalAmount: 22850000,
+            taxSummary: null,
+            finalisedAt: DateTime(2026, 10, 2),
+            notes: null,
+          ),
+          lines: base.lines,
+          payments: [
+            InvoicePayment(
+                tenderType: TenderType.mobileMoney,
+                amount: 22850000,
+                changeAmount: 0,
+                reference: null),
+          ],
+          clientTxnId: 't',
+          tenderedAmount: null,
+        ),
+        companyName: 'X',
+        branchName: '',
+        cashierName: '',
+        width: kCols58mm,
+        gift: false,
+      );
+      final lines = t.split('\n');
+      for (final l in lines) {
+        expect(l.length, lessThanOrEqualTo(kCols58mm), reason: 'overflow: "$l"');
+      }
+      final i = lines.indexOf('TOTAL INCL OF TAX:');
+      expect(i, isNonNegative, reason: 'label must not be truncated');
+      expect(lines[i + 1].trim(), 'TZS 22,850,000.00');
+      expect(t, contains('MOBILE MONEY'));
+    });
+
+    test('a nameless customer prints n/a, never the internal customer id', () {
+      final t = render([line('Soda', VatStatus.standard)], customerName: null);
+      expect(t, contains(leftRight('CUSTOMER NAME:', 'n/a', kCols58mm)));
+      expect(t, isNot(contains('424242')));
+    });
+
+    test('a long customer name moves to its own line instead of being cut', () {
+      const longName = 'Kilimanjaro Wholesale Distributors Limited';
+      final t = render([line('Soda', VatStatus.standard)],
+          customerName: longName);
+      for (final l in t.split('\n')) {
+        expect(l.length, lessThanOrEqualTo(kCols58mm));
+      }
+      expect(t.replaceAll(RegExp(r'\s+'), ' '), contains(longName));
+    });
+
+    test('carries no fiscal markings — this is not a TRA legal receipt', () {
+      final t = render([line('Soda', VatStatus.standard)], width: kCols80mm)
+          .toUpperCase();
+      for (final marker in [
+        'LEGAL RECEIPT',
+        'SERIAL',
+        'UIN',
+        'Z NUMBER',
+        'VERIFICATION',
+        'TRA',
+      ]) {
+        expect(t, isNot(contains(marker)), reason: marker);
+      }
+    });
+  });
+
+  group('labelValue', () {
+    test('one flush-right line when it fits', () {
+      expect(labelValue('RECEIPT NO:', 'INV-1', 20),
+          [leftRight('RECEIPT NO:', 'INV-1', 20)]);
+    });
+    test('label on its own line, value right-aligned below, when it does not',
+        () {
+      final out = labelValue('CUSTOMER NAME:', 'A rather long name', 20);
+      expect(out.first, 'CUSTOMER NAME:');
+      for (final l in out.skip(1)) {
+        expect(l.length, 20);
+      }
+    });
+  });
+
+  group('reversal approver', () {
+    test('prints the approver under the reversed banner', () {
+      final t = buildReceiptText(
+        receipt: _receipt(),
+        companyName: 'Tembo Group',
+        branchName: '',
+        cashierName: '',
+        width: kCols58mm,
+        gift: false,
+        reversed: true,
+        reversedBy: 'Halima Juma',
+      );
+      final lines = t.split('\n');
+      final banner = lines.indexWhere((l) => l.contains('*** REVERSED ***'));
+      expect(lines[banner + 1], contains('Approved by Halima Juma'));
+    });
+  });
+
+  group('InvoiceLine.vatStatus', () {
+    test('round-trips through JSON (the receipt journal)', () {
+      final l = InvoiceLine.fromJson(const {
+        'lineNo': 1,
+        'productName': 'Soda',
+        'quantity': 1,
+        'vatRate': 0,
+        'vatStatus': 'ZERO_RATED',
+      });
+      expect(l.vatStatus, VatStatus.zeroRated);
+      expect(InvoiceLine.fromJson(l.toJson()).vatStatus, VatStatus.zeroRated);
+    });
+    test('a receipt journalled before the field existed reads as unknown', () {
+      final l = InvoiceLine.fromJson(const {'lineNo': 1, 'vatRate': 18});
+      expect(l.vatStatus, VatStatus.unknown);
+      expect(taxCodeFor(l), 'A');
     });
   });
 
