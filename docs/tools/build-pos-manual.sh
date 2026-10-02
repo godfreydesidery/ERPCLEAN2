@@ -11,7 +11,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 
 TITLE="OrbixPOS — User Manual"
-SUBTITLE="Point-of-Sale till app for the ERP — Flutter (Windows · Web · Android)"
+# Client-facing: this docx ships inside every OrbixPOS zip, so no stack or platform jargon.
+SUBTITLE="The till app for OrbixERP — for cashiers, supervisors and managers"
 BODY="$(mktemp)"
 trap 'rm -f "$BODY"' EXIT
 

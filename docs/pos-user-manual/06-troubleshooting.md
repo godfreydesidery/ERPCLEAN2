@@ -1,312 +1,385 @@
 # Troubleshooting and Good Practice
 
-Even on a good day, a till sometimes hesitates: the network blips, a barcode finds nothing, a screen says you cannot do something. This chapter is your first-aid kit. It is written so that, when a message appears, you can find the exact wording, understand what it means, and know the next thing to press — without calling for help every time.
+Even on a good day, a till sometimes hesitates: the network blips, a barcode finds nothing, the printer is out of paper, a screen says you cannot do something. This chapter is your first-aid kit. It is written so that, when a message appears, you can find the exact wording, understand what it means, and know the next thing to press — without calling for help every time. Supervisors and whoever looks after the till PC will find the setup, certificate and printer fixes here too.
 
-It also covers a few **good habits** that keep your drawer clean and your sales safe: ringing one sale at a time, checking the printed total against the screen, and — most important — never re-keying a sale when you are not sure whether it went through.
+It also covers a few **good habits** that keep your drawer clean and your sales safe: ringing one sale at a time, checking the printed total against the screen, and — most important — never re-ringing a sale when you are not sure whether it went through.
 
 > **The golden rule of this chapter.** OrbixPOS is a *till*, not the books. The ERP server is the single source of truth for price, VAT, totals, and your cash variance. Anything you see in money before you take payment is a **preview**. The **receipt of record** is built from the finalised invoice the server sends back. When something looks wrong, the question is almost always "did the server hear me?" — and this chapter shows you how to find out safely.
+
+At the end of the chapter, **Quick reference — symptom to fix** lists every problem in one table.
 
 ---
 
 ## How OrbixPOS tells you something went wrong
 
-**What it is.** Whenever the till asks the server to do something — sign you in, load tills, ring a sale, close a session — the server answers. If the answer is anything other than "done", OrbixPOS turns it into a short, plain-language message and shows it to you, usually as a small pop-up notice (a **toast**) at the edge of the screen, or as a red banner on the screen you are on.
+**What it is.** Whenever the till asks the server to do something — sign you in, load tills, ring a sale, close a session — the server answers. If the answer is anything other than "done", OrbixPOS shows you a short message:
 
-**Why it exists.** You should never have to read a technical error code or guess what a number means. The till translates every failure into one friendly sentence aimed at you, the cashier, and decides what to do next based on *what kind* of failure it was — not on the words. The words are there so you know what happened; the till's behaviour is driven by the underlying status.
+- on the **Sign in** screen, as a red banner above the **Sign in** button;
+- on the **Payment** screen, as a yellow banner (outcome unknown) or a red banner (refused);
+- on the **Open shift** screen, as an amber strip for a warning that does not stop you;
+- everywhere else, as a small notice (a **toast**) near the bottom of the screen for a few seconds — dark for a problem, green for success.
 
-**When it happens.** On any failed action. A red banner appears under the **Sign in** button when login fails. A toast appears for most other failures (a failed scan, a refused sale, a payout that did not save).
+**Why it exists.** You should never have to read a technical error code. When the server explains *why* it refused something — "this product has no price", "this till already has an open session" — OrbixPOS shows you the server's own words. When it has no explanation, the till shows a plain sentence based on what kind of failure it was.
 
-**How it works.** The message is short and specific. Read it, take the matching action from the tables below, and try again. Messages never leak anything secret or technical — if you ever see raw code or a long stack of text, report it; that is a bug, not a normal message.
+**How to use it.** Read the message, find it in the tables below, take the matching action, and try again. If you ever see raw code or a long block of technical text, note it and report it — that is a fault, not a normal message.
 
-> Most failures are *transient* — a brief hiccup that fixes itself on the next try. The tables below tell you which ones to simply retry, which need you to change something, and the one case (an **unknown outcome**) where you must **not** start over but press the same button again.
+> Most failures are *transient* — a brief hiccup that fixes itself on the next try. The tables below tell you which ones to simply retry, which need you to change something, and the one case (an **unknown outcome**) where you must **not** start over but press **Retry this sale**.
 
 ---
 
 ## Cannot reach the server
 
-**What it is.** OrbixPOS holds no data of its own. Every action travels over your network to the ERP server. If the till cannot reach that server — the network is down, the cable is out, the server address is wrong, or the server itself is off — nothing can be rung.
+**What it is.** OrbixPOS holds no data of its own. Every action travels over your network to the ERP server. If the till cannot reach that server — the network is down, the cable is out, the address is wrong, the server's certificate is not trusted, or the server itself is off — nothing can be rung.
 
-**Why it matters.** This is the most common showstopper, and it is almost always something simple: a loose network cable, Wi-Fi that dropped, or a server address that was typed wrong during setup. You can check and fix most of it yourself from the **Server setup** dialog.
+**When you see it.** On the **Sign in** screen, or as the toast **Cannot reach the ERP. Check the connection and host.** during the day. In **Setup & diagnostics**, **Test connection** shows **Could not reach the ERP at this host.**
 
-**When you see it.** On the **Sign in** screen if the server is unreachable before you even log in; or as a toast like **Cannot reach the ERP. Check the connection and host.** during the day.
-
-**How it works.** OrbixPOS reaches the server at a single address called the **ERP host** (for example, `http://erp.yourcompany:8081`). The `/api/v1` path is added automatically — you only set the host. The **Server setup** dialog lets you type that host and press **Test connection** to confirm the server is alive and reachable from this device before you rely on it.
+**How it works.** OrbixPOS reaches the server at a single address called the **ERP host** — the scheme and server only, for example `http://192.168.1.10:8081` or `https://erp.yourshop.co.tz`. The till adds `/api/v1` itself. **Setup & diagnostics** lets you check that address with **Test connection**.
 
 ### Check the server, step by step
 
-1. On the **Sign in** screen, click **Server setup** (the small settings link below the **Sign in** button).
-2. The **Setup & diagnostics** dialog opens. Look at the **ERP host** field. It should hold the address your administrator gave you — for example `http://erp.yourcompany:8081`. Do not add `/api/v1`; the till adds that for you.
-3. Click **Test connection**.
-4. Wait for the coloured result box:
+1. If you are signed in, sign out (your shift stays open). **Setup & diagnostics** is only on the sign-in screen.
+2. On the **Sign in** screen, click **Server setup** (the small link with a gear icon below the **Sign in** button).
+3. Look at the **ERP host** field. It should hold exactly the address your administrator gave you.
+4. Click **Test connection** and read the coloured result:
 
 | What you see | What it means | What to do |
 |---|---|---|
 | **Reachable — ERP is UP.** (green) | The till reached the server and the server is healthy. | Click **Save**, then sign in as normal. |
-| **Reached host, status unclear.** (green-ish) | The address is right and *something* answered, but it did not report a clean "healthy". | The server may be starting up. Wait a minute and **Test connection** again; if it persists, tell your supervisor. |
-| **Could not reach the ERP at this host.** (red) | Nothing answered at that address. | Check the address for typos, check your network, then **Test connection** again. See the checklist below. |
+| **Reached host, status unclear.** (red) | *Something* answered at that address, but not a healthy ERP. | The server may be starting up. Wait a minute and test again. If it persists, the address or port may point at the wrong program — check with your administrator. |
+| **Could not reach the ERP at this host.** (red) | No ERP answered at that address. | Work through the checklist below. |
 
-5. When the result is green, click **Save** to store the host. To leave without changing anything, click **Cancel**.
-
-> **Tip — the host format.** It is `http://` (or `https://`) then the server name or IP, then a colon and the port (often `8081`) — for example `http://erp.yourcompany:8081`. No trailing slash is needed; the till trims one for you if you add it. Never invent a host: use exactly the one your administrator gave you.
+5. When the result is green, click **Save**. To leave without changing anything, click **Cancel**.
 
 ### If "Test connection" stays red
 
 | Check | What to do |
 |---|---|
-| The address has a typo. | Compare it character-by-character with the one your administrator gave you. A single wrong digit will fail. |
-| Your device is off the network. | Check the network cable or Wi-Fi. Can other things on this device reach the network? |
-| The till is on Wi-Fi that dropped. | Reconnect to the correct network, then **Test connection** again. |
-| Everything looks right but it still fails. | The server itself may be down. Note the time and tell your supervisor or administrator — this is not something you can fix at the till. |
+| **The address ends in `/api/v1`** (or any other path). | Remove it. Type only the scheme and server, for example `http://192.168.1.10:8081`. The till adds `/api/v1` itself, so typing it gives `/api/v1/api/v1` and the test fails. |
+| **The address has a typo**, or a wrong port. | Compare it character by character with the one your administrator gave you. A single wrong digit fails. |
+| **`http` vs `https`.** | Use exactly the scheme your administrator gave you. A server that expects `https://` will not answer `http://`, and the other way round. |
+| **The address is `https://` and the server uses its own private certificate.** | The till must be told to trust the server's certificate authority. Put the root certificate file in the `certs` folder beside `pos_app.exe` (or name it `erp-ca.pem` beside it) and **restart OrbixPOS** — see *Getting Started* (Chapter 1), **Trusting Your Server's Certificate**. |
+| **The certificate file is in place, but it still fails.** | Make sure you restarted OrbixPOS after adding it. Make sure the ERP host uses the server **name** the certificate was issued for, not its IP address. If the server was rebuilt recently, its certificate authority may have changed — ask for the new root certificate. |
+| **The device is off the network**, or on the wrong Wi-Fi. | Check the network cable or Wi-Fi. Can other things on this device reach the network? |
+| **The ERP runs on another PC, but the host says `localhost`.** | `localhost` means "this PC". Replace it with the server's address. |
+| **Everything looks right but it still fails.** | The server itself may be down. Note the time and tell your supervisor or administrator — this is not something you can fix at the till. |
+
+> **Certificate problems look like network problems.** When the till does not trust an `https://` server, it usually reports **Could not reach the ERP at this host.** or **Cannot reach the ERP. Check the connection and host.**, and sometimes **The server certificate was rejected.** If a till that worked over `https://` suddenly stops while other devices still reach the server, suspect the certificate first.
 
 ---
 
-## Your session has expired / you were signed out
+## Sign-in problems
 
-**What it is.** When you sign in, the server gives the till a time-limited pass. The till renews that pass quietly in the background for as long as you keep working. If it cannot be renewed — you were idle a long time, the server restarted, or your account was changed mid-shift — the pass lapses and you are returned to the **Sign in** screen.
+| What you see | What it means | What to do |
+|---|---|---|
+| A red banner saying your details were not accepted, or your account is locked | Wrong username or password, or the account is locked or disabled. | Re-type carefully (mind Caps Lock). If it persists, ask your administrator. |
+| **Cannot reach the ERP. Check the connection and host.** | The till cannot reach the server. | See **Cannot reach the server** above. |
+| **The server did not respond in time. The request may or may not have completed.** | The network or server is slow. | Wait a moment and try again. |
+| **This user is not assigned to any company.** | Your account is not attached to a company yet. | Ask your administrator. |
+| **No branches found for …** | Your company has no branch the till can use. | Ask your administrator. |
+| **You do not have permission for this action.** straight after **Sign in** | Your account lacks one of the basic rights the till needs to start (for example, to see your branch). | Ask your administrator to check your role. |
+| Amber strip: "Using branch … — we couldn't confirm your usual branch. Check this is correct before selling." | The till could not confirm your usual branch and picked another. | Check the branch named is the shop you are in. If not, sign out and ask your administrator before selling. |
 
-**Why it exists.** Time-limited passes are a security measure: an unattended till cannot be used indefinitely by someone who walks up to it.
+### Your session has expired / you were signed out
 
-**When you see it.** A message reading **Your session has expired. Please sign in again.** and a return to the **Sign in** screen. It can also happen silently after a long idle period.
+**What it is.** When you sign in, the server gives the till a time-limited pass, which the till renews quietly in the background while you work. If it cannot be renewed — for example the server ended it, or your account was changed — you are returned to the **Sign in** screen with **Your session ended. Please sign in again.** (or **Your session has expired. Please sign in again.**). A brief network drop does **not** sign you out.
 
-**How it works.** Being signed out does **not** lose a completed sale — every finalised sale already lives on the server. You simply prove who you are again and carry on.
+**What to do.** Sign in again. Nothing you finalised is lost, and **your shift is still open** — OrbixPOS takes you straight back to your register in it. A basket you had not yet paid for is cleared, so re-ring those items.
 
-1. At the **Sign in** screen, enter the username and password your administrator gave you.
-2. Click **Sign in**.
-3. If your shift was still open, the till brings you back to your register. Your session number is shown in the top bar; your open sale basket, if any was not yet paid, is cleared — re-ring those items.
+> A sign-in ending is not the same as your *cash session* (your shift) closing. Your shift stays **open** on the server until you count the drawer and close it.
 
-> **Note.** A session timing out is not the same as your *cash session* (your shift) closing. Your shift on the till stays **open** on the server until you close it. Signing back in reconnects you to the same open shift.
+---
+
+## Shift and till problems
+
+### The shift will not open
+
+| What you see | What it means | What to do |
+|---|---|---|
+| **Pick a till first.** | No till tile was selected. | Click a free till (green dot), then **Open session**. |
+| **This till already has an OPEN session.** | Someone opened a shift on that till moments ago. | Click **Refresh**, then pick a free till. |
+| **No active tills on this branch yet.** | No till is set up or active for your branch. | Ask your store manager to create or activate one (managers see **New till**). |
+| An error in the till list, with **Retry** | The till list could not be loaded. | Click **Retry**. If it keeps failing, see **Cannot reach the server**. |
+| **You do not have permission for this action.** | Your account may not open shifts. | Ask your administrator. |
+
+### The till is stuck "in use"
+
+| What you see | What it means | What to do |
+|---|---|---|
+| Your till shows **· Your shift** with an amber dot | You still have a shift open there — usually because the app was closed, the PC restarted or the power failed mid-shift. | Click it, then **Resume shift** to carry on, or **Close shift** to count the drawer and close it. |
+| A dialog **Couldn't reopen your shift** | The till could not reopen your shift. Nothing is lost. | Ask a supervisor for session access, or choose **Close shift** to count up. |
+| A dialog **Your shift** saying it "could not load it just now" | The till knows the shift is yours but could not load it. | Click **Refresh** on the Open shift screen and try again. |
+| A faded tile with a colleague's name and a red dot; **Till in use** | Another cashier has a shift open on this till. | Use another till, or ask that cashier to close their shift. If they are not available, a **branch manager** or administrator closes it in the ERP (**POS Sessions**) after counting that drawer. Then click **Refresh**. |
+| Amber strip: "We couldn't check whether you already have a shift open…" | The till could not look up your open shift when you signed in. | If a tile shows **· Your shift**, click it and **Resume shift**. |
+
+> **Shifts never close themselves.** Only a counted close ends a shift, so a till stays "in use" until someone counts its drawer. This is deliberate — it stops the system ever inventing a cash count.
+
+### Other shift problems
+
+| What you see | What it means | What to do |
+|---|---|---|
+| The **Session** chip shows **—**, and the menu says "Shift figures unavailable — reconnect to refresh." | Your shift was reopened without its details (no permission to view sessions, or the network was down at that moment). | You can keep selling. The figures come back once the till can read the session; ask a supervisor if your account should be allowed to view sessions. |
+| After **Close session**, you are still on the register and sales are refused | The session is CLOSED — no more sales can go on it. | If you are a supervisor, carry on with **Reconcile (Z-read)**. Otherwise **Sign out**; when you sign in again, the **Open shift** screen lets you start a new shift. |
+| **Session must be CLOSED before reconciliation.** | You tried to reconcile an open session. | Close it (count the drawer) first. |
+| A message that the session "has been reconciled — open its Z-read for the final figures" | X-read is not available after reconciling. | Use **Z-read (reprint)** instead. |
+| **Enter the counted cash.** / **Count the drawer and enter the cash total.** | The count field was empty. | Type the counted amount. |
+| **Enter an amount.** / **Say what the cash is for (at least a few words).** | A cash payout is missing its amount or reason. | Fill in both. |
 
 ---
 
 ## You do not have permission
 
-**What it is.** OrbixPOS shows or hides actions based on what your account is allowed to do. A cashier can sell and open and close their own shift. Reconciling (the **Z-read**) and reversing a sale need higher permission, usually a supervisor. Creating or retiring tills is a store-manager job.
+**What it is.** OrbixPOS shows actions based on what your account is allowed to do. A cashier can sell and open and close their own shift. Reconciling (the Z-read), approving refunds and large discounts, and creating tills need higher rights, usually a supervisor or store manager.
 
 **Why it exists.** This separation protects the business: the person who counts the drawer should not necessarily be the person who posts the variance to the books, and not everyone should be able to reverse a completed sale.
 
-**When you see it.** Two ways:
+**How it shows.**
 
-- The action is **dimmed or hidden** before you ever click it. In the **Session** menu, **Reconcile (Z-read)** shows a small **lock** icon and the subtitle **Post variance — supervisor** when you lack that permission; the **Refund / reverse** button simply does not appear on a receipt you may not reverse.
-- You click something and get the toast **You do not have permission for this action.**
-
-**How it works.** The till asks the server, and the server decides. There is nothing wrong with your till.
-
-| What you see | What to do |
-|---|---|
-| **Reconcile (Z-read)** is locked. | This is supervisor-gated. Ask a supervisor to reconcile, or hand over for that step. |
-| No **Refund / reverse** button on a receipt. | Reversing needs permission and an open session. Ask a supervisor to do the reversal. |
-| **You do not have permission for this action.** | The server refused this specific action for your account. If you believe you should be allowed, ask your administrator to review your role — do not keep retrying. |
-| **New till** does not appear on the **Open shift** screen. | Creating tills is a store-manager permission. Ask your store manager to set up the till. |
-
-> The till never lets you do something it knows you cannot. If a button is missing, that is by design — it is not broken.
-
----
-
-## Age not verified stops a sale
-
-**What it is.** Some products — for example alcohol or tobacco — are **age-restricted**. The till flags them with a small amber pill (such as **18+**) on the line and in the search results. Before such a sale can complete, the till asks you to confirm you have checked the customer is old enough.
-
-**Why it exists.** Selling an age-restricted item to someone under the minimum age is against the law and against store policy. The prompt is a deliberate stop so the check is never skipped by habit.
-
-**When you see it.** When you press **Complete sale** (or **PAY** then **Complete sale**) on a basket that contains one or more age-restricted items. A dialog titled **Age-restricted items** appears, listing the kinds in the basket (for example, "This basket contains 18+ items").
-
-**How it works.** You must look at the customer — and ask for ID if there is any doubt — *before* you answer.
-
-1. The **Age-restricted items** dialog appears at checkout.
-2. Check the customer meets the minimum age.
-3. If they do, click **Age verified** to continue to payment.
-4. If they do not — or you are unsure and cannot verify — click **Cancel**. The till shows **Sale stopped: age not verified.** and returns you to the basket. Remove the restricted line (press the **×** on its row), or set that line aside, then complete the rest of the sale.
-
-> **Warning.** Pressing **Age verified** is a statement that you checked. Never press it to clear the dialog without actually verifying. If a customer cannot prove their age, you must not sell them the restricted item.
-
----
-
-## "Your user has no sales-agent record"
-
-**What it is.** Every cashier who rings sales must have an **internal sales-agent record** linked to their user account on the ERP. This links each sale to a real, accountable salesperson. If your account has no such linked agent, the server refuses the sale.
-
-**Why it exists.** The business requires every sale to name a salesperson. The link is set up once, by an administrator, when your account is provisioned for the till. It is not something you create yourself.
-
-**When you see it.** You ring up a basket, press **Complete sale**, and instead of a receipt you get a toast carrying the server's explanation — that the sale cannot be posted because your user is not linked to a sales agent. (For the same reason, a **super-admin / root** account can never ring sales: by rule, the root account cannot be a sales agent.)
-
-**How it works.** This is a one-time setup gap on the server side, not a fault you can fix at the till. Re-pressing **Complete sale** will keep failing the same way until the link exists.
-
-1. Note the message exactly as shown.
-2. Stop trying to ring on this account.
-3. Ask your administrator to **link an internal sales-agent record to your user account** (your store manager's chapter explains how). If you were signed in with a shared or admin account, sign out and sign back in with your own cashier account.
-4. Once the link is in place, sign in and ring as normal — no further change is needed at the till.
-
-> If you only ever see this on the root/admin login, that is expected. Use a real cashier account to sell.
-
----
-
-## A scan or search finds nothing
-
-**What it is.** In the Supermarket register, the field at the top — labelled **Scan a barcode or search by code / name…** — is how you add items. You scan a barcode, type a product code, or type part of a name. The till first tries an exact product code, then a barcode lookup (including embedded weight/price barcodes), then a name search.
-
-**Why it matters.** A "no match" almost always means the code is not in the catalogue, the barcode was mis-read, or you typed a name the catalogue does not use.
-
-**When you see it.** The toast **No match for "<what you scanned>".** appears, and nothing is added to the grid.
-
-**How it works.** The till keeps showing you what it could not find so you can correct it.
+- **Hidden actions.** An action your account may not use is simply **not shown** — for example **Reconcile (Z-read)** is missing from a cashier's Session menu, and **New till** is missing from the Open shift screen. That is by design, not a fault.
+- **Manager approval.** Some actions stay visible but ask a manager to approve at the till: a **Manager approval — …** dialog asks for the manager's username and password (X-read for a cashier who may not view sessions, printing the Z-read, refunds, large discounts, leaving an unfinished sale unresolved).
+- **A refusal.** You click something and see **You do not have permission for this action.**
 
 | What you see | What to do |
 |---|---|
-| **No match for "…".** after a scan. | Scan again — the first read may have been partial. Hold the scanner steady and aim at the whole barcode. |
-| **No match for "…".** after typing a code. | Re-check the code for a typo. Try typing part of the **product name** instead — a single match adds itself; several matches show a list to pick from. |
-| A drop-down list of items appears. | Your search matched more than one product. Click the right one in the list to add it. |
-| Still nothing for an item you can see on the shelf. | The product may not be in the catalogue, or its barcode is not registered. Tell your supervisor; the item may need adding by master-data staff. |
+| An action is missing from the menu | Your account does not have that right. Ask a supervisor to do it, or ask your administrator to review your role. |
+| **You do not have permission for this action.** | The server refused this action for your account. Do not keep retrying — ask your administrator to review your role. |
+| **That user is not allowed to approve this action.** (in an approval dialog) | The manager's password was right, but they do not hold the right for this action — or the person signed in tried to approve their own action. A **different** person with the right must approve. |
+| **Those details were not accepted. Check the username and password and try again.** | The manager mistyped. Only the password is cleared; retype it. |
+| **Too many failed approval attempts. Please wait a moment and try again.** | Several wrong attempts in a row. Wait, then try again. |
+| **That approval was not accepted. Ask a supervisor who can reconcile the till.** | A drawer report was approved by someone who may not approve drawer reports. Ask a supervisor who can reconcile. |
+| **Not approved — the sale stands.** | A refund was cancelled or not approved. The sale is unchanged. |
 
-> **Tip.** When several products match your text, the till shows a list rather than guessing. Pick from the list instead of retyping — it is faster and avoids mistakes.
+> **Printing the Z-read needs a second person.** Printing the Z-read always asks for a manager's approval, and nobody may approve their own action — so a supervisor who reconciled their own till needs another manager to approve the print. If no one else is available, read the Z-read on screen. While the reconciled shift is still on the till (before **Finish shift**), **Z-read (reprint)** in the Session menu lets you print it once another manager arrives; after that, the Z-read can be viewed in the ERP.
 
 ---
 
-## The scanner is a "keyboard wedge" — keep the field focused
+## A sale is refused or its outcome is unclear
 
-**What it is.** In this build, the barcode scanner behaves like a fast keyboard: when you scan, it *types* the barcode into whatever field currently has the cursor, then presses Enter. This is called a **keyboard wedge**.
+### Slow network or a "blip" mid-sale — the unknown outcome
 
-**Why it matters.** Because the scanner types into the focused field, the **search field must hold the cursor** for scanning to work. If the cursor is somewhere else — say you just tapped the number pad, or a dialog is open — a scan will land in the wrong place or do nothing.
+**What it is.** Sometimes a sale leaves the till and the answer never comes back — the network stalls, the server is slow, or it reports an error after it may already have saved the sale. The sale **may** have been recorded, or **may** not have. The till genuinely does not know which.
 
-**When it matters.** All day, every scan. The Supermarket register tries hard to keep the search field focused for you: it grabs focus when the register opens, and returns focus to it after each item is added and after you finish a payment. But if you click elsewhere, you may need to click back.
+**Why this is special.** This is the one situation where the obvious move — "it failed, let me ring it again" — is dangerous, because if the first attempt *did* go through, ringing it again would charge the customer twice. OrbixPOS is built so that, as long as you retry the *same* sale, this cannot happen.
 
-**How it works.** Keep one simple habit: **the search field is home.** Before each scan, make sure the cursor is in the **Scan a barcode or search by code / name…** field (you will see the cursor blinking there).
+**When you see it.** You press **Complete sale**, and instead of a receipt a yellow banner appears in the **Payment** window:
+
+> **No answer from the ERP, so we cannot tell whether this sale went through. Press Retry — it is safe. If the sale was already recorded you will get that same receipt back, never a second charge.**
+
+The big green button changes to **Retry this sale**. If the server did give a reason, it is shown in smaller text underneath, starting **The ERP said:**.
+
+**What to do.**
+
+1. Do **not** close the window and do **not** start a new sale.
+2. Press **Retry this sale**.
+3. The receipt appears — either the original or the newly recorded one. You are done.
+4. If it is still unclear, wait a few seconds for the network to settle and press **Retry this sale** again. It is always safe.
+5. If it keeps failing with the same **The ERP said:** reason, retrying will not fix it — that reason must be fixed first (for example a product with no price must be priced in the ERP). Show the message to your supervisor.
+
+> **Warning.** Never react to an unknown outcome by clearing the basket and ringing the items again as a brand-new sale. That is the *only* way to double-charge — and **Retry this sale** exists precisely so you never have to.
+
+### The "Unfinished sale" prompt
+
+**When you see it.** When the register opens, or when you press **PAY**, a dialog titled **Unfinished sale** says a sale "was interrupted before we knew whether it went through". This happens after the app was closed, the PC restarted or the power failed mid-sale, or after you closed the Payment screen while the outcome was unknown.
+
+**What to do.** Press **Check sale**. It only asks the ERP what happened — it charges nothing.
+
+| What the till says next | What to do |
+|---|---|
+| **That sale went through as …** and the receipt | It was recorded. Give the customer the receipt if they are there. Do **not** ring it again. |
+| **Nothing was recorded** | The customer was not charged. If they are still there, press **Complete the sale** (safe — it can never charge twice). If they left, press **Discard**. |
+| **That sale is still going through. Give it a moment, then check again.** | Wait a few seconds, then **Check sale** again. |
+| **Cannot reach the ERP to check. Try again when the connection is back.** | Fix the connection (see **Cannot reach the server**), then check again. |
+| **Still no answer from the ERP. Check the connection and try again.** | The completion attempt got no answer. Check the connection and try again. |
+| **That basket is too old to complete. Nothing was charged — ring it again.** | The sale waited too long. Nothing was charged; ring it again as a new sale. |
+
+**Not now** leaves the question open, and the till will not take another payment until it is settled. **Leave unresolved…** gives up without an answer; it needs a manager's approval, is recorded on the ERP, and the till then tells you to check **Today's sales** before ringing those goods again.
+
+### The sale was refused
+
+**When you see it.** A red banner in the **Payment** window shows the server's reason, followed by **Nothing was charged. Fix it and try again.** The basket is still there.
+
+| Typical reason | What to do |
+|---|---|
+| The session is not OPEN | Your shift was closed. You cannot sell on it — sign out and open a new shift. |
+| An item is out of stock, or below the allowed price | Follow your shop's procedure; a supervisor may need to adjust stock or price in the ERP. |
+| A discount is larger than you may give | Press **Get manager approval for the discount** on the banner; a manager approves in the dialog and the sale retries. |
+| **No sales agent could be determined for this sale…** | See **"No sales agent could be determined"** below. |
+| The payments do not cover the total | The server's total is higher than the payments you added. Add a tender for the difference. |
+
+### "Select a customer before completing the sale."
+
+**What it is.** Every sale needs a customer. Normally the till uses your company's walk-in (cash) customer automatically. If it could not find one, it asks you to choose.
+
+**What to do.** In the **Customer** list that opens, pick the walk-in / cash customer (shown with **· Walk-in**) or the named customer, then carry on. If the list is empty or this happens on every sale, tell your supervisor — the walk-in customer may be missing in the ERP, or your account may not be allowed to see customers.
+
+### "No sales agent could be determined"
+
+**What it is.** Every sale is recorded against a sales agent — normally your own internal sales-agent record, linked to your user account. If you have none, the system creates one for you on your first sale. A sale is refused when that cannot happen.
+
+**When you see it.** The red banner reads **No sales agent could be determined for this sale. Select a sales agent, or ask an administrator to link an internal sales agent to your user account before ringing sales.** — or **Your sales agent record is no longer active, so sales cannot be recorded under it. Ask an administrator to reactivate your sales agent.**
+
+**What to do.**
+
+1. Note the message exactly as shown, and stop trying to ring on this account — pressing **Complete sale** again will fail the same way.
+2. If you are signed in with a shared or admin account, sign out and sign back in with your own cashier account. The **super-admin** account is not a salesperson and cannot ring sales.
+3. Otherwise ask your administrator to link (or reactivate) an internal sales-agent record for your user account. Once that is done, sign in and ring as normal.
+
+### "Tendered … is less than the total …"
+
+**When you see it.** A toast such as **Tendered 8,000.00 is less than the total 12,500.00.** when you press **Complete sale** without covering the full amount. (If you entered a single amount without using **Add tender**, it adds "Use Add tender to split, or key the full amount.")
+
+**What to do.** Look at **Total** and **Paid**, then add more tender — choose the tender type, enter the amount (or leave it empty to add the remaining balance) and press **Add tender**, or use a quick-cash button such as **Exact**. When **Paid** covers **Total**, press **Complete sale**.
+
+### Age not verified stops a sale
+
+**What it is.** Age-restricted products (for example alcohol or tobacco) carry a small amber **18+** or **21+** marker. Pressing **Complete sale** on a basket with one opens the **Age-restricted items** dialog.
+
+**What to do.** Check the customer's age (ask for ID if in any doubt). If they qualify, press **Age verified**. If not, press **Cancel** — the till shows **Sale stopped: age not verified.** — then remove the restricted line and complete the rest of the sale.
+
+> **Warning.** Pressing **Age verified** is a statement that you checked. Never press it just to clear the dialog. (On an account with the age-override right, **Cancel** does not stop the sale — close the Payment screen and remove the item instead if you do not want to sell it.)
+
+---
+
+## Scanning and search problems
+
+### A scan or search finds nothing
+
+**What it is.** In the Supermarket register, the field at the top — **Scan a barcode or search by code / name…** — is how you add items. For something that looks like a barcode, the till first looks up the barcode (including weight barcodes); then it searches the catalogue, where an exact product code wins, a single match is added at once, and several matches open a list to pick from.
 
 | What you see | What to do |
 |---|---|
-| You scan and nothing happens. | Click once inside the search field to put the cursor there, then scan again. |
-| The barcode digits appear in the number pad or another box. | The cursor was in the wrong place. Clear that box, click the search field, and re-scan. |
-| Scanning works, then stops after you adjust a quantity. | Click the search field again to return the cursor home, then carry on scanning. |
+| **No match for "…".** after a scan | Scan again — the first read may have been partial. Hold the scanner steady and aim at the whole barcode. |
+| **No match for "…".** after typing | Check for a typo. Try part of the **product name** instead. |
+| A drop-down list of items appears | Several products matched. Click the right one (or use the arrow keys and **Enter**). |
+| The item is found by name, but its barcode always says no match | The barcode is not registered against the product in the ERP — sometimes it was typed into the product's code instead of its barcodes. Tell your supervisor; master-data staff need to add the barcode to the product. Meanwhile, add the item by name. |
+| **Price-embedded labels aren't supported yet — enter … manually.** | The label carries a price inside the barcode, which the till cannot use. Search for the item by name and enter the quantity. |
+| Still nothing for an item on the shelf | The product may not be in the catalogue. Tell your supervisor. |
 
-> **Good habit.** After any action that takes the cursor away — editing a quantity, picking a customer, opening a menu — glance at the search field and click it before your next scan. The till tries to do this for you, but a quick check costs nothing.
+### The scan adds the wrong item
 
----
+**Symptom.** After a scan the search list stays open over an empty box, and the *next* scan adds the **previous** item again instead of the one you just scanned.
 
-## Slow network or a "blip" mid-sale — the unknown-outcome case
+**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
 
-**What it is.** Sometimes a request leaves the till and the answer never comes back — the network stalls, or the connection drops at exactly the wrong moment. The sale **may** have reached the server and posted, or it **may** not have. The till genuinely does not know which.
+### The scanner is a "keyboard wedge" — keep the field focused
 
-**Why this is special.** This is the one situation where the obvious move — "it failed, let me do it again" — is dangerous, because if the first attempt *did* post, doing it again would charge the customer twice. OrbixPOS is built so this cannot happen.
+**What it is.** The barcode scanner behaves like a fast keyboard: when you scan, it *types* the barcode into whatever field has the cursor, then presses Enter.
 
-**When you see it.** You press **Complete sale**, and instead of a receipt you get an amber banner inside the **Payment** window:
+**Why it matters.** The **search field must hold the cursor** for scanning to work. If the cursor is somewhere else — say you just used the number pad, or a dialog is open — a scan lands in the wrong place or does nothing. The Supermarket register puts the cursor back in the search field after each item, after a quantity change and after payment, but if you click elsewhere you may need to click back.
 
-> **The outcome was unknown (network/timeout). Press Complete again — the same idempotency key returns the original sale if it went through.**
-
-You may also see the message **The server did not respond in time. The request may or may not have completed.** The big green button changes its label to **RETRY (same key)**.
-
-**How it works — the safe sale.** Each sale carries a hidden, durable identifier that the till reuses on every retry. The server remembers it. So when you press the button again:
-
-- If the first attempt **did** post, the server recognises the identifier and simply hands back the **original** sale and receipt. No second charge.
-- If the first attempt **did not** post, this attempt posts it once. Still no double charge.
-
-Either way you end with exactly one sale.
-
-1. When you see the amber **unknown outcome** banner, do **not** close the window and do **not** start a new sale.
-2. Press the green **RETRY (same key)** button (it was **Complete sale** before).
-3. Wait. The receipt appears — either the original or the newly posted one. You are done.
-4. If it is still unknown, wait a few seconds for the network to settle and press **RETRY (same key)** again. The same identifier keeps it safe no matter how many times you press it.
-
-> **Warning.** Never react to an unknown outcome by cancelling and re-ringing the whole basket as a brand-new sale. That is the *only* way to double-charge — and the **RETRY (same key)** button exists precisely so you never have to. When in doubt, retry the same sale; do not start a fresh one.
-
-If you ever do suspect a customer was charged once but the receipt did not print, look the sale up in **Today's sales** (from the **Session** menu) before re-ringing — see Reprinting, below.
+| What you see | What to do |
+|---|---|
+| You scan and nothing happens | Click once inside the search field, then scan again. |
+| The barcode digits appear in the number pad or another box | Clear that box, click the search field, and re-scan. |
+| A scan lands in an open dialog | Finish or close the dialog first, then scan. |
 
 ---
 
-## "Tendered is less than the total"
+## Printer and cash drawer problems
 
-**What it is.** At the **Payment** window you choose how the customer pays — **Cash**, **Card**, **Mobile** (mobile money), **Cheque**, or a split across several. If the amounts you enter add up to less than the amount due, the till will not let the sale complete.
+Printing works on the **Windows** till only. The printer, paper width, print mode and drawer option are set in **Setup & diagnostics** on the sign-in screen (see Chapter 1). To change them mid-shift, sign out (your shift stays open), change them, **Save**, and sign in again.
 
-**When you see it.** A toast such as **Tendered 8,000 is less than the total 12,500.** when you press **Complete sale** without covering the full amount.
+| What you see | Cause | What to do |
+|---|---|---|
+| **No receipt printer set — configure one in Setup.** | No printer is chosen in Setup. | Sign out → **Server setup** → choose the **Printer** → **Test print** → **Save** → sign in. The sale itself is complete; reprint it afterwards. |
+| **Choose a printer first.** (on **Test print**) | The **Printer** box is **— none —**. | Pick the receipt printer from the list. |
+| **No printers detected (Windows desktop only).** | No printer is installed in Windows, or you are on the web or Android version. | Install the printer in Windows (with its driver), then close and reopen **Server setup** so the list refreshes. Web and Android cannot print. |
+| **Cannot open printer "…". Is it installed and online?** | The printer was removed or renamed in Windows, or is switched off. | Switch it on and check its cable. If it was reinstalled under a new name, choose it again in Setup. |
+| **Printer "…" did not accept the job (offline or out of paper?).** | The printer is offline, out of paper, or its cover is open. | Load paper, close the cover, switch it on, then press **Print** again. |
+| **Printer "…" did not start the page.** / **Failed to send the receipt to "…".** | The printer stopped part-way. | Check the printer, clear any stuck jobs in Windows, and print again. |
+| **Could not print the receipt.** / **Could not print the report.** / **Could not print the test receipt.** | An unexpected printing problem. | Try **Test print** in Setup. If it fails too, restart the printer and the till PC. |
+| **Receipt printing is only available on the Windows desktop app.** | You are on the web or Android version. | Print from a Windows till, or reprint later from **Recent receipts** / **Today's sales** there. |
+| The receipt prints strange symbols, stray letters at the start, or a page of rubbish | **Thermal (ESC/POS + cut)** mode is sending printer commands to a printer that does not understand them (an office laser or inkjet printer, for example). | Set **Print mode** to **Plain text**. If the printer still prints nothing useful, it cannot take raw text through its driver — ask your supplier for a receipt printer, or install it with the Windows "Generic / Text Only" driver. |
+| Lines wrap, totals break onto two lines, or the receipt looks squashed into the left half | The **Paper width** setting does not match the paper. | Choose **80 mm · 48 cols** or **58 mm · 32 cols** to match the roll, then **Test print**. |
+| Accented letters or symbols print as **?** | Receipts print plain letters, digits and punctuation only. | Expected. Names with special characters print with **?** in their place. |
+| The paper is not cut | **Plain text** mode does not cut, or the printer has no cutter. | Use **Thermal (ESC/POS + cut)** with a thermal printer that has a cutter. |
+| The cash drawer does not open | The drawer option is off, the mode is **Plain text**, the drawer cable is not in the printer's drawer port, or you did not press **Print**. | Tick **Open cash drawer after printing** with **Thermal (ESC/POS + cut)** mode, check the cable, and **Test print**. The drawer opens only when a receipt prints — use the drawer key if you are not printing. |
+| The drawer opens when you reprint a receipt | With the drawer option on, every receipt print opens it — including reprints and gift receipts. | Expected with that setting. Close the drawer and follow your branch's cash-handling rules. Drawer reports (X-read, Z-read) never open it. |
+| There is no **Print** button on the X-read or Z-read | You are on the web or Android version. | Use a Windows till to print reports. |
 
-**How it works.**
-
-1. Look at the **Total**, **Paid**, and (for cash) **Change** rows in the payment window.
-2. Add more tender: type an amount on the keypad, choose the tender type, and press **Add tender** — or use a quick-cash preset button (the **Exact** button matches the total exactly).
-3. When **Paid** is at least the **Total**, press **Complete sale**. For cash, any **Change** to give back is shown for you.
-
-> Card payments are taken on your **external card terminal**, never typed into OrbixPOS. In the till you record that a card tender of the right amount was taken; the card details stay on the terminal.
+> A printing problem never affects the sale. The sale is already complete on the server, and the receipt is saved on this device — reprint it from **Recent receipts** or **Today's sales** once the printer is fixed.
 
 ---
 
 ## Reprinting a receipt (and why it never makes a new sale)
 
-**What it is.** You can reprint any receipt without creating a new sale. There are two sources: **Today's sales** (looked up from the server) and **Recent receipts** (saved on this device).
+**What it is.** You can reprint any receipt without creating a new sale. There are two sources, both in the **Session** menu (the **☰** icon in the top bar):
 
-**Why it exists.** Customers ask for a second copy; a receipt jams in the printer; you need to confirm a sale really posted. Reprinting must never ring the sale again.
+- **Recent receipts** — the last 50 receipts saved on **this device**. Works even when the network is down. Click one to open it, then **Print**.
+- **Today's sales** — recent finalised sales looked up from the **server** (needs the network, and the right to view sales invoices). Click one to open it, then **Print**. Use this to confirm that a doubtful sale really went through before you consider ringing it again.
 
-**When you use it.** Any time after a sale — including, importantly, when you are not sure a sale went through after a network blip.
+**Why it matters.** Customers ask for a second copy; a receipt jams; you need to confirm a sale posted. Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
 
-**How it works.** Open the **Session** menu (the **☰** icon in the top bar), then:
-
-- **Today's sales** — lists sales the **server** has for today. Click one to open and reprint it. Use this to confirm a doubtful sale actually posted before you consider re-ringing.
-- **Recent receipts** — lists receipts saved on **this device**. This works even when the network is down (it does not call the server). Click one to reprint.
-
-Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
-
-> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, supervisor-permitted, while the session is open). It does **not** do partial or single-line refunds. To return one item from a multi-item sale, either reverse the whole sale and re-ring the rest, or record a cash refund through **Cash payout** in the **Session** menu, following your store's policy.
-
----
-
-## The printer, cash drawer, and scale in this build
-
-**What it is.** Receipt printers, the cash drawer, and weighing scales are **stubbed** in the current build. The buttons and flows are all there, but the real hardware drivers are not yet connected.
-
-**Why it matters.** So you are not surprised: when you press **Print**, the till confirms the action but does not yet drive a physical printer. The drawer does not pop on its own, and weighed items are entered through barcodes/quantities rather than read live from a scale.
-
-**When you see it.** Pressing **Print** on a receipt shows a confirmation toast: **Sent to printer (peripheral stub).**
-
-**How it works (for now).**
-
-| Peripheral | Today's behaviour | What to do |
-|---|---|---|
-| Receipt printer | **Print** confirms but does not produce paper yet. | Use your store's interim arrangement for paper copies. The on-screen receipt is complete and can be reprinted any time. |
-| Cash drawer | Does not open automatically. | Open the drawer manually as your store directs. |
-| Scale | No live weight read. | Use embedded-weight barcodes (the scanner handles these) or enter the quantity on the number pad. |
-
-> Real printer, drawer, and scale drivers are planned for a later release. Until then, the on-screen receipt — and the ability to reprint it from **Today's sales** or **Recent receipts** — is your reliable record.
+> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open, with a manager's approval). It does not do partial or single-line refunds. To return one item from a multi-item sale, either reverse the whole sale and ring the rest again, or pay the cash back with a **Refund** cash payout in the **Session** menu, following your shop's policy. See Chapter 6.
 
 ---
 
 ## Good habits that prevent problems
 
-A few simple practices remove most of the trouble before it starts.
-
 ### One sale at a time
 
-Finish the sale in front of you — ring, take payment, hand over the receipt — before starting the next. OrbixPOS deliberately stops you from switching register **mode** (Supermarket, Pharmacy, Restaurant) while a sale is in progress: if you try, it tells you **Finish or clear the current sale before switching mode.** Treat that as a reminder of the habit, not a nuisance.
+Finish the sale in front of you — ring, take payment, hand over the receipt — before starting the next. OrbixPOS stops you from switching register **mode** while a sale is in progress (**Finish or clear the current sale before switching mode.**). Treat that as a reminder of the habit.
 
 ### Verify the printed total matches the screen
 
-The money you see while building a basket is a **preview**. The real, final figures come from the server when you complete the sale. After you complete it, glance at the receipt's **TOTAL** and confirm it matches what you expected and what the customer is paying. If they differ, do **not** improvise — the receipt (from the finalised invoice) is the truth; investigate before handing over change.
+The money you see while building a basket is a **preview**. After you complete the sale, glance at the receipt's total and confirm it matches what you expected and what the customer is paying. If they differ, do **not** improvise — the receipt (from the finalised invoice) is the truth; investigate before handing over change.
 
-### Never re-key a sale when you are unsure — retry the *same* one
+### Never re-ring a sale when you are unsure — retry the *same* one
 
-This is the single most important habit on the till. If a sale's outcome is ever in doubt — a blip, a timeout, a frozen moment — **do not start a new sale**. Press **RETRY (same key)** on the same payment, or look the sale up in **Today's sales** first. The till is built to never double-charge as long as you retry the same sale rather than ringing a fresh one.
+This is the single most important habit on the till. If a sale's outcome is ever in doubt, **do not start a new sale**. Press **Retry this sale** on the same payment, answer **Unfinished sale → Check sale**, or look the sale up in **Today's sales** first.
 
 ### Keep the search field focused
 
-The scanner types into the focused field. Before each scan, make sure the cursor sits in the **Scan a barcode or search by code / name…** field. A one-second check saves a mis-scanned item.
+The scanner types into the focused field. Before each scan, make sure the cursor sits in the **Scan a barcode or search by code / name…** field.
+
+### Close the shift, don't just close the app
+
+Closing the app, signing out or switching the PC off leaves your shift open. At the end of the day always **Close session** with a real count, so the till is free for the next person.
 
 ### Check, don't guess
 
-If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales-agent link, a locked **Z-read**, a host that will not connect), it needs your administrator, supervisor, or store manager — not repeated retries. Note the exact wording and the time, and hand it on.
+If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version, and hand it on.
 
 ---
 
-## Quick reference — message to action
+## Quick reference — symptom to fix
 
-| Message or symptom | Likely cause | Your next move |
+| Symptom or message | Likely cause | Fix |
 |---|---|---|
-| **Cannot reach the ERP. Check the connection and host.** | Network down or wrong host. | **Server setup → Test connection**; check network and address. |
-| **Could not reach the ERP at this host.** (in Setup) | Wrong host or server down. | Fix the host; if right, tell your supervisor. |
-| **Your session has expired. Please sign in again.** | Timed-out pass. | Sign in again; your shift is still open on the server. |
-| **You do not have permission for this action.** | Account not allowed. | Ask a supervisor/administrator; don't retry. |
-| **Reconcile (Z-read)** is locked. | Supervisor-only step. | Have a supervisor reconcile. |
-| **Age-restricted items** dialog / **Sale stopped: age not verified.** | Restricted item in basket. | Verify age → **Age verified**, or remove the line. |
-| Sale refused — your user has no linked sales agent. | Account not provisioned to sell. | Ask your administrator to link an internal sales agent; use a cashier account, not root. |
-| **No match for "…".** | Code/barcode/name not found. | Re-scan; try the name; pick from the list; report if missing. |
-| Scan does nothing / lands in the wrong box. | Cursor not in the search field. | Click the **Scan a barcode or search…** field, then scan. |
-| **The outcome was unknown (network/timeout).** / **RETRY (same key)** | Network blip mid-sale. | Press **RETRY (same key)** — never re-ring as a new sale. |
-| **Tendered … is less than the total ….** | Underpaid. | Add tender until **Paid** ≥ **Total**, then **Complete sale**. |
-| **Sent to printer (peripheral stub).** | Printer driver not wired yet. | Use the on-screen/reprintable receipt; follow store policy for paper. |
+| **Could not reach the ERP at this host.** (in Setup) | Wrong address, `/api/v1` added, wrong `http`/`https`, untrusted certificate, network down, server off. | Correct the host (scheme and server only), check the network, add the certificate and restart; else tell your administrator. |
+| **Reached host, status unclear.** | Server starting up, or wrong port/program. | Wait and test again; check the address. |
+| **Cannot reach the ERP. Check the connection and host.** | Network down or wrong host. | Sign out → **Server setup → Test connection**. |
+| **The server certificate was rejected.** | The till does not trust the server's certificate. | Put the root certificate in `certs` beside `pos_app.exe`, restart OrbixPOS. |
+| A till that worked over `https://` stops connecting | The server's certificate authority changed. | Get the new root certificate, drop it in `certs`, restart. |
+| **The server did not respond in time…** | Slow network or server. | Wait and retry. During a sale, use **Retry this sale**. |
+| **Your session ended / has expired. Please sign in again.** | The server ended your sign-in. | Sign in again; your shift is still open. |
+| **This user is not assigned to any company.** / **No branches found for …** | Account not set up. | Ask your administrator. |
+| **You do not have permission for this action.** | Your account lacks the right. | Ask a supervisor or your administrator; don't retry. |
+| An action is missing from the menu | Your account does not have that right. | Ask a supervisor. |
+| **That user is not allowed to approve this action.** | Approver lacks the right, or tried to approve their own action. | A different person with the right approves. |
+| **Pick a till first.** | No till selected. | Click a free till. |
+| **This till already has an OPEN session.** | Till taken a moment ago. | **Refresh**, pick another till. |
+| Till shows **· Your shift** | Your shift is still open (app closed, power cut). | Click it → **Resume shift** or **Close shift**. |
+| **Till in use** with a colleague's name | Someone else's shift is open there. | Use another till, or have it closed (by them, or a branch manager in the ERP **POS Sessions**). |
+| **Couldn't reopen your shift** | Shift could not be reopened. | Ask a supervisor for session access, or **Close shift** with a count. |
+| Session chip shows **—** / "Shift figures unavailable…" | Shift reopened without its details. | Keep selling; figures return when the session can be read. |
+| Sales refused after **Close session** | The session is closed. | Supervisor: reconcile. Cashier: sign out, sign in, open a new shift. |
+| Yellow **No answer from the ERP…** banner / **Retry this sale** | Network blip mid-sale. | Press **Retry this sale** — never re-ring as a new sale. |
+| **The ERP said: …** under the yellow banner | The server gave a reason it could not be sure about. | Retry once; if the same reason returns, fix it (supervisor). |
+| Red banner **Nothing was charged. Fix it and try again.** | Server definitely refused the sale. | Fix the reason shown, press **Complete sale** again. |
+| **Unfinished sale** dialog | An earlier sale was interrupted. | **Check sale**, then follow what it says. |
+| **This basket is too old to complete. Nothing was charged — ring it again.** | The sale waited too long. | Ring it again. |
+| **Select a customer before completing the sale.** | No walk-in customer found. | Pick the walk-in customer; tell your supervisor if it repeats. |
+| **No sales agent could be determined for this sale…** | Your account has no usable sales agent, or you are on the super-admin account. | Use your own cashier account; ask your administrator to link or reactivate your sales agent. |
+| **Tendered … is less than the total …** | Underpaid. | Add tender until **Paid** covers **Total**. |
+| **Age-restricted items** / **Sale stopped: age not verified.** | Restricted item in basket. | Check ID → **Age verified**, or remove the line. |
+| **No match for "…".** | Barcode, code or name not found. | Re-scan, search by name, pick from the list; report missing barcodes. |
+| Next scan adds the previous item; list stays open | Fault in versions before 1.5.2. | Upgrade to 1.5.2 or later; check lines meanwhile. |
+| Scan does nothing / lands in the wrong box | Cursor not in the search field. | Click the search field, then scan. |
+| **No receipt printer set — configure one in Setup.** | No printer chosen. | Sign out → **Server setup** → pick printer → **Save**. |
+| **Cannot open printer "…"** / **did not accept the job** | Printer off, offline, out of paper, renamed. | Check power, paper, cable; reselect it in Setup. |
+| Receipt prints rubbish or symbols | Thermal mode on a non-thermal printer. | **Print mode → Plain text**, or use a proper receipt printer. |
+| Lines wrap or look squashed | Wrong paper width. | Match **Paper width** to the roll. |
+| Cash drawer does not open | Option off, plain mode, cable, or no print. | Tick the drawer option in thermal mode; check the cable; press **Print**. |
+| **Finish or clear the current sale before switching mode.** | Sale in progress. | Finish or clear the sale, then switch. |
 
 When in doubt, remember the two anchors of safe till work: **the server is the truth**, and **retry the same sale, never a new one.**
