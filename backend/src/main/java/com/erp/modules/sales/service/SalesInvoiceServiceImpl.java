@@ -1,6 +1,7 @@
 package com.erp.modules.sales.service;
 
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.modules.iam.service.UserLookupService;
 import com.erp.modules.parties.domain.entity.Agent;
 import com.erp.modules.parties.domain.entity.Customer;
 import com.erp.modules.routes.domain.entity.Route;
@@ -126,6 +127,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final DiscountAuthorisationGuard discountGuard;
     /** Makes the mandatory-agent rule satisfiable on a company whose agent master is empty. */
     private final InternalAgentProvisioner internalAgents;
+    /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
+    private final UserLookupService userLookup;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -153,7 +156,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    NegativeStockGuard negativeStockGuard,
                                    BelowCostGuard belowCostGuard,
                                    DiscountAuthorisationGuard discountGuard,
-                                   InternalAgentProvisioner internalAgents) {
+                                   InternalAgentProvisioner internalAgents,
+                                   UserLookupService userLookup) {
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -181,6 +185,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.belowCostGuard = belowCostGuard;
         this.discountGuard = discountGuard;
         this.internalAgents = internalAgents;
+        this.userLookup = userLookup;
     }
 
     // -------------------------------------------------------------------------
@@ -249,6 +254,16 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             return invoices.search(companyId, q, pageable).map(this::toDto);
         }
         return invoices.findByCompanyId(companyId, pageable).map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SalesInvoiceDto> listPosSalesSince(Long companyId, Long branchId, Instant from,
+                                                   Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // The branch only narrows a company-scoped query, so a branch id from another company
+        // simply matches nothing — it cannot widen what the caller sees.
+        return invoices.findPosSalesSince(companyId, branchId, from, pageable).map(this::toDto);
     }
 
     @Override
@@ -1350,8 +1365,19 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         inv.setUpdatedBy(actorId());
     }
 
-    /** Build response DTO with enriched customer, agent, and route fields. */
+    /**
+     * Display name of the user who created {@code inv} (for a POS sale, the cashier who rang it).
+     * Null when unknown. Kept out of {@link #toDto(SalesInvoice)}'s own body on purpose: that
+     * method's repository reads are pinned by signature in the ArchUnit freeze store.
+     */
+    private String creatorNameOf(SalesInvoice inv) {
+        Long creator = inv.getCreatedBy();
+        return creator == null ? null : userLookup.displayNamesByIds(List.of(creator)).get(creator);
+    }
+
+    /** Build response DTO with enriched customer, agent, route and creator fields. */
     private SalesInvoiceDto toDto(SalesInvoice inv) {
+        String createdByName = creatorNameOf(inv);
         String customerName = customers.findById(inv.getCustomerId())
                 .map(c -> c.getDisplayName())
                 .orElse(null);
@@ -1373,7 +1399,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
         String postedGlEntryUid = resolvePostedGlEntryUid(inv);
         return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName,
-                postedGlEntryUid);
+                postedGlEntryUid, createdByName);
     }
 
     /**

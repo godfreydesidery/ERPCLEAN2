@@ -19,13 +19,32 @@ import 'receipt_text.dart';
 
 /// Shows a printed-style receipt built from the finalised invoice (the receipt
 /// of record, AS-8). Reprint/gift never re-post (G-8); reverse is gated.
+///
+/// [reprint] is true when the receipt is opened again from Today's sales or
+/// Recent receipts rather than straight after the sale. A reprint never opens
+/// the cash drawer: the drawer opens to take the money for a sale, and a till
+/// that pops it on every reprint is an open drawer on request.
 Future<void> showReceiptSheet(
-    BuildContext context, WidgetRef ref, Receipt receipt) {
+    BuildContext context, WidgetRef ref, Receipt receipt,
+    {bool reprint = false}) {
   return showDialog(
     context: context,
-    builder: (_) => _ReceiptDialog(receipt: receipt),
+    builder: (_) => _ReceiptDialog(receipt: receipt, reprint: reprint),
   );
 }
+
+/// Whether printing this receipt should open the cash drawer: only the first
+/// print of a sale's own receipt, when the till is set to open it. Never a
+/// reprint, a gift receipt, a reversed sale, or a second copy — each of those
+/// would be an open drawer with no money going in.
+bool shouldKickDrawer({
+  required bool configured,
+  required bool reprint,
+  required bool gift,
+  required bool reversed,
+  required bool alreadyOpened,
+}) =>
+    configured && !reprint && !gift && !reversed && !alreadyOpened;
 
 /// Builds the fiscal-header detail lines (address, Tel, Email, TIN, VRN) for
 /// [company], in printed-receipt order. Omits any field that is null/empty so
@@ -53,8 +72,9 @@ List<String> companyReceiptLines(Company company) {
 }
 
 class _ReceiptDialog extends ConsumerStatefulWidget {
-  const _ReceiptDialog({required this.receipt});
+  const _ReceiptDialog({required this.receipt, this.reprint = false});
   final Receipt receipt;
+  final bool reprint;
   @override
   ConsumerState<_ReceiptDialog> createState() => _ReceiptDialogState();
 }
@@ -64,21 +84,43 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
   bool _reversed = false;
   bool _printing = false;
 
+  /// The drawer opens at most once per sale, on the first successful print of
+  /// the original receipt. Printing a second copy does not open it again.
+  bool _drawerOpened = false;
+
   /// Who approved the reversal, for the on-screen stamp. Display only — the
   /// authoritative record is the server's audit row.
   String? _reversedBy;
 
   Receipt get r => widget.receipt;
 
+  /// The CASHIER line: whoever rang the sale. Straight after a sale that is the
+  /// signed-in user; on a reprint it is only ever the name the server recorded,
+  /// and is left off rather than guessed when an old receipt does not carry it —
+  /// printing the reprinting user's name would put the wrong person on the slip.
+  String _cashierName(AppData app) {
+    final rang = r.invoice.createdByName?.trim() ?? '';
+    if (rang.isNotEmpty) return rang;
+    return widget.reprint ? '' : (app.me?.displayName ?? '');
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appControllerProvider);
+    final supervisor =
+        app.can(stepUpRuleFor(GatedAction.saleReverse).permissionCode);
+    // A cashier may reverse only sales rung on their own open shift; the server
+    // refuses anything else, so offering the button on a colleague's sale only
+    // led to a manager approving a refund that was then refused. Unknown
+    // session (an older server) leaves the decision to the server, as before.
+    final sessionId = r.invoice.posSessionId;
+    final ownShift = sessionId == null || sessionId == app.shift?.id;
     // Mirror of the endpoint's gate: POS.SALE.VOID (a cashier, who then needs a
     // manager) OR SALES.INVOICE.VOID (a supervisor, who does not). Showing only
     // the first would hide the button from exactly the person the refund policy
     // sends the cashier to find.
-    final canReverse = (app.can(Perms.saleVoid) ||
-            app.can(stepUpRuleFor(GatedAction.saleReverse).permissionCode)) &&
+    final canReverse = (app.can(Perms.saleVoid) || supervisor) &&
+        (supervisor || ownShift) &&
         (app.shift?.status.isOpen ?? false) &&
         !_reversed &&
         !r.invoice.status.isVoid;
@@ -176,7 +218,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       receipt: r,
       companyName: ctx?.company.name ?? 'OrbixPOS',
       branchName: ctx?.branch.name ?? '',
-      cashierName: app.me?.displayName ?? '',
+      cashierName: _cashierName(app),
       width: kCols80mm,
       gift: _gift,
       reversed: _reversed || r.invoice.status.isVoid,
@@ -214,22 +256,30 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
     }
     final app = ref.read(appControllerProvider);
     final company = app.context?.company;
+    final reversed = _reversed || r.invoice.status.isVoid;
+    final kick = shouldKickDrawer(
+        configured: cfg.kickDrawer,
+        reprint: widget.reprint,
+        gift: _gift,
+        reversed: reversed,
+        alreadyOpened: _drawerOpened);
     final bytes = buildReceiptBytes(
       receipt: r,
       companyName: company?.name ?? 'OrbixPOS',
       branchName: app.context?.branch.name ?? '',
-      cashierName: app.me?.displayName ?? '',
+      cashierName: _cashierName(app),
       width: cfg.receiptWidthCols,
       mode: cfg.printMode,
       gift: _gift,
-      reversed: _reversed || r.invoice.status.isVoid,
+      reversed: reversed,
       reversedBy: _reversedBy,
-      kickDrawer: cfg.kickDrawer,
+      kickDrawer: kick,
       companyDetailLines: company == null ? const [] : companyReceiptLines(company),
     );
     setState(() => _printing = true);
     try {
       await const ReceiptPrinter().printRaw(printer, bytes);
+      if (kick) _drawerOpened = true;
       if (mounted) showToast(context, 'Printed.', ok: true);
     } on ReceiptPrinterException catch (e) {
       if (mounted) showToast(context, e.message);

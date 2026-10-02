@@ -50,6 +50,9 @@ Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
   }
 }
 
+/// The cashier's answer to the age check.
+enum _AgeDecision { verified, overridden, cancelled }
+
 class _PaymentSheet extends ConsumerStatefulWidget {
   const _PaymentSheet();
   @override
@@ -174,7 +177,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
   // ---------------------------------------------------------------- complete
 
-  Future<bool> _confirmAge() async {
+  /// Asks the cashier to confirm the customer's age.
+  ///
+  /// **Cancel always stops the sale.** Someone who holds the age override gets a
+  /// third, explicit button for it. It used to be implied: for an override
+  /// holder, Cancel fell through to "sell anyway", so the one button that reads
+  /// as "stop" completed the sale.
+  Future<_AgeDecision> _confirmAge({required bool canOverride}) async {
     final cart = ref.read(cartProvider);
     final kinds = cart.activeLines
         .map((l) => l.product.restrictedKind)
@@ -182,7 +191,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         .map((k) => k.ageLabel)
         .toSet()
         .join(', ');
-    final ok = await showDialog<bool>(
+    final decision = await showDialog<_AgeDecision>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
@@ -196,15 +205,19 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             'customer meets the minimum age.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context, _AgeDecision.cancelled),
               child: const Text('Cancel')),
+          if (canOverride)
+            TextButton(
+                onPressed: () => Navigator.pop(context, _AgeDecision.overridden),
+                child: const Text('Override without check')),
           OrbixButton(
               label: 'Age verified',
-              onPressed: () => Navigator.pop(context, true)),
+              onPressed: () => Navigator.pop(context, _AgeDecision.verified)),
         ],
       ),
     );
-    return ok ?? false;
+    return decision ?? _AgeDecision.cancelled;
   }
 
   Future<void> _complete() async {
@@ -235,15 +248,18 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       return;
     }
 
-    // Age gate (ADR-0044 D-3a). Verify unless the cashier holds the override.
+    // Age gate (ADR-0044 D-3a). Verified, or an explicit override by someone who
+    // holds it (the server re-checks that permission); Cancel always stops.
     var ageVerified = false;
     if (cart.hasRestricted) {
-      ageVerified = await _confirmAge();
+      final decision =
+          await _confirmAge(canOverride: app.can(Perms.saleAgeOverride));
       if (!mounted) return;
-      if (!ageVerified && !app.can(Perms.saleAgeOverride)) {
+      if (decision == _AgeDecision.cancelled) {
         showToast(context, 'Sale stopped: age not verified.');
         return;
       }
+      ageVerified = decision == _AgeDecision.verified;
     }
 
     // Resolve the tenders to post. The single-CASH fast path is used ONLY when

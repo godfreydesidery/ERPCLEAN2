@@ -18,7 +18,7 @@ enum AppPhase { booting, login, openShift, register }
 
 /// Immutable top-level app state: who is signed in, the resolved numeric context,
 /// the open shift (if any), the active register mode, and the reference data the
-/// cart needs (walk-in customer, default agent, units by uid).
+/// cart needs (walk-in customer, units by uid).
 class AppData {
   const AppData({
     this.phase = AppPhase.booting,
@@ -31,8 +31,6 @@ class AppData {
     this.notice,
     this.cashierId,
     this.defaultCustomer,
-    this.defaultAgent,
-    this.agents = const [],
     this.unitsByUid = const {},
     this.currency = 'TZS',
     this.vatRates = const {},
@@ -56,8 +54,6 @@ class AppData {
   final String? cashierId;
 
   final Customer? defaultCustomer;
-  final Agent? defaultAgent;
-  final List<Agent> agents;
   final Map<String, Unit> unitsByUid;
   final String currency;
 
@@ -94,8 +90,6 @@ class AppData {
     bool clearNotice = false,
     String? cashierId,
     Customer? defaultCustomer,
-    Agent? defaultAgent,
-    List<Agent>? agents,
     Map<String, Unit>? unitsByUid,
     String? currency,
     Map<String, double>? vatRates,
@@ -111,8 +105,6 @@ class AppData {
       notice: clearNotice ? null : (notice ?? this.notice),
       cashierId: cashierId ?? this.cashierId,
       defaultCustomer: defaultCustomer ?? this.defaultCustomer,
-      defaultAgent: defaultAgent ?? this.defaultAgent,
-      agents: agents ?? this.agents,
       unitsByUid: unitsByUid ?? this.unitsByUid,
       currency: currency ?? this.currency,
       vatRates: vatRates ?? this.vatRates,
@@ -182,15 +174,14 @@ class AppController extends Notifier<AppData> {
     final unitsByUid = {for (final u in units) u.uid: u};
 
     Customer? walkIn;
-    List<Agent> agents = const [];
-    Agent? defaultAgent;
     try {
       walkIn = await parties.findWalkIn(context.companyId);
     } catch (_) {/* CUSTOMER.VIEW may be absent — handled at cart time */}
-    try {
-      agents = await parties.listAgents(context.companyId);
-      defaultAgent = agents.isNotEmpty ? agents.first : null;
-    } catch (_) {/* AGENT.VIEW may be absent */}
+
+    // No sales agent is chosen here. The sale goes up without one and the server credits it to the
+    // signed-in user's own internal agent, creating it on first use. This used to send the FIRST
+    // agent in the company list whenever the user could read agents (a Sales Manager, say), so
+    // every sale they rang was credited to whoever happened to sort first.
 
     final currency = context.company.baseCurrency ??
         walkIn?.defaultCurrency ??
@@ -246,8 +237,6 @@ class AppController extends Notifier<AppData> {
       notice: notice,
       clearNotice: notice == null,
       defaultCustomer: walkIn,
-      defaultAgent: defaultAgent,
-      agents: agents,
       unitsByUid: unitsByUid,
       currency: currency,
       vatRates: vatRates,

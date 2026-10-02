@@ -1,245 +1,337 @@
 # For Supervisors and Store Managers
 
-This chapter is for the people who run the floor rather than only ring sales: **shift supervisors** and **store managers**. It explains the jobs that a plain cashier cannot do — reconciling a session and reading its variance, keeping the cashier who counts the drawer separate from the person who signs off the count, running several tills (and several branches), creating and retiring tills, and getting every cashier set up so they are actually allowed to sell. It ends with a step-by-step end-of-day close-out you can follow across all the tills in your store.
+This chapter is for the people who run the floor rather than only ring sales: **shift supervisors** and **store managers**. It explains the jobs a plain cashier cannot do — approving refunds, discounts and drawer reports at a cashier's till, reconciling a session and reading its variance, freeing a till a cashier left open, keeping the person who counts the drawer separate from the person who signs off the count, running several tills, creating and retiring tills, and getting every cashier set up so they can actually sell. It ends with a step-by-step end-of-day close-out you can follow across all the tills in your store.
 
-If you have not yet read the earlier chapters, do that first — you need to know how to sign in, open a shift, ring a sale, take payment and print a receipt before the supervisor jobs below will make sense. Everything here builds on the same screens; the difference is that your account carries extra permissions, so OrbixPOS shows you actions a cashier never sees.
+Read the earlier chapters first — you need to know how to sign in, open a shift, ring a sale, take payment and print a receipt before the supervisor jobs below make sense. Everything here uses the same screens; the difference is that your account carries extra rights, so OrbixPOS shows you actions a cashier never sees — or asks you to approve them on a cashier's till.
 
-> Throughout this manual, OrbixPOS owns no money of its own. The **ERP server** is the single source of truth for price, VAT, totals and — the number you care about most here — the **cash variance** at the end of a shift. The figures OrbixPOS shows you while a shift is open are previews to help you work; the variance that gets posted to the books is the one the server computes when you close and reconcile.
+> OrbixPOS owns no money of its own. The **ERP server** is the single source of truth for price, VAT, totals and — the number you care about most here — the **cash variance** at the end of a shift. The figures OrbixPOS shows while a shift is open are previews; the variance posted to the books is the one the ERP works out when the session is closed and reconciled.
 
 ---
 
 ## What each role can and cannot do
 
-**What roles are.** OrbixPOS does not have a fixed list of "cashier" and "manager" buttons hard-wired into the app. Instead, every action is controlled by a named **permission** that your administrator grants to your user account in the ERP (for example, the permission to reconcile a session, or the permission to create a till). A "role" is just the bundle of permissions your administrator has given you.
+**What roles are.** OrbixPOS has no hard-wired "cashier" and "manager" buttons. Every action is controlled by a named **permission** (a right) that your administrator grants to user accounts in the ERP. A **role** is a bundle of permissions. The ERP comes with standard roles — **Cashier**, **Sales Manager** and **Branch Manager** are the ones that matter at the till — and your administrator can adjust them.
 
-**Why it exists.** Tills handle cash, and cash needs controls. By tying each sensitive action to its own permission, the business can let a cashier ring sales and close their own drawer, while reserving the act of signing off the count — and pushing the difference into the accounts — for someone more senior. This is the foundation of *segregation of duties*, explained in its own section below.
+**Why it exists.** Tills handle cash, and cash needs controls. Tying each sensitive action to its own permission lets the business have a cashier ring sales and close their own drawer, while reserving refunds, large discounts and signing off the count for someone more senior.
 
-**When it matters.** Every time you open the session menu or the open-shift screen, OrbixPOS checks what your account is allowed to do and shapes the screen to match. An action you lack permission for is **dimmed and unavailable**, and the reconcile action shows a small padlock so you can see at a glance that it is reserved for a supervisor.
+**How it shows on screen.** When you sign in, OrbixPOS asks the ERP what your account is allowed to do and shapes the screens to match:
 
-**How it works.** When you sign in, OrbixPOS asks the server for your effective permissions and remembers them for the session. It then enables or disables each action accordingly. You never see a raw permission code on screen — you simply find that some actions are available and others are locked.
+- An action you are **not allowed** to do is simply **not shown** — there is no greyed-out button or padlock for it.
+- An action you are allowed to do but that does not apply **right now** stays visible, dimmed, with the reason underneath (for example *Close the session first*).
+- **One exception:** the **X-read** and **Z-read (reprint)** rows stay visible to anyone working the till, even a cashier whose role does not include drawer reports. For that cashier, opening a report asks a manager to approve it at the till (see *Manager approval at the till* below).
 
-The three operating roles map to permissions like this:
+The table shows what the **standard** roles can do. If your administrator has changed the roles, your shop may differ.
 
-| Capability | Cashier | Supervisor | Store manager |
+| Capability | Cashier | Sales Manager | Branch Manager |
 |---|---|---|---|
-| Sign in, open and close their **own** shift | Yes | Yes | Yes |
-| Ring sales and take payment | Yes | Yes | Yes |
-| Run an **X-read** (mid-shift drawer report) | Yes | Yes | Yes |
-| Record a **cash payout** (refund or paid-out) | Yes | Yes | Yes |
-| Reprint from **Today's sales** / **Recent receipts** | Yes | Yes | Yes |
-| **Reverse** a whole sale while the session is open | No | Yes | Yes (where granted) |
-| **Reconcile (Z-read)** — post the variance to the ledger | No | Yes | Yes |
-| **Create** and **retire** tills | No | No | Yes |
-| Oversee several tills / branches | No | Partly | Yes |
+| Open a shift and ring sales | Yes | No | No |
+| Record a **cash payout** (refund or paid-out) | Yes | No | No |
+| Record a **till expense** (by category) | Yes | No | No |
+| **Close** a session (count the drawer) | Own shift | No | Yes — any session, in the ERP web app |
+| Open the **X-read** and **Z-read (reprint)** without an approval | Yes | Yes | Yes |
+| Look up and reprint from **Today's sales** | Yes | Yes | Yes |
+| Start a **Refund / reverse** | Only sales from their own open shift, with a manager's approval | Yes, on any sale while their shift is open; no second approval needed | Yes, on any sale while their shift is open; no second approval needed |
+| **Approve** a refund at a cashier's till | No | Yes | Yes |
+| **Approve** a discount above the company limit | No | Yes | Yes |
+| **Print** a Z-read without an approval | No | No | Yes |
+| **Approve** printing a Z-read, or an X-read for a cashier without report rights | No | No | Yes |
+| **Approve** leaving an unfinished sale unresolved | No | Yes | Yes |
+| **Reconcile (Z-read)** — post the variance to the books | No | No | Yes |
+| **Create** tills (**New till**) | No | No | Yes |
+| Sell age-restricted items without the age confirmation (**Override without check**) | No | No | Yes |
 
-> A supervisor is a cashier *plus* the right to reconcile and (usually) reverse a sale. A store manager is a supervisor *plus* the right to create and retire tills and oversee the branch. There is no separate "manager mode" — the same OrbixPOS app simply unlocks more actions for a more senior account.
+> **A manager usually approves at the cashier's till rather than running one.** The standard Sales Manager and Branch Manager roles do not include opening a shift or ringing sales. A manager who also works a till needs the Cashier role as well — ask your administrator.
 
-If you expect to see an action and it is dimmed or carries a padlock, your account is missing the permission for it. That is a deliberate control, not a fault. Ask your administrator to grant it if your job genuinely requires it.
+If you expect an action and it is not there, your account does not hold the permission for it. That is a deliberate control, not a fault. Ask your administrator to grant it if your job genuinely needs it.
+
+---
+
+## Manager approval at the till
+
+**What it is.** Some actions a cashier can start but not finish alone. When the cashier gets to that point, OrbixPOS opens a **Manager approval** box on the cashier's own screen. A manager walks over, types **their own** username and password, and presses **Approve**. The cashier stays signed in the whole time.
+
+**Why it exists.** It puts a manager on every action that moves money or closes a shift's figures — a refund, a big discount, the Z-read — without the cashier having to sign out and the manager sign in.
+
+**How it works.**
+
+1. The cashier's screen shows a box titled, for example, **Manager approval — refund**. Under the title is one line saying what is being approved (for example *Reverse this sale and return the money to the customer.*) and, usually, the specific receipt, item or amount.
+2. The manager types their **Manager username** and **Manager password**.
+3. The manager presses **Approve** (or **Cancel** to refuse).
+4. If the details are accepted, the box closes and the action goes ahead. Where it applies, the manager's name is shown — for example *Approved by Peter Mollel* on a reversed receipt, or *Discount approved by …* under the discount.
+
+The rules the ERP enforces every time:
+
+- **A different person.** Nobody can approve their own action. If a manager is the one signed in, they cannot approve by typing their own password — they get *That user is not allowed to approve this action.* In practice a manager who is signed in and already holds the right for a refund or a Z-read print is not shown the box at all: they are the manager it looks for.
+- **The right permission.** The approver must genuinely hold the permission for that action (see the table below), in this company, and their account must be active.
+- **One action only.** An approval covers that single action. Nothing is remembered — the next refund or report asks again. The manager is never signed in on the cashier's till.
+- **Mistyped details** show *Those details were not accepted. Check the username and password and try again.* The box stays open so the manager can retype. After several failures in a row you see *Too many failed approval attempts. Please wait a moment and try again.*
+
+### Which actions need a manager
+
+| Action at the till | Box title | The approver needs | Standard roles that can approve |
+|---|---|---|---|
+| **Refund / reverse** a sale (when a cashier starts it) | **Manager approval — refund** | the invoice-void permission | Sales Manager, Branch Manager |
+| A line discount above the company's limit | **Manager approval — discount** | the discount-override permission | Sales Manager, Branch Manager |
+| Opening the **X-read** for a cashier whose role has no report rights | **Manager approval — X-read** | the session-reconcile permission | Branch Manager |
+| Opening the **Z-read (reprint)** for a cashier whose role has no report rights | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
+| **Printing** a Z-read (any copy) when the person signed in does not hold the session-reconcile permission — for example a cashier printing a reprint | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
+| **Leave unresolved…** on an unfinished sale whose outcome is unknown | **Manager approval — leave a sale unresolved** | the invoice-void permission | Sales Manager, Branch Manager |
+
+Notes on the table:
+
+- **Refunds.** A supervisor who holds the invoice-void permission and is running a till shift themselves is not asked for a second approval when they reverse a sale. A cashier may only refund sales from **their own** open shift, even with an approval — on a colleague's sale the **Refund / reverse** button does not appear at all, so you will not be called over to approve a refund the ERP would then refuse. To reverse such a sale, either the cashier who rang it does so from their own shift (with your approval), or you do it yourself from a till where **your own** shift is open. See the *Receipts and Refunds* chapter (Chapter 6).
+- **Discounts.** The discount limit is set per company in the ERP and is **off** unless your administrator switches it on. The till does not know the limit; the ERP checks it when the sale is completed. See the *Selling — Supermarket* chapter (Chapter 3).
+- **Drawer reports.** By default the Cashier role *can* read its own X-read and Z-read, so the report approvals only appear if your shop has removed that right from cashiers. **Printing** a Z-read is a manager's job. A user who holds the session-reconcile permission (a Branch Manager, by default) prints it straight away with no approval box — they *are* the manager the box would ask for, so a shop with only one manager on duty can still print its Z-read. Anyone else, such as a cashier printing a **Z-read (reprint)**, sees the **Manager approval — Z-read** box and needs a Branch Manager to approve.
+- **Unfinished sales.** The till first asks the ERP one last time whether the sale went through. An approval is only asked for when the ERP still cannot say.
+- **Age-restricted items** are not a manager approval: the cashier confirms the customer's age at **Complete sale** in the **Age-restricted items** box. **Cancel** always stops the sale (*Sale stopped: age not verified.*). A user whose role holds the age-override permission (Branch Manager by default) also sees a third button, **Override without check**, which completes the sale without the age confirmation. A manager cannot approve the override for a cashier — only the person signed in can use it.
 
 ---
 
 ## Segregation of duties — why two people, not one
 
-**What segregation of duties is.** It is the practice of splitting a sensitive task between two people so that no single person can both create a discrepancy and approve it. At the till, the sensitive task is the end-of-shift cash count: one person physically **counts the drawer**, and a different, more senior person **reconciles** that count — confirming it and posting any shortfall or surplus to the accounts.
+**What it is.** Splitting a sensitive task between two people so that no single person can both create a discrepancy and approve it. At the till, one person physically **counts the drawer** (closes the session), and a different, more senior person **reconciles** that count — confirming it and posting any shortfall or surplus to the accounts.
 
-**Why it exists.** If the same person who counted the cash were also the one who signed the count off into the ledger, a missing amount could be quietly absorbed with no second pair of eyes. Keeping the two steps with two people means every variance is reviewed by someone who did not handle the drawer. It protects honest staff from suspicion just as much as it deters dishonesty.
+**Why it exists.** If the person who counted the cash also signed the count off into the books, a missing amount could be quietly absorbed with no second pair of eyes. Two people means every variance is reviewed by someone who did not handle the drawer. It protects honest staff from suspicion just as much as it deters dishonesty.
 
-**When it happens.** At the **close** of every shift. The cashier closes the session by counting the drawer; the supervisor (or manager) reconciles it afterwards. The two steps are deliberately separate in OrbixPOS — closing does not reconcile, and reconciling is a second, permission-gated action.
+**How OrbixPOS supports it.**
 
-**How it works.** OrbixPOS enforces the split through permissions:
+- The Cashier role holds the permission to **close** a session but **not** to **reconcile** it. A cashier counts and closes their own drawer, and the **Reconcile (Z-read)** row never appears in their menu.
+- The Branch Manager role holds the reconcile permission. **In practice the branch manager reconciles a cashier's session in the ERP web app**, on the **POS Sessions** screen. In OrbixPOS, **Reconcile (Z-read)** only appears for the person who closed the session on that till during the same sign-in — once the cashier signs out, the session can no longer be reached from the till.
 
-- A cashier holds the permission to **close** a session but **not** the permission to **reconcile** it. So a cashier can count and close their own drawer, and then the **Reconcile (Z-read)** action appears with a padlock — visible, but locked.
-- A supervisor or manager holds the reconcile permission, so for them the same action is unlocked.
+> **Note.** The standard Branch Manager role can close **and** reconcile a session, so one person *can* do both. Good practice — and usually store policy — is still that a manager reconciles a drawer they did **not** count.
 
-This means the natural workflow is: the cashier closes, then hands over to you to reconcile. You should reconcile a drawer you did **not** count. Even though OrbixPOS will technically let a supervisor both close and reconcile (a supervisor holds both permissions), good practice — and usually store policy — is to have the cashier close and a *different* person reconcile.
-
-> **Note.** Reconciling is final. It posts the variance to the general ledger and **cannot be undone**, and a closed or reconciled session cannot be re-opened or edited. Always confirm the counted figure with the cashier before you reconcile.
+> **Reconciling is final.** It posts the variance to the general ledger and **cannot be undone**, and a reconciled session cannot be reopened or edited. Always confirm the counted figure with the cashier before you reconcile.
 
 ---
 
-## Reconcile / Z-read — reading and posting the variance
+## Close, reconcile and the Z-read
 
-**What reconcile (Z-read) is.** Reconcile is the end-of-shift step that **finalises** a cash session and posts its cash variance to the accounts. Its printed summary is traditionally called a **Z-read** — the end-of-day "zeroing" report for that drawer. The variance is simply *counted cash minus expected cash*: a positive number means the drawer is **over** (more cash than expected), a negative number means it is **short**.
-
-**Why it exists.** Sales, the opening float and any cash payouts together tell the server how much cash *should* be in the drawer. The cashier's physical count tells you how much *actually* is. Reconciling records the difference permanently so the books match reality and any pattern of shortages can be investigated.
-
-**When it happens.** Once per shift, after the cashier has **closed** the session (counted the drawer). Reconcile is the supervisor-gated step that comes immediately after close.
-
-**How it works.** The server already computed the expected cash and the variance at close. When you reconcile, the server finalises the session, moves it from **CLOSED** to **RECONCILED**, and posts the variance to the general ledger. OrbixPOS then shows you the Z-read summary.
+**What reconcile (Z-read) is.** Reconcile is the end-of-shift step that **finalises** a cash session and posts its cash variance to the accounts. Its summary is the **Z-read** — the end-of-day "zeroing" report for that drawer. The variance is *counted cash minus expected cash*: a positive number means the drawer is **over**, a negative number means it is **short**.
 
 ### Reading the close screen (what the cashier sees)
 
-When the cashier closes the session, OrbixPOS shows a small variance panel. It is worth knowing exactly what it means, because it is the same figure you are about to post:
+When the cashier closes the session (**☰** › **Close session** › type the **Counted cash (TZS)** › **Close session**), OrbixPOS shows a **Session closed** panel. It is the same figure you are about to post:
 
 | Line | Meaning |
 |---|---|
-| **Expected** | What the server calculates *should* be in the drawer: opening float + cash sales − cash payouts. |
-| **Counted** | What the cashier physically counted and typed in. |
+| **Expected** | What the ERP calculates *should* be in the drawer. Under it: *Expected = float + cash sales − payouts (cash tenders only; card & mobile money settle separately).* |
+| **Counted** | What the cashier counted and typed in. |
 | **Variance** | Counted minus Expected. A green panel means the drawer balances or is over; a red panel means it is short. |
 
-The close panel ends with the reminder *"Reconcile (Z-read) posts this variance — supervisor."* That is your cue.
+The panel ends with *Reconcile (Z-read) posts this variance — supervisor.* The cashier presses **Done**, then signs out (**☰** › **Sign out**). The session is now **CLOSED** and waiting for you.
 
-### How to reconcile a session
+### How to reconcile a cashier's session (ERP web app)
 
-1. Make sure the cashier has already **closed** the session (the count is done) and has told you the counted figure.
-2. Open the **session menu** using the menu button (**☰**) in the register's top bar. The **Session** panel slides in from the right.
-3. Find **Reconcile (Z-read)** near the bottom of the list. Its subtitle reads *"Post variance — supervisor."* If it carries a padlock, your account lacks the permission — see the troubleshooting table below.
-4. Tap **Reconcile (Z-read)**. A confirmation dialog appears: *"This finalises the session and posts the cash variance to the general ledger. This cannot be undone."*
-5. Review the figures one last time, then tap **Reconcile**.
-6. OrbixPOS shows the **Z-read** summary. Read it top to bottom:
+1. Confirm the counted figure with the cashier.
+2. In the ERP web app, open **POS Sessions**. Filter by status **Closed** to see sessions waiting for you.
+3. Open the session and check the figures.
+4. Press **Reconcile** and confirm. The session moves to **RECONCILED** and the variance is posted.
+5. The **Z-Read (Final Shift Report)** for the session is shown on the same page.
+
+### Reconciling in OrbixPOS (when you ran and closed the shift yourself)
+
+If your account holds the reconcile permission and you closed the session on this till yourself, without signing out:
+
+1. Open the session menu (**☰**). **Reconcile (Z-read)** shows *Post the variance — this is final* (before the session is closed it reads *Close the session first*).
+2. Tap it. A **Reconcile session** box says: *This finalises the session and posts the cash variance to the general ledger. This cannot be undone — but the Z-read can be reprinted afterwards, so nothing is lost if the paper jams.*
+3. Tap **Reconcile**.
+4. The **Z-read** appears. Read it top to bottom:
 
    | Z-read line | What it tells you |
    |---|---|
+   | **Sales (all tenders)** | Total takings for the shift, all payment types. Under it, **By tender** splits it, for example *Cash 32,020.00 · Mobile 14,000.00*. |
    | **Opening float** | The cash the drawer started with. |
-   | **Sales** | Total cash takings for the shift. |
-   | **Payouts** | Cash paid out of the drawer during the shift (shown as a deduction). |
-   | **Expected** | Float + sales − payouts. |
-   | **Counted** | What the cashier counted. |
+   | **Cash sales** | The cash part of the takings. |
+   | **Payouts** | Cash paid out of the drawer (shown as a deduction), with a split such as *Refund (1)*, *Paid out (2)* and *Expense (1)*. Till expenses have their own **Expense** line. |
+   | **Expected** | Float + cash sales − payouts. |
+   | **Counted** | What was counted at close. |
    | **Variance** | Counted − Expected. Shown in red if the drawer was short. |
-   | **<n> invoices** | How many sales the shift rang. |
+   | **N invoices** | How many sales the shift rang. |
 
-7. Tap **Finish shift**. The session is now **RECONCILED** and the till is free for the next shift.
+5. To print it, tap **Print**. Because you hold the reconcile permission, it prints straight away — no approval box.
+6. Tap **Finish shift**. The till returns to the **Open shift** screen and is free for the next shift.
 
-> **Tip.** A small variance (a coin or two) is normal rounding. A large or repeated variance on the same till or cashier is worth investigating. Use **Today's sales** in the session menu to review the shift's invoices, and the **X-read** earlier in the shift to see whether the drawer drifted at a particular time.
+### Reprinting a Z-read
 
-### If reconcile is locked or fails
+After reconciling on the till, **☰** › **Z-read (reprint)** (*The final figures for a reconciled session*) shows the same figures again, marked as a reprint: *This is a reprint. The figures are identical to the original — the Z-read is read-only and posts nothing.* Before reconciliation the row reads *Available once the session is reconciled*. Printing the reprint needs no approval if you hold the reconcile permission yourself, or if a manager already approved opening that copy; otherwise it asks for a manager's approval (**Manager approval — Z-read**).
+
+> **Tip.** A small variance (a coin or two) is normal. A large or repeated variance on the same till or cashier is worth investigating. Use **Today's sales** to review the shift's sales, and the **X-read** earlier in the shift to see whether the drawer drifted at a particular time.
+
+### If reconcile is missing or fails
 
 | What you see | What to do |
 |---|---|
-| **Reconcile (Z-read)** is dimmed and shows a padlock | Your account lacks the reconcile permission. A supervisor or manager must do it, or ask your administrator to grant you the permission. |
-| The action does nothing | There is no open or closed session loaded on this device. Confirm the cashier closed the session on **this** till. |
-| An error message appears after tapping **Reconcile** | Read the message — it comes straight from the server. A common cause is that the session was already reconciled. Re-open the session menu to check its status. |
-| You reconciled the wrong session by mistake | Reconcile cannot be undone. Contact your administrator/accountant to handle the correction in the ERP. |
+| **Reconcile (Z-read)** is not in the menu | Your account does not hold the reconcile permission, or this is not the session you closed yourself. Reconcile in the ERP web app (**POS Sessions**). |
+| **Reconcile (Z-read)** is dimmed with *Close the session first* | The session is still open. It must be counted and closed first. |
+| An error message appears after tapping **Reconcile** | Read the message — it comes from the ERP. A common cause is that the session was already reconciled. |
+| You reconciled the wrong session by mistake | Reconcile cannot be undone. Contact your administrator or accountant to correct it in the ERP. |
 
 ---
 
 ## X-read, payouts and reviewing a shift
 
-A supervisor often needs to check on a drawer **without** closing it. Two session-menu actions exist for exactly this, and both are available to cashiers and supervisors alike.
-
 ### X-read — a mid-shift drawer check
 
-**What it is.** The **X-read** is a snapshot of the drawer *so far*, taken without closing or resetting anything. **Why it exists.** It lets you sanity-check a till mid-shift — for example before a cashier hands over, or if you suspect a problem — without ending the session. **When it happens.** Any time during an open shift, as often as you like. **How it works.** OrbixPOS asks the server for the running totals and shows them; nothing is posted and the running figures keep accumulating afterwards.
+**What it is.** A snapshot of the drawer *so far*, taken without closing or resetting anything. Use it to sanity-check a till mid-shift — before a cashier hands over, or if you suspect a problem.
 
-1. Open the session menu (**☰**).
-2. Tap **X-read** (*"Mid-shift drawer report"*).
-3. Read the report: **Opening float**, **Sales**, **Payouts** (as a deduction), **Expected cash**, and a footer with the **invoice count**.
-4. Tap **Close** to dismiss it. The shift continues unchanged.
+1. On the till, open the session menu (**☰**).
+2. Tap **X-read** (*Mid-shift drawer report — resets nothing*).
+3. If the cashier's role has no report rights, a **Manager approval — X-read** box opens; a Branch Manager approves it. (With the standard Cashier role, the report opens straight away.)
+4. Read the report: **Sales (all tenders)** with the **By tender** split, **Opening float**, **Cash sales**, **Payouts** (as a deduction, with the split by type), **Expected cash**, and the number of invoices. It ends with *An X-read does not close the shift and resets nothing.*
+5. Tap **Print** for a paper copy (no approval is needed to print an X-read), or **Close**. The shift carries on unchanged.
+
+An X-read works while the session is open or closed. Once it is reconciled, use the Z-read instead.
 
 ### Cash payout — recording cash that leaves the drawer
 
-**What it is.** A **cash payout** records money taken *out* of the drawer mid-shift. There are two kinds: a **Refund** (cash handed back to a customer) and a **Paid out** (a drawer drop or petty-cash payment). **Why it exists.** Any cash that leaves the drawer must be recorded, or the expected-cash figure — and therefore the variance — will be wrong at close. **When it happens.** Whenever cash physically leaves the drawer for a reason other than change on a sale. **How it works.** The payout is booked against the open session and subtracts from the expected cash the server will calculate at close.
+**What it is.** A record of money taken *out* of the drawer mid-shift. There are two kinds: **Paid out** (for example a drop to the safe) and **Refund** (cash handed back to a customer). A business expense paid from the drawer is recorded separately, as a **Till expense** (below). Any cash that leaves the drawer must be recorded, or the expected cash — and therefore the variance — will be wrong at close.
 
 1. Open the session menu (**☰**).
-2. Tap **Cash payout** (*"Refund or drawer drop"*).
-3. Choose the type: **Refund** or **Paid out**.
-4. Enter the **Amount** and a short **Reason**.
-5. Tap **Record**. OrbixPOS confirms *"Payout recorded."*
+2. Tap **Cash payout** (*Refund or drawer drop — reason required*). It is only available while the shift is open.
+3. Choose **Paid out** or **Refund** (the box opens on **Paid out**).
+4. Enter the **Amount (TZS)** and the **Reason (required)** — a few words saying what the cash is for. *A paid-out is booked to the ledger as an expense against the drawer, so the reason is what the entry is filed under.*
+5. Tap **Record**. OrbixPOS confirms *Payout recorded.* or *Payout recorded and posted to the ledger.*
 
-> A **cash-drawer refund payout** is also the supported way to give money back when a *whole-sale reverse* is not the right tool — for example, refunding a single line of a multi-line sale. OrbixPOS does **not** support partial or single-line refunds; you either reverse the entire sale (while the session is open, with the reverse action) or record a cash refund payout here.
+> A **Refund** payout is also the way to give money back when a whole-sale reverse is not possible — for example a return from a shift that has already closed. OrbixPOS does **not** do partial or single-line refunds; see the *Receipts and Refunds* chapter (Chapter 6).
+
+### Till expense — business costs paid from the drawer
+
+**What it is.** A record of cash paid out of the drawer for something the business needs — transport, cleaning, a small repair — filed under a **category**. It reduces the expected cash exactly like a payout, but because it carries a category, it appears as its own **Expense** line on the X-read and Z-read and is posted to the ledger under its category, so you can see what till money was spent on without reading every paid-out reason.
+
+**Who can record it.** Anyone whose role holds the till-expense permission — the standard Cashier role does. The **Till expense** row (*Cash paid out for the business — by category*) is only shown to those users, and only works while the session is open.
+
+1. Open the session menu (**☰**) and tap **Till expense**.
+2. Enter the **Amount (TZS)**.
+3. Under **Category (required)**, tap one of **Transport**, **Cleaning**, **Repairs**, **Meals**, **Utilities** or **Stationery**, or type another category (2 to 40 letters).
+4. Under **What was it for? (required)**, say in a few words what was bought.
+5. Tap **Record**. OrbixPOS confirms *Expense recorded and posted to the ledger.*
+
+> **Check the categories.** Ask cashiers to use the quick-pick categories wherever they fit. A category typed differently each time (for example *Taxi*, *taxi fare*, *Boda*) splits the same kind of cost into several categories. It also helps to have cashiers keep the seller's paper receipt for you.
 
 ### Reviewing a shift's sales
 
-To look back over what a till rang:
+- **Today's sales** (in the session menu) lists **today's** till sales at **this branch** from the **ERP** — every sale since midnight on the till's clock, from any till at the branch, newest first. Each line shows the receipt number, the time, the cashier who rang it, and the total. A reversed sale stays in the list, marked **· Reversed**, and reprints as REVERSED. If nothing has been sold yet it reads *No sales at this branch today.* Tap any line to reprint it; the reprint's **CASHIER:** line names the cashier who rang the sale. Reprinting never creates a new sale and never opens the cash drawer.
+- **Recent receipts** lists the last receipts stored on **this till**, so it works even if the network is down — but only for sales rung on this till.
+- For a full view of a session's sales, payouts and figures, open it in the ERP web app (**POS Sessions**).
 
-- **Today's sales** (in the session menu) lists the shift's finalised invoices from the **server**, newest figures and times shown. Tap any line to reprint that receipt. Reprinting never creates a new sale.
-- **Recent receipts** lists receipts stored on **this device**, so it works even if the network is down. It is per-device, so it only shows sales rung on this particular till.
+---
+
+## Freeing a till that is in use
+
+**What it is.** Only one shift can be open on a till at a time. If a cashier's shift is still open — they went home without closing, or the till app was shut down — nobody else can open that till until the shift is counted and closed.
+
+**What the Open shift screen shows.** Each till tile has a coloured dot:
+
+| Tile | Meaning |
+|---|---|
+| Green dot, till code | Free — tap to select it. |
+| Amber dot, till code followed by *· Your shift* | Your own shift is still open on it. |
+| Red dot, faded, with a person's name | Someone else's shift is open on it. |
+
+Tap **Refresh** (next to *Choose a till*) to re-check the tills — for example after a manager has freed one.
+
+**If it is your own shift.** Tapping the tile opens **Your shift is still open**. Press **Resume shift** to carry on where you left off, or **Close shift** to count the drawer now: the **Close your shift** box asks for the **Counted cash (TZS)** — count it physically; the box is deliberately left empty. After **Close shift** you see the variance, and then *Shift closed. The till is free again.* The session still needs reconciling by a manager.
+
+**If it is someone else's shift.** Tapping the tile opens **Till in use**, naming who holds it and since when: *A shift only ends once the drawer is counted — that cashier can close it from their own sign-in, or an administrator can close it in the ERP.*
+
+**How a branch manager frees it.** The standard Branch Manager role can close any cashier's session — from the ERP web app, not from the till:
+
+1. Count the cash in that till's drawer (ideally with a witness).
+2. In the ERP web app, open **POS Sessions**, find the open session for that till and open it.
+3. Press **Close Session** and enter the counted cash.
+4. Reconcile it as usual (it is now **CLOSED**).
+5. On the till, press **Refresh** — the tile turns green and the till can be opened again.
 
 ---
 
 ## Operating multiple tills and branches
 
-**What this is.** A store manager rarely watches just one register. You may be responsible for several tills in one shop, and sometimes for tills across more than one branch of the company. **Why it matters.** Each till runs its own independent cash session, and each session must be opened, closed and reconciled in its own right — there is no single button that closes "the whole store." **When it applies.** Throughout the trading day, and especially at end-of-day close-out (the routine at the end of this chapter). **How it works.** OrbixPOS always works on **one** till session at a time on the device in front of you. To act on a different till, you open or load that till's session.
+**What this is.** A store manager rarely watches just one register. Each till runs its own independent cash session, and each session must be opened, closed and reconciled in its own right — there is no single button that closes "the whole store."
 
-Key facts to keep in mind:
+- **One session per till.** Opening a shift ties the device to one till and its session.
+- **Each till reconciles separately.** There is no store-wide reconcile.
+- **Tills are listed per branch.** The **Open shift** screen shows only the **active** tills of the branch you are working in.
+- **Your branch comes from your account.** OrbixPOS works in your default branch. If it could not confirm your usual branch, a yellow strip says *Using branch … — we couldn't confirm your usual branch. Check this is correct before selling.* If you see tills you do not expect, or none at all, check your branch assignment with your administrator.
 
-- **One session per till.** Opening a shift binds the device to a single till and its session. To work a second till, open (or move to) that till's session — typically on the device standing at that register.
-- **Each till reconciles separately.** There is no store-wide reconcile. Every open session must be closed and reconciled on its own before the day is truly squared away.
-- **Tills are listed per branch.** The open-shift screen shows only the **active** tills that belong to the branch you are currently working in. Tills from other branches do not appear until you are working in that branch.
-- **Your branch comes from your account.** OrbixPOS works in the branch your account is set up for (your default branch). If you are responsible for more than one branch, the tills you see change with the branch your account is operating in. If you cannot see tills you expect for another branch, you are not currently operating in that branch — check with your administrator about your branch assignment.
-
-> **Tip.** Because each till session is independent, give your tills clear, recognisable names when you create them (next section). At end-of-day it is far easier to confirm "Front 1, Front 2 and Pharmacy are all reconciled" than to puzzle over codes.
+> **Tip.** Give your tills clear, recognisable names when you create them. At end of day it is far easier to confirm "Front 1, Front 2 and Pharmacy are all reconciled" than to puzzle over codes.
 
 ---
 
 ## Creating and retiring tills
 
-**What a till is.** A **till** (or register) is the record in the ERP that a cash session attaches to. It has a name and a code, belongs to a branch, and is linked to a cash account where its takings are booked. **Why it exists.** Every sale and every session has to be tied to a specific register so that cash, sales and variances can be tracked per till. **When you create one.** When you add a new physical register to a branch, or set up a new lane. **When you retire one.** When a register is removed, replaced, or should no longer be opened. **How it works.** Creating and retiring tills is reserved for accounts that hold the till-management permission — that is, store managers.
+**What a till is.** A **till** (or register) is the record in the ERP that a cash session attaches to. It has a name and a code, belongs to a branch, and is linked to the cash account where its takings are booked.
 
 ### Creating a till
 
-You can create a till directly from the open-shift screen — but only if your account holds the till-management permission. If it does, a **New till** button appears beside the *Choose a till* heading.
+If your account holds the till-management permission (Branch Manager by default), a **New till** button appears beside the **Choose a till** heading on the **Open shift** screen.
 
-1. Sign in and reach the **Open shift** screen (the screen where you pick a mode and a till).
-2. Look for the **New till** button (a small **+** with the label **New till**) to the right of the **Choose a till** heading. If you do not see it, your account lacks the till-management permission.
-3. Tap **New till**. A dialog titled **New till** opens.
-4. Type a clear **Till name** — for example, *Front 1* or *Pharmacy counter*.
-5. Tap **Create**.
-6. OrbixPOS confirms *"Till created."* and the new till appears in the grid as an active till you can select.
+1. Sign in and reach the **Open shift** screen.
+2. Tap **New till** (next to **Refresh**). If you do not see it, your account lacks the till-management permission.
+3. In the **New till** box, type a clear **Till name** — for example *Front 1*.
+4. Tap **Create**.
+5. OrbixPOS confirms *Till created.* and the new till appears in the grid.
 
-> The new till is created with sensible defaults — the server attaches it to your company's default cash account automatically. There is no need to configure an account from OrbixPOS.
+> The ERP attaches the new till to your company's default cash account automatically. You can also create tills in the ERP web app, on the **POS Tills** screen (**New Till**).
 
 ### Retiring a till
 
-When a till should no longer be used, it is **retired** (deactivated) rather than deleted, so its history stays intact. The current build of OrbixPOS does not put a retire button on the till grid; retiring a till is done by your **administrator in the ERP**. The effect, once done, is immediate and visible in OrbixPOS:
+When a till should no longer be used, it is **deactivated** rather than deleted, so its history stays intact. There is no retire button in OrbixPOS. In the ERP web app, open **POS Tills** and press **Deactivate** on the till (or ask your administrator).
 
-- A retired till is **no longer active**, so it **disappears from the open-shift list** — the *Choose a till* grid only ever shows active tills.
-- Existing, already-reconciled sessions on that till are unaffected; their history remains in the ERP.
+- A deactivated till **disappears from the Open shift list** — the grid only shows active tills.
+- Its past sessions are unaffected and stay in the ERP.
 
-To retire a till, ask your administrator to deactivate it in the ERP management web app. If you need to stop a till being used immediately, that is the route to take.
-
-> **Note.** Because a retired till vanishes from the open-shift list, retire a till only when it is genuinely out of service. If a cashier suddenly cannot find their usual till, a recent retirement is a likely cause — check with whoever administers your tills.
+> **Note.** If a cashier suddenly cannot find their usual till, a recent deactivation is a likely cause.
 
 ---
 
 ## Provisioning cashiers — who is allowed to sell
 
-This is the single most common reason a new cashier cannot ring sales, so it is worth understanding clearly. It is set up not in OrbixPOS but in the **ERP management web app** (the browser-based admin application your administrator uses), and it is normally an administrator's job. As the store manager you should know what is required so you can spot the problem and ask for the right fix.
-
-**What provisioning is.** Provisioning is the one-time setup that turns a person's login into a user who is actually permitted to sell at a till. **Why it exists.** Selling moves stock and books revenue against a *salesperson*, so the ERP insists that every selling user is tied to an internal **sales-agent** record — the business identity that the sale is attributed to. **When it happens.** Once, before a new cashier's first sale. **How it works.** In the ERP management web app an administrator creates the user, assigns them to the branch, grants them the right role, and links them to an internal sales-agent record.
+This is the most common reason a new cashier cannot ring sales. It is set up in the **ERP web app**, normally by an administrator; as store manager you should know what is needed so you can spot the problem.
 
 A cashier can only ring sales when **all** of these are true:
 
-1. They have a **user account** that is active.
-2. They are **assigned to the branch** they will sell in (with that branch set as their default).
-3. They have a **role** that grants the POS permissions (sell, open and close a session, view tills, plus the catalogue reads a till needs).
-4. They have an **internal sales-agent record linked to their user account**.
+1. They have an **active user account**.
+2. They are **assigned to the branch** they will sell in (with that branch as their default).
+3. They have the **Cashier** role (or a role with the same till permissions).
 
-That fourth point is the one that catches people out. **Every user who rings sales must have an internal sales-agent record linked to their account.** Without it, the server refuses the sale.
+**Sales agents look after themselves.** Every sale is credited to the person signed in at the till. A cashier who has no sales-agent record gets one automatically on their first sale, named after them, so there is nothing to set up. An administrator can still create or rename the record in the ERP web app (**Parties → Sales Agents**). Archiving a cashier's sales agent is how you stop them selling: the till then refuses their sales until the agent is reactivated.
 
-> **The super-admin (root) cannot sell.** The bootstrap super-admin / root account deliberately **cannot** be a sales agent, and therefore **cannot ring sales** at the till. Do not try to run a register signed in as the root administrator — set up a real cashier user instead. This is by design: the root account is for administration, not for trading.
+> **The super-admin (root) cannot sell.** The top-level super-admin account cannot be a sales agent and therefore cannot ring sales. Do not run a register signed in as the root administrator — set up a real cashier user instead.
+
+Three company-level settings also affect every till. Check them once when a shop goes live:
+
+| Setting in the ERP | If it is missing |
+|---|---|
+| A **walk-in (cash) customer** for the company | Every sale shows **Select customer** and asks the cashier to pick a customer before payment. |
+| The company's **address, phone, TIN and VRN** on the company record | Those lines are left off the receipt. |
+| A **receipt printer** chosen on each till (**Server setup** on the sign-in screen) | **Print** shows *No receipt printer set — configure one in Setup.* |
 
 ### What it looks like when a cashier is not provisioned
 
-If a user without a linked sales-agent record tries to complete a sale, OrbixPOS shows a clear error message from the server explaining that the sale was refused. The fix is always the same:
-
 | What you see | What to do |
 |---|---|
-| The sale is refused with a message about a missing agent / sales-agent record | Ask your administrator to link an **internal sales-agent record** to that user's account in the ERP management web app. |
-| The sale is refused while signed in as the root / super-admin | The root account cannot sell. Sign in as a properly provisioned cashier instead. |
-| A cashier sees no tills, or cannot open a shift | Check the user is assigned to this branch and holds the POS permissions. Your administrator sets these in the ERP. |
-| An expected action (reconcile, create till) is dimmed/padlocked | The user lacks that permission. Grant the appropriate role in the ERP. |
-
-> **Where this is done.** All four steps — create user, assign branch, grant role, link an internal sales agent — happen in the **ERP management web app**, not in OrbixPOS. OrbixPOS only *uses* the result. If a cashier cannot sell, the fix is in the ERP, and your administrator is the person to action it.
+| The sale is refused: *Your sales agent record is no longer active…* | That cashier's sales agent was archived. If they should sell, ask your administrator to reactivate it in **Parties → Sales Agents**. |
+| The sale is refused: *No sales agent could be determined for this sale…* | The user is not an active member of this company (or is the root account). Check their user account and company membership in the ERP web app. |
+| The sale is refused while signed in as root / super-admin | The root account cannot sell. Sign in as a properly set-up cashier. |
+| A cashier sees no tills, or cannot open a shift | Check the user is assigned to this branch and has the Cashier role. |
+| An expected action is not in the menu | The user lacks that permission. Grant the appropriate role in the ERP. |
 
 ---
 
 ## End-of-day close-out across tills
 
-This is the routine to follow at the end of trading to square away every till in your store. It combines the steps above into one repeatable procedure. Because each till session is independent, you work through the tills one at a time.
-
-**What close-out is.** The end-of-day procedure that closes, counts and reconciles every open till session so the day's cash is fully accounted for. **Why it exists.** It ensures no drawer is left open or unreconciled overnight, and that every variance is reviewed and posted the same day. **When it happens.** At the end of each trading day (or at the end of each shift block, depending on store policy). **How it works.** For each till, the cashier closes and counts, then a supervisor reconciles — keeping the two duties separate.
+The routine to square away every till in your store at the end of trading. Each till session is independent, so you work through the tills one at a time. The cashier counts and closes; a manager reconciles.
 
 Do this for **each** active till in the store:
 
-1. **Stop selling on that till.** Make sure no sale is in progress on the register.
-2. **(Optional) Run an X-read first.** On that till's device, open the session menu (**☰**) and tap **X-read** to see the expected cash before counting. This gives the cashier a target to count against.
-3. **Cashier closes the session.** On that till, open the session menu, tap **Close session** (*"Count the drawer → variance"*), physically count the drawer, type the total into **Counted cash**, and tap **Close session**. OrbixPOS shows the variance panel (Expected, Counted, Variance).
-4. **Note the variance.** Record or photograph the variance panel if your store policy requires a paper trail. The session is now **CLOSED** but not yet reconciled.
-5. **Supervisor reconciles.** A supervisor or manager — ideally **not** the cashier who counted — opens the session menu and taps **Reconcile (Z-read)**, reviews the Z-read summary, taps **Reconcile**, then **Finish shift**. The session is now **RECONCILED** and the variance is posted to the ledger.
-6. **Confirm and move on.** The till is now squared away. Move to the next till and repeat from step 1.
+1. **Stop selling on that till.** Make sure no sale is in progress.
+2. **(Optional) X-read.** On the till, **☰** › **X-read** to see the expected cash before counting.
+3. **Cashier closes the session.** **☰** › **Close session** (*Count the drawer → variance*), count the drawer, type the total into **Counted cash (TZS)**, and tap **Close session**. The **Session closed** panel shows Expected, Counted and Variance.
+4. **Note the variance.** Record or photograph the panel if your store policy needs a paper trail. Then the cashier taps **Done** and signs out. The session is **CLOSED**, not yet reconciled.
+5. **Manager reconciles.** A manager with the reconcile permission — ideally **not** the person who counted — opens the session in the ERP web app (**POS Sessions**), checks the figures and presses **Reconcile**. The session is now **RECONCILED** and the variance is posted.
+6. **Move on.** Repeat for the next till.
 
-When every till has reached **RECONCILED**, the store's cash is fully accounted for the day.
+When every till's session is **RECONCILED**, the store's cash is accounted for the day. The **POS Sessions** list in the ERP web app, filtered by status, is the quickest way to check that no session is left **Open** or **Closed**.
 
 ### End-of-day checklist
 
@@ -247,26 +339,30 @@ When every till has reached **RECONCILED**, the store's cash is fully accounted 
 |---|---|
 | Selling stopped; no sale in progress | ☐ |
 | Drawer counted; **Counted cash** entered | ☐ |
-| Session **closed**; variance noted | ☐ |
-| Session **reconciled (Z-read)** by a supervisor (not the counter) | ☐ |
-| Session status shows **RECONCILED**; shift finished | ☐ |
+| Session **closed**; variance noted; cashier signed out | ☐ |
+| Session **reconciled** by a manager (not the person who counted) | ☐ |
+| Session shows **RECONCILED** in **POS Sessions** | ☐ |
 
-> **Tip.** A till's session status is visible at the top of the session menu (the **Status** field). Use it to confirm each till is genuinely **RECONCILED** before you sign off the day. If any till is still **OPEN** or **CLOSED**, it has not finished close-out.
+> **Tip.** On a till, the session's status is at the top of the session menu (the **Status** field: OPEN, CLOSED or RECONCILED).
 
-> **Note.** Once a session is reconciled it is **final** — it cannot be re-opened or edited, and you cannot top up a float mid-shift (the float is set only when the session is opened). Plan the count carefully; if you genuinely need to correct a reconciled session, that is an ERP/accounting task for your administrator, not something OrbixPOS can reverse.
+> **Note.** Once a session is reconciled it is **final** — it cannot be reopened or edited, and you cannot top up a float mid-shift (the float is set only when the session is opened). If a reconciled session genuinely needs correcting, that is an accounting task for your administrator in the ERP.
 
 ---
 
 ## Quick reference
 
-| Job | Where in OrbixPOS | Who can do it |
+| Job | Where | Who can do it (standard roles) |
 |---|---|---|
-| Open a shift / pick a till | **Open shift** screen → pick mode, pick till, set float, **Open session** | Cashier, supervisor, manager |
-| Create a till | **Open shift** screen → **New till** | Manager (till-manage permission) |
-| Retire a till | ERP management web app (not in OrbixPOS) | Administrator |
-| Mid-shift drawer check | Session menu (**☰**) → **X-read** | Cashier, supervisor, manager |
-| Record cash leaving the drawer | Session menu → **Cash payout** | Cashier, supervisor, manager |
+| Open a shift / pick a till | **Open shift** screen → mode, till, **Opening float (TZS)**, **Open session** | Cashier |
+| Approve a refund, discount or unfinished sale at a till | The **Manager approval** box on the cashier's screen | Sales Manager, Branch Manager |
+| Approve a Z-read print, or a report for a cashier without report rights | The **Manager approval** box on the cashier's screen | Branch Manager |
+| Create a till | **Open shift** screen → **New till**, or ERP web **POS Tills** | Branch Manager |
+| Retire a till | ERP web app → **POS Tills** → **Deactivate** | Branch Manager / administrator |
+| Mid-shift drawer check | Session menu (**☰**) → **X-read** | Cashier (or with a Branch Manager's approval) |
+| Record cash leaving the drawer | Session menu → **Cash payout** | Cashier |
+| Record a business expense paid from the till | Session menu → **Till expense** | Cashier |
 | Review / reprint a sale | Session menu → **Today's sales** or **Recent receipts** | Anyone signed in |
-| Close (count) a drawer | Session menu → **Close session** | Cashier (own shift), supervisor, manager |
-| Reconcile (post variance) | Session menu → **Reconcile (Z-read)** | Supervisor, manager |
-| Set up a cashier to sell | ERP management web app | Administrator |
+| Close (count) a drawer | Session menu → **Close session** | Cashier (own shift) |
+| Free a till a cashier left open | ERP web app → **POS Sessions** → **Close Session** | Branch Manager |
+| Reconcile (post the variance) | ERP web app → **POS Sessions** → **Reconcile** (or on the till, for your own shift) | Branch Manager |
+| Set up a cashier to sell | ERP web app | Administrator |

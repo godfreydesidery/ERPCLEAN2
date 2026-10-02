@@ -59,6 +59,8 @@ class SalesInvoiceServiceImplPostedGlEntryTest {
     @Mock com.erp.platform.common.money.FxDocumentConverter fxConverter;
     @Mock com.erp.modules.parties.repository.PaymentTermsRepository paymentTermsRepo;
     @Mock JournalEntryRepository journalEntries;
+    // getByUid names the invoice's creator through this; null here would NPE every read.
+    @Mock com.erp.modules.iam.service.UserLookupService userLookup;
 
     @InjectMocks SalesInvoiceServiceImpl service;
 

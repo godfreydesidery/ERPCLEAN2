@@ -79,17 +79,24 @@ class SaleService {
     );
   }
 
-  /// Today's / recent finalised invoices for the company — for the reprint list.
-  Future<List<SalesInvoice>> listInvoices(
+  /// Today's till sales at [branchId] — POS sales finalised since the till's own
+  /// local midnight, newest first, reversed ones included (ERP 1.10.2+).
+  ///
+  /// The day starts at the TILL's midnight, sent as an instant, so a server that
+  /// keeps UTC still answers for the shop's calendar day.
+  Future<List<SalesInvoice>> listTodaysSales(
     String companyId, {
-    String? q,
-    int page = 0,
-    int size = 50,
+    required String branchId,
+    DateTime? now,
+    int size = 100,
   }) async {
+    final local = (now ?? DateTime.now()).toLocal();
+    final midnight = DateTime(local.year, local.month, local.day);
     final data = await _api.get('/sales-invoices', query: {
       'companyId': companyId,
-      'q': q,
-      'page': page,
+      'branchId': branchId,
+      'finalisedFrom': midnight.toUtc().toIso8601String(),
+      'page': 0,
       'size': size,
     });
     return asList(data, SalesInvoice.fromJson);

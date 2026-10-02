@@ -78,6 +78,9 @@ class SalesInvoiceServiceImplTest {
     // UAT wave 1: create() resolves the acting user's own internal agent through this, provisioning
     // one on first sale. Its own rules are pinned by InternalAgentProvisionerTest.
     @Mock InternalAgentProvisioner internalAgents;
+    // Every DTO names the invoice's creator through this. Mocked (not null) for the same reason
+    // as the discount guard: @InjectMocks would pass null and every read would NPE.
+    @Mock com.erp.modules.iam.service.UserLookupService userLookup;
 
     @InjectMocks SalesInvoiceServiceImpl service;
 

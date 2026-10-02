@@ -1,48 +1,107 @@
 # Receipts and Refunds
 
-This chapter explains what happens after you take payment: the receipt that OrbixPOS shows you, how to print it, how to give a customer a price-free **gift receipt**, how to find and reprint an earlier receipt, and how to refund a whole sale when something has gone wrong. It also explains — clearly — what OrbixPOS does **not** let you do, and what to use instead.
+This chapter explains what happens after you take payment: the receipt that OrbixPOS shows you and what each line on it means, how to print it, how to give a customer a price-free **gift receipt**, how to find and reprint an earlier receipt, and how to refund a whole sale with a manager's approval when something has gone wrong. It also explains — clearly — what OrbixPOS does **not** let you do, and what to use instead.
 
-If you have not yet read the chapter on ringing a sale and taking payment, read that first. This chapter picks up the moment the sale is finished and the receipt appears.
+If you have not yet read the chapters on ringing a sale and taking payment, read those first. This chapter picks up the moment the sale is finished and the receipt appears.
+
+> **This is a sales receipt, not a TRA fiscal receipt.** The OrbixPOS receipt is laid out like a familiar Tanzanian supermarket receipt, but it is an **ordinary sales receipt**. It is not produced by an EFD or VFD and it carries none of the fiscal markings — no "legal receipt" banner, no EFD serial or UIN, no Z number, no verification code and no QR code. It cannot be verified on the TRA portal. Your shop's EFD/VFD arrangement is separate from OrbixPOS: if a customer needs a fiscal receipt, issue it the way your shop normally does.
 
 ---
 
 ## 1. The receipt screen
 
-**What it is.** The receipt screen is the small printed-style slip that pops up the instant a sale completes. Its header reads **Sale complete** with a green tick. Below that is a black-on-white slip — the company name, the branch, the invoice number, the lines you sold, the totals, and how the customer paid — laid out exactly as it would print on paper.
+**What it is.** The receipt screen pops up the instant a sale completes. Its header reads **Sale complete** with a green tick. Below that is a white slip showing the receipt **exactly as it prints** — the same words, the same columns — followed by the action buttons.
 
-**Why it exists.** The receipt is the customer's proof of purchase and your proof that the sale was recorded. It is built from the **finalised invoice** that the ERP server sent back — not from the figures you saw on the till while ringing the basket. This matters: the prices, VAT and totals on the screen while you were scanning are a helpful preview, but the server is the authority on money. Once the sale finalises, the server returns the official invoice, and the receipt screen shows *that*. We call the finalised invoice the **receipt of record** — it is the single, true version of what was sold.
+**Why it exists.** The receipt is the customer's proof of purchase and your proof that the sale was recorded. It is built from the **finalised sale** that the ERP server sent back — not from the figures you saw while ringing the basket. The prices, VAT and totals on the till while you were scanning are a preview; once the sale finalises, the ERP returns the official figures and the receipt shows *those*. This finalised sale is the **receipt of record** — the single, true version of what was sold.
 
-**When it happens.** The receipt screen appears automatically after a successful payment. You do not have to ask for it. It also appears whenever you reprint an earlier sale (see Section 4).
+**When it happens.** Automatically after a successful payment. It also appears whenever you reprint an earlier sale (section 4).
 
-**How it works.** OrbixPOS takes the finalised invoice from the server, formats it as a slip, and shows it to you in a dialog with action buttons along the bottom. Nothing on this screen changes the money — printing, showing a gift receipt, or reprinting are all read-only. The only button that changes anything is **Refund / reverse** (Section 5), and that one is carefully controlled.
+**How it works.** Nothing on this screen changes the money. **Print**, **Gift receipt** and reprinting only read the sale. The only button that changes anything is **Refund / reverse** (section 5), and that one needs a manager.
 
 ### 1.1 Reading the receipt
 
 The slip is laid out top to bottom like a paper till roll:
 
-| Line on the slip | What it means |
+| Part of the slip | What it means |
 |---|---|
-| Company name (large, centred) | The trading company this sale belongs to. |
-| Branch name (centred, under it) | The shop or outlet you are working in. |
-| **Invoice** | The invoice number the server assigned, e.g. `INV-2026-000042`. This is the unique reference for the sale — quote it on any query. |
-| **Date** | The date and time the sale was finalised, in your local time. |
-| **Cashier** | Your name (the signed-in user). |
-| **Customer** | The customer's name if one was attached, otherwise a customer reference. A walk-in sale may show a default customer. |
-| The line items | One block per product: the product name on its own line, then the quantity × unit price on the left and the line total on the right. If a discount was applied to a line, a green **less disc** line shows the amount taken off. |
-| **Net** | The total before VAT. |
-| **VAT** | The tax added. |
-| **TOTAL** | The grand total the customer owed, shown with the currency, in bold. |
-| Tender lines | One line per payment method used — **Cash**, **Card**, **Mobile** (mobile money), **Cheque** — each with the amount taken on it. A split sale shows several. |
-| **Change** | Shown only when the customer paid cash and was owed change. |
-| Thank you! | The footer. |
+| Company name (capitals, centred) | The trading company this sale belongs to. |
+| Company details (centred) | The address, town and region, country, **Tel:**, **Email:**, **TIN:** and **VRN:** — taken from your company's record in the ERP. Only the details that have been filled in are printed; if your TIN or VRN is missing, ask your administrator to add it to the company record. |
+| Branch name (centred) | The shop or outlet you are working in. |
+| **CUSTOMER NAME:** | The customer on the sale, for example *Walk-in Customer*, or *n/a* if no name is available. |
+| **RECEIPT NO:** | The number the ERP gave the sale, for example `INV-2026-004218`. This is the unique reference for the sale — quote it on any query or refund. |
+| **RECEIPT DATE:** / **RECEIPT TIME:** | When the sale was finalised, as day-month-year and hours:minutes:seconds. |
+| **CASHIER:** | The name of the person who rang the sale — also on a reprint (see the note in section 4). |
+| **Description · Qty · Amount** | One row per product: the name, the quantity, the line amount including VAT, and a **tax letter** at the end of the row (see below). A long name wraps onto the next line. |
+| `@ 1,000.00` under a row | The price for one unit, shown when the quantity is not 1. |
+| `less disc 500.00` under a row | A discount taken off that line. |
+| **TOTAL EXCL OF TAX:** | The total before VAT. |
+| **TAX A-18%** | The VAT charged on standard-rated items, at the rate shown. |
+| **TOTAL TAX:** | All VAT on the sale. |
+| **TOTAL INCL OF TAX:** | The total the customer owed, with the currency (for example `TZS 25,000.00`). |
+| Tender lines | One line per way the customer paid — **CASH**, **CARD**, **MOBILE MONEY** or **CHEQUE** — with the amount. A split payment shows several. |
+| **CHANGE** | Shown only when change was given. |
+| *Thank you!* | The footer. |
 
-> **Note.** Quantities print without decimals for whole numbers (for example a quantity of `3`) and with decimals for weighed or fractional goods (for example `0.750` kg). This comes straight from the invoice, so it always matches what the customer was charged.
+**The tax letters.** Each item row ends with a letter that tells you how VAT was applied to it:
 
-> **Tip.** If a line shows `(line detail not loaded)` instead of the products, the totals are still correct and the receipt is still valid — only the itemised breakdown could not be fetched on this device. Reprint it from **Today's sales** (Section 4.1) to pull the full detail from the server.
+| Letter | Meaning |
+|---|---|
+| **A** | Standard rate — VAT charged (18%). These items make up the **TAX A-18%** line. |
+| **C** | Zero-rated — VAT applies at 0%. |
+| **E** | Exempt — no VAT. |
+| (blank) | An older receipt reprinted from this till, saved before the letters were added, for an item with no VAT. |
 
-### 1.2 Closing the receipt
+> **Note.** Quantities print without decimals for whole numbers (for example `6`) and with decimals for weighed goods (for example `1.255`). They come straight from the finalised sale, so they always match what the customer was charged.
 
-When you are done with the receipt, press **Done** (or the **✕** close button in the top-right corner). This clears the screen and returns you to the register, ready for the next customer. Pressing **Done** does **not** cancel or change the sale — the sale is already recorded on the server. It simply puts the slip away.
+> **Tip.** If the item area shows `(line detail not loaded)` instead of the products, the totals are still correct and the sale is still recorded — only the itemised breakdown could not be fetched at that moment. Reprint it from **Today's sales** (section 4.1) to pull the full detail from the ERP.
+
+### 1.2 A sample receipt
+
+This is what a receipt looks like on 80 mm paper (48 characters wide). The company, address and numbers are examples; yours will show your own. On 58 mm paper the same information is squeezed into 32 characters, so long names and large amounts wrap onto extra lines.
+
+```text
+             SAMPLE SUPERMARKET LTD
+             Plot 00, Market Street
+               Moshi, Kilimanjaro
+                    Tanzania
+             Tel: +255 27 275 0000
+                TIN: 123-456-789
+                VRN: 40-012345-A
+               Town Centre Branch
+================================================
+CUSTOMER NAME:                  Walk-in Customer
+================================================
+RECEIPT NO:                      INV-2026-004218
+RECEIPT DATE:                         02-10-2026
+RECEIPT TIME:                           14:07:32
+CASHIER:                            Neema Joseph
+================================================
+Description                      Qty    Amount
+Coca-Cola 500ml                    6  6,000.00 A
+  @ 1,000.00
+Drinking Water 1.5L x 6 (carton)   1  4,000.00 A
+  less disc 500.00
+Maize Flour 5kg                    1 12,000.00 E
+Fresh Milk 1L                      2  3,000.00 C
+  @ 1,500.00
+================================================
+TOTAL EXCL OF TAX:                     23,474.58
+TAX A-18%                               1,525.42
+TOTAL TAX:                              1,525.42
+TOTAL INCL OF TAX:                 TZS 25,000.00
+================================================
+MOBILE MONEY                           10,000.00
+CASH                                   20,000.00
+CHANGE                                  5,000.00
+
+                   Thank you!
+```
+
+In this example the customer paid TZS 10,000 by mobile money and handed over TZS 20,000 in cash for the remaining TZS 15,000, so TZS 5,000 change was given.
+
+### 1.3 Closing the receipt
+
+When you are done with the receipt, press **Done** (or the **✕** in the top-right corner). This returns you to the register, ready for the next customer. Pressing **Done** does **not** cancel or change the sale — the sale is already recorded in the ERP. It simply puts the slip away.
 
 ---
 
@@ -50,162 +109,167 @@ When you are done with the receipt, press **Done** (or the **✕** close button 
 
 **What it is.** **Print** sends the receipt to the receipt printer attached to your till.
 
-**Why it exists.** Most customers want a paper receipt, and many places are legally required to give one. Print is the everyday button you reach for at the end of almost every sale.
+**When it happens.** Press **Print** whenever the customer wants paper — usually straight away, but you can also reprint older receipts later (section 4).
 
-**When it happens.** Press **Print** whenever the customer wants paper — usually straight away on the receipt screen, but you can also reprint older receipts later (Section 4).
+1. With the receipt showing, press **Print** (the printer icon, top-left of the buttons).
+2. The receipt prints and you see *Printed.*
 
-**How it works.** Press **Print** on the receipt screen.
+| Message | What it means |
+|---|---|
+| *Printed.* | The receipt went to the printer. |
+| *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, press **Server setup** on the sign-in screen, choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
+| *Could not print the receipt.* (or a message from the printer) | The printer did not accept the job. Check it is switched on, has paper and is connected, then press **Print** again. The sale is not affected. |
 
-1. The receipt screen is showing (it appears automatically after a sale, or after you reprint one).
-2. Press **Print** (the button with the printer icon, on the left of the action row).
-3. The slip is sent to the printer.
+> **The cash drawer.** If your till is set up to **Open cash drawer after printing**, the drawer opens **once per sale**: on the first print of the sale's own receipt, straight after the sale, so you can put the money in and give change. It does **not** open when you print a second copy, a gift receipt, a reversed sale, or a reprint from **Today's sales** or **Recent receipts** — no money is going in, so the drawer stays shut. If the drawer is not set up to open, use its key or release lever as usual.
 
-> **Important — about printing in this build.** The receipt printer is not yet wired to a real driver. In the current release, pressing **Print** shows a confirmation message — *"Sent to printer (peripheral stub)."* — to confirm the action worked, but no paper comes out yet. Real printer support is coming. Until then, if a customer needs paper today, follow your store's interim procedure (for example, your administrator may have a separate printing arrangement). The receipt data itself is complete and correct; only the physical print step is pending.
+> **Paper width.** The screen always shows the 80 mm layout. The printed copy follows the paper width chosen in setup, so on 58 mm paper some lines wrap differently from the screen — the figures are the same.
 
 ---
 
 ## 3. Gift receipts (hiding prices)
 
-**What it is.** A **gift receipt** is the same receipt with all the money removed — no net, no VAT, no total, no tenders, no change. It lists what was bought but not what it cost.
+**What it is.** A **gift receipt** is the same receipt with all the money removed. It lists what was bought and how many, but no amounts, unit prices, tax letters, totals, tenders or change.
 
-**Why it exists.** When someone buys a present, they do not want the recipient to see the price. A gift receipt lets the recipient return or exchange the item (your store policy permitting) without ever learning what was paid for it.
+**Why it exists.** When someone buys a present, they do not want the recipient to see the price. A gift receipt lets the recipient return or exchange the item (your store policy permitting) without learning what was paid.
 
-**When it happens.** Give a gift receipt when a customer asks for one — usually for a present. You can switch any receipt to gift view on the spot.
+**How it works.**
 
-**How it works.** Press **Gift receipt** on the receipt screen.
+1. With the receipt showing, press **Gift receipt** (the gift-card icon).
+2. The slip redraws with the prices hidden. Where the totals were, it shows `* gift receipt - prices hidden *`. The receipt number, date, customer and cashier are still shown, so the item can be traced for a return.
+3. Press **Print** to print this price-free copy.
+4. To bring the prices back, press the same button — it now reads **Show prices**.
 
-1. With the receipt showing, press **Gift receipt** (the button with the gift-card icon).
-2. The slip redraws with the prices hidden. In their place you see *"\* gift receipt — prices hidden \*"*.
-3. Press **Print** to print this price-free version for the customer to put in the gift.
-4. To bring the prices back, press the same button — it now reads **Show prices**. The slip returns to the full priced view.
-
-> **Note.** Switching to gift view changes only what is displayed and printed. It does **not** change the sale, the totals, or anything on the server. The full priced invoice is still the record of the sale. You can flip between **Gift receipt** and **Show prices** as often as you like.
+> **Note.** Switching to gift view changes only what is shown and printed. It does **not** change the sale or anything in the ERP. You can flip between **Gift receipt** and **Show prices** as often as you like.
 
 ---
 
 ## 4. Reprinting an earlier receipt
 
-Sometimes a customer comes back later — they lost the slip, or the printer jammed, or they need a copy for their records. OrbixPOS gives you two ways to find an earlier receipt and print it again. Both open through the **Session** menu (press the **☰** menu button in the top bar).
+Sometimes a customer comes back later — they lost the slip, the printer jammed, or they need a copy. OrbixPOS gives you two ways to find an earlier receipt. Both are in the **Session** menu (press the **☰** button in the top bar).
 
-**The golden rule:** reprinting **never creates a new sale**. It just shows the same finalised invoice again. The customer is not charged a second time, stock is not touched, and no new invoice number is created. You can reprint a receipt as many times as you need.
-
-There are two sources, for two situations:
+**The golden rule:** reprinting **never creates a new sale**. It shows the same finalised sale again. The customer is not charged a second time, stock is not touched, and no new receipt number is created. You can reprint a receipt as many times as you need.
 
 | Source | Where it looks | Use it when |
 |---|---|---|
-| **Today's sales** | The ERP server | You want any of today's sales from **this branch**, even one rung on a different till or by a different cashier. Needs a network connection. |
-| **Recent receipts** | This device only | You want a sale that was rung **on this till**, and you may be offline. Works without the network. |
+| **Today's sales** | The ERP server | You want a sale rung **today at this branch**, even one rung on a different till or by a different cashier. Needs a network connection. |
+| **Recent receipts** | This till only | You want a sale that was rung **on this till**, and you may be offline. Works without the network. |
 
-### 4.1 Today's sales (look up on the server)
+> **The CASHIER line on a reprint.** A reprint prints the name of the cashier who **rang** the sale, not the person reprinting it. If you reprint a colleague's receipt, their name appears on the **CASHIER:** line, not yours. On a reprint of an older receipt — one saved on the till before OrbixPOS 1.5.4 — the till may not know who rang it; it then leaves the **CASHIER:** line off rather than print the wrong name. The ERP still records who really made the sale.
 
-**What it is.** A list of every sale finalised today for your branch, fetched live from the server.
+### 4.1 Today's sales (look up on the ERP)
 
-**Why it exists.** It lets you find and reprint a receipt even if it was not rung on your own till — for example, a customer who paid at a different register and lost their slip.
+1. Press **☰** to open the **Session** panel.
+2. Press **Today's sales** (*Look up & reprint a receipt*).
+3. OrbixPOS fetches **today's** till sales at **this branch** from the ERP — every sale since midnight on the till's clock, from any till and any cashier at the branch, newest first (up to the latest 100). Each row shows the receipt number, the time and the name of the cashier who rang it, and the total.
+4. Tap the sale you want. The full receipt loads and the receipt screen opens.
+5. Press **Print** (or **Gift receipt** then **Print**) as normal.
 
-**How it works.**
+> **Note.** **Today's sales** needs the network. If the connection is down, use **Recent receipts** instead. If the list shows *No sales at this branch today.*, nothing has been sold at this branch since midnight. A sale from an earlier day is not listed — find it under **Recent receipts** on the till that rang it, or ask the back office. A sale that has been **reversed** stays in the list, marked **· Reversed** after its receipt number, so a refund never makes a sale disappear from the day; it reprints with the header **Sale reversed** and the `*** REVERSED ***` stamp. If you do not see **Today's sales** in the menu at all, your account is not allowed to look up sales; ask your supervisor.
 
-1. Press the **☰** menu in the top bar to open the **Session** drawer.
-2. Press **Today's sales** ("Look up & reprint a receipt").
-3. OrbixPOS fetches the day's invoices from the server. Each row shows the invoice number, the time it was finalised, and the total.
-4. Tap the sale you want.
-5. OrbixPOS loads the full finalised receipt from the server and shows the receipt screen.
-6. Press **Print** (or **Gift receipt** then **Print**) as normal.
+### 4.2 Recent receipts (this till, works offline)
 
-> **Note.** **Today's sales** needs the network — it reads from the server. If the connection is down, use **Recent receipts** instead (Section 4.2), or try again when you are back online. If the list shows *"No sales yet."*, no sales have been finalised today for this branch.
+**What it is.** The last 50 receipts completed **on this till**, kept on the till itself.
 
-### 4.2 Recent receipts (this device, works offline)
+1. Press **☰** to open the **Session** panel.
+2. Press **Recent receipts** (*Reprint from this device (offline)*).
+3. A list headed **Recent receipts (this device)** appears — each row shows the receipt number, the date and time, and the total.
+4. Tap the receipt you want. The receipt screen opens.
+5. Press **Print** (or **Gift receipt** then **Print**) as normal.
 
-**What it is.** A list of the receipts that were rung **on this device**, kept locally on the till itself.
+> **Note.** **Recent receipts** only holds sales rung **on this particular till**. If the list shows *No receipts on this device yet.*, this till has not completed any sales since its local history was last cleared. A sale that was reversed on this till opens with the header **Sale reversed** and the `*** REVERSED ***` stamp.
 
-**Why it exists.** The network is not always up. Because OrbixPOS keeps a copy of each receipt it produces on the device, you can still reprint a recent one even with no connection — perfect for a customer who returns minutes after a sale during an outage.
-
-**How it works.**
-
-1. Press the **☰** menu in the top bar to open the **Session** drawer.
-2. Press **Recent receipts** ("Reprint from this device (offline)").
-3. A list headed **Recent receipts (this device)** appears — each row shows the invoice number, the date and time, and the total.
-4. Tap the receipt you want.
-5. The receipt screen opens.
-6. Press **Print** (or **Gift receipt** then **Print**) as normal.
-
-> **Note.** **Recent receipts** only contains sales rung **on this particular till**. A sale rung on another register will not be here — use **Today's sales** for those (when you have a connection). If the list shows *"No receipts on this device yet."*, this till has not completed any sales since the device's local history was last cleared.
-
-> **Tip.** Reprints from either source open the *same* receipt screen with the *same* buttons, so you can print, switch to a gift receipt, or — if it is allowed — refund the sale, exactly as you could when it was first rung.
+> **Tip.** Reprints from either source open the *same* receipt screen with the *same* buttons, so you can print, switch to a gift receipt, or — if allowed — refund the sale.
 
 ---
 
 ## 5. Refunding (reversing) a whole sale
 
-**What it is.** A **refund / reverse** cancels an entire sale that has already been recorded. It undoes the whole thing: it gives the money back, puts the stock back, and unwinds the tax and revenue on the server.
+**What it is.** A **refund / reverse** cancels an entire sale that has already been recorded. It gives the money back, puts the stock back, and undoes the VAT and revenue in the ERP.
 
-**Why it exists.** Mistakes happen — the wrong item was scanned, a customer changes their mind right after paying, a basket was rung twice. Reversing the sale is the clean, fully-accounted way to put everything back exactly as it was, with an audit trail of who did it and why.
+**Why it exists.** Mistakes happen — the wrong item was scanned, a customer changes their mind right after paying, a basket was rung twice. Reversing the sale is the clean, fully-accounted way to put everything back, with a record of who did it, who approved it, and why.
 
-**When it happens.** You reverse a sale from its receipt screen, while the till session that rang it is **still open** (that is, before the shift has been closed and reconciled). Because reversing is sensitive, it is **supervisor-gated** — only a user whose role includes the refund permission can do it. If you do not have that permission, the **Refund / reverse** button does not appear at all; ask a supervisor.
+**Who can do it.** A refund always involves a **manager**:
 
-**How it works.** Press **Refund / reverse** on the receipt screen.
+- **A cashier** can start a refund only on a sale rung on **their own** open till session, and a manager must approve it on the spot by typing their username and password at the till. On a colleague's sale the **Refund / reverse** button does not appear at all — fetch a supervisor instead.
+- **A supervisor or manager** whose account holds the invoice-void right (by default the **Sales Manager** and **Branch Manager** roles) is the approver. Normally they walk over and approve at the cashier's till. If a supervisor with this right is running a till shift themselves, they see **Refund / reverse** on any sale while their own shift is open, and they are not asked for a second approval. The ERP still accepts the reversal only while the shift that rang the sale is open.
 
-1. Open the sale you want to reverse. This can be the receipt that just appeared after a sale, or one you reprinted from **Today's sales** or **Recent receipts** (Section 4).
-2. Press **Refund / reverse** (the red button with the undo arrow). It appears only when reversing is allowed (see the conditions below).
-3. A confirmation box headed **Reverse this sale?** appears. It explains: *"This voids the whole sale and reverses revenue, VAT, cash and stock. Allowed while the session is open."*
-4. Type a short **Reason** — say what happened, e.g. "wrong size, customer swap" or "rang twice in error". A reason is good practice and goes into the audit record. (If you leave it blank, a default note is used.)
-5. Press **Reverse** to confirm, or **Cancel** to back out.
-6. On success you see *"Sale reversed."*, and the slip is stamped **\*\*\* REVERSED \*\*\*** in red. The money, stock, VAT and revenue are all unwound on the server, and the cash for this sale automatically drops out of your drawer's expected total — so you do **not** need to record a separate cash payout for it.
+The approving manager must be a **different person** from the one signed in. Nobody can approve their own refund.
 
-### 5.1 When the Refund / reverse button is available
+### 5.1 How to reverse a sale
+
+1. Open the sale's receipt. This can be the receipt that just appeared after the sale, or one you reprinted from **Today's sales** or **Recent receipts** (section 4).
+2. Press **Refund / reverse** (the red button with the undo arrow). It appears only when a refund is allowed — see section 5.2.
+3. A box headed **Reverse this sale?** appears: *This voids the whole sale and reverses revenue, VAT, cash and stock. Allowed while the session is open, and it needs a manager.*
+4. Type a short **Reason** — what happened, for example "wrong size, customer swap" or "rang twice in error". It goes into the record. (If you leave it blank, the reason is saved as "POS reversal".)
+5. Press **Continue**, or **Cancel** to back out.
+6. **If you are a cashier**, a **Manager approval — refund** box opens. It says *Reverse this sale and return the money to the customer.* and names the receipt and amount, for example *Receipt INV-2026-004218 — TZS 25,000.00*. The manager types their **Manager username** and **Manager password** and presses **Approve**. You stay signed in — this only checks the manager's authority for this one refund.
+7. On success you see *Sale reversed — approved by [manager's name].* (or just *Sale reversed.* when a supervisor did it on their own authority). The receipt header changes to **Sale reversed** and the slip is stamped `*** REVERSED ***`, followed by `Approved by [manager's name]` when a manager approved it.
+8. Give the customer their money. The sale's cash automatically drops out of your drawer's expected total, so you do **not** record a separate cash payout for it.
+
+If the manager presses **Cancel** in the approval box, you see *Not approved — the sale stands.* and nothing changes.
+
+> **If the manager's details are refused.** The approval box stays open and shows why — for example *Those details were not accepted. Check the username and password and try again.* or *That user is not allowed to approve this action.* (the user does not hold the refund-approval right, or is the same person who is signed in). The manager can retype, or you can press **Cancel**.
+
+### 5.2 When the Refund / reverse button is available
 
 The **Refund / reverse** button only shows when **all** of these are true:
 
 | Condition | Why |
 |---|---|
-| You have the refund permission (`POS.SALE.VOID`) | Reversing is supervisor-gated. Without it the button is hidden. |
-| The session is still **open** | The reversal puts the cash back into the *open* drawer. Once the shift is closed/reconciled, the cash is settled and the till can no longer absorb it. |
-| The sale has **not already** been reversed | A sale can only be reversed once. After it is stamped **REVERSED**, the button is gone. |
-| The invoice is not already void | You cannot reverse something that is already cancelled. |
+| Your account may start refunds (the till refund right, held by cashiers by default) **or** approve them (the invoice-void right, held by sales and branch managers) | Without either, the button is hidden. |
+| The shift on **this till** is still **open** | The refund comes out of the open drawer. Once the shift is closed, the cash is settled. |
+| **For a cashier:** the sale was rung on **your own** open shift. (A supervisor with the invoice-void right skips this check.) | A cashier may only reverse their own sales. On a colleague's sale the button is simply not shown, so nobody calls a manager over for a refund that would be refused. |
+| The sale has **not already** been reversed | A sale can only be reversed once. |
 
-If the button is missing, check these in order. The most common reasons are: you are a cashier without supervisor rights (ask a supervisor), the shift has already been closed (the sale must be handled by the back office now — see the next note), or the sale was already reversed.
+Even when the button shows, the ERP checks again when you confirm:
 
-> **Note — a sale from a session that has already been closed.** If the original shift has already been closed and reconciled, OrbixPOS cannot reverse the sale at the till, because the drawer it belonged to is settled. In that situation the sale has to be cancelled in the back-office ERP instead, where the cash difference is treated as a reconciliation matter. Ask your supervisor or store manager to handle it from the office system.
+| The ERP refuses with … | Meaning |
+|---|---|
+| *You can only reverse sales rung on your own till session. Ask a supervisor to reverse this one.* | A cashier tried to refund a colleague's sale. A supervisor must do it. Normally the till hides the button on a colleague's sale, so you should rarely see this — it can still appear, for example when the till is connected to an older ERP server that does not tell it which shift rang the sale. |
+| *This refund needs a supervisor's approval. Ask a supervisor to approve it at the till, then try again.* | The approval did not reach the ERP or was not accepted. Start again from **Refund / reverse**. |
+| A message saying the session is not open | The shift that rang this sale has already been closed. It must be cancelled in the back office instead (see below). |
+| A message saying the invoice is not a POS sale | The sale was not made at a till; it must be cancelled in the back office. |
 
-> **Important — the refused-message case.** If you press **Reverse** and the server refuses (for example because the session has just closed, or the sale was not a till sale), OrbixPOS shows the reason in a short message and the sale is left untouched. Read the message; it tells you what to do next.
+In every refused case the sale is left untouched.
+
+> **A sale from a shift that has already been closed.** OrbixPOS cannot reverse it, because the drawer it belonged to is settled. The sale has to be cancelled in the back-office ERP, where the cash difference is handled as a reconciliation matter. Ask your supervisor or store manager.
 
 ---
 
 ## 6. What OrbixPOS does *not* do — partial and single-line refunds
 
-This is an important limit to understand, so you are never stuck mid-transaction.
+**OrbixPOS cannot refund part of a sale.** There is **no** way to refund a single line, one item out of five, or part of a quantity. **Refund / reverse** is all-or-nothing.
 
-**OrbixPOS cannot refund part of a sale.** There is **no** way to refund a single line, refund one item out of five, or refund part of the quantity. The **Refund / reverse** button is all-or-nothing: it reverses the **whole** sale or nothing.
-
-So what do you do when a customer wants to return just one item out of a larger basket? You have two correct options, depending on your store's policy:
+When a customer wants to return just one item out of a larger basket, you have two correct options, depending on your store's policy:
 
 | Situation | What to do |
 |---|---|
-| Customer returns **one item** from a multi-item sale, and the sale's session is still open | **Reverse the whole sale** (Section 5), then **ring a fresh sale** for the items the customer is keeping. The net effect is that only the returned item is refunded. |
-| You just need to **hand cash back** that is not tied to a specific reversible sale (a goodwill cash-back, or a return for a sale from an already-closed shift) | Record a **cash payout** of type **Refund** instead (Section 7). |
+| Customer returns **one item** from a multi-item sale, and the sale's shift is still open | **Reverse the whole sale** (section 5), then **ring a fresh sale** for the items the customer is keeping. The net effect is that only the returned item is refunded. |
+| You must **hand cash back** that is not tied to a reversible sale (a goodwill cash-back, or a return for a sale from an already-closed shift) | Record a **cash payout** of type **Refund** instead (section 7). |
 
-> **Tip.** The "reverse the whole sale, then re-ring the rest" approach keeps the books perfectly accurate, because each step is a complete, properly-accounted transaction. It feels like extra steps, but it is the right way, and the idempotency safety on sales means re-ringing is safe.
+> **Tip.** "Reverse the whole sale, then re-ring the rest" keeps the books accurate, because each step is a complete, properly-accounted transaction. It takes a few more steps, but it is the right way. The re-rung sale gets a new receipt number.
 
 ---
 
 ## 7. The cash-drawer refund payout (the alternative)
 
-**What it is.** A **cash payout** records cash physically leaving the drawer. One of its types is **Refund** — money handed back to a customer that is **not** linked to reversing a particular sale.
+**What it is.** A **cash payout** records cash physically leaving the drawer. One of its two types is **Refund** — money handed back to a customer that is **not** linked to reversing a particular sale. (The other type, **Paid out**, is for cash leaving the drawer for another reason, such as a drop to the safe. A business expense paid from the till is recorded with **Till expense** instead — see the *Starting and Ending a Shift* chapter, Chapter 2.)
 
-**Why it exists.** Sometimes you must give cash back but there is no open, reversible sale to undo — for example, a customer returns goods bought during a shift that has already closed, or your manager authorises a goodwill cash-back. A refund payout keeps your drawer honest: it tells the system that cash left, so when you count the till at close, the figures still add up.
+**When it happens.** Only when the proper whole-sale reversal (section 5) is not available or not appropriate. If the sale can be reversed, **always prefer Refund / reverse** — it handles cash *and* stock *and* tax, which a payout does not.
 
-**When it happens.** Use a refund payout only when the proper whole-sale reversal (Section 5) is not available or not appropriate. If the sale is reversible (its session is still open and you have permission), **always prefer Refund / reverse** — it handles cash *and* stock *and* tax, which a payout does not.
+**How it works.**
 
-**How it works.** Record it from the **Session** menu.
-
-1. Press the **☰** menu in the top bar to open the **Session** drawer.
-2. Press **Cash payout** ("Refund or drawer drop").
-3. At the top, choose the type. Pick **Refund** for cash returned to a customer. (The other type, **Paid out**, is for a drawer-to-safe drop or petty-cash payout — not a customer refund.)
-4. Enter the **Amount** (in your currency).
-5. Type a **Reason** — say why the cash is leaving, e.g. "Cash refund, returned goods, ref INV-2026-000042". Quote the original receipt number if you have it.
+1. Press **☰** to open the **Session** panel.
+2. Press **Cash payout** (*Refund or drawer drop — reason required*). It is only available while the shift is open.
+3. At the top, choose **Refund**. (The box opens on **Paid out** — make sure you switch it.)
+4. Enter the **Amount (TZS)**.
+5. Type the **Reason (required)** — say why the cash is leaving, in a few words, for example "Cash refund, returned goods, ref INV-2026-004218". Quote the original receipt number if you have it.
 6. Press **Record**.
-7. You see *"Payout recorded."*. The amount is now subtracted from the cash your drawer is expected to hold at close.
+7. You see *Payout recorded.* (or *Payout recorded and posted to the ledger.*). The amount is now taken off the cash your drawer is expected to hold at close.
 
-> **Warning — what a refund payout does *not* do.** A refund payout is **cash bookkeeping only**. It does **not** put stock back, it does **not** reverse VAT or revenue, and it is **not** linked to any invoice. It only keeps your drawer's expected cash correct. If the goods are coming back into the shop and the sale could be reversed, use **Refund / reverse** (Section 5) instead — a payout is the fallback for when that is not possible.
+If the reason is too short you see *Say what the cash is for (at least a few words).*; if the amount is empty, *Enter an amount.*
+
+> **Warning — what a refund payout does *not* do.** A refund payout is **cash bookkeeping only**. It does **not** put stock back, it does **not** reverse VAT or revenue, and it is **not** linked to any receipt. It only keeps your drawer's expected cash correct. If the goods are coming back into the shop and the sale could be reversed, use **Refund / reverse** instead.
 
 ---
 
@@ -213,19 +277,24 @@ So what do you do when a customer wants to return just one item out of a larger 
 
 | What you see | What to do |
 |---|---|
-| The receipt screen appeared after payment | The sale is recorded. Press **Print** for paper, **Gift receipt** to hide prices, then **Done** to move on. |
+| The **Sale complete** receipt appeared after payment | The sale is recorded. Press **Print** for paper, **Gift receipt** to hide prices, then **Done** to move on. |
+| A customer asks for a TRA / EFD receipt | The OrbixPOS receipt is not a fiscal receipt. Issue the fiscal receipt through your shop's EFD/VFD arrangement. |
 | A customer wants a present receipt with no prices | Press **Gift receipt**, then **Print**. Press **Show prices** to switch back. |
-| A customer lost a receipt from earlier today (any till) | **☰** menu › **Today's sales** › tap the sale › **Print**. Needs the network. |
-| A customer lost a receipt and you are offline | **☰** menu › **Recent receipts** › tap the sale › **Print**. Works without the network (this till's sales only). |
-| You reprinted a receipt — did the customer get charged again? | No. Reprinting never creates a new sale and never charges anyone. |
-| You need to undo a whole sale, shift still open, and you have permission | On the receipt, press **Refund / reverse**, enter a reason, press **Reverse**. |
-| **Refund / reverse** button is missing | You may lack the supervisor permission (ask a supervisor), the shift may already be closed (back office must handle it), or the sale was already reversed. |
-| Customer wants to return just one item from a bigger sale | Reverse the whole sale, then re-ring the items they are keeping (Section 6). |
-| You must hand cash back but there is no reversible sale | **☰** menu › **Cash payout** › type **Refund** › enter amount and reason › **Record** (Section 7). |
-| **Print** showed "Sent to printer (peripheral stub)" but nothing printed | Expected in this build — the physical printer driver is not wired yet. The receipt data is correct; follow your store's interim printing procedure. |
-| The line items show "(line detail not loaded)" | Totals are still correct. Reprint from **Today's sales** to pull the full breakdown from the server. |
+| A customer lost a receipt from earlier today (any till at this branch) | **☰** › **Today's sales** › tap the sale › **Print**. Needs the network. |
+| A customer lost a receipt and you are offline | **☰** › **Recent receipts** › tap the sale › **Print**. Works without the network (this till's sales only). |
+| You reprinted a receipt — was the customer charged again? | No. Reprinting never creates a new sale and never charges anyone. |
+| *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen (usually an administrator's job). |
+| The company address, TIN or VRN is missing from the receipt | It has not been filled in on the company record in the ERP. Ask your administrator. |
+| You need to undo a whole sale and the shift is still open | On the receipt, press **Refund / reverse**, enter a reason, press **Continue**, and have a manager approve it. |
+| **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
+| *You can only reverse sales rung on your own till session.* | It is a colleague's sale. Ask a supervisor to reverse it. (Rare — normally the button is not shown on a colleague's sale.) |
+| *Not approved — the sale stands.* | The approval was cancelled. Nothing changed. |
+| Customer wants to return just one item from a bigger sale | Reverse the whole sale, then re-ring the items they are keeping (section 6). |
+| You must hand cash back but there is no reversible sale | **☰** › **Cash payout** › **Refund** › amount and reason › **Record** (section 7). |
+| The item area shows `(line detail not loaded)` | Totals are still correct. Reprint from **Today's sales** to pull the full breakdown. |
 
-> **Remember the three rules of this chapter:**
-> 1. The receipt is built from the **finalised invoice** — the server's official record of the sale.
+> **Remember the four rules of this chapter:**
+> 1. The receipt is built from the **finalised sale** — the ERP's official record. It is an ordinary sales receipt, **not** a TRA fiscal receipt.
 > 2. **Reprinting never creates a new sale** and never charges the customer.
-> 3. Refunds at the till are **whole-sale only** and **supervisor-gated**, while the session is open; for anything else, reverse-and-re-ring or record a **Refund** cash payout.
+> 3. Refunds at the till are **whole-sale only**, only while the shift is open, and always **approved by a manager** (or done by one).
+> 4. For anything else, reverse-and-re-ring, or record a **Refund** cash payout.
