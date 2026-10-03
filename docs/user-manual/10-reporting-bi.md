@@ -276,91 +276,120 @@ The Trial Balance is covered fully in the Finance chapter (Accounting › Trial 
 ## Business Intelligence Dashboard
 
 **What is the BI Dashboard, and who uses it?**
-The Business Intelligence Dashboard is a single-screen summary that composes key performance indicators (KPIs) from Finance, Operations, and CRM into one view. Rather than opening the income statement, then the AR list, then the stock valuation report separately, a finance director or general manager can open the dashboard and see the essential health indicators at a glance: is the trial balance balanced? Are the AR and AP sub-ledgers in agreement with the GL? How much cash is in the accounts? What is the current pipeline forecast? Each panel has a health badge (green `[OK]` / red `[!]`) that instantly signals whether the underlying sub-ledger ties to the GL control account — a critical integrity check the finance team would otherwise have to perform manually. Drill-through links let the reader navigate directly to the relevant detail screen with a single click. The dashboard is permission-gated at the panel level: a user with only operations permissions sees the stock panel but not the finance panel, and gets a calm "no permission" message for the panels they cannot access (ADR-0037).
+The Business Intelligence Dashboard (the page is titled **Analytics Dashboard**) is a single-screen summary that composes key performance indicators (KPIs) from Finance, Operations, and CRM into one view. Rather than opening the income statement, then the AR list, then the stock valuation report separately, a finance director or general manager can open the dashboard and see the essential health indicators at a glance: is the trial balance balanced? Are the AR and AP sub-ledgers in agreement with the GL? How much cash is in the accounts? What is the current pipeline forecast? Each reconciled figure carries a health badge (green `[OK]` / red `[!]`) that instantly signals whether the underlying sub-ledger ties to the GL control account — a critical integrity check the finance team would otherwise have to perform manually. Drill-through links take the reader straight to the relevant detail screen. The dashboard is permission-gated at the panel level: a user with only operations permissions sees the stock panel but not the finance panels, and gets a calm "no permission" message for the panels they cannot access (ADR-0037).
 
-Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
+Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`. Users who hold `BI.VIEW` also see a **Dashboard** card first on their home-page launchpad.
 
 ![BI dashboard](images/10-reporting-bi/dashboard.png)
 
-The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel loads independently and has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
+The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
 
-**Filters at the top of the page:**
+**Who sees which panels (standard roles):**
 
-- **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
-- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it. Only the **CRM pipeline panel** and the **Sales by Branch panel** actually vary by branch — the Finance, Cash Position, Working Capital, and Inventory panels are anchored to the GL at company level and show the same figures regardless of which branch is selected.
-- **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Change the dates and click the circular **refresh** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
+| Role | Finance, Cash, Working Capital, Trends, Sales by Branch | Inventory | CRM | Export |
+|---|---|---|---|---|
+| Finance Director | Yes | Yes | Yes | Yes |
+| Accountant | Yes | — | — | Yes |
+| Branch Manager | Yes | Yes | — | Yes |
+| Sales Manager | — | — | Yes | Yes |
+| Procurement Manager | — | Yes | — | Yes |
+
+Root users see everything. A custom role sees exactly the panels whose permission it has been granted (see the panel list below).
+
+---
+
+### Filters at the top of the page
+
+- **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches, resets **Branch** to "All branches", and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
+- **Branch** — **All branches** (the default) or one branch, shown as `code — name`. The dashboard re-fetches as soon as you change it. Only the **CRM** panel and the **Sales by Branch** panel are narrowed by this filter. The Finance, Cash Position, Working Capital, Inventory, and Revenue and net profit panels are anchored to the GL at company level and always show company-wide figures — each of those panels carries a **Group-wide** tag, and while a branch is selected a short note under its heading reminds you: *Group-wide — not affected by the branch filter above.* The two panels that *do* follow the filter show a **This branch** tag instead.
+- **The list offers only the branches you are assigned to** (in **Administration › Users**, branch assignments); root users see every branch of the company. If an assignment is removed while you have the page open and you then pick that branch, a yellow banner at the top explains: *You are not assigned to that branch. Choose a branch you work in, or clear the branch filter to see the whole company.* Choose one of your branches, or **All branches**.
+- **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Changing a date does **not** refresh on its own: click the circular **Refresh dashboard** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
+
+**The scope line.** Once the data loads, a row of three grey tags appears under the filters, showing what the server actually filtered to: the **company name**, **Branch: …** (the branch name, or *All branches*), and the **period** (for example `2026-10-01 – 2026-10-02`). Read these tags rather than the pickers when you want to be sure what a figure covers. If they ever read *Branch: Unknown branch*, the branch you chose does not belong to this company, and the branch-filtered panels will be empty — choose the branch again.
 
 ---
 
 **Example — Read the dashboard KPIs and drill through to source screens:**
 
-Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` and branch `DSM Main` auto-select; dates default to the current month (2026-06-01 to 2026-06-14).
+Finance director Gideon Moshi logs in and opens **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` is selected automatically, **Branch** is on **All branches**, and the dates default to the current month (2026-06-01 to 2026-06-14). The scope line reads `Kijenge Trading Ltd` · `Branch: All branches` · `2026-06-01 – 2026-06-14`.
 
 1. **Health strip** — all five pills (TB, Cash vs GL, AR vs GL 1200, AP vs GL 2100, Stock vs GL 1300) show green `[OK]`. No reconciliation issues, so no `(diff: …)` figures appear.
 
-2. **Finance panel** — Revenue: TZS 9,850,000; OpEx: TZS 4,200,000; Net Profit (period): TZS 3,480,000. Trial Balance status: Balanced. Gideon clicks the drill icon in the **Finance** heading — this opens `/admin/reporting/income-statement` where he can run a full P&L; the **View TB** link beside the Trial Balance status opens the GL trial balance.
+2. **Finance panel** — Revenue: 9,850,000.00; OpEx: 4,200,000.00; Net Profit (period): 3,480,000.00 (shown green because it is positive). Small trend lines under Revenue and Net Profit show the last 12 fiscal periods at a glance. The Trial Balance card reads **Balanced**. Gideon clicks the drill icon in the **Finance** heading — this opens the Income Statement (`/admin/reporting/income-statement`) where he can run a full P&L; the **View TB** link on the Trial Balance card opens the GL trial balance.
 
-3. **Cash Position panel** — Total Book Balance across all accounts: TZS 14,890,000, with a green **Cash-GL recon** pill, and a per-account table showing each account's balance in its own currency. He uses the heading drill icon to open the cash & bank accounts list.
+3. **Cash Position panel** — Total Book Balance: 14,890,000.00 (the TZS accounts), with *Not converted: USD 2,500.00* underneath for the company's dollar account, a green **[OK] Cash-GL recon** pill, and a table listing each cash/bank account with its balance in its own currency. He uses the heading drill icon to open the cash & bank accounts list.
 
-4. **Working Capital panel** — AR Outstanding: TZS 19,700,000 (green **AR-GL** pill). AP Outstanding: TZS 6,450,000 (green **AP-GL** pill). He clicks **View Receivables** to drill into the AR invoices list.
+4. **Working Capital panel** — AR Outstanding: 19,700,000.00 (green **AR-GL** pill). AP Outstanding: 6,450,000.00 (green **AP-GL** pill). Below AR Outstanding a small line reads *Not converted: USD 1,200.00* — older US-dollar invoices that carry no reliable exchange rate, so they are listed separately instead of being added into the TZS figure. He clicks **View Receivables** to drill into the AR invoices list.
 
-5. **Inventory panel** — Stock Value: TZS 38,250,000, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
+5. **Inventory panel** — Stock Value: 38,250,000.00, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
 
-6. **CRM panel** — Pipeline by Stage shows 15 open deals across five stages; Win-Rate KPIs show Won, Lost, Win Rate 62%, and Avg Cycle (days); the Forecast block shows Open Opps and a Weighted Value of TZS 29,340,000. He uses the heading drill icon to open the pipeline dashboard.
+6. **CRM panel** — **Pipeline by stage** shows 15 open deals across five stages, one bar per stage with its number of opportunities and value; **Win rate** reads 62.0% with a meter bar, above Won, Lost and Avg cycle; the **Forecast** block shows Open opportunities and a Weighted value of TZS 29,340,000.00. He uses the heading drill icon to open the CRM pipeline dashboard.
 
-7. **Sales by Branch panel** — with **Branch** still on "All branches", the table lists every branch in descending order of sales: `DSM Main` leads with TZS 5,120,000 across 34 finalised invoices, followed by `Arusha Branch` with TZS 2,890,000 across 19 invoices and the remaining branches, with a **Total** row of TZS 9,715,000 across 61 invoices. (This total is sourced from finalised sales invoices, so it need not exactly match the Finance panel's GL-derived Revenue figure above.) Gideon clicks the drill icon in the **Sales by Branch** heading — this opens the sales invoices list.
+7. **Revenue and net profit** — one chart with two smooth lines over the last 12 fiscal periods (labelled `P1 2026`, `P2 2026`, …): Revenue in blue with a light shaded area, Net profit in orange. Gideon moves the pointer across the chart; a vertical line follows it and a small box shows both figures for that period. P6 shows net profit just below the zero line — a loss month.
 
-8. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change. Only the **CRM panel** and the **Sales by Branch panel** actually vary by branch — the Sales by Branch table now shows a single row, for `Arusha Branch` only; the Finance, Cash Position, Working Capital, and Inventory panels stay company-level and show the same figures as before. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+8. **Sales by Branch panel** — with **Branch** still on "All branches", the panel lists every branch as a bar, in descending order of sales: `DSM — DSM Main` leads with 5,120,000.00 across 34 finalised invoices, followed by `ARU — Arusha Branch` with 2,890,000.00 across 19 invoices and the remaining branches, with a **Total** row of 9,715,000.00 across 61 invoices. (This total is the VAT-inclusive value of finalised sales invoices, so it will not match the Finance panel's Revenue, which is net of VAT and taken from the GL.) The drill icon in the heading opens the sales invoices list.
 
-9. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
+9. Gideon changes **Branch** to `ARU — Arusha Branch`. The dashboard re-fetches immediately. The scope line now reads `Branch: Arusha Branch`; the CRM and Sales by Branch headings show **This branch**, and the Sales by Branch table shows a single row for Arusha. The other panels still show **Group-wide** with the "not affected by the branch filter" note, and their figures are unchanged.
+
+10. He selects **Excel** in the **Export** dropdown and clicks **Download**. The file `dashboard_2026-06-01_2026-06-14.xlsx` downloads; its first line reads *Branch: Arusha Branch*, so the file states its own scope. (Requires `BI.EXPORT`.)
 
 ---
 
 ### KPI Panels
 
 **What are KPI panels?**
-Each KPI panel on the dashboard is a self-contained summary of one operational or financial domain, sourced from the module that owns that data. The panels display figures that have already been computed by the underlying modules (the AR reconciliation query, the stock valuation query, the CRM pipeline query, etc.); the dashboard simply composes them into one screen. A health badge (`[OK]` or `[!]`) accompanies any panel whose data has a GL tie-out — it tells you at a glance whether the sub-ledger agrees with the General Ledger. A red badge is a prompt for the finance team to investigate before closing the period.
+Each KPI panel on the dashboard is a self-contained summary of one operational or financial domain, sourced from the module that owns that data. The panels display figures that have already been computed by the underlying modules (the AR reconciliation query, the stock valuation query, the CRM pipeline query, etc.); the dashboard simply composes them into one screen. A health badge (`[OK]` or `[!]`) accompanies any figure that has a GL tie-out — it tells you at a glance whether the sub-ledger agrees with the General Ledger. A red badge is a prompt for the finance team to investigate before closing the period.
 
-**Health strip** — a row of colour-coded status pills that show whether each sub-ledger reconciles with its GL control account. The badges are labelled by what they tie out: **TB** (trial balance), **Cash vs GL**, **AR vs GL 1200**, **AP vs GL 2100**, and **Stock vs GL 1300**. A green pill prefixed `[OK]` means the sub-ledger ties; a red pill prefixed `[!]` means there is a discrepancy, and the red pill also shows the numeric reconciliation difference inline (for example, `[!] AR vs GL 1200 (diff: 1,250.00)`) so the finance team can see how far out the balance is. These badges provide a quick finance-health summary.
+All amounts are shown with two decimals and no currency symbol unless stated; they are in the company's **base currency** (the scope line names the company).
 
-**Finance panel (requires `BI.FINANCE.VIEW`):**
+**Each panel has four possible states:** a *Loading…* spinner; the figures; an empty message when there is nothing yet for the period (for example *No finance data yet for this period.*); or a message when you cannot see it — either *You do not have permission to view …* (missing panel permission; if the branch filter was refused, the yellow banner above says so) or *Could not load … data.* (a temporary fault — click **Refresh dashboard** to try again).
 
-- Revenue, OpEx (Operating Expenses), and Net Profit (period) for the selected period.
-- A **Trial Balance** stat-card with a status pill showing **Balanced** or **Out of balance** (whether total debits equal total credits), and a **View TB** link to the GL trial balance.
+**Health strip** — a row of colour-coded status pills under the scope line, showing whether each sub-ledger reconciles with its GL control account. The pills are labelled by what they tie out: **TB** (trial balance), **Cash vs GL**, **AR vs GL 1200**, **AP vs GL 2100**, and **Stock vs GL 1300**. A green pill prefixed `[OK]` means the figures tie; a red pill prefixed `[!]` means there is a discrepancy, and it also shows the difference inline (for example, `[!] AR vs GL 1200 (diff: 1,250.00)`) so the finance team can see how far out the balance is. You only see the pills for the panels you are allowed to view.
+
+**Finance panel (requires `BI.FINANCE.VIEW`; Group-wide):**
+
+- **Revenue**, **OpEx** (operating expenses, excluding cost of sales), and **Net Profit (period)** for the selected date range — the same figures the Income Statement gives for those dates. Net profit is green when positive and red when negative.
+- Under Revenue and Net Profit, a small **trend line** shows the last 12 fiscal periods, with a dot on the latest. It is there for the shape; the full figures are in the *Revenue and net profit* chart.
+- A **Trial Balance** card with a status pill showing **Balanced** or **Out of balance** (whether total debits equal total credits), and a **View TB** link to the GL trial balance. The trial-balance check covers all postings to date, not just the selected range.
 - The drill icon in the panel heading opens the Income Statement (P&L) report.
 
-**Cash Position panel (requires `BI.FINANCE.VIEW`):**
+**Cash Position panel (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- A **Total Book Balance** summary across all cash and bank accounts, with a **Cash-GL recon** status pill (`[OK]` / `[!]`) showing whether the cash book ties to the GL.
-- A per-account table listing each cash/bank account (code and name) with its **Balance** shown in the account's own currency.
-- Open the Cash & Bank accounts list via the drill-through link in the panel heading.
+- A **Total Book Balance**: the sum of the cash and bank accounts held in the base currency, with a **Cash-GL recon** pill (`[OK]` / `[!]`) showing whether the cash book ties to the GL.
+- Accounts held in another currency are **not** added into that total, because a cash transaction records only its own-currency amount. They are summed per currency on a line underneath, for example *Not converted: USD 2,500.00, EUR 300.00*. The line only appears when you have such accounts.
+- A table listing each cash/bank account (code and name) with its **Balance** in the account's own currency.
+- The drill icon in the panel heading opens the Cash & Bank accounts list.
 
-**Working Capital panel (requires `BI.FINANCE.VIEW`):**
+**Working Capital panel (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- **AR Outstanding** balance with an **AR-GL** sub-ledger/GL reconciliation status pill, and a **View Receivables** link into the AR invoices list.
-- **AP Outstanding** balance with an **AP-GL** sub-ledger/GL reconciliation status pill, and a **View Payables** link into the AP supplier-bills list.
+- **AR Outstanding** with an **AR-GL** reconciliation pill, and a **View Receivables** link into the AR invoices list.
+- **AP Outstanding** with an **AP-GL** reconciliation pill, and a **View Payables** link into the AP supplier-bills list.
+- Both balances are current (as at today) and in base currency. Foreign-currency items count at the rate they were booked at. **Older foreign-currency items with no reliable rate** (raised before multi-currency was switched on) are not added into the base figure; they appear underneath as *Not converted: USD 1,200.00, EUR 300.00* so nothing is hidden. The same rule applies to the AR and AP reconciliation pills and to the customer and supplier balances described in the Finance chapter.
 
-**Inventory panel (requires `BI.OPS.VIEW`):**
+**Inventory panel (requires `BI.OPS.VIEW`; Group-wide):**
 
-- **Stock Value** and a **Stock-GL (acct 1300)** status pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
+- **Stock Value** and a **Stock-GL (acct 1300)** pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
 - The drill icon in the panel heading opens the stock valuation screen.
 
-**CRM pipeline panel (requires `BI.CRM.VIEW`):**
+**CRM panel (requires `BI.CRM.VIEW`; follows the Branch filter):**
 
-- A **Pipeline by Stage** bar chart, each bar showing the open opportunity count and total value for that stage.
-- A **Win-Rate KPIs** block: **Won** count, **Lost** count, **Win Rate** (%), and **Avg Cycle (days)**.
-- A separate **Forecast** block: **Open Opps** count and **Weighted Value** (the probability-weighted pipeline value for the period).
-- Open the sales pipeline via the drill-through link in the panel heading.
+- **Pipeline by stage**: one bar per stage, in pipeline order, labelled with the stage name, the number of open opportunities and their total value. This is the pipeline as it stands today — it does not follow the From / To dates.
+- **Win rate**: the percentage in large type with a meter bar, then **Won**, **Lost**, and **Avg cycle** (days), for the selected date range.
+- **Forecast**: **Open opportunities** and **Weighted value** (the probability-weighted pipeline value for the period).
+- The drill icon in the panel heading opens the CRM Pipeline Dashboard.
 
-**Revenue trend and Net Profit trend (requires `BI.FINANCE.VIEW`):**
+**Revenue and net profit (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- Bar charts showing the last 12 periods of revenue and net profit. Each bar represents one fiscal period.
+- One line chart for the company's last 12 fiscal periods, labelled `P<period> <year>` (for example `P3 2026`): **Revenue** as a blue line with a light shaded area, **Net profit** as an orange line. Both are in base currency on the same scale; a darker line marks zero, so a loss month dips below it.
+- **Reading a value:** move the pointer over the chart — a vertical line snaps to the nearest period and a box shows Revenue and Net profit for it. With the keyboard, Tab to the chart and use the **left / right arrow** keys (Home / End jump to the first / last period, Esc clears); screen readers announce each period.
+- **Show table** (top right of the chart) switches to a table of every period with both figures; **Show chart** switches back.
+- The chart does **not** follow the From / To dates — it always shows the last 12 periods set up in the fiscal calendar (so if next year's periods are already open, they appear at zero).
 
-**Sales by Branch panel (requires `BI.FINANCE.VIEW`):**
+**Sales by Branch panel (requires `BI.FINANCE.VIEW`; follows the Branch filter):**
 
-- A table of finalised sales invoices for the selected date range, broken down by branch: **Branch** (shown as `code — name`), **Sales** (total invoiced value in the company's currency), and **Invoices** (count of finalised invoices), sorted with the highest-selling branch first. A **Total** footer row sums the sales value and invoice count across all rows shown.
-- This is the one finance-domain panel that genuinely honours the **Branch** filter at the top of the page: with the filter left on "All branches" the table shows the full per-branch breakdown; selecting a single branch narrows the table to that branch's row only. (The other finance panels above stay company-level regardless of the Branch filter — see *Filters at the top of the page*.)
-- Only **FINALISED** invoices count; draft or voided invoices are excluded.
+- One bar per branch for finalised sales invoices in the selected date range, highest-selling branch first. Each row shows the branch (`code — name`), its number of invoices, and its sales — each invoice's gross total *including VAT*, in base currency. The bar length is relative to the top branch. A **Total** line underneath gives the invoice count and sales for all rows shown.
+- With **All branches** the panel shows every branch; selecting one branch narrows it to that branch's row.
+- Only **FINALISED** invoices count, dated by when they were finalised; draft or voided invoices are excluded. Invoices raised in another currency count at their base-currency value.
 - If no invoices were finalised in the period, the panel shows *No finalised invoices for this period.*
 - The drill icon in the panel heading opens the sales invoices list (**Sales › Invoices**, `/admin/sales-invoices`).
 
@@ -368,22 +397,35 @@ Each KPI panel on the dashboard is a self-contained summary of one operational o
 
 ### Drill-Through
 
-Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline, Sales by Branch → Sales Invoices) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM, Sales) with your current company and branch context preserved.
+Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash & Bank Accounts, Inventory → Stock Valuation, CRM → Pipeline Dashboard, Sales by Branch → Sales Invoices) plus text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Working Capital and the two trend charts have no heading icon.
 
-The target screen has its own permission guard. If you do not hold the necessary permission for the target screen, you will be redirected to an access-denied page.
+The target screen opens with its own default filters — it does not carry over the dashboard's dates or branch filter, so set them again there if needed. It also has its own permission; if you do not hold it, you are taken to an access-denied page.
 
 ---
 
 ### Exporting the Dashboard
 
-Requires both `BI.VIEW` and `BI.EXPORT` — the same pair the export endpoint checks. The **Export** control sits just under the filters (company, branch, dates), above the panels.
+Requires both `BI.VIEW` and `BI.EXPORT`. The Finance Director, Accountant, Branch Manager, Sales Manager, and Procurement Manager roles have it as standard. Without it, no **Export** control is shown. The control sits just under the filters, above the panels.
 
-1. Choose a format from the dropdown: **PDF**, **Excel**, or **CSV**.
-2. Click **Download**.
+1. Choose a format from the **Export** dropdown: **PDF** (the default), **Excel**, or **CSV**.
+2. Click **Download**. The button reads *Exporting…* while the file is prepared.
 
-The file is named `dashboard_<from>_<to>.<ext>` and includes the panel data for the selected company, branch, and date range. If the export is refused or fails, a short message appears beside the button (for example "You don't have permission to export the dashboard.").
+The file is named `dashboard_<from>_<to>.<ext>` (for example `dashboard_2026-06-01_2026-06-14.pdf`, or `.xlsx` for Excel). It covers the same company, branch, and date range as the screen, and its first line states the branch (*Branch: All branches*, or the branch name).
 
-> **Note for administrators:** no seeded role holds `BI.EXPORT` today, so only root users see the control until a role is granted it.
+**What the file contains.** Only the panels you are allowed to view, in this order:
+
+- **Finance summary** — Revenue, Operating Expenses, Net Profit, and the trial-balance check.
+- **Cash Position** — one line per cash/bank account, labelled with its currency (for example `CB-02 Dollar Account (USD)`); the **Total Cash Book Balance (TZS accounts)**; a *Not included above — USD accounts (in USD)* line for each foreign currency; and the Cash vs GL check.
+- **Working Capital** — AR and AP outstanding with their GL checks, plus *AR / AP not converted (in USD)* lines when there are foreign items with no reliable rate.
+- **Inventory** — stock value and its GL check.
+- **CRM** — the pipeline value per stage, the KPIs, and the weighted forecast.
+- **Revenue Trend** and **Net Profit Trend** — the 12 periods.
+- **Sales by Branch (finalised invoices, incl. VAT)** — one line per branch with its invoice count, and a total.
+- **Health Indicators.**
+
+Amounts are in base currency unless the line names another currency in brackets.
+
+If the export is refused or fails, a short message appears beside the button: *You don't have permission to export the dashboard.*, *The dashboard could not be exported with these filters. Check the dates and try again.*, or *Could not export the dashboard. Please try again.*
 
 ---
 

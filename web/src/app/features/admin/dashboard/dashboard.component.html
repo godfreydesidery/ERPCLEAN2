@@ -75,6 +75,12 @@
 
   @if (selectedCompanyId()) {
 
+    @if (branchRefusal(); as msg) {
+      <p class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+        <i class="bi bi-diagram-3 mt-1" aria-hidden="true"></i><span>{{ msg }}</span>
+      </p>
+    }
+
     <!--
       ── Scope banner (UAT 2026-08) ──────────────────────────────────────────────
       What the SERVER says it just filtered to, not what the picker above asked for. The
@@ -186,6 +192,11 @@
                   <div class="erp-kpi h-100">
                     <div class="erp-kpi__label">Revenue</div>
                     <div class="erp-kpi__value">{{ +f.revenue | number:'1.2-2' }}</div>
+                    @if (revenueSpark().length > 1) {
+                      <div class="bi-spark" title="Revenue, last {{ revenueSpark().length }} periods">
+                        <app-sparkline [values]="revenueSpark()" [color]="colors.series1" />
+                      </div>
+                    }
                   </div>
                 </div>
                 <div class="col-6 col-md-4">
@@ -202,6 +213,11 @@
                          [class.text-danger]="+f.netProfitPeriod<0">
                       {{ +f.netProfitPeriod | number:'1.2-2' }}
                     </div>
+                    @if (netProfitSpark().length > 1) {
+                      <div class="bi-spark" title="Net profit, last {{ netProfitSpark().length }} periods">
+                        <app-sparkline [values]="netProfitSpark()" [color]="colors.series2" />
+                      </div>
+                    }
                   </div>
                 </div>
                 <div class="col-6 col-md-4">
@@ -266,7 +282,15 @@
             @if (finance()?.cash; as cash) {
               <div class="erp-kpi mb-3">
                 <div class="erp-kpi__label">Total Book Balance</div>
-                <div class="erp-kpi__value">{{ +cash.total | number:'1.2-2' }}</div>
+                <div class="erp-kpi__value">{{ (cashSplit()?.total ?? +cash.total) | number:'1.2-2' }}</div>
+                @if (cashSplit()?.foreign?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of cashSplit()!.foreign; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <span class="status-tag"
                         [class.status-tag--ok]="cash.cashTies"
@@ -488,66 +512,41 @@
       }
       @default {
         @if (crm(); as c) {
-          <div class="row g-4 mb-4">
-            <!-- Pipeline by stage — CSS bars -->
-            <div class="col-md-7">
-              <h3 class="h6 mb-3">Pipeline by Stage</h3>
-              @if (c.pipeline?.stages?.length) {
-                <figure class="mb-0">
-                  <figcaption class="sr-only">Pipeline by stage bar chart</figcaption>
-                  <div class="bi-bar-chart">
-                  @for (row of c.pipeline!.stages; track row.stageUid) {
-                    <div class="bi-bar-row mb-2">
-                      <div class="d-flex justify-content-between small mb-1">
-                        <span>{{ row.stageName }}</span>
-                        <span class="font-monospace text-muted">{{ row.openCount }} opps</span>
-                      </div>
-                      <div class="d-flex align-items-center gap-2">
-                        <div class="bi-bar-track flex-grow-1">
-                          <div class="bi-bar-fill" aria-hidden="true"
-                               [style.width.%]="trendBarWidth(row.totalValueAmount, pipelineMax(c.pipeline!.stages))">
-                          </div>
-                        </div>
-                        <span class="font-monospace small text-nowrap">
-                          {{ row.currency }} {{ +row.totalValueAmount | number:'1.2-2' }}
-                        </span>
-                      </div>
-                    </div>
-                  }
+          <div class="erp-card bi-card mb-4">
+            <div class="row g-4">
+              <div class="col-md-7">
+                <h3 class="bi-card__title">Pipeline by stage</h3>
+                @if (pipelineRows().length) {
+                  <app-bar-list [rows]="pipelineRows()" [unit]="pipelineCurrency()"
+                                label="Open pipeline value by stage" />
+                } @else {
+                  <div class="erp-empty">
+                    <i class="bi bi-funnel"></i>No open pipeline.
                   </div>
-                </figure>
-              } @else {
-                <div class="erp-empty">
-                  <i class="bi bi-funnel"></i>No open pipeline.
-                </div>
-              }
-            </div>
-            <!-- CRM KPIs -->
-            <div class="col-md-5">
-              <h3 class="h6 mb-3">Win-Rate KPIs</h3>
-              @if (c.kpis; as k) {
-                <dl class="row mb-3">
-                  <dt class="col-6">Won</dt>
-                  <dd class="col-6 font-monospace text-success">{{ k.wonCount }}</dd>
-                  <dt class="col-6">Lost</dt>
-                  <dd class="col-6 font-monospace text-danger">{{ k.lostCount }}</dd>
-                  <dt class="col-6">Win Rate</dt>
-                  <dd class="col-6 font-monospace fw-semibold">{{ +k.winRatePercent | number:'1.1-1' }}%</dd>
-                  <dt class="col-6">Avg Cycle (days)</dt>
-                  <dd class="col-6 font-monospace">{{ +k.avgCycleDays | number:'1.1-1' }}</dd>
-                </dl>
-              }
-              @if (c.forecast; as f) {
-                <h3 class="h6 mb-2">Forecast</h3>
-                <dl class="row mb-0">
-                  <dt class="col-6">Open Opps</dt>
-                  <dd class="col-6 font-monospace">{{ f.openCount }}</dd>
-                  <dt class="col-6">Weighted Value</dt>
-                  <dd class="col-6 font-monospace text-primary fw-semibold">
-                    {{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}
-                  </dd>
-                </dl>
-              }
+                }
+              </div>
+              <div class="col-md-5">
+                @if (c.kpis; as k) {
+                  <h3 class="bi-card__title">Win rate</h3>
+                  <div class="bi-meter-value">{{ +k.winRatePercent | number:'1.1-1' }}%</div>
+                  <div class="bi-meter" role="meter" aria-label="Win rate" aria-valuemin="0" aria-valuemax="100"
+                       [attr.aria-valuenow]="winRatePct(k.winRatePercent)">
+                    <div class="bi-meter__fill" [style.width.%]="winRatePct(k.winRatePercent)"></div>
+                  </div>
+                  <dl class="bi-facts">
+                    <div><dt>Won</dt><dd>{{ k.wonCount }}</dd></div>
+                    <div><dt>Lost</dt><dd>{{ k.lostCount }}</dd></div>
+                    <div><dt>Avg cycle</dt><dd>{{ +k.avgCycleDays | number:'1.1-1' }} days</dd></div>
+                  </dl>
+                }
+                @if (c.forecast; as f) {
+                  <h3 class="bi-card__title mt-3">Forecast</h3>
+                  <dl class="bi-facts">
+                    <div><dt>Open opportunities</dt><dd>{{ f.openCount }}</dd></div>
+                    <div><dt>Weighted value</dt><dd>{{ f.currency }} {{ +f.weightedValueAmount | number:'1.2-2' }}</dd></div>
+                  </dl>
+                }
+              </div>
             </div>
           </div>
         } @else {
@@ -558,74 +557,9 @@
       }
     }
 
-    <!-- ── Revenue Trend (12-period CSS bars) ──────────────────────────────── -->
-    <h2 class="erp-section-title">
-      Revenue Trend (12 periods)
-      <span class="status-tag status-tag--neutral ms-2"
-            title="Always company-wide — the Branch filter does not narrow this panel">
-        Group-wide
-      </span>
-    </h2>
-    @if (branchScopeActive()) {
-      <p class="text-muted small mb-2">
-        <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
-      </p>
-    }
-    @switch (revenueTrendState()) {
-      @case ('loading') {
-        <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
-          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
-        </p>
-      }
-      @case ('error') {
-        <p class="text-danger mb-4" role="alert">Could not load revenue trend.</p>
-      }
-      @case ('forbidden') {
-        <p class="text-muted mb-4">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view the revenue trend.
-        </p>
-      }
-      @default {
-        @if (revenueTrend(); as t) {
-          @if (t.points.length > 0) {
-            <figure class="mb-0">
-              <figcaption class="sr-only">{{ t.metricLabel }} trend, {{ t.currency }}</figcaption>
-              <div class="bi-bar-chart mb-2">
-                @for (pt of t.points; track pt.periodLabel) {
-                  <div class="bi-bar-row mb-1">
-                    <div class="d-flex justify-content-between small mb-1">
-                      <span class="text-muted">{{ pt.periodLabel }}</span>
-                      <span class="font-monospace text-muted small">
-                        {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
-                      </span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="bi-bar-track flex-grow-1">
-                        <div class="bi-bar-fill bi-bar-fill--revenue" aria-hidden="true"
-                             [style.width.%]="trendBarWidth(pt.value, revenueTrendMax())">
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                }
-              </div>
-            </figure>
-          } @else {
-            <div class="erp-empty mb-4">
-              <i class="bi bi-graph-up"></i>No revenue trend data yet for this period.
-            </div>
-          }
-        } @else {
-          <div class="erp-empty mb-4">
-            <i class="bi bi-graph-up"></i>No revenue trend data yet for this period.
-          </div>
-        }
-      }
-    }
-
-    <!-- ── Net Profit Trend (12-period CSS bars) ─────────────────────────────── -->
+    <!-- ── Revenue and net profit trend (ADR-0064) ───────────────────────────── -->
     <h2 class="erp-section-title mt-3">
-      Net Profit Trend (12 periods)
+      Revenue and net profit
       <span class="status-tag status-tag--neutral ms-2"
             title="Always company-wide — the Branch filter does not narrow this panel">
         Group-wide
@@ -636,55 +570,30 @@
         <i class="bi bi-info-circle me-1" aria-hidden="true"></i>Group-wide — not affected by the branch filter above.
       </p>
     }
-    @switch (netProfitTrendState()) {
+    @switch (trendState()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2 mb-4" aria-live="polite">
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading…
         </p>
       }
       @case ('error') {
-        <p class="text-danger mb-4" role="alert">Could not load net profit trend.</p>
+        <p class="text-danger mb-4" role="alert">Could not load the revenue and net profit trend.</p>
       }
       @case ('forbidden') {
         <p class="text-muted mb-4">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view the net profit trend.
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>You do not have permission to view the revenue and net profit trend.
         </p>
       }
       @default {
-        @if (netProfitTrend(); as t) {
-          @if (t.points.length > 0) {
-            <figure class="mb-0">
-              <figcaption class="sr-only">{{ t.metricLabel }} trend, {{ t.currency }}</figcaption>
-              <div class="bi-bar-chart mb-4">
-                @for (pt of t.points; track pt.periodLabel) {
-                  <div class="bi-bar-row mb-1">
-                    <div class="d-flex justify-content-between small mb-1">
-                      <span class="text-muted">{{ pt.periodLabel }}</span>
-                      <span class="font-monospace small" [class.text-success]="+pt.value>=0" [class.text-danger]="+pt.value<0">
-                        {{ t.currency }} {{ +pt.value | number:'1.2-2' }}
-                      </span>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                      <div class="bi-bar-track flex-grow-1">
-                        <div class="bi-bar-fill" aria-hidden="true"
-                             [class.bi-bar-fill--profit]="+pt.value>=0"
-                             [class.bi-bar-fill--loss]="+pt.value<0"
-                             [style.width.%]="trendBarWidth(pt.value, netProfitTrendMax())">
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                }
-              </div>
-            </figure>
-          } @else {
-            <div class="erp-empty mb-4">
-              <i class="bi bi-graph-down"></i>No net profit trend data yet for this period.
-            </div>
-          }
+        @if (trendChart(); as t) {
+          <div class="erp-card bi-card mb-4">
+            <p class="bi-card__sub">Last {{ t.labels.length }} fiscal periods · {{ t.currency }} · not affected by the From / To dates</p>
+            <app-trend-chart [labels]="t.labels" [series]="t.series" [unit]="t.currency"
+                             label="Revenue and net profit by fiscal period" />
+          </div>
         } @else {
           <div class="erp-empty mb-4">
-            <i class="bi bi-graph-down"></i>No net profit trend data yet for this period.
+            <i class="bi bi-graph-up"></i>No revenue or net profit trend yet.
           </div>
         }
       }
@@ -721,33 +630,13 @@
       @default {
         @if (salesByBranch(); as sbb) {
           @if (sbb.rows.length > 0) {
-            <div class="erp-table-wrap mb-4">
-              <table class="erp-table">
-                <caption class="visually-hidden">Sales by branch — finalised invoices, {{ sbb.currency }}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Branch</th>
-                    <th scope="col" class="num">Sales ({{ sbb.currency }})</th>
-                    <th scope="col" class="num">Invoices</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of sbb.rows; track row.branchId) {
-                    <tr>
-                      <td class="small">{{ row.branchCode }} — {{ row.branchName }}</td>
-                      <td class="num mono small">{{ +row.total | number:'1.2-2' }}</td>
-                      <td class="num mono small">{{ row.count }}</td>
-                    </tr>
-                  }
-                </tbody>
-                <tfoot>
-                  <tr class="fw-semibold">
-                    <th scope="row">Total</th>
-                    <td class="num mono small">{{ +sbb.grandTotal | number:'1.2-2' }}</td>
-                    <td class="num mono small">{{ sbb.invoiceCount }}</td>
-                  </tr>
-                </tfoot>
-              </table>
+            <div class="erp-card bi-card mb-4">
+              <p class="bi-card__sub">Finalised invoices, including VAT · {{ sbb.currency }}</p>
+              <app-bar-list [rows]="salesRows()" [unit]="sbb.currency" label="Sales by branch" />
+              <div class="bi-total">
+                <span>Total · {{ sbb.invoiceCount }} {{ sbb.invoiceCount === 1 ? 'invoice' : 'invoices' }}</span>
+                <strong>{{ sbb.currency }} {{ +sbb.grandTotal | number:'1.2-2' }}</strong>
+              </div>
             </div>
           } @else {
             <div class="erp-empty mb-4">

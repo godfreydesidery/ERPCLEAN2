@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { AuthService } from '../../../core/auth/auth.service';
 import { DashboardDto } from './models/dashboard.model';
 
 // ── Minimal fixture DTO ───────────────────────────────────────────────────────
@@ -171,6 +172,10 @@ function makeBranchService() {
   };
 }
 
+function makeAuthService(mine: { branchUid: string; companyUid: string }[] = [{ branchUid: 'BR1', companyUid: 'CO1' }]) {
+  return { myBranches: vi.fn(() => of(mine)) };
+}
+
 function makeBed(
   dashboardObs = of(MOCK_DTO),
   session = makeSession(),
@@ -191,6 +196,7 @@ function makeBed(
       { provide: OrganisationService, useValue: makeOrgService() },
       { provide: CompanyService, useValue: makeCompanyService() },
       { provide: BranchService, useValue: makeBranchService() },
+      { provide: AuthService, useValue: makeAuthService() },
       { provide: SessionStore, useValue: session },
     ],
   });
@@ -218,6 +224,7 @@ describe('DashboardComponent', () => {
         { provide: OrganisationService, useValue: makeOrgService() },
         { provide: CompanyService, useValue: makeCompanyService() },
         { provide: BranchService, useValue: makeBranchService() },
+        { provide: AuthService, useValue: makeAuthService() },
         { provide: SessionStore, useValue: makeSession() },
       ],
     });
@@ -297,19 +304,27 @@ describe('DashboardComponent', () => {
     expect(comp.canExport()).toBe(true);
   });
 
-  // 7. trendBarWidth: proportional scaling
-  it('trendBarWidth returns 100 for value equal to max', () => {
+  // 7. Chart data: revenue and net profit share one chart, aligned by period label
+  it('trendChart puts revenue and net profit on one chart, aligned by period', () => {
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
-    expect(comp.trendBarWidth('200000', 200000)).toBe(100);
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    TestBed.flushEffects();
+    const t = comp.trendChart();
+    expect(t?.labels).toEqual(['Jan 2026', 'Dec 2025']);
+    expect(t?.series.map((s) => s.key)).toEqual(['revenue', 'net']);
+    expect(t?.series[1].values).toEqual([50000, -5000]);
+    expect(t?.currency).toBe('TZS');
   });
 
-  it('trendBarWidth returns 50 for half of max', () => {
+  it('pipeline and sales bar rows carry the counts as sublabels', () => {
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
-    expect(comp.trendBarWidth('100000', 200000)).toBe(50);
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    TestBed.flushEffects();
+    expect(comp.pipelineRows()[0]).toEqual(expect.objectContaining({ label: 'Prospecting', sublabel: '5 opportunities', value: 250000 }));
+    expect(comp.salesRows().map((r) => r.label)).toEqual(['HQ — Head Office', 'NBI — Nairobi Branch']);
+    expect(comp.salesRows()[0].sublabel).toBe('8 invoices');
   });
 
   // 8. healthPrefix — drives the text label inside every health status-tag
@@ -423,7 +438,7 @@ describe('DashboardComponent', () => {
 
   // 14. "Group-wide" badge is always present on the company-wide panels, regardless
   // of branch selection — the reader should never have to guess.
-  it('renders a "Group-wide" badge on Finance, Cash Position, Working Capital, Inventory and both Trend panels', () => {
+  it('renders a "Group-wide" badge on Finance, Cash Position, Working Capital, Inventory and the trend panel', () => {
     vi.useFakeTimers();
     makeBed(of(MOCK_DTO));
     const fixture = TestBed.createComponent(DashboardComponent);
@@ -433,8 +448,8 @@ describe('DashboardComponent', () => {
       fixture.nativeElement.querySelectorAll('h2 .status-tag'),
     ) as HTMLElement[];
     const groupWide = badges.filter((b) => b.textContent?.trim() === 'Group-wide');
-    // Finance, Cash Position, Working Capital, Inventory, Revenue Trend, Net Profit Trend
-    expect(groupWide.length).toBe(6);
+    // Finance, Cash Position, Working Capital, Inventory, Revenue and net profit
+    expect(groupWide.length).toBe(5);
   });
 
   // 15. Once a specific branch is selected, the company-wide panels also carry an
@@ -456,7 +471,7 @@ describe('DashboardComponent', () => {
 
     notes = Array.from(fixture.nativeElement.querySelectorAll('p')) as HTMLElement[];
     const scopeNotes = notes.filter((p) => p.textContent?.includes('not affected by the branch filter'));
-    expect(scopeNotes.length).toBe(6);
+    expect(scopeNotes.length).toBe(5);
   });
 
   // 16. CRM and Sales-by-Branch DO react to the branch filter — label them "This branch"
@@ -554,5 +569,119 @@ describe('DashboardComponent — export', () => {
     comp.exportDashboard();
     expect(comp.exportError()).toBe("You don't have permission to export the dashboard.");
     expect(comp.exporting()).toBe(false);
+  });
+});
+
+// ── Branch picker + cash currency split (2026-10-03) ────────────────────────────
+
+const TWO_BRANCHES = [
+  { uid: 'BR1', id: '100', code: 'HQ', name: 'Head Office' },
+  { uid: 'BR2', id: '200', code: 'ARU', name: 'Arusha' },
+];
+
+function makeBranchBed(opts: {
+  isRoot?: boolean;
+  mine?: { branchUid: string; companyUid: string }[];
+  dashboardObs?: Observable<DashboardDto>;
+}) {
+  const session = makeSession();
+  session.user = signal(opts.isRoot ? { isRoot: true } : { isRoot: false }) as never;
+  const auth = makeAuthService(opts.mine ?? [{ branchUid: 'BR1', companyUid: 'CO1' }]);
+  TestBed.configureTestingModule({
+    imports: [DashboardComponent],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      provideRouter([{ path: '**', redirectTo: '' }]),
+      {
+        provide: DashboardService,
+        useValue: {
+          getDashboard: vi.fn(() => opts.dashboardObs ?? of(MOCK_DTO)),
+          exportDashboard: vi.fn(() => of(new Blob())),
+        },
+      },
+      { provide: OrganisationService, useValue: makeOrgService() },
+      { provide: CompanyService, useValue: makeCompanyService() },
+      { provide: BranchService, useValue: { list: vi.fn(() => of(TWO_BRANCHES)) } },
+      { provide: AuthService, useValue: auth },
+      { provide: SessionStore, useValue: session },
+    ],
+  });
+  return { auth };
+}
+
+describe('DashboardComponent — branch picker and cash split', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('offers a non-root user only the branches they are assigned to', () => {
+    makeBranchBed({ mine: [{ branchUid: 'BR2', companyUid: 'CO1' }, { branchUid: 'BRX', companyUid: 'OTHER' }] });
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(comp.branches().map((b) => b.uid)).toEqual(['BR2']);
+  });
+
+  it('offers root every branch of the company, without asking for assignments', () => {
+    const { auth } = makeBranchBed({ isRoot: true, mine: [] });
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(comp.branches().map((b) => b.uid)).toEqual(['BR1', 'BR2']);
+    expect(auth.myBranches).not.toHaveBeenCalled();
+  });
+
+  it('still loads the dashboard when the assignment lookup fails, offering only All branches', () => {
+    makeBranchBed({});
+    const auth = TestBed.inject(AuthService) as unknown as { myBranches: ReturnType<typeof vi.fn> };
+    auth.myBranches.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(comp.branches()).toEqual([]);
+    expect(comp.financeState()).toBe('idle');
+  });
+
+  it("explains a refused branch filter in the server's words instead of only 'no permission'", () => {
+    makeBranchBed({});
+    const fixture = TestBed.createComponent(DashboardComponent);
+    const comp = fixture.componentInstance;
+    const svc = TestBed.inject(DashboardService) as unknown as { getDashboard: ReturnType<typeof vi.fn> };
+    svc.getDashboard.mockReturnValue(throwError(() => new HttpErrorResponse({
+      status: 403,
+      error: { errors: ['You are not assigned to that branch. Choose a branch you work in, or clear the branch filter to see the whole company.'] },
+    })));
+    comp.onBranchChange('100');
+    fixture.detectChanges();
+    expect(comp.branchRefusal()).toContain('You are not assigned to that branch');
+    const alert = (fixture.nativeElement as HTMLElement).querySelector('.alert-warning');
+    expect(alert?.textContent).toContain('You are not assigned to that branch');
+  });
+
+  it('does not show the branch banner for a refusal with no branch filter', () => {
+    makeBranchBed({ dashboardObs: throwError(() => new HttpErrorResponse({ status: 403 })) });
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    expect(comp.branchRefusal()).toBeNull();
+    expect(comp.financeState()).toBe('forbidden');
+  });
+
+  it('shows foreign cash balances beside the base-currency total', () => {
+    const dto: DashboardDto = {
+      ...MOCK_DTO,
+      finance: {
+        ...MOCK_DTO.finance!,
+        cash: {
+          ...MOCK_DTO.finance!.cash,
+          // The payload total is the raw sum of both accounts; the card must not show it.
+          total: '76200.00',
+          accounts: [
+            ...MOCK_DTO.finance!.cash.accounts,
+            { cashBankAccountId: '2', cashBankAccountUid: 'CB2', accountCode: '1110', accountName: 'Dollar Account', bookBalance: '1200.00', currency: 'USD' },
+          ],
+        },
+      },
+    };
+    makeBranchBed({ dashboardObs: of(dto) });
+    const fixture = TestBed.createComponent(DashboardComponent);
+    fixture.detectChanges();
+    const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Total Book Balance75,000.00');
+    expect(text).toContain('Not converted: USD 1,200.00');
   });
 });

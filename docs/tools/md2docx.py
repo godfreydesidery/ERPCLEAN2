@@ -33,7 +33,7 @@ HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)$')
 TABLE_SEP_RE = re.compile(r'^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$')
 TASK_RE = re.compile(r'^(\s*)[-*]\s+\[([ xX])\]\s+(.*)$')
 BULLET_RE = re.compile(r'^(\s*)[-*]\s+(.*)$')
-NUM_RE = re.compile(r'^(\s*)\d+\.\s+(.*)$')
+NUM_RE = re.compile(r'^(\s*)(\d+)\.\s+(.*)$')
 QUOTE_RE = re.compile(r'^\s*>\s?')
 # A block-level Markdown image on its own line: ![alt text](relative/path.png)
 IMAGE_RE = re.compile(r'^\s*!\[(.*?)\]\(([^)]+)\)\s*$')
@@ -275,6 +275,21 @@ def add_quote_shading(paragraph):
     paragraph._p.get_or_add_pPr().append(shd)
 
 
+def new_list_number_instance(doc):
+    """A fresh numbering instance of the 'List Number' style, restarting at 1.
+
+    Every 'List Number' paragraph otherwise shares the style's one w:num, so Word counts
+    straight through the whole document (step "974." in chapter ten).
+    """
+    style_numpr = doc.styles['List Number'].element.pPr.numPr
+    numbering = doc.part.numbering_part.element
+    abstract_id = next(n.abstractNumId.val for n in numbering.num_lst
+                       if n.numId == style_numpr.numId.val)
+    num = numbering.add_num(abstract_id)
+    num.add_lvlOverride(ilvl=0).add_startOverride(1)
+    return num.numId
+
+
 def convert(md_path, docx_path, title=None, subtitle=None):
     # Image base: where chapter-relative `images/...` links are anchored.
     img_base = os.environ.get('MD2DOCX_IMG_BASE') or os.path.dirname(os.path.abspath(md_path))
@@ -321,16 +336,21 @@ def convert(md_path, docx_path, title=None, subtitle=None):
     # Buffered paragraph state. Markdown soft-wraps: consecutive non-blank lines are ONE
     # paragraph. Without this every wrapped source line became its own Word paragraph.
     buf, buf_kind, buf_indent = [], None, 0
+    # Numbered lists: indent -> [numId, last literal number]. A source item "1." starts a new
+    # list (restart at 1) unless the previous item at that indent was also "1." — the lazy
+    # "1. 1. 1." spelling. Headings end every open list.
+    num_lists = {}
+    buf_num = None
 
     def flush_para():
-        nonlocal buf, buf_kind, buf_indent
+        nonlocal buf, buf_kind, buf_indent, buf_num
         if not buf:
             buf_kind = None
             return
         text = ' '.join(part.strip() for part in buf if part.strip())
         buf = []
-        kind, indent = buf_kind, buf_indent
-        buf_kind, buf_indent = None, 0
+        kind, indent, literal = buf_kind, buf_indent, buf_num
+        buf_kind, buf_indent, buf_num = None, 0, None
         if not text:
             return
         if kind == 'bullet':
@@ -339,6 +359,13 @@ def convert(md_path, docx_path, title=None, subtitle=None):
                 p.paragraph_format.left_indent = Inches(0.5 + 0.25 * (indent // 2 - 1))
         elif kind == 'number':
             p = doc.add_paragraph(style='List Number')
+            state = num_lists.get(indent)
+            if state is None or (literal == 1 and state[1] != 1):
+                state = num_lists[indent] = [new_list_number_instance(doc), literal]
+            state[1] = literal
+            num_pr = p._p.get_or_add_pPr().get_or_add_numPr()
+            num_pr.get_or_add_ilvl().val = 0
+            num_pr.get_or_add_numId().val = state[0]
             if indent >= 2:
                 p.paragraph_format.left_indent = Inches(0.5 + 0.25 * (indent // 2 - 1))
         elif kind == 'task':
@@ -404,6 +431,7 @@ def convert(md_path, docx_path, title=None, subtitle=None):
         m = HEADING_RE.match(line)
         if m:
             flush_para()
+            num_lists.clear()
             level = len(m.group(1))
             text = m.group(2).strip()
             h = doc.add_heading('', level=min(level, 4))
@@ -462,8 +490,8 @@ def convert(md_path, docx_path, title=None, subtitle=None):
         nm = NUM_RE.match(line)
         if nm:
             flush_para()
-            buf_kind, buf_indent = 'number', len(nm.group(1))
-            buf.append(nm.group(2))
+            buf_kind, buf_indent, buf_num = 'number', len(nm.group(1)), int(nm.group(2))
+            buf.append(nm.group(3))
             i += 1; continue
 
         # ── plain text: continues the current block (soft wrap), or starts one ──

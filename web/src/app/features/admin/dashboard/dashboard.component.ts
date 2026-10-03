@@ -3,6 +3,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, forkJoin, map, of } from 'rxjs';
+import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -10,7 +12,12 @@ import { BranchService } from '../branch/branch.service';
 import { Company } from '../models/company.model';
 import { Branch } from '../models/branch.model';
 import { downloadBlob } from '../reporting/reporting.utils';
+import { serverMessage } from '../reporting/report-filter-options.service';
 import { DashboardService } from './dashboard.service';
+import { BarListComponent, BarListRow } from '../../../shared/charts/bar-list.component';
+import { CHART_COLORS, toNumber } from '../../../shared/charts/chart-math';
+import { SparklineComponent } from '../../../shared/charts/sparkline.component';
+import { TrendChartComponent, TrendSeries } from '../../../shared/charts/trend-chart.component';
 import {
   BiHeaderDto,
   DashboardDto,
@@ -29,11 +36,12 @@ type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
  * BI Analytics Dashboard (ADR-0037 D-7/D-8).
  * Route: /admin/dashboard — gated BI.VIEW.
  * Per-panel signal trios + four-state @switch + graceful per-panel forbidden.
- * Chart-free: stat-cards, CSS bars, tables.
+ * Charts are the in-house SVG components in shared/charts (ADR-0064): a smooth revenue / net
+ * profit trend, tile sparklines and bar lists — all drawn from the payload as it is.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [DecimalPipe, FormsModule, RouterLink],
+  imports: [DecimalPipe, FormsModule, RouterLink, TrendChartComponent, BarListComponent, SparklineComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
@@ -42,6 +50,7 @@ export class DashboardComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly branchService = inject(BranchService);
+  private readonly auth = inject(AuthService);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ──────────────────────────────────────────────────────────
@@ -94,6 +103,13 @@ export class DashboardComponent {
   // picker's own state would prove exactly as little.
   readonly header = signal<BiHeaderDto | null>(null);
 
+  /**
+   * The server's own sentence when it refuses the branch filter (the caller is not assigned to
+   * that branch). The picker only offers the caller's branches, so this is the rare case — an
+   * assignment revoked mid-session — and without it every panel would just say "no permission".
+   */
+  readonly branchRefusal = signal<string | null>(null);
+
   // ── Permissions ───────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('BI.VIEW'));
   readonly canFinance = computed(() => this.session.hasPermission('BI.FINANCE.VIEW'));
@@ -121,19 +137,93 @@ export class DashboardComponent {
     return b ? `${b.code} — ${b.name}` : '';
   });
 
-  // ── Derived: trend max for CSS bar scaling ───────────────────────────────────
-  readonly revenueTrendMax = computed(() => {
-    const pts = this.revenueTrend()?.points ?? [];
-    if (pts.length === 0) return 1;
-    return Math.max(...pts.map((p) => +p.value), 1);
+  /**
+   * Cash total in base currency, plus each foreign currency kept out of it. The payload's
+   * `cash.total` adds every account's own-currency balance together (TZS + USD = a number in no
+   * currency); the per-account rows carry their currency, so the split is made here from them —
+   * the AR/AP rule (owner ruling 2026-10-02). No currency on an account counts as base.
+   */
+  readonly cashSplit = computed(() => {
+    const cash = this.finance()?.cash;
+    const base = this.header()?.currency;
+    if (!cash) return null;
+    if (!base) return { total: +cash.total, foreign: [] as { currency: string; amount: number }[] };
+    let total = 0;
+    const foreign = new Map<string, number>();
+    for (const acc of cash.accounts) {
+      const cur = (acc.currency ?? '').trim().toUpperCase();
+      if (!cur || cur === base.toUpperCase()) total += +acc.bookBalance;
+      else foreign.set(cur, (foreign.get(cur) ?? 0) + +acc.bookBalance);
+    }
+    return {
+      total,
+      foreign: [...foreign.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, amount]) => ({ currency, amount })),
+    };
   });
 
-  readonly netProfitTrendMax = computed(() => {
-    const pts = this.netProfitTrend()?.points ?? [];
-    if (pts.length === 0) return 1;
-    const abs = pts.map((p) => Math.abs(+p.value));
-    return Math.max(...abs, 1);
+  // ── Derived: chart data (ADR-0064) ─────────────────────────────────────────
+  readonly colors = CHART_COLORS;
+
+  /** Revenue and net profit on one chart: same currency, one axis. Points arrive oldest first. */
+  readonly trendChart = computed(() => {
+    const rev = this.revenueTrend();
+    const np = this.netProfitTrend();
+    const base = rev?.points.length ? rev : np?.points.length ? np : null;
+    if (!base) return null;
+    const labels = base.points.map((p) => p.periodLabel);
+    const series: TrendSeries[] = [];
+    if (rev?.points.length) {
+      const byLabel = new Map(rev.points.map((p) => [p.periodLabel, toNumber(p.value)]));
+      series.push({ key: 'revenue', name: 'Revenue', color: CHART_COLORS.series1, area: true,
+        values: labels.map((l) => byLabel.get(l) ?? 0) });
+    }
+    if (np?.points.length) {
+      const byLabel = new Map(np.points.map((p) => [p.periodLabel, toNumber(p.value)]));
+      series.push({ key: 'net', name: 'Net profit', color: CHART_COLORS.series2,
+        values: labels.map((l) => byLabel.get(l) ?? 0) });
+    }
+    return { labels, series, currency: base.currency };
   });
+
+  /** One state for the combined trend card — both trends share the BI.FINANCE.VIEW gate. */
+  readonly trendState = computed<LoadState>(() => {
+    const a = this.revenueTrendState();
+    const b = this.netProfitTrendState();
+    if (a === 'loading' || b === 'loading') return 'loading';
+    if (a === 'forbidden' && b === 'forbidden') return 'forbidden';
+    if (a === 'error' && b === 'error') return 'error';
+    return 'idle';
+  });
+
+  readonly revenueSpark = computed(() => (this.revenueTrend()?.points ?? []).map((p) => toNumber(p.value)));
+  readonly netProfitSpark = computed(() => (this.netProfitTrend()?.points ?? []).map((p) => toNumber(p.value)));
+
+  readonly pipelineRows = computed<BarListRow[]>(() =>
+    (this.crm()?.pipeline?.stages ?? []).map((st) => ({
+      key: st.stageUid,
+      label: st.stageName,
+      sublabel: `${st.openCount} ${st.openCount === 1 ? 'opportunity' : 'opportunities'}`,
+      value: toNumber(st.totalValueAmount),
+    })),
+  );
+
+  readonly pipelineCurrency = computed(() => this.crm()?.pipeline?.stages?.[0]?.currency ?? '');
+
+  readonly salesRows = computed<BarListRow[]>(() =>
+    (this.salesByBranch()?.rows ?? []).map((r) => ({
+      key: String(r.branchId),
+      label: `${r.branchCode} — ${r.branchName}`,
+      sublabel: `${r.count} ${r.count === 1 ? 'invoice' : 'invoices'}`,
+      value: toNumber(r.total),
+    })),
+  );
+
+  /** Win rate as a 0–100 meter width. */
+  winRatePct(v: string | number | null | undefined): number {
+    return Math.max(0, Math.min(100, toNumber(v)));
+  }
 
   // ── Export state ──────────────────────────────────────────────────────────────
   readonly exporting = signal(false);
@@ -176,11 +266,25 @@ export class DashboardComponent {
     });
   }
 
+  /**
+   * The Branch picker offers only branches the caller may filter to: the dashboard refuses a branch
+   * the caller is not assigned to (BranchReadGuard), so listing every branch offered choices that
+   * always failed. The company list supplies the numeric id the endpoint takes; GET
+   * /auth/my-branches (self-scoped) says which of them are the caller's. Root is exempt from the
+   * assignment check server-side, so root keeps the full list — the ReportFilterOptionsService rule.
+   */
   private loadBranches(companyUid: string): void {
     this.branchState.set('loading');
-    this.branchService.list(companyUid).subscribe({
-      next: (list) => {
-        this.branches.set(list);
+    const assigned$ = this.session.user()?.isRoot === true
+      ? of(null)
+      : this.auth.myBranches().pipe(
+          map((mine) => new Set(mine.filter((b) => b.companyUid === companyUid).map((b) => b.branchUid))),
+          // Unknown assignments → offer no single branch; "All branches" still works.
+          catchError(() => of(new Set<string>())),
+        );
+    forkJoin([this.branchService.list(companyUid), assigned$]).subscribe({
+      next: ([list, assigned]) => {
+        this.branches.set(assigned === null ? list : list.filter((b) => assigned.has(b.uid)));
         this.branchState.set('idle');
         // Default to "All branches" (empty) so the sales-by-branch panel shows
         // the full per-branch breakdown on first load.
@@ -235,6 +339,7 @@ export class DashboardComponent {
     this.salesByBranch.set(null);
     this.health.set([]);
     this.header.set(null);
+    this.branchRefusal.set(null);
 
     const branchId = this.selectedBranchId() || undefined;
     const from = this.fromDate() || undefined;
@@ -242,7 +347,15 @@ export class DashboardComponent {
 
     this.dashboardService.getDashboard(companyId, from, to, branchId).subscribe({
       next: (dto: DashboardDto) => this.applyDto(dto),
-      error: (err: unknown) => this.applyGlobalError(err),
+      error: (err: unknown) => {
+        if (branchId && err instanceof HttpErrorResponse && err.status === 403) {
+          this.branchRefusal.set(serverMessage(
+            err,
+            "You are not assigned to that branch. Choose a branch you work in, or choose All branches.",
+          ));
+        }
+        this.applyGlobalError(err);
+      },
     });
   }
 
@@ -342,20 +455,6 @@ export class DashboardComponent {
 
   healthPrefix(ties: boolean): string {
     return ties ? '[OK]' : '[!]';
-  }
-
-  // ── Trend bar width (%) ───────────────────────────────────────────────────────
-
-  pipelineMax(stages: { totalValueAmount: string }[]): number {
-    if (!stages || stages.length === 0) return 1;
-    return Math.max(...stages.map((s) => +s.totalValueAmount), 1);
-  }
-
-  trendBarWidth(value: string, max: number): number {
-    const v = +value;
-    if (max === 0) return 0;
-    const pct = (Math.abs(v) / max) * 100;
-    return Math.min(pct, 100);
   }
 
   // ── Export ────────────────────────────────────────────────────────────────────

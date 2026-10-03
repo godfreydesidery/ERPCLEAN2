@@ -46,6 +46,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [7. Standing Orders (Recurring)](#7-standing-orders-recurring)
     - [8. Pricing Rules](#8-pricing-rules)
     - [9. Point of Sale](#9-point-of-sale)
+    - [10. Sales analysis reports](#10-sales-analysis-reports)
 5. [Procurement (Procure-to-Pay)](#procurement-procure-to-pay)
     - [Overview](#overview-1)
     - [1. Purchase Requisitions](#1-purchase-requisitions)
@@ -57,6 +58,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [7. Purchase Returns](#7-purchase-returns)
     - [8. Purchase Settings](#8-purchase-settings)
     - [9. End-to-end procure-to-pay example](#9-end-to-end-procure-to-pay-example)
+    - [10. Purchase Reports](#10-purchase-reports)
 6. [Inventory and Manufacturing](#inventory-and-manufacturing)
     - [1. Permissions quick reference](#1-permissions-quick-reference)
     - [2. Stock on-hand](#2-stock-on-hand)
@@ -1951,6 +1953,8 @@ This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders
 
 The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` permission; every override is recorded in the audit trail. **Cash / walk-in customers are exempt** — this check never applies to them.
 
+**Credit limit and other currencies.** The limit is checked in your base currency. The customer's balance counts each foreign-currency item at the rate it was booked at; older foreign-currency items that have no reliable booked rate, and an order or invoice that is itself in a foreign currency, are converted at **today's** exchange rate (the latest rate on or before today). If a currency involved has **no exchange rate at all**, the system cannot work out the exposure, so it treats the limit as exceeded: the order or invoice is blocked with "The credit limit could not be checked because there is no exchange rate for USD. Add a USD rate under Currency rates and try again." A user with `SALES.CREDIT.OVERRIDE` can still proceed, and the audit record notes which rate was missing. The same rule applies to the credit-limit check at invoice finalisation.
+
 > A separate, advisory credit warning may also appear without blocking confirmation; it is informational only and the order still confirms.
 
 ### 2.4 Cancel an order
@@ -2132,6 +2136,8 @@ After finalisation:
 
 **Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
 
+**Rounding follows the invoice's currency.** Line amounts, VAT and totals are rounded to the decimal places of the invoice's own currency: whole shillings for a TZS invoice, cents for a USD, EUR or KES invoice (18% VAT on USD 12.00 is USD 2.16). The same applies to quotations, sales orders and POS sales. The accounting entry is always posted in the base currency, each amount converted at the invoice's exchange rate.
+
 **Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
 
 **Not enough stock (negative-stock block).** If your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The refusal is a plain message naming the product with how much is available versus requested — for example *"Not enough stock of Sukari 1kg to complete this sale — 3 available, 5 requested. To allow this, enable backorder in Sales Settings."* Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). When the setting is **off**, or the company has never saved any Sales Settings, sales are never blocked this way and stock is allowed to go negative. Invoices raised from a delivery are not checked here (their stock was issued and checked at the delivery — see below), and **the same block applies when you create a Delivery** against a sales order (section 3.1).
@@ -2229,6 +2235,8 @@ The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "
 4. Click **Confirm Return**.
 
 Returns are created directly in **CONFIRMED** status. Stock is returned to the branch. A credit note is raised automatically (pro-rated to the returned quantity).
+
+**How the credit is worked out.** The credit note gives back the same share of the order line's net and VAT as the share of goods returned — returning 2 of 5 credits 2/5 of what the customer was charged for that line, discounts and VAT-inclusive prices included. Amounts are rounded in the order's currency (whole shillings for TZS, cents for USD).
 
 ### 5.2 Returnable quantity
 
@@ -2665,6 +2673,33 @@ Jane checks the X-Read: Sales Total TZS 25,100, Payouts TZS 20,000, Expected Cas
 At end of day Jane counts the drawer: TZS 105,200 (TZS 100 over). She clicks **Close Session**, enters Counted Cash **TZS 105,200** — Variance is **+TZS 100.00** (over).
 
 Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONCILED. Z-Read confirms the +TZS 100 variance and shows Journal **JNL-0519**: DR Cash 100 / CR Till Surplus (4900) 100.
+
+---
+
+## 10. Sales analysis reports
+
+### 10.1 Sales Summary (sales by customer, agent, route, branch, day or cashier)
+
+Navigate to **Sales > Sales Summary** (`/admin/reports/sales-summary`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "sales by customer", "agent performance", "sales by route", "daily sales" or "cashier sales".
+
+Pick a **From** and **To** date, a **Group by** option and, optionally, a **Branch**, then click **Run report**. Each row is one customer, sales agent, route, branch, day or cashier, showing: number of invoices, quantity (in base units, so a pack of 12 counts as 12), gross sales, discount, VAT, net sales, cost of sales, margin and margin %. A TOTAL row sums every group.
+
+- Only **finalised** invoices count; drafts and voided invoices do not. Returns and credit notes are **not** deducted — the same as the Sales Report.
+- **All amounts are in the company's base currency** (e.g. TZS). An invoice raised in another currency (e.g. USD) is converted at the exchange rate stamped on that invoice when it was finalised — the same rate its accounting entry used — so a USD 14.16 sale at 2,500 shows as TZS 35,400, not 14.16. Each line is converted and rounded on its own, so every grouping adds up to the same total as the Sales Report and the Profitability Report. Margin is the converted net less the cost of sales (which is always recorded in base currency). The export notes how many invoices were converted.
+- **Cashier** means the user who created the invoice (at a till, the cashier who rang the sale). **Day** uses the company's time zone.
+- Cost of sales is what the goods cost at the moment of sale. When an item was sold before its stock had ever been costed, its group's cost, margin and margin % show a dash (unknown — not zero), the group is left out of the Cost and Margin totals, and a yellow banner says how many groups and items are affected.
+- Exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`.
+
+### 10.2 Payment Summary (daily cash-up)
+
+Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.CASHUP.VIEW` — a managers' permission (Sales Manager, Branch Manager, Accountant, Finance Director). Cashiers do not hold it: the till's X-read and Z-read show their own session, while this report shows every cashier's takings.
+
+The screen opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
+
+- Amounts are what the business kept: tendered amount less change given back.
+- Payments are counted on the day they were taken, by the person who took them, for sales rung at a till or settled at the counter. A voided sale's payment is not counted.
+- Not included: payments received later against credit invoices (Receivables receipts), till payouts and expenses, and the opening float. To balance one drawer, use the session's X-read / Z-read.
+- Exports additionally require `REPORT.EXPORT`.
 
 ---
 
@@ -3384,6 +3419,54 @@ If 20 bags arrived damaged, John opens **Purchasing › Purchase Returns** (`/ad
 
 ---
 
+## 10. Purchase Reports
+
+Four reports under **Purchasing** answer the questions a buyer, storekeeper or owner asks about what was bought. Each one can be printed or downloaded as **PDF**, **Excel** or **CSV** by a user who also holds **REPORT.EXPORT** (the buttons are hidden otherwise). The **Branch** filter offers only the branches you are assigned to; choosing a branch you are not assigned to is refused with a message saying so — clear the filter to see the whole company. Figures in a foreign currency are listed in their own currency and left out of the totals, and the screen tells you how many.
+
+### 10.1 Goods Received Register
+
+**Purchasing › Goods Received Register** (`/admin/reports/purchases/goods-received`) — permission **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+Every item received from suppliers over a period, one line per goods-receipt line: date, GRN number, order number (or **Direct** for stock taken in with **Receive Without Order**), supplier, branch, item, quantity, unit cost and value, with the total at the foot.
+
+- **Filters:** From / To date (required), Branch, Supplier, Product (all optional; type in the supplier or product box to search).
+- **Voided receipts:** the receipt stays on the day it was received, and appears again in red, as a **negative** line marked *Voided*, on the day it was voided — the same way the Stock Movement report shows it. A month's register therefore never changes after the month is over.
+- **Values exclude VAT.** A goods receipt does not hold VAT (VAT comes from the supplier's bill), and landed costs added later are not included.
+- Long registers are paged; the total at the foot always covers **all** pages.
+
+### 10.2 Purchases by Supplier
+
+**Purchasing › Purchases by Supplier** (`/admin/reports/purchases/by-supplier`) — permission **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+One line per supplier for a period, largest first: number of receipts, value **received** (less receipts voided in the period — it agrees with the Goods Received Register total for the same period and branch), **returns** (confirmed purchase returns at receipt cost), **net purchases** (received − returns), **billed** (supplier bills dated in the period, excluding VAT) and **unpaid** (what is still owed today on those bills, including VAT).
+
+- **Filters:** From / To date, Branch.
+- **Returns / Net purchases** are shown only to users who can see purchase returns (**PURCHASE.RETURN.VIEW**); **Billed / Unpaid** only to users who can see supplier bills (**AP.VIEW**). Hidden columns are left off the report, never shown as zero, and the screen says which are hidden and why.
+- Billing happens separately from receiving, so Billed is not expected to equal Received in any one period.
+
+### 10.3 Open Purchase Orders
+
+**Purchasing › Open Purchase Orders** (`/admin/reports/purchases/open-orders`) — permission **PURCHASE.ORDER.VIEW**.
+
+Goods ordered and still to come: each placed order line with quantity outstanding — order number, order date, expected date (marked **Late** once it has passed), supplier, item, ordered / received / outstanding quantity in the unit ordered, unit price, outstanding value (excluding VAT) and age in days. Opens straight away, as at today.
+
+- **Filters:** As at date (blank = today), Branch, Supplier.
+- Only **placed** orders appear — an order above the approval threshold cannot be placed until it is approved, so drafts and orders awaiting approval are never listed. Closed and voided orders drop off.
+- **As at** really looks back: run it for an earlier date and receipts, voids and closings after that date are treated as not having happened yet.
+- Orders created automatically behind a **Receive Without Order** receipt are never listed — nobody is going to deliver against them.
+
+### 10.4 Purchase Price Variance
+
+**Purchasing › Purchase Price Variance** (`/admin/reports/purchases/price-variance`) — permissions **PURCHASE.ORDER.VIEW** *and* **PURCHASE.GOODS_RECEIPT.VIEW**.
+
+Receipts in a period where you paid a different price from the purchase order: order price, receipt cost and receipt variance; and — for users with **AP.VIEW** — the price on the supplier bill(s) matched to that receipt line, the variance per unit, in total and as a percentage. A **positive** variance means you paid more than the order price.
+
+- **Filters:** From / To date, Branch, Supplier.
+- A receipt takes its cost from its order, so the receipt variance is normally zero; the bill is where price changes show. Two bills against one receipt line are combined at their quantity-weighted average price. Draft bills and voided receipts are ignored.
+- Without **AP.VIEW** the bill columns are hidden and only receipts whose cost differs from the order are listed.
+
+---
+
 # Inventory and Manufacturing
 
 This chapter covers all inventory screens and the manufacturing (Bill of Materials and Work Orders) screens. All screens are available from the **Inventory** and **Manufacturing** groups in the left-hand navigation.
@@ -3951,6 +4034,30 @@ Use this screen to assign an initial cost to products that have a quantity on-ha
 
 The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the product's average cost is established. Opening valuation is a one-time operation per on-hand row. Once a row has been valued it no longer appears on this screen.
 
+### 9.3 Reorder Report
+
+Navigate to **Inventory > Reorder Report** (`/admin/reports/reorder`). Requires `STOCK.VIEW`.
+
+Lists every stock line at or below its reorder level (set per item and location on the Stock On-Hand screen — see 2.4). Optional filters: **Branch** and **Preferred supplier** (type to search); filtering by supplier gives that supplier's order list. Columns: code, description, branch / location, on hand, reorder level, shortfall, **suggested quantity** and preferred supplier.
+
+- The suggested quantity fills the line back up to its maximum level when one is set; otherwise it uses the product's standard reorder quantity; otherwise it is just the shortfall. It is never less than the shortfall.
+- Users who also hold `INVENTORY.VALUATION.VIEW` see two more columns — **Last cost** (the unit cost of the latest goods receipt of the item) and **Order value** — plus an estimated order total. Without that permission the cost columns are not shown at all.
+- Only active products are listed. The reorder level on the product master is not used; the level on the stock line is (the same one the low-stock flag and notification use).
+- Exports additionally require `REPORT.EXPORT`.
+
+### 9.4 Stock Ageing
+
+Navigate to **Inventory > Stock Ageing** (`/admin/reports/stock-ageing`). Requires `INVENTORY.VALUATION.VIEW` (it shows stock value).
+
+Shows, per item, the quantity on hand split into five age bands — **0–30**, **31–60**, **61–90**, **91–180** and **over 180 days** — with the value, and the number of days since the item last sold ("Never" if it has not). Optional filters: **As of** date (defaults to today) and **Branch**. Tick **Only items not sold in 90 days or more** to see slow and dead stock; the totals still cover every item.
+
+**How the age is worked out.** Stock is not labelled with the day it arrived, so the report assumes **first in, first out**: the stock on hand is taken to be the most recently received units. Receipts, opening balances, production, positive adjustments (including count gains and bulk stock imports) and stock transferred in from another branch count as arrivals; moves between your own locations do not change an item's age, and reversals (a voided sale putting stock back) are not new arrivals. Stock is costed at moving average, so each band is valued at the item's average cost — ageing is a view of quantities, and the band values add up exactly to the stock value.
+
+- When the recorded arrivals do not explain all of an item's stock (stock older than the system's records), the unexplained part is put in the **over 180 days** band and marked with an asterisk.
+- Items with no cost show a dash for value and are left out of the value totals; items with negative stock have no age and are left out of the list. A banner counts both.
+- For a past **As of** date, quantities are rebuilt as of that date but valued at today's average cost.
+- Exports additionally require `REPORT.EXPORT`; the PDF prints the first-in, first-out note in its header.
+
 ---
 
 ## 10. Bills of Materials
@@ -4281,12 +4388,12 @@ The list shows each category's code, name, depreciation method, life (in periods
 2. Enter a unique **Code** (e.g. `MACH`) and a **Name** (e.g. Machinery).
 3. Choose the **Depreciation Method**:
    - **Straight Line** — equal charge each period.
-   - **Reducing Balance** — percentage of the remaining book value each period. Requires a **Reducing Rate** (e.g. `0.25` for 25%).
+   - **Reducing Balance** — percentage of the remaining book value each period. Requires a **Rate % per month**, entered as a percentage (`2.5` means 2.5%). The rate is charged **every month** — it is not a yearly rate. If your policy or tax schedule gives a yearly rate, divide it by 12: 25% a year is entered as `2.0833`. (Entering `25` charges 25% of the book value every month — a 48,000,000 van would lose 12,000,000 in its first month.)
 4. Enter the **Default Life Periods** — the standard useful life in accounting periods.
 5. Enter the three **GL Account IDs** by their numeric identifier:
    - Asset Account (the balance-sheet asset account, e.g. 1510)
    - Accumulated Depreciation Account (the contra account, e.g. 1515)
-   - Depreciation Expense Account (the P&L charge account, e.g. 6510)
+   - Depreciation Expense Account (the P&L charge account — on a newly provisioned company this is **5600 Depreciation Expense**, the account mapped to the `DEPRECIATION_EXPENSE` GL configuration key)
 6. Click **Create Category** (the button shows **Saving…** while the request is in flight).
 
 New categories are created with status **ACTIVE** (the status is shown throughout the UI as the raw uppercase value, `ACTIVE` or `INACTIVE`).
@@ -4336,7 +4443,7 @@ DISPOSED and WRITTEN_OFF are terminal states.
 6. Enter the **Acquisition Cost** (the purchase price, excluding VAT).
 7. Enter the **Salvage Value** (the estimated residual value at the end of useful life; enter 0 if none).
 8. Choose the **Depreciation Method** (defaults from the category, can be overridden).
-9. For Reducing Balance, enter the **Reducing Rate**.
+9. For Reducing Balance, enter the **Rate % per month** (a monthly rate — divide a yearly rate by 12; see section 2).
 10. Enter the **Life Periods** (can be overridden from the category default).
 11. Enter the **Acquisition Date** and **Depreciation Start Date** (ISO format yyyy-MM-dd).
 12. Optionally enter a **Location**, **Asset Tag**, and **Cost Centre ID**.
@@ -4361,7 +4468,7 @@ Open any asset from the list. The detail screen shows:
 - Header: asset number, name, and status badge.
 - A **key-metrics row** of four figures: **Acquisition Cost**, **Carrying Cost**, **Accumulated Depreciation**, and **NBV (Net Book Value)**. Carrying Cost equals the acquisition cost until the asset is revalued, after which it diverges to reflect the revised carrying value; NBV is the carrying cost less accumulated depreciation.
 - An **Asset Details** panel listing category, branch, depreciation method, life periods, dates, and (where set) salvage value, the revaluation reserve balance, location, and asset tag. If the asset was capitalised from an AP supplier bill, this panel also shows a **Source Bill** link (**View Source Bill**) to the originating bill.
-- **Depreciation Schedule** (shown when In Service, or once a schedule exists) — a line for each period showing the planned charge, accumulated depreciation after, NBV after, and a posted flag.
+- **Depreciation Schedule** (shown when In Service, Disposed or Written Off — any asset that has a schedule) — a line for each period showing the planned charge, accumulated depreciation after, NBV after, and a posted flag. Holders of `FA.VIEW` **and** `REPORT.EXPORT` see **Export PDF / Export Excel / Export CSV** buttons beside the heading; the file lists every schedule version (a revaluation starts a new version), the posted-to-date total, and the asset's current accumulated depreciation and NBV.
 - **Revaluation History** (shown when revaluations exist) — every revaluation in date order with its direction, delta, carrying-before and carrying-after values, and reason.
 
 The asset number is the human identifier shown throughout the UI. The internal identifier appears only in the browser address bar.
@@ -4414,7 +4521,7 @@ Depreciation is the systematic allocation of an asset's cost over its useful lif
 | Method | Behaviour |
 |---|---|
 | **Straight Line** | Equal charge each period: (Acquisition Cost − Salvage Value) / Life Periods |
-| **Reducing Balance** | Percentage of the closing book value each period: NBV × Reducing Rate |
+| **Reducing Balance** | Percentage of the opening book value each month: NBV × Rate % per month (the rate is monthly, not yearly) |
 
 **Straight Line** is simpler and produces equal charges — appropriate for assets that provide roughly equal benefit in each period (office furniture, computers). **Reducing Balance** produces a higher charge early and a lower charge later — appropriate for assets that lose value quickly in the first years of use (vehicles, plant). In both cases the final period's charge is a residual plug that ensures the asset reaches exactly its salvage value: there is no rounding drift over the asset's life.
 
@@ -4435,14 +4542,14 @@ The preview table lists each eligible asset with its planned charge for the peri
 ### 6.3 Posting a depreciation run
 
 **What happens when you post a depreciation run?**
-Posting a depreciation run does three things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts a single consolidated GL journal — one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category — covering every eligible asset; and (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance. Only one run is permitted per company per fiscal period: if a run already exists for that company and period, a second attempt is **hard-rejected** with the message *"Depreciation run already posted … Duplicate runs are not allowed"* (HTTP 409). The run is rejected, not silently returned — so always confirm a period has not already been run before posting, and use the preview step first.
+Posting a depreciation run does three things at once: (1) it creates a `DEPR-####` run record that acts as the audit trail for the period; (2) it posts one GL journal **per branch** — each asset's depreciation is booked to the branch the asset belongs to, so each branch's profit and loss shows exactly the depreciation of that branch's assets; within each journal there is one Debit to Depreciation Expense and one Credit to Accumulated Depreciation per asset category; and (3) it marks each asset's schedule line for the period as posted and increases each asset's accumulated depreciation balance. Only one run is permitted per company per fiscal period: if a run already exists for that company and period, a second attempt is **hard-rejected** with the message *"Depreciation run already posted … Duplicate runs are not allowed"* (HTTP 409). The run is rejected, not silently returned — so always confirm a period has not already been run before posting, and use the preview step first.
 
 After reviewing the preview:
 
 1. Enter the **Posting Date** (must fall within the selected open fiscal period).
 2. Click **Post Run**.
 
-The system creates a depreciation run with status **Posted** and a run number (e.g. `DEPR-0001`). A single consolidated GL entry is posted covering all eligible assets. Each asset's accumulated depreciation balance increases. The schedule lines for the period are marked as posted.
+The system creates a depreciation run with status **Posted** and a run number (e.g. `DEPR-0001`). One GL entry is posted for each branch that has eligible assets (the run detail lists a **View GL Entry** link for each). Each asset's accumulated depreciation balance increases. The schedule lines for the period are marked as posted.
 
 **Validation.** Only one depreciation run is allowed per company per fiscal period. Attempting a second run for the same period is rejected with a 409 conflict ("Duplicate runs are not allowed"); it is not a safe no-op. The fiscal period containing the posting date must also be open.
 
@@ -4533,6 +4640,28 @@ Navigate to **Finance / Fixed Assets > FA Reconciliation** (`/admin/fixed-assets
      - **Difference** — register figure minus GL figure.
 
 Each card shows a green **TIED** badge when its register and GL figures agree, or a red **MISMATCH** badge when they do not. A mismatch typically indicates a manual GL journal was posted directly to an asset account, which bypasses the register.
+
+### 9.1 Fixed Asset Register report
+
+Navigate to **Finance / Fixed Assets > Fixed Asset Register** (`/admin/fixed-assets/register`). Requires `FA.VIEW`; exporting also requires `REPORT.EXPORT`.
+
+**What it shows.** Every asset acquired on or before the **As at** date — asset number, name, category, branch, location, acquisition date, **cost**, **accumulated depreciation**, **NBV** and **status** — grouped by category with a **subtotal** per category and a **grand total**.
+
+**Filters.** **As at** (required, defaults to today), and optionally **Category**, **Status**, **Branch**, **Location** (matches any part of the location text) and **Cost centre**. Click **Run report**.
+
+**How the "as at" figures are worked out.**
+
+- **Cost** is the carrying cost on that date — the acquisition cost, adjusted by any revaluation dated on or before it.
+- **Accumulated depreciation** counts only the depreciation charges posted for periods on or before that date.
+- **Status** is the status the asset had on that date: an asset sold in March shows as *In service* in a February register; an asset capitalised after the date shows as *Draft*.
+- **NBV** is cost less accumulated depreciation for assets in service on the date. Draft, disposed and written-off assets show **no book value** (not 0.00) and are **left out of the totals** — a note under the table says how many.
+- **Branch and location** are where each asset is *now* (transfers keep no history).
+
+**Agreement with the reconciliation.** Run as at today (or any date after the last posting), the grand-total cost and accumulated depreciation equal the *Register* figures on the FA Reconciliation screen.
+
+**Export.** **Export PDF / Excel / CSV** download the same rows with category subtotal lines, the grand total and the company letterhead.
+
+If you filter by a branch you are not assigned to, the report says so: choose a branch you work in, or clear the branch filter to see the whole company.
 
 ---
 
@@ -4996,6 +5125,7 @@ The Journal Entries list shows every posted batch — its batch number, posting 
 
 1. Set the **Posting Date** (defaults to today). Verify it falls within an open period.
 2. Enter a **Description** summarising the purpose of the entry. Optionally add a **Source Reference** (e.g. a supporting document number).
+   - Optionally pick a **Branch**. The journal then shows in that branch's financial statements (the statements run with that branch selected) instead of under *Company-level entries (no branch)*. Leave it at **Company level (no branch)** for entries that belong to the whole company — accruals, year-end adjustments, owner's capital. The picker lists only the branches you are assigned to; posting to any other branch is refused with *"You are not assigned to that branch, so you cannot post to it…"*. The branch you are currently switched into is **not** applied automatically — a journal is company level unless you choose a branch.
 3. Each line requires exactly one of a debit or credit amount (not both — business rule BR-GL-08).
    - Use the **Account** dropdown on each line to select an account (shown as `code — name`). Only active accounts are listed.
    - Enter the **Debit** or **Credit** amount for that line, and an optional line **Memo**.
@@ -5257,7 +5387,7 @@ The list shows all AR open items for the company: document number, customer name
 
 **When it is used.** By an AR clerk when a customer makes a payment — by cash, bank transfer, mobile money, or cheque. Requires the `AR.RECEIPT.RECORD` permission. The receipt triggers a GL posting immediately (DR Cash / CR Accounts Receivable).
 
-**How it works.** The cash leg posts to the GL in the same transaction as the sub-ledger write, so the control account and the open-item balances are always in agreement at every committed moment. Re-allocating an existing receipt between invoices (changing which invoice the money is applied to) does NOT create a new GL posting — it is a sub-ledger-only change. The receipt amount and every allocation slice must be **positive**, and a receipt may only be allocated to invoices belonging to the **same customer** — an attempt to allocate against another customer's invoice is rejected with a `409 Conflict`.
+**How it works.** The cash leg posts to the GL in the same transaction as the sub-ledger write, so the control account and the open-item balances are always in agreement at every committed moment. Re-allocating an existing receipt between invoices (changing which invoice the money is applied to) does NOT create a new GL posting — it is a sub-ledger-only change. The receipt amount and every allocation slice must be **positive**, and a receipt may only be allocated to invoices belonging to the **same customer** — an attempt to allocate against another customer's invoice is rejected with a `409 Conflict`. A receipt whose cheque **bounced** has been reversed: it no longer counts as money held on account, and it cannot be re-allocated (record a new receipt when the customer pays).
 
 Navigate to **Accounting > Record Receipt** (`/admin/ar/receipts/record`). Permission required: `AR.RECEIPT.RECORD`.
 
@@ -5296,7 +5426,7 @@ Navigate to **Accounting > Record Receipt** (`/admin/ar/receipts/record`). Permi
 **How it works (raise then apply).** A credit note has a two-stage lifecycle:
 
 - **Raise** posts the full contra to the GL **once** (DR Sales Revenue, DR VAT Payable, CR Accounts Receivable) at the credit note's exchange rate, and sets an **unapplied amount** equal to the note total. Its status starts at **UNAPPLIED**.
-- **Apply** is a sub-ledger move that reduces the chosen invoice's outstanding balance and decrements the note's unapplied amount. Apply posts nothing to the GL except a realized-FX adjustment when the settlement rate differs from the invoice rate. The note's status moves to **PARTIAL** and then **APPLIED** as the unapplied amount falls to zero.
+- **Apply** is a sub-ledger move that reduces the chosen invoice's outstanding balance and decrements the note's unapplied amount. Apply posts nothing to the GL except a realized-FX adjustment when the settlement rate differs from the invoice rate. The note's status moves to **PARTIAL** and then **APPLIED** as the unapplied amount falls to zero. A part-applied note can be applied again — to another invoice, or to the same invoice again, in which case the amount is added to the earlier application.
 
 When you raise a credit note directly against an invoice (the usual case from the invoices list), the system raises and immediately applies it in one step, so the invoice outstanding drops right away. Either way the credit note may only be applied to invoices belonging to the **same customer** — a cross-customer application is rejected with a `409 Conflict`. The invoice status updates automatically (OPEN, PARTIAL, or PAID depending on the remaining balance).
 
@@ -5372,7 +5502,24 @@ To load balances brought forward from a prior system, navigate to **Accounting >
 | 61–90 | 61 to 90 days past due date |
 | 90+ | More than 90 days past due date |
 
-**Customer balance lookup:** on the **Accounting > AR Ageing** screen (`/admin/ar/ageing`), use the balance lookup section to check a specific customer's net balance (outstanding invoices minus unallocated receipts). Permission required: `AR.VIEW`.
+**Customer balance lookup:** on the **Accounting > AR Ageing** screen (`/admin/ar/ageing`), use the balance lookup section to check a specific customer's net balance (outstanding invoices minus unallocated receipts and unapplied credit notes). Permission required: `AR.VIEW`.
+
+The balance is in your **base currency**. A foreign-currency item counts at the rate it was booked at. **Older foreign-currency items with no reliable rate.** Items raised in another currency before multi-currency was switched on were stored with an exchange rate of 1, so their "base" value is really the foreign amount. The system does not add those into a base-currency figure. They are shown underneath, per currency ("Not included above — … USD 30.00"), and the same rule applies to the AR control-account check on the dashboard.
+
+**Printable customer statement (to send to the customer).** Once a customer is picked on **Customer Statement**, a **Printable Statement** box appears. Choose **From** and **To** dates (From defaults to the first of this month, To to today; leave From empty to start from the customer's very first transaction) and click **Export PDF**, **Export Excel** or **Export CSV**. The statement carries your company letterhead (name, address, phone, TIN, VRN), the customer's name and TIN, the period and currency, then:
+
+- **Balance brought forward** — everything the customer owed before the From date.
+- Every movement in the period, oldest first: **Invoice** and **Opening balance** lines in the Debit column; **Receipt**, **Credit note** and **Write-off** lines in the Credit column; a **Reversal** line (Debit) when a customer's cheque came back unpaid — so the customer sees both "you paid" and "it bounced".
+- A running **Balance** after every line, and a **Closing balance** row with the period's debit and credit totals.
+- At the foot: "Amount due from customer" (or "Customer in credit"), and who printed it and when.
+
+**Which currency.** The statement covers every currency the customer actually trades in, one section each — a US-dollar customer gets a USD statement, not an empty TZS one. A customer who has transactions in more than one currency gets one block per currency (the customer's own default currency first, then your base currency), each with its own balance brought forward, closing balance and "amount due" line; the amounts are never added together and there is no grand total. Each **Invoice** line's **Reference** is the sales invoice number.
+
+**Ageing export.** On **AR Ageing**, users with export permission see **Export PDF / Excel / CSV** above the table: one row per customer with the five buckets and their total, and a totals row at the bottom, as at today.
+
+**Invoices in another currency.** Every ageing figure is in the invoice's own currency. A customer who owes you in TZS and in USD appears on **two rows** — one per currency, each with its own **Ccy** — and the two are never added together. On the customer statement the headline **Total Outstanding** is the base-currency amount only, with any foreign-currency balance shown beside it ("and USD 500.00"), and the ageing table gets one line per currency. In the ageing export, a single currency prints exactly as before; when more than one currency is present the document gains a **Currency** column and a total line per currency instead of one grand total. Amounts are not converted to TZS: the system ages what the customer actually owes, in the currency they owe it.
+
+Both exports need the screen's permission (`AR.STATEMENT.VIEW`) **and** `REPORT.EXPORT`. A user without `REPORT.EXPORT` does not see the buttons.
 
 ---
 
@@ -5477,7 +5624,7 @@ Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list sho
 **How it works (raise then apply).** A debit note mirrors the AR credit note lifecycle exactly:
 
 - **Raise** posts the full contra to the GL **once** (DR Accounts Payable / CR Purchases, plus CR VAT Input where VAT is present) at the note's exchange rate, and sets an **unapplied amount** equal to the note total. Its status starts at **UNAPPLIED**.
-- **Apply** is a sub-ledger move that reduces the chosen bill's outstanding balance and decrements the note's unapplied amount, posting only a realized-FX adjustment when the settlement rate differs from the bill rate. The note's status moves to **PARTIAL** and then **APPLIED** as the unapplied amount falls to zero.
+- **Apply** is a sub-ledger move that reduces the chosen bill's outstanding balance and decrements the note's unapplied amount, posting only a realized-FX adjustment when the settlement rate differs from the bill rate. The note's status moves to **PARTIAL** and then **APPLIED** as the unapplied amount falls to zero. A part-applied note can be applied again — to another bill, or to the same bill again, in which case the amount is added to the earlier application.
 
 When you raise a debit note directly against a bill (the usual case from the payables list), the system raises and immediately applies it in one step, so the bill outstanding drops right away. If the reduction brings the outstanding to zero, the bill moves to PAID.
 
@@ -5524,6 +5671,22 @@ Pick a supplier by name to view:
 - **Ageing breakdown** — same bucket structure as AR (Current, 1–30, 31–60, 61–90, 90+).
 - **Open bills** — all bills with a remaining balance.
 - **Reconciliation** — compares the AP sub-ledger total against the GL AP control account. A zero difference confirms the books are in agreement. A non-zero difference is a finance-grade discrepancy requiring investigation.
+
+**AP Sub-ledger vs GL Control Account.** This box is company-wide, so it shows as soon as the screen opens — before you pick a supplier. It reads **Reconciled** when the supplier balances add up to the GL AP control account, or **Out by TZS X** with which side is higher (the supplier sub-ledger or the GL control account). Click **Re-check** after posting corrections. Permission: `AP.VIEW`. The supplier side is what you owe on open bills, less any payment still held on account, less any **debit note not yet applied** to a bill — a debit note reduces the GL control account in full the moment it is raised, so an unapplied one is credit you already hold against the supplier, not a difference. A payment whose cheque came back unpaid counts again as owed on both sides. The supplier's **Outstanding balance** above is worked out the same way.
+
+Both figures are in your **base currency**; a foreign-currency bill, payment or debit note counts at the rate it was booked at. **Older foreign-currency items with no reliable rate.** Items raised in another currency before multi-currency was switched on were stored with an exchange rate of 1, so their "base" value is really the foreign amount. The system does not add those into a base-currency figure. They are listed as **Unconverted (per currency)** under the reconciliation (and as "Plus, not converted" under the supplier's outstanding balance) and are **excluded from the comparison** — so a difference shown is a real one, and the unconverted list tells you what was left out.
+
+**Printable supplier statement.** Once a supplier is picked, a **Printable Statement** box appears. Choose **From** / **To** (leave From empty to start from the first transaction) and click **Statement PDF / Excel / CSV**. The statement carries your letterhead, the supplier's name, TIN and VRN, the period and currency, then the **Balance brought forward**, every movement in the period with a running balance, and the **Closing balance** (what you owe):
+
+- **Bill** and **Opening balance** lines in the Credit column — only bills that are on the ledger (matched, approved, part-paid or paid). A bill still **HELD** for a price or quantity variance, or still a **DRAFT**, is not on the statement.
+- **Payment** and **Debit note** lines in the Debit column. A payment's line says how much of it was WHT withheld and paid to TRA on the supplier's behalf. For a payment run that paid several suppliers at once, only this supplier's share is shown.
+- A **Reversal** line (Credit) when a cheque to the supplier came back unpaid.
+
+As with the customer statement, a supplier you deal with in more than one currency gets one section per currency (the supplier's default currency first), never added together.
+
+**Ageing PDF / Excel / CSV** prints this supplier's five ageing buckets and the total outstanding, as at today. Bills in a foreign currency are aged in that currency on their own line (and their own total) — they are never added into the TZS figures.
+
+Both exports need `AP.VIEW` **and** `REPORT.EXPORT`.
 
 ---
 
@@ -5687,6 +5850,8 @@ Select an account by name to view:
 - **Transaction history** — each cash transaction in date order with a running balance column (IN transactions increase the balance; OUT transactions decrease it).
 - **GL reconciliation** — compares the account's book balance against the linked GL asset account balance. A zero difference confirms agreement. A non-zero difference requires investigation.
 
+**Printing the account statement.** Above the balance, choose **From** and **To** and click **Export PDF**, **Export Excel** or **Export CSV**. The statement carries your letterhead, the account (code, name, bank, branch, account number), the period and currency, the **Balance brought forward** on the From date, every transaction in the period with **Money In**, **Money Out** and a running **Balance**, and a **Closing balance** row. For a period that ended before today, the foot also gives today's book balance, so the two are never confused. Leave both dates empty to print the whole history. Permission: `CASH.VIEW` **and** `REPORT.EXPORT`.
+
 ---
 
 ### End-of-Day Cash Count
@@ -5813,6 +5978,8 @@ The list shows all VAT returns for the company with their return number, period,
 
 Click **Recompute** on the detail screen to re-read the current sales and purchase figures. This is useful after new invoices or bills have been entered for the period.
 
+**Printing the return (Export PDF / Excel / CSV).** On the VAT return detail, users with `VAT.VIEW` **and** `REPORT.EXPORT` see three export buttons at the top. The document prints the return face as the screen shows it — supplies by tax band (taxable value and VAT), total sales turnover and output VAT, the zero-rated and exempt "of which" lines, purchases turnover, input VAT, adjustments, credit brought forward, and **Net VAT** (Payable to TRA / Credit carried forward / Nil) — under your company letterhead with its **TIN and VRN**. A filed return prints its filing date and TRA reference; a **DRAFT** prints "DRAFT — not yet filed; figures may still change", so it cannot pass for the filed return. Purchases turnover prints blank (not 0.00) when it was not computed. Any penalty or interest recorded is printed at the foot, marked as not included in Net VAT.
+
 ---
 
 ### VAT Adjustments
@@ -5882,6 +6049,8 @@ A nil-activity return (output and input both zero) files and locks without posti
 
 **When they are used.** WHT types are maintained by a user with `WHT.MANAGE` permission during initial setup or when a new rate category is needed. WHT is applied optionally on individual AP payments and AR receipts by selecting a WHT type and amount during recording.
 
+**What WHT does to the cash.** The payment **amount** is what the bill is relieved by; the WHT is held back from it. Paying a 400,000 bill with 20,000 WHT clears the whole 400,000 from the supplier's account, but only **380,000** leaves the bank — that is what the cash book and the GL both record, and the other 20,000 sits on WHT payable until you remit it to TRA. A receipt the customer withheld from works the same way in reverse. The WHT must be less than the amount paid, and an amount withheld needs its WHT type. A payment run can deduct WHT only when it pays a single supplier (the certificate is issued to one supplier) — run each supplier separately.
+
 **What the register shows.** The WHT register is the period summary of all WHT certificates — how much was withheld on supplier payments (payable to TRA) and how much was withheld by customers from your receipts (a receivable credit against your tax bill). It is the data source for preparing the WHT remittance to TRA.
 
 **WHT Types:** Navigate to **Accounting > Tax > WHT Types** (`/admin/tax/wht-types`). Permission required: `WHT.VIEW` to view; `WHT.MANAGE` to create, edit, and deactivate.
@@ -5908,6 +6077,8 @@ The register shows all WHT certificates in a period, grouped into two sections:
 - **WHT Receivable** — certificates from customer receipts (`WHT_ON_RECEIPT`).
 
 Select the period by choosing **Month** mode (year + month) or **Range** mode (start and end dates), then click **Load**.
+
+**Exporting the register.** After loading, users with `WHT.VIEW` **and** `REPORT.EXPORT` see **Export PDF / Excel / CSV**. The export is exactly the period on screen: the WHT Payable section and the WHT Receivable section, each certificate with its date, party, source reference, taxable base and WHT amount, and a subtotal per section, under your company letterhead. There is deliberately no grand total — payable and receivable are different obligations and adding them would mean nothing.
 
 > **Behind the scenes.** A WHT certificate can be marked as remitted to TRA once the withheld tax has been paid over (API: `POST /wht/register/transactions/{uid}/remit`, permission `WHT.REMIT`). This mark-remitted action is not yet exposed on the WHT Register screen above.
 
@@ -6475,6 +6646,7 @@ The four financial statements are available from the **Accounting** navigation g
 - **Run button** — computes and displays the statement.
 - **Export buttons** (PDF, Excel, CSV) — download the statement in the chosen format. Requires the additional `REPORT.EXPORT` permission. The buttons are hidden if you do not hold that permission.
 - **Comparative period** — most statements accept an optional comparative period or date to populate a second column.
+- **Branch** (Income Statement, Balance Sheet, Cash-Flow Statement and Financial Ratios) — leave it on *All branches* for the whole company, or pick a branch to see only the journals posted at that branch. The list offers only the branches you are assigned to; asking for another branch is refused with *"You are not assigned to that branch…"*. The statements also offer **Company-level entries (no branch)** — the journals that carry no branch: manual journals, opening balances, FX revaluation runs and the year-end close. The branches plus the company-level entries always add up exactly to the whole-company statement. The statement header names what you are looking at (a branch name, *All branches*, or *Company-level entries*), and so does the company line of every export.
 - **Reconciliation indicator** — a green **"Reconciled"** bar confirms the computed figures tie back to the underlying GL movement. A red **data-integrity alarm** means the figures do not agree and the books require investigation; the report is shown but no automatic correction is made.
 
 ---
@@ -6502,6 +6674,8 @@ The statement shows:
 **Drill-through to the account ledger:** any account name shown as a link in the detail rows can be clicked to open the Account Ledger pre-filtered to that account and period.
 
 **Export:** after running the statement, click **PDF**, **Excel**, or **CSV** in the export toolbar. The downloaded file is named `income-statement_<from>_<to>.<ext>`.
+
+**Year-end close:** the closing journal that moves a year's result into Retained Earnings is not income or expense, so the Income Statement leaves it out — a closed year still shows the profit it made.
 
 ---
 
@@ -6549,6 +6723,13 @@ The statement shows sections for Current Assets, Non-Current Assets, Current Lia
 
 **Export:** file is named `balance-sheet_<asAt>.<ext>`.
 
+**A branch Balance Sheet** balances on its own, because every journal is posted to exactly one branch (or to none). Read it with two caveats, which the screen also prints under a branch statement:
+
+- **Stock transfers between branches move quantities, not ledger value.** No journal is posted for a transfer, so a branch's *Inventory* reflects what it bought and sold, not what it holds — a branch that sells stock it received by transfer can show low or even negative Inventory, and the sender too much. The company total is right.
+- **Company-level journals carry no branch.** After a year-end close, each branch keeps its closed years under *Retained earnings — prior years (unclosed)* because the close itself is company-level; the *Company-level entries* statement carries the matching opposite.
+
+If a journal ever carried lines for different branches, the branch statement would show an explicit **Inter-branch balance (entries spanning branches)** line under Current Liabilities instead of silently failing to balance. Nothing the system posts today produces one.
+
 ---
 
 **Example — Run a comparative balance sheet at year-end:**
@@ -6585,6 +6766,8 @@ The opening position is shown as a body row at the top of the table (**Opening c
 
 **Export:** file is named `cash-flow_<from>_<to>.<ext>`.
 
+A branch Cash-Flow Statement is read from that branch's journals on the company's cash and bank accounts, and ties to the movement on those accounts at that branch.
+
 ---
 
 **Example — Cash-flow analysis for H1 2026:**
@@ -6594,6 +6777,72 @@ The opening position is shown as a body row at the top of the table (**Opening c
 3. Click **Run**.
 
 Results show Opening Cash: TZS 6,800,000; Operating inflow: TZS 11,250,000; Investing outflow: TZS −4,200,000 (purchase of delivery van); Financing outflow: TZS −1,500,000 (loan repayment); Net Change: TZS 5,550,000; Closing Cash & Bank Balance: TZS 12,350,000. The green **Cash Tie-out: Reconciled** bar confirms the net change ties to the actual movement in the bank account GL balances.
+
+---
+
+### Statement of Changes in Equity
+
+**What is the Statement of Changes in Equity?**
+It is the fourth primary financial statement. Where the Balance Sheet shows the owners' equity at one date, this statement explains how it got from the opening figure to the closing one over a period: the profit earned, capital the owners put in, drawings and dividends they took out, and transfers between equity lines such as the year-end close moving the year's result into Retained Earnings. Auditors and banks expect it alongside the other three.
+
+Navigate to **Accounting › Changes in Equity** (`/admin/reporting/changes-in-equity`). Permission required: `REPORT.BS.VIEW` (the same as the Balance Sheet, because its closing column *is* the Balance Sheet's equity). Export also requires `REPORT.EXPORT`.
+
+1. Select the company by name.
+2. Set **Period from** and **Period to**.
+3. Click **Run**.
+
+One row per equity component — each equity account (e.g. 3000 Owner's Equity / Capital, 3900 Retained Earnings) plus the two earnings lines the Balance Sheet shows (*Retained earnings — prior years (unclosed)* and *Current-year earnings*) — with these columns:
+
+| Column | What it holds |
+|---|---|
+| Opening | the Balance Sheet figure the day before the period starts |
+| Profit for the period | the Income Statement's net profit for the same dates (on the current-year earnings line) |
+| Opening balances posted | equity posted by opening-balance journals |
+| Capital introduced & other credits | every other credit to the account — capital injected, and any other credit |
+| Drawings, dividends & other debits | every other debit to the account, shown as a negative amount |
+| Transfers | the year-end close (out of earnings, into Retained Earnings) and, when the period crosses the start of a financial year, last year's "current-year earnings" becoming "prior years". The column always totals zero. |
+| Closing | the Balance Sheet figure on the last day of the period |
+
+The ledger records *which journal* moved an equity account, not *why*, so a capital injection and a correcting credit share one column — the column names say so.
+
+A green **Ties to the Balance Sheet** bar confirms that opening plus every movement equals the Balance Sheet's equity at the period end. A component whose movements do not add up is flagged *does not add up* on its row, and the bar turns red with the difference — nothing is adjusted to make it tie.
+
+The statement is company-wide (no branch filter). **Export:** PDF, Excel or CSV, named `changes-in-equity_<from>_<to>.<ext>`; the export footer repeats the tie-out result.
+
+---
+
+### Financial Ratios
+
+**What are the financial ratios for?**
+They turn the statements into a handful of numbers a manager or a bank can compare from one period to the next: can the business pay its short-term debts, how much of each sale it keeps, how geared it is, what return the owners earn, and how fast stock, customers and suppliers turn over.
+
+Navigate to **Accounting › Financial Ratios** (`/admin/reporting/ratios`). Permission required: **both** `REPORT.PL.VIEW` and `REPORT.BS.VIEW` (the ratios disclose figures from both statements). Export also requires `REPORT.EXPORT`.
+
+1. Select the company by name.
+2. Set **Period from** and **Period to**.
+3. Optionally pick a **Branch** (only branches you are assigned to are offered).
+4. Click **Run**.
+
+Every ratio is shown with its formula, the statement figures it was worked out from, and the result. The figures come from the Income Statement for the period and the Balance Sheet at its closing date and the day before it opens; "average" means (opening + closing) ÷ 2.
+
+| Ratio | Formula |
+|---|---|
+| Current ratio | Current assets ÷ Current liabilities |
+| Quick ratio | (Current assets − Inventory) ÷ Current liabilities |
+| Gross margin | Gross profit ÷ Revenue × 100 |
+| Net margin | Net profit ÷ Revenue × 100 |
+| Debt-to-equity | Total liabilities ÷ Total equity |
+| Return on equity | Net profit ÷ Average equity × 100 (for the period, not annualised) |
+| Inventory turnover | Cost of sales ÷ Average inventory |
+| Inventory days | Average inventory ÷ Cost of sales × Days in period |
+| Debtor days (DSO) | Average receivables ÷ Revenue × Days in period |
+| Creditor days (DPO) | Average payables ÷ Cost of sales × Days in period |
+
+Inventory, receivables and payables are the accounts marked as Inventory, Accounts Receivable and Accounts Payable control accounts in the chart of accounts. Debtor days use total revenue because the ledger does not separate credit sales from cash sales (a shop with many cash sales shows fewer days than its credit customers really take); creditor days use cost of sales in place of credit purchases.
+
+A ratio that cannot be worked out — because what it divides by is zero (no revenue, no cost of sales, no current liabilities…) — shows a dash and the reason, never 0.00. If the Income Statement or the Balance Sheet underneath fails its own check, a red warning says so.
+
+For a branch, the ratios are that branch's and inherit the branch caveats above — in particular, inventory ratios are distorted by stock transfers. **Export:** PDF, Excel or CSV, named `financial-ratios_<from>_<to>.<ext>`.
 
 ---
 
@@ -6617,9 +6866,9 @@ The report shows:
 - Every journal line in date order under the columns **Date**, **Source**, **Reference**, **Memo**, **Debit**, **Credit**, and **Balance** (the running balance). Negative running balances are shown in red.
 - A **closing balance** (the account's balance at the end of the to date).
 
-**Pagination:** if the account has more than 50 lines in the period, the shared paginator appears at the bottom. Navigate with the chevron icon buttons — first page, previous page, next page, and last page (their text is read out by screen readers via aria-labels) — and the numbered page buttons shown between them.
+**Pagination:** if the account has more than 50 lines in the period, the shared paginator appears at the bottom. Navigate with the chevron icon buttons — first page, previous page, next page, and last page (their text is read out by screen readers via aria-labels) — and the numbered page buttons shown between them. The running balance carries across pages: the first line of each page continues from the last line of the page before, and the last line of the last page equals the closing balance.
 
-**Export:** the export is bounded at 10,000 rows per download. For very busy accounts spanning long periods, narrow the date range and export in segments. File is named `account-ledger_<accountCode>_<from>_<to>.<ext>`. Export requires `REPORT.EXPORT`.
+**Export:** the export is bounded at 10,000 rows per download. If the period has more lines than that, the document lists the first 10,000 and then one line "*N further lines not listed (net movement)*" carrying the net of the rest, so the printed figures still add up to the closing balance. For very busy accounts spanning long periods, narrow the date range and export in segments. File is named `account-ledger_<accountCode>_<from>_<to>.<ext>`. Export requires `REPORT.EXPORT`.
 
 ---
 
@@ -6644,89 +6893,118 @@ The Trial Balance is covered fully in the Finance chapter (Accounting › Trial 
 ## Business Intelligence Dashboard
 
 **What is the BI Dashboard, and who uses it?**
-The Business Intelligence Dashboard is a single-screen summary that composes key performance indicators (KPIs) from Finance, Operations, and CRM into one view. Rather than opening the income statement, then the AR list, then the stock valuation report separately, a finance director or general manager can open the dashboard and see the essential health indicators at a glance: is the trial balance balanced? Are the AR and AP sub-ledgers in agreement with the GL? How much cash is in the accounts? What is the current pipeline forecast? Each panel has a health badge (green `[OK]` / red `[!]`) that instantly signals whether the underlying sub-ledger ties to the GL control account — a critical integrity check the finance team would otherwise have to perform manually. Drill-through links let the reader navigate directly to the relevant detail screen with a single click. The dashboard is permission-gated at the panel level: a user with only operations permissions sees the stock panel but not the finance panel, and gets a calm "no permission" message for the panels they cannot access (ADR-0037).
+The Business Intelligence Dashboard (the page is titled **Analytics Dashboard**) is a single-screen summary that composes key performance indicators (KPIs) from Finance, Operations, and CRM into one view. Rather than opening the income statement, then the AR list, then the stock valuation report separately, a finance director or general manager can open the dashboard and see the essential health indicators at a glance: is the trial balance balanced? Are the AR and AP sub-ledgers in agreement with the GL? How much cash is in the accounts? What is the current pipeline forecast? Each reconciled figure carries a health badge (green `[OK]` / red `[!]`) that instantly signals whether the underlying sub-ledger ties to the GL control account — a critical integrity check the finance team would otherwise have to perform manually. Drill-through links take the reader straight to the relevant detail screen. The dashboard is permission-gated at the panel level: a user with only operations permissions sees the stock panel but not the finance panels, and gets a calm "no permission" message for the panels they cannot access (ADR-0037).
 
-Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`.
+Navigate to **Analytics › Dashboard** (`/admin/dashboard`). Permission required: `BI.VIEW`. Users who hold `BI.VIEW` also see a **Dashboard** card first on their home-page launchpad.
 
-The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel loads independently and has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
+The dashboard is a composite view of key performance indicators drawn from Finance, Operations, and CRM data. Each panel has its own permission. If you hold `BI.VIEW` but lack a panel-specific permission, that panel shows a calm "no permission" message rather than blocking the whole page.
 
-**Filters at the top of the page:**
+**Who sees which panels (standard roles):**
 
-- **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
-- **Branch** — filter data to a specific branch (chosen as `code — name`); the dashboard re-fetches as soon as you change it. Only the **CRM pipeline panel** and the **Sales by Branch panel** actually vary by branch — the Finance, Cash Position, Working Capital, and Inventory panels are anchored to the GL at company level and show the same figures regardless of which branch is selected.
-- **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Change the dates and click the circular **refresh** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
+| Role | Finance, Cash, Working Capital, Trends, Sales by Branch | Inventory | CRM | Export |
+|---|---|---|---|---|
+| Finance Director | Yes | Yes | Yes | Yes |
+| Accountant | Yes | — | — | Yes |
+| Branch Manager | Yes | Yes | — | Yes |
+| Sales Manager | — | — | Yes | Yes |
+| Procurement Manager | — | Yes | — | Yes |
+
+Root users see everything. A custom role sees exactly the panels whose permission it has been granted (see the panel list below).
+
+---
+
+### Filters at the top of the page
+
+- **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches, resets **Branch** to "All branches", and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
+- **Branch** — **All branches** (the default) or one branch, shown as `code — name`. The dashboard re-fetches as soon as you change it. Only the **CRM** panel and the **Sales by Branch** panel are narrowed by this filter. The Finance, Cash Position, Working Capital, Inventory, and Revenue and net profit panels are anchored to the GL at company level and always show company-wide figures — each of those panels carries a **Group-wide** tag, and while a branch is selected a short note under its heading reminds you: *Group-wide — not affected by the branch filter above.* The two panels that *do* follow the filter show a **This branch** tag instead.
+- **The list offers only the branches you are assigned to** (in **Administration › Users**, branch assignments); root users see every branch of the company. If an assignment is removed while you have the page open and you then pick that branch, a yellow banner at the top explains: *You are not assigned to that branch. Choose a branch you work in, or clear the branch filter to see the whole company.* Choose one of your branches, or **All branches**.
+- **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Changing a date does **not** refresh on its own: click the circular **Refresh dashboard** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
+
+**The scope line.** Once the data loads, a row of three grey tags appears under the filters, showing what the server actually filtered to: the **company name**, **Branch: …** (the branch name, or *All branches*), and the **period** (for example `2026-10-01 – 2026-10-02`). Read these tags rather than the pickers when you want to be sure what a figure covers. If they ever read *Branch: Unknown branch*, the branch you chose does not belong to this company, and the branch-filtered panels will be empty — choose the branch again.
 
 ---
 
 **Example — Read the dashboard KPIs and drill through to source screens:**
 
-Finance director Gideon Moshi logs in, navigates to **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` and branch `DSM Main` auto-select; dates default to the current month (2026-06-01 to 2026-06-14).
+Finance director Gideon Moshi logs in and opens **Analytics › Dashboard** (`/admin/dashboard`). The company `Kijenge Trading Ltd` is selected automatically, **Branch** is on **All branches**, and the dates default to the current month (2026-06-01 to 2026-06-14). The scope line reads `Kijenge Trading Ltd` · `Branch: All branches` · `2026-06-01 – 2026-06-14`.
 
 1. **Health strip** — all five pills (TB, Cash vs GL, AR vs GL 1200, AP vs GL 2100, Stock vs GL 1300) show green `[OK]`. No reconciliation issues, so no `(diff: …)` figures appear.
 
-2. **Finance panel** — Revenue: TZS 9,850,000; OpEx: TZS 4,200,000; Net Profit (period): TZS 3,480,000. Trial Balance status: Balanced. Gideon clicks the drill icon in the **Finance** heading — this opens `/admin/reporting/income-statement` where he can run a full P&L; the **View TB** link beside the Trial Balance status opens the GL trial balance.
+2. **Finance panel** — Revenue: 9,850,000.00; OpEx: 4,200,000.00; Net Profit (period): 3,480,000.00 (shown green because it is positive). Small trend lines under Revenue and Net Profit show the last 12 fiscal periods at a glance. The Trial Balance card reads **Balanced**. Gideon clicks the drill icon in the **Finance** heading — this opens the Income Statement (`/admin/reporting/income-statement`) where he can run a full P&L; the **View TB** link on the Trial Balance card opens the GL trial balance.
 
-3. **Cash Position panel** — Total Book Balance across all accounts: TZS 14,890,000, with a green **Cash-GL recon** pill, and a per-account table showing each account's balance in its own currency. He uses the heading drill icon to open the cash & bank accounts list.
+3. **Cash Position panel** — Total Book Balance: 14,890,000.00 (the TZS accounts), with *Not converted: USD 2,500.00* underneath for the company's dollar account, a green **[OK] Cash-GL recon** pill, and a table listing each cash/bank account with its balance in its own currency. He uses the heading drill icon to open the cash & bank accounts list.
 
-4. **Working Capital panel** — AR Outstanding: TZS 19,700,000 (green **AR-GL** pill). AP Outstanding: TZS 6,450,000 (green **AP-GL** pill). He clicks **View Receivables** to drill into the AR invoices list.
+4. **Working Capital panel** — AR Outstanding: 19,700,000.00 (green **AR-GL** pill). AP Outstanding: 6,450,000.00 (green **AP-GL** pill). Below AR Outstanding a small line reads *Not converted: USD 1,200.00* — older US-dollar invoices that carry no reliable exchange rate, so they are listed separately instead of being added into the TZS figure. He clicks **View Receivables** to drill into the AR invoices list.
 
-5. **Inventory panel** — Stock Value: TZS 38,250,000, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
+5. **Inventory panel** — Stock Value: 38,250,000.00, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
 
-6. **CRM panel** — Pipeline by Stage shows 15 open deals across five stages; Win-Rate KPIs show Won, Lost, Win Rate 62%, and Avg Cycle (days); the Forecast block shows Open Opps and a Weighted Value of TZS 29,340,000. He uses the heading drill icon to open the pipeline dashboard.
+6. **CRM panel** — **Pipeline by stage** shows 15 open deals across five stages, one bar per stage with its number of opportunities and value; **Win rate** reads 62.0% with a meter bar, above Won, Lost and Avg cycle; the **Forecast** block shows Open opportunities and a Weighted value of TZS 29,340,000.00. He uses the heading drill icon to open the CRM pipeline dashboard.
 
-7. **Sales by Branch panel** — with **Branch** still on "All branches", the table lists every branch in descending order of sales: `DSM Main` leads with TZS 5,120,000 across 34 finalised invoices, followed by `Arusha Branch` with TZS 2,890,000 across 19 invoices and the remaining branches, with a **Total** row of TZS 9,715,000 across 61 invoices. (This total is sourced from finalised sales invoices, so it need not exactly match the Finance panel's GL-derived Revenue figure above.) Gideon clicks the drill icon in the **Sales by Branch** heading — this opens the sales invoices list.
+7. **Revenue and net profit** — one chart with two smooth lines over the last 12 fiscal periods (labelled `P1 2026`, `P2 2026`, …): Revenue in blue with a light shaded area, Net profit in orange. Gideon moves the pointer across the chart; a vertical line follows it and a small box shows both figures for that period. P6 shows net profit just below the zero line — a loss month.
 
-8. Gideon changes the **Branch** to `Arusha Branch`. The dashboard re-fetches immediately on the branch change. Only the **CRM panel** and the **Sales by Branch panel** actually vary by branch — the Sales by Branch table now shows a single row, for `Arusha Branch` only; the Finance, Cash Position, Working Capital, and Inventory panels stay company-level and show the same figures as before. (Changing the **From / To** dates instead requires clicking the refresh button to re-fetch.)
+8. **Sales by Branch panel** — with **Branch** still on "All branches", the panel lists every branch as a bar, in descending order of sales: `DSM — DSM Main` leads with 5,120,000.00 across 34 finalised invoices, followed by `ARU — Arusha Branch` with 2,890,000.00 across 19 invoices and the remaining branches, with a **Total** row of 9,715,000.00 across 61 invoices. (This total is the VAT-inclusive value of finalised sales invoices, so it will not match the Finance panel's Revenue, which is net of VAT and taken from the GL.) The drill icon in the heading opens the sales invoices list.
 
-9. He selects format **Excel** in the export dropdown and clicks **Download**. File `dashboard.xlsx` downloads with the currently visible panel data. (Requires `BI.EXPORT`.)
+9. Gideon changes **Branch** to `ARU — Arusha Branch`. The dashboard re-fetches immediately. The scope line now reads `Branch: Arusha Branch`; the CRM and Sales by Branch headings show **This branch**, and the Sales by Branch table shows a single row for Arusha. The other panels still show **Group-wide** with the "not affected by the branch filter" note, and their figures are unchanged.
+
+10. He selects **Excel** in the **Export** dropdown and clicks **Download**. The file `dashboard_2026-06-01_2026-06-14.xlsx` downloads; its first line reads *Branch: Arusha Branch*, so the file states its own scope. (Requires `BI.EXPORT`.)
 
 ---
 
 ### KPI Panels
 
 **What are KPI panels?**
-Each KPI panel on the dashboard is a self-contained summary of one operational or financial domain, sourced from the module that owns that data. The panels display figures that have already been computed by the underlying modules (the AR reconciliation query, the stock valuation query, the CRM pipeline query, etc.); the dashboard simply composes them into one screen. A health badge (`[OK]` or `[!]`) accompanies any panel whose data has a GL tie-out — it tells you at a glance whether the sub-ledger agrees with the General Ledger. A red badge is a prompt for the finance team to investigate before closing the period.
+Each KPI panel on the dashboard is a self-contained summary of one operational or financial domain, sourced from the module that owns that data. The panels display figures that have already been computed by the underlying modules (the AR reconciliation query, the stock valuation query, the CRM pipeline query, etc.); the dashboard simply composes them into one screen. A health badge (`[OK]` or `[!]`) accompanies any figure that has a GL tie-out — it tells you at a glance whether the sub-ledger agrees with the General Ledger. A red badge is a prompt for the finance team to investigate before closing the period.
 
-**Health strip** — a row of colour-coded status pills that show whether each sub-ledger reconciles with its GL control account. The badges are labelled by what they tie out: **TB** (trial balance), **Cash vs GL**, **AR vs GL 1200**, **AP vs GL 2100**, and **Stock vs GL 1300**. A green pill prefixed `[OK]` means the sub-ledger ties; a red pill prefixed `[!]` means there is a discrepancy, and the red pill also shows the numeric reconciliation difference inline (for example, `[!] AR vs GL 1200 (diff: 1,250.00)`) so the finance team can see how far out the balance is. These badges provide a quick finance-health summary.
+All amounts are shown with two decimals and no currency symbol unless stated; they are in the company's **base currency** (the scope line names the company).
 
-**Finance panel (requires `BI.FINANCE.VIEW`):**
+**Each panel has four possible states:** a *Loading…* spinner; the figures; an empty message when there is nothing yet for the period (for example *No finance data yet for this period.*); or a message when you cannot see it — either *You do not have permission to view …* (missing panel permission; if the branch filter was refused, the yellow banner above says so) or *Could not load … data.* (a temporary fault — click **Refresh dashboard** to try again).
 
-- Revenue, OpEx (Operating Expenses), and Net Profit (period) for the selected period.
-- A **Trial Balance** stat-card with a status pill showing **Balanced** or **Out of balance** (whether total debits equal total credits), and a **View TB** link to the GL trial balance.
+**Health strip** — a row of colour-coded status pills under the scope line, showing whether each sub-ledger reconciles with its GL control account. The pills are labelled by what they tie out: **TB** (trial balance), **Cash vs GL**, **AR vs GL 1200**, **AP vs GL 2100**, and **Stock vs GL 1300**. A green pill prefixed `[OK]` means the figures tie; a red pill prefixed `[!]` means there is a discrepancy, and it also shows the difference inline (for example, `[!] AR vs GL 1200 (diff: 1,250.00)`) so the finance team can see how far out the balance is. You only see the pills for the panels you are allowed to view.
+
+**Finance panel (requires `BI.FINANCE.VIEW`; Group-wide):**
+
+- **Revenue**, **OpEx** (operating expenses, excluding cost of sales), and **Net Profit (period)** for the selected date range — the same figures the Income Statement gives for those dates. Net profit is green when positive and red when negative.
+- Under Revenue and Net Profit, a small **trend line** shows the last 12 fiscal periods, with a dot on the latest. It is there for the shape; the full figures are in the *Revenue and net profit* chart.
+- A **Trial Balance** card with a status pill showing **Balanced** or **Out of balance** (whether total debits equal total credits), and a **View TB** link to the GL trial balance. The trial-balance check covers all postings to date, not just the selected range.
 - The drill icon in the panel heading opens the Income Statement (P&L) report.
 
-**Cash Position panel (requires `BI.FINANCE.VIEW`):**
+**Cash Position panel (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- A **Total Book Balance** summary across all cash and bank accounts, with a **Cash-GL recon** status pill (`[OK]` / `[!]`) showing whether the cash book ties to the GL.
-- A per-account table listing each cash/bank account (code and name) with its **Balance** shown in the account's own currency.
-- Open the Cash & Bank accounts list via the drill-through link in the panel heading.
+- A **Total Book Balance**: the sum of the cash and bank accounts held in the base currency, with a **Cash-GL recon** pill (`[OK]` / `[!]`) showing whether the cash book ties to the GL.
+- Accounts held in another currency are **not** added into that total, because a cash transaction records only its own-currency amount. They are summed per currency on a line underneath, for example *Not converted: USD 2,500.00, EUR 300.00*. The line only appears when you have such accounts.
+- A table listing each cash/bank account (code and name) with its **Balance** in the account's own currency.
+- The drill icon in the panel heading opens the Cash & Bank accounts list.
 
-**Working Capital panel (requires `BI.FINANCE.VIEW`):**
+**Working Capital panel (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- **AR Outstanding** balance with an **AR-GL** sub-ledger/GL reconciliation status pill, and a **View Receivables** link into the AR invoices list.
-- **AP Outstanding** balance with an **AP-GL** sub-ledger/GL reconciliation status pill, and a **View Payables** link into the AP supplier-bills list.
+- **AR Outstanding** with an **AR-GL** reconciliation pill, and a **View Receivables** link into the AR invoices list.
+- **AP Outstanding** with an **AP-GL** reconciliation pill, and a **View Payables** link into the AP supplier-bills list.
+- Both balances are current (as at today) and in base currency. Foreign-currency items count at the rate they were booked at. **Older foreign-currency items with no reliable rate** (raised before multi-currency was switched on) are not added into the base figure; they appear underneath as *Not converted: USD 1,200.00, EUR 300.00* so nothing is hidden. The same rule applies to the AR and AP reconciliation pills and to the customer and supplier balances described in the Finance chapter.
 
-**Inventory panel (requires `BI.OPS.VIEW`):**
+**Inventory panel (requires `BI.OPS.VIEW`; Group-wide):**
 
-- **Stock Value** and a **Stock-GL (acct 1300)** status pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
+- **Stock Value** and a **Stock-GL (acct 1300)** pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
 - The drill icon in the panel heading opens the stock valuation screen.
 
-**CRM pipeline panel (requires `BI.CRM.VIEW`):**
+**CRM panel (requires `BI.CRM.VIEW`; follows the Branch filter):**
 
-- A **Pipeline by Stage** bar chart, each bar showing the open opportunity count and total value for that stage.
-- A **Win-Rate KPIs** block: **Won** count, **Lost** count, **Win Rate** (%), and **Avg Cycle (days)**.
-- A separate **Forecast** block: **Open Opps** count and **Weighted Value** (the probability-weighted pipeline value for the period).
-- Open the sales pipeline via the drill-through link in the panel heading.
+- **Pipeline by stage**: one bar per stage, in pipeline order, labelled with the stage name, the number of open opportunities and their total value. This is the pipeline as it stands today — it does not follow the From / To dates.
+- **Win rate**: the percentage in large type with a meter bar, then **Won**, **Lost**, and **Avg cycle** (days), for the selected date range.
+- **Forecast**: **Open opportunities** and **Weighted value** (the probability-weighted pipeline value for the period).
+- The drill icon in the panel heading opens the CRM Pipeline Dashboard.
 
-**Revenue trend and Net Profit trend (requires `BI.FINANCE.VIEW`):**
+**Revenue and net profit (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- Bar charts showing the last 12 periods of revenue and net profit. Each bar represents one fiscal period.
+- One line chart for the company's last 12 fiscal periods, labelled `P<period> <year>` (for example `P3 2026`): **Revenue** as a blue line with a light shaded area, **Net profit** as an orange line. Both are in base currency on the same scale; a darker line marks zero, so a loss month dips below it.
+- **Reading a value:** move the pointer over the chart — a vertical line snaps to the nearest period and a box shows Revenue and Net profit for it. With the keyboard, Tab to the chart and use the **left / right arrow** keys (Home / End jump to the first / last period, Esc clears); screen readers announce each period.
+- **Show table** (top right of the chart) switches to a table of every period with both figures; **Show chart** switches back.
+- The chart does **not** follow the From / To dates — it always shows the last 12 periods set up in the fiscal calendar (so if next year's periods are already open, they appear at zero).
 
-**Sales by Branch panel (requires `BI.FINANCE.VIEW`):**
+**Sales by Branch panel (requires `BI.FINANCE.VIEW`; follows the Branch filter):**
 
-- A table of finalised sales invoices for the selected date range, broken down by branch: **Branch** (shown as `code — name`), **Sales** (total invoiced value in the company's currency), and **Invoices** (count of finalised invoices), sorted with the highest-selling branch first. A **Total** footer row sums the sales value and invoice count across all rows shown.
-- This is the one finance-domain panel that genuinely honours the **Branch** filter at the top of the page: with the filter left on "All branches" the table shows the full per-branch breakdown; selecting a single branch narrows the table to that branch's row only. (The other finance panels above stay company-level regardless of the Branch filter — see *Filters at the top of the page*.)
-- Only **FINALISED** invoices count; draft or voided invoices are excluded.
+- One bar per branch for finalised sales invoices in the selected date range, highest-selling branch first. Each row shows the branch (`code — name`), its number of invoices, and its sales — each invoice's gross total *including VAT*, in base currency. The bar length is relative to the top branch. A **Total** line underneath gives the invoice count and sales for all rows shown.
+- With **All branches** the panel shows every branch; selecting one branch narrows it to that branch's row.
+- Only **FINALISED** invoices count, dated by when they were finalised; draft or voided invoices are excluded. Invoices raised in another currency count at their base-currency value.
 - If no invoices were finalised in the period, the panel shows *No finalised invoices for this period.*
 - The drill icon in the panel heading opens the sales invoices list (**Sales › Invoices**, `/admin/sales-invoices`).
 
@@ -6734,20 +7012,35 @@ Each KPI panel on the dashboard is a self-contained summary of one operational o
 
 ### Drill-Through
 
-Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash Accounts, Inventory → Stock Valuation, CRM → Pipeline, Sales by Branch → Sales Invoices) plus inline text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Clicking a drill link takes you to the live module (AR, AP, GL, Inventory, CRM, Sales) with your current company and branch context preserved.
+Each panel offers one or more drill links to the relevant detail screen: a small drill icon in the panel heading (Finance → Income Statement, Cash Position → Cash & Bank Accounts, Inventory → Stock Valuation, CRM → Pipeline Dashboard, Sales by Branch → Sales Invoices) plus text links inside the panels (**View TB**, **View Receivables**, **View Payables**). Working Capital and the two trend charts have no heading icon.
 
-The target screen has its own permission guard. If you do not hold the necessary permission for the target screen, you will be redirected to an access-denied page.
+The target screen opens with its own default filters — it does not carry over the dashboard's dates or branch filter, so set them again there if needed. It also has its own permission; if you do not hold it, you are taken to an access-denied page.
 
 ---
 
 ### Exporting the Dashboard
 
-Requires `BI.EXPORT`. An export toolbar appears at the foot of the dashboard, below the trend panels.
+Requires both `BI.VIEW` and `BI.EXPORT`. The Finance Director, Accountant, Branch Manager, Sales Manager, and Procurement Manager roles have it as standard. Without it, no **Export** control is shown. The control sits just under the filters, above the panels.
 
-1. Choose a format from the dropdown: **PDF**, **Excel**, or **CSV**.
-2. Click **Download**.
+1. Choose a format from the **Export** dropdown: **PDF** (the default), **Excel**, or **CSV**.
+2. Click **Download**. The button reads *Exporting…* while the file is prepared.
 
-The file is named `dashboard.<ext>` and includes the currently visible panel data for the selected company, branch, and date range.
+The file is named `dashboard_<from>_<to>.<ext>` (for example `dashboard_2026-06-01_2026-06-14.pdf`, or `.xlsx` for Excel). It covers the same company, branch, and date range as the screen, and its first line states the branch (*Branch: All branches*, or the branch name).
+
+**What the file contains.** Only the panels you are allowed to view, in this order:
+
+- **Finance summary** — Revenue, Operating Expenses, Net Profit, and the trial-balance check.
+- **Cash Position** — one line per cash/bank account, labelled with its currency (for example `CB-02 Dollar Account (USD)`); the **Total Cash Book Balance (TZS accounts)**; a *Not included above — USD accounts (in USD)* line for each foreign currency; and the Cash vs GL check.
+- **Working Capital** — AR and AP outstanding with their GL checks, plus *AR / AP not converted (in USD)* lines when there are foreign items with no reliable rate.
+- **Inventory** — stock value and its GL check.
+- **CRM** — the pipeline value per stage, the KPIs, and the weighted forecast.
+- **Revenue Trend** and **Net Profit Trend** — the 12 periods.
+- **Sales by Branch (finalised invoices, incl. VAT)** — one line per branch with its invoice count, and a total.
+- **Health Indicators.**
+
+Amounts are in base currency unless the line names another currency in brackets.
+
+If the export is refused or fails, a short message appears beside the button: *You don't have permission to export the dashboard.*, *The dashboard could not be exported with these filters. Check the dates and try again.*, or *Could not export the dashboard. Please try again.*
 
 ---
 
@@ -7117,7 +7410,7 @@ You can recalculate from DRAFT, CALCULATED, or APPROVED status — recalculation
 1. With the run in POSTED status, click **Disburse**.
 2. Enter the **Cash / Bank Account UID** of the account from which the net wages will be paid. (This is a UID text field on this screen; obtain the account UID from your administrator or the Chart of Accounts.)
 3. Optionally enter a **Transaction Date** (defaults to the run's pay date).
-4. Click **Disburse**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account).
+4. Click **Disburse**. Status moves to **PAID**. A Cash & Bank OUT entry is recorded (debit Net Wages Payable, credit the chosen bank/cash account), booked to the payroll run's branch. Net Wages Payable (2550) is a locked payroll control account — you cannot post to it with a manual journal or a direct cash entry — but disbursement is a system settlement and is allowed to clear it.
 
 **Reversing a run (requires `HR.PAYROLL.REVERSE`):**
 
@@ -7133,6 +7426,24 @@ A POSTED or PAID run can be reversed if needed (for example, a posting error). C
 | POSTED | Blocked | Blocked | Blocked | Allowed (if net > 0) | Allowed |
 | PAID | Blocked | Blocked | Blocked | Blocked | Allowed |
 | REVERSED | Blocked | Blocked | Blocked | Blocked | Blocked |
+
+**Download bank file (requires `HR.PAYROLL.DISBURSE`):**
+
+Once a run is **POSTED** (and still after it is **PAID**), the run detail shows **Download bank file**. It downloads a CSV with one row per employee — employee number and name, payment method, bank name, account name, account / mobile-money number, net pay and currency — ready to upload to your bank. The button is not shown before posting (net pay can still change) or for a reversed run, and the system itself refuses the file for any other status — so a bank file can never be produced for an unapproved or reversed run, even outside this screen. If the download is refused (for example because the run was reversed in another window after you opened it), a short message explains why; refresh the page to see the run's current status.
+
+**Statutory Summary on the run (requires `HR.PAYROLL.VIEW`):**
+
+From CALCULATED onwards the run detail shows a **Statutory Summary**: totals for **PAYE** and **SDL** (paid to TRA), **NSSF** employee + employer, **WCF** and **HESLB**, and a per-employee table with each employee's **TIN** and **NSSF number** (blank where none was captured), gross, each deduction/contribution and net. While the run is not yet approved the summary is marked **Provisional** — do not file it; a reversed run is marked likewise. Holders of `REPORT.EXPORT` also see **Export PDF / Excel / CSV**.
+
+### Payroll Statutory Report
+
+Navigate to **HR & Payroll > Payroll Statutory Report** (`/admin/reports/payroll-statutory`). Requires `HR.PAYROLL.VIEW`; exporting also requires `REPORT.EXPORT`.
+
+Choose a **Pay date from / to** range and click **Run report**. The report lists one row per payroll run whose **pay date** falls in the range — period, pay date, status, number of staff, gross, PAYE, SDL, NSSF (employee and employer), WCF, HESLB and net — with totals, plus three summary figures: **Due to TRA (PAYE + SDL)**, **Due to NSSF (employee + employer)** and **Employer cost (NSSF + WCF + SDL)**.
+
+Only **APPROVED**, **POSTED** and **PAID** runs are counted, because their figures are final. Runs still in DRAFT or CALCULATED, and REVERSED runs, are left out; a note under the table says how many, so nothing is silently missing. Click a run number to open that run.
+
+> **Note for administrators:** the seeded *HR Payroll Manager* role holds `HR.PAYROLL.VIEW` but not `REPORT.EXPORT`, so it sees the reports but not the export buttons until `REPORT.EXPORT` is granted.
 
 ---
 
