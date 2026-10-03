@@ -18,6 +18,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { AuthService } from '../../../core/auth/auth.service';
 import { DashboardDto } from './models/dashboard.model';
 import { assertA11y } from '../../../../testing/a11y.helper';
 
@@ -108,6 +109,7 @@ function makeBed(dto: DashboardDto) {
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Acme Ltd' }])) } },
       { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme Org' })) } },
       { provide: BranchService, useValue: { list: vi.fn(() => of([{ uid: 'BR1', id: '100', code: 'HQ', name: 'Head Office' }])) } },
+      { provide: AuthService, useValue: { myBranches: vi.fn(() => of([{ branchUid: 'BR1', companyUid: 'CO1' }])) } },
       {
         provide: SessionStore,
         useValue: {

@@ -3,6 +3,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, forkJoin, map, of } from 'rxjs';
+import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
@@ -10,6 +12,7 @@ import { BranchService } from '../branch/branch.service';
 import { Company } from '../models/company.model';
 import { Branch } from '../models/branch.model';
 import { downloadBlob } from '../reporting/reporting.utils';
+import { serverMessage } from '../reporting/report-filter-options.service';
 import { DashboardService } from './dashboard.service';
 import {
   BiHeaderDto,
@@ -42,6 +45,7 @@ export class DashboardComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly branchService = inject(BranchService);
+  private readonly auth = inject(AuthService);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ──────────────────────────────────────────────────────────
@@ -94,6 +98,13 @@ export class DashboardComponent {
   // picker's own state would prove exactly as little.
   readonly header = signal<BiHeaderDto | null>(null);
 
+  /**
+   * The server's own sentence when it refuses the branch filter (the caller is not assigned to
+   * that branch). The picker only offers the caller's branches, so this is the rare case — an
+   * assignment revoked mid-session — and without it every panel would just say "no permission".
+   */
+  readonly branchRefusal = signal<string | null>(null);
+
   // ── Permissions ───────────────────────────────────────────────────────────────
   readonly canView = computed(() => this.session.hasPermission('BI.VIEW'));
   readonly canFinance = computed(() => this.session.hasPermission('BI.FINANCE.VIEW'));
@@ -119,6 +130,32 @@ export class DashboardComponent {
     if (!id) return '';
     const b = this.branches().find((x) => x.id === id);
     return b ? `${b.code} — ${b.name}` : '';
+  });
+
+  /**
+   * Cash total in base currency, plus each foreign currency kept out of it. The payload's
+   * `cash.total` adds every account's own-currency balance together (TZS + USD = a number in no
+   * currency); the per-account rows carry their currency, so the split is made here from them —
+   * the AR/AP rule (owner ruling 2026-10-02). No currency on an account counts as base.
+   */
+  readonly cashSplit = computed(() => {
+    const cash = this.finance()?.cash;
+    const base = this.header()?.currency;
+    if (!cash) return null;
+    if (!base) return { total: +cash.total, foreign: [] as { currency: string; amount: number }[] };
+    let total = 0;
+    const foreign = new Map<string, number>();
+    for (const acc of cash.accounts) {
+      const cur = (acc.currency ?? '').trim().toUpperCase();
+      if (!cur || cur === base.toUpperCase()) total += +acc.bookBalance;
+      else foreign.set(cur, (foreign.get(cur) ?? 0) + +acc.bookBalance);
+    }
+    return {
+      total,
+      foreign: [...foreign.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, amount]) => ({ currency, amount })),
+    };
   });
 
   // ── Derived: trend max for CSS bar scaling ───────────────────────────────────
@@ -176,11 +213,25 @@ export class DashboardComponent {
     });
   }
 
+  /**
+   * The Branch picker offers only branches the caller may filter to: the dashboard refuses a branch
+   * the caller is not assigned to (BranchReadGuard), so listing every branch offered choices that
+   * always failed. The company list supplies the numeric id the endpoint takes; GET
+   * /auth/my-branches (self-scoped) says which of them are the caller's. Root is exempt from the
+   * assignment check server-side, so root keeps the full list — the ReportFilterOptionsService rule.
+   */
   private loadBranches(companyUid: string): void {
     this.branchState.set('loading');
-    this.branchService.list(companyUid).subscribe({
-      next: (list) => {
-        this.branches.set(list);
+    const assigned$ = this.session.user()?.isRoot === true
+      ? of(null)
+      : this.auth.myBranches().pipe(
+          map((mine) => new Set(mine.filter((b) => b.companyUid === companyUid).map((b) => b.branchUid))),
+          // Unknown assignments → offer no single branch; "All branches" still works.
+          catchError(() => of(new Set<string>())),
+        );
+    forkJoin([this.branchService.list(companyUid), assigned$]).subscribe({
+      next: ([list, assigned]) => {
+        this.branches.set(assigned === null ? list : list.filter((b) => assigned.has(b.uid)));
         this.branchState.set('idle');
         // Default to "All branches" (empty) so the sales-by-branch panel shows
         // the full per-branch breakdown on first load.
@@ -235,6 +286,7 @@ export class DashboardComponent {
     this.salesByBranch.set(null);
     this.health.set([]);
     this.header.set(null);
+    this.branchRefusal.set(null);
 
     const branchId = this.selectedBranchId() || undefined;
     const from = this.fromDate() || undefined;
@@ -242,7 +294,15 @@ export class DashboardComponent {
 
     this.dashboardService.getDashboard(companyId, from, to, branchId).subscribe({
       next: (dto: DashboardDto) => this.applyDto(dto),
-      error: (err: unknown) => this.applyGlobalError(err),
+      error: (err: unknown) => {
+        if (branchId && err instanceof HttpErrorResponse && err.status === 403) {
+          this.branchRefusal.set(serverMessage(
+            err,
+            "You are not assigned to that branch. Choose a branch you work in, or choose All branches.",
+          ));
+        }
+        this.applyGlobalError(err);
+      },
     });
   }
 

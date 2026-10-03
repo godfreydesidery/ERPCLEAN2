@@ -75,6 +75,12 @@
 
   @if (selectedCompanyId()) {
 
+    @if (branchRefusal(); as msg) {
+      <p class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+        <i class="bi bi-diagram-3 mt-1" aria-hidden="true"></i><span>{{ msg }}</span>
+      </p>
+    }
+
     <!--
       ── Scope banner (UAT 2026-08) ──────────────────────────────────────────────
       What the SERVER says it just filtered to, not what the picker above asked for. The
@@ -266,7 +272,15 @@
             @if (finance()?.cash; as cash) {
               <div class="erp-kpi mb-3">
                 <div class="erp-kpi__label">Total Book Balance</div>
-                <div class="erp-kpi__value">{{ +cash.total | number:'1.2-2' }}</div>
+                <div class="erp-kpi__value">{{ (cashSplit()?.total ?? +cash.total) | number:'1.2-2' }}</div>
+                @if (cashSplit()?.foreign?.length) {
+                  <div class="erp-kpi__delta">
+                    Not converted:
+                    @for (u of cashSplit()!.foreign; track u.currency; let last = $last) {
+                      {{ u.currency }} {{ +u.amount | number:'1.2-2' }}{{ last ? '' : ', ' }}
+                    }
+                  </div>
+                }
                 <div class="mt-2">
                   <span class="status-tag"
                         [class.status-tag--ok]="cash.cashTies"
