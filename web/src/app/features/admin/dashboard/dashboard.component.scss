@@ -1,45 +1,98 @@
-// BI Dashboard — chart-free CSS bar widgets (ADR-0037 D-8).
-// Follows admin.styles.scss minimalism; no layout overrides.
+// BI Dashboard — the chart cards around the shared SVG charts (ADR-0064).
+// Ink stays in the text tokens; only marks carry the series colours.
 
-// <figure> wrappers used as accessible chart containers — strip browser default margin.
-figure.mb-0 {
-  margin: 0;
+.bi-card {
+  padding: 1rem 1.1rem 0.9rem;
 }
 
-.bi-bar-chart {
-  width: 100%;
+.bi-card__title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-text-2);
+  margin: 0 0 0.6rem;
 }
 
-.bi-bar-row {
-  // nothing extra — Bootstrap spacing classes do the work
+.bi-card__sub {
+  font-size: 0.78rem;
+  color: var(--erp-text-3);
+  margin: 0 0 0.5rem;
 }
 
-.bi-bar-track {
-  height: 16px;
-  background: #e9ecef;
-  border-radius: 2px;
+// Sparkline under a stat-tile value.
+.bi-spark {
+  margin-top: 0.4rem;
+}
+
+// Win-rate meter: the unfilled track is a lighter step of the same blue, so state reads across
+// the whole bar rather than as a lone sliver.
+.bi-meter-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--erp-text);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.bi-meter {
+  height: 8px;
+  margin: 0.45rem 0 0.75rem;
+  background: #dbe5fd;
+  border-radius: 4px;
   overflow: hidden;
 }
 
-.bi-bar-fill {
+.bi-meter__fill {
   height: 100%;
-  background: var(--bs-primary);
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  background: #2563eb;
+  border-radius: 4px;
+  transition: width 0.4s ease;
 
   @media (prefers-reduced-motion: reduce) {
     transition: none;
   }
+}
 
-  &--revenue {
-    background: var(--erp-primary);
+// Label / value facts (won, lost, cycle, forecast).
+.bi-facts {
+  margin: 0;
+  display: grid;
+  gap: 0.3rem;
+
+  > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.85rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid #f0f2f5;
   }
 
-  &--profit {
-    background: var(--erp-ok);
+  dt {
+    font-weight: 400;
+    color: var(--erp-text-2);
   }
 
-  &--loss {
-    background: var(--erp-danger);
+  dd {
+    margin: 0;
+    color: var(--erp-text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// Footer total under a bar list.
+.bi-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.5rem 0;
+  border-top: 1px solid var(--erp-border);
+  font-size: 0.85rem;
+  color: var(--erp-text-2);
+
+  strong {
+    color: var(--erp-text);
+    font-variant-numeric: tabular-nums;
   }
 }

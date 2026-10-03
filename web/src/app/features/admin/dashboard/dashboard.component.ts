@@ -14,6 +14,10 @@ import { Branch } from '../models/branch.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { serverMessage } from '../reporting/report-filter-options.service';
 import { DashboardService } from './dashboard.service';
+import { BarListComponent, BarListRow } from '../../../shared/charts/bar-list.component';
+import { CHART_COLORS, toNumber } from '../../../shared/charts/chart-math';
+import { SparklineComponent } from '../../../shared/charts/sparkline.component';
+import { TrendChartComponent, TrendSeries } from '../../../shared/charts/trend-chart.component';
 import {
   BiHeaderDto,
   DashboardDto,
@@ -32,11 +36,12 @@ type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
  * BI Analytics Dashboard (ADR-0037 D-7/D-8).
  * Route: /admin/dashboard — gated BI.VIEW.
  * Per-panel signal trios + four-state @switch + graceful per-panel forbidden.
- * Chart-free: stat-cards, CSS bars, tables.
+ * Charts are the in-house SVG components in shared/charts (ADR-0064): a smooth revenue / net
+ * profit trend, tile sparklines and bar lists — all drawn from the payload as it is.
  */
 @Component({
   selector: 'app-dashboard',
-  imports: [DecimalPipe, FormsModule, RouterLink],
+  imports: [DecimalPipe, FormsModule, RouterLink, TrendChartComponent, BarListComponent, SparklineComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
@@ -158,19 +163,67 @@ export class DashboardComponent {
     };
   });
 
-  // ── Derived: trend max for CSS bar scaling ───────────────────────────────────
-  readonly revenueTrendMax = computed(() => {
-    const pts = this.revenueTrend()?.points ?? [];
-    if (pts.length === 0) return 1;
-    return Math.max(...pts.map((p) => +p.value), 1);
+  // ── Derived: chart data (ADR-0064) ─────────────────────────────────────────
+  readonly colors = CHART_COLORS;
+
+  /** Revenue and net profit on one chart: same currency, one axis. Points arrive oldest first. */
+  readonly trendChart = computed(() => {
+    const rev = this.revenueTrend();
+    const np = this.netProfitTrend();
+    const base = rev?.points.length ? rev : np?.points.length ? np : null;
+    if (!base) return null;
+    const labels = base.points.map((p) => p.periodLabel);
+    const series: TrendSeries[] = [];
+    if (rev?.points.length) {
+      const byLabel = new Map(rev.points.map((p) => [p.periodLabel, toNumber(p.value)]));
+      series.push({ key: 'revenue', name: 'Revenue', color: CHART_COLORS.series1, area: true,
+        values: labels.map((l) => byLabel.get(l) ?? 0) });
+    }
+    if (np?.points.length) {
+      const byLabel = new Map(np.points.map((p) => [p.periodLabel, toNumber(p.value)]));
+      series.push({ key: 'net', name: 'Net profit', color: CHART_COLORS.series2,
+        values: labels.map((l) => byLabel.get(l) ?? 0) });
+    }
+    return { labels, series, currency: base.currency };
   });
 
-  readonly netProfitTrendMax = computed(() => {
-    const pts = this.netProfitTrend()?.points ?? [];
-    if (pts.length === 0) return 1;
-    const abs = pts.map((p) => Math.abs(+p.value));
-    return Math.max(...abs, 1);
+  /** One state for the combined trend card — both trends share the BI.FINANCE.VIEW gate. */
+  readonly trendState = computed<LoadState>(() => {
+    const a = this.revenueTrendState();
+    const b = this.netProfitTrendState();
+    if (a === 'loading' || b === 'loading') return 'loading';
+    if (a === 'forbidden' && b === 'forbidden') return 'forbidden';
+    if (a === 'error' && b === 'error') return 'error';
+    return 'idle';
   });
+
+  readonly revenueSpark = computed(() => (this.revenueTrend()?.points ?? []).map((p) => toNumber(p.value)));
+  readonly netProfitSpark = computed(() => (this.netProfitTrend()?.points ?? []).map((p) => toNumber(p.value)));
+
+  readonly pipelineRows = computed<BarListRow[]>(() =>
+    (this.crm()?.pipeline?.stages ?? []).map((st) => ({
+      key: st.stageUid,
+      label: st.stageName,
+      sublabel: `${st.openCount} ${st.openCount === 1 ? 'opportunity' : 'opportunities'}`,
+      value: toNumber(st.totalValueAmount),
+    })),
+  );
+
+  readonly pipelineCurrency = computed(() => this.crm()?.pipeline?.stages?.[0]?.currency ?? '');
+
+  readonly salesRows = computed<BarListRow[]>(() =>
+    (this.salesByBranch()?.rows ?? []).map((r) => ({
+      key: String(r.branchId),
+      label: `${r.branchCode} — ${r.branchName}`,
+      sublabel: `${r.count} ${r.count === 1 ? 'invoice' : 'invoices'}`,
+      value: toNumber(r.total),
+    })),
+  );
+
+  /** Win rate as a 0–100 meter width. */
+  winRatePct(v: string | number | null | undefined): number {
+    return Math.max(0, Math.min(100, toNumber(v)));
+  }
 
   // ── Export state ──────────────────────────────────────────────────────────────
   readonly exporting = signal(false);
@@ -402,20 +455,6 @@ export class DashboardComponent {
 
   healthPrefix(ties: boolean): string {
     return ties ? '[OK]' : '[!]';
-  }
-
-  // ── Trend bar width (%) ───────────────────────────────────────────────────────
-
-  pipelineMax(stages: { totalValueAmount: string }[]): number {
-    if (!stages || stages.length === 0) return 1;
-    return Math.max(...stages.map((s) => +s.totalValueAmount), 1);
-  }
-
-  trendBarWidth(value: string, max: number): number {
-    const v = +value;
-    if (max === 0) return 0;
-    const pct = (Math.abs(v) / max) * 100;
-    return Math.min(pct, 100);
   }
 
   // ── Export ────────────────────────────────────────────────────────────────────

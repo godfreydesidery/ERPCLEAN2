@@ -304,19 +304,27 @@ describe('DashboardComponent', () => {
     expect(comp.canExport()).toBe(true);
   });
 
-  // 7. trendBarWidth: proportional scaling
-  it('trendBarWidth returns 100 for value equal to max', () => {
+  // 7. Chart data: revenue and net profit share one chart, aligned by period label
+  it('trendChart puts revenue and net profit on one chart, aligned by period', () => {
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
-    expect(comp.trendBarWidth('200000', 200000)).toBe(100);
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    TestBed.flushEffects();
+    const t = comp.trendChart();
+    expect(t?.labels).toEqual(['Jan 2026', 'Dec 2025']);
+    expect(t?.series.map((s) => s.key)).toEqual(['revenue', 'net']);
+    expect(t?.series[1].values).toEqual([50000, -5000]);
+    expect(t?.currency).toBe('TZS');
   });
 
-  it('trendBarWidth returns 50 for half of max', () => {
+  it('pipeline and sales bar rows carry the counts as sublabels', () => {
     vi.useFakeTimers();
     makeBed();
-    const comp = TestBed.createComponent(DashboardComponent).componentInstance as any;
-    expect(comp.trendBarWidth('100000', 200000)).toBe(50);
+    const comp = TestBed.createComponent(DashboardComponent).componentInstance;
+    TestBed.flushEffects();
+    expect(comp.pipelineRows()[0]).toEqual(expect.objectContaining({ label: 'Prospecting', sublabel: '5 opportunities', value: 250000 }));
+    expect(comp.salesRows().map((r) => r.label)).toEqual(['HQ — Head Office', 'NBI — Nairobi Branch']);
+    expect(comp.salesRows()[0].sublabel).toBe('8 invoices');
   });
 
   // 8. healthPrefix — drives the text label inside every health status-tag
@@ -430,7 +438,7 @@ describe('DashboardComponent', () => {
 
   // 14. "Group-wide" badge is always present on the company-wide panels, regardless
   // of branch selection — the reader should never have to guess.
-  it('renders a "Group-wide" badge on Finance, Cash Position, Working Capital, Inventory and both Trend panels', () => {
+  it('renders a "Group-wide" badge on Finance, Cash Position, Working Capital, Inventory and the trend panel', () => {
     vi.useFakeTimers();
     makeBed(of(MOCK_DTO));
     const fixture = TestBed.createComponent(DashboardComponent);
@@ -440,8 +448,8 @@ describe('DashboardComponent', () => {
       fixture.nativeElement.querySelectorAll('h2 .status-tag'),
     ) as HTMLElement[];
     const groupWide = badges.filter((b) => b.textContent?.trim() === 'Group-wide');
-    // Finance, Cash Position, Working Capital, Inventory, Revenue Trend, Net Profit Trend
-    expect(groupWide.length).toBe(6);
+    // Finance, Cash Position, Working Capital, Inventory, Revenue and net profit
+    expect(groupWide.length).toBe(5);
   });
 
   // 15. Once a specific branch is selected, the company-wide panels also carry an
@@ -463,7 +471,7 @@ describe('DashboardComponent', () => {
 
     notes = Array.from(fixture.nativeElement.querySelectorAll('p')) as HTMLElement[];
     const scopeNotes = notes.filter((p) => p.textContent?.includes('not affected by the branch filter'));
-    expect(scopeNotes.length).toBe(6);
+    expect(scopeNotes.length).toBe(5);
   });
 
   // 16. CRM and Sales-by-Branch DO react to the branch filter — label them "This branch"

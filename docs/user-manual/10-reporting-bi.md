@@ -301,7 +301,7 @@ Root users see everything. A custom role sees exactly the panels whose permissio
 ### Filters at the top of the page
 
 - **Company** — a selector appears only if your organisation has more than one company; switching company reloads its branches, resets **Branch** to "All branches", and re-fetches the dashboard. With a single company it is selected automatically and no selector is shown.
-- **Branch** — **All branches** (the default) or one branch, shown as `code — name`. The dashboard re-fetches as soon as you change it. Only the **CRM** panel and the **Sales by Branch** panel are narrowed by this filter. The Finance, Cash Position, Working Capital, Inventory, Revenue Trend and Net Profit Trend panels are anchored to the GL at company level and always show company-wide figures — each of those panels carries a **Group-wide** tag, and while a branch is selected a short note under its heading reminds you: *Group-wide — not affected by the branch filter above.* The two panels that *do* follow the filter show a **This branch** tag instead.
+- **Branch** — **All branches** (the default) or one branch, shown as `code — name`. The dashboard re-fetches as soon as you change it. Only the **CRM** panel and the **Sales by Branch** panel are narrowed by this filter. The Finance, Cash Position, Working Capital, Inventory, and Revenue and net profit panels are anchored to the GL at company level and always show company-wide figures — each of those panels carries a **Group-wide** tag, and while a branch is selected a short note under its heading reminds you: *Group-wide — not affected by the branch filter above.* The two panels that *do* follow the filter show a **This branch** tag instead.
 - **The list offers only the branches you are assigned to** (in **Administration › Users**, branch assignments); root users see every branch of the company. If an assignment is removed while you have the page open and you then pick that branch, a yellow banner at the top explains: *You are not assigned to that branch. Choose a branch you work in, or clear the branch filter to see the whole company.* Choose one of your branches, or **All branches**.
 - **From / To dates** — the reporting date range. **From** defaults to the first day of the current month and **To** defaults to today. Changing a date does **not** refresh on its own: click the circular **Refresh dashboard** button (the arrow-clockwise icon beside the To date) to re-fetch all panels.
 
@@ -315,7 +315,7 @@ Finance director Gideon Moshi logs in and opens **Analytics › Dashboard** (`/a
 
 1. **Health strip** — all five pills (TB, Cash vs GL, AR vs GL 1200, AP vs GL 2100, Stock vs GL 1300) show green `[OK]`. No reconciliation issues, so no `(diff: …)` figures appear.
 
-2. **Finance panel** — Revenue: 9,850,000.00; OpEx: 4,200,000.00; Net Profit (period): 3,480,000.00 (shown green because it is positive). The Trial Balance card reads **Balanced**. Gideon clicks the drill icon in the **Finance** heading — this opens the Income Statement (`/admin/reporting/income-statement`) where he can run a full P&L; the **View TB** link on the Trial Balance card opens the GL trial balance.
+2. **Finance panel** — Revenue: 9,850,000.00; OpEx: 4,200,000.00; Net Profit (period): 3,480,000.00 (shown green because it is positive). Small trend lines under Revenue and Net Profit show the last 12 fiscal periods at a glance. The Trial Balance card reads **Balanced**. Gideon clicks the drill icon in the **Finance** heading — this opens the Income Statement (`/admin/reporting/income-statement`) where he can run a full P&L; the **View TB** link on the Trial Balance card opens the GL trial balance.
 
 3. **Cash Position panel** — Total Book Balance: 14,890,000.00 (the TZS accounts), with *Not converted: USD 2,500.00* underneath for the company's dollar account, a green **[OK] Cash-GL recon** pill, and a table listing each cash/bank account with its balance in its own currency. He uses the heading drill icon to open the cash & bank accounts list.
 
@@ -323,11 +323,11 @@ Finance director Gideon Moshi logs in and opens **Analytics › Dashboard** (`/a
 
 5. **Inventory panel** — Stock Value: 38,250,000.00, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
 
-6. **CRM panel** — Pipeline by Stage shows 15 open deals across five stages, each bar giving the stage's deal count and value; Win-Rate KPIs show Won, Lost, Win Rate 62.0%, and Avg Cycle (days); the Forecast block shows Open Opps and a Weighted Value of TZS 29,340,000.00. He uses the heading drill icon to open the CRM pipeline dashboard.
+6. **CRM panel** — **Pipeline by stage** shows 15 open deals across five stages, one bar per stage with its number of opportunities and value; **Win rate** reads 62.0% with a meter bar, above Won, Lost and Avg cycle; the **Forecast** block shows Open opportunities and a Weighted value of TZS 29,340,000.00. He uses the heading drill icon to open the CRM pipeline dashboard.
 
-7. **Revenue Trend / Net Profit Trend** — twelve bars each, one per fiscal period (labelled `P1 2026`, `P2 2026`, …). The net-profit bars are green for a profit and red for a loss.
+7. **Revenue and net profit** — one chart with two smooth lines over the last 12 fiscal periods (labelled `P1 2026`, `P2 2026`, …): Revenue in blue with a light shaded area, Net profit in orange. Gideon moves the pointer across the chart; a vertical line follows it and a small box shows both figures for that period. P6 shows net profit just below the zero line — a loss month.
 
-8. **Sales by Branch panel** — with **Branch** still on "All branches", the table lists every branch in descending order of sales: `DSM — DSM Main` leads with 5,120,000.00 across 34 finalised invoices, followed by `ARU — Arusha Branch` with 2,890,000.00 across 19 invoices and the remaining branches, with a **Total** row of 9,715,000.00 across 61 invoices. (This total is the VAT-inclusive value of finalised sales invoices, so it will not match the Finance panel's Revenue, which is net of VAT and taken from the GL.) The drill icon in the heading opens the sales invoices list.
+8. **Sales by Branch panel** — with **Branch** still on "All branches", the panel lists every branch as a bar, in descending order of sales: `DSM — DSM Main` leads with 5,120,000.00 across 34 finalised invoices, followed by `ARU — Arusha Branch` with 2,890,000.00 across 19 invoices and the remaining branches, with a **Total** row of 9,715,000.00 across 61 invoices. (This total is the VAT-inclusive value of finalised sales invoices, so it will not match the Finance panel's Revenue, which is net of VAT and taken from the GL.) The drill icon in the heading opens the sales invoices list.
 
 9. Gideon changes **Branch** to `ARU — Arusha Branch`. The dashboard re-fetches immediately. The scope line now reads `Branch: Arusha Branch`; the CRM and Sales by Branch headings show **This branch**, and the Sales by Branch table shows a single row for Arusha. The other panels still show **Group-wide** with the "not affected by the branch filter" note, and their figures are unchanged.
 
@@ -349,6 +349,7 @@ All amounts are shown with two decimals and no currency symbol unless stated; th
 **Finance panel (requires `BI.FINANCE.VIEW`; Group-wide):**
 
 - **Revenue**, **OpEx** (operating expenses, excluding cost of sales), and **Net Profit (period)** for the selected date range — the same figures the Income Statement gives for those dates. Net profit is green when positive and red when negative.
+- Under Revenue and Net Profit, a small **trend line** shows the last 12 fiscal periods, with a dot on the latest. It is there for the shape; the full figures are in the *Revenue and net profit* chart.
 - A **Trial Balance** card with a status pill showing **Balanced** or **Out of balance** (whether total debits equal total credits), and a **View TB** link to the GL trial balance. The trial-balance check covers all postings to date, not just the selected range.
 - The drill icon in the panel heading opens the Income Statement (P&L) report.
 
@@ -372,20 +373,22 @@ All amounts are shown with two decimals and no currency symbol unless stated; th
 
 **CRM panel (requires `BI.CRM.VIEW`; follows the Branch filter):**
 
-- A **Pipeline by Stage** bar chart: one bar per stage showing the number of open opportunities and their total value. This is the pipeline as it stands today — it does not follow the From / To dates.
-- A **Win-Rate KPIs** block: **Won** count, **Lost** count, **Win Rate** (%), and **Avg Cycle (days)**, for the selected date range.
-- A **Forecast** block: **Open Opps** count and **Weighted Value** (the probability-weighted pipeline value for the period).
+- **Pipeline by stage**: one bar per stage, in pipeline order, labelled with the stage name, the number of open opportunities and their total value. This is the pipeline as it stands today — it does not follow the From / To dates.
+- **Win rate**: the percentage in large type with a meter bar, then **Won**, **Lost**, and **Avg cycle** (days), for the selected date range.
+- **Forecast**: **Open opportunities** and **Weighted value** (the probability-weighted pipeline value for the period).
 - The drill icon in the panel heading opens the CRM Pipeline Dashboard.
 
-**Revenue Trend and Net Profit Trend (requires `BI.FINANCE.VIEW`; Group-wide):**
+**Revenue and net profit (requires `BI.FINANCE.VIEW`; Group-wide):**
 
-- One bar per fiscal period for the company's last 12 fiscal periods, labelled `P<period> <year>` (for example `P3 2026`), with the value beside it. These charts do **not** follow the From / To dates — they always show the last 12 periods set up in the fiscal calendar (so if next year's periods are already open, they appear with zero).
-- Net-profit bars are green for a profit and red for a loss.
+- One line chart for the company's last 12 fiscal periods, labelled `P<period> <year>` (for example `P3 2026`): **Revenue** as a blue line with a light shaded area, **Net profit** as an orange line. Both are in base currency on the same scale; a darker line marks zero, so a loss month dips below it.
+- **Reading a value:** move the pointer over the chart — a vertical line snaps to the nearest period and a box shows Revenue and Net profit for it. With the keyboard, Tab to the chart and use the **left / right arrow** keys (Home / End jump to the first / last period, Esc clears); screen readers announce each period.
+- **Show table** (top right of the chart) switches to a table of every period with both figures; **Show chart** switches back.
+- The chart does **not** follow the From / To dates — it always shows the last 12 periods set up in the fiscal calendar (so if next year's periods are already open, they appear at zero).
 
 **Sales by Branch panel (requires `BI.FINANCE.VIEW`; follows the Branch filter):**
 
-- A table of finalised sales invoices in the selected date range, by branch: **Branch** (`code — name`), **Sales (TZS)** — each invoice's gross total *including VAT*, in base currency (the column heading names it) — and **Invoices** (count), with the highest-selling branch first. A **Total** row sums both columns.
-- With **All branches** the table shows the full per-branch breakdown; selecting one branch narrows it to that branch's row.
+- One bar per branch for finalised sales invoices in the selected date range, highest-selling branch first. Each row shows the branch (`code — name`), its number of invoices, and its sales — each invoice's gross total *including VAT*, in base currency. The bar length is relative to the top branch. A **Total** line underneath gives the invoice count and sales for all rows shown.
+- With **All branches** the panel shows every branch; selecting one branch narrows it to that branch's row.
 - Only **FINALISED** invoices count, dated by when they were finalised; draft or voided invoices are excluded. Invoices raised in another currency count at their base-currency value.
 - If no invoices were finalised in the period, the panel shows *No finalised invoices for this period.*
 - The drill icon in the panel heading opens the sales invoices list (**Sales › Invoices**, `/admin/sales-invoices`).
