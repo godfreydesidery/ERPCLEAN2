@@ -53,6 +53,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
         meta: [
           if (branch.isNotEmpty) branch,
           if (data.generatedAt != null) 'Generated ${data.generatedAt}',
+          if (data.marginIsPartial) _marginNote(data),
         ],
         columns: const [
           'Item',
@@ -73,7 +74,9 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
               Cell.money(r.amount, currency: data.currency),
               Cell.money(r.discount, currency: data.currency),
               Cell.money(r.vat, currency: data.currency),
-              Cell.money(r.margin, currency: data.currency),
+              r.margin == null
+                  ? const Cell.unknown()
+                  : Cell.money(r.margin!, currency: data.currency),
             ],
         ],
         totals: [
@@ -81,7 +84,11 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           DocTotal('Discount',
               Cell.money(data.discount, currency: data.currency)),
           DocTotal('VAT', Cell.money(data.vat, currency: data.currency)),
-          DocTotal('Margin', Cell.money(data.margin, currency: data.currency)),
+          DocTotal(
+              data.marginIsPartial ? 'Margin (partial)' : 'Margin',
+              data.marginUnknown
+                  ? const Cell.unknown()
+                  : Cell.money(data.margin, currency: data.currency)),
           DocTotal('Items sold', Cell.number(data.qtySold)),
         ],
       );
@@ -254,10 +261,24 @@ class _Totals extends StatelessWidget {
               Expanded(child: _Mini(label: 'VAT', value: tzs(report.vat))),
               Container(width: 1, height: 28, color: HqOnDark.hairline),
               Expanded(
-                child: _Mini(label: 'Margin', value: tzs(report.margin)),
+                child: _Mini(
+                  label: report.marginIsPartial ? 'Margin (partial)' : 'Margin',
+                  value: report.marginUnknown ? '—' : tzs(report.margin),
+                ),
               ),
             ],
           ),
+          if (report.marginIsPartial) ...[
+            const SizedBox(height: 10),
+            Text(
+              _marginNote(report),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: HqOnDark.secondary,
+                height: 1.35,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -361,4 +382,15 @@ class _Row extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Why the margin is partial, in the owner's words. A total that silently
+/// leaves rows out while looking complete is worse than one that says so.
+String _marginNote(SalesReport r) {
+  final n = r.marginRowsUnknown;
+  final items = n == 1 ? '1 item has' : '$n items have';
+  return r.marginUnknown
+      ? 'No margin: none of these items has a recorded cost.'
+      : 'Margin leaves out sales of items with no recorded cost — '
+          '$items no cost yet.';
 }
