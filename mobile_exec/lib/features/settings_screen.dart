@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
+import '../app/brand.dart';
 import '../app/theme.dart';
 import '../app/version.dart';
 import '../core/session.dart';
@@ -115,6 +116,17 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.info_outline_rounded,
                     title: 'Version',
                     value: kAppVersion,
+                  ),
+                  // Which brand build this is — support's second question,
+                  // since a customer app and the generic one look different
+                  // but must be diagnosed the same way.
+                  const Divider(height: 1),
+                  const _Row(
+                    icon: Icons.verified_outlined,
+                    title: 'Edition',
+                    value: Brand.isOrbix
+                        ? Brand.appName
+                        : '${Brand.appName} · powered by OrbixHQ',
                   ),
                 ],
               ),

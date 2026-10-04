@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED from brands/kilimanjaro/brand.json by tool/brand.py. -->
+<resources>
+    <string name="app_name">Kilimanjaro</string>
+    <color name="hq_brand_teal">#1D4ED8</color>
+</resources>

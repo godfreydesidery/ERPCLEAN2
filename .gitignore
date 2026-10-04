@@ -76,6 +76,8 @@ pos_app/screenshots/
 # OrbixHQ demo APKs — built artefacts, distributed out-of-band, never committed
 dist/orbixhq/*.apk
 dist/orbixhq/*.aab
+# build-hq.ps1 writes a record beside each APK (brand, server, commit, SHA-256)
+dist/orbixhq/*.json
 
 # OrbixPOS Windows zips — built by dist/build-pos.ps1, published as GitHub Releases
 # (tag pos-v<version>), never committed: a zip cannot delta-compress, so each one would sit

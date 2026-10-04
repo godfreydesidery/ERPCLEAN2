@@ -94,6 +94,7 @@ class Session extends ChangeNotifier {
   Future<void> setHost(String host) async {
     _config = HqConfig(baseHost: HqConfig.normaliseHost(host));
     await _config.save();
+    _tokens.rebase(_config.apiBase);
     notifyListeners();
   }
 
