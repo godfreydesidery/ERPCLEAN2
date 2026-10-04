@@ -30,6 +30,31 @@ android {
         versionName = flutter.versionName
     }
 
+    // ONE FLAVOR PER BRAND, discovered from mobile_exec/brands/<id>/brand.json
+    // — adding a customer is `python tool/brand.py new ...`, never an edit here.
+    // `orbix` is the generic app and keeps net.otapp.orbix.hq; a customer brand
+    // is its own app beside it (net.otapp.orbix.hq.<id>), with its own name and
+    // icon from brands/<id>/generated/android/res. Build with dist/build-hq.ps1,
+    // which also passes the brand's dart-defines (lib/app/brand.dart).
+    flavorDimensions += "brand"
+    val brandDirs = (file("../../brands").listFiles() ?: emptyArray())
+        .filter { File(it, "brand.json").isFile }
+        .sortedBy { it.name }
+    productFlavors {
+        brandDirs.forEach { dir ->
+            create(dir.name) {
+                dimension = "brand"
+                if (dir.name != "orbix") applicationIdSuffix = "." + dir.name
+            }
+        }
+    }
+    sourceSets {
+        brandDirs.forEach { dir ->
+            val res = File(dir, "generated/android/res")
+            if (res.isDirectory) getByName(dir.name).res.srcDir(res)
+        }
+    }
+
     buildTypes {
         release {
             // DEMO BUILD ONLY. A real release keystore (and a signingConfig that reads it

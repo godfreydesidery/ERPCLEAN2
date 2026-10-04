@@ -35,6 +35,10 @@ class TokenManager {
   AuthUser? get user => _bundle?.user;
   bool get hasSession => _bundle != null;
 
+  /// Points refresh at a new server after the address changes — otherwise it
+  /// kept calling the old one until the app was restarted.
+  void rebase(String apiBase) => _bare.options.baseUrl = apiBase;
+
   Future<void> load() async {
     _bundle = await _store.readSession();
   }

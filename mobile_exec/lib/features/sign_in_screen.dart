@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/app_scope.dart';
+import '../app/brand.dart';
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
 import '../core/config/hq_config.dart';
@@ -105,18 +106,22 @@ class _SignInScreenState extends State<SignInScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This phone is set to:',
+              session.config.hasHost
+                  ? 'This phone is set to:'
+                  : 'This phone is not connected to a server yet.',
               style: HqText.tiny,
             ),
-            const SizedBox(height: 3),
-            Text(
-              HqConfig.normaliseHost(session.config.baseHost),
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: HqColors.ink,
+            if (session.config.hasHost) ...[
+              const SizedBox(height: 3),
+              Text(
+                HqConfig.normaliseHost(session.config.baseHost),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: HqColors.ink,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 14),
             TextField(
               controller: controller,
@@ -171,7 +176,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   ),
                   alignment: Alignment.center,
                   child: const Text(
-                    'H',
+                    Brand.mark,
                     style: TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.w800,
@@ -183,7 +188,7 @@ class _SignInScreenState extends State<SignInScreen> {
               const SizedBox(height: 18),
               const Center(
                 child: Text(
-                  'OrbixHQ',
+                  Brand.appName,
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -195,11 +200,14 @@ class _SignInScreenState extends State<SignInScreen> {
               const SizedBox(height: 6),
               const Center(
                 child: Text(
-                  'Your business, in your pocket.',
+                  Brand.tagline,
                   style: TextStyle(fontSize: 13.5, color: HqOnDark.secondary),
                 ),
               ),
               const SizedBox(height: 34),
+              if (!AppScope.of(context).session.config.hasHost)
+                _ConnectCard(onConnect: _editHost)
+              else
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -316,6 +324,16 @@ class _SignInScreenState extends State<SignInScreen> {
                           style: TextStyle(
                               fontSize: 11.5, color: HqOnDark.tertiary),
                         ),
+                        if (!Brand.isOrbix) ...[
+                          // A customer-branded app still says what it is, so
+                          // support knows the product on the phone.
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Powered by OrbixHQ',
+                            style: TextStyle(
+                                fontSize: 11, color: HqOnDark.tertiary),
+                          ),
+                        ],
                         if (_tapHint != null) ...[
                           const SizedBox(height: 4),
                           Text(
@@ -332,6 +350,52 @@ class _SignInScreenState extends State<SignInScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// First launch of a build with no server baked in (the generic Orbix app):
+/// the address is the one thing the app cannot guess, so it is asked for
+/// openly, before the sign-in form. Once set, it goes back behind the footer
+/// gesture like every other build.
+class _ConnectCard extends StatelessWidget {
+  const _ConnectCard({required this.onConnect});
+
+  final VoidCallback onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: HqColors.panel,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Connect to your company's server",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: HqColors.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Enter the server address your administrator gave you. '
+            'You only do this once.',
+            style: HqText.body,
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: onConnect,
+            icon: const Icon(Icons.dns_outlined, size: 19),
+            label: const Text('Enter server address'),
+          ),
+        ],
       ),
     );
   }

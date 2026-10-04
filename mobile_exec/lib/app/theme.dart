@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 
+import 'brand.dart';
+
 /// OrbixHQ design tokens.
 ///
 /// Sibling to OrbixPOS (`pos_app/lib/app/theme.dart`) - same silhouette, same
 /// ink/hairline ramp, deliberately different brand field so the two apps are
 /// distinguishable at a glance on a home screen. POS ships blue #1B6FD1;
 /// HQ takes deep teal.
+///
+/// The brand field (brand*, the hero and brand gradients, the on-dark ink) is
+/// per build — see [Brand]. Everything else is fixed: status colours mean the
+/// same thing in every customer's app.
 class HqColors {
   HqColors._();
 
-  // brand - deep teal, the executive field
-  static const brand = Color(0xFF0F766E);
-  static const brandD = Color(0xFF0B5A54);
-  static const brandSoft = Color(0xFFE6F4F1);
+  // brand - the executive field (Orbix: deep teal)
+  static const brand = Color(Brand.primary);
+  static const brandD = Color(Brand.primaryDark);
+  static const brandSoft = Color(Brand.primarySoft);
 
   // surfaces
   static const bg = Color(0xFFF4F6F8);
@@ -134,18 +140,18 @@ class HqText {
 class HqSurfaces {
   HqSurfaces._();
 
-  /// The hero gradient - deep teal into near-black, the "executive" field.
+  /// The hero gradient - brand colour into near-black, the "executive" field.
   static const heroGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0F766E), Color(0xFF0B3B39), Color(0xFF08201F)],
+    colors: [Color(Brand.primary), Color(Brand.heroMid), Color(Brand.heroEnd)],
     stops: [0.0, 0.55, 1.0],
   );
 
   static const brandGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF12897F), Color(0xFF0C5F58)],
+    colors: [Color(Brand.gradientStart), Color(Brand.gradientEnd)],
   );
 
   /// Warm accent - used sparingly, for the one thing that matters most.
@@ -158,7 +164,7 @@ class HqSurfaces {
       ];
 
   static List<BoxShadow> get hero => [
-        BoxShadow(color: const Color(0xFF0B3B39).withValues(alpha: 0.30), blurRadius: 26, offset: const Offset(0, 12)),
+        BoxShadow(color: const Color(Brand.heroMid).withValues(alpha: 0.30), blurRadius: 26, offset: const Offset(0, 12)),
       ];
 }
 
@@ -166,7 +172,7 @@ class HqSurfaces {
 class HqOnDark {
   HqOnDark._();
   static const primary = Color(0xFFFFFFFF);
-  static const secondary = Color(0xFFB9D6D2);
-  static const tertiary = Color(0xFF7FA9A4);
+  static const secondary = Color(Brand.onDarkSecondary);
+  static const tertiary = Color(Brand.onDarkTertiary);
   static const hairline = Color(0x2AFFFFFF);
 }
