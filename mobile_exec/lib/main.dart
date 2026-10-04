@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app/app_scope.dart';
+import 'app/brand.dart';
 import 'app/theme.dart';
 import 'core/session.dart';
 import 'features/create_item_screen.dart';
@@ -35,7 +36,7 @@ class OrbixHqApp extends StatelessWidget {
     return AppScope(
       session: session,
       child: MaterialApp(
-        title: 'OrbixHQ',
+        title: Brand.appName,
         debugShowCheckedModeBanner: false,
         theme: buildHqTheme(),
         home: const _Root(),
@@ -120,9 +121,7 @@ class _ShellState extends State<_Shell> {
       'till' => const TillReportScreen(),
       _ => const StockValuationScreen(),
     };
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => screen),
-    );
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override

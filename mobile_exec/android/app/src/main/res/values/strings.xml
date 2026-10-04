@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The generic Orbix brand. A customer brand's flavor overrides this from
+         brands/<id>/generated/android/res (tool/brand.py). -->
+    <string name="app_name">OrbixHQ</string>
+</resources>

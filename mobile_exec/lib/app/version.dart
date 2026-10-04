@@ -7,4 +7,4 @@
 ///
 /// **Bump this with `version:` in pubspec.yaml.** They are checked against each
 /// other by test/version_test.dart, which fails the build if they drift.
-const String kAppVersion = '1.2.1';
+const String kAppVersion = '1.2.2';

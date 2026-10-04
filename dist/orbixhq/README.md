@@ -1,5 +1,38 @@
 # OrbixHQ — Android builds
 
+## Building — double-click `dist\build-hq.cmd`
+
+It asks which app(s) to build, then each one's server address (press Enter to
+keep the default shown), tests, builds, and leaves the APKs here with a `.json`
+record beside each (brand, app id, server, commit, SHA-256). The window stays
+open at the end. Options for a terminal are listed at the top of
+`dist\build-hq.ps1`.
+
+**Brands.** One codebase, one app per brand, from `mobile_exec\brands\<id>\brand.json`:
+
+| Brand | App on the phone | App id | Default server |
+|---|---|---|---|
+| `orbix` | OrbixHQ (generic, teal) | `net.otapp.orbix.hq` | none — asks on first launch |
+| `kilimanjaro` | Kilimanjaro (blue) | `net.otapp.orbix.hq.kilimanjaro` | `http://51.21.23.170` |
+| `shayo` | Shayo HQ (dark green) | `net.otapp.orbix.hq.shayo` | `http://13.53.62.5:8081` |
+
+Add a customer — icon, colours and launcher name are generated, no code or
+Gradle change:
+
+    python mobile_exec\tool\brand.py new acme --name "Acme" --company "Acme Ltd" --mark A --color "#7C2D12" --server http://1.2.3.4
+
+A colour too light for white text is refused. Commit `brands\<id>\`, then build.
+A brand changes only looks and the default server — what the app can do follows
+the user's permissions on the server, identically in every brand.
+
+**A customer brand is its own app** (own app id): it installs beside any
+OrbixHQ already on the phone. Kilimanjaro's phones run the old
+`net.otapp.orbix.hq` build — install the new Kilimanjaro app once, then
+uninstall OrbixHQ.
+
+**Builds below 1.2.2 were all the one generic app**, with only the server
+differing:
+
 The server address is only a default — it can be changed in the app on the
 sign-in screen, so one binary works against any install. It is baked in so that
 whoever receives the APK does not have to type an IP address correctly before
@@ -40,6 +73,17 @@ per-unit prices 2026-07-04, direct goods receipt 2026-08-08, the Product List
 report 2026-08-11, the pack-factor correction 2026-08-12. This cannot be
 probed: the API answers 401 for a route that does not exist exactly as it does
 for one that needs a login, so the git dates are the evidence.
+
+**1.2.2** is the first branded release: the generic OrbixHQ plus a
+Kilimanjaro app and a Shayo HQ app, each with its own name, icon and colours
+(see the top of this file). The generic app, which has no server built in, asks
+for the address on first launch instead of hiding it. The sales report no
+longer shows an unknown margin as 0: a product whose cost was never recorded
+shows "—", and when any are left out the margin is labelled **partial** and
+says how many items have no cost (the server has reported this since ERP
+1.9.3; against an older server nothing changes). Changing the server on the
+phone now takes effect for login renewal straight away — before, renewal kept
+calling the old server until the app was restarted.
 
 **1.2.1** hides the server-address entry behind the seven-tap gesture above,
 and fixes the About card, which reported version 1.0.0 on every build since —

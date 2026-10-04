@@ -13,13 +13,23 @@ class HqConfig {
   String baseHost;
 
   /// Overridable at build time so a shipped build can pre-fill the right
-  /// server: `--dart-define=HQ_HOST=https://erp.example.com`.
-  static const String defaultHost =
-      String.fromEnvironment('HQ_HOST', defaultValue: 'http://localhost:8081');
+  /// server: `--dart-define=HQ_HOST=https://erp.example.com` (a customer
+  /// brand's `brands/<id>/brand.json` sets it). The generic Orbix build sets it
+  /// EMPTY — it does not know whose server it will meet — and the sign-in
+  /// screen then asks for the address before anything else.
+  static const String defaultHost = String.fromEnvironment(
+    'HQ_HOST',
+    defaultValue: 'http://localhost:8081',
+  );
 
   static const _kHost = 'hq.base_host';
 
-  String get apiBase => '${_trim(baseHost)}/api/v1';
+  /// Empty while there is no host: Dio rejects a relative base URL like a bare
+  /// `/api/v1` outright, and the app must still start to ask for the address.
+  String get apiBase => hasHost ? '${_trim(baseHost)}/api/v1' : '';
+
+  /// False until a server address is known — a generic build on first launch.
+  bool get hasHost => _trim(baseHost).isNotEmpty;
 
   static String _trim(String h) {
     var v = h.trim();

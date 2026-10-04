@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED from brands/shayo/brand.json by tool/brand.py. -->
+<resources>
+    <string name="app_name">Shayo HQ</string>
+    <color name="hq_brand_teal">#166534</color>
+</resources>

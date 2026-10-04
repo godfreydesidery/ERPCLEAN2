@@ -11,7 +11,8 @@ import '../../app/format.dart';
 /// One cell. Text and numbers are distinguished so the CSV can stay bare while
 /// the PDF and the pasted text stay readable.
 class Cell {
-  const Cell._(this._text, this._number, this._decimals, this._currency);
+  const Cell._(this._text, this._number, this._decimals, this._currency,
+      [this._unknown = false]);
 
   const Cell.text(String value) : this._(value, null, 0, null);
 
@@ -21,16 +22,25 @@ class Cell {
   const Cell.money(double value, {String currency = 'TZS'})
       : this._(null, value, 2, currency);
 
+  /// A figure the server could not establish — e.g. the margin of a product
+  /// whose cost was never recorded. Shown as a dash, and left EMPTY in the
+  /// CSV: a 0 there would be summed by the spreadsheet as a real zero, which
+  /// is exactly the false figure the server stopped sending.
+  const Cell.unknown() : this._('—', null, 0, null, true);
+
   final String? _text;
   final double? _number;
   final int _decimals;
   final String? _currency;
+  final bool _unknown;
 
-  bool get isNumeric => _number != null;
+  /// Unknown cells sit in numeric columns, so they keep those right-aligned.
+  bool get isNumeric => _number != null || _unknown;
 
   /// What a spreadsheet should see: no thousands separators, no currency code,
   /// nothing it would have to parse back out of a string.
   String get csv {
+    if (_unknown) return '';
     final n = _number;
     if (n == null) return _text ?? '';
     return n.toStringAsFixed(_decimals);
