@@ -85,7 +85,7 @@ public class WhtRegisterController {
         WhtRegisterDto dto = service.getRegister(companyId, period[0], period[1]);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flatten(dto, head, ZonedDateTime.now()), format));
+                flatten(dto, head, letterhead.now(companyId)), format));
     }
 
     /**

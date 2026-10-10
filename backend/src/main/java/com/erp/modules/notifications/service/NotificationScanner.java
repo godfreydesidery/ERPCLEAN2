@@ -7,11 +7,11 @@ import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.modules.notifications.domain.entity.NotificationScanMarker;
 import com.erp.modules.notifications.repository.NotificationScanMarkerRepository;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
@@ -46,17 +46,20 @@ public class NotificationScanner {
     private final StockOnHandRepository            stockOnHand;
     private final NotificationScanMarkerRepository markers;
     private final NotificationRaiser               raiser;
+    private final CompanyCalendar calendar;
 
     public NotificationScanner(CompanyRepository companies,
                                 ArInvoiceRepository arInvoices,
                                 StockOnHandRepository stockOnHand,
                                 NotificationScanMarkerRepository markers,
-                                NotificationRaiser raiser) {
+                                NotificationRaiser raiser,
+                                CompanyCalendar calendar) {
         this.companies   = companies;
         this.arInvoices  = arInvoices;
         this.stockOnHand = stockOnHand;
         this.markers     = markers;
         this.raiser      = raiser;
+        this.calendar    = calendar;
     }
 
     /** Default hourly scan. Override with {@code erp.notifications.scanner.cron} (OQ-NOTIF-06). */
@@ -80,7 +83,7 @@ public class NotificationScanner {
 
     @Transactional
     public void scanOverdue(Long companyId) {
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today = calendar.today(companyId);
         List<ArInvoice> overdue = arInvoices.findOverdueByCompany(companyId, today);
 
         for (ArInvoice invoice : overdue) {
@@ -177,7 +180,7 @@ public class NotificationScanner {
             vals.put("sourceUid", row.getUid());
 
             // Trigger key includes date to distinguish daily crossings
-            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate today = calendar.today(companyId);
             String triggerKey = "scan:" + TYPE_LOW_STOCK + ":" + row.getUid()
                                 + ":" + row.getBranchId() + ":" + today;
             NotificationTrigger trigger = new NotificationTrigger(

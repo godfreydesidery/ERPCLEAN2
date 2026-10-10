@@ -14,6 +14,7 @@ import { CustomerService } from '../parties/customer.service';
 import { ArInvoiceDto, SetOpeningBalanceRequest } from './models/ar.model';
 import { ArService } from './ar.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Set AR Opening Balance. Gated AR.OPENING.SET.
@@ -71,7 +72,7 @@ export class ArOpeningBalanceComponent {
   private readonly customerSearch$ = new Subject<string>();
 
   constructor() {
-    this.invoiceDate.set(new Date().toISOString().slice(0, 10));
+    this.invoiceDate.set(todayLocal());
 
     this.customerSearch$
       .pipe(
@@ -189,7 +190,7 @@ export class ArOpeningBalanceComponent {
     this.amount.set('');
     this.dueDate.set('');
     this.documentNo.set('');
-    this.invoiceDate.set(new Date().toISOString().slice(0, 10));
+    this.invoiceDate.set(todayLocal());
     this.selectedCustomer.set(null);
     this.customerSearchQ.set('');
     this.customerResults.set([]);

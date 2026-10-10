@@ -18,6 +18,7 @@ import { StockBatchDto } from './stock-batch.model';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 import { UidPickerComponent } from '../../../../shared/uid-picker/uid-picker.component';
 import type { UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { localIsoDate } from '../../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -241,7 +242,7 @@ export class StockBatchListComponent {
   private defaultHorizon(): string {
     const d = new Date();
     d.setDate(d.getDate() + 30);
-    return d.toISOString().slice(0, 10);
+    return localIsoDate(d);
   }
 
 }

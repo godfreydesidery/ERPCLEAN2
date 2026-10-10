@@ -51,6 +51,7 @@ import {
   isInvalidAmount,
   normaliseAmount,
 } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 // ── Save-sequence section status ──────────────────────────────────────────────
 
@@ -1307,7 +1308,7 @@ export class ProductMasterComponent implements OnInit {
   }
 
   private todayIso(): string {
-    return new Date().toISOString().substring(0, 10);
+    return todayLocal();
   }
 
   private messageFrom(err: unknown, fallback: string): string {

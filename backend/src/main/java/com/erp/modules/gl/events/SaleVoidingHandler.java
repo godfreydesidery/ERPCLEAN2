@@ -5,15 +5,14 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -43,15 +42,18 @@ public class SaleVoidingHandler implements DomainEventHandler {
     private final JournalEntryRepository journalEntries;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public SaleVoidingHandler(IdempotencyGuard guard,
                                JournalEntryRepository journalEntries,
                                GLPostingSafeInvoker safeInvoker,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               CompanyCalendar calendar) {
         this.guard          = guard;
         this.journalEntries = journalEntries;
         this.safeInvoker    = safeInvoker;
         this.objectMapper   = objectMapper;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -90,7 +92,7 @@ public class SaleVoidingHandler implements DomainEventHandler {
         RequestContext.Principal previous = RequestContext.get();
         RequestContext.set(RequestContext.Principal.system(companyId, event.getBranchId()));
         try {
-            LocalDate reversalDate = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
+            LocalDate reversalDate = calendar.today(companyId);
             safeInvoker.postReversalInNewTx(
                     original.getUid(),
                     reversalDate,

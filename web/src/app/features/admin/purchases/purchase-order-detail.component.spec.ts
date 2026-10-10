@@ -631,7 +631,7 @@ describe('PurchaseOrderDetailComponent — unit-cost suggestion', () => {
     const hint: HTMLElement = fixture.nativeElement.querySelector('#lineUnitCostHint');
     expect(hint).toBeTruthy();
     expect(hint.textContent).toContain('From the last purchase');
-    expect(hint.textContent).toContain('12 Jul 2026');
+    expect(hint.textContent).toContain('12-Jul-2026');
 
     const input: HTMLInputElement = fixture.nativeElement.querySelector('#lineUnitCost');
     expect(input.getAttribute('aria-describedby')).toBe('lineUnitCostHint');

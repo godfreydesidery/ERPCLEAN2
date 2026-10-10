@@ -56,7 +56,7 @@
               </dd>
               @if (g.receivedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Received At</dt>
-                <dd class="col-sm-9 mb-0">{{ g.receivedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+                <dd class="col-sm-9 mb-0">{{ g.receivedAt | appDate:'datetime' }}</dd>
               }
               @if (g.notes) {
                 <dt class="col-sm-3 text-muted fw-normal">Notes</dt>
@@ -179,11 +179,11 @@
                         }
                         @if (line.expiryDate) {
                           <dt class="text-muted fw-normal d-inline">Exp:</dt>
-                          <dd class="d-inline ms-1 me-2">{{ line.expiryDate }}</dd>
+                          <dd class="d-inline ms-1 me-2">{{ line.expiryDate | appDate }}</dd>
                         }
                         @if (line.manufactureDate) {
                           <dt class="text-muted fw-normal d-inline">Mfg:</dt>
-                          <dd class="d-inline ms-1 me-2">{{ line.manufactureDate }}</dd>
+                          <dd class="d-inline ms-1 me-2">{{ line.manufactureDate | appDate }}</dd>
                         }
                         @if (line.serialNumbers.length) {
                           <dt class="text-muted fw-normal mt-1">

@@ -24,6 +24,7 @@ import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
 import { CashbankService } from '../cashbank/cashbank.service';
 import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Record Payment screen — AP.PAYMENT.RUN.
@@ -132,7 +133,7 @@ export class RecordPaymentComponent {
   private readonly supplierSearch$ = new Subject<string>();
 
   constructor() {
-    this.paymentDate.set(new Date().toISOString().slice(0, 10));
+    this.paymentDate.set(todayLocal());
 
     this.supplierSearch$
       .pipe(

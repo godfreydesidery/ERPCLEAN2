@@ -15,6 +15,7 @@ import {
   RecordDirectEntryRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
+import { todayLocal } from '../../../shared/date.util';
 
 /** Counter-account types in the order they are offered: what the money most likely was first. */
 const COUNTER_ORDER: Record<CashTxnDirection, readonly string[]> = {
@@ -121,7 +122,7 @@ export class RecordEntryComponent {
   });
 
   constructor() {
-    this.txnDate.set(new Date().toISOString().slice(0, 10));
+    this.txnDate.set(todayLocal());
     this.loadCompanies();
   }
 
@@ -265,7 +266,7 @@ export class RecordEntryComponent {
     this.amount.set('');
     this.counterGlAccountUid.set('');
     this.memo.set('');
-    this.txnDate.set(new Date().toISOString().slice(0, 10));
+    this.txnDate.set(todayLocal());
     this.formError.set(null);
   }
 

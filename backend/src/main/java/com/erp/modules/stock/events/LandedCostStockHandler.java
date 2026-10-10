@@ -3,6 +3,7 @@ package com.erp.modules.stock.events;
 import com.erp.modules.purchases.domain.dto.LandedCostAllocatedPayload;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryValuationService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -10,7 +11,6 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -37,15 +37,18 @@ public class LandedCostStockHandler implements DomainEventHandler {
     private final InventoryValuationService valuation;
     private final InventoryGlPoster         glPoster;
     private final ObjectMapper              objectMapper;
+    private final CompanyCalendar calendar;
 
     public LandedCostStockHandler(IdempotencyGuard guard,
                                    InventoryValuationService valuation,
                                    InventoryGlPoster glPoster,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   CompanyCalendar calendar) {
         this.guard        = guard;
         this.valuation    = valuation;
         this.glPoster     = glPoster;
         this.objectMapper = objectMapper;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -86,7 +89,7 @@ public class LandedCostStockHandler implements DomainEventHandler {
             // Amount = sum of per-line allocations (not payload.totalAmount() — see above).
             if (glAmount.signum() > 0) {
                 String glEntryUid = glPoster.postLandedCostInNewTx(
-                        payload.companyId(), payload.branchId(), LocalDate.now(),
+                        payload.companyId(), payload.branchId(), calendar.today(payload.companyId()),
                         payload.landedCostUid(), payload.landedCostNumber(),
                         payload.currency() != null ? payload.currency() : "TZS",
                         glAmount);

@@ -23,11 +23,11 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +51,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
     private final UnitOfMeasureRepository    units;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
+    private final CompanyCalendar calendar;
 
     public BlanketOrderServiceImpl(BlanketOrderRepository blankets,
                                     BlanketOrderLineRepository blanketLines,
@@ -62,7 +63,8 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
                                     ProductRepository products,
                                     UnitOfMeasureRepository units,
                                     ScopeGuard scopeGuard,
-                                    AuditService audit) {
+                                    AuditService audit,
+                                    CompanyCalendar calendar) {
         this.blankets          = blankets;
         this.blanketLines      = blanketLines;
         this.salesOrders       = salesOrders;
@@ -74,6 +76,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         this.units             = units;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.calendar          = calendar;
     }
 
     @Override
@@ -158,7 +161,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         if (blanket.getStatus() != BlanketStatus.ACTIVE) {
             throw new ConflictException("This blanket order is not ACTIVE.");
         }
-        if (LocalDate.now().isAfter(blanket.getValidTo())) {
+        if (calendar.today(blanket.getCompanyId()).isAfter(blanket.getValidTo())) {
             throw new ConflictException("This blanket order has expired.");
         }
 
@@ -182,7 +185,7 @@ public class BlanketOrderServiceImpl implements BlanketOrderService {
         // Create the SO via SalesOrderService
         var soDto = salesOrderService.create(new CreateSalesOrderRequest(
                 company.getUid(), customer.getUid(), null,
-                blanket.getCurrency().value(), LocalDate.now(), null, null, null, null));
+                blanket.getCurrency().value(), calendar.today(blanket.getCompanyId()), null, null, null, null));
 
         // Stamp source_blanket_uid on the SO entity
         var soEntity = salesOrders.findByUid(soDto.uid())

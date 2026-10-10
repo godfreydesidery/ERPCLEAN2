@@ -17,6 +17,7 @@ import { formatMoney } from '../../../shared/money.util';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { exportErrorMessage } from '../reporting/ledger-export.util';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * VAT Return detail / face screen (FR-VAT-02/08 / US-VAT-02/03/04).
@@ -79,7 +80,7 @@ export class VatReturnDetailComponent implements OnInit {
   readonly filing = signal(false);
   readonly fileError = signal<string | null>(null);
   readonly fileRef = signal('');
-  readonly fileDate = signal(new Date().toISOString().slice(0, 10));
+  readonly fileDate = signal(todayLocal());
 
   // ── Permissions ───────────────────────────────────────────────────────────
   readonly canPrepare = computed(() => this.session.hasPermission('VAT.RETURN.PREPARE'));
@@ -167,7 +168,7 @@ export class VatReturnDetailComponent implements OnInit {
     this.showFileForm.set(true);
     this.fileError.set(null);
     this.fileRef.set('');
-    this.fileDate.set(new Date().toISOString().slice(0, 10));
+    this.fileDate.set(todayLocal());
   }
 
   cancelFile(): void {

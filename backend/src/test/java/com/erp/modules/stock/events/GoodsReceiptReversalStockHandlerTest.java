@@ -78,7 +78,8 @@ class GoodsReceiptReversalStockHandlerTest {
 
         handler = new GoodsReceiptReversalStockHandler(
                 guard, posting, movementRepository, valuation, glPoster,
-                batchService, serialService, locationRepo, objectMapper);
+                batchService, serialService, locationRepo, objectMapper, com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
         // A stale branch-default location — distinct from the movements' own location, so any

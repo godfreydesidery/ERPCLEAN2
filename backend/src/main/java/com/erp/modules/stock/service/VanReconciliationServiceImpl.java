@@ -27,13 +27,13 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +72,7 @@ public class VanReconciliationServiceImpl implements VanReconciliationService {
     private final OutboxPublisher                 outbox;
     private final ScopeGuard                      scopeGuard;
     private final AuditService                    audit;
+    private final CompanyCalendar calendar;
 
     public VanReconciliationServiceImpl(VanReconciliationRepository reconciliations,
                                         VanReconciliationLineRepository lineRepo,
@@ -84,7 +85,8 @@ public class VanReconciliationServiceImpl implements VanReconciliationService {
                                         WarehouseNumberGenerator numberGenerator,
                                         OutboxPublisher outbox,
                                         ScopeGuard scopeGuard,
-                                        AuditService audit) {
+                                        AuditService audit,
+                                        CompanyCalendar calendar) {
         this.reconciliations = reconciliations;
         this.lineRepo         = lineRepo;
         this.movements        = movements;
@@ -97,6 +99,7 @@ public class VanReconciliationServiceImpl implements VanReconciliationService {
         this.outbox           = outbox;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.calendar         = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -140,8 +143,9 @@ public class VanReconciliationServiceImpl implements VanReconciliationService {
     /** Derives loaded/returned per product from the transfer ledger and writes the worksheet lines. */
     private void buildLines(VanReconciliation recon, StockLocation van,
                             CreateVanReconciliationRequest request) {
-        Instant windowStart = request.businessDate().atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant windowEnd   = request.businessDate().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        // The van's business day is the company's day (owner ruling 2026-10-10), not the UTC day.
+        Instant windowStart = calendar.startOfDay(recon.getCompanyId(), request.businessDate());
+        Instant windowEnd   = calendar.endOfDayExclusive(recon.getCompanyId(), request.businessDate());
 
         Map<Long, BigDecimal> loadedByProduct = sumToMap(movements.sumByLocationTypeAndWindow(
                 recon.getCompanyId(), van.getBranchId(), van.getId(),

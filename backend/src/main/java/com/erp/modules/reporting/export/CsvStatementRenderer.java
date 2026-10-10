@@ -1,6 +1,7 @@
 package com.erp.modules.reporting.export;
 
 import com.erp.modules.reporting.export.StatementRenderModel.Row;
+import com.erp.platform.common.time.PrintedStamp;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -21,7 +22,7 @@ public class CsvStatementRenderer {
             w.println(line(text(model.companyName())));
             w.println(line(text(model.periodLabel()),
                             text(model.comparativeLabel() != null ? model.comparativeLabel() : "")));
-            w.println(line(text("Generated"), text(model.generatedAt())));
+            w.println(line(text("Generated"), text(PrintedStamp.of(model.generatedAt()))));
             w.println();
             w.println(line(text("Description"), text("Current"), text("Comparative")));
             for (Row row : model.rows()) {

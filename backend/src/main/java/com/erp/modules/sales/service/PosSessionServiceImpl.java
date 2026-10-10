@@ -43,6 +43,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -50,7 +51,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -213,6 +213,7 @@ public class PosSessionServiceImpl implements PosSessionService {
      * person, it does not establish a session, so an approval cannot outlive the request it rode in on.
      */
     private final StepUpAuthService          stepUpAuth;
+    private final CompanyCalendar calendar;
 
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
@@ -231,7 +232,8 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   SalesDepthNumberGenerator numberGen,
                                   TillExpenseGlSeeder tillExpenseGl,
                                   PermissionResolver permissionResolver,
-                                  StepUpAuthService stepUpAuth) {
+                                  StepUpAuthService stepUpAuth,
+                                  CompanyCalendar calendar) {
         this.sessions       = sessions;
         this.tills          = tills;
         this.payouts        = payouts;
@@ -250,6 +252,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.tillExpenseGl  = tillExpenseGl;
         this.permissionResolver = permissionResolver;
         this.stepUpAuth     = stepUpAuth;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -461,7 +464,7 @@ public class PosSessionServiceImpl implements PosSessionService {
     public TillExpenseReportDto tillExpenseReport(Long companyId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        LocalDate today    = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today    = calendar.today(companyId);
         LocalDate fromDate = (from != null) ? from : today.minusDays(DEFAULT_EXPENSE_REPORT_DAYS);
         LocalDate toDate   = (to != null) ? to : today;
         if (toDate.isBefore(fromDate)) {
@@ -472,8 +475,8 @@ public class PosSessionServiceImpl implements PosSessionService {
         // on the closing day is inside the report, which a `<= toDate 00:00` bound would drop.
         List<PosPayoutDto> rows = payouts.findExpensesForCompanyBetween(
                         companyId, PosPayoutType.EXPENSE,
-                        fromDate.atStartOfDay(ZoneOffset.UTC).toInstant(),
-                        toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant())
+                        calendar.startOfDay(companyId, fromDate),
+                        calendar.endOfDayExclusive(companyId, toDate))
                 .stream()
                 .map(PosSessionServiceImpl::toDto)
                 .toList();
@@ -1039,7 +1042,7 @@ public class PosSessionServiceImpl implements PosSessionService {
             String  memo      = isExpense ? "Till expense: " + payout.getCategory() : "Till payout";
             var draft = new JournalEntryDraft(
                     companyId, session.getBranchId(),
-                    LocalDate.now(ZoneOffset.UTC),
+                    calendar.today(companyId),
                     (isExpense ? "POS till expense " : "POS till payout ")
                             + session.getSessionNumber(),
                     JournalSourceType.CASH_DIRECT, payout.getUid(),
@@ -1163,9 +1166,7 @@ public class PosSessionServiceImpl implements PosSessionService {
                 .map(c -> c.getBaseCurrency())
                 .orElse("TZS");
         // Posting date = session close date (not today) so GL period matches the session
-        LocalDate postingDate = session.getClosedAt() != null
-                ? session.getClosedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        LocalDate postingDate = calendar.dateOf(session.getCompanyId(), session.getClosedAt());
         BigDecimal abs = variance.abs();
         LineDraft debitLine;
         LineDraft creditLine;

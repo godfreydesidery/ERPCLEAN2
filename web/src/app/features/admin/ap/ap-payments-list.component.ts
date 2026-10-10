@@ -17,6 +17,7 @@ import { ApService } from './ap.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CashbankService } from '../cashbank/cashbank.service';
 import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
+import { todayLocal } from '../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -143,7 +144,7 @@ export class ApPaymentsListComponent {
         error: () => this.payBillResults.set([]),
       });
 
-    this.payDate.set(new Date().toISOString().slice(0, 10));
+    this.payDate.set(todayLocal());
     this.loadCompanies();
   }
 
@@ -214,7 +215,7 @@ export class ApPaymentsListComponent {
     this.payAmount.set('');
     this.payRef.set('');
     this.payTender.set('BANK_TRANSFER');
-    this.payDate.set(new Date().toISOString().slice(0, 10));
+    this.payDate.set(todayLocal());
   }
 
   /** AP-08: the company's active cash / bank / mobile-money accounts, default preselected. */

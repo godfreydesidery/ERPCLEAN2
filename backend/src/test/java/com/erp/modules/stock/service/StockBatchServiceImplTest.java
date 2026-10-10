@@ -35,7 +35,7 @@ class StockBatchServiceImplTest {
     void setUp() {
         batches = mock(StockBatchRepository.class);
         ScopeGuard scopeGuard = mock(ScopeGuard.class);
-        service = new StockBatchServiceImpl(batches, scopeGuard);
+        service = new StockBatchServiceImpl(batches, scopeGuard, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     // -------------------------------------------------------------------------

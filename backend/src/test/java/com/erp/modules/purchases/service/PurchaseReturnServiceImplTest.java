@@ -91,7 +91,9 @@ class PurchaseReturnServiceImplTest {
                 numberGen, outbox, scopeGuard, audit, mock(PurchaseReturnPrintQuery.class),
                 mock(com.erp.platform.common.money.FxDocumentConverter.class),
                 mock(org.springframework.jdbc.core.JdbcTemplate.class),
-                mock(com.erp.modules.purchases.domain.dto.ReceiptBillingReader.class));
+                mock(com.erp.modules.purchases.domain.dto.ReceiptBillingReader.class),
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                        com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         // Default principal in context
         RequestContext.set(new RequestContext.Principal(1L, "user@test.com", false, 10L, 20L, null));

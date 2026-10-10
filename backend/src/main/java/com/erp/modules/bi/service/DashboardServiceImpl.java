@@ -42,6 +42,7 @@ import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.StockValuationQuery;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.BranchReadGuard;
@@ -50,7 +51,6 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -126,6 +126,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final SalesByBranchQuery       salesByBranchQuery;
     private final BranchRepository         branchRepository;
     private final BranchReadGuard          branchGuard;
+    private final CompanyCalendar calendar;
 
     public DashboardServiceImpl(ScopeGuard scopeGuard,
                                  PermissionChecks permChecks,
@@ -142,7 +143,8 @@ public class DashboardServiceImpl implements DashboardService {
                                  FiscalPeriodRepository fiscalPeriods,
                                  SalesByBranchQuery salesByBranchQuery,
                                  BranchRepository branchRepository,
-                                 BranchReadGuard branchGuard) {
+                                 BranchReadGuard branchGuard,
+                                 CompanyCalendar calendar) {
         this.scopeGuard          = scopeGuard;
         this.permChecks          = permChecks;
         this.companyRepo         = companyRepo;
@@ -159,6 +161,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.salesByBranchQuery  = salesByBranchQuery;
         this.branchRepository    = branchRepository;
         this.branchGuard         = branchGuard;
+        this.calendar            = calendar;
     }
 
     // =========================================================================
@@ -187,8 +190,9 @@ public class DashboardServiceImpl implements DashboardService {
         String companyName = company.getName();
         String currency    = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
 
-        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        LocalDate today         = calendar.today(companyId);
+        LocalDate effectiveFrom = from != null ? from : today.withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : today;
         String    periodLabel   = effectiveFrom + " – " + effectiveTo;
 
         List<HealthIndicatorDto> health = new ArrayList<>();
@@ -221,7 +225,7 @@ public class DashboardServiceImpl implements DashboardService {
                 branchScope.uid(), branchScope.name(),
                 readScope.limitedToAssigned() ? readScope.label() : branchScope.label(),
                 currency, periodLabel,
-                effectiveFrom, effectiveTo, LocalDate.now(), Instant.now());
+                effectiveFrom, effectiveTo, today, Instant.now());
 
         return new DashboardDto(header, financePanel, wcPanel, inventoryPanel, crmPanel,
                 revTrend, netTrend, salesPanel, health);
@@ -460,16 +464,18 @@ public class DashboardServiceImpl implements DashboardService {
         BranchReadScope readScope = branchGuard.readScope(RequestContext.get(), companyId, branchId);
         com.erp.modules.iam.domain.entity.Company company = requireCompanyExists(companyId);
         String currency = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
-        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        LocalDate today         = calendar.today(companyId);
+        LocalDate effectiveFrom = from != null ? from : today.withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : today;
         return buildSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency, readScope);
     }
 
     private SalesByBranchDto buildSalesByBranch(Long companyId, Long branchId,
                                                 LocalDate from, LocalDate to, String currency,
                                                 BranchReadScope readScope) {
-        Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();
-        Instant toInstant   = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        // RPT-09: the panel's days are the company's days, not UTC days.
+        Instant fromInstant = calendar.startOfDay(companyId, from);
+        Instant toInstant   = calendar.endOfDayExclusive(companyId, to);
 
         // The aggregate is one row per branch, so the caller's branch scope is applied to its rows.
         List<BranchSalesAggregateDto> aggregates =

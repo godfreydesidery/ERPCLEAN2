@@ -135,7 +135,9 @@ class PosSessionServiceImplTest {
         // (PosSessionAuthorisedReadTest) where both are stubbed per case.
         service = new PosSessionServiceImpl(sessions, tills, payouts, expenseIdempotency, invoices,
                 tenderPayments, glInvoker, glConfig, glPosting, companies, branches, userLookup,
-                scopeGuard, audit, numberGen, tillExpenseGl, permissionResolver, stepUpAuth);
+                scopeGuard, audit, numberGen, tillExpenseGl, permissionResolver, stepUpAuth,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         // default: no request context
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 1L, null));
@@ -292,8 +294,8 @@ class PosSessionServiceImplTest {
 
     @Test
     void reconcileSession_varianceGl_postingDateEqualsSessionCloseDate() {
-        // session closed on 2026-06-12 (UTC)
-        Instant closedAt = Instant.parse("2026-06-12T22:00:00Z");
+        // session closed at 2026-06-12 18:00 UTC = 21:00 EAT on 2026-06-12
+        Instant closedAt = Instant.parse("2026-06-12T18:00:00Z");
         PosSession session = closedSession(1L, new BigDecimal("-100.00"), closedAt);
 
         Company company = mockCompany(1L, "TZS");
@@ -313,6 +315,30 @@ class PosSessionServiceImplTest {
 
         // Must post on 2026-06-12, not today
         assertThat(captor.getValue().postingDate()).isEqualTo(LocalDate.of(2026, 6, 12));
+    }
+
+    @Test
+    void reconcileSession_varianceGl_afterMidnightEatClose_postsOnTheEatDate() {
+        // Owner ruling 2026-10-10: business dates are the company's (EAT) dates. A bar till closed
+        // at 00:30 EAT on 1 July is 21:30 UTC on 30 June — the variance belongs to 1 July.
+        Instant closedAt = Instant.parse("2026-06-30T21:30:00Z");
+        PosSession session = closedSession(1L, new BigDecimal("-100.00"), closedAt);
+
+        Company company = mockCompany(1L, "TZS");
+        when(sessions.findByUid("S4")).thenReturn(Optional.of(session));
+        when(companies.findById(1L)).thenReturn(Optional.of(company));
+        ChartOfAccount cashAcct  = mockCoa(10L);
+        ChartOfAccount shortAcct = mockCoa(30L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
+        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(sessions.save(any())).thenReturn(session);
+
+        service.reconcileSession("S4", new ReconcileSessionRequest(null));
+
+        ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
+        verify(glPosting).post(captor.capture());
+        assertThat(captor.getValue().postingDate()).isEqualTo(LocalDate.of(2026, 7, 1));
     }
 
     // -------------------------------------------------------------------------
@@ -1397,8 +1423,9 @@ class PosSessionServiceImplTest {
         ArgumentCaptor<Instant> until = ArgumentCaptor.forClass(Instant.class);
         verify(payouts).findExpensesForCompanyBetween(anyLong(), any(),
                 from.capture(), until.capture());
-        assertThat(from.getValue()).isEqualTo(Instant.parse("2026-08-01T00:00:00Z"));
-        assertThat(until.getValue()).isEqualTo(Instant.parse("2026-08-09T00:00:00Z"));
+        // Days are the company's (EAT, UTC+3) days: 1 Aug 00:00 EAT .. 9 Aug 00:00 EAT, exclusive.
+        assertThat(from.getValue()).isEqualTo(Instant.parse("2026-07-31T21:00:00Z"));
+        assertThat(until.getValue()).isEqualTo(Instant.parse("2026-08-08T21:00:00Z"));
     }
 
     /** The report is company-scoped before a single row is read — no cross-tenant read. */

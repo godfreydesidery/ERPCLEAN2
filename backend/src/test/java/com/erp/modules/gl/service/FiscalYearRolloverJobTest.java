@@ -89,13 +89,15 @@ class FiscalYearRolloverJobTest {
     }
 
     @Test
-    void badTimeZone_fallsBackToUtc_ratherThanSkippingTheCompany() {
+    void badTimeZone_fallsBackToDarEsSalaam_ratherThanSkippingTheCompany() {
         Company odd = company(1L, MasterStatus.ACTIVE, "Not/AZone");
         when(companies.findAll()).thenReturn(List.of(odd));
 
+        // 22:00 UTC on 31 Dec is 01:00 EAT on 1 Jan: the house-zone fallback (owner ruling
+        // 2026-10-10) puts it in the new year, where the UTC fallback used to keep it in the old.
         job.rollOverAllCompanies(Instant.parse("2026-12-31T22:00:00Z"));
 
-        verify(calendar).ensureCurrentAndNextYear(1L, LocalDate.of(2026, 12, 31));
+        verify(calendar).ensureCurrentAndNextYear(1L, LocalDate.of(2027, 1, 1));
     }
 
     @Test

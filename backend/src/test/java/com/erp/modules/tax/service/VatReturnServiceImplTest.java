@@ -71,7 +71,9 @@ class VatReturnServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new VatReturnServiceImpl(returns, bands, adjustments, companies, numberGen,
-                computationReader, filingPoster, scopeGuard, audit, FIXED_CLOCK);
+                computationReader, filingPoster, scopeGuard, audit,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                        com.erp.platform.common.time.BusinessZone.DEFAULT, FIXED_CLOCK));
     }
 
     @AfterEach

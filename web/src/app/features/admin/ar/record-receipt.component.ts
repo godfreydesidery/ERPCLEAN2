@@ -30,6 +30,7 @@ import {
   normaliseAmount,
   parseAmount,
 } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * A UI-only allocation row — wraps an ArInvoiceDto with the user's input.
@@ -206,7 +207,7 @@ export class RecordReceiptComponent {
   private readonly customerSearch$ = new Subject<string>();
 
   constructor() {
-    this.receiptDate.set(new Date().toISOString().slice(0, 10));
+    this.receiptDate.set(todayLocal());
 
     // Debounced customer search
     this.customerSearch$

@@ -28,6 +28,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
@@ -56,6 +57,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
     private final SalesOrderService salesOrderService;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final CompanyCalendar calendar;
 
     public OpportunityConversionServiceImpl(OpportunityRepository opportunities,
                                             OpportunityLineRepository lines,
@@ -65,7 +67,8 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
                                             QuotationService quotationService,
                                             SalesOrderService salesOrderService,
                                             ScopeGuard scopeGuard,
-                                            AuditService audit) {
+                                            AuditService audit,
+                                            CompanyCalendar calendar) {
         this.opportunities = opportunities;
         this.lines = lines;
         this.companies = companies;
@@ -75,6 +78,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
         this.salesOrderService = salesOrderService;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
+        this.calendar = calendar;
     }
 
     @Override
@@ -126,7 +130,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
         String docNumber = null;
 
         if (req.target() == ConvertTarget.QUOTATION) {
-            LocalDate quoteDate = LocalDate.now();
+            LocalDate quoteDate = calendar.today(opp.getCompanyId());
             LocalDate validUntil = req.validUntil() != null ? req.validUntil() : quoteDate.plusDays(30);
             CreateQuotationRequest qReq = new CreateQuotationRequest(
                     companyUid, customerUid, agentUid,
@@ -157,7 +161,7 @@ public class OpportunityConversionServiceImpl implements OpportunityConversionSe
             // SALES_ORDER (requires WON — already gated above)
             CreateSalesOrderRequest soReq = new CreateSalesOrderRequest(
                     companyUid, customerUid, agentUid,
-                    CurrencyCode.value(opp.getCurrency()), LocalDate.now(),
+                    CurrencyCode.value(opp.getCurrency()), calendar.today(opp.getCompanyId()),
                     null, null, null,
                     opp.getUid()  // sourceOpportunityUid (ADR-0031 D-7)
             );

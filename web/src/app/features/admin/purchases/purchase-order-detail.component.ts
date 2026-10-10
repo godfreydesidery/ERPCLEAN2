@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -27,6 +27,7 @@ import {
   PurchasesService,
 } from './purchases.service';
 import { PurchaseSettingsService } from './settings/purchase-settings.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -53,7 +54,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-purchase-order-detail',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [AppDatePipe, FormsModule, RouterLink, DecimalPipe],
   templateUrl: './purchase-order-detail.component.html',
   styleUrl: './purchase-order-detail.component.scss',
 })

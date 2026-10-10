@@ -51,7 +51,9 @@ class DropshipFulfilCogsHandlerTest {
         glInvoker    = mock(GLPostingSafeInvoker.class);
         glConfig     = mock(GLConfigResolver.class);
         objectMapper = new ObjectMapper();
-        handler      = new DropshipFulfilCogsHandler(guard, glInvoker, glConfig, objectMapper);
+        handler      = new DropshipFulfilCogsHandler(guard, glInvoker, glConfig, objectMapper,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     @Test

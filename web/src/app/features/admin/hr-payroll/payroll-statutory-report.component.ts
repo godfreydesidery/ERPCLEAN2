@@ -11,6 +11,7 @@ import {
   PayrollStatutoryPeriodReportDto,
   StatutoryExportFormat,
 } from './models/payroll-statutory.model';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden' | 'invalid';
 
@@ -115,7 +116,7 @@ export class PayrollStatutoryReportComponent {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfYear(): string {

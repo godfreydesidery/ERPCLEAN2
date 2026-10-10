@@ -106,7 +106,8 @@ class PosSessionAuthorisedReadTest {
                 mock(GLPostingService.class), mock(CompanyRepository.class),
                 mock(BranchRepository.class), mock(UserLookupService.class), scopeGuard, audit,
                 mock(SalesDepthNumberGenerator.class), mock(TillExpenseGlSeeder.class),
-                permissionResolver, stepUpAuth);
+                permissionResolver, stepUpAuth, com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         // The cashier at the till: a real, ordinary, NON-root operator.
         RequestContext.set(new RequestContext.Principal(

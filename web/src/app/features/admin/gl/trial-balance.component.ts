@@ -15,6 +15,7 @@ import { GlService } from './gl.service';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { formatMoney } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -190,7 +191,7 @@ export class TrialBalanceComponent {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   rowsForType(type: AccountType): TrialBalanceRowDto[] {

@@ -86,7 +86,7 @@ class PriceResolutionServiceImplTest {
         priceLists = mock(PriceListRepository.class);
 
         service = new PriceResolutionServiceImpl(
-                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products, priceLists);
+                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products, priceLists, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         baseUnit = unitWithId(1L, "BASEUID0000000000000040", "PCS");
         boxUnit = unitWithId(2L, "BOXUID00000000000000040", "BOX");

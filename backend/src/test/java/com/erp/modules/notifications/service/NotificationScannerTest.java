@@ -50,7 +50,7 @@ class NotificationScannerTest {
         stockOnHand = mock(StockOnHandRepository.class);
         markers     = mock(NotificationScanMarkerRepository.class);
         raiser      = mock(NotificationRaiser.class);
-        scanner     = new NotificationScanner(companies, arInvoices, stockOnHand, markers, raiser);
+        scanner     = new NotificationScanner(companies, arInvoices, stockOnHand, markers, raiser, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     // -------------------------------------------------------------------------

@@ -15,11 +15,10 @@ import com.erp.platform.bulk.ImportParsers;
 import com.erp.platform.bulk.ImportRow;
 import com.erp.platform.bulk.RowOutcome;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -84,11 +83,6 @@ public class StockImportHandler implements BulkImportHandler {
     /** Higher-privilege capability: establishing a cost posts to the GL (ADR-0020 D-5b). */
     private static final String PERM_OPENING_SET = "INVENTORY.OPENING.SET";
 
-    /**
-     * Posting date is the operator's business day, not the server's. On a UTC host an evening
-     * upload in Dar would otherwise post to the following day and land in the wrong period.
-     */
-    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Dar_es_Salaam");
 
     private final StockService stockService;
     private final ProductService productService;
@@ -96,19 +90,22 @@ public class StockImportHandler implements BulkImportHandler {
     private final InventoryValuationService valuation;
     private final PermissionResolver permissionResolver;
     private final AdjustTargetResolver adjustTargets;
+    private final CompanyCalendar calendar;
 
     public StockImportHandler(StockService stockService,
                               ProductService productService,
                               StockOnHandRepository onHands,
                               InventoryValuationService valuation,
                               PermissionResolver permissionResolver,
-                              AdjustTargetResolver adjustTargets) {
+                              AdjustTargetResolver adjustTargets,
+                              CompanyCalendar calendar) {
         this.stockService = stockService;
         this.productService = productService;
         this.onHands = onHands;
         this.valuation = valuation;
         this.permissionResolver = permissionResolver;
         this.adjustTargets = adjustTargets;
+        this.calendar      = calendar;
     }
 
     @Override
@@ -272,7 +269,9 @@ public class StockImportHandler implements BulkImportHandler {
             return new CostOutcome(false, "cost unchanged (already valued)");
         }
         valuation.setOpeningValue(
-                new SetOpeningValuationRequest(soh.getUid(), unitCost), LocalDate.now(BUSINESS_ZONE));
+                new SetOpeningValuationRequest(soh.getUid(), unitCost),
+                // The operator's business day in the company's zone, not the server's.
+                calendar.today(companyId));
         return new CostOutcome(true, "cost " + fmt(unitCost) + " set");
     }
 

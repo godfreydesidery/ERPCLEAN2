@@ -5,6 +5,7 @@ import com.erp.modules.documents.service.DocumentBrandingService;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.reporting.export.ExportResult;
 import com.erp.modules.reporting.service.ReportCompanyHeaderQuery;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -35,15 +36,26 @@ public class ExportLetterhead {
 
     private final ReportCompanyHeaderQuery companyHeaders;
     private final DocumentBrandingService  branding;
+    private final CompanyCalendar calendar;
 
-    public ExportLetterhead(ReportCompanyHeaderQuery companyHeaders, DocumentBrandingService branding) {
+    public ExportLetterhead(ReportCompanyHeaderQuery companyHeaders, DocumentBrandingService branding, CompanyCalendar calendar) {
         this.companyHeaders = companyHeaders;
         this.branding       = branding;
+        this.calendar       = calendar;
     }
 
     /** The company block and logo for an export whose read has already passed its tenant check. */
     public Letterhead forCompany(Long companyId) {
         return new Letterhead(companyHeaders.forCompany(companyId), logoOf(companyId));
+    }
+
+    /**
+     * The current moment in the company's zone — what every "Printed On / At" and "Generated"
+     * line prints (owner ruling 2026-10-10: display in the company's time zone, never the
+     * server's).
+     */
+    public ZonedDateTime now(Long companyId) {
+        return calendar.now(companyId);
     }
 
     /**

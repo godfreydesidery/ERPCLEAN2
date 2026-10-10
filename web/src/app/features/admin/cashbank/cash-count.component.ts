@@ -16,6 +16,7 @@ import {
 import { CashbankService } from './cashbank.service';
 import { formatMoney } from '../../../shared/money.util';
 import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Hardcoded TZS denomination ladder (ADR-0050 D-7.7 — a configurable per-currency
@@ -151,7 +152,7 @@ export class CashCountComponent {
     if (uid) {
       this.loadExisting(uid);
     } else {
-      this.businessDate.set(new Date().toISOString().slice(0, 10));
+      this.businessDate.set(todayLocal());
       this.loadCompaniesForOpen();
     }
   }

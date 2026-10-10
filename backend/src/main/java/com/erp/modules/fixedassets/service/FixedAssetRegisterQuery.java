@@ -5,6 +5,7 @@ import com.erp.modules.fixedassets.domain.dto.FixedAssetRegisterRowDto;
 import com.erp.modules.fixedassets.domain.dto.FixedAssetRegisterTotalDto;
 import com.erp.modules.fixedassets.domain.enums.FixedAssetStatus;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
@@ -51,11 +52,13 @@ public class FixedAssetRegisterQuery {
     private final JdbcTemplate    jdbc;
     private final ScopeGuard      scopeGuard;
     private final BranchReadGuard branchGuard;
+    private final CompanyCalendar calendar;
 
-    public FixedAssetRegisterQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard, BranchReadGuard branchGuard) {
+    public FixedAssetRegisterQuery(JdbcTemplate jdbc, ScopeGuard scopeGuard, BranchReadGuard branchGuard, CompanyCalendar calendar) {
         this.jdbc        = jdbc;
         this.scopeGuard  = scopeGuard;
         this.branchGuard = branchGuard;
+        this.calendar    = calendar;
     }
 
     public FixedAssetRegisterDto register(Long companyId, LocalDate asOf, String categoryUid,
@@ -63,7 +66,7 @@ public class FixedAssetRegisterQuery {
                                           String location, String costCentreUid) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
-        LocalDate date = asOf != null ? asOf : LocalDate.now();
+        LocalDate date = asOf != null ? asOf : calendar.today(companyId);
 
         NamedRef category   = resolve("asset_categories", "name", categoryUid, companyId,
                 "That asset category could not be found.");

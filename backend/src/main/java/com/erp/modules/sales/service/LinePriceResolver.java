@@ -65,13 +65,14 @@ final class LinePriceResolver {
      *                  document has none (or it could not be loaded) — the walk-in question
      * @param currency  the document's currency code
      * @param quantity  the line quantity in {@code unitId}
+     * @param businessDate today in the company's zone — the date price-list validity is judged on
      */
     static SellingPriceQuery query(Long companyId, Long productId, Long unitId, Customer customer,
-                                   String currency, BigDecimal quantity) {
+                                   String currency, BigDecimal quantity, LocalDate businessDate) {
         return new SellingPriceQuery(companyId, productId, unitId,
                 customer == null ? null : customer.getId(),
                 customer == null ? null : customer.getDefaultPriceListId(),
-                currency, quantity, LocalDate.now());
+                currency, quantity, businessDate);
     }
 
     /**

@@ -25,6 +25,8 @@ import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.TaxRate;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -36,6 +38,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -86,6 +89,9 @@ class SalesInvoiceServiceImplTest {
     // as the discount guard: @InjectMocks would pass null and every read would NPE.
     @Mock com.erp.modules.iam.service.UserLookupService userLookup;
 
+    // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
+    @Spy CompanyCalendar calendar =
+            CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
     @InjectMocks SalesInvoiceServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;

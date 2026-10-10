@@ -15,6 +15,7 @@ import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -24,7 +25,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +61,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
     private final CompanyRepository companies;
     private final AuditService audit;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public ArSalePostedHandler(IdempotencyGuard guard,
                                 SalesInvoiceService salesInvoiceService,
@@ -69,7 +70,8 @@ public class ArSalePostedHandler implements DomainEventHandler {
                                 PaymentTermsRepository paymentTermsRepo,
                                 CompanyRepository companies,
                                 AuditService audit,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                CompanyCalendar calendar) {
         this.guard               = guard;
         this.salesInvoiceService = salesInvoiceService;
         this.arInvoices          = arInvoices;
@@ -78,6 +80,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
         this.companies           = companies;
         this.audit               = audit;
         this.objectMapper        = objectMapper;
+        this.calendar            = calendar;
     }
 
     @Override
@@ -150,9 +153,7 @@ public class ArSalePostedHandler implements DomainEventHandler {
 
         // 3c. Resolve due date — priority: PaymentTerms master > paymentTermsDays integer > net-on-receipt
         //     (D-2, ADR-0040: linked term wins; deprecated integer is fallback; net-on-receipt if neither set)
-        LocalDate invoiceDate = totals.finalisedAt() != null
-                ? totals.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        LocalDate invoiceDate = calendar.dateOf(companyId, totals.finalisedAt());
 
         Customer customer = totals.customerId() != null
                 ? customers.findById(totals.customerId()).orElse(null)

@@ -198,7 +198,7 @@
                         client-side id→name map stays as the fallback for a row that predates it.
                       -->
                       <td>{{ s.cashierName ?? cashierLabel(s.cashierId) }}</td>
-                      <td class="text-muted">{{ s.openedAt ?? '—' }}</td>
+                      <td class="text-muted">{{ (s.openedAt | appDate:'datetime') || '—' }}</td>
                       <td class="num">{{ +s.openingFloatAmount | number:'1.2-2' }}</td>
                       <td class="num">
                         @if (s.expectedCashAmount) {

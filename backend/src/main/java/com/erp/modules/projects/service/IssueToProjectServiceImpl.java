@@ -19,6 +19,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.Ulid;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -60,6 +61,7 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
     private final IssueNumberGenerator      numberGen;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    private final CompanyCalendar calendar;
 
     public IssueToProjectServiceImpl(ProjectTagResolver tagResolver,
                                      CompanyRepository companies,
@@ -70,7 +72,8 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
                                      InventoryGlPoster glPoster,
                                      IssueNumberGenerator numberGen,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
+                                     AuditService audit,
+                                     CompanyCalendar calendar) {
         this.tagResolver  = tagResolver;
         this.companies    = companies;
         this.branches     = branches;
@@ -81,6 +84,7 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
         this.numberGen    = numberGen;
         this.scopeGuard   = scopeGuard;
         this.audit        = audit;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -101,7 +105,8 @@ public class IssueToProjectServiceImpl implements IssueToProjectService {
         String issueNumber = numberGen.next(company.getId());
         String issueUid    = Ulid.next();
 
-        LocalDate issueDate = req.issueDate() != null ? req.issueDate() : LocalDate.now();
+        LocalDate issueDate = req.issueDate() != null ? req.issueDate()
+                : calendar.today(company.getId());
 
         List<IssueLineResultDto> resultLines = new ArrayList<>();
         List<ProjectCogsLeg>     cogsLegs    = new ArrayList<>();

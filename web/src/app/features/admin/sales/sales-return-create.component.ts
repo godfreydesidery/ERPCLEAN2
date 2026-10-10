@@ -17,6 +17,7 @@ import { SalesOrdersService } from './sales-orders.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /** Per-line entry state for the return form. */
 interface ReturnLineEntry {
@@ -76,7 +77,7 @@ export class SalesReturnCreateComponent implements OnInit {
   readonly deliveryError = signal<string | null>(null);
 
   // ── Return form ────────────────────────────────────────────────────────────
-  readonly returnDate = signal(new Date().toISOString().slice(0, 10));
+  readonly returnDate = signal(todayLocal());
   readonly reason = signal('');
   readonly lineEntries = signal<ReturnLineEntry[]>([]);
   readonly formError = signal<string | null>(null);

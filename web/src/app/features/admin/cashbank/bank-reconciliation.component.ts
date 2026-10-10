@@ -14,6 +14,7 @@ import {
   OpenReconciliationRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Bank Reconciliation screen. Gated CASH.RECONCILE.
@@ -128,7 +129,7 @@ export class BankReconciliationComponent {
   );
 
   constructor() {
-    this.statementDate.set(new Date().toISOString().slice(0, 10));
+    this.statementDate.set(todayLocal());
     this.loadCompanies();
   }
 
@@ -199,7 +200,7 @@ export class BankReconciliationComponent {
   openNewRecon(): void {
     this.showOpenForm.set(true);
     this.openError.set(null);
-    this.statementDate.set(new Date().toISOString().slice(0, 10));
+    this.statementDate.set(todayLocal());
     this.statementClosingBalanceInput.set('');
     this.statementOpeningBalanceInput.set('');
   }

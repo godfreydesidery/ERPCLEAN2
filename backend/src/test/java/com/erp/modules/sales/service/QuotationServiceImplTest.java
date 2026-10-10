@@ -34,6 +34,8 @@ import com.erp.modules.sales.repository.QuotationLineRepository;
 import com.erp.modules.sales.repository.QuotationRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -45,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -73,6 +76,9 @@ class QuotationServiceImplTest {
     @Mock ScopeGuard scopeGuard;
     @Mock AuditService audit;
 
+    // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
+    @Spy CompanyCalendar calendar =
+            CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
     @InjectMocks QuotationServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;

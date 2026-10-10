@@ -24,6 +24,7 @@ import {
 import { ApService } from './ap.service';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * UI-only line row for the bill line editor.
@@ -152,7 +153,7 @@ export class EnterBillComponent {
   private readonly supplierSearch$ = new Subject<string>();
 
   constructor() {
-    this.billDate.set(new Date().toISOString().slice(0, 10));
+    this.billDate.set(todayLocal());
     // AP-09: the due date starts EMPTY. Left empty, the server derives it from the supplier's
     // payment terms (bill date + terms); defaulting it to today made every bill overdue tomorrow.
     this.dueDate.set('');

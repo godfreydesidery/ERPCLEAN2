@@ -10,6 +10,7 @@ import { BranchService } from '../branch/branch.service';
 import { CrmService } from './crm.service';
 import { CrmKpiDto, ForecastDto, PipelineSummaryDto } from './models/crm.model';
 import { SessionStore } from '../../../core/auth/session.store';
+import { firstOfMonthLocal, localIsoDate } from '../../../shared/date.util';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
 
@@ -65,15 +66,13 @@ export class PipelineDashboardComponent {
   }
 
   private defaultFrom(): string {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
+    return firstOfMonthLocal();
   }
 
   private defaultTo(): string {
     const d = new Date();
     d.setMonth(d.getMonth() + 3);
-    return d.toISOString().slice(0, 10);
+    return localIsoDate(d);
   }
 
   private loadCompanies(): void {

@@ -30,11 +30,11 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +66,7 @@ public class QuotationServiceImpl implements QuotationService {
     private final SalesOrderTotalsCalculator totalsCalc;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    private final CompanyCalendar calendar;
 
     public QuotationServiceImpl(QuotationRepository quotations,
                                 QuotationLineRepository quotationLines,
@@ -81,7 +82,8 @@ public class QuotationServiceImpl implements QuotationService {
                                 OrderToCashNumberGenerator numberGen,
                                 SalesOrderTotalsCalculator totalsCalc,
                                 ScopeGuard scopeGuard,
-                                AuditService audit) {
+                                AuditService audit,
+                                CompanyCalendar calendar) {
         this.quotations      = quotations;
         this.quotationLines  = quotationLines;
         this.customers       = customers;
@@ -97,6 +99,7 @@ public class QuotationServiceImpl implements QuotationService {
         this.totalsCalc      = totalsCalc;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
+        this.calendar        = calendar;
     }
 
     @Override
@@ -177,7 +180,7 @@ public class QuotationServiceImpl implements QuotationService {
                         LinePriceResolver.pricingCustomer(customers, q.getCompanyId(),
                                 q.getCustomerId()),
                         q.getCurrency() == null ? null : q.getCurrency().value(),
-                        req.quantity()),
+                        req.quantity(), calendar.today(q.getCompanyId())),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
@@ -240,7 +243,7 @@ public class QuotationServiceImpl implements QuotationService {
                     + "to the customer.");
         }
         // Check validity date not in the past
-        if (q.getValidUntil().isBefore(LocalDate.now())) {
+        if (q.getValidUntil().isBefore(calendar.today(q.getCompanyId()))) {
             throw new IllegalStateException("Valid-until date is in the past; cannot send.");
         }
 
@@ -264,7 +267,7 @@ public class QuotationServiceImpl implements QuotationService {
             throw new IllegalStateException("Only SENT quotations can be accepted; current: " + q.getStatus());
         }
         // Expiry guard
-        if (q.getValidUntil().isBefore(LocalDate.now())) {
+        if (q.getValidUntil().isBefore(calendar.today(q.getCompanyId()))) {
             q.setStatus(QuotationStatus.EXPIRED);
             q.setExpiredAt(Instant.now());
             q.setUpdatedAt(Instant.now());

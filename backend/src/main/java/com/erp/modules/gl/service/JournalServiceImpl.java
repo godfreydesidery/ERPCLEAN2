@@ -18,6 +18,7 @@ import com.erp.modules.iam.repository.BranchRepository;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -42,6 +43,7 @@ public class JournalServiceImpl implements JournalService {
     private final BranchRepository branches;
     private final ScopeGuard scopeGuard;
     private final BranchReadGuard branchGuard;
+    private final CompanyCalendar calendar;
 
     public JournalServiceImpl(GLPostingService postingService,
                                JournalEntryRepository entries,
@@ -51,7 +53,8 @@ public class JournalServiceImpl implements JournalService {
                                CompanyRepository companies,
                                BranchRepository branches,
                                ScopeGuard scopeGuard,
-                               BranchReadGuard branchGuard) {
+                               BranchReadGuard branchGuard,
+                               CompanyCalendar calendar) {
         this.postingService = postingService;
         this.entries        = entries;
         this.lineRepo       = lineRepo;
@@ -61,6 +64,7 @@ public class JournalServiceImpl implements JournalService {
         this.branches       = branches;
         this.scopeGuard     = scopeGuard;
         this.branchGuard    = branchGuard;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -125,7 +129,8 @@ public class JournalServiceImpl implements JournalService {
                 .orElseThrow(() -> NotFoundException.of("JournalEntry", originalEntryUid));
         scopeGuard.assertCanActIn(RequestContext.get(), original.getCompanyId());
 
-        LocalDate date = reversalDate != null ? reversalDate : LocalDate.now();
+        LocalDate date = reversalDate != null ? reversalDate
+                : calendar.today(original.getCompanyId());
         return postingService.postReversal(
                 originalEntryUid, date, JournalSourceType.MANUAL, null, actorId(), reason);
     }

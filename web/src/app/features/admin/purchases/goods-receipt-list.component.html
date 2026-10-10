@@ -137,7 +137,7 @@
                         <span class="text-muted">—</span>
                       }
                     </td>
-                    <td class="small text-muted">{{ gr.receivedAt | date:'dd/MM/yyyy HH:mm' }}</td>
+                    <td class="small text-muted">{{ gr.receivedAt | appDate:'datetime' }}</td>
                     <td class="num">
                       @if (gr.receiptTotalAmount === null) {
                         <span class="text-muted">—</span>

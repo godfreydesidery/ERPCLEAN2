@@ -42,7 +42,8 @@ class StockValuationControllerAsOfTest {
         InventoryValuationService valuationService = mock(InventoryValuationService.class);
         Clock fixed = Clock.fixed(TODAY.atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
         controller = new StockValuationController(valuationQuery, valuationService,
-                mock(TabularExporter.class), fixed);
+                mock(TabularExporter.class), com.erp.platform.common.time.CompanyCalendar.fixed(
+                        com.erp.platform.common.time.BusinessZone.DEFAULT, fixed));
 
         when(valuationQuery.report(anyLong())).thenReturn(mock(StockValuationReportDto.class));
         RequestContext.set(new RequestContext.Principal(1L, "tester", true, 5L, 9L, null));
@@ -119,7 +120,8 @@ class StockValuationControllerAsOfTest {
                 Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC);
         StockValuationController pastController = new StockValuationController(
                 valuationQuery, mock(InventoryValuationService.class),
-                mock(TabularExporter.class), stuckInThePast);
+                mock(TabularExporter.class), com.erp.platform.common.time.CompanyCalendar.fixed(
+                        com.erp.platform.common.time.BusinessZone.DEFAULT, stuckInThePast));
 
         // 2020-01-02 is the future for THIS clock even though it is long past in real time.
         assertThatThrownBy(() -> pastController.report(LocalDate.of(2020, 1, 2)))

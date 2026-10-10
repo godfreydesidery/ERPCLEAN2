@@ -123,10 +123,10 @@ class UnitPriceLookupServiceImplTest {
                 productPrices,
                 bulkPacks,
                 products,
-                mock(PriceListRepository.class)));
+                mock(PriceListRepository.class), com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC())));
 
         customers = mock(CustomerRepository.class);
-        service = new UnitPriceLookupServiceImpl(products, units, priceResolution, customers);
+        service = new UnitPriceLookupServiceImpl(products, units, priceResolution, customers, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         pcs = unitWithId(1L, "PCSUID00000000000000040", "PCS");
         box = unitWithId(2L, BOX_UID, "BOX");

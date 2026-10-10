@@ -29,6 +29,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -80,6 +81,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final JdbcTemplate                 jdbc;
     /** PUR-14: whether the receipt was already billed (AP answers through a purchases-owned port). */
     private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
+    /** Business dates in the company's zone (owner ruling 2026-10-10). */
+    private final CompanyCalendar              calendar;
 
     public PurchaseReturnServiceImpl(PurchaseReturnRepository returns,
                                      PurchaseReturnLineRepository returnLines,
@@ -97,7 +100,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                                      FxDocumentConverter fxConverter,
                                      JdbcTemplate jdbc,
                                      com.erp.modules.purchases.domain.dto.ReceiptBillingReader
-                                             billingReader) {
+                                             billingReader,
+                                     CompanyCalendar calendar) {
         this.returns           = returns;
         this.returnLines       = returnLines;
         this.grRepo            = grRepo;
@@ -114,6 +118,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         this.fxConverter       = fxConverter;
         this.jdbc              = jdbc;
         this.billingReader     = billingReader;
+        this.calendar          = calendar;
     }
 
     @Override
@@ -391,7 +396,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     companyUid,
                     supplierUid,
                     null,                                // no specific bill — general supplier credit
-                    LocalDate.now(),
+                    calendar.today(ret.getCompanyId()),
                     totalReturnValue,
                     vatTotal,
                     "Purchase return " + ret.getReturnNumber() + " [" + ret.getUid() + "]: " + ret.getReason(),

@@ -129,7 +129,7 @@ class WorkOrderBomVersionFidelityTest {
 
     private final WorkOrderCostingServiceImpl costing = new WorkOrderCostingServiceImpl(
             workOrders, components, operations, explosion, stockPosting, valuation,
-            locations, glPoster, scopeGuard, audit, outbox, branchesRepo);
+            locations, glPoster, scopeGuard, audit, outbox, branchesRepo, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
     private WorkOrder workOrder;
 

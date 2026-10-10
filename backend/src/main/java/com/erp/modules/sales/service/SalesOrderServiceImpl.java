@@ -49,12 +49,12 @@ import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.Money;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -103,6 +103,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
     private final ApprovalEngine           approvalEngine;
     /** D-4: automatic amount-threshold approval gate (extends the PR #189 engine-derived flow). */
     private final SalesApprovalGate        salesApprovalGate;
+    private final CompanyCalendar calendar;
 
     public SalesOrderServiceImpl(SalesOrderRepository orders,
                                  SalesOrderLineRepository orderLines,
@@ -128,7 +129,8 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                                  PermissionResolver permissionResolver,
                                  ApprovalEngine approvalEngine,
                                  SalesApprovalGate salesApprovalGate,
-                                 CreditExposureCalculator creditExposure) {
+                                 CreditExposureCalculator creditExposure,
+                                 CompanyCalendar calendar) {
         this.orders           = orders;
         this.orderLines       = orderLines;
         this.quotations       = quotations;
@@ -154,6 +156,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         this.approvalEngine   = approvalEngine;
         this.salesApprovalGate = salesApprovalGate;
         this.creditExposure   = creditExposure;
+        this.calendar         = calendar;
     }
 
     @Override
@@ -236,7 +239,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                         LinePriceResolver.pricingCustomer(customers, order.getCompanyId(),
                                 order.getCustomerId()),
                         order.getCurrency() == null ? null : order.getCurrency().value(),
-                        req.quantity()),
+                        req.quantity(), calendar.today(order.getCompanyId())),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
@@ -519,7 +522,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         SalesOrder order = new SalesOrder(
                 quote.getCompanyId(), quote.getBranchId(),
                 quote.getCustomerId(), quote.getAgentId(),
-                quote.getCurrency().value(), LocalDate.now(), actorId());
+                quote.getCurrency().value(), calendar.today(quote.getCompanyId()), actorId());
         order.setSourceQuotationUid(quote.getUid());
         order.setDocDiscountAmount(quote.getDocDiscountAmount());
         order.setDocDiscountPercent(quote.getDocDiscountPercent());
@@ -876,7 +879,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                 && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
             exposure = creditExposure.assess(order.getCompanyId(), order.getCustomerId(),
                     order.getGrossTotalAmount(), CurrencyCode.value(order.getCurrency()),
-                    creditLimit, LocalDate.now());
+                    creditLimit, calendar.today(order.getCompanyId()));
             projectedBalance = exposure.exposure();
             limitBreached = exposure.breached();
         }
