@@ -134,7 +134,7 @@ void main() {
     final x = await sessions.xRead(session.uid);
     expect(x.invoiceCount, greaterThanOrEqualTo(1));
     final closed = await sessions.close(
-        session.uid, (x.expectedCashAmount));
+        session.uid, (x.expectedCashAmount!));
     expect(closed.status, PosSessionStatus.closed);
     final z = await sessions.reconcile(session.uid);
     expect(z.sessionUid, session.uid);

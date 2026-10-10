@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -48,6 +49,7 @@ import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PosTillRepository;
 import com.erp.modules.sales.repository.SalesInvoicePaymentRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
@@ -237,6 +239,7 @@ class PosSessionServiceImplTest {
                         new TenderSubtotalDto(TenderType.CASH, new BigDecimal("500.00")),
                         new TenderSubtotalDto(TenderType.MOBILE_MONEY, new BigDecimal("300.00"))));
 
+        callerMaySettleTill();
         var xRead = service.xRead("S9");
 
         assertThat(xRead.totalSalesAmount())
@@ -508,6 +511,7 @@ class PosSessionServiceImplTest {
         when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
         when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
 
+        callerMaySettleTill();
         var xRead = service.xRead("SX1");
 
         assertThat(xRead.totalSalesAmount()).isEqualByComparingTo(new BigDecimal("800.00"));
@@ -688,6 +692,9 @@ class PosSessionServiceImplTest {
      */
     @Test
     void recordPayout_refund_raisesNoJournal_soCashIsNotCreditedTwice() {
+        // A supervisor may still pay a refund out on their own authority (POS-02).
+        when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.VOID"), anyLong()))
+                .thenReturn(true);
         PosSession session = openSession(1L, new BigDecimal("1000.00"));
         when(sessions.findByUid("K8-3")).thenReturn(Optional.of(session));
         when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -1826,5 +1833,132 @@ class PosSessionServiceImplTest {
         ChartOfAccount coa = mock(ChartOfAccount.class);
         when(coa.getId()).thenReturn(id);
         return coa;
+    }
+
+    // -------------------------------------------------------------------------
+    // Wave-2 POS drawer controls: POS-02 (refund payout), POS-04 (blind X-read),
+    // POS-05 (paid-out / expense approval)
+    // -------------------------------------------------------------------------
+
+    private static final String MANAGER_UID = "01J0MANAGER0000000000000AA";
+
+    private void callerMaySettleTill() {
+        when(permissionResolver.hasPermission(any(), eq("POS.SESSION.RECONCILE"), anyLong()))
+                .thenReturn(true);
+    }
+
+    private void managerApprovesFor(String permission) {
+        when(stepUpAuth.verifyAuthoriserUid(eq(MANAGER_UID), eq(permission), any()))
+                .thenReturn(com.erp.modules.iam.domain.dto.AuthorityVerificationDto.granted(
+                        permission, MANAGER_UID, "juma.manager", "Juma Mwita"));
+    }
+
+    private void approvalRefused() {
+        when(stepUpAuth.verifyAuthoriserUid(anyString(), anyString(), any()))
+                .thenReturn(com.erp.modules.iam.domain.dto.AuthorityVerificationDto.denied(
+                        "X", "That approval could not be verified."));
+    }
+
+    private java.util.Map<String, Object> payoutAuditDetail() {
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.erp.platform.audit.AuditEvent.class);
+        verify(audit, org.mockito.Mockito.atLeastOnce()).record(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(e -> AuditActions.POS_SESSION_PAYOUT.equals(e.action()))
+                .reduce((a, b) -> b).orElseThrow().detail();
+    }
+
+    @Test
+    void w2_refundPayout_withoutApproval_isRefusedWithAPlainSentence() {
+        when(sessions.findByUid("W2-1")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        var req = new PosPayoutRequest(PosPayoutType.REFUND, new BigDecimal("3000.00"),
+                "Customer returned a faulty kettle");
+
+        assertThatThrownBy(() -> service.recordPayout("W2-1", req))
+                .as("409 with text: an OrbixPOS 1.5.x till shows server text only for non-403s")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("reverse the sale");
+        verify(payouts, never()).save(any());
+        verify(audit).recordIndependent(any());
+    }
+
+    @Test
+    void w2_refundPayout_withManagerApproval_isRecordedAndNamesTheManager() {
+        when(sessions.findByUid("W2-2")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        managerApprovesFor("SALES.INVOICE.VOID");
+
+        service.recordPayout("W2-2", new PosPayoutRequest(PosPayoutType.REFUND,
+                new BigDecimal("3000.00"), "Faulty kettle", MANAGER_UID));
+
+        assertThat(payoutAuditDetail())
+                .containsEntry("authorisation", "APPROVED")
+                .containsEntry("authorisedBy", "juma.manager")
+                .containsEntry("authorisedByUid", MANAGER_UID);
+    }
+
+    @Test
+    void w2_refundPayout_withAnApprovalThatDoesNotCheckOut_isForbidden() {
+        when(sessions.findByUid("W2-3")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        approvalRefused();
+
+        assertThatThrownBy(() -> service.recordPayout("W2-3", new PosPayoutRequest(
+                PosPayoutType.REFUND, new BigDecimal("3000.00"), "Faulty kettle", MANAGER_UID)))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class);
+        verify(payouts, never()).save(any());
+    }
+
+    @Test
+    void w2_paidOut_fromAnOldTillWithoutApproval_isAcceptedButAuditedAsUnapproved() {
+        when(sessions.findByUid("W2-4")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubPayoutGlAccounts();
+
+        service.recordPayout("W2-4", new PosPayoutRequest(PosPayoutType.PAID_OUT,
+                new BigDecimal("500.00"), "Casual labour"));
+
+        assertThat(payoutAuditDetail()).containsEntry("authorisation", "NONE");
+    }
+
+    @Test
+    void w2_paidOut_withManagerApproval_isAuditedAsApproved() {
+        when(sessions.findByUid("W2-5")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubPayoutGlAccounts();
+        managerApprovesFor("POS.SESSION.RECONCILE");
+
+        service.recordPayout("W2-5", new PosPayoutRequest(PosPayoutType.PAID_OUT,
+                new BigDecimal("500.00"), "Casual labour", MANAGER_UID));
+
+        assertThat(payoutAuditDetail())
+                .containsEntry("authorisation", "APPROVED")
+                .containsEntry("authorisedBy", "juma.manager");
+    }
+
+    @Test
+    void w2_expense_withAnApprovalThatDoesNotCheckOut_isForbidden() {
+        when(sessions.findByUid("W2-6")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        approvalRefused();
+
+        assertThatThrownBy(() -> service.recordExpense("W2-6", new PosExpenseRequest(
+                new BigDecimal("500.00"), "Transport", "Bodaboda to the bank", MANAGER_UID)))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class);
+        verify(payouts, never()).save(any());
+    }
+
+    @Test
+    void w2_xRead_forACashierWhoCannotSettleTheTill_withholdsExpectedCash() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("W2-7")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(any())).thenReturn(new BigDecimal("800.00"));
+        when(tenderPayments.sumCashTenderByPosSession(any())).thenReturn(new BigDecimal("500.00"));
+        when(tenderPayments.sumByPosSessionGroupedByTender(any())).thenReturn(List.of());
+        when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
+        when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
+
+        var xRead = service.xRead("W2-7");
+
+        assertThat(xRead.expectedCashAmount()).as("blind cash-up (POS-04)").isNull();
+        assertThat(xRead.totalSalesAmount()).isEqualByComparingTo(new BigDecimal("800.00"));
     }
 }

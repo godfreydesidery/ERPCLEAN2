@@ -21,5 +21,13 @@ import java.math.BigDecimal;
 public record PosExpenseRequest(
         @NotNull @DecimalMin("0.01") BigDecimal amount,
         @NotBlank @Size(min = 2, max = 40) String category,
-        @NotBlank @Size(min = 3, max = 255) String reason
-) {}
+        @NotBlank @Size(min = 3, max = 255) String reason,
+        // POS-05 (additive, optional): the uid a manager step-up returned - see PosPayoutRequest.
+        @Size(max = 26, message = "The approval reference is not valid.") String authorisedByUid
+) {
+
+    /** Pre-POS-05 shape - what OrbixPOS 1.5.x and earlier send. */
+    public PosExpenseRequest(BigDecimal amount, String category, String reason) {
+        this(amount, category, reason, null);
+    }
+}

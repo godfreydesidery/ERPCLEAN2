@@ -45,8 +45,10 @@ interface SaleLine {
   unitId: string;
   unitName: string;
   quantity: string;
-  /** System-resolved net unit price from the product's price list (server-authoritative). */
+  /** Server-resolved unit price for the sale's customer (NET, or GROSS when `vatInclusive`). */
   unitPrice: string;
+  /** True when `unitPrice` comes from a VAT-inclusive price list, i.e. it is already gross. */
+  vatInclusive?: boolean;
   lineDiscountAmount: string;
   /** VAT fraction (e.g. 0.18) resolved from the company tax rate for the product's VAT status. */
   vatRate?: string;
@@ -464,16 +466,29 @@ export class PosSaleComponent {
     }
   }
 
-  /** Pulls the product's price-list price and populates the (read-only) line price. */
-  private fetchLinePrice(lineId: string, productUid: string): void {
-    const companyId = this.selectedCompanyId();
-    this.productService.listPrices(productUid).subscribe({
-      next: (priceRows) => {
-        const row = priceRows.find((p) => p.companyId === companyId) ?? priceRows[0];
-        const amount = row?.price?.amount;
+  /**
+   * Asks the SERVER what this line will be charged — for the selected customer and currency
+   * (PRD-01: contract price, then the customer's default list, then the company default list), in
+   * the line's unit. The old first-price-row lookup previewed a walk-in price, so an account
+   * customer whose price is higher was refused at submit for an under-tender.
+   */
+  private fetchLinePrice(lineId: string, productUid: string, unitUid?: string): void {
+    const product = this.products().find((p) => p.uid === productUid);
+    const isBase = !unitUid || unitUid === product?.baseUnitUid;
+    this.lines.update((ls) => ls.map((l) => l.id === lineId ? { ...l, priceState: 'loading' } : l));
+    this.productService.resolvePrices({
+      productUids: [productUid],
+      unitUid: isBase ? null : unitUid,
+      customerUid: this.selectedCustomerUid() || null,
+      currency: this.currency() || null,
+    }).subscribe({
+      next: (rows) => {
+        const row = rows.find((r) => r.productUid === productUid);
+        const ok = row?.status === 'RESOLVED' && row.amount != null;
         this.lines.update((ls) =>
-          ls.map((l) => l.id === lineId
-            ? { ...l, unitPrice: amount ?? '0.00', priceState: amount != null ? 'ok' : 'missing' }
+          ls.map((l) => l.id === lineId && l.productUid === productUid
+            ? { ...l, unitPrice: ok ? String(row!.amount) : '0.00', vatInclusive: ok ? !!row!.vatInclusive : false,
+                priceState: ok ? 'ok' : 'missing' }
             : l),
         );
       },
@@ -485,6 +500,25 @@ export class PosSaleComponent {
     });
   }
 
+  /** Re-prices every line — the customer or currency changed, so every price may have. */
+  private repriceAllLines(): void {
+    for (const l of this.lines()) {
+      if (l.productUid) this.fetchLinePrice(l.id, l.productUid, l.unitUid || undefined);
+    }
+  }
+
+  onCustomerChange(uid: string): void {
+    const changed = uid !== this.selectedCustomerUid();
+    this.selectedCustomerUid.set(uid);
+    if (changed) this.repriceAllLines();
+  }
+
+  onCurrencyChange(code: string): void {
+    const changed = code !== this.currency();
+    this.currency.set(code);
+    if (changed) this.repriceAllLines();
+  }
+
   onLineUnitChange(lineId: string, unitUid: string): void {
     const unit = this.units().find((u) => u.uid === unitUid);
     this.lines.update((ls) =>
@@ -492,6 +526,9 @@ export class PosSaleComponent {
         l.id === lineId ? { ...l, unitUid, unitId: unit?.id ?? '', unitName: unit?.name ?? '' } : l,
       ),
     );
+    // A carton is priced as a carton (explicit pack price, else base × factor) — ask again.
+    const line = this.lines().find((l) => l.id === lineId);
+    if (line?.productUid && unitUid) this.fetchLinePrice(lineId, line.productUid, unitUid);
   }
 
   onLineFieldChange(lineId: string, field: 'quantity' | 'lineDiscountAmount', value: number | string | null): void {
@@ -573,14 +610,41 @@ export class PosSaleComponent {
     return raw >= 0 && raw < 1 ? raw : 0;
   }
 
-  /** Net amount for a line: qty × unit price − discount. */
-  private lineNet(l: SaleLine): number {
-    return (+l.quantity || 0) * (+l.unitPrice || 0) - (+l.lineDiscountAmount || 0);
+  /** Decimal places the server rounds this sale in (CurrencyMinorUnits): TZS & co 0, else 2. */
+  private minorUnits(): number {
+    const c = (this.currency() || '').toUpperCase();
+    return !c || ['TZS', 'UGX', 'RWF', 'BIF', 'JPY', 'KRW'].includes(c) ? 0 : 2;
   }
 
-  /** Gross (VAT-inclusive) amount for a line. */
+  /** HALF_UP to the sale currency's minor units, as InvoiceTotalsCalculator rounds each line. */
+  private roundMinor(v: number): number {
+    const f = 10 ** this.minorUnits();
+    const r = Math.floor(Math.abs(v) * f + 0.5 + 1e-9);
+    return (v < 0 ? -r : r) / f;
+  }
+
+  /**
+   * Line amount before VAT handling, mirroring InvoiceTotalsCalculator step 1:
+   * `round(qty × unitPrice − discount)`, floored at 0. NET for an exclusive list, GROSS for an
+   * inclusive one.
+   */
+  private lineRaw(l: SaleLine): number {
+    const raw = (+l.quantity || 0) * (+l.unitPrice || 0) - (+l.lineDiscountAmount || 0);
+    return this.roundMinor(Math.max(0, raw));
+  }
+
+  /** Net amount for a line (VAT stripped out of an inclusive price, as the server does). */
+  private lineNet(l: SaleLine): number {
+    const rate = +(l.vatRate ?? '0') || 0;
+    const raw = this.lineRaw(l);
+    return l.vatInclusive ? this.roundMinor(raw / (1 + rate)) : raw;
+  }
+
+  /** Gross (VAT-inclusive) amount for a line — net + round(net × VAT), or the inclusive raw. */
   lineGross(l: SaleLine): number {
-    return this.lineNet(l) * (1 + (+(l.vatRate ?? '0') || 0));
+    const rate = +(l.vatRate ?? '0') || 0;
+    const raw = this.lineRaw(l);
+    return l.vatInclusive ? raw : raw + this.roundMinor(raw * rate);
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────

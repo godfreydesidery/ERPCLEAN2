@@ -131,6 +131,17 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<CustomerDto> list(Long companyId, String q, CustomerKind kind, Pageable pageable) {
+        if (kind == null) {
+            return list(companyId, q, pageable);
+        }
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String query = (q == null || q.isBlank()) ? null : q.strip();
+        return customers.searchByKind(companyId, kind, query, pageable).map(CustomerDto::from);
+    }
+
+    @Override
     public CustomerDto updateByUid(String uid, UpdateCustomerRequest req) {
         Customer c = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), c.getCompanyId());

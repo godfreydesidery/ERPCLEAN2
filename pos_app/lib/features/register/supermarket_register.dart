@@ -5,13 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/barcode.dart';
 import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
+import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
+import '../../state/parked_sale_store.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/price_cache.dart';
 import '../../state/providers.dart';
@@ -75,7 +78,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// approximate the pricing rules and then disagree with the posted sale.
   void _refreshPrices(List<Product> results) {
     if (results.isEmpty) return;
-    _prices.refreshFor(results.map((p) => p.uid)).then((_) {
+    final cart = ref.read(cartProvider);
+    _prices
+        .refreshFor(results.map((p) => p.uid),
+            customerUid: cart.customer?.uid, currency: cart.currency)
+        .then((_) {
       if (mounted) setState(() {});
     });
   }
@@ -90,6 +97,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     // No catalogue preload — products and prices are fetched fresh per action so
     // the till never shows stale data (a backend price/catalogue change is live).
     _searchFocus.requestFocus();
+    _refreshParked();
   }
 
   @override
@@ -136,15 +144,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// `base × factor` otherwise — the same order the server resolves in, so the
   /// preview matches the authoritative total either way.
   void _priceLine(String lineId, Product p, SaleUnit unit) {
-    final app = ref.read(appControllerProvider);
-    final cart = ref.read(cartProvider.notifier);
-    _cache.previewPrice(p.uid, _currency, unit: unit).then((pp) {
-      if (pp != null && mounted) {
-        cart.setLinePrice(
-            lineId,
-            app.grossUnitPrice(pp.amount, p.vatStatus,
-                vatInclusive: pp.vatInclusive));
-      }
+    // Priced by the SERVER for the basket's customer and currency (PRD-01),
+    // so an account customer's own price shows before payment, not after.
+    ref.read(basketPricerProvider).price(lineIds: [lineId]).then((_) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -232,6 +235,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         hits = await ref
             .read(catalogServiceProvider)
             .searchProducts(_companyId, q: value, size: 40);
+      } on ApiException {
+        rethrow; // unreachable / refused — reported below, never as "No match"
       } catch (_) {
         hits = const [];
       }
@@ -257,7 +262,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _refreshPrices(hits);
       }
     } on ApiException catch (e) {
-      if (mounted) showToast(context, e.message);
+      // POS-17: a dropped connection is not "this product does not exist".
+      if (mounted) {
+        showToast(context,
+            e.isUnreachable ? ApiException.unreachableMessage : e.message);
+      }
     } finally {
       if (mounted) setState(() => _busyScan = false);
     }
@@ -287,6 +296,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _setResults(hits, q);
         _refreshStock(q);
         _refreshPrices(hits);
+      }
+    } on ApiException catch (e) {
+      if (mounted && _isCurrentQuery(q)) {
+        _setResults(const [], q);
+        // POS-17: say why the dropdown is empty when it is the link, not the
+        // catalogue.
+        if (e.isUnreachable) showToast(context, ApiException.unreachableMessage);
       }
     } catch (_) {
       if (mounted && _isCurrentQuery(q)) _setResults(const [], q);
@@ -400,6 +416,93 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _numCtrl.clear();
     // Scanner-first: hand focus back to the search box so the next scan lands
     // there, not in the numpad.
+    _searchFocus.requestFocus();
+  }
+
+  // ---------------------------------------------------------- hold / recall
+
+  /// How many baskets are on hold for this shift — shown on the Recall key.
+  int _parkedCount = 0;
+
+  Future<void> _refreshParked() async {
+    final uid = ref.read(appControllerProvider).shift?.uid;
+    if (uid == null) return;
+    final n = (await ref.read(parkedSaleStoreProvider).list(uid)).length;
+    if (mounted) setState(() => _parkedCount = n);
+  }
+
+  /// POS-06: put the basket on hold so the queue keeps moving while the
+  /// customer fetches money or another item. Kept on this till only.
+  Future<void> _hold() async {
+    final cart = ref.read(cartProvider);
+    final sessionUid = ref.read(appControllerProvider).shift?.uid;
+    if (cart.isEmpty || sessionUid == null) return;
+    final ok = await ref.read(parkedSaleStoreProvider).park(ParkedSale.fromCart(
+        cart,
+        id: ApiClient.newTxnId(),
+        sessionUid: sessionUid,
+        now: DateTime.now()));
+    if (!mounted) return;
+    if (!ok) {
+      showToast(context,
+          "Couldn't put this sale on hold on this till. Finish it or remove it.");
+      return;
+    }
+    ref.read(cartProvider.notifier).clearLines();
+    showToast(context, 'Sale on hold. Use Recall when the customer is back.',
+        ok: true);
+    await _refreshParked();
+    _searchFocus.requestFocus();
+  }
+
+  /// POS-06: bring a held basket back. Lines are re-priced by the server for
+  /// the basket's customer — prices may have changed while it waited.
+  Future<void> _recall() async {
+    final app = ref.read(appControllerProvider);
+    final sessionUid = app.shift?.uid;
+    if (sessionUid == null) return;
+    if (!ref.read(cartProvider).isEmpty) {
+      showToast(context, 'Hold or finish the current sale first.');
+      return;
+    }
+    final store = ref.read(parkedSaleStoreProvider);
+    final parked = await store.list(sessionUid);
+    if (!mounted) return;
+    if (parked.isEmpty) {
+      showToast(context, 'No sales on hold.');
+      return;
+    }
+    final pick = await showDialog<ParkedSale>(
+      context: context,
+      builder: (_) => _RecallDialog(parked: parked),
+    );
+    if (pick == null || !mounted) return;
+
+    final cart = ref.read(cartProvider.notifier);
+    if (pick.customer != null) cart.setCustomer(pick.customer!);
+    if (pick.notes != null) cart.setNotes(pick.notes);
+    var skipped = 0;
+    for (final l in pick.lines) {
+      final unit = app.unitsByUid[l.unitUid];
+      if (unit == null) {
+        skipped++;
+        continue;
+      }
+      cart.addProduct(l.product, unit,
+          unitFactor: l.unitFactor, quantity: l.quantity);
+      final id = ref.read(cartProvider).selectedId;
+      if (id != null && l.lineDiscountAmount > 0) {
+        cart.setDiscount(id, l.lineDiscountAmount);
+      }
+    }
+    await store.remove(pick.id);
+    await ref.read(basketPricerProvider).price();
+    if (!mounted) return;
+    await _refreshParked();
+    if (skipped > 0 && mounted) {
+      showToast(context,
+          '$skipped item(s) could not be restored — their unit is no longer set up. Scan them again.');
+    }
     _searchFocus.requestFocus();
   }
 
@@ -1048,6 +1151,28 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           const SizedBox(height: 8),
           Expanded(child: _keys()),
           const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: cart.isEmpty ? null : _hold,
+                  icon: const Icon(Icons.pause_circle_outline, size: 18),
+                  label: const Text('Hold'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _recall,
+                  icon: const Icon(Icons.restore, size: 18),
+                  label: Text(_parkedCount > 0
+                      ? 'Recall ($_parkedCount)'
+                      : 'Recall'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: PayButton(
@@ -1331,6 +1456,51 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       fontSize: 22, fontWeight: FontWeight.w700)),
         ),
       ),
+    );
+  }
+}
+
+/// The list of baskets on hold for this shift (POS-06), oldest first.
+class _RecallDialog extends StatelessWidget {
+  const _RecallDialog({required this.parked});
+  final List<ParkedSale> parked;
+
+  @override
+  Widget build(BuildContext context) {
+    String hhmm(DateTime t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: const Text('Sales on hold'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 420),
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: parked.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, i) {
+            final p = parked[i];
+            final who = p.customer == null || p.customer!.isWalkIn
+                ? 'Walk-in'
+                : p.customer!.displayName;
+            return ListTile(
+              leading: const Icon(Icons.shopping_basket_outlined,
+                  color: AppColors.brand),
+              title: Text(p.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('$who · held at ${hhmm(p.parkedAt.toLocal())}',
+                  style: const TextStyle(fontSize: 12)),
+              trailing: Text(formatMoneyParts(p.previewTotal, p.currency),
+                  style: numStyle(weight: FontWeight.w700)),
+              onTap: () => Navigator.pop(context, p),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+      ],
     );
   }
 }

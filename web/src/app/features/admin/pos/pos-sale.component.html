@@ -137,7 +137,7 @@
                            (input)="onCustomerSearch($any($event.target).value)" />
                     <app-uid-picker id="saleCustomer"
                                     [ngModel]="selectedCustomerUid()"
-                                    (ngModelChange)="selectedCustomerUid.set($event)"
+                                    (ngModelChange)="onCustomerChange($event)"
                                     [options]="customerOptions()"
                                     placeholder="Select customer"
                                     [required]="true"
@@ -174,7 +174,8 @@
                       Currency <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <app-currency-select id="saleCurrency" name="saleCurrency"
-                                         [(ngModel)]="currency"
+                                         [ngModel]="currency()"
+                                         (ngModelChange)="onCurrencyChange($event)"
                                          [companyUid]="selectedCompanyUid()"
                                          [required]="true"
                                          [disabled]="submitting()" />

@@ -5,6 +5,7 @@ import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
 import '../../models/parties.dart';
 import '../../state/app_controller.dart';
+import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
@@ -140,9 +141,24 @@ class _CustomerPickerState extends ConsumerState<_CustomerPicker> {
     }
   }
 
-  void _pick(Customer c) {
+  /// Sets the basket customer and RE-PRICES the basket for them (PRD-01): the
+  /// server charges an account customer their own price, so the lines already
+  /// rung at the walk-in price must change before the cashier takes payment.
+  Future<void> _pick(Customer c) async {
+    final changed = ref.read(cartProvider).customer?.uid != c.uid;
     ref.read(cartProvider.notifier).setCustomer(c);
-    Navigator.pop(context);
+    if (changed && !ref.read(cartProvider).isEmpty) {
+      setState(() => _busy = true);
+      final ok = await ref.read(basketPricerProvider).price();
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!ok) {
+        showToast(context,
+            "Couldn't update prices for ${c.displayName} — check the connection. "
+            'The sale will be charged at their price.');
+      }
+    }
+    if (mounted) Navigator.pop(context);
   }
 
   @override

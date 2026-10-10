@@ -48,6 +48,26 @@ export const PRODUCT_PICKER_SEARCH_SIZE = 25;
  * All other methods use the auto-unwrap path (interceptor strips the envelope).
  * Base: /api/v1/products; price-lists: /api/v1/price-lists.
  */
+/** Request for {@link ProductService.resolvePrices}; null/absent fields keep the walk-in default. */
+export interface ResolveUnitPricesRequest {
+  productUids: string[];
+  /** Unit every price is expressed in; absent = each product's own base unit. */
+  unitUid?: string | null;
+  customerUid?: string | null;
+  currency?: string | null;
+}
+
+/** One answer from /product-prices/resolve. `amount` is a JSON number (BigDecimal). */
+export interface ResolvedUnitPriceDto {
+  productUid: string;
+  unitUid: string;
+  amount: number | string | null;
+  currency: string | null;
+  /** true ⇒ `amount` is GROSS (VAT-inclusive list); false ⇒ NET. */
+  vatInclusive: boolean;
+  status: 'RESOLVED' | 'NO_PRICE' | 'UNIT_NOT_APPLICABLE' | string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ProductService {
   private readonly http = inject(HttpClient);
@@ -150,13 +170,19 @@ export class ProductService {
   // ── Prices ────────────────────────────────────────────────────────────────
 
   /**
-   * SAL-28: what the server would charge for these products in this unit, for this customer and
-   * currency (`POST /product-prices/resolve` — the same resolution the invoice line uses: customer
-   * price → customer list → company default). An indicator only; the server re-prices the line.
+   * Batch price READ — what the server will charge (POST /product-prices/resolve). With
+   * `customerUid` + `currency` (PRD-01) it answers for that customer: contract price, then their
+   * default price list, then the company default list — the same rule the posted sale uses.
+   * Used by the web POS; the invoice line hint calls it as {@link resolveUnitPrices} (SAL-28).
    */
-  resolveUnitPrices(request: ResolveUnitPricesRequest): Observable<ResolvedUnitPriceDto[]> {
+  resolvePrices(request: ResolveUnitPricesRequest): Observable<ResolvedUnitPriceDto[]> {
     return this.http.post<ResolvedUnitPriceDto[]>(
       `${environment.apiBaseUrl}/product-prices/resolve`, request);
+  }
+
+  /** SAL-28 name for {@link resolvePrices} — the invoice add-line price hint. */
+  resolveUnitPrices(request: ResolveUnitPricesRequest): Observable<ResolvedUnitPriceDto[]> {
+    return this.resolvePrices(request);
   }
 
   listPrices(uid: string): Observable<ProductPriceDto[]> {
