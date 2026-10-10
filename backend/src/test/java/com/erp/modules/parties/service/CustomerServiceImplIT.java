@@ -362,6 +362,29 @@ class CustomerServiceImplIT extends PostgresIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // POS-14: the till finds its walk-in by kind, not by scanning page 0
+    // -----------------------------------------------------------------------
+
+    @Test
+    void list_byKind_returnsOnlyThatKind() {
+        customerService.create(businessCreditRequest(companyA.getId(), "Acme Traders Ltd",
+                "TIN-ACME", false, null, null, null));
+        customerService.create(new CreateCustomerRequest(
+                companyA.getId(), PartyType.INDIVIDUAL, "Cash Sale", null,
+                null, false, null, null, null, null, null, null, null, null, null,
+                CustomerKind.CASH_WALK_IN, null, null, null));
+
+        assertThat(customerService.list(companyA.getId(), null, CustomerKind.CASH_WALK_IN,
+                Pageable.unpaged()).getContent())
+                .extracting(CustomerDto::displayName).containsExactly("Cash Sale");
+        assertThat(customerService.list(companyA.getId(), "acme", CustomerKind.CASH_WALK_IN,
+                Pageable.unpaged()).getContent()).isEmpty();
+        // No kind = the unchanged list.
+        assertThat(customerService.list(companyA.getId(), null, null,
+                Pageable.unpaged()).getContent()).hasSize(2);
+    }
+
+    // -----------------------------------------------------------------------
     // P2 D5 / P2-mechanical — master-data defaults settable via create/update
     // -----------------------------------------------------------------------
 

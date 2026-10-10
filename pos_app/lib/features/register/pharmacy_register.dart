@@ -330,9 +330,11 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                           const Text('Patient',
                               style: TextStyle(fontSize: 11, color: AppColors.ink3)),
                           Text(
-                              cart.customer?.isWalkIn ?? true
-                                  ? 'Walk-in'
-                                  : cart.customer!.displayName,
+                              cart.customer == null
+                                  ? 'Select customer'
+                                  : cart.customer!.isWalkIn
+                                      ? 'Walk-in'
+                                      : cart.customer!.displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontWeight: FontWeight.w600)),
