@@ -170,7 +170,7 @@ class ProductServiceImplTest {
 
         service = new ProductServiceImpl(products, productBranches, bulkPacks, barcodes, prices,
                 components, priceLists, units, companies, suppliers, codeGen, branchGuard,
-                compositionGuard, scopeGuard, audit, symbologyRules, stock);
+                compositionGuard, scopeGuard, audit, symbologyRules, stock, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         baseUnit = unitWithId(1L, "BASEUID0000000000000030", "PCS");
         boxUnit = unitWithId(2L, "BOXUID00000000000000030", "BOX");

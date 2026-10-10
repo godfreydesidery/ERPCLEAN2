@@ -81,7 +81,7 @@ class PurchaseCostSuggestionServiceImplTest {
         scopeGuard     = mock(ScopeGuard.class);
 
         service = new PurchaseCostSuggestionServiceImpl(
-                orders, lines, products, units, companies, suppliers, supplierPrices, scopeGuard);
+                orders, lines, products, units, companies, suppliers, supplierPrices, scopeGuard, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         Company company = mock(Company.class);
         when(company.getId()).thenReturn(COMPANY_ID);

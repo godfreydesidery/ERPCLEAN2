@@ -4,12 +4,11 @@ import com.erp.modules.gl.domain.dto.FiscalYearDto;
 import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.time.BusinessZone;
 import com.erp.platform.security.RequestContext;
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,15 +120,8 @@ public class FiscalYearRolloverJob {
         }
     }
 
+    /** The company's zone; blank or invalid falls back to Africa/Dar_es_Salaam (never UTC). */
     private static ZoneId zoneOf(Company company) {
-        String tz = company.getTimeZone();
-        if (tz == null || tz.isBlank()) {
-            return ZoneOffset.UTC;
-        }
-        try {
-            return ZoneId.of(tz);
-        } catch (DateTimeException ex) {
-            return ZoneOffset.UTC;
-        }
+        return BusinessZone.parse(company.getTimeZone());
     }
 }

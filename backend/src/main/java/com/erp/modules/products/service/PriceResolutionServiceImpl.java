@@ -26,6 +26,7 @@ import com.erp.modules.products.repository.PriceTierRepository;
 import com.erp.modules.products.repository.PromotionRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -68,6 +69,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     private final ProductBulkPackRepository bulkPacks;
     private final ProductRepository       products;
     private final PriceListRepository     priceLists;
+    private final CompanyCalendar calendar;
 
     public PriceResolutionServiceImpl(CustomerPriceRepository customerPrices,
                                       PromotionRepository promotions,
@@ -75,7 +77,8 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                                       ProductPriceRepository productPrices,
                                       ProductBulkPackRepository bulkPacks,
                                       ProductRepository products,
-                                      PriceListRepository priceLists) {
+                                      PriceListRepository priceLists,
+                                      CompanyCalendar calendar) {
         this.customerPrices = customerPrices;
         this.promotions     = promotions;
         this.priceTiers     = priceTiers;
@@ -83,6 +86,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         this.bulkPacks      = bulkPacks;
         this.products       = products;
         this.priceLists     = priceLists;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -91,7 +95,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         if (req.customerId() != null) {
             var cp = customerPrices.findActiveForCustomerProduct(
                     req.customerId(), req.productId(),
-                    req.businessDate() != null ? req.businessDate() : LocalDate.now());
+                    req.businessDate() != null ? req.businessDate() : calendar.today(req.companyId()));
             if (cp.isPresent()) {
                 CustomerPrice customerPrice = cp.get();
                 return ResolvedPriceDto.customerPrice(customerPrice.getUnitPriceAmount(),
@@ -180,7 +184,8 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         // read if a caller ever passes a productId that isn't actually in companyId.
         Product product = products.findByCompanyIdAndId(query.companyId(), query.productId())
                 .orElseThrow(() -> new NotFoundException("Product not found."));
-        LocalDate date = query.businessDate() != null ? query.businessDate() : LocalDate.now();
+        LocalDate date = query.businessDate() != null ? query.businessDate()
+                : calendar.today(query.companyId());
 
         // null = the unit is neither the base nor a configured pack (mirrors computeQtyInBase).
         BigDecimal factor = unitFactor(product, query.unitId());

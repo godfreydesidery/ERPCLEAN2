@@ -46,6 +46,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -88,6 +89,7 @@ public class ProductServiceImpl implements ProductService {
     private final AuditService audit;
     private final BarcodeSymbologyRuleService symbologyRules;
     private final StockReservationService stock;
+    private final CompanyCalendar calendar;
 
     public ProductServiceImpl(ProductRepository products,
                               ProductBranchRepository productBranches,
@@ -105,7 +107,8 @@ public class ProductServiceImpl implements ProductService {
                               ScopeGuard scopeGuard,
                               AuditService audit,
                               BarcodeSymbologyRuleService symbologyRules,
-                              StockReservationService stock) {
+                              StockReservationService stock,
+                              CompanyCalendar calendar) {
         this.products = products;
         this.productBranches = productBranches;
         this.bulkPacks = bulkPacks;
@@ -123,6 +126,7 @@ public class ProductServiceImpl implements ProductService {
         this.audit = audit;
         this.symbologyRules = symbologyRules;
         this.stock = stock;
+        this.calendar = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -889,7 +893,7 @@ public class ProductServiceImpl implements ProductService {
         // what keeps the price the cashier sees equal to the price the sale posts. Same fields, same
         // rows; only the order is defined (it used to be whatever the database returned).
         return prices.findByProductId(p.getId()).stream()
-                .sorted(SellingPriceRules.walkInPreference(java.time.LocalDate.now()))
+                .sorted(SellingPriceRules.walkInPreference(calendar.today(p.getCompanyId())))
                 .map(ProductPriceDto::from)
                 .toList();
     }

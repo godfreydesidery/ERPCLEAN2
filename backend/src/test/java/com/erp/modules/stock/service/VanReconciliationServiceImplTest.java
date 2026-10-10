@@ -95,7 +95,7 @@ class VanReconciliationServiceImplTest {
 
         service = new VanReconciliationServiceImpl(reconciliations, lineRepo, movements, onHands,
                 stockLocations, locationResolver, productService, agentService, numberGenerator,
-                outbox, scopeGuard, audit);
+                outbox, scopeGuard, audit, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         RequestContext.set(new RequestContext.Principal(
                 USER_ID, "agent@test.com", false, COMPANY_ID, BRANCH_ID, null));

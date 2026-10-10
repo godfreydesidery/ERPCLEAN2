@@ -23,14 +23,13 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -71,10 +70,10 @@ public class StockServiceImpl implements StockService {
     private final AdjustTargetResolver     adjustTargets;
     private final StockUnitResolver        unitResolver;
     private final PermissionResolver       permissionResolver;
+    private final CompanyCalendar calendar;
 
     /** Gates the opening VALUE leg (it posts to the GL) — same rule as the bulk stock sheet. */
     private static final String PERM_OPENING_SET = "INVENTORY.OPENING.SET";
-    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Dar_es_Salaam");
 
     public StockServiceImpl(StockOnHandRepository onHands,
                             StockMovementRepository movements,
@@ -88,7 +87,8 @@ public class StockServiceImpl implements StockService {
                             AuditService audit,
                             AdjustTargetResolver adjustTargets,
                             StockUnitResolver unitResolver,
-                            PermissionResolver permissionResolver) {
+                            PermissionResolver permissionResolver,
+                            CompanyCalendar calendar) {
         this.onHands           = onHands;
         this.movements         = movements;
         this.posting           = posting;
@@ -102,6 +102,7 @@ public class StockServiceImpl implements StockService {
         this.adjustTargets     = adjustTargets;
         this.unitResolver      = unitResolver;
         this.permissionResolver = permissionResolver;
+        this.calendar           = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -214,7 +215,7 @@ public class StockServiceImpl implements StockService {
                 product.companyId(), principal.branchId(), locationId, product.id()).orElse(null);
         if (soh != null) {
             // FOLLOW-001: pass productCode + reasonCode so memo text avoids raw ULID.
-            valuation.revalueAdjustment(movementUid, soh, qty, LocalDate.now(),
+            valuation.revalueAdjustment(movementUid, soh, qty, calendar.today(product.companyId()),
                     dimTag.costCentreValueId(), dimTag.departmentValueId(),
                     product.code(), request.reasonCode() != null ? request.reasonCode().name() : null);
         }
@@ -298,7 +299,7 @@ public class StockServiceImpl implements StockService {
             if (soh != null && soh.getAvgCost() == null
                     && soh.getOnHandValue().compareTo(BigDecimal.ZERO) == 0) {
                 valuation.setOpeningValue(new SetOpeningValuationRequest(soh.getUid(), baseCost),
-                        LocalDate.now(BUSINESS_ZONE));
+                        calendar.today(product.companyId()));
             }
         }
 

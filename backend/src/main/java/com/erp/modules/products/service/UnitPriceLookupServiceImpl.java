@@ -14,8 +14,8 @@ import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -49,15 +49,18 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
     private final UnitOfMeasureRepository units;
     private final PriceResolutionService priceResolution;
     private final CustomerRepository customers;
+    private final CompanyCalendar calendar;
 
     public UnitPriceLookupServiceImpl(ProductRepository products,
                                       UnitOfMeasureRepository units,
                                       PriceResolutionService priceResolution,
-                                      CustomerRepository customers) {
+                                      CustomerRepository customers,
+                                      CompanyCalendar calendar) {
         this.products = products;
         this.units = units;
         this.priceResolution = priceResolution;
         this.customers = customers;
+        this.calendar  = calendar;
     }
 
     @Override
@@ -157,7 +160,7 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
         UnitPriceQuoteResult result = priceResolution.findSellingPriceQuote(new SellingPriceQuery(
                 product.getCompanyId(), product.getId(), unitId,
                 audience.customerId(), audience.customerPriceListId(), audience.currency(),
-                null, LocalDate.now()));
+                null, calendar.today(product.getCompanyId())));
         Optional<UnitPriceQuoteDto> quote = result.quote();
         if (quote.isEmpty()) {
             // NO_PRICE (no usable price row) or UNIT_NOT_APPLICABLE (the requested unit is neither

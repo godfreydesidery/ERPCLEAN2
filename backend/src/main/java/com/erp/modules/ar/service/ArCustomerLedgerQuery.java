@@ -7,6 +7,7 @@ import com.erp.modules.ar.domain.enums.ArLedgerEntryType;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.StatementCurrencies;
+import com.erp.platform.common.time.BusinessZone;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -189,7 +190,7 @@ public class ArCustomerLedgerQuery {
         ArCustomerRefDto customer = resolveCustomer(companyId, customerId, customerUid);
         CompanyRow co = loadCompany(companyId);
 
-        LocalDate to = toDate != null ? toDate : LocalDate.now();
+        LocalDate to = toDate != null ? toDate : LocalDate.now(BusinessZone.parse(co.timeZone()));
         if (fromDate != null && fromDate.isAfter(to)) {
             throw new IllegalArgumentException("The start date must be on or before the end date.");
         }

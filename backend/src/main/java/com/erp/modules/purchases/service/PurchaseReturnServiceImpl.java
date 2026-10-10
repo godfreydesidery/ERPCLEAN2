@@ -27,6 +27,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -34,7 +35,6 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +71,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
     private final PurchaseReturnPrintQuery     printQuery;
+    private final CompanyCalendar calendar;
 
     public PurchaseReturnServiceImpl(PurchaseReturnRepository returns,
                                      PurchaseReturnLineRepository returnLines,
@@ -84,7 +85,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
                                      AuditService audit,
-                                     PurchaseReturnPrintQuery printQuery) {
+                                     PurchaseReturnPrintQuery printQuery,
+                                     CompanyCalendar calendar) {
         this.returns           = returns;
         this.returnLines       = returnLines;
         this.grRepo            = grRepo;
@@ -98,6 +100,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
         this.printQuery        = printQuery;
+        this.calendar          = calendar;
     }
 
     @Override
@@ -325,7 +328,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     companyUid,
                     supplierUid,
                     null,                                // no specific bill — general supplier credit
-                    LocalDate.now(),
+                    calendar.today(ret.getCompanyId()),
                     totalReturnValue,
                     BigDecimal.ZERO,                     // no VAT on the goods cost reversal
                     "Purchase return " + ret.getReturnNumber() + " [" + ret.getUid() + "]: " + ret.getReason(),

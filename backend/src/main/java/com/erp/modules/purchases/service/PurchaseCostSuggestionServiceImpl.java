@@ -18,12 +18,12 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.Money;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Optional;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -52,6 +52,7 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
     private final SupplierRepository          suppliers;
     private final SupplierPriceReader         supplierPrices;
     private final ScopeGuard                  scopeGuard;
+    private final CompanyCalendar calendar;
 
     public PurchaseCostSuggestionServiceImpl(PurchaseOrderRepository orders,
                                              PurchaseOrderLineRepository lines,
@@ -60,7 +61,8 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
                                              CompanyRepository companies,
                                              SupplierRepository suppliers,
                                              SupplierPriceReader supplierPrices,
-                                             ScopeGuard scopeGuard) {
+                                             ScopeGuard scopeGuard,
+                                             CompanyCalendar calendar) {
         this.orders         = orders;
         this.lines          = lines;
         this.products       = products;
@@ -69,6 +71,7 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
         this.suppliers      = suppliers;
         this.supplierPrices = supplierPrices;
         this.scopeGuard     = scopeGuard;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -150,7 +153,7 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
                         line.getUnitPriceAmount(),
                         CurrencyCode.value(line.getCurrency()),
                         PurchaseCostSource.LAST_QUOTE,
-                        toDate(line.getCreatedAt())));
+                        toDate(companyId, line.getCreatedAt())));
     }
 
     /** (2) Last price actually ordered from this supplier for this product/unit. */
@@ -163,7 +166,7 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
                         line.getUnitCostAmount(),
                         CurrencyCode.value(line.getCurrency()),
                         PurchaseCostSource.LAST_PURCHASE,
-                        toDate(orderedAt(line))));
+                        toDate(companyId, orderedAt(line))));
     }
 
     /**
@@ -202,7 +205,7 @@ public class PurchaseCostSuggestionServiceImpl implements PurchaseCostSuggestion
         return line.getPurchaseOrder().getOrderedAt();
     }
 
-    private LocalDate toDate(Instant at) {
-        return at != null ? at.atZone(ZoneOffset.UTC).toLocalDate() : null;
+    private LocalDate toDate(Long companyId, Instant at) {
+        return at != null ? calendar.dateOf(companyId, at) : null;
     }
 }

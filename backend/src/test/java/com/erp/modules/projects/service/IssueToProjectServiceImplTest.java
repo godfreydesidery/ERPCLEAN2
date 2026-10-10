@@ -66,7 +66,7 @@ class IssueToProjectServiceImplTest {
         scopeGuard   = mock(ScopeGuard.class);
         audit        = mock(AuditService.class);
         service      = new IssueToProjectServiceImpl(tagResolver, companies, branches, products,
-                valuation, stockPosting, glPoster, numberGen, scopeGuard, audit);
+                valuation, stockPosting, glPoster, numberGen, scopeGuard, audit, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     /**
