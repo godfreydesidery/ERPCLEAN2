@@ -19,6 +19,9 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     Optional<PurchaseOrder> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** Company-scoped by-id read (TenantScopingRulesTest): the order behind a loaded receipt. */
+    Optional<PurchaseOrder> findByCompanyIdAndId(Long companyId, Long id);
+
     Page<PurchaseOrder> findByCompanyId(Long companyId, Pageable pageable);
 
     /**

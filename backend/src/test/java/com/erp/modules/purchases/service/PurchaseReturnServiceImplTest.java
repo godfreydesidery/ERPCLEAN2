@@ -88,7 +88,10 @@ class PurchaseReturnServiceImplTest {
         service = new PurchaseReturnServiceImpl(
                 returns, returnLines, grRepo, grLineRepo, poRepo,
                 companies, suppliers, apDebitNoteService,
-                numberGen, outbox, scopeGuard, audit, mock(PurchaseReturnPrintQuery.class));
+                numberGen, outbox, scopeGuard, audit, mock(PurchaseReturnPrintQuery.class),
+                mock(com.erp.platform.common.money.FxDocumentConverter.class),
+                mock(org.springframework.jdbc.core.JdbcTemplate.class),
+                mock(com.erp.modules.purchases.domain.dto.ReceiptBillingReader.class));
 
         // Default principal in context
         RequestContext.set(new RequestContext.Principal(1L, "user@test.com", false, 10L, 20L, null));
@@ -124,14 +127,14 @@ class PurchaseReturnServiceImplTest {
         when(suppliers.findById(50L)).thenReturn(Optional.of(supplier));
 
         ApDebitNoteDto debitNoteDto = stubDebitNoteDto("DN-UID-1", "DN-0001");
-        when(apDebitNoteService.raise(any())).thenReturn(debitNoteDto);
+        when(apDebitNoteService.raiseForPurchaseReturn(any(), any(), any())).thenReturn(debitNoteDto);
 
         // act
         service.confirm("PRET-UID-1");
 
         // assert: AP debit note raised exactly once
         ArgumentCaptor<RaiseDebitNoteRequest> captor = forClass(RaiseDebitNoteRequest.class);
-        verify(apDebitNoteService).raise(captor.capture());
+        verify(apDebitNoteService).raiseForPurchaseReturn(captor.capture(), any(), any());
         RaiseDebitNoteRequest req = captor.getValue();
 
         assertThat(req.companyUid()).isEqualTo("COMP-UID-1");
@@ -161,7 +164,7 @@ class PurchaseReturnServiceImplTest {
         service.confirm("PRET-UID-ZERO");
 
         // assert: no debit note raised for zero total
-        verify(apDebitNoteService, org.mockito.Mockito.never()).raise(any());
+        verify(apDebitNoteService, org.mockito.Mockito.never()).raiseForPurchaseReturn(any(), any(), any());
     }
 
     // -------------------------------------------------------------------------
@@ -187,7 +190,7 @@ class PurchaseReturnServiceImplTest {
         when(supplier.getUid()).thenReturn("SUPP-UID-B");
         when(suppliers.findById(50L)).thenReturn(Optional.of(supplier));
 
-        when(apDebitNoteService.raise(any())).thenReturn(stubDebitNoteDto("DN-UID-B", "DN-0002"));
+        when(apDebitNoteService.raiseForPurchaseReturn(any(), any(), any())).thenReturn(stubDebitNoteDto("DN-UID-B", "DN-0002"));
 
         // capture the outbox publish call to inspect the payload
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
@@ -258,7 +261,7 @@ class PurchaseReturnServiceImplTest {
         when(supplier.getUid()).thenReturn("SUPP-UID-EXACT");
         when(suppliers.findById(50L)).thenReturn(Optional.of(supplier));
 
-        when(apDebitNoteService.raise(any())).thenReturn(stubDebitNoteDto("DN-EXACT", "DN-0003"));
+        when(apDebitNoteService.raiseForPurchaseReturn(any(), any(), any())).thenReturn(stubDebitNoteDto("DN-EXACT", "DN-0003"));
 
         // act — must not throw
         service.confirm("PRET-UID-EXACT");
@@ -401,7 +404,7 @@ class PurchaseReturnServiceImplTest {
                 .hasMessageContaining("This receipt has been voided");
         verify(outbox, org.mockito.Mockito.never())
                 .publish(any(), any(), any(), any(), any(), any(), any());
-        verify(apDebitNoteService, org.mockito.Mockito.never()).raise(any());
+        verify(apDebitNoteService, org.mockito.Mockito.never()).raiseForPurchaseReturn(any(), any(), any());
     }
 
     // -------------------------------------------------------------------------
@@ -537,7 +540,7 @@ class PurchaseReturnServiceImplTest {
         Supplier supplier = mock(Supplier.class);
         when(supplier.getUid()).thenReturn("SUPP-UID");
         when(suppliers.findById(50L)).thenReturn(Optional.of(supplier));
-        when(apDebitNoteService.raise(any())).thenReturn(stubDebitNoteDto("DN-UID", "DN-0009"));
+        when(apDebitNoteService.raiseForPurchaseReturn(any(), any(), any())).thenReturn(stubDebitNoteDto("DN-UID", "DN-0009"));
     }
 
     private PurchaseReturn stubConfirmableReturn(String uid, Long companyId, Long branchId,
