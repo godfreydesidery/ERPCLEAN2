@@ -3,6 +3,7 @@ package com.erp.modules.documents.service;
 import com.erp.modules.documents.domain.dto.GeneratedDocumentDto;
 import com.erp.modules.documents.domain.dto.RenderDocumentRequest;
 import com.erp.modules.documents.domain.enums.DocumentType;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
 import java.time.Instant;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,4 +32,12 @@ public interface DocumentRenderService {
 
     /** Get a single log record by uid. */
     GeneratedDocumentDto getByUid(String uid);
+
+    /**
+     * Renders a purchase return / debit note to PDF bytes with the company's document branding.
+     * <b>Stream-only</b>: no generated_documents row, no outbox event — the caller streams the bytes.
+     * The print model comes from {@code PurchaseReturnService.printByUid}, which has already
+     * tenant-checked the caller; the company is re-checked here before its branding is read.
+     */
+    byte[] renderPurchaseReturn(PurchaseReturnPrintDto printModel);
 }

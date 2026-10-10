@@ -88,7 +88,7 @@ class PurchaseReturnServiceImplTest {
         service = new PurchaseReturnServiceImpl(
                 returns, returnLines, grRepo, grLineRepo, poRepo,
                 companies, suppliers, apDebitNoteService,
-                numberGen, outbox, scopeGuard, audit);
+                numberGen, outbox, scopeGuard, audit, mock(PurchaseReturnPrintQuery.class));
 
         // Default principal in context
         RequestContext.set(new RequestContext.Principal(1L, "user@test.com", false, 10L, 20L, null));

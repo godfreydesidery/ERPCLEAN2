@@ -7,6 +7,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnLineDto;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnedPayload;
 import com.erp.modules.purchases.domain.entity.GoodsReceipt;
@@ -69,6 +70,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final OutboxPublisher              outbox;
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
+    private final PurchaseReturnPrintQuery     printQuery;
 
     public PurchaseReturnServiceImpl(PurchaseReturnRepository returns,
                                      PurchaseReturnLineRepository returnLines,
@@ -81,7 +83,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                                      PurchaseNumberGenerator numberGen,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
+                                     AuditService audit,
+                                     PurchaseReturnPrintQuery printQuery) {
         this.returns           = returns;
         this.returnLines       = returnLines;
         this.grRepo            = grRepo;
@@ -94,6 +97,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         this.outbox            = outbox;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.printQuery        = printQuery;
     }
 
     @Override
@@ -202,6 +206,12 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public Page<PurchaseReturnDto> list(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return returns.findByCompanyId(companyId, pageable).map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PurchaseReturnPrintDto printByUid(String uid) {
+        return printQuery.byUid(uid);
     }
 
     @Override

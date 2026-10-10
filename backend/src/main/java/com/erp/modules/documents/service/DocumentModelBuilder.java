@@ -19,6 +19,8 @@ import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintLineDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptVatBandDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintLineDto;
 import com.erp.modules.reporting.export.StatementRenderModel;
 import com.erp.modules.reporting.export.StatementRenderModel.Row;
 import com.erp.modules.sales.domain.dto.DeliveryDto;
@@ -31,10 +33,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
@@ -259,6 +265,99 @@ public class DocumentModelBuilder {
             sb.append("    Printed From: ").append(gr.branchName());
         }
         return sb.toString();
+    }
+
+    // -------------------------------------------------------------------------
+    // PURCHASE RETURN / DEBIT NOTE — stream-only (Kilimanjaro: "cannot print purchase return")
+    //
+    // Same renderer and the same face as the GRN it reverses: letterhead, the meta block beside the
+    // supplier block, priced lines with the item code, the Net / VAT / Total foot and a ruled
+    // sign-off row. It is never logged to generated_documents (the DEBIT_NOTE type has no seeded
+    // template) — the purchase-return export endpoint streams it and stores nothing.
+    // Every figure is copied from PurchaseReturnPrintDto (BR-DOC-02 / BR-DOC-09).
+    // -------------------------------------------------------------------------
+
+    /** Title printed on the purchase return. Fixed: there is no DEBIT_NOTE template row to read. */
+    public static final String PURCHASE_RETURN_TITLE = "PURCHASE RETURN / DEBIT NOTE";
+
+    private static final String DEFAULT_ZONE = "Africa/Dar_es_Salaam";
+    private static final DateTimeFormatter PRINT_DATE =
+            DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter PRINT_TIME =
+            DateTimeFormatter.ofPattern("h:mm:ss a", Locale.ENGLISH);
+
+    public DocumentRenderModel buildPurchaseReturn(PurchaseReturnPrintDto pr,
+                                                    DocumentBranding branding,
+                                                    String printedByName,
+                                                    Instant now) {
+        BrandingBlock brand = toBrandingBlock(branding);
+
+        List<MetaPair> meta = new ArrayList<>();
+        meta.add(new MetaPair("Return No.", pr.returnNumber()));
+        if (pr.returnDate() != null) meta.add(new MetaPair("Return Date", pr.returnDate()));
+        if (pr.status() != null) meta.add(new MetaPair("Status", pr.status()));
+        if (pr.goodsReceiptNumber() != null) meta.add(new MetaPair("G.R.N. No.", pr.goodsReceiptNumber()));
+        if (pr.purchaseOrderNumber() != null) meta.add(new MetaPair("Order No.", pr.purchaseOrderNumber()));
+        if (pr.debitNoteNumber() != null) meta.add(new MetaPair("Debit Note No.", pr.debitNoteNumber()));
+        // The renderer never reads model.currency(): a priced document states it as a meta pair.
+        if (pr.currency() != null) meta.add(new MetaPair("Currency", pr.currency()));
+        if (pr.branchName() != null) meta.add(new MetaPair("Branch", pr.branchName()));
+        if (pr.reason() != null) meta.add(new MetaPair("Reason", pr.reason()));
+
+        // Supplier block: name, address, then VRN as its own line (the renderer prints the TIN).
+        List<String> supplierLines = new ArrayList<>(pr.supplierAddressLines());
+        if (pr.supplierVrn() != null) supplierLines.add("VRN: " + pr.supplierVrn());
+        PartyBlock party = new PartyBlock(
+                pr.supplierName() != null ? pr.supplierName() : "", supplierLines, pr.supplierTin());
+
+        List<DocLine> docLines = new ArrayList<>();
+        for (PurchaseReturnPrintLineDto l : pr.lines()) {
+            // Quantity, unit and cost all in the LINE's unit — what the supplier counts back.
+            docLines.add(new DocLine(
+                    l.lineNo(), l.productCode(), l.productName(),
+                    l.returnedQty(), l.unitName(),
+                    l.unitCost(), null, null, l.lineValue()));
+        }
+
+        List<TotalRow> totals = new ArrayList<>();
+        totals.add(new TotalRow("Net Amount", pr.netAmount(), false));
+        // No VAT row when the return carries none — "VAT 0.00" reads as a fault, not a fact.
+        if (pr.hasVat()) {
+            totals.add(new TotalRow("VAT Amount", pr.vatAmount(), false));
+        }
+        totals.add(new TotalRow("Total Amount", pr.totalAmount(), true));
+
+        List<String> signatories = List.of(
+                pr.preparedByName() != null ? "Prepared By: " + pr.preparedByName() : "Prepared By",
+                "Authorised By",
+                "Received by Supplier");
+
+        ZoneId zone = zoneOrDefault(pr.timeZone());
+        String printedOn = PRINT_DATE.format(now.atZone(zone));
+        String printedAt = PRINT_TIME.format(now.atZone(zone));
+        StringBuilder footer = new StringBuilder("Printed On: ").append(printedOn)
+                .append("    Printed At: ").append(printedAt);
+        if (printedByName != null && !printedByName.isBlank()) {
+            footer.append("    Printed By: ").append(printedByName);
+        }
+        if (pr.branchName() != null && !pr.branchName().isBlank()) {
+            footer.append("    Printed From: ").append(pr.branchName());
+        }
+        Layout layout = new Layout(true, signatories, footer.toString());
+
+        // A DRAFT has not left stock and has no debit note yet; stamp it so the paper cannot pass
+        // for a confirmed return.
+        return new DocumentRenderModel(PURCHASE_RETURN_TITLE, brand, meta, party, docLines,
+                List.of(), totals, pr.currency(), printedOn + " " + printedAt,
+                pr.isDraft() ? "DRAFT - NOT CONFIRMED" : null, layout);
+    }
+
+    private static ZoneId zoneOrDefault(String timeZone) {
+        try {
+            return ZoneId.of(timeZone != null && !timeZone.isBlank() ? timeZone : DEFAULT_ZONE);
+        } catch (DateTimeException e) {
+            return ZoneId.of(DEFAULT_ZONE);
+        }
     }
 
     // -------------------------------------------------------------------------
