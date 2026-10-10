@@ -38,6 +38,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import com.erp.modules.sales.service.SaleTenderAccountQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +76,7 @@ public class CashCountServiceImpl implements CashCountService {
     private final GLPostingService                  glPosting;
     private final ScopeGuard                         scopeGuard;
     private final AuditService                       audit;
+    private final SaleTenderAccountQuery             saleTenderAccounts;
 
     public CashCountServiceImpl(CashCountRepository counts,
                                  CashCountDenominationRepository denominations,
@@ -86,7 +88,8 @@ public class CashCountServiceImpl implements CashCountService {
                                  GLConfigResolver glConfig,
                                  GLPostingService glPosting,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 SaleTenderAccountQuery saleTenderAccounts) {
         this.counts        = counts;
         this.denominations = denominations;
         this.accounts      = accounts;
@@ -98,6 +101,7 @@ public class CashCountServiceImpl implements CashCountService {
         this.glPosting     = glPosting;
         this.scopeGuard    = scopeGuard;
         this.audit         = audit;
+        this.saleTenderAccounts = saleTenderAccounts;
     }
 
     @Override
@@ -301,7 +305,11 @@ public class CashCountServiceImpl implements CashCountService {
         Long salesCashGl = glConfigs.findByCompanyIdAndConfigKey(companyId, GlConfigKey.CASH)
                 .map(c -> c.getAccountId())
                 .orElse(null);
-        if (salesCashGl != null && salesCashGl.equals(till.getGlAccountId())) {
+        // ACC-05: a sale tender that names its cash/bank account posts to that account's own GL
+        // link, so an account that takes sale tenders has the same blind spot as GL CASH.
+        boolean takesSaleTenders = saleTenderAccounts != null
+                && saleTenderAccounts.takesSaleTenders(companyId, till.getId());
+        if ((salesCashGl != null && salesCashGl.equals(till.getGlAccountId())) || takesSaleTenders) {
             throw new ConflictException(
                     "This cash account receives your sales takings, so it cannot be counted here: "
                             + "the count would record the day's sales a second time. Count this "

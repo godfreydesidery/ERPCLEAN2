@@ -1,5 +1,7 @@
 package com.erp.modules.gl.service;
 
+import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
+import com.erp.modules.cashbank.service.CashBankAccountResolver;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
@@ -8,13 +10,17 @@ import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.modules.sales.domain.dto.InvoicePostingTenderDto;
 import com.erp.platform.common.money.FxDocumentConverter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,15 +52,28 @@ public class GLPostingSafeInvoker {
     private final GLConfigResolver     configResolver;
     private final FxDocumentConverter  fxConverter;
     private final CompanyRepository    companies;
+    /** ACC-05: resolves a tender's cash/bank account to its own GL link. Null in legacy unit tests. */
+    private final CashBankAccountResolver cashBankAccounts;
 
+    @Autowired
+    public GLPostingSafeInvoker(GLPostingService    postingService,
+                                GLConfigResolver    configResolver,
+                                FxDocumentConverter fxConverter,
+                                CompanyRepository   companies,
+                                CashBankAccountResolver cashBankAccounts) {
+        this.postingService   = postingService;
+        this.configResolver   = configResolver;
+        this.fxConverter      = fxConverter;
+        this.companies        = companies;
+        this.cashBankAccounts = cashBankAccounts;
+    }
+
+    /** Constructor for callers that post no tender legs (every tender then uses CASH). */
     public GLPostingSafeInvoker(GLPostingService    postingService,
                                 GLConfigResolver    configResolver,
                                 FxDocumentConverter fxConverter,
                                 CompanyRepository   companies) {
-        this.postingService = postingService;
-        this.configResolver = configResolver;
-        this.fxConverter    = fxConverter;
-        this.companies      = companies;
+        this(postingService, configResolver, fxConverter, companies, null);
     }
 
     /**
@@ -90,52 +109,210 @@ public class GLPostingSafeInvoker {
             String baseCurrency = companies.findById(companyId)
                     .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
                     .orElse("TZS");
-
-            // Convert each leg independently HALF_UP, then compute the DR control leg as the
-            // BALANCING PLUG so Σbase == 0 exactly, absorbing any rounding residual. (D-3/D-8)
-            ConvertedAmount netConv = fxConverter.toBase(net, currency, companyId, postingDate);
-            String postCurrency = baseCurrency;  // every LineDraft carries base currency (D-3)
-
-            BigDecimal baseNet = netConv.baseAmount();
-            BigDecimal baseVat = BigDecimal.ZERO;
-            if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
-                baseVat = fxConverter.toBase(vat, currency, companyId, postingDate).baseAmount();
-            }
-
-            // DR Cash/AR = balancing plug = baseNet + baseVat (exact; absorbs residual) (D-3)
-            BigDecimal baseGross = fxConverter.balancingPlug(
-                    List.of(baseNet.negate(), baseVat.negate()),   // credits are negative
-                    netConv.baseAmount().scale());
-
-            ChartOfAccount debitAcct = cashSale
-                    ? configResolver.resolve(companyId, GlConfigKey.CASH)
-                    : configResolver.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
-            ChartOfAccount revenueAcct    = configResolver.resolve(companyId, GlConfigKey.SALES_REVENUE);
-            ChartOfAccount vatPayableAcct = configResolver.resolve(companyId, GlConfigKey.VAT_PAYABLE);
-
-            List<LineDraft> lines = new ArrayList<>();
-            // DR Cash/AR — balancing plug in base currency, untagged (ADR-0025 D-6 / ADR-0036 D-3)
-            lines.add(new LineDraft(debitAcct.getId(), baseGross, BigDecimal.ZERO,
-                    postCurrency, "Gross sale"));
-            // CR Sales Revenue — base amount, carry dimension + project tag (ADR-0025 D-6 / ADR-0033 D-4c)
-            lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, baseNet, postCurrency,
-                    "Sales revenue", costCentreValueId, departmentValueId, null, null,
-                    projectId, projectTaskId, null));
-            if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
-                // CR VAT Payable — base amount, untagged
-                lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, baseVat,
-                        postCurrency, "VAT payable"));
-            }
-            JournalEntryDraft draft = new JournalEntryDraft(
-                    companyId, branchId, postingDate, "Sale " + invoiceUid,
-                    JournalSourceType.SALES, invoiceUid, null, null, lines);
-            return postingService.post(draft);
+            return postSale(companyId, branchId, invoiceUid, currency, gross, net, vat, cashSale,
+                    List.of(), postingDate, costCentreValueId, departmentValueId,
+                    projectId, projectTaskId, baseCurrency);
         } catch (Exception ex) {
             log.warn("GLPostingSafeInvoker: sale GL post failed for company={} invoice={} — "
                             + "GL not configured or period closed. error={}",
                     companyId, invoiceUid, ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * SAL-06 / ACC-04 / ACC-05: the sale posting with its counter tenders. Same entry as
+     * {@link #postSaleInNewTx} except the single DR Cash/AR leg is split:
+     * <ul>
+     *   <li>each tender (amount − change) debits the GL account linked to the cash/bank account it
+     *       landed in ({@code sales_invoice_payments.cash_bank_account_id}), or the company's
+     *       {@code CASH} mapping when the tender named no account (or that account cannot take a
+     *       posting) — grouped into one line per GL account;</li>
+     *   <li>whatever the tenders did not cover debits AR on a credit sale (the AR open item is that
+     *       same outstanding amount) or {@code CASH} otherwise, exactly as before.</li>
+     * </ul>
+     * With no tenders the entry is identical to {@link #postSaleInNewTx}. The POS till's own cash
+     * account is deliberately NOT used as a fallback: POS payouts and session variances post to
+     * {@code CASH}, so moving the drawer's sales elsewhere would split one drawer across two GL
+     * accounts.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public JournalEntryDto postSaleWithTendersInNewTx(Long companyId, Long branchId,
+                                                      String invoiceUid, String currency,
+                                                      BigDecimal gross, BigDecimal net,
+                                                      BigDecimal vat, boolean cashSale,
+                                                      List<InvoicePostingTenderDto> tenders,
+                                                      LocalDate postingDate,
+                                                      Long costCentreValueId,
+                                                      Long departmentValueId,
+                                                      Long projectId, Long projectTaskId) {
+        try {
+            String baseCurrency = companies.findScopedById(companyId)
+                    .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
+                    .orElse("TZS");
+            return postSale(companyId, branchId, invoiceUid, currency, gross, net, vat, cashSale,
+                    tenders == null ? List.of() : tenders, postingDate, costCentreValueId,
+                    departmentValueId, projectId, projectTaskId, baseCurrency);
+        } catch (Exception ex) {
+            log.warn("GLPostingSafeInvoker: sale GL post failed for company={} invoice={} — "
+                            + "GL not configured or period closed. error={}",
+                    companyId, invoiceUid, ex.getMessage());
+            return null;
+        }
+    }
+
+    /** Builds and posts the sale entry (shared by both sale entry points; runs in their TX). */
+    private JournalEntryDto postSale(Long companyId, Long branchId, String invoiceUid,
+                                     String currency, BigDecimal gross, BigDecimal net,
+                                     BigDecimal vat, boolean cashSale,
+                                     List<InvoicePostingTenderDto> tenders, LocalDate postingDate,
+                                     Long costCentreValueId, Long departmentValueId,
+                                     Long projectId, Long projectTaskId, String baseCurrency) {
+        // Convert each leg independently HALF_UP, then compute ONE debit leg as the BALANCING
+        // PLUG so Σbase == 0 exactly, absorbing any rounding residual. (D-3/D-8)
+        ConvertedAmount netConv = fxConverter.toBase(net, currency, companyId, postingDate);
+        String postCurrency = baseCurrency;  // every LineDraft carries base currency (D-3)
+        int scale = netConv.baseAmount().scale();
+
+        BigDecimal baseNet = netConv.baseAmount();
+        BigDecimal baseVat = BigDecimal.ZERO;
+        if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
+            baseVat = fxConverter.toBase(vat, currency, companyId, postingDate).baseAmount();
+        }
+
+        ChartOfAccount cashAcct = configResolver.resolve(companyId, GlConfigKey.CASH);
+        ChartOfAccount residualAcct = cashSale
+                ? cashAcct
+                : configResolver.resolve(companyId, GlConfigKey.ACCOUNTS_RECEIVABLE);
+        ChartOfAccount revenueAcct    = configResolver.resolve(companyId, GlConfigKey.SALES_REVENUE);
+        ChartOfAccount vatPayableAcct = configResolver.resolve(companyId, GlConfigKey.VAT_PAYABLE);
+
+        // ── Debit legs in FACE currency, one per GL account (insertion order kept) ──────────
+        Map<Long, BigDecimal> tenderFace = new LinkedHashMap<>();
+        BigDecimal tendered = BigDecimal.ZERO;
+        for (InvoicePostingTenderDto t : tenders) {
+            if (t == null || t.netAmount() == null || t.netAmount().signum() == 0) {
+                continue;
+            }
+            tenderFace.merge(tenderGlAccountId(companyId, t, cashAcct), t.netAmount(),
+                    BigDecimal::add);
+            tendered = tendered.add(t.netAmount());
+        }
+        // What the tenders did not cover: AR on a credit sale (= the AR open item), else Cash.
+        BigDecimal residualFace = gross.subtract(tendered);
+
+        List<DebitLeg> legs = new ArrayList<>();
+        DebitLeg residualLeg = null;
+        for (Map.Entry<Long, BigDecimal> e : tenderFace.entrySet()) {
+            if (e.getKey().equals(residualAcct.getId())) {
+                continue; // folded into the residual leg below (e.g. a cash tender on a cash sale)
+            }
+            if (e.getValue().signum() != 0) {
+                legs.add(new DebitLeg(e.getKey(), e.getValue(), "Sale takings"));
+            }
+        }
+        BigDecimal residualTotal = residualFace.add(
+                tenderFace.getOrDefault(residualAcct.getId(), BigDecimal.ZERO));
+        if (residualTotal.signum() != 0 || legs.isEmpty()) {
+            residualLeg = new DebitLeg(residualAcct.getId(), residualTotal,
+                    legs.isEmpty() ? "Gross sale"
+                            : (cashSale ? "Sale takings" : "Sale on account"));
+            legs.add(residualLeg);
+        }
+
+        // ── Base amounts: every leg converted, one leg is the balancing plug ──────────────────
+        // The plug is the single leg when there is only one (unchanged behaviour), else the
+        // largest tender leg — so a split credit sale's AR leg is converted exactly like the AR
+        // open item (outstanding × rate) and the subledger ties to the control account.
+        DebitLeg plugLeg = null;
+        for (DebitLeg leg : legs) {
+            if (legs.size() > 1 && !cashSale && leg == residualLeg) {
+                continue; // the AR leg of a split entry is converted, never plugged
+            }
+            if (plugLeg == null || leg.face().abs().compareTo(plugLeg.face().abs()) > 0) {
+                plugLeg = leg;
+            }
+        }
+        if (plugLeg == null) {
+            plugLeg = legs.get(0);
+        }
+        List<BigDecimal> others = new ArrayList<>(List.of(baseNet.negate(), baseVat.negate()));
+        Map<DebitLeg, BigDecimal> legBase = new LinkedHashMap<>();
+        for (DebitLeg leg : legs) {
+            if (leg == plugLeg) {
+                continue;
+            }
+            BigDecimal b = fxConverter.toBase(leg.face(), currency, companyId, postingDate)
+                    .baseAmount();
+            legBase.put(leg, b);
+            others.add(b);
+        }
+        legBase.put(plugLeg, fxConverter.balancingPlug(others, scale));
+
+        List<LineDraft> lines = new ArrayList<>();
+        // DR Cash/bank/AR legs — base currency, untagged (ADR-0025 D-6 / ADR-0036 D-3). A leg
+        // that nets negative (change recorded above its own tender) posts as a credit, since a
+        // journal line carries one side only.
+        for (DebitLeg leg : legs) {
+            BigDecimal b = legBase.get(leg);
+            if (b.signum() > 0) {
+                lines.add(new LineDraft(leg.glAccountId(), b, BigDecimal.ZERO,
+                        postCurrency, leg.description()));
+            } else if (b.signum() < 0) {
+                lines.add(new LineDraft(leg.glAccountId(), BigDecimal.ZERO, b.negate(),
+                        postCurrency, leg.description()));
+            }
+        }
+        // CR Sales Revenue — base amount, carry dimension + project tag (ADR-0025 D-6 / ADR-0033 D-4c)
+        lines.add(new LineDraft(revenueAcct.getId(), BigDecimal.ZERO, baseNet, postCurrency,
+                "Sales revenue", costCentreValueId, departmentValueId, null, null,
+                projectId, projectTaskId, null));
+        if (vat != null && vat.compareTo(BigDecimal.ZERO) > 0) {
+            // CR VAT Payable — base amount, untagged
+            lines.add(new LineDraft(vatPayableAcct.getId(), BigDecimal.ZERO, baseVat,
+                    postCurrency, "VAT payable"));
+        }
+        JournalEntryDraft draft = new JournalEntryDraft(
+                companyId, branchId, postingDate, "Sale " + invoiceUid,
+                JournalSourceType.SALES, invoiceUid, null, null, lines);
+        return postingService.post(draft);
+    }
+
+    /**
+     * ACC-05: the GL account a tender debits — its cash/bank account's own GL link, else CASH.
+     * Company-scoped through the resolver, so a foreign account id on a payment row never routes
+     * money into another company's ledger.
+     */
+    private Long tenderGlAccountId(Long companyId, InvoicePostingTenderDto tender,
+                                   ChartOfAccount cashAcct) {
+        if (cashBankAccounts == null || tender.cashBankAccountId() == null) {
+            return cashAcct.getId();
+        }
+        return cashBankAccounts.findSaleTenderGlAccount(companyId, tender.cashBankAccountId())
+                .map(CashAccountGlResolutionDto::glAccountId)
+                .orElseGet(() -> {
+                    log.warn("GLPostingSafeInvoker: tender cash/bank account id={} cannot take a "
+                                    + "posting in company={} — posting the tender to CASH instead",
+                            tender.cashBankAccountId(), companyId);
+                    return cashAcct.getId();
+                });
+    }
+
+    /** One debit leg of a sale entry, in face currency (identity-keyed: legs never collide). */
+    private static final class DebitLeg {
+        private final Long glAccountId;
+        private final BigDecimal face;
+        private final String description;
+
+        DebitLeg(Long glAccountId, BigDecimal face, String description) {
+            this.glAccountId = glAccountId;
+            this.face = face;
+            this.description = description;
+        }
+
+        Long glAccountId() { return glAccountId; }
+        BigDecimal face() { return face; }
+        String description() { return description; }
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.erp.modules.gl.events;
 
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
+import com.erp.modules.sales.domain.dto.InvoicePostingTenderDto;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
@@ -12,6 +13,7 @@ import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -122,10 +124,14 @@ public class SalesPostingHandler implements DomainEventHandler {
         // ADR-0025 D-6: pass the invoice's header-level dimension default ids onto the revenue leg.
         // ADR-0033 D-4c: pass the invoice's project tag onto the revenue leg so the project P&L
         // roll-up includes this revenue (re-read from sales_invoices.project_id, not the payload).
-        safeInvoker.postSaleInNewTx(
+        // SAL-06 / ACC-04 / ACC-05: the counter tenders split the debit — each tender to its own
+        // cash/bank account's GL (else CASH), and only the outstanding to AR on a credit sale.
+        List<InvoicePostingTenderDto> tenders = salesInvoiceService
+                .findPostingTendersByUidAndCompany(payload.invoiceUid(), companyId);
+        safeInvoker.postSaleWithTendersInNewTx(
                 companyId, event.getBranchId(), payload.invoiceUid(),
                 totals.currency(), totals.grossTotalAmount(), totals.netTotalAmount(),
-                totals.vatTotalAmount(), totals.isCashSale(), postingDate,
+                totals.vatTotalAmount(), totals.isCashSale(), tenders, postingDate,
                 totals.costCentreValueId(), totals.departmentValueId(),
                 totals.projectId(), totals.projectTaskId());
         log.debug("SalesPostingHandler: GL posting attempted for invoice uid={} company={}",
