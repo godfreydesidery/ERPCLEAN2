@@ -138,6 +138,90 @@
           }
         </div>
 
+        <!-- ── AP-01: match / correct an unposted bill ─────────────────────── -->
+        @if (isUnposted(b) && (canMatch() || canEnter())) {
+          <div class="erp-card mb-4">
+            <div class="erp-card__head">
+              <h2 class="h6 mb-0">
+                <i class="bi bi-tools me-1" aria-hidden="true"></i>
+                @if (b.status === 'HELD') { This bill is on hold } @else { This bill is not posted yet }
+              </h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small text-muted mb-3">
+                Nothing from this bill is in the books yet. Run the match again after fixing the
+                order, the goods receipt or the exchange rate; accept a difference you have checked;
+                or delete the bill and enter the invoice again.
+              </p>
+              <div class="d-flex flex-wrap gap-2">
+                @if (canMatch()) {
+                  <button type="button" class="btn btn-primary btn-sm"
+                          [disabled]="matchState() === 'running'"
+                          (click)="runMatch()">
+                    @if (matchState() === 'running') {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    } @else {
+                      <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+                    }
+                    Run match
+                  </button>
+                }
+                @if (canEnter()) {
+                  <button type="button" class="btn btn-outline-danger btn-sm"
+                          [disabled]="deleting()"
+                          (click)="deleteBill()">
+                    <i class="bi bi-trash me-1" aria-hidden="true"></i>Delete bill
+                  </button>
+                }
+              </div>
+              @if (matchError(); as err) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ err }}
+                </p>
+              }
+              @if (deleteError(); as err) {
+                <p class="text-danger small mt-2 mb-0" role="alert">
+                  <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ err }}
+                </p>
+              }
+
+              @if (matchResult(); as r) {
+                <div class="erp-table-wrap mt-3" aria-live="polite">
+                  <table class="erp-table">
+                    <caption class="visually-hidden">Match result per bill line</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Line</th>
+                        <th scope="col">Result</th>
+                        <th scope="col">Why</th>
+                        <th scope="col"><span class="visually-hidden">Action</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (line of r.lineResults; track line.billLineUid) {
+                        <tr>
+                          <td>{{ lineDescription(line.billLineUid) }}</td>
+                          <td>{{ lineStatusLabel(line) }}</td>
+                          <td class="small">{{ line.matchNote || '—' }}</td>
+                          <td>
+                            @if (isHeld(line) && canMatch() && r.billStatus === 'HELD') {
+                              <button type="button" class="btn btn-outline-warning btn-sm"
+                                      [disabled]="acceptingLine() === line.billLineUid"
+                                      (click)="acceptVariance(line.billLineUid)">
+                                {{ acceptLabel(line) }}
+                              </button>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
         <!-- ── Bill lines ───────────────────────────────────────────────────── -->
         @if (b.lines && b.lines.length > 0) {
           <div class="erp-card mb-4">

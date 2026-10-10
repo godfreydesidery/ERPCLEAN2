@@ -58,7 +58,13 @@
     @if (matchState() === 'error') {
       <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
         <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
-        Bill entered but 3-way match failed. You can re-run the match from the bill detail screen.
+        <span>
+          Bill entered but 3-way match failed. You can re-run the match, or delete the bill and
+          enter it again, from the bill detail screen.
+          @if (savedBill(); as bill) {
+            <a [routerLink]="['/admin/ap/supplier-bills/uid', bill.uid]" class="alert-link ms-1">Open the bill</a>
+          }
+        </span>
       </div>
     }
 

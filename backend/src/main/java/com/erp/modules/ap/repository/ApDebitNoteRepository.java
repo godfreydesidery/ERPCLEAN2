@@ -21,6 +21,9 @@ public interface ApDebitNoteRepository extends JpaRepository<ApDebitNote, Long> 
 
     Page<ApDebitNote> findByCompanyId(Long companyId, Pageable pageable);
 
+    /** AP-01: true when any debit note was raised against this bill. */
+    boolean existsBySupplierBillId(Long supplierBillId);
+
     Page<ApDebitNote> findByCompanyIdAndSupplierId(Long companyId, Long supplierId, Pageable pageable);
 
     /**

@@ -113,9 +113,13 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         // Duplicate-invoice guard (uq_supplier_bill_supplier_invoice)
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(
                 companyId, supplierId, req.supplierInvoiceNo())) {
+            // AP-01: a held or never-matched bill can now be deleted from its detail screen, so
+            // say where to go instead of leaving the clerk at a dead end.
             throw new IllegalStateException(
                     "Supplier invoice '" + req.supplierInvoiceNo()
-                            + "' already entered for this supplier (duplicate-payable guard).");
+                            + "' has already been entered for this supplier. If that bill is on"
+                            + " hold or was never matched, open it and delete it, then enter the"
+                            + " invoice again.");
         }
 
         String currency = req.currency() != null ? req.currency()
