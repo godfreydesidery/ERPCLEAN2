@@ -823,7 +823,13 @@ public class ProductServiceImpl implements ProductService {
         // Security fix (finding 3)
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+        // Ordered the way the walk-in resolver prefers rows (company default list first, then the
+        // oldest row, rows that cannot price anything today last) — PRD-01 / POS-12. The deployed
+        // OrbixPOS till previews the FIRST row of this listing in the sale currency, so this order is
+        // what keeps the price the cashier sees equal to the price the sale posts. Same fields, same
+        // rows; only the order is defined (it used to be whatever the database returned).
         return prices.findByProductId(p.getId()).stream()
+                .sorted(SellingPriceRules.walkInPreference(java.time.LocalDate.now()))
                 .map(ProductPriceDto::from)
                 .toList();
     }

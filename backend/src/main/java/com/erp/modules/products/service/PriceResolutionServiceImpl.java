@@ -2,6 +2,7 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
@@ -12,6 +13,7 @@ import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.Promotion;
+import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.PromotionEffect;
 import com.erp.modules.products.domain.enums.PromotionTarget;
 import com.erp.modules.products.domain.enums.UnitPriceStatus;
@@ -26,14 +28,19 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Deterministic price resolver: customer price > promotion > tier > list > NONE (ADR-0029 D-6).
- * No stacking — first matching rule wins. Read-only transaction.
+ * Deterministic price resolver. The live selling path is {@link #findSellingPriceQuote}: customer
+ * contract price &gt; list price (customer list &gt; company default list &gt; legacy lowest-id row),
+ * PRD-01. {@link #resolve} (ADR-0029 D-6, adding promotions and tiers) stays unwired. Read-only
+ * transaction.
  */
 @Service
 @Transactional(readOnly = true)
@@ -83,7 +90,8 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         // 1 — Customer-specific price (highest priority)
         if (req.customerId() != null) {
             var cp = customerPrices.findActiveForCustomerProduct(
-                    req.customerId(), req.productId(), req.businessDate());
+                    req.customerId(), req.productId(),
+                    req.businessDate() != null ? req.businessDate() : LocalDate.now());
             if (cp.isPresent()) {
                 CustomerPrice customerPrice = cp.get();
                 return ResolvedPriceDto.customerPrice(customerPrice.getUnitPriceAmount(),
@@ -150,77 +158,236 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
 
     @Override
     public UnitPriceQuoteResult findUnitListPriceQuote(Long companyId, Long productId, Long unitId) {
+        // The walk-in question: no customer, any currency, today. One implementation of the rules —
+        // this used to be its own "first price row ever created wins" scan (PRD-01).
+        return findSellingPriceQuote(SellingPriceQuery.walkIn(companyId, productId, unitId));
+    }
+
+    @Override
+    public UnitListPriceDto resolveSellingPrice(SellingPriceQuery query) {
+        UnitPriceQuoteResult result = findSellingPriceQuote(query);
+        return switch (result.status()) {
+            case RESOLVED -> new UnitListPriceDto(result.price().amount(),
+                    result.price().vatInclusive(), result.price().source());
+            case NO_PRICE -> throw new IllegalArgumentException(NO_PRICE_MESSAGE);
+            case UNIT_NOT_APPLICABLE -> throw new IllegalStateException(UNIT_NOT_APPLICABLE_MESSAGE);
+        };
+    }
+
+    @Override
+    public UnitPriceQuoteResult findSellingPriceQuote(SellingPriceQuery query) {
         // Company-scoped finder (not bare findById) — prevents a confused-deputy cross-tenant
         // read if a caller ever passes a productId that isn't actually in companyId.
-        Product product = products.findByCompanyIdAndId(companyId, productId)
+        Product product = products.findByCompanyIdAndId(query.companyId(), query.productId())
                 .orElseThrow(() -> new NotFoundException("Product not found."));
+        LocalDate date = query.businessDate() != null ? query.businessDate() : LocalDate.now();
+
+        // null = the unit is neither the base nor a configured pack (mirrors computeQtyInBase).
+        BigDecimal factor = unitFactor(product, query.unitId());
+
+        // Every row that may price a sale today: ACTIVE list, inside the list's and the row's own
+        // validity windows, carrying an amount. Oldest first, so "first" keeps meaning lowest id.
+        List<ProductPrice> usable = productPrices
+                .findPricingRowsOfProduct(query.companyId(), query.productId()).stream()
+                .filter(row -> SellingPriceRules.rowUsable(row, date))
+                .toList();
+
+        UnitPriceQuoteResult listPrice = resolveListPrice(product, query, factor, usable);
+
+        // 1 — Customer contract price (PRD-02, customer prices only). Applies to the named customer
+        // alone, so a walk-in sale — and the till's preview of it — is never affected.
+        if (query.customerId() != null) {
+            Optional<UnitPriceQuoteResult> contract =
+                    customerContractPrice(product, query, factor, date, listPrice);
+            if (contract.isPresent()) {
+                return contract.get();
+            }
+        }
+        // 2 — List price: customer list > company default list > legacy lowest-id row.
+        return listPrice;
+    }
+
+    // ---- selling-price resolution (PRD-01) ------------------------------------------
+
+    /**
+     * The list price, choosing the list customer default &gt; company default &gt; legacy lowest-id
+     * row, preferring rows in the document currency (see the interface for the full contract).
+     */
+    private UnitPriceQuoteResult resolveListPrice(Product product, SellingPriceQuery query,
+                                                  BigDecimal factor, List<ProductPrice> usable) {
+        List<List<ProductPrice>> passes = new ArrayList<>(2);
+        if (query.currency() != null) {
+            // Rows in the document's currency first. A TZS invoice must not be priced from a USD row
+            // while a TZS one exists — that charges the USD number as shillings.
+            passes.add(usable.stream()
+                    .filter(row -> SellingPriceRules.currencyMatches(row, query.currency()))
+                    .toList());
+        }
+        // Then every usable row: the long-standing tolerance for a single-currency shop whose rows
+        // were saved under another code (the till does the same). Reached only when no row in the
+        // document currency could price the line.
+        passes.add(usable);
+
+        boolean unitNotApplicable = false;
+        for (List<ProductPrice> rows : passes) {
+            if (rows.isEmpty()) {
+                continue;
+            }
+            List<Long> listOrder = new ArrayList<>(3);
+            if (query.customerPriceListId() != null) {
+                listOrder.add(query.customerPriceListId());
+            }
+            companyDefaultListId(rows).ifPresent(listOrder::add);
+            listOrder.add(null); // legacy: any list, lowest row id
+
+            for (Long listId : listOrder) {
+                UnitPriceQuoteResult result = priceOnRows(product, query.unitId(), factor, rows, listId);
+                if (result == null) {
+                    continue; // nothing on this list for the product — try the next tier
+                }
+                if (result.isResolved()) {
+                    return result;
+                }
+                // A unit the product is not sold in is a product-level fact; another list can only
+                // rescue it with an explicit row for that very unit. Keep looking, remember why.
+                unitNotApplicable = true;
+            }
+        }
+        return UnitPriceQuoteResult.unpriced(unitNotApplicable
+                ? UnitPriceStatus.UNIT_NOT_APPLICABLE
+                : UnitPriceStatus.NO_PRICE);
+    }
+
+    /**
+     * The company default among the lists that can price this product today. Several lists can
+     * carry the flag (there is no unique index behind it); the lowest id wins, deterministically.
+     */
+    private static Optional<Long> companyDefaultListId(List<ProductPrice> rows) {
+        return rows.stream()
+                .map(ProductPrice::getPriceList)
+                .filter(PriceList::isDefault)
+                .map(PriceList::getId)
+                .filter(Objects::nonNull)
+                .min(Long::compare);
+    }
+
+    /**
+     * Prices one line from {@code rows}, restricted to price list {@code listId} (null = any list,
+     * the legacy tier). ADR-0048: an explicit per-unit row for a pack wins (non-linear pack price,
+     * inheriting ITS OWN list's VAT stance), else the base row × {@code factor_to_base}.
+     *
+     * @return the resolved quote; {@code UNIT_NOT_APPLICABLE} when a base row exists but the unit
+     *         is not one the product is sold in; {@code null} when these rows hold no price at all
+     */
+    private static UnitPriceQuoteResult priceOnRows(Product product, Long unitId, BigDecimal factor,
+                                                    List<ProductPrice> rows, Long listId) {
+        Long baseUnitId = product.getBaseUnit().getId();
+        List<ProductPrice> candidates = listId == null
+                ? rows
+                : rows.stream().filter(row -> listId.equals(row.getPriceList().getId())).toList();
+        if (candidates.isEmpty()) {
+            return null;
+        }
 
         // 1 — explicit per-unit override (non-linear pack price), if configured for this unit.
-        boolean isBaseUnit = product.getBaseUnit().getId().equals(unitId);
-        if (!isBaseUnit) {
-            Optional<ProductPrice> explicit =
-                    productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productId, unitId);
+        if (!baseUnitId.equals(unitId)) {
+            Optional<ProductPrice> explicit = firstWithUnit(candidates, unitId);
             if (explicit.isPresent()) {
-                ProductPrice pack = explicit.get();
-                BigDecimal packAmount = amountOrNull(pack);
-                if (packAmount == null) {
-                    return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
-                }
-                // ADR-0056: a pack override inherits ITS OWN list's VAT stance, independent of
-                // whatever the base row's list says.
-                return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(packAmount,
-                        currencyOf(pack), pack.getPriceList().isPriceIncludesVat()));
+                return UnitPriceQuoteResult.resolved(quoteOf(explicit.get(), BigDecimal.ONE));
             }
         }
 
         // 2 — base row × factor_to_base(unit); factor is 1 for the base unit itself.
-        // First-wins across price lists: the live path is deliberately price-list-blind (ADR-0048),
-        // and a product priced on several lists has several base rows — take the lowest-id one rather
-        // than throwing on a multi-price-list product (restores the pre-D-1 findFirst tolerance).
-        // Checked BEFORE unit applicability so an unpriced product reads as NO_PRICE whatever unit
-        // the caller asked for (the order the batch statuses were specified in).
-        Optional<ProductPrice> baseRow =
-                productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productId);
-
+        //
         // A base price is SUPPOSED to live on the NULL row — resolvePriceUnit coerces a base-unit uid
         // to null on every write (ADR-0048 D-1). But a row can end up keyed on the base unit id
-        // anyway: it was written against a PACK unit, correctly, and the product's base unit was
-        // later changed to that same unit. The row never moved.
-        //
-        // Such a row is then invisible here, and invisible in the worst way. Step 1 above skips the
-        // explicit per-unit lookup PRECISELY because the caller asked for the base unit, and this
-        // step only looks for NULL — so the price falls between the two branches. The back office
-        // lists it, the till prices the line at nothing, and no error is raised anywhere. A shop
-        // lost a morning to it on 2026-08-16 with a 20,000 TZS price sitting on the screen.
-        //
-        // Read-side tolerance rather than a data migration: it heals the rows in place, on every
-        // install, without anyone first having to work out which products are affected — and
-        // rewriting live price rows to repair a read is the more dangerous of the two options.
-        // ProductServiceImpl.updateByUid now refuses the base-unit change that creates this shape,
-        // so what remains is the rows that already drifted.
-        //
-        // The NULL row still wins when both exist, so correctly-keyed data behaves identically.
-        if (baseRow.isEmpty()) {
-            baseRow = productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(
-                    productId, product.getBaseUnit().getId());
+        // anyway: written against a PACK unit, correctly, before the product's base unit was changed
+        // to that same unit. Step 1 skips such a row precisely because the caller asked for the base
+        // unit, so without this tolerance the price falls between the two branches and the till
+        // prices the line at nothing (a shop lost a morning to it on 2026-08-16). Read-side tolerance
+        // rather than a data migration; the NULL row still wins when both exist, so correctly-keyed
+        // data behaves identically.
+        Optional<ProductPrice> base = candidates.stream()
+                .filter(row -> row.getUnit() == null)
+                .findFirst();
+        if (base.isEmpty()) {
+            base = firstWithUnit(candidates, baseUnitId);
         }
-
-        if (baseRow.isEmpty()) {
-            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
+        if (base.isEmpty()) {
+            return null;
         }
-        ProductPrice base = baseRow.get();
-        BigDecimal baseAmount = amountOrNull(base);
-        if (baseAmount == null) {
-            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE);
-        }
-
         // 3 — unit must be the base or a configured pack, else reject (mirrors computeQtyInBase).
-        BigDecimal factor = unitFactor(product, unitId);
         if (factor == null) {
             return UnitPriceQuoteResult.unpriced(UnitPriceStatus.UNIT_NOT_APPLICABLE);
         }
-        return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(baseAmount.multiply(factor),
-                currencyOf(base), base.getPriceList().isPriceIncludesVat()));
+        return UnitPriceQuoteResult.resolved(quoteOf(base.get(), factor));
+    }
+
+    private static Optional<ProductPrice> firstWithUnit(List<ProductPrice> rows, Long unitId) {
+        return rows.stream()
+                .filter(row -> row.getUnit() != null && row.getUnit().getId().equals(unitId))
+                .findFirst();
+    }
+
+    private static UnitPriceQuoteDto quoteOf(ProductPrice row, BigDecimal factor) {
+        PriceList list = row.getPriceList();
+        return new UnitPriceQuoteDto(row.getPrice().getAmount().multiply(factor), currencyOf(row),
+                list.isPriceIncludesVat(), PriceSource.LIST_PRICE, list.getUid(), list.getName());
+    }
+
+    /**
+     * The customer's contract price for this line, when one applies (see the interface). Empty when
+     * none is configured, it belongs to another company, it is in another currency than the
+     * document, or the line is below its minimum quantity — the list price then stands.
+     */
+    private Optional<UnitPriceQuoteResult> customerContractPrice(Product product,
+                                                                 SellingPriceQuery query,
+                                                                 BigDecimal factor, LocalDate date,
+                                                                 UnitPriceQuoteResult listPrice) {
+        Optional<CustomerPrice> found = customerPrices
+                .findActiveForCustomerProduct(query.customerId(), product.getId(), date)
+                // Defence in depth: the customer id came from a document; never trust it across
+                // tenants.
+                .filter(cp -> query.companyId().equals(cp.getCompanyId()))
+                .filter(cp -> cp.getUnitPriceAmount() != null)
+                .filter(cp -> query.currency() == null
+                        || query.currency().equalsIgnoreCase(CurrencyCode.value(cp.getCurrency())));
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        if (factor == null) {
+            // A contract price cannot make a unit sellable that the product is not sold in.
+            return Optional.of(UnitPriceQuoteResult.unpriced(UnitPriceStatus.UNIT_NOT_APPLICABLE));
+        }
+        CustomerPrice contract = found.get();
+        BigDecimal lineQty = query.quantity() != null ? query.quantity() : BigDecimal.ONE;
+        if (contract.getMinQty() != null
+                && lineQty.multiply(factor).compareTo(contract.getMinQty()) < 0) {
+            return Optional.empty();
+        }
+
+        // VAT stance: the contract's own list when it names one; otherwise the stance of the list
+        // price this customer would otherwise pay — the contract price is entered on the same basis
+        // as the prices that customer sees, so a VAT-inclusive shop's "650" stays VAT-inclusive.
+        boolean vatInclusive;
+        String listUid = null;
+        String listName = null;
+        Optional<PriceList> ownList = contract.getPriceListId() == null
+                ? Optional.empty()
+                : priceLists.findByCompanyIdAndId(query.companyId(), contract.getPriceListId());
+        if (ownList.isPresent()) {
+            vatInclusive = ownList.get().isPriceIncludesVat();
+            listUid = ownList.get().getUid();
+            listName = ownList.get().getName();
+        } else {
+            vatInclusive = listPrice.isResolved() && listPrice.price().vatInclusive();
+        }
+        // Stored per base unit (customer_prices has no unit column), so a pack line pays
+        // amount × factor_to_base.
+        return Optional.of(UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(
+                contract.getUnitPriceAmount().multiply(factor),
+                CurrencyCode.value(contract.getCurrency()), vatInclusive,
+                PriceSource.CUSTOMER_PRICE, listUid, listName)));
     }
 
     // ---- helpers ---------------------------------------------------------------
@@ -249,21 +416,11 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     }
 
     /**
-     * ISO 4217 code of the price row. {@code requireAmount} has already rejected an incomplete
-     * {@code Money}, so the currency is present whenever this is reached.
+     * ISO 4217 code of the price row. {@code SellingPriceRules.rowUsable} has already rejected a row
+     * without a {@code Money}, so the price is present whenever this is reached.
      */
     private static String currencyOf(ProductPrice pp) {
         return CurrencyCode.value(pp.getPrice().getCurrency());
-    }
-
-    /**
-     * Extracts the price amount, or {@code null} when the row's {@code Money} is incomplete — an
-     * unusable row reads the same as no row at all ({@code NO_PRICE}). Returns a value rather than
-     * throwing so batch callers never trip the transaction (see {@code UnitPriceQuoteResult}).
-     */
-    private static BigDecimal amountOrNull(ProductPrice pp) {
-        var money = pp.getPrice();
-        return money == null ? null : money.getAmount();
     }
 
     /**

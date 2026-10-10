@@ -15,6 +15,11 @@ import java.util.List;
  * @param unitUid     optional — the unit every price should be expressed in. When null each product
  *                    is priced in its OWN base unit (the common POS case, where each row has a
  *                    different base unit).
+ * @param customerUid optional (PRD-01) — price for this customer: their contract prices and their
+ *                    default price list apply exactly as they will on the invoice. Null asks the
+ *                    walk-in question, which is what every client that predates the field gets.
+ * @param currency    optional (PRD-01) — the document currency; a price row in it is preferred.
+ *                    Null = any currency, the pre-existing behaviour.
  */
 public record ResolveUnitPricesRequest(
 
@@ -22,5 +27,16 @@ public record ResolveUnitPricesRequest(
         @Size(max = 200, message = "Ask for at most 200 products in one price request.")
         List<String> productUids,
 
-        String unitUid) {
+        String unitUid,
+
+        @Size(max = 26, message = "The customer reference is not valid.")
+        String customerUid,
+
+        @Size(max = 3, message = "Use a three-letter currency code.")
+        String currency) {
+
+    /** Pre-PRD-01 shape — the walk-in question in any currency. */
+    public ResolveUnitPricesRequest(List<String> productUids, String unitUid) {
+        this(productUids, unitUid, null, null);
+    }
 }

@@ -228,8 +228,15 @@ public class SalesOrderServiceImpl implements SalesOrderService {
         }
         // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
         // line below regardless of whether the price is overridden.
+        // Priced for the order's customer (PRD-01): contract price, else their default price list,
+        // else the company default list.
         UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
-                priceResolutionService, order.getCompanyId(), product.getId(), unit.getId(),
+                priceResolutionService,
+                LinePriceResolver.query(order.getCompanyId(), product.getId(), unit.getId(),
+                        LinePriceResolver.pricingCustomer(customers, order.getCompanyId(),
+                                order.getCustomerId()),
+                        order.getCurrency() == null ? null : order.getCurrency().value(),
+                        req.quantity()),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
