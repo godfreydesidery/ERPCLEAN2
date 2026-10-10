@@ -78,6 +78,9 @@ class SalesInvoiceServiceImplTest {
     // UAT wave 1: create() resolves the acting user's own internal agent through this, provisioning
     // one on first sale. Its own rules are pinned by InternalAgentProvisionerTest.
     @Mock InternalAgentProvisioner internalAgents;
+    // LSF-04: root's sales fall back to the company's Counter agent. Pinned below and in
+    // CounterAgentProvisionerTest.
+    @Mock CounterAgentProvisioner counterAgents;
     // Every DTO names the invoice's creator through this. Mocked (not null) for the same reason
     // as the discount guard: @InjectMocks would pass null and every read would NPE.
     @Mock com.erp.modules.iam.service.UserLookupService userLookup;
@@ -394,6 +397,46 @@ class SalesInvoiceServiceImplTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Select a sales agent");
         verify(invoices, never()).save(any());
+        // A staff member without an agent is a setup gap to name, never silently credited to the
+        // counter.
+        verify(counterAgents, never()).resolveOrProvision(any(), any());
+    }
+
+    @Test
+    void create_byRootWithNoAgentNamed_isCreditedToTheCounterAgent() {
+        // LSF-04: the owner on a fresh install signs in as root, who can hold no internal agent.
+        asRoot();
+        Long counterAgentId = 5151L;
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+        when(counterAgents.resolveOrProvision(eq(COMPANY_ID), eq(1L)))
+                .thenReturn(Optional.of(counterAgentId));
+        when(invoices.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        service.create(new CreateSalesInvoiceRequest("COMPUID00000000000000001",
+                "CUSTUID00000000000000001", null, "TZS", null, null));
+
+        ArgumentCaptor<SalesInvoice> captor = ArgumentCaptor.forClass(SalesInvoice.class);
+        verify(invoices).save(captor.capture());
+        assertThat(captor.getValue().getAgentId()).isEqualTo(counterAgentId);
+    }
+
+    @Test
+    void create_byRootWhenTheCounterAgentWasArchived_stillRefuses() {
+        asRoot();
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+        when(counterAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(new CreateSalesInvoiceRequest(
+                "COMPUID00000000000000001", "CUSTUID00000000000000001", null, "TZS", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Select a sales agent");
+        verify(invoices, never()).save(any());
     }
 
     // -------------------------------------------------------------------------
@@ -404,6 +447,12 @@ class SalesInvoiceServiceImplTest {
     private static void asCashier() {
         RequestContext.set(new RequestContext.Principal(
                 77L, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
+    }
+
+    /** The system administrator — can never hold an internal sales agent. */
+    private static void asRoot() {
+        RequestContext.set(new RequestContext.Principal(
+                1L, "rootadmin", true, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
     }
 
     private static com.erp.modules.iam.domain.entity.Company company() {

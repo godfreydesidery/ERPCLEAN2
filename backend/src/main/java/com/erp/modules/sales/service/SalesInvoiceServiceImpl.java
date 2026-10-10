@@ -128,6 +128,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final DiscountAuthorisationGuard discountGuard;
     /** Makes the mandatory-agent rule satisfiable on a company whose agent master is empty. */
     private final InternalAgentProvisioner internalAgents;
+    /** LSF-04: the company's "Counter" agent, for sales rung by root (who can hold no agent). */
+    private final CounterAgentProvisioner counterAgents;
     /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
     private final UserLookupService userLookup;
     /** Base-currency minor units for the VAT-return output summary (converted per document). */
@@ -162,7 +164,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    InternalAgentProvisioner internalAgents,
                                    UserLookupService userLookup,
                                    com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
-                                   CreditExposureCalculator creditExposure) {
+                                   CreditExposureCalculator creditExposure,
+                                   CounterAgentProvisioner counterAgents) {
+        this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -1234,6 +1238,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Optional<Long> auto = internalAgents.resolveOrProvision(companyId, ctx);
         if (auto.isPresent()) {
             return auto.get();
+        }
+        // LSF-04: the system administrator (root) can never hold an internal agent, so on a fresh
+        // install the owner could not ring the first sale. Their sales go to the company's
+        // "Counter" agent instead (created on first use). Staff are NOT routed here: a non-root
+        // user without an agent is a setup gap the refusal below names, and silently crediting
+        // their sales to the counter would hide it.
+        if (ctx != null && ctx.root()) {
+            Optional<Long> counter = counterAgents.resolveOrProvision(companyId, ctx.userId());
+            if (counter.isPresent()) {
+                return counter.get();
+            }
         }
         // Technical context goes to the log only; the user-facing message stays friendly and
         // carries no internal codes/identifiers (error-message hygiene standing rule).
