@@ -36,9 +36,9 @@ import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import com.erp.modules.gl.repository.JournalLineRepository;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Locale;
@@ -89,6 +89,7 @@ public class CashCountServiceImpl implements CashCountService {
     private final SaleTenderAccountQuery             saleTenderAccounts;
     private final CashBookGoLive                     goLive;
     private final JournalLineRepository              journalLines;
+    private final CompanyCalendar                    calendar;
 
     public CashCountServiceImpl(CashCountRepository counts,
                                  CashCountDenominationRepository denominations,
@@ -103,7 +104,8 @@ public class CashCountServiceImpl implements CashCountService {
                                  AuditService audit,
                                  SaleTenderAccountQuery saleTenderAccounts,
                                  CashBookGoLive goLive,
-                                 JournalLineRepository journalLines) {
+                                 JournalLineRepository journalLines,
+                                 CompanyCalendar calendar) {
         this.counts        = counts;
         this.denominations = denominations;
         this.accounts      = accounts;
@@ -118,6 +120,7 @@ public class CashCountServiceImpl implements CashCountService {
         this.saleTenderAccounts = saleTenderAccounts;
         this.goLive        = goLive;
         this.journalLines  = journalLines;
+        this.calendar      = calendar;
     }
 
     @Override
@@ -333,7 +336,8 @@ public class CashCountServiceImpl implements CashCountService {
                     "This cash account receives your sales takings and cannot be counted here "
                             + "yet. Count this drawer when you close the POS till session.");
         }
-        LocalDate firstDay = since.atZone(ZoneOffset.UTC).toLocalDate();
+        // The go-live business day, in the company's zone.
+        LocalDate firstDay = calendar.dateOf(companyId, since);
         if (businessDate.isBefore(firstDay)) {
             throw new ConflictException(
                     "This cash account receives your sales takings, and the cash book only "

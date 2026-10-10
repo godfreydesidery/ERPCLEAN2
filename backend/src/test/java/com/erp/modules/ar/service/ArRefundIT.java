@@ -80,6 +80,7 @@ class ArRefundIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private com.erp.platform.common.time.CompanyCalendar calendar;
 
     private Company company;
     private Branch branch;
@@ -119,7 +120,7 @@ class ArRefundIT extends PostgresIntegrationTest {
     @Test
     void depositRefund_paysBackPartOfTheOnAccountMoney_glBalanced_cashOut_arStillReconciles() {
         ArReceiptDto deposit = receiptService.recordAndAllocate(new RecordReceiptRequest(
-                companyUid, customerUid, new BigDecimal("1000"), "TZS", LocalDate.now(), "CASH",
+                companyUid, customerUid, new BigDecimal("1000"), "TZS", today(), "CASH",
                 null, List.of()));
         assertThat(deposit.unallocatedAmount()).isEqualByComparingTo("1000");
 
@@ -160,7 +161,7 @@ class ArRefundIT extends PostgresIntegrationTest {
     @Test
     void unusedCreditNote_refundedInFull_isUsedUp_andCannotBeReapplied() {
         ArCreditNoteDto note = creditNoteService.raise(new RaiseCreditNoteRequest(
-                companyUid, customerUid, null, LocalDate.now(), new BigDecimal("500"),
+                companyUid, customerUid, null, today(), new BigDecimal("500"),
                 BigDecimal.ZERO, "TZS", "Price allowance"));
         assertThat(note.unappliedAmount()).isEqualByComparingTo("500");
 
@@ -184,7 +185,7 @@ class ArRefundIT extends PostgresIntegrationTest {
     @Test
     void refund_withoutReason_orBeyondNothing_isRefused() {
         ArReceiptDto deposit = receiptService.recordAndAllocate(new RecordReceiptRequest(
-                companyUid, customerUid, new BigDecimal("300"), "TZS", LocalDate.now(), "CASH",
+                companyUid, customerUid, new BigDecimal("300"), "TZS", today(), "CASH",
                 null, List.of()));
 
         assertThatThrownBy(() -> refundService.refund(new RefundCustomerRequest(
@@ -218,5 +219,10 @@ class ArRefundIT extends PostgresIntegrationTest {
         Long id = accountRepo.findByCompanyIdAndAccountCode(company.getId(), code).orElseThrow().getId();
         return lines.stream().filter(l -> id.equals(l.getAccountId()))
                 .map(JournalLine::getCreditAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** The business day in the company's zone (store UTC, derive in company zone). */
+    private LocalDate today() {
+        return calendar.today(company.getId());
     }
 }

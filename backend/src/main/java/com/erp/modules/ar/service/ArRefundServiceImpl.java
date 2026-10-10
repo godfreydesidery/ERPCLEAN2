@@ -25,12 +25,12 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -67,6 +67,7 @@ public class ArRefundServiceImpl implements ArRefundService {
     private final GLPostingService glPosting;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final CompanyCalendar calendar;
 
     public ArRefundServiceImpl(ArReceiptRepository receipts,
                                ArCreditNoteRepository creditNotes,
@@ -76,7 +77,8 @@ public class ArRefundServiceImpl implements ArRefundService {
                                GLConfigResolver glConfig,
                                GLPostingService glPosting,
                                ScopeGuard scopeGuard,
-                               AuditService audit) {
+                               AuditService audit,
+                               CompanyCalendar calendar) {
         this.receipts        = receipts;
         this.creditNotes     = creditNotes;
         this.companies       = companies;
@@ -86,6 +88,7 @@ public class ArRefundServiceImpl implements ArRefundService {
         this.glPosting       = glPosting;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
+        this.calendar        = calendar;
     }
 
     @Override
@@ -122,7 +125,7 @@ public class ArRefundServiceImpl implements ArRefundService {
         BigDecimal credit = receipt.getUnallocatedAmount() == null
                 ? BigDecimal.ZERO : receipt.getUnallocatedAmount();
         assertWithinCredit(amount, credit, currency, "receipt " + number);
-        LocalDate date = refundDate(req, receipt.getReceiptDate());
+        LocalDate date = refundDate(req, companyId, receipt.getReceiptDate());
 
         Posted posted = post(companyId, receipt.getBranchId(), date, amount, currency,
                 req.cashBankAccountUid(), JournalSourceType.AR_RECEIPT, receipt.getUid(),
@@ -160,7 +163,7 @@ public class ArRefundServiceImpl implements ArRefundService {
         String currency = assertBaseCurrency(companyId, note.getCurrency().value(), "Credit note " + number);
         BigDecimal credit = note.getUnappliedAmount() == null ? BigDecimal.ZERO : note.getUnappliedAmount();
         assertWithinCredit(amount, credit, currency, "credit note " + number);
-        LocalDate date = refundDate(req, note.getNoteDate());
+        LocalDate date = refundDate(req, companyId, note.getNoteDate());
 
         // Source ref = the note's UID: the note's own entries carry its NUMBER, and re-applying a
         // note retires every live entry under that number except the raise — a refund must not be
@@ -241,8 +244,9 @@ public class ArRefundServiceImpl implements ArRefundService {
         }
     }
 
-    private static LocalDate refundDate(RefundCustomerRequest req, LocalDate documentDate) {
-        LocalDate date = req.refundDate() != null ? req.refundDate() : LocalDate.now(ZoneOffset.UTC);
+    private LocalDate refundDate(RefundCustomerRequest req, Long companyId, LocalDate documentDate) {
+        // Defaults to today in the company's business zone (store UTC, derive in company zone).
+        LocalDate date = req.refundDate() != null ? req.refundDate() : calendar.today(companyId);
         if (documentDate != null && date.isBefore(documentDate)) {
             throw new IllegalArgumentException("The refund cannot be dated before the document it refunds.");
         }

@@ -124,6 +124,7 @@ class SalesCashBookIT extends PostgresIntegrationTest {
     @Autowired AppUserRepository users;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired IamTestData testData;
+    @Autowired com.erp.platform.common.time.CompanyCalendar calendar;
 
     Company company;
     Branch branch;
@@ -268,7 +269,7 @@ class SalesCashBookIT extends PostgresIntegrationTest {
 
     @Test
     void cashCount_onTheSalesTill_dayWithSalesPayoutAndRefund_expectedIsTheDrawer_noCashOver() {
-        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        java.time.LocalDate today = calendar.today(company.getId());
         directEntries.recordDirectEntry(new com.erp.modules.cashbank.domain.dto.RecordDirectEntryRequest(
                 company.getUid(), cashAccount.getUid(), CashTxnDirection.IN,
                 new BigDecimal("1000"), today, glUid("3000"), "Opening float"));

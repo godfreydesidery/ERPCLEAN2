@@ -101,7 +101,9 @@ class CashCountServiceImplTest {
 
         service = new CashCountServiceImpl(counts, denominations, accounts, txns, companies,
                 glConfigs, numbers, glConfig, glPosting, scopeGuard, audit, saleTenderAccounts,
-                goLive, journalLines);
+                goLive, journalLines,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                        java.time.ZoneId.of("Africa/Dar_es_Salaam"), java.time.Clock.systemUTC()));
 
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 5L, null));
     }

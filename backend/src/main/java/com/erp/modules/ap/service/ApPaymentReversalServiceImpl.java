@@ -16,11 +16,11 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.AccountingSetupException;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
@@ -46,6 +46,7 @@ public class ApPaymentReversalServiceImpl implements ApPaymentReversalService {
     private final CashTransactionRecorder cashTxnRecorder;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final CompanyCalendar calendar;
 
     public ApPaymentReversalServiceImpl(ApPaymentRepository payments,
                                         ApPaymentReversalSupport reversalSupport,
@@ -54,7 +55,8 @@ public class ApPaymentReversalServiceImpl implements ApPaymentReversalService {
                                         FiscalPeriodResolver fiscalPeriods,
                                         CashTransactionRecorder cashTxnRecorder,
                                         ScopeGuard scopeGuard,
-                                        AuditService audit) {
+                                        AuditService audit,
+                                        CompanyCalendar calendar) {
         this.payments        = payments;
         this.reversalSupport = reversalSupport;
         this.paymentService  = paymentService;
@@ -63,6 +65,7 @@ public class ApPaymentReversalServiceImpl implements ApPaymentReversalService {
         this.cashTxnRecorder = cashTxnRecorder;
         this.scopeGuard      = scopeGuard;
         this.audit           = audit;
+        this.calendar        = calendar;
     }
 
     @Override
@@ -105,8 +108,9 @@ public class ApPaymentReversalServiceImpl implements ApPaymentReversalService {
                     + " Ask your accountant to correct it with a journal.");
         }
 
-        // Dated today (never before the payment itself), like a bounced-cheque reversal.
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        // Dated today in the company's zone (never before the payment itself), like a
+        // bounced-cheque reversal.
+        LocalDate today = calendar.today(companyId);
         LocalDate reversalDate = today.isBefore(payment.getPaymentDate())
                 ? payment.getPaymentDate() : today;
 

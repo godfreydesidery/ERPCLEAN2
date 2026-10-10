@@ -76,6 +76,7 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private com.erp.platform.common.time.CompanyCalendar calendar;
 
     private Company company;
     private Branch branch;
@@ -114,9 +115,9 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
 
     @Test
     void reverse_restoresTheBill_postsABalancedReversal_andPutsTheCashBackInTheBook() {
-        SupplierBillDto bill = openingBalance("OB-REV-001", new BigDecimal("1000"), LocalDate.now());
+        SupplierBillDto bill = openingBalance("OB-REV-001", new BigDecimal("1000"), today());
         ApPaymentDto paid = paymentService.paySingle(new PaySingleBillRequest(
-                companyUid, bill.uid(), new BigDecimal("1000"), LocalDate.now(), "CASH", null));
+                companyUid, bill.uid(), new BigDecimal("1000"), today(), "CASH", null));
         assertThat(billRepo.findByUid(bill.uid()).orElseThrow().getStatus())
                 .isEqualTo(SupplierBillStatus.PAID);
 
@@ -148,15 +149,15 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
 
         // The bill can be paid again (it is payable, not stuck as PAID).
         ApPaymentDto again = paymentService.paySingle(new PaySingleBillRequest(
-                companyUid, bill.uid(), new BigDecimal("1000"), LocalDate.now(), "CASH", null));
+                companyUid, bill.uid(), new BigDecimal("1000"), today(), "CASH", null));
         assertThat(again.uid()).isNotEqualTo(paid.uid());
     }
 
     @Test
     void reverse_twice_isRefused() {
-        SupplierBillDto bill = openingBalance("OB-REV-002", new BigDecimal("500"), LocalDate.now());
+        SupplierBillDto bill = openingBalance("OB-REV-002", new BigDecimal("500"), today());
         ApPaymentDto paid = paymentService.paySingle(new PaySingleBillRequest(
-                companyUid, bill.uid(), new BigDecimal("500"), LocalDate.now(), "CASH", null));
+                companyUid, bill.uid(), new BigDecimal("500"), today(), "CASH", null));
         reversalService.reverse(paid.uid(), "Duplicate");
 
         assertThatThrownBy(() -> reversalService.reverse(paid.uid(), "Again"))
@@ -167,9 +168,9 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
 
     @Test
     void reverse_withoutReason_isRefused() {
-        SupplierBillDto bill = openingBalance("OB-REV-003", new BigDecimal("500"), LocalDate.now());
+        SupplierBillDto bill = openingBalance("OB-REV-003", new BigDecimal("500"), today());
         ApPaymentDto paid = paymentService.paySingle(new PaySingleBillRequest(
-                companyUid, bill.uid(), new BigDecimal("500"), LocalDate.now(), "CASH", null));
+                companyUid, bill.uid(), new BigDecimal("500"), today(), "CASH", null));
 
         assertThatThrownBy(() -> reversalService.reverse(paid.uid(), "  "))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -179,8 +180,8 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
 
     @Test
     void reverse_inClosedPeriod_isRefused() {
-        LocalDate lastMonth = LocalDate.now().withDayOfMonth(1).minusDays(1);
-        assumeThat(lastMonth.getYear()).isEqualTo(LocalDate.now().getYear());
+        LocalDate lastMonth = today().withDayOfMonth(1).minusDays(1);
+        assumeThat(lastMonth.getYear()).isEqualTo(today().getYear());
         SupplierBillDto bill = openingBalance("OB-REV-004", new BigDecimal("700"), lastMonth);
         ApPaymentDto paid = paymentService.paySingle(new PaySingleBillRequest(
                 companyUid, bill.uid(), new BigDecimal("700"), lastMonth, "CASH", null));
@@ -219,5 +220,10 @@ class ApPaymentReverseIT extends PostgresIntegrationTest {
                 .map(l -> debit ? l.getDebitAmount() : l.getCreditAmount())
                 .map(v -> v != null ? v : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** The business day in the company's zone (store UTC, derive in company zone). */
+    private LocalDate today() {
+        return calendar.today(company.getId());
     }
 }
