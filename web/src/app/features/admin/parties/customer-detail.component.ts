@@ -19,6 +19,8 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { CustomerService } from './customer.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { ArService } from '../ar/ar.service';
+import { ArBalanceDto } from '../ar/models/ar.model';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -40,6 +42,7 @@ export class CustomerDetailComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
+  private readonly arService = inject(ArService);
   protected readonly session = inject(SessionStore);
 
   /** Route input bound via withComponentInputBinding. */
@@ -76,6 +79,19 @@ export class CustomerDetailComponent {
   readonly isCreditAccount = computed(() => this.fCustomerKind() === 'CREDIT_ACCOUNT');
   readonly canManage = computed(() => this.session.hasPermission('CUSTOMER.MANAGE'));
   readonly canAssign = computed(() => this.session.hasPermission('PARTY.BRANCH.ASSIGN'));
+
+  // ── Account balance (ARC-21) ───────────────────────────────────────────────
+  readonly canViewAr = computed(() => this.session.hasPermission('AR.VIEW'));
+  readonly arBalance = signal<ArBalanceDto | null>(null);
+  readonly arBalanceState = signal<'idle' | 'loading' | 'error'>('idle');
+  /** Credit still available = limit − balance, only when both are in the same currency. */
+  readonly availableCredit = computed<number | null>(() => {
+    const b = this.arBalance();
+    const limit = this.customer()?.creditLimit;
+    if (!b || !limit || limit.amount == null || String(limit.amount).trim() === '') return null;
+    if (limit.currency && b.currency && limit.currency !== b.currency) return null;
+    return (+limit.amount || 0) - (+b.balance || 0);
+  });
 
   // ── Branch associations ────────────────────────────────────────────────────
   readonly branches = signal<PartyBranch[]>([]);
@@ -130,9 +146,27 @@ export class CustomerDetailComponent {
         this.customer.set(c);
         this.customerState.set('idle');
         this.patchForm(c);
+        this.loadArBalance(c);
       },
       error: () => this.customerState.set('error'),
     });
+  }
+
+  /** ARC-21: what the customer owes now (GET /ar/balance, AR.VIEW). Non-fatal when it fails. */
+  private loadArBalance(c: CustomerModel): void {
+    if (!this.canViewAr() || !c.companyId) return;
+    this.arBalanceState.set('loading');
+    this.arService.getBalance(String(c.companyId), c.uid).subscribe({
+      next: (b) => { this.arBalance.set(b); this.arBalanceState.set('idle'); },
+      error: () => this.arBalanceState.set('error'),
+    });
+  }
+
+  fmtMoney(v: number | string | null | undefined): string {
+    const n = +(v ?? 0);
+    return Number.isFinite(n)
+      ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '0.00';
   }
 
   private patchForm(c: CustomerModel): void {
