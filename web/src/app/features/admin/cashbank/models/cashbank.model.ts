@@ -15,6 +15,10 @@ export type CashTxnType =
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
   | 'DIRECT_ENTRY'
+  | 'SALE_TENDER'
+  | 'SALE_REFUND'
+  | 'POS_PAYOUT'
+  | 'POS_VARIANCE'
   | 'RECEIPT'
   | 'PAYMENT'
   | 'CHEQUE';

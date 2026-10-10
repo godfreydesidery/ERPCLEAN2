@@ -119,6 +119,27 @@ public class JournalServiceImpl implements JournalService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.Optional<JournalEntryDto> findPostedBySource(
+            Long companyId, com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
+            String sourceRef) {
+        if (companyId == null || sourceType == null || sourceRef == null) {
+            return java.util.Optional.empty();
+        }
+        return entries.findByCompanyIdAndSourceTypeAndSourceRef(companyId, sourceType, sourceRef)
+                .map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<JournalEntryDto> findPostedByUid(Long companyId, String uid) {
+        if (companyId == null || uid == null) {
+            return java.util.Optional.empty();
+        }
+        return entries.findByCompanyIdAndUid(companyId, uid).map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<JournalEntryDto> list(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return entries.findByCompanyId(companyId, pageable).map(this::toDto);

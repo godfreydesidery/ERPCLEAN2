@@ -872,7 +872,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getWhtAmount(), p.getWhtTransactionUid(),
                 p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
                 p.getPaymentRunId(),
-                dtoAllocs);
+                dtoAllocs,
+                p.getReversedAt());
     }
 
     // -------------------------------------------------------------------------

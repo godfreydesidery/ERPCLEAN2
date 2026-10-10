@@ -204,6 +204,8 @@ public final class AuditActions {
     public static final String AR_RECEIPT_ALLOCATE = "AR.RECEIPT.ALLOCATE";
     /** A posted receipt was reversed by hand (ARC-04); detail carries the reason. */
     public static final String AR_RECEIPT_REVERSE  = "AR.RECEIPT.REVERSE";
+    /** Customer credit (on-account receipt money or an unused credit note) paid back (ARC-11). */
+    public static final String AR_REFUND           = "AR.REFUND";
     public static final String AR_WRITEOFF         = "AR.WRITEOFF";
     public static final String AR_CREDITNOTE_RAISE = "AR.CREDITNOTE.RAISE";
     public static final String AR_OPENING_SET      = "AR.OPENING.SET";
@@ -242,6 +244,8 @@ public final class AuditActions {
     /** AP-01: an unposted (DRAFT / HELD) bill removed so it can be entered again correctly. */
     public static final String AP_BILL_DELETE      = "AP.BILL.DELETE";
     public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
+    /** A posted supplier payment was reversed by hand (AP-03); detail carries the reason. */
+    public static final String AP_PAYMENT_REVERSE  = "AP.PAYMENT.REVERSE";
     public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
     public static final String AP_OPENING_SET      = "AP.OPENING.SET";
 

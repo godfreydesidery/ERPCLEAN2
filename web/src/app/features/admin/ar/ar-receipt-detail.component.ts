@@ -55,6 +55,26 @@ export class ArReceiptDetailComponent {
     !!this.entity()?.customerUid && !!this.entity()?.companyId,
   );
 
+  // ── Refund on-account money (ARC-11) ─────────────────────────────────────
+  /** AR.REFUND — the same code the server checks (finance seats only). */
+  readonly canRefund = computed(() => this.session.hasPermission('AR.REFUND'));
+  readonly showRefund = computed(() =>
+    this.canRefund() && !!this.entity() && !this.isReversed() && this.onAccount() > 0.000001,
+  );
+  readonly refundOpen = signal(false);
+  readonly refundAmount = signal('');
+  readonly refundReason = signal('');
+  readonly refunding = signal(false);
+  readonly refundError = signal<string | null>(null);
+  readonly refundAmountInvalid = computed(() => {
+    const n = parseAmount(this.refundAmount());
+    return n === null || n <= 0 || n > this.onAccount() + 0.000001;
+  });
+  readonly refundDisabled = computed(() =>
+    this.refunding() || this.refundAmountInvalid() || !this.refundReason().trim() ||
+    this.refundReason().trim().length > 200,
+  );
+
   // ── Reverse receipt (ARC-04) ──────────────────────────────────────────────
   /** AR.RECEIPT.REVERSE — the same code the server checks (finance seats only). */
   readonly canReverse = computed(() => this.session.hasPermission('AR.RECEIPT.REVERSE'));
@@ -174,7 +194,45 @@ export class ArReceiptDetailComponent {
     });
   }
 
+  openRefund(): void {
+    this.closeApply();
+    this.closeReverse();
+    this.refundAmount.set(this.fmtMoney(this.onAccount()));
+    this.refundReason.set('');
+    this.refundError.set(null);
+    this.refundOpen.set(true);
+  }
+
+  closeRefund(): void {
+    this.refundOpen.set(false);
+    this.refundError.set(null);
+  }
+
+  /** Confirmed in the panel: pays the money back, then shows what is left on account. */
+  confirmRefund(): void {
+    const r = this.entity();
+    const amount = parseAmount(this.refundAmount());
+    if (!r || amount === null || this.refundDisabled()) return;
+    this.refunding.set(true);
+    this.refundError.set(null);
+    this.arService.refundCustomer({
+      sourceType: 'RECEIPT', sourceUid: r.uid, amount, reason: this.refundReason().trim(),
+    }).subscribe({
+      next: (res) => {
+        this.refunding.set(false);
+        this.entity.set({ ...r, unallocatedAmount: +res.remainingCredit });
+        this.alerts.success('Refund paid', `${res.currency} ${this.fmtMoney(res.amount)}`);
+        this.refundOpen.set(false);
+      },
+      error: (err) => {
+        this.refunding.set(false);
+        this.refundError.set(this.messageFrom(err, 'Could not pay this refund.'));
+      },
+    });
+  }
+
   openReverse(): void {
+    this.closeRefund();
     this.closeApply();
     this.reverseReason.set('');
     this.reverseError.set(null);

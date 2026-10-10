@@ -518,13 +518,17 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             saved.add(allocations.save(alloc));
             totalAllocated = totalAllocated.add(line.allocatedAmount());
         }
-        if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
+        // ARC-11: money already paid back to the customer is no longer on this receipt.
+        BigDecimal available = receipt.getAmount().subtract(
+                cashTxnRecorder.refundedAmount(receipt.getCompanyId(), receipt.getUid()));
+        if (totalAllocated.compareTo(available) > 0) {
             throw new IllegalStateException(
-                    "The total re-allocated amount exceeds the receipt amount."
-                    + " Please reduce your allocation lines so they do not exceed the receipt total.");
+                    "The total re-allocated amount exceeds what is left on the receipt."
+                    + " Please reduce your allocation lines so they do not exceed the receipt total"
+                    + " less anything already refunded.");
         }
 
-        BigDecimal unallocated = receipt.getAmount().subtract(totalAllocated);
+        BigDecimal unallocated = available.subtract(totalAllocated);
         receipt.setUnallocatedAmount(unallocated);
         receipt.setStatus(deriveReceiptStatus(unallocated, receipt.getAmount(), totalAllocated));
         receipt.setUpdatedAt(Instant.now());
@@ -558,6 +562,14 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         if (receipt.getGlEntryUid() == null) {
             throw new ConflictException("Receipt " + receipt.getReceiptNumber()
                     + " has no ledger entry, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // ARC-11: part of this receipt was paid back to the customer. Reversing it would put the
+        // whole receipt back on the customer's account, refund included.
+        if (cashTxnRecorder.refundedAmount(companyId, receipt.getUid()).signum() > 0) {
+            throw new ConflictException("Part of receipt " + receipt.getReceiptNumber()
+                    + " was refunded to the customer, so it cannot be reversed here."
                     + " Ask your accountant to correct it with a journal.");
         }
 

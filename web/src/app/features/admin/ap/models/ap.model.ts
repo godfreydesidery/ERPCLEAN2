@@ -252,6 +252,8 @@ export interface ApPaymentDto {
   /** Bank account number; null for a pure cash account, which has none. */
   cashBankAccountNumber: string | null;
   allocations: PaymentAllocationDto[];
+  /** AP-03: when the payment was reversed (bounced cheque or "reverse payment"); null while live. */
+  reversedAt?: string | null;
 }
 
 export interface PaySingleBillRequest {

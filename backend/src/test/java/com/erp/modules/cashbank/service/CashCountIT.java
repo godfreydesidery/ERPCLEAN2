@@ -321,15 +321,15 @@ class CashCountIT extends PostgresIntegrationTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void open_onTheTillLinkedToSalesCashGl_refused() {
+    void open_onTheTillLinkedToSalesCashGl_forADayBeforeTheCashBookCarriedSales_refused() {
         CashBankAccountDto salesTill = accountService.create(new CreateCashBankAccountRequest(
                 companyUid, null, "Sales Till", CashBankAccountType.CASH,
                 null, null, null, glUid(company.getId(), "1000"), false));
 
         assertThatThrownBy(() -> cashCountService.open(
-                new OpenCashCountRequest(companyUid, salesTill.uid(), LocalDate.now())))
+                new OpenCashCountRequest(companyUid, salesTill.uid(), LocalDate.of(2020, 1, 2))))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("POS till session");
+                .hasMessageContaining("only carries them from");
         assertThat(cashCountService.listByAccount(company.getId(),
                 accountService.getByUid(salesTill.uid()).id())).isEmpty();
     }

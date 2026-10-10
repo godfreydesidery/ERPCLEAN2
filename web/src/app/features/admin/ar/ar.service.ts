@@ -16,8 +16,7 @@ import {
   RaiseCreditNoteRequest,
   RecordReceiptRequest,
   SetOpeningBalanceRequest,
-  WriteOffRequest,
-} from './models/ar.model';
+  WriteOffRequest, ArRefundDto, RefundCustomerRequest } from './models/ar.model';
 import { ExportFormat } from '../reporting/models/reporting.model';
 
 export interface ArInvoicePage {
@@ -126,6 +125,15 @@ export class ArService {
    * Reverse a posted receipt (ARC-04): POST /ar/receipts/uid/{uid}/reverse. Posts the reversing
    * journal and cash-book row and restores the invoices it settled. Gated AR.RECEIPT.REVERSE.
    */
+  /**
+   * Pay a customer's unused credit back (ARC-11): POST /ar/refunds. Posts DR AR / CR cash-bank,
+   * writes the OUT cash-book row and reduces the receipt's on-account (or the note's unapplied)
+   * amount. Gated AR.REFUND.
+   */
+  refundCustomer(request: RefundCustomerRequest): Observable<ArRefundDto> {
+    return this.http.post<ArRefundDto>(`${this.base}/refunds`, request);
+  }
+
   reverseReceipt(uid: string, reason: string): Observable<ArReceiptDto> {
     return this.http.post<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/reverse`, { reason });
   }

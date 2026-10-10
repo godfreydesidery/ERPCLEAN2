@@ -31,6 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Mirrors {@code SaleIssueStockHandler} exactly: @Transactional(MANDATORY), idempotency via
  * IdempotencyGuard, system RequestContext, re-reads invoice by uid (never trusts payload amounts).
  */
+// ARC-08: runs before the cash book's handler for the same event, which mirrors the journal this
+// handler posts (in its own committed transaction). Unordered handlers keep their relative order.
+@org.springframework.core.annotation.Order(0)
 @Component
 public class SalesPostingHandler implements DomainEventHandler {
 

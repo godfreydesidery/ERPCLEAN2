@@ -34,6 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>The original entry is found via the partial unique index on
  * {@code journal_entries(company_id, source_type, source_ref) WHERE source_type IN ('SALES',...)}.
  */
+// ARC-08: runs before the cash book's handler for the same event, which mirrors the journal this
+// handler posts (in its own committed transaction). Unordered handlers keep their relative order.
+@org.springframework.core.annotation.Order(0)
 @Component
 public class SaleVoidingHandler implements DomainEventHandler {
 

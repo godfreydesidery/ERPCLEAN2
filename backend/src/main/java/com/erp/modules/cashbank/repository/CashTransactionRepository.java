@@ -45,6 +45,18 @@ public interface CashTransactionRepository extends JpaRepository<CashTransaction
             """)
     java.math.BigDecimal bookBalanceAsOf(@Param("accountId") Long accountId, @Param("asOf") LocalDate asOf);
 
+    /**
+     * Book balance over the rows WRITTEN before {@code before} (ARC-01 / ARC-08) — paired with
+     * the GL balance posted before the same instant to measure the pre-go-live gap. Null when none.
+     */
+    @Query("""
+            SELECT SUM(CASE WHEN t.direction = 'IN' THEN t.amount ELSE -t.amount END)
+            FROM CashTransaction t
+            WHERE t.cashBankAccountId = :accountId AND t.createdAt < :before
+            """)
+    java.math.BigDecimal bookBalanceWrittenBefore(@Param("accountId") Long accountId,
+                                                  @Param("before") java.time.Instant before);
+
     /** Cleared book balance for a reconciliation (the completion check, D-6). */
     @Query("""
             SELECT SUM(CASE WHEN t.direction = 'IN' THEN t.amount ELSE -t.amount END)
