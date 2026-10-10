@@ -419,7 +419,7 @@ class StockTransferServiceImplTest {
     void receive_fromSourceBranch_refusedWithSwitchBranchMessage_stk05() {
         StockTransfer t = inTransitTransfer(800L, "STUID00000000000000000800", true);
         when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
-        when(branches.findById(DST_BRANCH_ID)).thenReturn(Optional.of(branch("DST-01", "Arusha")));
+        when(branches.findByIdAndCompany_Id(DST_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("DST-01", "Arusha")));
         actAs(false, SRC_BRANCH_ID);
 
         assertThatThrownBy(() -> service.receive(t.getUid()))
@@ -452,7 +452,7 @@ class StockTransferServiceImplTest {
     void dispatch_fromDestinationBranch_refused_stk05() {
         StockTransfer t = inTransitTransfer(803L, "STUID00000000000000000803", false);
         when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
-        when(branches.findById(SRC_BRANCH_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
+        when(branches.findByIdAndCompany_Id(SRC_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
         actAs(false, DST_BRANCH_ID);
 
         assertThatThrownBy(() -> service.dispatch(t.getUid()))
@@ -465,7 +465,7 @@ class StockTransferServiceImplTest {
     void completeInstant_fromDestinationBranch_refused_stk05() {
         StockTransfer t = transferWithId(804L, "STUID00000000000000000804"); // INSTANT
         when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
-        when(branches.findById(SRC_BRANCH_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
+        when(branches.findByIdAndCompany_Id(SRC_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
         actAs(false, DST_BRANCH_ID);
 
         assertThatThrownBy(() -> service.completeInstant(t.getUid()))

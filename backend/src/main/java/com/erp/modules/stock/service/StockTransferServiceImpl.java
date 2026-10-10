@@ -436,7 +436,8 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (requiredBranchId != null && requiredBranchId.equals(principal.branchId())) {
             return;
         }
-        String branchName = requiredBranchId == null ? null : branches.findById(requiredBranchId)
+        String branchName = requiredBranchId == null ? null : branches
+                .findByIdAndCompany_Id(requiredBranchId, principal.companyId())
                 .map(Branch::getName).orElse(null);
         throw new ForbiddenException("Switch to "
                 + (branchName != null ? branchName : "the transfer's branch")
