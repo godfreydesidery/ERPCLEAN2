@@ -22,6 +22,20 @@ export type ReconciliationStatus = 'DRAFT' | 'COMPLETED';
 // ── Cash / Bank Account ──────────────────────────────────────────────────────
 
 /**
+ * CashTillOptionDto — narrow till picker row from GET /cash/accounts/tills (LRB-03): ACTIVE
+ * CASH-type accounts only, no balances or bank detail. Reachable with the cash-count codes.
+ */
+export interface CashTillOptionDto {
+  /** Wire: JSON string (Long). */
+  id: string;
+  uid: string;
+  code: string;
+  name: string;
+  branchId: string | null;
+  currency: string | null;
+}
+
+/**
  * CashBankAccountDto — mirrors the backend record.
  * id, companyId, branchId, glAccountId arrive as numbers on wire — coerce with +v if needed.
  */

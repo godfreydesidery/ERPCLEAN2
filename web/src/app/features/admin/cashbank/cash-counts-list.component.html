@@ -45,7 +45,9 @@
       </select>
     </div>
 
-    @if (companyState() !== 'loading' && tills().length === 0) {
+    @if (tillsState() !== 'idle') {
+      <app-lookup-notice [state]="tillsState()" what="till" />
+    } @else if (companyState() !== 'loading' && tills().length === 0) {
       <div class="erp-empty">
         <i class="bi bi-cash-coin"></i>
         No CASH-type accounts found for this company.
