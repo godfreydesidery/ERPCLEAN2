@@ -572,6 +572,14 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','NOTIFICATION.PREFERENCE.MANAGE'),
   ('ACCOUNTANT','DOCUMENT.RENDER'),
   ('ACCOUNTANT','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (LRB-08, owner-approved): the accountant reconciles daily takings and
+  -- returns against the books, but could not open sales invoices, till sessions, stock on hand or
+  -- the return documents behind the credit/debit notes they post.
+  ('ACCOUNTANT','SALES.INVOICE.VIEW'),
+  ('ACCOUNTANT','POS.SESSION.VIEW'),
+  ('ACCOUNTANT','STOCK.VIEW'),
+  ('ACCOUNTANT','SALES.RETURN.VIEW'),
+  ('ACCOUNTANT','PURCHASE.RETURN.VIEW'),
   -- SALES_MANAGER (76 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('SALES_MANAGER','SALES.QUOTE.CREATE'),
   ('SALES_MANAGER','SALES.QUOTE.SEND'),
@@ -659,6 +667,9 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','POS.CASHUP.VIEW'),
   ('SALES_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-13, owner-approved): the sales manager reads every sales report but
+  -- could not export one to PDF/Excel.
+  ('SALES_MANAGER','REPORT.EXPORT'),
   -- BRANCH_MANAGER (56 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
@@ -723,6 +734,16 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','SALES.DISCOUNT.OVERRIDE'),
   ('BRANCH_MANAGER','POS.EXPENSE.VIEW'),
   ('BRANCH_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-12 / LRB-09, owner-approved): a branch manager could post a stock
+  -- count but not start one, view transfers but not receive one into their branch, and could not
+  -- see the debtors statement, deliveries or returns of the branch they run.
+  ('BRANCH_MANAGER','STOCK.TRANSFER.RECEIVE'),
+  ('BRANCH_MANAGER','STOCK.TRANSFER.CREATE'),
+  ('BRANCH_MANAGER','STOCK.COUNT.CREATE'),
+  ('BRANCH_MANAGER','AR.STATEMENT.VIEW'),
+  ('BRANCH_MANAGER','SALES.RETURN.VIEW'),
+  ('BRANCH_MANAGER','SALES.DELIVERY.VIEW'),
+  ('BRANCH_MANAGER','PURCHASE.RETURN.VIEW'),
   -- PROCUREMENT_OFFICER (25 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('PROCUREMENT_OFFICER','PURCHASE.REQUISITION.CREATE'),
   ('PROCUREMENT_OFFICER','PURCHASE.REQUISITION.VIEW'),
@@ -929,7 +950,10 @@ SELECT r.id, p.id FROM (VALUES
   ('PRODUCTION_MANAGER','NOTIFICATION.VIEW'),
   ('PRODUCTION_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('PRODUCTION_MANAGER','DOCUMENT.RENDER'),
-  ('PRODUCTION_MANAGER','BRANCH.VIEW')
+  ('PRODUCTION_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-39, owner-approved): the production manager holds
+  -- STOCK.TRANSFER.CREATE but the transfer form's location pickers 403'd without this.
+  ('PRODUCTION_MANAGER','STOCK.LOCATION.VIEW')
 ) AS g(role_code, perm_code)
 JOIN roles r ON r.code = g.role_code
 JOIN permissions p ON p.code = g.perm_code
