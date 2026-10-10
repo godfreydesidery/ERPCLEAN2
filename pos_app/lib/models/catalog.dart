@@ -48,6 +48,23 @@ class Product {
         restrictedKind: RestrictedKind.fromWire(asStr(j['restrictedKind'])),
         status: asStrOr(j['status'], 'ACTIVE'),
       );
+
+  /// Round-trips through [Product.fromJson] — used to keep a parked basket on
+  /// the till (POS-06). Not a server payload.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'code': code,
+        'name': name,
+        'sellable': sellable,
+        'baseUnitUid': baseUnitUid,
+        'baseUnitCode': baseUnitCode,
+        'baseUnitName': baseUnitName,
+        'cost': cost.toJson(),
+        'vatStatus': vatStatus,
+        'restrictedKind': restrictedKind.wire,
+        'status': status,
+      };
 }
 
 /// A barcode lookup result (`ProductBarcodeDto`). The `derived*` fields are

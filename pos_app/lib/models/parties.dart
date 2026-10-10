@@ -32,6 +32,17 @@ class Customer {
         defaultCurrency: asStr(j['defaultCurrency']),
         status: asStrOr(j['status'], 'ACTIVE'),
       );
+
+  /// Round-trips through [Customer.fromJson] (parked baskets, POS-06).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'code': code,
+        'displayName': displayName,
+        'customerKind': customerKind,
+        'defaultCurrency': defaultCurrency,
+        'status': status,
+      };
 }
 
 /// A sales agent (subset of `AgentDto`). A numeric agent id is required on every

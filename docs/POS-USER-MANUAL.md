@@ -1033,13 +1033,15 @@ These two action columns look similar but do different things.
 1. Tap the **Customer** chip on the right.
 2. The **Customer** picker opens with a search box reading *Search name / code / phone…*.
 3. Type part of the customer's **name**, **code**, or **phone number**. The list updates as you type.
-4. Tap the customer you want. The picker closes and the chip shows their name. A tick marks the currently selected customer in the list.
+4. Tap the customer you want. The picker closes and the chip shows their name. A tick marks the currently selected customer in the list. If the basket already has items, the till first re-reads their prices **for this customer** — an account customer may have their own price list or contract prices — so the total you read out is the one they will be charged.
 
 To go back to an anonymous sale, open the picker again and choose the walk-in entry (shown with a "walking person" icon and *· Walk-in* after its code).
 
 > **If the chip says "Select customer".** No walk-in customer could be found for your company (or your account cannot read the customer list). When you press **PAY** the till shows *Select a customer before completing the sale.* and opens the picker for you. Choose a customer to carry on. Ask your administrator to set up a walk-in customer so this does not happen on every sale.
 
-> **Tip.** You can set the customer before or after adding items — it does not affect what is in the basket.
+> **Tip.** You can set the customer before or after adding items — the items stay, and their prices are updated for the customer you choose.
+
+> **Every new sale starts on the walk-in customer.** After a sale is paid, the next basket goes back to the walk-in customer automatically, so a named customer is never carried onto the next shopper's sale.
 
 ---
 
@@ -1052,6 +1054,20 @@ To go back to an anonymous sale, open the picker again and choose the walk-in en
 **How it works.** The total updates instantly every time you add, void, remove, re-quantity, discount or change the unit of a line. Voided lines do not count. The prices already include VAT — whether your price list is entered with VAT included or without, the till shows the VAT-inclusive price, the same way the receipt will. Underneath you always see the small reminder **preview — ERP is authoritative**.
 
 > **Remember.** This total is a preview. The amount the customer actually pays is the one the ERP returns when you complete the sale, and that finalised figure prints on the receipt.
+
+---
+
+## 6a. Putting a sale on hold — Hold and Recall
+
+**What it is.** **Hold** (under the number pad, beside **Recall**) puts the whole basket aside so you can serve the next customer — for example when a shopper goes back for an item or to fetch money. **Recall** brings it back.
+
+**How it works.**
+
+1. With items in the basket, press **Hold**. You see *Sale on hold. Use Recall when the customer is back.* and the basket empties for the next customer. The **Recall** key shows how many sales are waiting, for example **Recall (2)**.
+2. When the customer returns, finish or hold the sale you are on, then press **Recall**. The **Sales on hold** list shows each basket's first item, the customer, the time it was held and its total. Tap the one you want.
+3. The items and customer come back into the basket and the prices are read again from the ERP (they may have changed while the basket waited). Take payment as usual.
+
+> Held sales are kept **on this till only**, for **this shift**, and for at most a day. They are not sales yet: nothing is charged, no stock moves and nothing reaches the ERP until you recall the basket and take payment. A line discount comes back with the basket, but a manager's approval for it does not — ask again if the till needs one.
 
 ---
 
