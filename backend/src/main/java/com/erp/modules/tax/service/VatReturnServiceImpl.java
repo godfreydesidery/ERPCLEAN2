@@ -194,13 +194,16 @@ public class VatReturnServiceImpl implements VatReturnService {
         vatReturn.setFilingDate(req.filingDate());
         vatReturn.setFiledAt(Instant.now());
         vatReturn.setFiledBy(actorId());
+        // Lock with the filing metadata, BEFORE the GL post: the poster reads the adjustments, and
+        // that query auto-flushes this row — a DRAFT carrying a filing reference violates
+        // chk_vat_return_filed_fields. A GL failure still rolls the whole TX back.
+        vatReturn.setStatus(VatReturnStatus.FILED);
 
         // Step 3: post synchronous GL settlement (D-8); GL failure rolls back the whole TX
         String journalUid = filingPoster.post(vatReturn, actorId());
         vatReturn.setPostedJournalUid(journalUid);
 
-        // Step 4: lock the return
-        vatReturn.setStatus(VatReturnStatus.FILED);
+        // Step 4: stamp the lock
         vatReturn.setUpdatedAt(Instant.now());
         vatReturn.setUpdatedBy(actorId());
         vatReturn = returns.save(vatReturn);
@@ -260,7 +263,11 @@ public class VatReturnServiceImpl implements VatReturnService {
             VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(bandKey);
             BigDecimal base = b != null ? b.taxableBase() : BigDecimal.ZERO;
             BigDecimal vat  = b != null ? b.outputVat()   : BigDecimal.ZERO;
-            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey, base, vat, actorId));
+            // ACC-06/24: credits and voids can take a band below zero in a quiet month; the band
+            // row is a non-negative schedule line (chk_vat_return_band_amounts), so it floors at
+            // zero. The return totals (output/input/net, turnover) keep the exact signed figures.
+            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey,
+                    base.max(BigDecimal.ZERO), vat.max(BigDecimal.ZERO), actorId));
         }
 
         // Refresh totals

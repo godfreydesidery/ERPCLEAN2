@@ -1311,6 +1311,64 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, totalOutput);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public com.erp.modules.sales.domain.dto.VatOutputSummaryDto findVatVoidSummaryForPeriod(
+            Long companyId, java.time.LocalDate start, java.time.LocalDate end) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        // Window: the SAME derivation as findVatSummaryForPeriod (keep the two in step).
+        List<SalesInvoice> voidedInPeriod = invoices.findVoidedInPeriod(
+                companyId,
+                start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
+                end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+
+        final int baseScale = minorUnits.of(companies.findScopedById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElse(null));
+        return summariseOutputVat(voidedInPeriod, baseScale);
+    }
+
+    /**
+     * Base-currency output VAT of the given invoices, by band — the arithmetic of
+     * {@link #findVatSummaryForPeriod} (per-document conversion at the stamped rate, band split from
+     * the tax_summary JSON array).
+     */
+    private static com.erp.modules.sales.domain.dto.VatOutputSummaryDto summariseOutputVat(
+            List<SalesInvoice> docs, int baseScale) {
+        java.util.Map<String, BigDecimal> bandBase = new java.util.LinkedHashMap<>();
+        java.util.Map<String, BigDecimal> bandVat  = new java.util.LinkedHashMap<>();
+        BigDecimal total = BigDecimal.ZERO;
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (SalesInvoice inv : docs) {
+            final BigDecimal rate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            total = total.add(toBaseAtRate(inv.getVatTotalAmount(), rate, baseScale));
+            if (inv.getTaxSummary() == null || inv.getTaxSummary().isBlank()) {
+                continue;
+            }
+            try {
+                for (com.fasterxml.jackson.databind.JsonNode node : mapper.readTree(inv.getTaxSummary())) {
+                    String band = node.path("status").asText(null);
+                    if (band == null) {
+                        continue;
+                    }
+                    bandBase.merge(band, toBaseAtRate(
+                            new BigDecimal(node.path("net").asText("0")), rate, baseScale), BigDecimal::add);
+                    bandVat.merge(band, toBaseAtRate(
+                            new BigDecimal(node.path("vat").asText("0")), rate, baseScale), BigDecimal::add);
+                }
+            } catch (Exception ignored) {
+                // malformed tax_summary — zero-band; vat_total_amount already counted
+            }
+        }
+        java.util.Map<String, com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto> byBand
+                = new java.util.LinkedHashMap<>();
+        bandVat.forEach((band, vat) -> byBand.put(band,
+                new com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto(
+                        bandBase.getOrDefault(band, BigDecimal.ZERO), vat)));
+        return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, total);
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------

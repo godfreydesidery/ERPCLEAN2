@@ -44,8 +44,17 @@ public class VatReturnComputationReader {
 
     /**
      * Compute output-by-band and input for the given company + period (accrual basis).
-     * Output: FINALISED invoices whose finalised_at falls in [start, end].
-     * Input:  matched/approved supplier bills (status not DRAFT or HELD) with bill_date in [start, end].
+     * <ul>
+     *   <li>Output = invoices finalised in [start, end] (including ones voided later — ACC-24)
+     *       − invoices VOIDED in [start, end] (the void month carries the negative)
+     *       − AR credit-note VAT (incl. sales returns) with note_date in [start, end] (ACC-06).</li>
+     *   <li>Input = matched/approved supplier bills (not DRAFT or HELD) with bill_date in
+     *       [start, end] − AP debit-note VAT (incl. purchase returns) with note_date in
+     *       [start, end] (ACC-06).</li>
+     * </ul>
+     * Each component is the same base-currency amount its own GL journal moved on VAT Payable
+     * (2200) or VAT Input (1400), so the filing settlement that clears these figures leaves both
+     * control accounts at zero. Either total may be negative (a month of more credits than sales).
      */
     public VatReturnComputationDto compute(Long companyId, LocalDate start, LocalDate end) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
@@ -56,6 +65,15 @@ public class VatReturnComputationReader {
         Map<String, BandTotalsDto> byBand = new LinkedHashMap<>();
         outputSummary.byBand().forEach((band, b) ->
                 byBand.put(band, new BandTotalsDto(b.taxableBase(), b.outputVat())));
+
+        // ACC-24: invoices voided in this period — a negative in the void month, by band (the GL
+        // void reversal debits 2200 on the day of the void). The month the invoice was finalised
+        // keeps it, so a FILED earlier return is never disturbed.
+        VatOutputSummaryDto voided = salesService.findVatVoidSummaryForPeriod(companyId, start, end);
+        voided.byBand().forEach((band, b) -> byBand.merge(band,
+                new BandTotalsDto(b.taxableBase().negate(), b.outputVat().negate()),
+                VatReturnComputationReader::addBand));
+        BigDecimal totalOutput = outputSummary.totalOutputVat().subtract(voided.totalOutputVat());
 
         // --- Input VAT (direct scalar projection on supplier_bills — avoids ap↔tax cycle D-10) ---
         // Statuses that mean "posted payable": MATCHED, APPROVED, PARTIALLY_PAID, PAID.
@@ -80,8 +98,50 @@ public class VatReturnComputationReader {
                 BigDecimal.class,
                 companyId, start, end);
 
-        return new VatReturnComputationDto(byBand, outputSummary.totalOutputVat(),
-                inputVat != null ? inputVat : BigDecimal.ZERO);
+        // ACC-06: AR credit notes (standalone and sales returns) dated in the period. Each one
+        // debited VAT Payable at raise by round(vat_amount × fx_rate) to base minor units (even at
+        // rate 1, as ArCreditNoteServiceImpl does) — so output VAT falls by exactly what the ledger already relieved. A credit
+        // note carries no band split; VAT-bearing ones reduce the STANDARD band (the only band with
+        // VAT), zero-VAT ones change no band.
+        Map<String, Object> cn = jdbc.queryForMap(
+                """
+                SELECT COALESCE(SUM(ROUND(vat_amount * fx_rate, %1$d)), 0) AS vat,
+                       COALESCE(SUM(CASE WHEN vat_amount = 0 THEN 0
+                                         ELSE ROUND(net_amount * fx_rate, %1$d) END), 0) AS std_net
+                FROM   ar_credit_notes
+                WHERE  company_id = ?
+                  AND  note_date BETWEEN ? AND ?
+                """.formatted(baseScale),
+                companyId, start, end);
+        BigDecimal cnVat    = (BigDecimal) cn.get("vat");
+        BigDecimal cnStdNet = (BigDecimal) cn.get("std_net");
+        if (cnVat.signum() != 0 || cnStdNet.signum() != 0) {
+            byBand.merge("STANDARD", new BandTotalsDto(cnStdNet.negate(), cnVat.negate()),
+                    VatReturnComputationReader::addBand);
+        }
+        totalOutput = totalOutput.subtract(cnVat);
+
+        // ACC-06: AP debit notes (standalone and purchase returns) dated in the period. Each one
+        // credited VAT Input at raise by round(vat_amount × fx_rate) (ApDebitNoteServiceImpl), so
+        // input VAT falls by the same figure.
+        BigDecimal dnVat = jdbc.queryForObject(
+                """
+                SELECT COALESCE(SUM(ROUND(vat_amount * fx_rate, %d)), 0)
+                FROM   ap_debit_notes
+                WHERE  company_id = ?
+                  AND  note_date BETWEEN ? AND ?
+                """.formatted(baseScale),
+                BigDecimal.class,
+                companyId, start, end);
+
+        BigDecimal totalInput = (inputVat != null ? inputVat : BigDecimal.ZERO)
+                .subtract(dnVat != null ? dnVat : BigDecimal.ZERO);
+        return new VatReturnComputationDto(byBand, totalOutput, totalInput);
+    }
+
+    private static BandTotalsDto addBand(BandTotalsDto a, BandTotalsDto b) {
+        return new BandTotalsDto(a.taxableBase().add(b.taxableBase()),
+                a.outputVat().add(b.outputVat()));
     }
 
     /** Minor units of the company's base currency (0 for TZS), from the currencies master. */
