@@ -129,6 +129,87 @@ class GlobalExceptionHandlerTest {
         assertThat(new AccountingSetupException("x")).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void numberWithThousandsSeparator_isFriendly_neverTheJdkText() {
+        // LUI-04: new BigDecimal("1,800") — the JDK text used to reach the user verbatim.
+        NumberFormatException nfe;
+        try {
+            new java.math.BigDecimal("1,800");
+            throw new AssertionError("expected a NumberFormatException");
+        } catch (NumberFormatException e) {
+            nfe = e;
+        }
+
+        var response = handler.handleNumberFormat(nfe);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(errorOf(response))
+                .doesNotContain("Character")
+                .doesNotContain("decimal digit")
+                .contains("without commas");
+    }
+
+    @Test
+    void unknownEnumConstant_namesNoInternalClass() {
+        // LRB-14: StockCountType.valueOf("PARTIAL") in a service.
+        var ex = new IllegalArgumentException(
+                "No enum constant com.erp.modules.stock.domain.enums.StockCountType.PARTIAL");
+
+        var response = handler.handleIllegalArgument(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(errorOf(response))
+                .doesNotContain("com.erp")
+                .doesNotContain("enum")
+                .doesNotContain("StockCountType");
+    }
+
+    @Test
+    void serviceSentence_isStillPassedThrough() {
+        var response = handler.handleIllegalArgument(
+                new IllegalArgumentException("Select a van location."));
+
+        assertThat(errorOf(response)).isEqualTo("Select a van location.");
+    }
+
+    @Test
+    void messageLessIllegalArgument_neverPutsANullInErrors() {
+        var response = handler.handleIllegalArgument(new IllegalArgumentException());
+
+        assertThat(errorOf(response)).isNotBlank();
+    }
+
+    @Test
+    void commaAmountInAJsonNumberField_namesTheFieldNotTheType() {
+        var ife = com.fasterxml.jackson.databind.exc.InvalidFormatException.from(
+                null, "Cannot deserialize value of type `java.math.BigDecimal`", "1,800",
+                java.math.BigDecimal.class);
+        ife.prependPath(new com.fasterxml.jackson.databind.JsonMappingException.Reference(
+                null, "unitCost"));
+        var ex = new org.springframework.http.converter.HttpMessageNotReadableException(
+                "JSON parse error", ife,
+                new org.springframework.mock.http.MockHttpInputMessage(new byte[0]));
+
+        var response = handler.handleMessageNotReadable(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(errorOf(response))
+                .contains("unitCost")
+                .contains("without commas")
+                .doesNotContain("BigDecimal");
+    }
+
+    @Test
+    void moneyDto_refusesACommaAmountWithAFriendlySentence() {
+        var dto = new com.erp.platform.common.money.MoneyDto("1,800", "TZS");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> com.erp.platform.common.money.MoneyDto.toMoney(dto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .isNotInstanceOf(NumberFormatException.class)
+                .hasMessageContaining("without commas");
+    }
+
     private static String errorOf(org.springframework.http.ResponseEntity<ApiResponse<Void>> r) {
         assertThat(r.getBody()).isNotNull();
         assertThat(r.getBody().errors()).hasSize(1);

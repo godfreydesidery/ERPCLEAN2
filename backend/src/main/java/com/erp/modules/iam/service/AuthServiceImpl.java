@@ -81,8 +81,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenResponse login(String username, String rawPassword, String ip) {
         Instant now = Instant.now();
-        AppUser user = users.findByUsername(username == null ? null : username.toLowerCase())
-                .orElse(null);
+        AppUser user = findLoginUser(username).orElse(null);
 
         if (user == null) {
             // Equalise timing for unknown usernames so an attacker can't distinguish "no such user"
@@ -113,6 +112,45 @@ public class AuthServiceImpl implements AuthService {
 
         loginAttempts.recordSuccess(user.getId(), ip, now);
         return issueSession(user);
+    }
+
+    /**
+     * The account a sign-in name refers to (LUI-16).
+     *
+     * <p>An exact match always wins — that is every full {@code name@organisation} and every bare
+     * name issued before usernames were suffixed (platform operators, pre-1.8.0 accounts), so no
+     * existing sign-in changes meaning.
+     *
+     * <p>Otherwise, a name typed WITHOUT an {@code @} is read as {@code name@alias} only when the
+     * installation hosts exactly one customer organisation. Then the suffix carries no information
+     * — it is the same for every member of staff — and asking a clerk to type it on every login
+     * only produces lock-outs. On a shared (multi-customer) instance the bare name is NOT resolved,
+     * even when it happens to be unique across organisations: resolving it there would make one
+     * tenant's sign-ins depend on another tenant's user list (a second {@code john} created
+     * elsewhere would silently break this {@code john}'s login), and would let a bare-name guess
+     * reach into whichever tenant holds the name. The resolved account then goes through exactly
+     * the same password, lockout, active and tenant-open checks, and an unresolved name takes the
+     * same constant-time "invalid credentials" path as any unknown user, so nothing about which
+     * names exist is revealed.
+     */
+    private java.util.Optional<AppUser> findLoginUser(String username) {
+        if (username == null) {
+            return java.util.Optional.empty();
+        }
+        String normalised = username.toLowerCase();
+        java.util.Optional<AppUser> exact = users.findByUsername(normalised);
+        if (exact.isPresent()) {
+            return exact;
+        }
+        String local = normalised.trim();
+        if (local.isEmpty() || local.indexOf('@') >= 0) {
+            return java.util.Optional.empty();
+        }
+        java.util.List<String> aliases = organisations.findCustomerAliases();
+        if (aliases.size() != 1) {
+            return java.util.Optional.empty();
+        }
+        return users.findByUsername(local + "@" + aliases.get(0));
     }
 
     @Override

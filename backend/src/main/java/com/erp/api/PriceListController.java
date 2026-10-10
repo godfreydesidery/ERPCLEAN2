@@ -38,8 +38,12 @@ public class PriceListController {
         this.priceListService = priceListService;
     }
 
+    // LRB-01: the Product Master's selling-price section lists price lists to price a new item, and
+    // PRODUCT.MANAGE (procurement, the product-master owners) is the screen's main action. Without
+    // this the picker 403'd and the screen claimed "No active price lists", so new items reached the
+    // till unpriced. Read-only widening; PriceListServiceImpl.list keeps its company-scope assert.
     @GetMapping
-    @PreAuthorize("@perm.has('PRICELIST.VIEW')")
+    @PreAuthorize("@perm.has('PRICELIST.VIEW') or @perm.has('PRODUCT.MANAGE')")
     public ApiResponse<List<PriceListDto>> list(@RequestParam Long companyId,
                                                 @RequestParam(required = false) String q,
                                                 Pageable pageable) {
@@ -48,7 +52,7 @@ public class PriceListController {
     }
 
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.has('PRICELIST.VIEW')")
+    @PreAuthorize("@perm.has('PRICELIST.VIEW') or @perm.has('PRODUCT.MANAGE')")
     public PriceListDto get(@PathVariable String uid) {
         return priceListService.getByUid(uid);
     }

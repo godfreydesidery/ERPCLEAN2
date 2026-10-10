@@ -22,7 +22,7 @@
       <i class="bi" [class.bi-list]="!sidebarOpen()" [class.bi-x-lg]="sidebarOpen()" aria-hidden="true"></i>
     </button>
 
-    <a class="topbar-brand" routerLink="/admin/companies" (click)="closeSidebar()">
+    <a class="topbar-brand" routerLink="/admin/home" (click)="closeSidebar()">
       <span class="brand-mark-sm">E</span>
       <span class="brand-word d-none d-sm-inline">ERP</span>
     </a>
@@ -142,6 +142,14 @@
   <!-- Sidebar (dark, off-canvas on mobile) -->
   <aside class="sidebar" [ngClass]="{ 'sidebar-open': sidebarOpen() }">
     <nav class="sidebar-nav" aria-label="Main">
+      <!-- ADM-18: an always-available way back to the launchpad (the home route has no guard). -->
+      <div class="nav-group">
+        <a class="nav-item" routerLink="/admin/home" routerLinkActive="active"
+           (click)="closeSidebar()">
+          <i class="bi bi-house nav-item-icon" aria-hidden="true"></i>
+          <span>Home</span>
+        </a>
+      </div>
       @for (group of nav(); track group.label) {
         <div class="nav-group">
           <div class="nav-group-label">{{ group.label }}</div>

@@ -8,13 +8,14 @@ import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import {
-  CashBankAccountDto,
   CashCountDto,
+  CashTillOptionDto,
   OpenCashCountRequest,
   RecordDenominationsRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 import { formatMoney } from '../../../shared/money.util';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 
 /**
  * Hardcoded TZS denomination ladder (ADR-0050 D-7.7 — a configurable per-currency
@@ -39,7 +40,7 @@ type VarianceTone = 'ok' | 'danger' | 'neutral';
  */
 @Component({
   selector: 'app-cash-count',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, LookupNoticeComponent],
   templateUrl: './cash-count.component.html',
   styleUrl: './cash-count.component.scss',
 })
@@ -62,7 +63,9 @@ export class CashCountComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('idle');
 
   // ── Till picker (new-count mode only) ─────────────────────────────────────
-  readonly tills = signal<CashBankAccountDto[]>([]);
+  readonly tills = signal<CashTillOptionDto[]>([]);
+  /** ADM-28: why the till list is empty when it is — 'forbidden' is not "no tills exist". */
+  readonly tillsState = signal<'idle' | LookupFailure>('idle');
   readonly selectedTillUid = signal('');
   readonly businessDate = signal('');
 
@@ -186,11 +189,19 @@ export class CashCountComponent {
     });
   }
 
-  /** Tills = CASH-type cash_bank_accounts only (a BANK account cannot be physically counted). */
+  /**
+   * Tills = ACTIVE CASH-type accounts (a BANK account cannot be physically counted). Uses the narrow
+   * till lookup, open to the cash-count codes (LRB-03): the full account list needs CASH.VIEW,
+   * which the cashier does not hold, so the dropdown used to be silently empty.
+   */
   private loadTills(companyId: string): void {
-    this.cashbankService.listAllAccounts(companyId).subscribe({
-      next: (list) => this.tills.set(list.filter((a) => a.accountType === 'CASH')),
-      error: () => {},
+    this.tillsState.set('idle');
+    this.cashbankService.listCashTills(companyId).subscribe({
+      next: (list) => this.tills.set(list),
+      error: (err: unknown) => {
+        this.tills.set([]);
+        this.tillsState.set(lookupFailure(err));
+      },
     });
   }
 

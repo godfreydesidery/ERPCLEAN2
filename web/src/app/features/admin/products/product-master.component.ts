@@ -43,6 +43,12 @@ import { ProductService } from './product.service';
 import { SupplierService } from '../parties/supplier.service';
 import { StockService } from '../stock/stock.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
+import {
+  INVALID_AMOUNT_MESSAGE,
+  isInvalidAmount,
+  normaliseAmount,
+} from '../../../shared/money.util';
 
 // ── Save-sequence section status ──────────────────────────────────────────────
 
@@ -129,7 +135,7 @@ export type TabId = 'general' | 'pricing' | 'supplier' | 'stock' | 'branches';
 @Component({
   selector: 'app-product-master',
   standalone: true,
-  imports: [FormsModule, RouterLink, CurrencySelectComponent],
+  imports: [FormsModule, RouterLink, CurrencySelectComponent, LookupNoticeComponent],
   templateUrl: './product-master.component.html',
   styleUrl: './product-master.component.scss',
 })
@@ -196,7 +202,8 @@ export class ProductMasterComponent implements OnInit {
   readonly fCostCurrency = signal('TZS');
   readonly priceRows = signal<PriceRow[]>([]);
   readonly priceLists = signal<PriceListDto[]>([]);
-  readonly priceListsState = signal<'loading' | 'idle' | 'error'>('idle');
+  /** 'forbidden' = the caller may not read price lists (LRB-01 / ADM-28), not "there are none". */
+  readonly priceListsState = signal<'loading' | 'idle' | LookupFailure>('idle');
   readonly defaultPriceListUid = computed(() => {
     const lists = this.priceLists();
     if (lists.length === 0) return '';
@@ -426,7 +433,7 @@ export class ProductMasterComponent implements OnInit {
           this.addDefaultPriceRow();
         }
       },
-      error: () => this.priceListsState.set('error'),
+      error: (err: unknown) => this.priceListsState.set(lookupFailure(err)),
     });
   }
 
@@ -846,6 +853,18 @@ export class ProductMasterComponent implements OnInit {
       return;
     }
 
+    // LUI-04: "1,800" is a valid amount; it is sent as "1800". Anything unreadable is stopped
+    // here with a message that opens the Pricing tab, instead of a server error on another tab.
+    const costAmount = normaliseAmount(this.fCostAmount());
+    const badPriceRow = this.priceRows().some((r) => isInvalidAmount(r.amount));
+    if (costAmount === null || badPriceRow) {
+      this.formError.set(
+        `${costAmount === null ? 'Cost price' : 'Selling price'}: ${INVALID_AMOUNT_MESSAGE}`,
+      );
+      this.setTab('pricing');
+      return;
+    }
+
     this.formError.set(null);
     this.saving.set(true);
     this.saveComplete.set(false);
@@ -861,8 +880,8 @@ export class ProductMasterComponent implements OnInit {
     ];
     this.sectionResults.set(sections);
 
-    const cost: Money | undefined = this.fCostAmount().trim()
-      ? { amount: this.fCostAmount().trim(), currency: this.fCostCurrency() || 'TZS' }
+    const cost: Money | undefined = costAmount
+      ? { amount: costAmount, currency: this.fCostCurrency() || 'TZS' }
       : undefined;
 
     const isService = this.fType() === 'SERVICE';
@@ -981,7 +1000,7 @@ export class ProductMasterComponent implements OnInit {
   // ── Sub-step: prices ──────────────────────────────────────────────────────
 
   private runPrices(productUid: string): Promise<void> {
-    const rows = this.priceRows().filter((r) => r.amount.trim() && r.priceListUid);
+    const rows = this.priceRows().filter((r) => normaliseAmount(r.amount) && r.priceListUid);
     if (rows.length === 0) {
       this.setSection(1, 'done');
       return Promise.resolve();
@@ -998,7 +1017,7 @@ export class ProductMasterComponent implements OnInit {
         const row = rows[idx];
         const req: SetProductPriceRequest = {
           priceListUid: row.priceListUid,
-          price: { amount: row.amount.trim(), currency: row.currency || 'TZS' },
+          price: { amount: normaliseAmount(row.amount) ?? '', currency: row.currency || 'TZS' },
           effectiveFrom: row.effectiveFrom || this.todayIso(),
         };
         this.productService.setPrice(productUid, req).subscribe({

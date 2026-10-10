@@ -128,6 +128,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final DiscountAuthorisationGuard discountGuard;
     /** Makes the mandatory-agent rule satisfiable on a company whose agent master is empty. */
     private final InternalAgentProvisioner internalAgents;
+    /** LSF-04: the company's "Counter" agent, for sales rung by root (who can hold no agent). */
+    private final CounterAgentProvisioner counterAgents;
     /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
     private final UserLookupService userLookup;
     /** Base-currency minor units for the VAT-return output summary (converted per document). */
@@ -162,7 +164,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    InternalAgentProvisioner internalAgents,
                                    UserLookupService userLookup,
                                    com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
-                                   CreditExposureCalculator creditExposure) {
+                                   CreditExposureCalculator creditExposure,
+                                   CounterAgentProvisioner counterAgents) {
+        this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -402,11 +406,20 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             // limit — all in BASE currency (owner ruling 2026-10-02). Unconverted (V62-filled)
             // foreign AR and a foreign invoice gross count at today's rate; a missing rate fails
             // closed (treated as over the limit).
+            //
+            // LRB-05: the credit this invoice extends is what is left unpaid after the tenders
+            // already applied at the counter (same currency, checked above), not its gross. A sale
+            // the customer pays in full adds no exposure, so it is never a credit-limit question —
+            // it used to be refused as "no permission to override the credit limit" whenever the
+            // customer's existing balance was over the limit.
             com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
+            BigDecimal unpaidOnThisInvoice = unpaidAfterCounterPayments(
+                    inv.getGrossTotalAmount(), paymentList);
             if (creditLimit != null && creditLimit.isPresent()
-                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0
+                    && unpaidOnThisInvoice.signum() > 0) {
                 CreditExposureCalculator.Assessment exposure = creditExposure.assess(
-                        inv.getCompanyId(), inv.getCustomerId(), inv.getGrossTotalAmount(),
+                        inv.getCompanyId(), inv.getCustomerId(), unpaidOnThisInvoice,
                         com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
                         creditLimit, LocalDate.now());
                 if (exposure.breached()) {
@@ -1237,6 +1250,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         if (auto.isPresent()) {
             return auto.get();
         }
+        // LSF-04: the system administrator (root) can never hold an internal agent, so on a fresh
+        // install the owner could not ring the first sale. Their sales go to the company's
+        // "Counter" agent instead (created on first use). Staff are NOT routed here: a non-root
+        // user without an agent is a setup gap the refusal below names, and silently crediting
+        // their sales to the counter would hide it.
+        if (ctx != null && ctx.root()) {
+            Optional<Long> counter = counterAgents.resolveOrProvision(companyId, ctx.userId());
+            if (counter.isPresent()) {
+                return counter.get();
+            }
+        }
         // Technical context goes to the log only; the user-facing message stays friendly and
         // carries no internal codes/identifiers (error-message hygiene standing rule).
         log.warn("Agent resolution failed (BR-SALES-06): no agentUid supplied and no internal agent "
@@ -1368,6 +1392,24 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
      * Cash over-tender → set change_amount on the cash row (change accepted).
      * Mobile-money over-tender → reject (no change for mobile).
      */
+    /**
+     * The part of an invoice's gross that the counter tenders leave unpaid, never below zero
+     * (LRB-05). Payments are net of any change given. This is the new credit a finalised credit
+     * sale extends, and so the amount the credit-limit check must assess.
+     */
+    static BigDecimal unpaidAfterCounterPayments(BigDecimal gross,
+                                                 List<SalesInvoicePayment> paymentList) {
+        BigDecimal grossAmount = gross != null ? gross : BigDecimal.ZERO;
+        BigDecimal paid = BigDecimal.ZERO;
+        for (SalesInvoicePayment p : paymentList) {
+            BigDecimal amount = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+            BigDecimal change = p.getChangeAmount() != null ? p.getChangeAmount() : BigDecimal.ZERO;
+            paid = paid.add(amount.subtract(change));
+        }
+        BigDecimal unpaid = grossAmount.subtract(paid);
+        return unpaid.signum() > 0 ? unpaid : BigDecimal.ZERO;
+    }
+
     private void assertPaidInFull(SalesInvoice inv, List<SalesInvoicePayment> paymentList) {
         // FR-SALES-18: at least one tender must be recorded before finalising a cash invoice
         if (paymentList.isEmpty()) {

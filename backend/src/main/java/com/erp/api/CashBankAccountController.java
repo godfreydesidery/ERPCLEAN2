@@ -1,6 +1,7 @@
 package com.erp.api;
 
 import com.erp.modules.cashbank.domain.dto.CashBankAccountDto;
+import com.erp.modules.cashbank.domain.dto.CashTillOptionDto;
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.dto.UpdateCashBankAccountRequest;
 import com.erp.modules.cashbank.service.CashBankAccountService;
@@ -62,5 +63,18 @@ public class CashBankAccountController {
     @PreAuthorize("@perm.has('CASH.VIEW')")
     public List<CashBankAccountDto> listByCompany(@RequestParam Long companyId) {
         return service.listByCompany(companyId);
+    }
+
+    /**
+     * Till picker for the end-of-day cash count (LRB-03 / ADM-01): ACTIVE CASH-type accounts only,
+     * as a narrow row with no balances or bank detail. Admits the cash-count codes so a cashier can
+     * pick the drawer they are counting without being granted CASH.VIEW (which exposes every bank
+     * account). The service asserts the company is the caller's own.
+     */
+    @GetMapping("/tills")
+    @PreAuthorize("@perm.has('CASH.VIEW') or @perm.has('CASH.COUNT.MANAGE') "
+            + "or @perm.has('CASH.COUNT.VIEW')")
+    public List<CashTillOptionDto> listCashTills(@RequestParam Long companyId) {
+        return service.listCashTills(companyId);
     }
 }

@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpErrorResponse, HttpParams } from '@angular
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, of, throwError } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AddInvoiceLineRequest,
@@ -134,9 +134,15 @@ export class SalesService {
 
   // ── Fiscal receipt (D-6: EFD, ADR-0049) ──────────────────────────────────
 
-  /** No receipt issued yet → backend 404, mapped here to `null` (not an error). */
+  /**
+   * No receipt issued yet → backend 404, mapped here to `null` (not an error). SILENT_ERROR
+   * (LUI-03): without it the interceptor raised the blocking "Something went wrong — Fiscal
+   * receipt not found" modal on every finalised invoice. The detail screen renders its own
+   * fiscal-panel state for a genuine failure.
+   */
   getFiscalReceipt(uid: string): Observable<FiscalReceiptDto | null> {
-    return this.http.get<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`).pipe(
+    const context = new HttpContext().set(SILENT_ERROR, true);
+    return this.http.get<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`, { context }).pipe(
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 404) return of(null);
         return throwError(() => err);

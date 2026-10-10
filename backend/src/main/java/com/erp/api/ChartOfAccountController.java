@@ -73,7 +73,11 @@ public class ChartOfAccountController {
     // membership. Tenant isolation is unchanged: ChartOfAccountServiceImpl.list keeps
     // scopeGuard.assertCanActIn(ctx, companyId), so any holder reads only their own company's CoA.
     @GetMapping
-    @PreAuthorize("@perm.has('GL.VIEW') or @perm.has('CASH.ENTRY.RECORD') or @perm.has('CASH.VIEW')")
+    //
+    // LRB-11 / ADM-11: the petty-cash voucher's expense-account picker fires the same list for a
+    // PETTY_CASH.MANAGE holder (the cashier); without it vouchers were saved uncategorised.
+    @PreAuthorize("@perm.has('GL.VIEW') or @perm.has('CASH.ENTRY.RECORD') or @perm.has('CASH.VIEW') "
+            + "or @perm.has('PETTY_CASH.MANAGE')")
     public ApiResponse<List<AccountDto>> list(@RequestParam Long companyId, Pageable pageable) {
         Page<AccountDto> page = service.list(companyId, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));

@@ -1,6 +1,7 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService } from '../../../core/auth/auth.service';
 import { LoginComponent } from './login.component';
@@ -61,5 +62,40 @@ describe('LoginComponent — post-login redirect', () => {
     returnUrl = 'https://evil.com/phish';
     makeComponent().submit();
     expect(navigateByUrl).toHaveBeenCalledWith('/admin');
+  });
+});
+
+describe('LoginComponent — bare sign-in name hint (LUI-16)', () => {
+  function failingComponent(username: string): LoginComponent {
+    const unauthorized = new HttpErrorResponse({
+      status: 401, error: { errors: ['Invalid username or password.'] },
+    });
+    TestBed.configureTestingModule({
+      imports: [LoginComponent],
+      providers: [
+        { provide: AuthService, useValue: { login: vi.fn(() => throwError(() => unauthorized)) } },
+        { provide: Router, useValue: { navigateByUrl: vi.fn() } },
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
+      ],
+    });
+    const comp = TestBed.createComponent(LoginComponent).componentInstance;
+    comp.username.set(username);
+    comp.password.set('wrong-password');
+    return comp;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('adds the full-name hint when a bare name is refused', () => {
+    const comp = failingComponent('asha');
+    comp.submit();
+    expect(comp.error()).toContain('Invalid username or password.');
+    expect(comp.error()).toContain(LoginComponent.FULL_NAME_HINT);
+  });
+
+  it('does not add the hint when the full name was typed', () => {
+    const comp = failingComponent('asha@duka');
+    comp.submit();
+    expect(comp.error()).toBe('Invalid username or password.');
   });
 });

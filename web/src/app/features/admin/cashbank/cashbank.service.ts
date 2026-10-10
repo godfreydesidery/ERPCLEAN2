@@ -11,6 +11,7 @@ import {
   CashAccountStatementDto,
   CashBankAccountDto,
   CashCountDto,
+  CashTillOptionDto,
   CashGlReconciliationDto,
   CashTransferDto,
   CashTransactionDto,
@@ -104,6 +105,17 @@ export class CashbankService {
   }
 
   /** Convenience: load ALL active accounts for a company (for pickers). */
+  /**
+   * Countable tills (ACTIVE CASH accounts) for the cash-count screens (LRB-03). Unlike
+   * {@link listAllAccounts} (CASH.VIEW) this is open to the cash-count codes, so a cashier's till
+   * dropdown is no longer empty.
+   */
+  listCashTills(companyId: string): Observable<CashTillOptionDto[]> {
+    return this.http.get<CashTillOptionDto[]>(`${this.base}/accounts/tills`, {
+      params: { companyId },
+    });
+  }
+
   listAllAccounts(companyId: string): Observable<CashBankAccountDto[]> {
     const params = new HttpParams()
       .set('companyId', companyId)

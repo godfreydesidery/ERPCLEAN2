@@ -8,7 +8,8 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { Company } from '../models/company.model';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
-import { CashBankAccountDto, CashCountDto } from './models/cashbank.model';
+import { CashCountDto, CashTillOptionDto } from './models/cashbank.model';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 import { CashbankService } from './cashbank.service';
 import { formatMoney } from '../../../shared/money.util';
 
@@ -28,7 +29,7 @@ interface LoadTrigger {
  */
 @Component({
   selector: 'app-cash-counts-list',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, LookupNoticeComponent],
   templateUrl: './cash-counts-list.component.html',
   styleUrl: './cash-counts-list.component.scss',
 })
@@ -44,7 +45,9 @@ export class CashCountsListComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Till picker (CASH-type accounts only) ─────────────────────────────────
-  readonly tills = signal<CashBankAccountDto[]>([]);
+  readonly tills = signal<CashTillOptionDto[]>([]);
+  /** ADM-28: 'forbidden' / 'error' explain an empty till list instead of "none exist". */
+  readonly tillsState = signal<'idle' | LookupFailure>('idle');
   readonly selectedTillId = signal('');
 
   // ── List state ─────────────────────────────────────────────────────────────
@@ -102,11 +105,14 @@ export class CashCountsListComponent {
     });
   }
 
-  /** Tills = CASH-type cash_bank_accounts only (a BANK account is never counted). */
+  /**
+   * Tills = ACTIVE CASH-type accounts (a BANK account is never counted), from the narrow till
+   * lookup open to the cash-count codes (LRB-03 / ADM-01).
+   */
   private loadTills(companyId: string): void {
-    this.cashbankService.listAllAccounts(companyId).subscribe({
-      next: (list) => {
-        const cashTills = list.filter((a) => a.accountType === 'CASH');
+    this.tillsState.set('idle');
+    this.cashbankService.listCashTills(companyId).subscribe({
+      next: (cashTills) => {
         this.tills.set(cashTills);
         if (cashTills.length > 0) {
           this.selectedTillId.set(cashTills[0].id);
@@ -116,7 +122,10 @@ export class CashCountsListComponent {
           this.rows.set([]);
         }
       },
-      error: () => {},
+      error: (err: unknown) => {
+        this.tills.set([]);
+        this.tillsState.set(lookupFailure(err));
+      },
     });
   }
 

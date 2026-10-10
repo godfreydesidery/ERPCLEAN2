@@ -142,12 +142,18 @@
 
               <!-- Agent picker (optional) -->
               <div class="erp-field position-relative">
-                <label for="newAgentSearch">Agent (optional)</label>
+                <!-- LUI-06: blank is genuinely allowed — the server records the sale under the
+                     user's own sales agent (or the company's Counter agent for the administrator). -->
+                <label for="newAgentSearch">Sales agent</label>
+                <div id="newAgentHint" class="form-text mt-0 mb-1">
+                  Leave blank to record the sale under your own sales agent.
+                </div>
                 <div class="d-flex gap-1">
                   <div class="flex-grow-1">
                     <input id="newAgentSearch" name="newAgentSearch" type="search"
                            class="form-control"
                            placeholder="Search agent…"
+                           aria-describedby="newAgentHint"
                            [ngModel]="agentSearchQ()"
                            (ngModelChange)="onAgentSearchChange($event)"
                            [disabled]="saving()"

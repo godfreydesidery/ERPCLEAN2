@@ -108,7 +108,9 @@ public class GoodsReceiptController {
 
     /** Paged list / search for a company. */
     @GetMapping
-    @PreAuthorize("@perm.has('PURCHASE.GOODS_RECEIPT.VIEW')")
+    // LRB-04: Enter Bill (AP.BILL.ENTER) loads the supplier's received lines from this list to link
+    // bill lines to GRN lines. The service keeps its company-scope predicate.
+    @PreAuthorize("@perm.has('PURCHASE.GOODS_RECEIPT.VIEW') or @perm.has('AP.BILL.ENTER')")
     public ApiResponse<List<GoodsReceiptDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,

@@ -1,6 +1,7 @@
 package com.erp.modules.cashbank.service;
 
 import com.erp.modules.cashbank.domain.dto.CashBankAccountDto;
+import com.erp.modules.cashbank.domain.dto.CashTillOptionDto;
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.dto.UpdateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.entity.CashBankAccount;
@@ -206,6 +207,17 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         return accounts.findByCompanyId(companyId).stream()
                 .map(CashBankAccountServiceImpl::toDto).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CashTillOptionDto> listCashTills(Long companyId) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        return accounts.findByCompanyId(companyId).stream()
+                .filter(a -> a.getAccountType() == CashBankAccountType.CASH && a.isActive())
+                .map(a -> new CashTillOptionDto(a.getId(), a.getUid(), a.getCode(), a.getName(),
+                        a.getBranchId(), a.getCurrency() != null ? a.getCurrency().value() : null))
+                .toList();
     }
 
     // -------------------------------------------------------------------------

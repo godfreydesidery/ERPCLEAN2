@@ -129,7 +129,15 @@
                      class="form-control font-monospace" placeholder="0.00"
                      [ngModel]="receiptAmount()"
                      (ngModelChange)="receiptAmount.set($event)"
+                     [class.is-invalid]="receiptAmountInvalid()"
+                     [attr.aria-invalid]="receiptAmountInvalid() ? 'true' : null"
+                     aria-describedby="receiptAmountError"
                      [disabled]="submitting()" autocomplete="off" required />
+              @if (receiptAmountInvalid()) {
+                <div id="receiptAmountError" class="invalid-feedback d-block" role="alert">
+                  {{ invalidAmountMessage }}
+                </div>
+              }
             </div>
 
             <!-- Currency -->

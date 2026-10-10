@@ -22,6 +22,12 @@ import { ArService } from './ar.service';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import {
+  INVALID_AMOUNT_MESSAGE,
+  isInvalidAmount,
+  normaliseAmount,
+  parseAmount,
+} from '../../../shared/money.util';
 
 /**
  * A UI-only allocation row — wraps an ArInvoiceDto with the user's input.
@@ -106,16 +112,26 @@ export class RecordReceiptComponent {
 
   /** Sum of all filled allocation inputs. Coerces with +v. */
   readonly allocatedTotal = computed(() =>
-    this.allocationRows().reduce((sum, r) => {
-      const v = +(String(r.allocInput ?? '').trim() || '0');
-      return sum + (Number.isFinite(v) ? v : 0);
-    }, 0),
+    this.allocationRows().reduce((sum, r) => sum + (parseAmount(r.allocInput) ?? 0), 0),
   );
 
-  readonly receiptAmountNum = computed(() => {
-    const v = +(String(this.receiptAmount() ?? '').trim() || '0');
-    return Number.isFinite(v) ? v : 0;
-  });
+  /**
+   * LUI-04: "68,300" used to read as 0 (`+"68,300"` is NaN), which disabled Record and claimed the
+   * allocations exceeded a zero receipt. Separators are now stripped by the shared parser.
+   */
+  readonly receiptAmountNum = computed(() => parseAmount(this.receiptAmount()) ?? 0);
+
+  /** True when something is typed in Amount but it is not a readable number. */
+  readonly receiptAmountInvalid = computed(() => isInvalidAmount(this.receiptAmount()));
+
+  /** True when any amount field (receipt, WHT, an allocation) cannot be read. */
+  readonly anyAmountInvalid = computed(() =>
+    this.receiptAmountInvalid() ||
+    isInvalidAmount(this.whtAmount()) ||
+    this.allocationRows().some((r) => isInvalidAmount(r.allocInput)),
+  );
+
+  readonly invalidAmountMessage = INVALID_AMOUNT_MESSAGE;
 
   /** Unallocated remainder (on-account). May be positive; never negative if guard holds. */
   readonly unallocated = computed(() => {
@@ -131,7 +147,7 @@ export class RecordReceiptComponent {
   /** True if any single allocation exceeds the invoice's outstanding (client guard). */
   readonly anyAllocationExceedsOutstanding = computed(() =>
     this.allocationRows().some((r) => {
-      const allocated = +(String(r.allocInput ?? '').trim() || '0');
+      const allocated = parseAmount(r.allocInput) ?? 0;
       const outstanding = +(r.invoice.outstandingAmount ?? 0);
       return allocated > outstanding + 0.000001;
     }),
@@ -142,6 +158,7 @@ export class RecordReceiptComponent {
     !this.selectedCustomer() ||
     !String(this.receiptAmount() ?? '').trim() ||
     this.receiptAmountNum() <= 0 ||
+    this.anyAmountInvalid() ||
     !String(this.receiptDate() ?? '').trim() ||
     !this.selectedCompanyId() ||
     this.overAllocated() ||
@@ -320,7 +337,8 @@ export class RecordReceiptComponent {
     const customer = this.selectedCustomer();
     if (!customer) { this.formError.set('Customer is required.'); return; }
 
-    const amount = String(this.receiptAmount() ?? '').trim();
+    // Normalised: "68,300" goes on the wire as "68300" (LUI-04).
+    const amount = normaliseAmount(this.receiptAmount()) ?? '';
     const currency = String(this.receiptCurrency() ?? '').trim();
     const date = String(this.receiptDate() ?? '').trim();
     const bankRef = String(this.bankReference() ?? '').trim();
@@ -330,13 +348,10 @@ export class RecordReceiptComponent {
     if (!date) { this.formError.set('Receipt date is required.'); return; }
 
     const allocations: AllocationLineRequest[] = this.allocationRows()
-      .filter((r) => {
-        const v = +(String(r.allocInput ?? '').trim() || '0');
-        return v > 0;
-      })
+      .filter((r) => (parseAmount(r.allocInput) ?? 0) > 0)
       .map((r) => ({
         arInvoiceUid: r.invoice.uid,
-        allocatedAmount: String(+(String(r.allocInput ?? '').trim())).valueOf(),
+        allocatedAmount: normaliseAmount(r.allocInput) ?? '',
       }));
 
     const request: RecordReceiptRequest = {
@@ -352,7 +367,7 @@ export class RecordReceiptComponent {
 
     // Optional WHT (WHT_ON_RECEIPT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
-    const whtAmt = String(this.whtAmount() ?? '').trim();
+    const whtAmt = normaliseAmount(this.whtAmount()) ?? '';
     if (whtUid && whtAmt && +whtAmt > 0) {
       request.whtTypeUid = whtUid;
       request.whtAmount = whtAmt;
@@ -384,7 +399,7 @@ export class RecordReceiptComponent {
 
   /** Returns CSS class for an allocation row: danger when over outstanding, warning when partial. */
   allocationRowClass(row: AllocationRow): string {
-    const allocated = +(String(row.allocInput ?? '').trim() || '0');
+    const allocated = parseAmount(row.allocInput) ?? 0;
     const outstanding = +(row.invoice.outstandingAmount ?? 0);
     if (allocated > outstanding + 0.000001) return 'table-danger';
     if (allocated > 0 && allocated < outstanding) return 'table-warning';

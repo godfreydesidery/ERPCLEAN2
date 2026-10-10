@@ -82,6 +82,25 @@ describe('RecordReceiptComponent — allocation guard', () => {
     expect(comp.submitDisabled()).toBe(false);
   });
 
+  it('reads "68,300" as 68300, not 0 (LUI-04)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    comp.receiptAmount.set('68,300');
+    expect(comp.receiptAmountNum()).toBe(68300);
+    expect(comp.receiptAmountInvalid()).toBe(false);
+  });
+
+  it('flags an unreadable amount and blocks submit instead of treating it as 0 (LUI-04)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    primeValid(comp);
+    comp.receiptAmount.set('1,8');
+    expect(comp.receiptAmountInvalid()).toBe(true);
+    expect(comp.submitDisabled()).toBe(true);
+  });
+
   it('over-allocation (allocated > receipt amount) → overAllocated true, submit disabled', () => {
     vi.useFakeTimers();
     makeBed();

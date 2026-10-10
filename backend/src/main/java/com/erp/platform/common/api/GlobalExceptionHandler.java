@@ -69,6 +69,15 @@ public class GlobalExceptionHandler {
             "One of the values in this request could not be read. Please check the filters or "
             + "selections you chose and try again.";
 
+    /** Shown when an amount or quantity is not a plain number (LUI-04: "1,800"). */
+    static final String INVALID_NUMBER_MESSAGE =
+            "An amount or quantity is not a valid number. Enter digits only, without commas or "
+            + "spaces (for example 1800.50).";
+
+    /** Shown when a chosen option is not one the system knows (LRB-14). */
+    static final String INVALID_CHOICE_MESSAGE =
+            "One of the options chosen is not valid. Please pick it again from the list and retry.";
+
     // -------------------------------------------------------------------------
     // Existing handlers (preserved verbatim)
     // -------------------------------------------------------------------------
@@ -216,10 +225,37 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(ex.getMessage()));
     }
 
-    /** Bad input the caller can fix → 400. */
+    /**
+     * A number the JDK could not parse (e.g. {@code new BigDecimal("1,800")}) → 400 with a friendly
+     * sentence (LUI-04). {@link NumberFormatException} is an {@link IllegalArgumentException}, so
+     * without this handler its raw JDK text — "Character , is neither a decimal digit number…" —
+     * went straight to the user. The detail stays in the log.
+     */
+    @ExceptionHandler(NumberFormatException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNumberFormat(NumberFormatException ex) {
+        log.debug("Unparseable number in request: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(INVALID_NUMBER_MESSAGE));
+    }
+
+    /**
+     * Bad input the caller can fix → 400. The message is the service's own user-facing sentence,
+     * except for the JDK texts that are not (LRB-14): an {@code Enum.valueOf} miss ("No enum
+     * constant com.erp…StockCountType.PARTIAL") names an internal class, and a message-less
+     * exception would put a null in {@code errors[]}. Those get a friendly sentence; the detail is
+     * logged.
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        String msg = ex.getMessage();
+        if (msg == null || msg.isBlank()) {
+            log.debug("IllegalArgumentException without a message", ex);
+            return ResponseEntity.badRequest().body(ApiResponse.error(UNUSABLE_PARAMETER_MESSAGE));
+        }
+        if (msg.startsWith("No enum constant")) {
+            log.debug("Unknown enum value in request: {}", msg);
+            return ResponseEntity.badRequest().body(ApiResponse.error(INVALID_CHOICE_MESSAGE));
+        }
+        return ResponseEntity.badRequest().body(ApiResponse.error(msg));
     }
 
     /** Currency not enabled for the company/branch scope → 422 (ADR-0039 D-7/D-8). */
@@ -404,6 +440,15 @@ public class GlobalExceptionHandler {
                 && ife.getTargetType().isEnum()) {
             return buildEnumMessage(ife);
         }
+        // LUI-04: "1,800" into a numeric JSON field. Name the field (its last segment) so the user
+        // knows which box to fix, never the Java type.
+        if (cause instanceof InvalidFormatException ife && isNumeric(ife.getTargetType())) {
+            String field = lastFieldName(ife);
+            return field.isEmpty()
+                    ? INVALID_NUMBER_MESSAGE
+                    : "The value entered for '" + field + "' is not a valid number. Enter digits "
+                            + "only, without commas or spaces (for example 1800.50).";
+        }
         // Defensive fallback: strip FQCN from any remaining cause message.
         if (cause != null && cause.getMessage() != null) {
             Matcher m = ENUM_CONSTANT_PATTERN.matcher(cause.getMessage());
@@ -426,6 +471,26 @@ public class GlobalExceptionHandler {
             return INVALID_VALUE_PREFIX + value + "' for " + typeName + ".";
         }
         return INVALID_VALUE_PREFIX + value + "' for field '" + fieldPath + "' (" + typeName + ").";
+    }
+
+    private static boolean isNumeric(Class<?> type) {
+        if (type == null) {
+            return false;
+        }
+        return Number.class.isAssignableFrom(type)
+                || type == int.class || type == long.class || type == double.class
+                || type == float.class || type == short.class || type == byte.class;
+    }
+
+    /** The innermost named field of Jackson's reference chain, or "" when there is none. */
+    private static String lastFieldName(InvalidFormatException ife) {
+        String last = "";
+        for (com.fasterxml.jackson.databind.JsonMappingException.Reference ref : ife.getPath()) {
+            if (ref.getFieldName() != null) {
+                last = ref.getFieldName();
+            }
+        }
+        return last;
     }
 
     /** Reconstructs the dot-notation field path from Jackson's reference chain. */

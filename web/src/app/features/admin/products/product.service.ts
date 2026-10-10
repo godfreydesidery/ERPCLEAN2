@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, switchMap } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AddBarcodeRequest,
@@ -99,8 +99,11 @@ export class ProductService {
    */
   barcodeLookup(companyId: string, barcode: string): Observable<ProductModel> {
     const params = new HttpParams().set('companyId', companyId).set('barcode', barcode);
+    // LUI-03: an unknown barcode is a normal 404 the caller renders inline ("No product found");
+    // without SILENT_ERROR the interceptor also popped the blocking "Something went wrong" modal.
+    const context = new HttpContext().set(SILENT_ERROR, true);
     return this.http
-      .get<ProductBarcodeDto>(`${this.base}/barcode-lookup`, { params })
+      .get<ProductBarcodeDto>(`${this.base}/barcode-lookup`, { params, context })
       .pipe(switchMap((row) => this.getByUid(row.productUid ?? '')));
   }
 

@@ -88,22 +88,30 @@ public class StockLocationController {
     // Reads
     // -------------------------------------------------------------------------
 
+    // LRB-02: the van-reconciliation screen resolves its van location by uid; STOCK.VAN_RECON.MANAGE
+    // (the screen's main action, FIELD_SALES_AGENT) admits that read. Scoped like the original.
     @GetMapping("/uid/{uid}")
-    @PreAuthorize("@perm.scoped(#uid, 'stocklocation', 'STOCK.LOCATION.VIEW')")
+    @PreAuthorize("@perm.scoped(#uid, 'stocklocation', 'STOCK.LOCATION.VIEW') "
+            + "or @perm.scoped(#uid, 'stocklocation', 'STOCK.VAN_RECON.MANAGE')")
     public StockLocationDto getByUid(@PathVariable String uid) {
         return locationService.getByUid(uid);
     }
 
+    // LRB-10: the Stock Batches / Serial Numbers screens (route guard STOCK.VIEW) need this list for
+    // their required Location picker; locations are not sensitive and the service still pins the
+    // caller's own company (and an accessible branch).
     @GetMapping
-    @PreAuthorize("@perm.has('STOCK.LOCATION.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.LOCATION.VIEW') or @perm.has('STOCK.VIEW')")
     public ApiResponse<List<StockLocationDto>> list(
             @RequestParam(required = false) String branchUid, Pageable pageable) {
         Page<StockLocationDto> page = locationService.listForBranch(branchUid, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
+    // LRB-02: van reconciliation (STOCK.VAN_RECON.MANAGE) picks its van from this list. The service
+    // asserts the branch belongs to the caller's company.
     @GetMapping("/active")
-    @PreAuthorize("@perm.has('STOCK.LOCATION.VIEW')")
+    @PreAuthorize("@perm.has('STOCK.LOCATION.VIEW') or @perm.has('STOCK.VAN_RECON.MANAGE')")
     public List<StockLocationDto> activeForBranch(String branchUid) {
         return locationService.activeForBranch(branchUid);
     }

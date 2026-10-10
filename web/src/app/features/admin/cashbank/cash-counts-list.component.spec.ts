@@ -71,7 +71,8 @@ function makeBed(opts: { canView?: boolean; canManage?: boolean; listSpy?: Retur
       {
         provide: CashbankService,
         useValue: {
-          listAllAccounts: vi.fn(() => of(MOCK_TILLS)),
+          // The server's till lookup returns CASH accounts only (LRB-03).
+          listCashTills: vi.fn(() => of(MOCK_TILLS.filter((t) => t.accountType === 'CASH'))),
           listCashCounts: listSpy,
         },
       },
