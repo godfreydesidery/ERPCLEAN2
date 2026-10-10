@@ -13,6 +13,8 @@ public interface BankReconciliationRepository extends JpaRepository<BankReconcil
 
     Optional<BankReconciliation> findByCompanyIdAndUid(Long companyId, String uid);
 
+    Optional<BankReconciliation> findByCompanyIdAndId(Long companyId, Long id);
+
     List<BankReconciliation> findByCashBankAccountId(Long accountId);
 
     /**

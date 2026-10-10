@@ -148,7 +148,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
             // inside this statement's opening balance — it cannot be moved or un-cleared.
             Long clearedIn = t.getClearedInReconciliationId();
             if (clearedIn != null && !clearedIn.equals(recon.getId())
-                    && reconciliations.findById(clearedIn)
+                    && reconciliations.findByCompanyIdAndId(recon.getCompanyId(), clearedIn)
                             .map(r -> r.getStatus() == ReconciliationStatus.COMPLETED)
                             .orElse(false))
                 throw new IllegalStateException(
@@ -222,7 +222,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
 
         // The account remembers where it was last reconciled to (columns exist since V13).
         final BankReconciliation done = recon;
-        accounts.findById(done.getCashBankAccountId()).ifPresent(a -> {
+        accounts.findByCompanyIdAndId(done.getCompanyId(), done.getCashBankAccountId()).ifPresent(a -> {
             a.setLastReconciledDate(done.getStatementDate());
             a.setLastReconciledBalance(done.getStatementClosingBalance());
         });
