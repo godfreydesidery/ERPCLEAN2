@@ -52,6 +52,7 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
     @Autowired private ApOpeningBalanceService openingBalanceService;
     @Autowired private ApGlSeeder             apGlSeeder;
     @Autowired private ApDebitNoteService     debitNoteService;
+    @Autowired private com.erp.platform.common.money.FxRateService fxRateService;
     @Autowired private SupplierService        supplierService;
     @Autowired private ChartOfAccountService  chartOfAccountService;
     @Autowired private FiscalCalendarService  fiscalCalendarService;
@@ -254,6 +255,39 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
         List<ApAgeingRowDto> summary = ageingQuery.ageing(company.getId(), null, LocalDate.now());
         assertThat(bucketAmount(summary, AgeingBucket.CURRENT)).isEqualByComparingTo("300.00");
         assertThat(bucketAmount(summary, AgeingBucket.D31_60)).isEqualByComparingTo("700.00");
+    }
+
+    // =========================================================================
+    // AP-12: a USD opening balance posts to the GL in base currency and stamps the FX triple
+    // =========================================================================
+
+    @Test
+    void openingBalance_inUsd_postsBaseLines_andStampsFxRate() {
+        fxRateService.addRate(new com.erp.modules.fx.domain.dto.UpsertRateRequest(
+                company.getId(), "USD", "TZS", new BigDecimal("2500"),
+                LocalDate.now().minusDays(10), "SPOT", "test"));
+
+        var bill = openingBalanceService.setOpeningBalance(new SetApOpeningBalanceRequest(
+                companyUid, supplierUid, new BigDecimal("400.00"), "USD",
+                LocalDate.now(), LocalDate.now().plusDays(30), "OB-USD-1"));
+
+        var row = jdbc.queryForMap(
+                "SELECT currency, fx_rate, base_gross_amount, base_outstanding_amount,"
+                        + " posted_gl_entry_uid FROM supplier_bills WHERE uid = ?", bill.uid());
+        assertThat(row.get("currency")).isEqualTo("USD");
+        assertThat((BigDecimal) row.get("fx_rate")).isEqualByComparingTo("2500");
+        assertThat((BigDecimal) row.get("base_gross_amount")).isEqualByComparingTo("1000000");
+        assertThat((BigDecimal) row.get("base_outstanding_amount")).isEqualByComparingTo("1000000");
+
+        var gl = jdbc.queryForMap(
+                "SELECT SUM(l.debit_amount) AS dr, SUM(l.credit_amount) AS cr,"
+                        + " MIN(l.currency) AS lo, MAX(l.currency) AS hi"
+                        + " FROM journal_lines l JOIN journal_entries e ON e.id = l.entry_id"
+                        + " WHERE e.uid = ?", row.get("posted_gl_entry_uid"));
+        assertThat((BigDecimal) gl.get("dr")).isEqualByComparingTo("1000000");
+        assertThat((BigDecimal) gl.get("cr")).isEqualByComparingTo("1000000");
+        assertThat(gl.get("lo")).isEqualTo("TZS");
+        assertThat(gl.get("hi")).isEqualTo("TZS");
     }
 
     // =========================================================================
