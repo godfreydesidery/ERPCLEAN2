@@ -418,6 +418,35 @@ public class StockTransferServiceImpl implements StockTransferService {
                 .map(t -> toDto(t, List.of()));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<StockTransferDto> list(String status, String direction, java.time.LocalDate fromDate,
+                                       java.time.LocalDate toDate, String q, Pageable pageable) {
+        RequestContext.Principal principal = RequestContext.get();
+        scopeGuard.assertCanActIn(principal, principal.companyId());
+
+        StockTransferStatus st = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                st = StockTransferStatus.valueOf(status.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Unknown transfer status filter.");
+            }
+        }
+        Long branchId = principal.branchId();
+        String dir = direction == null ? "" : direction.trim().toUpperCase(java.util.Locale.ROOT);
+        Long dest   = "INCOMING".equals(dir) ? branchId : null;
+        Long source = "OUTGOING".equals(dir) ? branchId : null;
+        Long any    = "BRANCH".equals(dir)   ? branchId : null;
+        String numberLike = q == null || q.isBlank()
+                ? null
+                : "%" + q.trim().toLowerCase(java.util.Locale.ROOT)
+                        .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return transfers.search(principal.companyId(), st, dest, source, any,
+                        fromDate, toDate, numberLike, pageable)
+                .map(t -> toDto(t, List.of()));
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

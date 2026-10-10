@@ -12,6 +12,56 @@
     </div>
   </div>
 
+  <!-- STK-19: filters (newest transfer date first) -->
+  <div class="erp-card mb-3">
+    <div class="erp-card__body">
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-3">
+          <label class="form-label small text-muted mb-1" for="trfDirection">Branch</label>
+          <select id="trfDirection" class="form-select form-select-sm"
+                  [value]="filters().direction ?? ''"
+                  (change)="setFilter('direction', $any($event.target).value)">
+            <option value="BRANCH">This branch (in or out)</option>
+            <option value="INCOMING">Incoming to this branch</option>
+            <option value="OUTGOING">Outgoing from this branch</option>
+            <option value="">All branches</option>
+          </select>
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="trfStatus">Status</label>
+          <select id="trfStatus" class="form-select form-select-sm"
+                  [value]="filters().status ?? ''"
+                  (change)="setFilter('status', $any($event.target).value)">
+            <option value="">Any</option>
+            @for (s of statusOptions; track s) {
+              <option [value]="s">{{ s }}</option>
+            }
+          </select>
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="trfFrom">From</label>
+          <input id="trfFrom" type="date" class="form-control form-control-sm"
+                 [value]="filters().fromDate ?? ''"
+                 (change)="setFilter('fromDate', $any($event.target).value)" />
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="trfTo">To</label>
+          <input id="trfTo" type="date" class="form-control form-control-sm"
+                 [value]="filters().toDate ?? ''"
+                 (change)="setFilter('toDate', $any($event.target).value)" />
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small text-muted mb-1" for="trfNumber">Transfer #</label>
+          <input id="trfNumber" type="search" class="form-control form-control-sm" autocomplete="off"
+                 [value]="filters().q ?? ''"
+                 (change)="setFilter('q', $any($event.target).value)" />
+        </div>
+        <div class="col-sm-1">
+          <button type="button" class="btn btn-sm btn-outline-secondary w-100" (click)="clearFilters()">Clear</button>
+        </div>
+      </div>
+    </div>
+  </div>
   @switch (state()) {
     @case ('loading') {
       <div class="erp-empty" aria-live="polite">

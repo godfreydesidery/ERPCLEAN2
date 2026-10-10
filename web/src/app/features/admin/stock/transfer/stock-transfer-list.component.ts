@@ -8,7 +8,7 @@ import { PageMeta } from '../../../../core/api/api-response.model';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 import { StockTransferDto } from './stock-transfer.model';
-import { StockTransferService } from './stock-transfer.service';
+import { StockTransferListFilters, StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
 
 const DEFAULT_SIZE = 20;
@@ -49,6 +49,32 @@ export class StockTransferListComponent {
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
+  /**
+   * STK-19: list filters. Defaults to transfers touching the ACTIVE branch so a receiving
+   * storekeeper is not paging through every branch's transfers; "All branches" clears it.
+   */
+  readonly filters = signal<StockTransferListFilters>({ direction: 'BRANCH' });
+  readonly statusOptions = ['DRAFT', 'DISPATCHED', 'RECEIVED', 'COMPLETED', 'CANCELLED'];
+
+  setFilter(key: keyof StockTransferListFilters, value: string): void {
+    this.filters.update((f) => ({ ...f, [key]: value }));
+    this.load(0);
+  }
+
+  clearFilters(): void {
+    this.filters.set({ direction: 'BRANCH' });
+    this.load(0);
+  }
+
+  /** Only the filters actually set — what is sent to the server. */
+  private activeFilters(): StockTransferListFilters {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(this.filters())) {
+      if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+    }
+    return out as StockTransferListFilters;
+  }
+
   constructor() {
     const pageTrigger$ = toObservable(this.currentPage).pipe(
       skip(1),
@@ -61,7 +87,7 @@ export class StockTransferListComponent {
       .pipe(
         switchMap(({ page }) => {
           this.state.set('loading');
-          return this.transferService.list(page, DEFAULT_SIZE);
+          return this.transferService.list(page, DEFAULT_SIZE, this.activeFilters());
         }),
         takeUntilDestroyed(),
       )

@@ -139,8 +139,22 @@ public class StockTransferController {
 
     @GetMapping
     @PreAuthorize("@perm.has('STOCK.TRANSFER.VIEW')")
-    public ApiResponse<List<StockTransferDto>> list(Pageable pageable) {
-        Page<StockTransferDto> page = transferService.list(pageable);
+    public ApiResponse<List<StockTransferDto>> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate fromDate,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate toDate,
+            @RequestParam(required = false) String q,
+            // STK-19: newest first unless the caller asks otherwise (was unsorted).
+            @org.springframework.data.web.PageableDefault(size = 20,
+                    sort = {"transferDate", "id"},
+                    direction = org.springframework.data.domain.Sort.Direction.DESC)
+            Pageable pageable) {
+        Page<StockTransferDto> page = transferService.list(status, direction, fromDate, toDate, q, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
