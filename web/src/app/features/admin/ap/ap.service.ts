@@ -92,6 +92,14 @@ export class ApService {
     return this.http.post<SupplierBillDto>(`${this.base}/supplier-bills`, request);
   }
 
+  /**
+   * AP-01: delete a bill that never reached the books (DRAFT or HELD, nothing posted, paid or
+   * credited against it) so the invoice can be entered again. Gated AP.BILL.ENTER.
+   */
+  deleteBill(uid: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/supplier-bills/uid/${uid}`);
+  }
+
   // ── 3-way match ───────────────────────────────────────────────────────────
 
   runMatch(billUid: string): Observable<BillMatchResultDto> {
@@ -114,8 +122,12 @@ export class ApService {
     return this.http.post<ApPaymentDto>(`${this.base}/payments/single`, request);
   }
 
-  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto[]> {
-    return this.http.post<ApPaymentDto[]>(`${this.base}/payments/payment-run`, request);
+  /**
+   * A payment run posts ONE payment (allocated across the selected bills) — the backend returns a
+   * single ApPaymentDto, not a list (AP-17: typing it as an array broke the success screen).
+   */
+  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto> {
+    return this.http.post<ApPaymentDto>(`${this.base}/payments/payment-run`, request);
   }
 
   listPayments(

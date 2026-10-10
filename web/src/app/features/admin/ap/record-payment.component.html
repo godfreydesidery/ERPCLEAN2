@@ -23,7 +23,7 @@
     <section class="alert alert-success mt-3" aria-label="Payment run result">
       <div class="d-flex align-items-center gap-2 mb-2">
         <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
-        <strong>Payment run complete — {{ payments.length }} payment(s) recorded</strong>
+        <strong>Payment recorded</strong>
       </div>
       <ul class="mb-0 small">
         @for (p of payments; track p.uid) {
@@ -172,6 +172,28 @@
                      [ngModel]="bankReference()"
                      (ngModelChange)="bankReference.set($event)"
                      [disabled]="submitting()" autocomplete="off" />
+            </div>
+
+            <!-- AP-08: which cash / bank / mobile-money account the money leaves -->
+            <div class="col-sm-6">
+              <label class="form-label" for="payFromAccount">Pay from</label>
+              <select id="payFromAccount" name="payFromAccount" class="form-select"
+                      aria-describedby="payFromAccountHelp"
+                      [ngModel]="cashAccountUid()"
+                      (ngModelChange)="cashAccountUid.set($event)"
+                      [disabled]="submitting()">
+                <option value="">Company default account</option>
+                @for (a of cashAccounts(); track a.uid) {
+                  <option [value]="a.uid">{{ cashAccountLabel(a) }}</option>
+                }
+              </select>
+              <div id="payFromAccountHelp" class="form-text">
+                @if (cashAccountsUnavailable()) {
+                  The account list could not be loaded, so the payment will use the company default account.
+                } @else {
+                  The till, M-Pesa or bank account the money actually left.
+                }
+              </div>
             </div>
 
           </div>

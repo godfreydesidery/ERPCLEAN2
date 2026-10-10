@@ -58,5 +58,9 @@ public record SupplierBillDto(
         DirectReceiptRatificationState directReceiptRatification,
         // UAT 2026-08-12: derived, never stored — see the class javadoc.
         BillComparisonState comparisonState,
-        List<SupplierBillLineDto> lines
+        List<SupplierBillLineDto> lines,
+        // AP-28 (additive): the supplier's external id + display name, so a screen can open the
+        // payment screen on this bill's supplier without a second lookup. Null when unresolved.
+        String supplierUid,
+        String supplierName
 ) {}

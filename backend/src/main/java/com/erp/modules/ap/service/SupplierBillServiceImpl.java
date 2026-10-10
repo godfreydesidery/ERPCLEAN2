@@ -113,9 +113,13 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         // Duplicate-invoice guard (uq_supplier_bill_supplier_invoice)
         if (bills.existsByCompanyIdAndSupplierIdAndSupplierInvoiceNo(
                 companyId, supplierId, req.supplierInvoiceNo())) {
+            // AP-01: a held or never-matched bill can now be deleted from its detail screen, so
+            // say where to go instead of leaving the clerk at a dead end.
             throw new IllegalStateException(
                     "Supplier invoice '" + req.supplierInvoiceNo()
-                            + "' already entered for this supplier (duplicate-payable guard).");
+                            + "' has already been entered for this supplier. If that bill is on"
+                            + " hold or was never matched, open it and delete it, then enter the"
+                            + " invoice again.");
         }
 
         String currency = req.currency() != null ? req.currency()
@@ -241,7 +245,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         // A bill just entered cannot have been matched yet — there are no bill_match rows behind it,
         // and saying so is the honest answer rather than a query that can only return one value.
         return toDto(bill, savedLines, ratification.stateFor(bill.getPurchaseOrderUid()),
-                BillComparisonState.NEVER_MATCHED);
+                BillComparisonState.NEVER_MATCHED, supplier.getUid(), supplier.getDisplayName());
     }
 
     @Override
@@ -250,8 +254,12 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         SupplierBill bill = Lookups.orNotFound(bills.findByUid(uid), "SupplierBill", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), bill.getCompanyId());
         List<SupplierBillLine> billLines = lines.findBySupplierBillIdOrderByLineNo(bill.getId());
+        Supplier supplier = supplierOf(bill.getCompanyId(), List.of(bill.getSupplierId()))
+                .get(bill.getSupplierId());
         return toDto(bill, billLines, ratification.stateFor(bill.getPurchaseOrderUid()),
-                comparisons.stateFor(bill.getId(), billLines.size()));
+                comparisons.stateFor(bill.getId(), billLines.size()),
+                supplier != null ? supplier.getUid() : null,
+                supplier != null ? supplier.getDisplayName() : null);
     }
 
     @Override
@@ -336,12 +344,33 @@ public class SupplierBillServiceImpl implements SupplierBillService {
         // Same discipline for the comparison signal: one query for the page, resolved up front.
         BillComparisonReader.Snapshot comparisonStates = comparisons.snapshotFor(
                 page.getContent().stream().map(SupplierBill::getId).toList());
+        // AP-28: the page's suppliers in one query, so each bill can carry its supplier's uid.
+        Map<Long, Supplier> pageSuppliers = page.isEmpty()
+                ? Map.of()
+                : supplierOf(page.getContent().get(0).getCompanyId(),
+                        page.getContent().stream().map(SupplierBill::getSupplierId).toList());
         return page.map(b -> {
             List<SupplierBillLine> billLines = lines.findBySupplierBillIdOrderByLineNo(b.getId());
+            Supplier s = pageSuppliers.get(b.getSupplierId());
             return toDto(b, billLines,
                     ratificationStates.stateFor(b.getPurchaseOrderUid()),
-                    comparisonStates.stateFor(b.getId(), billLines.size()));
+                    comparisonStates.stateFor(b.getId(), billLines.size()),
+                    s != null ? s.getUid() : null,
+                    s != null ? s.getDisplayName() : null);
         });
+    }
+
+    /** Suppliers by id, scoped to the company the bills were loaded from (never a caller value). */
+    private Map<Long, Supplier> supplierOf(Long companyId, List<Long> supplierIds) {
+        List<Long> ids = supplierIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Supplier> out = new java.util.HashMap<>();
+        for (Supplier s : suppliers.findByCompanyIdAndIdIn(companyId, ids)) {
+            out.put(s.getId(), s);
+        }
+        return out;
     }
 
     /**
@@ -362,6 +391,13 @@ public class SupplierBillServiceImpl implements SupplierBillService {
     static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList,
                                   DirectReceiptRatificationState ratificationState,
                                   BillComparisonState comparisonState) {
+        return toDto(b, lineList, ratificationState, comparisonState, null, null);
+    }
+
+    static SupplierBillDto toDto(SupplierBill b, List<SupplierBillLine> lineList,
+                                  DirectReceiptRatificationState ratificationState,
+                                  BillComparisonState comparisonState,
+                                  String supplierUid, String supplierName) {
         List<SupplierBillLineDto> lineDtos = lineList.stream().map(l ->
                 new SupplierBillLineDto(
                         l.getId(), l.getUid(), l.getSupplierBillId(), l.getLineNo(),
@@ -393,7 +429,7 @@ public class SupplierBillServiceImpl implements SupplierBillService {
                 // UAT 2026-08-12: derived comparison state. A missing value falls back to
                 // NEVER_MATCHED, never to "compared" — an unknown must never read as verified.
                 comparisonState != null ? comparisonState : BillComparisonState.NEVER_MATCHED,
-                lineDtos);
+                lineDtos, supplierUid, supplierName);
     }
 
     /**

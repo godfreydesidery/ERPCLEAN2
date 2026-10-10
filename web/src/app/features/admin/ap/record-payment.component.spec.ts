@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { signal } from '@angular/core';
 
@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { CashbankService } from '../cashbank/cashbank.service';
 
 // Record Payment guard: submit must be disabled when zero bills are selected,
 // and enabled as soon as at least one bill is checked.
@@ -28,7 +29,7 @@ function makeSession(canPay = true) {
   };
 }
 
-function makeBed(canPay = true) {
+function makeBed(canPay = true, queryParams: Record<string, string> = {}) {
   TestBed.configureTestingModule({
     imports: [RecordPaymentComponent],
     providers: [
@@ -39,7 +40,8 @@ function makeBed(canPay = true) {
         provide: ApService,
         useValue: {
           listBills: vi.fn(() => of({ rows: [], meta: {} })),
-          paymentRun: vi.fn(() => of([])),
+          paymentRun: vi.fn(() => of(null)),
+          getBill: vi.fn(() => of({ ...makePayableBill('B2', 300), supplierUid: 'SUP9', supplierName: 'Serengeti Breweries' })),
         },
       },
       { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
@@ -47,6 +49,16 @@ function makeBed(canPay = true) {
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore, useValue: makeSession(canPay) },
+      { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(queryParams) } } },
+      {
+        provide: CashbankService,
+        useValue: {
+          listAllAccounts: vi.fn(() => of([
+            { uid: 'ACC-BANK', name: 'CRDB Main', bankAccountNo: '0150', currency: 'TZS', isDefault: true, active: true },
+            { uid: 'ACC-MPESA', name: 'M-Pesa Till', bankAccountNo: null, currency: 'TZS', isDefault: false, active: true },
+          ])),
+        },
+      },
     ],
   });
 }
@@ -146,7 +158,7 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
     const fixture = TestBed.createComponent(RecordPaymentComponent);
     const comp = fixture.componentInstance as any;
     const apService = TestBed.inject(ApService) as any;
-    apService.paymentRun.mockReturnValue(of([{ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [] }]));
+    apService.paymentRun.mockReturnValue(of({ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [] }));
 
     primeSupplierSelected(comp);
     comp.bills.set([makePayableBill('B1', 500), makePayableBill('B2', 300)]);
@@ -161,5 +173,67 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
         bankReference: 'REF1',
       }),
     );
+  });
+
+  it('AP-08: the company default account is preselected and the chosen account is sent', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(RecordPaymentComponent);
+    const comp = fixture.componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+    apService.paymentRun.mockReturnValue(of({ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'MOBILE_MONEY', bankReference: null, allocations: [] }));
+
+    expect(comp.cashAccountUid()).toBe('ACC-BANK');
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500)]);
+    comp.toggleBill('B1', true);
+    comp.cashAccountUid.set('ACC-MPESA');
+    comp.submit();
+
+    expect(apService.paymentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ cashBankAccountUid: 'ACC-MPESA' }),
+    );
+  });
+
+  it('AP-28: Pay from a bill selects its supplier and ticks the bill', () => {
+    vi.useFakeTimers();
+    makeBed(true, { billUid: 'B2', supplierUid: 'SUP9' });
+    const apService = TestBed.inject(ApService) as any;
+    apService.listBills.mockReturnValue(of({
+      rows: [makePayableBill('B1', 500), makePayableBill('B2', 300)], meta: {},
+    }));
+    const comp = TestBed.createComponent(RecordPaymentComponent).componentInstance as any;
+
+    expect(apService.getBill).toHaveBeenCalledWith('B2');
+    expect(comp.selectedSupplier()).toEqual({ uid: 'SUP9', label: 'Serengeti Breweries' });
+    expect(apService.listBills).toHaveBeenCalledWith('10', 'SUP9', undefined, 0, 200);
+    expect(comp.isBillSelected('B2')).toBe(true);
+    expect(comp.isBillSelected('B1')).toBe(false);
+  });
+
+  it('AP-17: the success screen renders the ONE payment the run returns', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(RecordPaymentComponent);
+    const comp = fixture.componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+    // The backend returns a single object, not an array.
+    apService.paymentRun.mockReturnValue(of({
+      uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS',
+      tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [],
+      cashBankAccountName: 'CRDB Main', cashBankAccountNumber: '0150-1',
+    }));
+
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500)]);
+    comp.toggleBill('B1', true);
+    comp.submit();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Payment recorded');
+    expect(text).toContain('PMT-001');
+    expect(text).toContain('Paid from CRDB Main');
+    expect(text).not.toContain('undefined');
   });
 });

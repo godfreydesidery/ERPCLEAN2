@@ -224,6 +224,8 @@ public final class AuditActions {
     public static final String AP_BILL_ENTER       = "AP.BILL.ENTER";
     public static final String AP_BILL_MATCH       = "AP.BILL.MATCH";
     public static final String AP_BILL_POST        = "AP.BILL.POST";
+    /** AP-01: an unposted (DRAFT / HELD) bill removed so it can be entered again correctly. */
+    public static final String AP_BILL_DELETE      = "AP.BILL.DELETE";
     public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
     public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
     public static final String AP_OPENING_SET      = "AP.OPENING.SET";

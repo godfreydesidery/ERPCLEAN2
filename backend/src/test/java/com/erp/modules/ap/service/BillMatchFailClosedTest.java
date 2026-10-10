@@ -316,6 +316,92 @@ class BillMatchFailClosedTest {
     }
 
     // =========================================================================
+    // AP-06: units — billed cartons are compared with received cartons, not bottles
+    // AP-05: the same receipt line cannot be billed twice
+    // =========================================================================
+
+    @Test
+    @DisplayName("AP-06: 200 cartons billed against 10 cartons (240 bottles) received is HELD")
+    void runMatch_billedPacksComparedWithReceivedPacksNotBaseUnits() {
+        SupplierBill bill = bill("po-uid-1", new BigDecimal("900000"));
+        SupplierBillLine line = line("pol-1", "grl-1",
+                new BigDecimal("200"), new BigDecimal("4500"));
+        stubBill(bill, line);
+        stubResolvedPurchase(new BigDecimal("4500"),
+                grLine(new BigDecimal("10"), new BigDecimal("240")));
+
+        BillMatchResultDto result = service.runMatch("bill-uid-1");
+
+        LineMatchDto lineResult = result.lineResults().get(0);
+        assertThat(result.billStatus()).isEqualTo(SupplierBillStatus.HELD);
+        assertThat(lineResult.matchStatus()).isEqualTo(BillMatchStatus.HELD_QTY_VARIANCE);
+        assertThat(lineResult.grReceivedQty())
+                .as("the received figure is in the same unit as the billed one")
+                .isEqualByComparingTo("10");
+        assertThat(lineResult.qtyVariance()).isEqualByComparingTo("190");
+        verify(glPosting, never()).post(any());
+    }
+
+    @Test
+    @DisplayName("AP-06: 10 cartons billed against 10 cartons (240 bottles) received MATCHES")
+    void runMatch_billedPacksEqualReceivedPacks_matches() {
+        SupplierBill bill = bill("po-uid-1", new BigDecimal("45000"));
+        SupplierBillLine line = line("pol-1", "grl-1",
+                new BigDecimal("10"), new BigDecimal("4500"));
+        stubBill(bill, line);
+        stubResolvedPurchase(new BigDecimal("4500"),
+                grLine(new BigDecimal("10"), new BigDecimal("240")));
+
+        BillMatchResultDto result = service.runMatch("bill-uid-1");
+
+        assertThat(result.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
+        assertThat(result.lineResults().get(0).qtyVariance()).isEqualByComparingTo("0");
+        verify(glPosting).post(any(JournalEntryDraft.class));
+    }
+
+    @Test
+    @DisplayName("AP-05: a receipt line already billed in full on another bill is HELD, "
+            + "with a note that says so")
+    void runMatch_receiptLineAlreadyBilledElsewhere_holds() {
+        SupplierBill bill = bill("po-uid-1", new BigDecimal("67500"));
+        SupplierBillLine line = line("pol-1", "grl-1",
+                new BigDecimal("15"), new BigDecimal("4500"));
+        stubBill(bill, line);
+        stubResolvedPurchase(new BigDecimal("4500"), new BigDecimal("15"));
+        when(lineRepo.sumBilledQtyOnOtherBills(eq(COMPANY_ID), eq("grl-1"), any()))
+                .thenReturn(new BigDecimal("15"));
+
+        BillMatchResultDto result = service.runMatch("bill-uid-1");
+
+        LineMatchDto lineResult = result.lineResults().get(0);
+        assertThat(result.billStatus()).isEqualTo(SupplierBillStatus.HELD);
+        assertThat(lineResult.matchStatus()).isEqualTo(BillMatchStatus.HELD_QTY_VARIANCE);
+        assertThat(lineResult.qtyVariance()).isEqualByComparingTo("15");
+        assertThat(lineResult.matchNote()).contains("Other bills already claim 15")
+                .contains("only 0 is left");
+        assertThat(savedMatches.get(0).getVarianceReason()).contains("already billed");
+        verify(glPosting, never()).post(any());
+    }
+
+    @Test
+    @DisplayName("AP-05: billing the remainder of a partly billed receipt line still MATCHES")
+    void runMatch_receiptLinePartlyBilledElsewhere_remainderMatches() {
+        SupplierBill bill = bill("po-uid-1", new BigDecimal("27000"));
+        SupplierBillLine line = line("pol-1", "grl-1",
+                new BigDecimal("6"), new BigDecimal("4500"));
+        stubBill(bill, line);
+        stubResolvedPurchase(new BigDecimal("4500"), new BigDecimal("15"));
+        when(lineRepo.sumBilledQtyOnOtherBills(eq(COMPANY_ID), eq("grl-1"), any()))
+                .thenReturn(new BigDecimal("9"));
+
+        BillMatchResultDto result = service.runMatch("bill-uid-1");
+
+        assertThat(result.billStatus()).isEqualTo(SupplierBillStatus.MATCHED);
+        assertThat(result.lineResults().get(0).qtyVariance()).isEqualByComparingTo("0");
+        verify(glPosting).post(any(JournalEntryDraft.class));
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -339,13 +425,17 @@ class BillMatchFailClosedTest {
 
     /** Both sides of the 3-way resolve: the PO line at {@code unitCost}, the GR line at {@code received}. */
     private void stubResolvedPurchase(BigDecimal unitCost, BigDecimal received) {
+        stubResolvedPurchase(unitCost, grLine(received));
+    }
+
+    private void stubResolvedPurchase(BigDecimal unitCost, GoodsReceiptLineDto grLine) {
         when(purchaseReader.findPoLine("po-uid-1", "pol-1"))
                 .thenReturn(Optional.of(poLine(unitCost)));
         when(jdbc.queryForObject(startsWith("SELECT gr.uid"), eq(String.class),
                 eq("grl-1"), eq(COMPANY_ID)))
                 .thenReturn("gr-uid-1");
         when(purchaseReader.findGrLine("gr-uid-1", "grl-1"))
-                .thenReturn(Optional.of(grLine(received)));
+                .thenReturn(Optional.of(grLine));
     }
 
     private static PurchaseOrderLineDto poLine(BigDecimal unitCost) {
@@ -358,9 +448,14 @@ class BillMatchFailClosedTest {
     }
 
     private static GoodsReceiptLineDto grLine(BigDecimal received) {
+        return grLine(received, received);
+    }
+
+    /** A receipt line of {@code received} packs that came to {@code inBase} base units. */
+    private static GoodsReceiptLineDto grLine(BigDecimal received, BigDecimal inBase) {
         return new GoodsReceiptLineDto(
                 1L, "grl-1", 1L, 1L, (short) 1, 99L, "CEM50", "Cement 50kg", 1L, "BAG",
-                received, received, new BigDecimal("4500"),
+                received, inBase, new BigDecimal("4500"),
                 received.multiply(new BigDecimal("4500")), "TZS",
                 null, null, null, List.of());
     }

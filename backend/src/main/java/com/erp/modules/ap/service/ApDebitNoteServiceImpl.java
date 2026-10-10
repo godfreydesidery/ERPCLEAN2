@@ -27,6 +27,7 @@ import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
@@ -134,6 +135,10 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         if (req.supplierBillUid() != null && !req.supplierBillUid().isBlank()) {
             targetBill = bills.findByCompanyIdAndUid(companyId, req.supplierBillUid())
                     .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
+            // AP-14: the note is raised for req.supplierUid — the bill must be that supplier's.
+            if (!supplierId.equals(targetBill.getSupplierId())) {
+                throw new ConflictException(OTHER_SUPPLIER_BILL);
+            }
             docCurrency = targetBill.getCurrency().value();
             branchId    = targetBill.getBranchId();
 
@@ -442,6 +447,10 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             SupplierBill bill = bills.findByCompanyIdAndUid(companyId, line.supplierBillUid())
                     .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
 
+            // AP-14: a supplier's credit may only reduce THAT supplier's bills, in the same currency
+            // — a TZS note from supplier A used to wipe a USD bill of supplier B figure for figure.
+            assertSameSupplierAndCurrency(note.getSupplierId(), note.getCurrency().value(), bill);
+
             // Guard: slice must not exceed current bill outstanding (bill uid not exposed)
             if (line.allocatedAmount().compareTo(bill.getOutstandingAmount()) > 0) {
                 throw new IllegalStateException(
@@ -601,6 +610,25 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     }
 
     // =========================================================================
+
+    static final String OTHER_SUPPLIER_BILL =
+            "This bill belongs to a different supplier. A debit note can only reduce bills of the"
+                    + " supplier it was raised for.";
+    static final String OTHER_CURRENCY_BILL =
+            "This bill is in a different currency from the debit note. Apply the note only to bills"
+                    + " in the same currency.";
+
+    /** AP-14: the note and the bill must share the supplier and the currency. */
+    static void assertSameSupplierAndCurrency(Long noteSupplierId, String noteCurrency,
+                                              SupplierBill bill) {
+        if (noteSupplierId == null || !noteSupplierId.equals(bill.getSupplierId())) {
+            throw new ConflictException(OTHER_SUPPLIER_BILL);
+        }
+        String billCurrency = bill.getCurrency() != null ? bill.getCurrency().value() : null;
+        if (noteCurrency == null || !noteCurrency.equals(billCurrency)) {
+            throw new ConflictException(OTHER_CURRENCY_BILL);
+        }
+    }
 
     private Long branchId() {
         RequestContext.Principal p = RequestContext.get();

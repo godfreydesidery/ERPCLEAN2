@@ -21,6 +21,21 @@ class GlobalExceptionHandlerTest {
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
     @Test
+    void missingFxRate_isAFriendly409_notAGeneric500() {
+        // AP-20: a USD bill whose day rate was missing surfaced as "match failed" (500).
+        var ex = new com.erp.platform.common.money.FxRateNotFoundException(
+                7L, "USD", "TZS", java.time.LocalDate.of(2026, 10, 10));
+
+        var response = handler.handleFxRateNotFound(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(errorOf(response))
+                .contains("USD to TZS on 2026-10-10")
+                .contains("exchange-rate screen")
+                .doesNotContain("7");
+    }
+
+    @Test
     void discountRefusal_carriesItsCodeInAHeader_soNoClientMustMatchEnglishProse() {
         // UAT finding #13: the web invoice screen decided whether to offer a manager-approval
         // prompt by string-matching the server's English refusal text. One rewording and the button

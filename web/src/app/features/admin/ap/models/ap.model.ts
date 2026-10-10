@@ -126,6 +126,10 @@ export interface SupplierBillDto {
    */
   comparisonState?: BillComparisonState | null;
   lines: SupplierBillLineDto[];
+  /** The supplier's uid (AP-28) — lets "Pay" open Record Payment on this supplier. */
+  supplierUid?: string | null;
+  /** The supplier's display name (AP-28). */
+  supplierName?: string | null;
 }
 
 // ── Enter Bill request ────────────────────────────────────────────────────────
@@ -148,7 +152,8 @@ export interface EnterBillRequest {
   supplierInvoiceNo: string;
   purchaseOrderUid?: string | null;
   billDate: string;
-  dueDate: string;
+  /** AP-09: null/omitted = derived by the server from the supplier's payment terms. */
+  dueDate?: string | null;
   /** Send as string; 0 if no VAT. */
   vatAmount: string;
   currency: string;
@@ -255,6 +260,8 @@ export interface PaySingleBillRequest {
   paymentDate: string;
   tenderType: string;
   bankReference?: string | null;
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
 }
 
 export interface PaymentRunRequest {
@@ -265,6 +272,8 @@ export interface PaymentRunRequest {
   tenderType: string;
   bankReference?: string | null;
   billUids?: string[];
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
   /**
    * Optional WHT_ON_PAYMENT capture (ADR-0017 D-9).
    * When set, the cash CR is reduced by whtAmount and a WHT payable leg is posted.

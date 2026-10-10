@@ -120,6 +120,8 @@ export class EnterBillComponent {
   readonly matchResult = signal<BillMatchResultDto | null>(null);
   readonly matchState = signal<'idle' | 'running' | 'done' | 'error'>('idle');
   readonly acceptingLine = signal<string | null>(null); // billLineUid being accepted
+  /** AP-20: why the match failed, from the server (e.g. the day's exchange rate is missing). */
+  readonly matchError = signal<string | null>(null);
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canEnter = computed(() => this.session.hasPermission('AP.BILL.ENTER'));
@@ -128,7 +130,6 @@ export class EnterBillComponent {
     !this.selectedSupplier() ||
     !String(this.supplierInvoiceNo() ?? '').trim() ||
     !String(this.billDate() ?? '').trim() ||
-    !String(this.dueDate() ?? '').trim() ||
     !this.selectedCompanyId() ||
     this.lines().length === 0 ||
     this.submitting(),
@@ -138,7 +139,9 @@ export class EnterBillComponent {
 
   constructor() {
     this.billDate.set(new Date().toISOString().slice(0, 10));
-    this.dueDate.set(new Date().toISOString().slice(0, 10));
+    // AP-09: the due date starts EMPTY. Left empty, the server derives it from the supplier's
+    // payment terms (bill date + terms); defaulting it to today made every bill overdue tomorrow.
+    this.dueDate.set('');
 
     this.supplierSearch$
       .pipe(
@@ -392,7 +395,10 @@ export class EnterBillComponent {
 
     if (!invNo) { this.formError.set('Supplier invoice no. is required.'); return; }
     if (!bDate) { this.formError.set('Bill date is required.'); return; }
-    if (!dDate) { this.formError.set('Due date is required.'); return; }
+    if (dDate && dDate < bDate) {
+      this.formError.set('The due date cannot be before the bill date.');
+      return;
+    }
 
     const lineRequests: BillLineRequest[] = this.lines()
       .filter((l) => String(l.description ?? '').trim())
@@ -412,7 +418,7 @@ export class EnterBillComponent {
       supplierInvoiceNo: invNo,
       purchaseOrderUid: poUid || null,
       billDate: bDate,
-      dueDate: dDate,
+      dueDate: dDate || null,
       vatAmount: vat,
       currency: curr,
       lines: lineRequests,
@@ -441,12 +447,16 @@ export class EnterBillComponent {
 
   private runMatch(billUid: string): void {
     this.matchState.set('running');
+    this.matchError.set(null);
     this.apService.runMatch(billUid).subscribe({
       next: (result) => {
         this.matchResult.set(result);
         this.matchState.set('done');
       },
-      error: () => this.matchState.set('error'),
+      error: (err) => {
+        this.matchError.set(this.messageFrom(err, ''));
+        this.matchState.set('error');
+      },
     });
   }
 

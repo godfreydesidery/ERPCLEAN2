@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -21,6 +21,8 @@ import { ApService } from './ap.service';
 import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
 
 /**
  * Record Payment screen — AP.PAYMENT.RUN.
@@ -46,7 +48,9 @@ export class RecordPaymentComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly taxService = inject(TaxService);
+  private readonly cashbank = inject(CashbankService);
   private readonly alerts = inject(AlertService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -69,6 +73,14 @@ export class RecordPaymentComponent {
   readonly paymentDate = signal('');
   readonly tenderType = signal<TenderType>('BANK_TRANSFER');
   readonly bankReference = signal('');
+
+  // ── AP-08: pay-from account ───────────────────────────────────────────────
+  /** Active cash / bank / mobile-money accounts of the company. */
+  readonly cashAccounts = signal<CashBankAccountDto[]>([]);
+  /** Chosen account uid; '' = let the server use the company default account. */
+  readonly cashAccountUid = signal('');
+  /** The list needs CASH.VIEW; without it the payment still goes through on the default account. */
+  readonly cashAccountsUnavailable = signal(false);
 
   // ── WHT section (optional, WHT_ON_PAYMENT) ────────────────────────────────
   readonly whtTypes = signal<WhtTypeDto[]>([]);
@@ -143,6 +155,8 @@ export class RecordPaymentComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
+              this.loadCashAccounts(list[0].id);
+              this.applyDeepLink();
             }
           },
           error: () => this.companyState.set('error'),
@@ -150,6 +164,35 @@ export class RecordPaymentComponent {
       },
       error: () => this.companyState.set('error'),
     });
+  }
+
+  /**
+   * AP-28: "Pay" on a bill opens this screen with ?billUid= (and ?supplierUid= when known). Select
+   * the bill's supplier and tick the bill, so the clerk does not search and tick it all over again.
+   * Anything that cannot be resolved simply leaves the screen as it was — the manual path still works.
+   */
+  private applyDeepLink(): void {
+    const qp = this.route.snapshot?.queryParamMap;
+    const billUid = qp?.get('billUid') ?? '';
+    const supplierUid = qp?.get('supplierUid') ?? '';
+    if (billUid) {
+      this.apService.getBill(billUid).subscribe({
+        next: (bill) => {
+          const uid = bill.supplierUid || supplierUid;
+          if (!uid) return;
+          const label = bill.supplierName || this.supplierSearchQ() || 'Selected supplier';
+          this.selectedSupplier.set({ uid, label });
+          this.supplierSearchQ.set(label);
+          this.loadPayableBills(uid, bill.uid);
+        },
+        error: () => {},
+      });
+    } else if (supplierUid) {
+      this.supplierService.getByUid(supplierUid).subscribe({
+        next: (s) => this.selectSupplier(s),
+        error: () => {},
+      });
+    }
   }
 
   private loadWhtTypes(companyId: string): void {
@@ -164,7 +207,30 @@ export class RecordPaymentComponent {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
     this.whtUnavailable.set(false);
-    if (id) this.loadWhtTypes(id);
+    if (id) {
+      this.loadWhtTypes(id);
+      this.loadCashAccounts(id);
+    }
+  }
+
+  private loadCashAccounts(companyId: string): void {
+    this.cashAccountUid.set('');
+    this.cashAccountsUnavailable.set(false);
+    this.cashbank.listAllAccounts(companyId).subscribe({
+      next: (list) => {
+        this.cashAccounts.set(list);
+        // Start on the company default so the clerk sees which account that actually is.
+        const def = list.find((a) => a.isDefault);
+        if (def) this.cashAccountUid.set(def.uid);
+      },
+      error: () => { this.cashAccounts.set([]); this.cashAccountsUnavailable.set(true); },
+    });
+  }
+
+  /** "CRDB Main · 0150… (TZS)" — what is printed on the cheque book / statement. */
+  cashAccountLabel(a: CashBankAccountDto): string {
+    const no = a.bankAccountNo ? ` · ${a.bankAccountNo}` : '';
+    return `${a.name}${no} (${a.currency})${a.isDefault ? ' — default' : ''}`;
   }
 
   // ── Supplier picker ────────────────────────────────────────────────────────
@@ -199,7 +265,7 @@ export class RecordPaymentComponent {
 
   // ── Load payable bills (MATCHED, APPROVED, PARTIALLY_PAID) ────────────────
 
-  private loadPayableBills(supplierUid: string): void {
+  private loadPayableBills(supplierUid: string, preselectBillUid?: string): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
     this.billsState.set('loading');
@@ -214,6 +280,9 @@ export class RecordPaymentComponent {
         );
         this.bills.set(payable);
         this.billsState.set('idle');
+        if (preselectBillUid && payable.some((b) => b.uid === preselectBillUid)) {
+          this.selectedBillUids.set(new Set([preselectBillUid]));
+        }
       },
       error: () => this.billsState.set('error'),
     });
@@ -268,6 +337,10 @@ export class RecordPaymentComponent {
       billUids: [...this.selectedBillUids()],
     };
 
+    // AP-08: send the chosen account; omitted = the company default (server-side fallback).
+    const accountUid = String(this.cashAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
+
     // Optional WHT (WHT_ON_PAYMENT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
     const whtAmt = String(this.whtAmount() ?? '').trim();
@@ -280,10 +353,14 @@ export class RecordPaymentComponent {
     this.formError.set(null);
 
     this.apService.paymentRun(request).subscribe({
-      next: (payments) => {
+      next: (payment) => {
         this.submitting.set(false);
-        this.savedPayments.set(payments);
-        this.alerts.success('Payment run complete', `${payments.length} payment(s) recorded`);
+        // AP-17: the run returns ONE payment; the success panel lists what was recorded.
+        this.savedPayments.set(payment ? [payment] : []);
+        this.alerts.success(
+          'Payment recorded',
+          payment?.paymentNumber ? `Payment ${payment.paymentNumber} recorded` : 'Payment recorded',
+        );
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not record payment.'));

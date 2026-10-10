@@ -329,6 +329,13 @@ export class SupplierBillsListComponent {
     return this.supplierMap().get(String(supplierId)) ?? String(supplierId);
   }
 
+  /** AP-28: open Record Payment on this bill's supplier with this bill ticked. */
+  payQueryParams(bill: SupplierBillDto): Record<string, string> {
+    const qp: Record<string, string> = { billUid: bill.uid };
+    if (bill.supplierUid) qp['supplierUid'] = bill.supplierUid;
+    return qp;
+  }
+
   canPayBill(bill: SupplierBillDto): boolean {
     return bill.status === 'MATCHED' || bill.status === 'APPROVED' || bill.status === 'PARTIALLY_PAID';
   }

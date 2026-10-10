@@ -15,6 +15,8 @@ import { SupplierService } from '../parties/supplier.service';
 import { ApPaymentDto, PaySingleBillRequest, SupplierBillDto } from './models/ap.model';
 import { ApService } from './ap.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
 
 const DEFAULT_SIZE = 20;
 
@@ -37,6 +39,7 @@ export class ApPaymentsListComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly alerts = inject(AlertService);
+  private readonly cashbank = inject(CashbankService);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -66,6 +69,10 @@ export class ApPaymentsListComponent {
   readonly payDate = signal('');
   readonly payTender = signal('BANK_TRANSFER');
   readonly payRef = signal('');
+  /** AP-08: account the money leaves; '' = company default. */
+  readonly payAccountUid = signal('');
+  readonly cashAccounts = signal<CashBankAccountDto[]>([]);
+  readonly cashAccountsUnavailable = signal(false);
   readonly paying = signal(false);
   readonly payError = signal<string | null>(null);
 
@@ -199,6 +206,7 @@ export class ApPaymentsListComponent {
 
   openPayForm(): void {
     this.showPayForm.set(true);
+    this.loadCashAccounts();
     this.payError.set(null);
     this.selectedPayBill.set(null);
     this.payBillQ.set('');
@@ -207,6 +215,27 @@ export class ApPaymentsListComponent {
     this.payRef.set('');
     this.payTender.set('BANK_TRANSFER');
     this.payDate.set(new Date().toISOString().slice(0, 10));
+  }
+
+  /** AP-08: the company's active cash / bank / mobile-money accounts, default preselected. */
+  private loadCashAccounts(): void {
+    const companyId = this.selectedCompanyId();
+    this.payAccountUid.set('');
+    this.cashAccountsUnavailable.set(false);
+    if (!companyId) return;
+    this.cashbank.listAllAccounts(companyId).subscribe({
+      next: (list) => {
+        this.cashAccounts.set(list);
+        const def = list.find((a) => a.isDefault);
+        if (def) this.payAccountUid.set(def.uid);
+      },
+      error: () => { this.cashAccounts.set([]); this.cashAccountsUnavailable.set(true); },
+    });
+  }
+
+  cashAccountLabel(a: CashBankAccountDto): string {
+    const no = a.bankAccountNo ? ` · ${a.bankAccountNo}` : '';
+    return `${a.name}${no} (${a.currency})${a.isDefault ? ' — default' : ''}`;
   }
 
   closePayForm(): void { this.showPayForm.set(false); this.payError.set(null); }
@@ -248,6 +277,8 @@ export class ApPaymentsListComponent {
       tenderType: this.payTender(),
       bankReference: this.payRef().trim() || null,
     };
+    const accountUid = String(this.payAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
 
     this.apService.paySingle(request).subscribe({
       next: () => {
