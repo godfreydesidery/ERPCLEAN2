@@ -125,6 +125,26 @@ class JournalSearchIT extends PostgresIntegrationTest {
         return journals.search(company.getId(), c, PageRequest.of(0, 50)).getContent();
     }
 
+    /** ACC-26: a system journal is not reversed on its own; a manual one takes a date and reason. */
+    @Test
+    void reversal_refusesSystemJournals_andTakesDateAndReasonForManualOnes() {
+        List<JournalEntryDto> all = search(new JournalSearchCriteria(null, null, null, null, null));
+        JournalEntryDto sale = all.stream()
+                .filter(r -> r.sourceType() == JournalSourceType.SALES).findFirst().orElseThrow();
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> journals.postManualReversal(sale.uid(), feb, "wrong"))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Only manual journals can be reversed here");
+
+        JournalEntryDto rent = all.stream()
+                .filter(r -> r.sourceType() == JournalSourceType.MANUAL).findFirst().orElseThrow();
+        JournalEntryDto reversal = journals.postManualReversal(rent.uid(), feb.plusDays(1),
+                "Posted to the wrong month");
+        assertThat(reversal.postingDate()).isEqualTo(feb.plusDays(1));
+        assertThat(reversal.description()).contains("Posted to the wrong month");
+        assertThat(reversal.reversalOfId()).isEqualTo(rent.id());
+    }
+
     private void post(LocalDate date, String description, JournalSourceType type, String ref,
                       String debitCode, String creditCode) {
         postingService.post(new JournalEntryDraft(company.getId(), branch.getId(), date,

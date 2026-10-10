@@ -69,6 +69,8 @@ export interface JournalEntryDto {
   sourceType: JournalSourceType;
   sourceRef: string | null;
   reversalOfId: string | null;
+  /** True once a reversing entry exists for this one. */
+  reversed?: boolean;
   lines: JournalLineDto[];
   /** Source document number (GRN-0007, INV-0453) when the server could read it (ACC-19). */
   documentRef?: string | null;

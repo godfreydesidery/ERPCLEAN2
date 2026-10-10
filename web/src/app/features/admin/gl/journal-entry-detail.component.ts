@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -16,7 +17,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-journal-entry-detail',
-  imports: [RouterLink],
+  imports: [RouterLink, FormsModule],
   templateUrl: './journal-entry-detail.component.html',
   styleUrl: './journal-entry-detail.component.scss',
 })
@@ -36,6 +37,11 @@ export class JournalEntryDetailComponent {
   // ── Reversal ───────────────────────────────────────────────────────────────
   readonly reversing = signal(false);
   readonly reverseError = signal<string | null>(null);
+  /** ACC-26: the reversal form — a date (a September error corrected in October can still land
+   *  in September) and a reason for the audit trail. */
+  readonly reverseFormOpen = signal(false);
+  readonly reversalDate = signal(new Date().toISOString().slice(0, 10));
+  readonly reversalReason = signal('');
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canPost = computed(() => this.session.hasPermission('GL.POST'));
@@ -45,7 +51,7 @@ export class JournalEntryDetailComponent {
   readonly isAlreadyReversal = computed(() => !!this.entry()?.reversalOfId);
 
   readonly canReverse = computed(() =>
-    this.canPost() && this.isManual() && !this.isAlreadyReversal(),
+    this.canPost() && this.isManual() && !this.isAlreadyReversal() && !this.entry()?.reversed,
   );
 
   readonly totalDebits = computed(() =>
@@ -77,11 +83,25 @@ export class JournalEntryDetailComponent {
     });
   }
 
+  openReverseForm(): void {
+    this.reverseFormOpen.set(true);
+    this.reverseError.set(null);
+  }
+
+  cancelReverse(): void {
+    this.reverseFormOpen.set(false);
+    this.reverseError.set(null);
+  }
+
   reverse(): void {
     if (this.reversing()) return;
+    if (!this.reversalReason().trim()) {
+      this.reverseError.set('Give a reason for the reversal — it is kept with the journal.');
+      return;
+    }
     this.reversing.set(true);
     this.reverseError.set(null);
-    this.glService.reverseJournal(this.uid()).subscribe({
+    this.glService.reverseJournal(this.uid(), this.reversalDate() || null, this.reversalReason()).subscribe({
       next: (reversal) => {
         this.reversing.set(false);
         this.alerts.success('Journal reversed', reversal.batchNumber);

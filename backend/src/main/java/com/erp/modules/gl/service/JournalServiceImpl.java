@@ -190,6 +190,15 @@ public class JournalServiceImpl implements JournalService {
                 .orElseThrow(() -> NotFoundException.of("JournalEntry", originalEntryUid));
         scopeGuard.assertCanActIn(RequestContext.get(), original.getCompanyId());
 
+        // ACC-26: only a manual journal is corrected by reversing it here. A system journal (sale,
+        // COGS, receipt, payment…) mirrors a document; reversing it alone would leave that document
+        // standing with no ledger entry — the sub-ledger and the GL would silently disagree.
+        if (original.getSourceType() != JournalSourceType.MANUAL) {
+            throw new ConflictException("Only manual journals can be reversed here. This journal was"
+                    + " posted automatically from a document; correct it from that document instead"
+                    + " (for example void the invoice or reverse the receipt).");
+        }
+
         LocalDate date = reversalDate != null ? reversalDate : LocalDate.now();
         return postingService.postReversal(
                 originalEntryUid, date, JournalSourceType.MANUAL, null, actorId(), reason);

@@ -142,8 +142,15 @@ export class GlService {
     return this.http.post<JournalEntryDto>(`${this.base}/journals`, request);
   }
 
-  reverseJournal(uid: string): Observable<JournalEntryDto> {
-    return this.http.post<JournalEntryDto>(`${this.base}/journals/uid/${uid}/reverse`, {});
+  /**
+   * Reverse a MANUAL journal (ACC-26). `reversalDate` (yyyy-MM-dd) defaults to today server-side;
+   * `reason` is appended to the reversing entry's description for the audit trail.
+   */
+  reverseJournal(uid: string, reversalDate?: string | null, reason?: string | null): Observable<JournalEntryDto> {
+    return this.http.post<JournalEntryDto>(`${this.base}/journals/uid/${uid}/reverse`, {
+      reversalDate: reversalDate || null,
+      reason: reason?.trim() || null,
+    });
   }
 
   // ── Posting exceptions (ACC-02) ───────────────────────────────────────────
