@@ -234,7 +234,10 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
         }
         checkMostRecentlyClosed(year);
 
-        // 3. Reopen the year's periods FIRST (so the reversal posts into an OPEN period — D-6)
+        // 3. Flip the year OPEN, then reopen its periods (so the reversal posts into an OPEN period —
+        //    D-6). The year goes first because reopenPeriod refuses a period of a CLOSED year
+        //    (ACC-15); the close stamps are cleared in step 5, after the reversal has used them.
+        year.setStatus(PeriodStatus.OPEN);
         List<FiscalPeriod> yearPeriods = periods.findByFiscalYearIdOrderByPeriodNo(year.getId());
         for (FiscalPeriod period : yearPeriods) {
             if (period.getStatus() == PeriodStatus.CLOSED) {

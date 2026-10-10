@@ -343,6 +343,29 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // ACC-15 — a period of a CLOSED year cannot be reopened on its own
+    // =========================================================================
+
+    @Test
+    void reopenPeriod_ofAClosedYear_isRefused_untilTheYearIsReopened() {
+        post2026(cashAccountId, salesAccountId, new BigDecimal("1000"));
+        FiscalYearDto fy2026 = fy2026();
+        yearEndCloseService.closeFiscalYear(fy2026.uid());
+        FiscalPeriodDto december = fiscalCalendarService.listPeriodsForYear(fy2026.uid()).get(11);
+
+        assertThatThrownBy(() -> fiscalCalendarService.reopenPeriod(december.uid()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Reopen the fiscal year first");
+        assertThat(fiscalCalendarService.getPeriodByUid(december.uid()).status())
+                .isEqualTo(PeriodStatus.CLOSED);
+
+        // The supported route still works: reopening the year reopens its periods.
+        yearEndCloseService.reopenFiscalYear(fy2026.uid());
+        assertThat(fiscalCalendarService.listPeriodsForYear(fy2026.uid()))
+                .allMatch(p -> p.status() == PeriodStatus.OPEN);
+    }
+
+    // =========================================================================
     // Bar 5 — close ↔ Reporting consistency (BR-CLOSE-12)
     // =========================================================================
 
@@ -412,6 +435,11 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
      * always within period 1 which is OPEN at setup time).
      * DR debitAccountId / CR creditAccountId, same amount.
      */
+    private FiscalYearDto fy2026() {
+        return fiscalCalendarService.listFiscalYears(company.getId()).stream()
+                .filter(y -> y.yearCode().equals("FY2026")).findFirst().orElseThrow();
+    }
+
     private void post2026(Long debitAccountId, Long creditAccountId, BigDecimal amount) {
         LocalDate postingDate = FY2026_START.plusDays(10);
         glPostingService.post(new JournalEntryDraft(

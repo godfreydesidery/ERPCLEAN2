@@ -164,6 +164,16 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         if (period.getStatus() == PeriodStatus.OPEN) {
             throw new ConflictException("This period is already OPEN.");
         }
+        // ACC-15: a period of a CLOSED year stays closed. Reopening it alone would let postings land
+        // in a year whose P&L was already rolled into Retained Earnings, while the year still reads
+        // CLOSED. Reopening the year reverses the closing journal and reopens its periods properly.
+        FiscalYear year = years.findById(period.getFiscalYearId()).orElse(null);
+        if (year != null && year.getStatus() == PeriodStatus.CLOSED) {
+            throw new ConflictException(
+                    "This period belongs to fiscal year " + year.getYearCode() + ", which is"
+                            + " closed. Reopen the fiscal year first (Year-End Close, Reopen Year);"
+                            + " that reverses the year-end closing entry and reopens its periods.");
+        }
         period.setStatus(PeriodStatus.OPEN);
         period.setClosedAt(null);
         period.setClosedBy(null);

@@ -107,6 +107,44 @@ class FiscalCalendarServiceImplTest {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // ACC-15: a period of a CLOSED year cannot be reopened on its own
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    void reopenPeriod_inAClosedYear_isRefused_andPointsToReopeningTheYear() {
+        FiscalYear fy2026 = year("FY2026", LocalDate.of(2026, 1, 1));
+        fy2026.setStatus(com.erp.modules.gl.domain.enums.PeriodStatus.CLOSED);
+        FiscalPeriod december = closedPeriod();
+        when(periods.findByUid("P12")).thenReturn(Optional.of(december));
+        when(years.findById(any())).thenReturn(Optional.of(fy2026));
+
+        assertThatThrownBy(() -> service.reopenPeriod("P12"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("FY2026")
+                .hasMessageContaining("Reopen the fiscal year first");
+        assertThat(december.getStatus()).isEqualTo(com.erp.modules.gl.domain.enums.PeriodStatus.CLOSED);
+    }
+
+    @Test
+    void reopenPeriod_inAnOpenYear_reopens() {
+        FiscalYear fy2026 = year("FY2026", LocalDate.of(2026, 1, 1));
+        FiscalPeriod december = closedPeriod();
+        when(periods.findByUid("P12")).thenReturn(Optional.of(december));
+        when(years.findById(any())).thenReturn(Optional.of(fy2026));
+
+        var dto = service.reopenPeriod("P12");
+
+        assertThat(dto.status()).isEqualTo(com.erp.modules.gl.domain.enums.PeriodStatus.OPEN);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+
+    private static FiscalPeriod closedPeriod() {
+        FiscalPeriod p = new FiscalPeriod(COMPANY, 1L, 12,
+                LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31), null);
+        p.setStatus(com.erp.modules.gl.domain.enums.PeriodStatus.CLOSED);
+        return p;
+    }
 
     static FiscalYear year(String code, LocalDate start) {
         return new FiscalYear(COMPANY, code, start.getMonthValue(), start,
