@@ -461,7 +461,11 @@
                           <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
                         }
                       } @else {
-                        {{ row.reorderLevel ?? '—' }}
+                        @if (row.reorderLevel === null && row.effectiveReorderLevel) {
+                          <span class="text-muted" title="From the product (no level set for this location)">{{ row.effectiveReorderLevel }}*</span>
+                        } @else {
+                          {{ row.reorderLevel ?? '—' }}
+                        }
                         @if (canAdjust()) {
                           <button type="button" class="btn btn-link btn-sm p-0 ms-1"
                                   (click)="startReorderEdit(row)"

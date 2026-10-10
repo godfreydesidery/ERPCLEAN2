@@ -370,6 +370,8 @@ public class StockServiceImpl implements StockService {
         Page<StockOnHand> page = onHands.findByCompanyIdAndBranchIdAndProductIdIn(
                 principal.companyId(), principal.branchId(), productIds, pageable);
         Map<Long, StockLocation> locationById = locationMap(principal.companyId(), page.getContent());
+        Map<Long, BigDecimal> levels = inheritedReorderLevels(
+                principal.companyId(), page.getContent(), locationById);
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
             StockLocation loc = locationById.get(s.getLocationId());
@@ -377,7 +379,8 @@ public class StockServiceImpl implements StockService {
                     p != null ? p.code() : null,
                     p != null ? p.name() : null,
                     loc != null ? loc.getUid()  : null,
-                    loc != null ? loc.getName() : null);
+                    loc != null ? loc.getName() : null,
+                    levels.get(s.getId()));
         });
     }
 
@@ -422,6 +425,7 @@ public class StockServiceImpl implements StockService {
                         }
                 ));
         Map<Long, StockLocation> locationById = locationMap(companyId, page.getContent());
+        Map<Long, BigDecimal> levels = inheritedReorderLevels(companyId, page.getContent(), locationById);
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
             StockLocation loc = locationById.get(s.getLocationId());
@@ -429,8 +433,41 @@ public class StockServiceImpl implements StockService {
                     p != null ? p.code() : null,
                     p != null ? p.name() : null,
                     loc != null ? loc.getUid()  : null,
-                    loc != null ? loc.getName() : null);
+                    loc != null ? loc.getName() : null,
+                    levels.get(s.getId()));
         });
+    }
+
+    /**
+     * STK-10 / LBO-16: the reorder level each row inherits when it has none of its own — the
+     * product's level for the branch, else the Product Master level — in one query for the page.
+     * An inherited level applies only to a row that holds stock or sits at the branch's default
+     * location (same rule as the reorder report and the LOW_STOCK alert), so the zero row a
+     * received transfer leaves at In-Transit is not flagged Low.
+     */
+    private Map<Long, BigDecimal> inheritedReorderLevels(Long companyId, List<StockOnHand> rows,
+                                                         Map<Long, StockLocation> locationById) {
+        List<Long> ids = rows.stream()
+                .filter(s -> s.getReorderLevel() == null)
+                .filter(s -> {
+                    if (s.getQuantity() != null && s.getQuantity().signum() != 0) {
+                        return true;
+                    }
+                    StockLocation loc = locationById.get(s.getLocationId());
+                    return loc == null || loc.isDefault();
+                })
+                .map(StockOnHand::getId)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> out = new java.util.HashMap<>();
+        for (Object[] r : onHands.findEffectiveReorderLevels(companyId, ids)) {
+            if (r[0] != null && r[1] != null) {
+                out.put(((Number) r[0]).longValue(), (BigDecimal) r[1]);
+            }
+        }
+        return out;
     }
 
     /**

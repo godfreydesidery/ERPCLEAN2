@@ -542,6 +542,28 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     // =========================================================================
 
     @Test
+    void productReorderLevel_flagsLowOnHandAndFeedsTheLowStockScan_stk10() {
+        ProductDto p = productService.create(new CreateProductRequest(
+                companyA.getUid(), null, "LevelWidget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD,
+                new BigDecimal("24"), null, null, null, null, null, null, null, null));
+        stockService.openingBalance(new OpeningBalanceRequest(p.uid(), new BigDecimal("23"), null));
+
+        StockOnHandDto row = stockService.listOnHand(null, Pageable.unpaged()).getContent().stream()
+                .filter(r -> r.productId().equals(p.id())).findFirst().orElseThrow();
+        assertThat(row.reorderLevel()).as("the row has no level of its own").isNull();
+        assertThat(row.effectiveReorderLevel()).isEqualByComparingTo("24");
+        assertThat(row.low()).isTrue();
+
+        assertThat(stockOnHandRepo.findAtOrBelowReorderByCompany(companyA.getId()))
+                .extracting(com.erp.modules.stock.domain.entity.StockOnHand::getProductId)
+                .contains(p.id());
+        assertThat(stockOnHandRepo.findAboveReorderByCompany(companyA.getId()))
+                .extracting(com.erp.modules.stock.domain.entity.StockOnHand::getProductId)
+                .doesNotContain(p.id());
+    }
+
+    @Test
     void listOnHand_withSearchTerm_filtersByProductNameWithinScope() {
         ProductDto apple  = stockableProduct("Apple Juice");
         ProductDto banana = stockableProduct("Banana Bread");

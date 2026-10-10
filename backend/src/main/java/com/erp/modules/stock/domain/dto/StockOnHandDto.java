@@ -56,7 +56,13 @@ public record StockOnHandDto(
         String createdAt,
         Long createdBy,
         String updatedAt,
-        Long updatedBy
+        Long updatedBy,
+        /**
+         * Additive (STK-10): the level {@code low} is judged against — this row's own
+         * {@code reorderLevel}, else the product's level for the branch, else the Product Master
+         * level. Null when none is set. {@code reorderLevel} stays the row's own override.
+         */
+        BigDecimal effectiveReorderLevel
 ) {
 
     /**
@@ -92,9 +98,17 @@ public record StockOnHandDto(
      */
     public static StockOnHandDto from(StockOnHand s, String productCode, String productName,
                                        String locationUid, String locationName) {
+        return from(s, productCode, productName, locationUid, locationName, s.getReorderLevel());
+    }
+
+    /** As above, judging {@code low} against an inherited level the caller resolved (STK-10). */
+    public static StockOnHandDto from(StockOnHand s, String productCode, String productName,
+                                       String locationUid, String locationName,
+                                       BigDecimal effectiveReorderLevel) {
+        BigDecimal level = s.getReorderLevel() != null ? s.getReorderLevel() : effectiveReorderLevel;
         boolean neg = s.getQuantity().compareTo(BigDecimal.ZERO) < 0;
-        boolean low = s.getReorderLevel() != null
-                && s.getQuantity().compareTo(s.getReorderLevel()) <= 0;
+        boolean low = level != null
+                && s.getQuantity().compareTo(level) <= 0;
         return new StockOnHandDto(
                 s.getId(),
                 s.getUid(),
@@ -117,7 +131,8 @@ public record StockOnHandDto(
                 s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,
                 s.getCreatedBy(),
                 s.getUpdatedAt() != null ? s.getUpdatedAt().toString() : null,
-                s.getUpdatedBy()
+                s.getUpdatedBy(),
+                level
         );
     }
 }

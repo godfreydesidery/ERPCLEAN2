@@ -42,6 +42,11 @@ export interface StockOnHandDto {
   lastCountedAt: string | null;
   negative: boolean;
   low: boolean;
+  /**
+   * STK-10: the level `low` is judged against — this row's own `reorderLevel`, else the product's
+   * level for the branch, else the Product Master level. Absent on older servers.
+   */
+  effectiveReorderLevel?: string | null;
   /** Location of this on-hand row (enriched server-side; optional for older servers). */
   locationUid?: string | null;
   locationName?: string | null;
