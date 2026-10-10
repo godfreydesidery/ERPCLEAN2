@@ -289,6 +289,54 @@ class StockTransferServiceImplTest {
      *
      * @param avgCost the running average the source stock carries, or null for never costed
      */
+    // -------------------------------------------------------------------------
+    // STK-26: no service items, no duplicate lines — refused before anything is saved
+    // -------------------------------------------------------------------------
+
+    private void stubLocationsOnly() {
+        StockLocation src = location("Main Store");
+        ReflectionTestUtils.setField(src, "id", SRC_LOC_ID);
+        StockLocation dst = location("Bar Counter");
+        ReflectionTestUtils.setField(dst, "id", DST_LOC_ID);
+        when(locationResolver.resolveLocation("SRCLOCUID0000000000000001", COMPANY_ID)).thenReturn(src);
+        when(locationResolver.resolveLocation("DSTLOCUID0000000000000001", COMPANY_ID)).thenReturn(dst);
+    }
+
+    @Test
+    void create_sameProductOnTwoLines_refused_stk26() {
+        stubLocationsOnly();
+        when(productService.getByUid("PRODUID00000000000000001")).thenReturn(product());
+
+        assertThatThrownBy(() -> service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                                "PRODUID00000000000000001", new BigDecimal("4"), null),
+                        new CreateStockTransferRequest.LineRequest(
+                                "PRODUID00000000000000001", new BigDecimal("2"), null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("more than one line");
+        verify(transfers, never()).save(any());
+    }
+
+    @Test
+    void create_serviceItem_refused_stk26() {
+        stubLocationsOnly();
+        ProductDto service0 = org.mockito.Mockito.mock(ProductDto.class);
+        when(service0.stockable()).thenReturn(false);
+        when(service0.name()).thenReturn("Delivery fee");
+        when(productService.getByUid("PRODUID00000000000000002")).thenReturn(service0);
+
+        assertThatThrownBy(() -> service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000002", new BigDecimal("1"), null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Delivery fee is not a stock item");
+        verify(transfers, never()).save(any());
+    }
+
     private List<StockTransferLine> stubCreate(BigDecimal avgCost) {
         stubUpToProductLookup();
 

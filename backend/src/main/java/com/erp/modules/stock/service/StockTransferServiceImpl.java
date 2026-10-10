@@ -117,6 +117,22 @@ public class StockTransferServiceImpl implements StockTransferService {
                     "The in-transit location can't be chosen on a transfer. Pick a store or warehouse.");
         }
 
+        // STK-26: validate every line BEFORE a number is consumed or anything is saved. A service
+        // (non-stock) item would create phantom on-hand rows; the same product on two lines is
+        // almost always a typo and makes the printed note and the receipt hard to check.
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (CreateStockTransferRequest.LineRequest lineReq : request.lines()) {
+            ProductDto p = productService.getByUid(lineReq.productUid());
+            if (!p.stockable()) {
+                throw new IllegalArgumentException(
+                        p.name() + " is not a stock item, so it can't be transferred.");
+            }
+            if (!seen.add(p.uid())) {
+                throw new IllegalArgumentException(
+                        p.name() + " appears on more than one line. Combine them into one line.");
+            }
+        }
+
         String number = numberGenerator.nextTransfer(principal.companyId());
         String mode   = request.transferMode() != null ? request.transferMode().toUpperCase() : "IN_TRANSIT";
 
