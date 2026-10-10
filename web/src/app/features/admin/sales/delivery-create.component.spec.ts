@@ -96,3 +96,48 @@ describe('DeliveryCreateComponent — numeric field coercion', () => {
     expect(body.lines[0].qtyDelivered).toBe('5');
   });
 });
+
+// ── SAL-01 / LSF-01: pack-unit lines are delivered in their own unit ─────────
+
+describe('DeliveryCreateComponent — pack-unit order lines (SAL-01)', () => {
+  const crateLine = {
+    ...stubLine,
+    uid: 'CRATE1', unitName: 'Crate',
+    qtyOrdered: '2', qtyOrderedBase: '48', openQtyBase: '24',
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed();
+    const svc = TestBed.inject(SalesOrdersService) as any;
+    svc.listOrderLines.mockReturnValue(of([crateLine]));
+  });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('prefills the open quantity in crates, not base units', async () => {
+    const comp = TestBed.createComponent(DeliveryCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const entry = comp.lineEntries()[0];
+    expect(entry.factor).toBe(24);
+    expect(entry.openQty).toBe(1);
+    expect(entry.qtyInput).toBe('1');
+  });
+
+  it('refuses more crates than are open and posts the crate count', async () => {
+    const comp = TestBed.createComponent(DeliveryCreateComponent).componentInstance;
+    const svc = TestBed.inject(SalesOrdersService) as any;
+    await vi.runAllTimersAsync();
+    comp.deliveryDate.set('2025-06-01');
+
+    comp.updateQty(0, 2);
+    comp.submit();
+    expect(comp.formError()).toContain('exceeds open balance (1 Crate)');
+    expect(svc.createDelivery).not.toHaveBeenCalled();
+
+    comp.updateQty(0, 1);
+    comp.submit();
+    expect(svc.createDelivery).toHaveBeenCalledOnce();
+    expect(svc.createDelivery.mock.calls[0][0].lines[0].qtyDelivered).toBe('1');
+  });
+});

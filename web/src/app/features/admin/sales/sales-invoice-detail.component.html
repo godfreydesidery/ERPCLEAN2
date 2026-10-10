@@ -119,7 +119,7 @@
                       (click)="toggleVoidForm()"
                       [attr.aria-expanded]="showVoidForm()">
                 <i class="bi bi-x-circle me-1" aria-hidden="true"></i>
-                Void Invoice
+                {{ voidRefunds() ? 'Void & refund' : 'Void Invoice' }}
               </button>
             }
 
@@ -150,8 +150,15 @@
           <!-- Void form -->
           @if (showVoidForm()) {
             <div class="erp-card mt-3">
-              <div class="erp-card__head"><h2 class="text-danger">Void Invoice</h2></div>
+              <div class="erp-card__head"><h2 class="text-danger">{{ voidRefunds() ? 'Void & refund' : 'Void Invoice' }}</h2></div>
               <div class="erp-card__body">
+                @if (voidRefunds()) {
+                  <p class="small mb-2" role="note">
+                    The whole sale is cancelled and every payment taken on it is refunded to the
+                    customer. Stock comes back and the sale is reversed in the ledger. This cannot
+                    be undone.
+                  </p>
+                }
                 <form (ngSubmit)="submitVoid()" aria-label="Void invoice">
                   <div class="row g-2 align-items-end">
                     <div class="col-sm-7">
@@ -167,7 +174,7 @@
                         @if (voiding()) {
                           <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                         }
-                        Confirm Void
+                        {{ voidRefunds() ? 'Confirm void & refund' : 'Confirm Void' }}
                       </button>
                     </div>
                     <div class="col-sm-2">

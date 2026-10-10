@@ -200,6 +200,12 @@ export interface DeliveryLineDto {
   returnedQtyBase: string;
   issueValueAmount: string | null;
   currency: string;
+  /**
+   * Base units in ONE `unitName` (1 for a base-unit line), from the sales-order line. `qtyDelivered`
+   * is in `unitName`; every `*Base` quantity is in base units — divide by this to show it in
+   * `unitName` (SAL-01). Null only when the order line could not be resolved.
+   */
+  factorToBase?: string | number | null;
 }
 
 // ── DeliveryDto ────────────────────────────────────────────────────────────────────
@@ -277,6 +283,7 @@ export interface CreateDeliveryRequest {
   notes?: string;
   lines: Array<{
     salesOrderLineUid: string;
+    /** In the sales-order line's OWN unit (e.g. 1 Crate), not base units (SAL-01). */
     qtyDelivered: string;
   }>;
 }

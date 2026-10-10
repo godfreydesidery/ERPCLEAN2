@@ -45,6 +45,7 @@ import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.SalesInvoiceLine;
 import com.erp.modules.sales.domain.entity.SalesInvoicePayment;
 import com.erp.modules.sales.domain.entity.TaxRate;
+import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.repository.SalesInvoiceLineRepository;
@@ -134,6 +135,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final UserLookupService userLookup;
     /** Base-currency minor units for the VAT-return output summary (converted per document). */
     private final com.erp.platform.common.money.CurrencyMinorUnits minorUnits;
+    /** SAL-07: a voided order-billed invoice hands its quantities back to the delivery. */
+    private final DeliveryService deliveryService;
+    /** SAL-02: a POS sale whose till session is still OPEN is reversed at the till, not here. */
+    private final com.erp.modules.sales.repository.PosSessionRepository posSessions;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -165,7 +170,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    UserLookupService userLookup,
                                    com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
                                    CreditExposureCalculator creditExposure,
-                                   CounterAgentProvisioner counterAgents) {
+                                   CounterAgentProvisioner counterAgents,
+                                   DeliveryService deliveryService,
+                                   com.erp.modules.sales.repository.PosSessionRepository posSessions) {
         this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
@@ -197,6 +204,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.userLookup = userLookup;
         this.minorUnits = minorUnits;
         this.creditExposure = creditExposure;
+        this.deliveryService = deliveryService;
+        this.posSessions = posSessions;
     }
 
     // -------------------------------------------------------------------------
@@ -553,22 +562,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     "This invoice cannot be voided because payments have already been received and "
                             + "allocated against it. Please raise a credit note to reverse it.");
         }
+        // SAL-02 (owner ruling 2026-10-10): a FINALISED counter (DIRECT) or POS sale that was paid
+        // at the counter may be voided IN FULL with a refund of those payments, by a holder of
+        // SALES.INVOICE.VOID (the endpoint gate) and with a reason (@NotBlank on the request). It
+        // used to be refused outright once any tender existed, and the till reversal only works
+        // while the sale's own session is still open — so a paid counter sale could not be undone
+        // at all. The refund follows the till reversal's pattern exactly: the payment rows stay
+        // as the record of what was taken, and VOID takes the invoice — and with it its tenders —
+        // out of every finalised-only cash-up and payment read; SALE.VOIDED reverses the GL sale
+        // (its Cash leg included) and the stock issue. No partial refunds: that is a return.
+        BigDecimal refunded = BigDecimal.ZERO;
         if (!posReversal) {
-            // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
-            // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
-            // a non-zero settled total means cash has changed hands and the invoice must be reversed
-            // via a credit note, not silently voided. Skipped for a POS reversal (see method
-            // Javadoc) — every POS sale is paid at the till by design.
+            // FLOW-ORDER-TO-CASH-027 (direct-payment path): effective amount = amount − change.
             BigDecimal settled = payments.findByInvoiceId(inv.getId()).stream()
                     .map(p -> p.getChangeAmount() != null
                             ? p.getAmount().subtract(p.getChangeAmount())
                             : p.getAmount())
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (settled.compareTo(BigDecimal.ZERO) > 0) {
-                // FLOW-ORDER-TO-CASH-027: block void when direct tenders have been applied
-                throw new com.erp.platform.common.api.ConflictException(
-                        "This invoice cannot be voided because direct payments have been applied to it. "
-                                + "Please raise a credit note to reverse it.");
+                if (inv.getOrigin() == DocumentOrigin.SALES_ORDER) {
+                    // An order-billed invoice is not a counter sale; its payments are reversed by
+                    // a credit note, as before.
+                    throw new com.erp.platform.common.api.ConflictException(
+                            "This invoice cannot be voided because direct payments have been "
+                                    + "applied to it. Please raise a credit note to reverse it.");
+                }
+                if (inv.getOrigin() == DocumentOrigin.POS && posSessionStillOpen(inv)) {
+                    // The till reversal owns this case: it puts the refund through the drawer that
+                    // took the money and enforces the own-drawer / supervisor rules.
+                    throw new com.erp.platform.common.api.ConflictException(
+                            "This sale's till session is still open. Reverse it at the till instead.");
+                }
+                refunded = settled;
             }
         }
         inv.setStatus(InvoiceStatus.VOID);
@@ -591,11 +616,36 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 new SaleVoidedPayload(inv.getUid(), inv.getCompanyId(), inv.getBranchId(),
                         inv.getInvoiceNumber()));
 
+        // SAL-07: an order-billed invoice gives its quantities back to the delivery it billed, so
+        // the delivered goods can be invoiced again (previously the void stranded them).
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER && inv.getSourceDeliveryUid() != null) {
+            Map<Long, BigDecimal> billedBase = new java.util.HashMap<>();
+            for (SalesInvoiceLine l : lines.findByInvoiceIdOrderByLineNo(inv.getId())) {
+                billedBase.merge(l.getProductId(), l.getQtyInBase(), BigDecimal::add);
+            }
+            deliveryService.releaseInvoicedQuantities(inv.getSourceDeliveryUid(), billedBase);
+        }
+
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("invoiceNumber", inv.getInvoiceNumber());
+        detail.put("voidReason", req.reason());
+        if (refunded.signum() > 0) {
+            detail.put("refundedAmount", refunded.toPlainString());
+            detail.put("refundCurrency", inv.getCurrency().value());
+        }
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_VOID, "sales_invoices",
                         inv.getId(), inv.getUid())
-                .detail(Map.of(
-                        "invoiceNumber", inv.getInvoiceNumber(),
-                        "voidReason", req.reason())));
+                .detail(detail));
+    }
+
+    /** Whether the POS session this sale was rung on is still OPEN (SAL-02). */
+    private boolean posSessionStillOpen(SalesInvoice inv) {
+        if (inv.getPosSessionId() == null) {
+            return false;
+        }
+        return posSessions.findByCompanyIdAndStatus(inv.getCompanyId(),
+                        com.erp.modules.sales.domain.enums.PosSessionStatus.OPEN).stream()
+                .anyMatch(s -> inv.getPosSessionId().equals(s.getId()));
     }
 
     // -------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyMinorUnits;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -82,6 +83,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final ProductRepository          productRepository;
     /** Owner decision 2026-07-05 (V87): synchronous "block negative stock on sale" pre-check. */
     private final NegativeStockGuard         negativeStockGuard;
+    /** Order-currency minor units — fixed line discounts are pro-rated to them (SAL-17). */
+    private final CurrencyMinorUnits         minorUnits;
 
     public DeliveryServiceImpl(DeliveryRepository deliveries,
                                DeliveryLineRepository deliveryLines,
@@ -97,7 +100,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                                AuditService audit,
                                OutboxPublisher outbox,
                                ProductRepository productRepository,
-                               NegativeStockGuard negativeStockGuard) {
+                               NegativeStockGuard negativeStockGuard,
+                               CurrencyMinorUnits minorUnits) {
         this.deliveries        = deliveries;
         this.deliveryLines     = deliveryLines;
         this.salesOrders       = salesOrders;
@@ -113,6 +117,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.outbox            = outbox;
         this.productRepository = productRepository;
         this.negativeStockGuard = negativeStockGuard;
+        this.minorUnits        = minorUnits;
     }
 
     // -------------------------------------------------------------------------
@@ -166,8 +171,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                         "One or more delivery lines do not belong to the specified sales order.");
             }
 
-            BigDecimal qtyDeliveredBase = lineReq.qtyDelivered();  // UI sends base qty; unit=base in v1
-            if (qtyDeliveredBase.compareTo(BigDecimal.ZERO) <= 0) {
+            // SAL-01 / LSF-01: the delivery quantity is in the SO LINE's unit (the unit the order
+            // was taken and priced in — e.g. 1 Crate), converted to base with the line's own factor
+            // for stock. It used to be read as a base quantity and stored against the pack unit, so
+            // 1 crate of 25 went out as 1 bottle (or, keyed as 25, was later billed as 25 crates).
+            BigDecimal qtyDelivered = lineReq.qtyDelivered();
+            if (qtyDelivered.compareTo(BigDecimal.ZERO) <= 0) {
                 // sol.getUid() intentionally not surfaced (error-hygiene rule)
                 throw new IllegalArgumentException(
                         "Delivery quantity must be greater than zero.");
@@ -175,11 +184,19 @@ public class DeliveryServiceImpl implements DeliveryService {
 
             // BR-SO-11: cannot deliver more than the open (unfulfilled) qty on the SO line
             BigDecimal openQty = sol.getQtyOrderedBase().subtract(sol.getQtyFulfilledBase());
+            BigDecimal openQtyInUnit = SalesLineUnits.toLineUnit(sol, openQty);
+            // Delivering exactly what is open takes exactly the open base quantity, so a pack factor
+            // that does not divide evenly can never leave a rounding sliver on the backorder.
+            BigDecimal qtyDeliveredBase = qtyDelivered.compareTo(openQtyInUnit) == 0
+                    ? openQty
+                    : SalesLineUnits.toBase(sol, qtyDelivered);
             if (qtyDeliveredBase.compareTo(openQty) > 0) {
                 // BR-SO-11: cannot deliver more than the outstanding (unfulfilled) qty
                 throw new IllegalStateException(
-                        "The delivery quantity (" + qtyDeliveredBase + ") exceeds the remaining "
-                                + "quantity available to deliver (" + openQty + ") for this order line.");
+                        "The delivery quantity (" + SalesLineUnits.plain(qtyDelivered) + " "
+                                + sol.getUnitName() + ") exceeds the remaining quantity available "
+                                + "to deliver (" + SalesLineUnits.plain(openQtyInUnit) + " "
+                                + sol.getUnitName() + ") for this order line.");
             }
 
             // Release the corresponding reservation (delta = negative) BEFORE the negative-stock
@@ -219,7 +236,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     saved.getCompanyId(), saved.getBranchId(), lineNo++,
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
-                    qtyDeliveredBase, qtyDeliveredBase,   // qty + qty_base (same in v1)
+                    qtyDelivered, qtyDeliveredBase,       // qty in the SO line's unit + qty_base
                     sol.getCurrency().value(), actorId());
             savedLines.add(deliveryLines.save(dl));
 
@@ -329,6 +346,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         // discounted net, not the full-order discount applied to fewer lines.
         // docDiscountPercent is copied verbatim — same rate gives the correct per-line share.
         BigDecimal invoiceDocDiscountAmount = order.getDocDiscountAmount();
+        // Minor units of the order currency — the rounding the invoice totals use.
+        final int currencyScale = minorUnits.of(order.getCurrency());
         if (invoiceDocDiscountAmount != null
                 && invoiceDocDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
             // Compute SO total raw net (unitPrice × qty − lineDiscount, floored at 0) for ratio.
@@ -336,8 +355,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                     salesOrderLines.findBySalesOrderIdOrderByLineNo(order.getId());
             BigDecimal soRawNetSum = allSoLines.stream()
                     .map(sol -> {
+                        // Unit price is per SO-line unit, so it multiplies the SO-unit qty
+                        // (a pack line's base qty would overweight it by its pack factor).
                         BigDecimal gross = sol.getUnitPriceAmount()
-                                .multiply(sol.getQtyOrderedBase());
+                                .multiply(sol.getQtyOrdered());
                         BigDecimal dis = sol.getLineDiscountAmount() != null
                                 && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
                                 ? sol.getLineDiscountAmount()
@@ -357,11 +378,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                 SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
                         .orElseThrow(() -> new NotFoundException(
                                 "Sales order line not found."));
-                BigDecimal qty = dl.openInvoiceQtyBase();
+                BigDecimal qty = SalesLineUnits.toLineUnit(sol, dl.openInvoiceQtyBase());
                 BigDecimal gross = sol.getUnitPriceAmount().multiply(qty);
+                // SAL-17: only the invoiced share of a fixed line discount counts here too.
                 BigDecimal dis = sol.getLineDiscountAmount() != null
                         && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
-                        ? sol.getLineDiscountAmount()
+                        ? SalesLineUnits.proRatedLineDiscount(sol.getLineDiscountAmount(),
+                                sol.getQtyOrderedBase(), sol.getQtyInvoicedBase(),
+                                dl.openInvoiceQtyBase(), currencyScale)
                         : sol.getLineDiscountPercent() != null
                         && sol.getLineDiscountPercent().compareTo(BigDecimal.ZERO) > 0
                         ? gross.multiply(sol.getLineDiscountPercent())
@@ -405,16 +429,28 @@ public class DeliveryServiceImpl implements DeliveryService {
                             "Sales order line not found."));
 
             BigDecimal qtyToInvoice = dl.openInvoiceQtyBase();
+            // SAL-01 / LSF-01: bill in the SO line's unit at its per-unit price. The base quantity
+            // is converted with the SO line's own factor — never read from the delivery line's
+            // stored qty — so deliveries recorded before this fix (qty_delivered = base count
+            // against a pack unit) bill correctly too: 25 bottles of a 25-crate line is 1 crate.
+            BigDecimal qtyToInvoiceInUnit = SalesLineUnits.toLineUnit(sol, qtyToInvoice);
 
             SalesInvoiceLine invLine = new SalesInvoiceLine(
                     savedInv, lineNo++,
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
-                    qtyToInvoice, qtyToInvoice,       // quantity + qty_in_base
+                    qtyToInvoiceInUnit, qtyToInvoice, // quantity (SO line unit) + qty_in_base
                     sol.getListPriceAmount(), sol.getUnitPriceAmount(),
                     sol.getVatStatus(), sol.getVatRate(),
                     actorId());
-            invLine.setLineDiscountAmount(sol.getLineDiscountAmount());
+            // SAL-17: a FIXED line discount belongs to the whole ordered quantity, so each
+            // partial invoice takes only its share (telescoped over the line's cumulative
+            // invoiced quantity so the shares add back to exactly the order line's discount).
+            // Copying it whole gave 4 + 6 delivered out of 10 the full discount twice. A
+            // percentage discount is a rate and is copied as is.
+            invLine.setLineDiscountAmount(SalesLineUnits.proRatedLineDiscount(
+                    sol.getLineDiscountAmount(), sol.getQtyOrderedBase(),
+                    sol.getQtyInvoicedBase(), qtyToInvoice, currencyScale));
             invLine.setLineDiscountPercent(sol.getLineDiscountPercent());
             // Carry the VAT-inclusive/exclusive stance snapshot from the SO line, else the
             // totals recompute below would treat an inclusive (gross) unit price as net and
@@ -447,6 +483,59 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     // -------------------------------------------------------------------------
+    // SAL-07: release on void
+    // -------------------------------------------------------------------------
+
+    /**
+     * Gives back, per product, the base quantity a voided order-billed invoice had taken off this
+     * delivery. The invoice carries no per-line link to the delivery line, so the release is matched
+     * on product, delivery line by delivery line in line order, never taking more off a line than
+     * is invoiced on it — and the same amount comes off the sales-order line the delivery line
+     * fulfils. Without it the void left the delivery "fully invoiced" and the order INVOICED/CLOSED,
+     * so the goods could never be billed again.
+     */
+    @Override
+    public void releaseInvoicedQuantities(String deliveryUid,
+                                          Map<Long, BigDecimal> invoicedBaseByProduct) {
+        if (deliveryUid == null || invoicedBaseByProduct == null || invoicedBaseByProduct.isEmpty()) {
+            return;
+        }
+        Delivery delivery = deliveries.findByUid(deliveryUid).orElse(null);
+        if (delivery == null) {
+            log.warn("releaseInvoicedQuantities: source delivery not found — nothing released");
+            return;
+        }
+        Map<Long, SalesOrderLine> solById = new java.util.HashMap<>();
+        for (SalesOrderLine sol
+                : salesOrderLines.findBySalesOrderIdOrderByLineNo(delivery.getSalesOrderId())) {
+            solById.put(sol.getId(), sol);
+        }
+        Map<Long, BigDecimal> remaining = new java.util.HashMap<>(invoicedBaseByProduct);
+        for (DeliveryLine dl : deliveryLines.findByDeliveryIdOrderByLineNo(delivery.getId())) {
+            BigDecimal left = remaining.get(dl.getProductId());
+            if (left == null || left.signum() <= 0) {
+                continue;
+            }
+            BigDecimal take = left.min(dl.getQtyInvoicedBase());
+            if (take.signum() <= 0) {
+                continue;
+            }
+            dl.setQtyInvoicedBase(dl.getQtyInvoicedBase().subtract(take));
+            dl.setUpdatedAt(Instant.now());
+            dl.setUpdatedBy(actorId());
+            SalesOrderLine sol = solById.get(dl.getSalesOrderLineId());
+            if (sol != null) {
+                sol.setQtyInvoicedBase(sol.getQtyInvoicedBase().subtract(
+                        take.min(sol.getQtyInvoicedBase())));
+                sol.setUpdatedAt(Instant.now());
+                sol.setUpdatedBy(actorId());
+            }
+            remaining.put(dl.getProductId(), left.subtract(take));
+        }
+        salesOrderService.recomputeStatus(delivery.getSalesOrderId());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -458,8 +547,25 @@ public class DeliveryServiceImpl implements DeliveryService {
         return Lookups.orNotFound(salesOrders.findByUid(uid), "SalesOrder", uid);
     }
 
+    /**
+     * Delivery lines are shown in their sales-order line's unit: the quantity and the factor come
+     * from that line (SAL-01), so a delivery recorded under the old base-count contract reads
+     * correctly too.
+     */
     private DeliveryDto toDto(Delivery d, List<DeliveryLine> lines) {
-        return DeliveryDto.from(d, lines.stream().map(DeliveryLineDto::from).toList());
+        Map<Long, SalesOrderLine> solById = new java.util.HashMap<>();
+        for (SalesOrderLine sol : salesOrderLines.findBySalesOrderIdOrderByLineNo(d.getSalesOrderId())) {
+            solById.put(sol.getId(), sol);
+        }
+        return DeliveryDto.from(d, lines.stream().map(l -> {
+            SalesOrderLine sol = solById.get(l.getSalesOrderLineId());
+            if (sol == null) {
+                return DeliveryLineDto.from(l);
+            }
+            return DeliveryLineDto.from(l,
+                    SalesLineUnits.toLineUnit(sol, l.getQtyDeliveredBase()),
+                    SalesLineUnits.factorToBase(sol));
+        }).toList());
     }
 
     private Long actorId() {

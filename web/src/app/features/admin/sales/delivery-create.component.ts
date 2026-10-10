@@ -11,10 +11,15 @@ import {
   SalesOrderLineDto,
 } from '../models/sales-orders.model';
 import { SalesOrdersService } from './sales-orders.service';
+import { baseToUnit, lineFactor } from './line-units';
 
 interface DeliveryLineEntry {
   line: SalesOrderLineDto;
-  /** User-entered qty string; validated before submit. */
+  /** Base units in one of the line's units (1 for a base-unit line) — SAL-01. */
+  factor: number;
+  /** Open (undelivered) quantity in the line's OWN unit (e.g. Crates), not base units. */
+  openQty: number;
+  /** User-entered qty string, in the line's unit; validated before submit. */
   qtyInput: string;
   include: boolean;
 }
@@ -24,7 +29,10 @@ type LoadState = 'loading' | 'idle' | 'error';
 /**
  * Create Delivery from a Sales Order. Route: /admin/deliveries/create?soUid=<uid>.
  * Loads the SO and its open lines, lets user pick which lines to deliver and at what qty
- * (up to openQtyBase per line — supports partial delivery).
+ * (up to the line's open quantity — supports partial delivery).
+ *
+ * SAL-01 / LSF-01: quantities here are in each order line's OWN unit (the unit it was ordered
+ * and priced in — a Crate of 24 is "1", not "24"); the server converts to base for stock.
  */
 @Component({
   selector: 'app-delivery-create',
@@ -73,11 +81,11 @@ export class DeliveryCreateComponent {
           next: (lines) => {
             const openLines = lines.filter((l) => +l.openQtyBase > 0);
             this.lineEntries.set(
-              openLines.map((l) => ({
-                line: l,
-                qtyInput: String(+l.openQtyBase),
-                include: true,
-              })),
+              openLines.map((l) => {
+                const factor = lineFactor(l);
+                const openQty = baseToUnit(l.openQtyBase, factor);
+                return { line: l, factor, openQty, qtyInput: String(openQty), include: true };
+              }),
             );
           },
         });
@@ -119,9 +127,9 @@ export class DeliveryCreateComponent {
         this.formError.set(`Invalid quantity for ${entry.line.productCode}.`);
         return;
       }
-      if (qty > +entry.line.openQtyBase) {
+      if (qty > entry.openQty) {
         this.formError.set(
-          `Quantity for ${entry.line.productCode} exceeds open balance (${entry.line.openQtyBase}).`,
+          `Quantity for ${entry.line.productCode} exceeds open balance (${entry.openQty} ${entry.line.unitName}).`,
         );
         return;
       }

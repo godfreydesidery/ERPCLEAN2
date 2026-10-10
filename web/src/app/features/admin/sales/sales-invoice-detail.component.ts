@@ -199,6 +199,11 @@ export class SalesInvoiceDetailComponent {
   readonly isDraft = computed(() => this.invoice()?.status === 'DRAFT');
   readonly isFinalised = computed(() => this.invoice()?.status === 'FINALISED');
   readonly isVoid = computed(() => this.invoice()?.status === 'VOID');
+  /**
+   * SAL-02 (owner ruling 2026-10-10): voiding a finalised sale that took counter payments refunds
+   * them in full — the action is labelled "Void & refund" so nobody voids a paid sale unawares.
+   */
+  readonly voidRefunds = computed(() => this.isFinalised() && this.payments().length > 0);
 
   readonly invoiceLabel = computed(() => {
     const inv = this.invoice();
