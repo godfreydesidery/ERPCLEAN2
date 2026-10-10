@@ -501,6 +501,9 @@ SELECT r.id, p.id FROM (VALUES
   ('STOREKEEPER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('STOREKEEPER','DOCUMENT.RENDER'),
   ('STOREKEEPER','BRANCH.VIEW'),
+  -- Gap review wave 2 (PRD-07, owner-approved 2026-10-10): opening stock now carries its value in
+  -- the same step; without this the storekeeper's opening balances stayed unvalued.
+  ('STOREKEEPER','INVENTORY.OPENING.SET'),
   -- ACCOUNTANT (59 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('ACCOUNTANT','GL.VIEW'),
   ('ACCOUNTANT','GL.POST'),
