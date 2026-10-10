@@ -280,10 +280,14 @@ export class RecordPaymentComponent {
     this.formError.set(null);
 
     this.apService.paymentRun(request).subscribe({
-      next: (payments) => {
+      next: (payment) => {
         this.submitting.set(false);
-        this.savedPayments.set(payments);
-        this.alerts.success('Payment run complete', `${payments.length} payment(s) recorded`);
+        // AP-17: the run returns ONE payment; the success panel lists what was recorded.
+        this.savedPayments.set(payment ? [payment] : []);
+        this.alerts.success(
+          'Payment recorded',
+          payment?.paymentNumber ? `Payment ${payment.paymentNumber} recorded` : 'Payment recorded',
+        );
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not record payment.'));

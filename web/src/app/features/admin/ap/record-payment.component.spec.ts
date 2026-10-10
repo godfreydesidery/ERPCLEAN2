@@ -39,7 +39,7 @@ function makeBed(canPay = true) {
         provide: ApService,
         useValue: {
           listBills: vi.fn(() => of({ rows: [], meta: {} })),
-          paymentRun: vi.fn(() => of([])),
+          paymentRun: vi.fn(() => of(null)),
         },
       },
       { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
@@ -146,7 +146,7 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
     const fixture = TestBed.createComponent(RecordPaymentComponent);
     const comp = fixture.componentInstance as any;
     const apService = TestBed.inject(ApService) as any;
-    apService.paymentRun.mockReturnValue(of([{ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [] }]));
+    apService.paymentRun.mockReturnValue(of({ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [] }));
 
     primeSupplierSelected(comp);
     comp.bills.set([makePayableBill('B1', 500), makePayableBill('B2', 300)]);
@@ -161,5 +161,31 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
         bankReference: 'REF1',
       }),
     );
+  });
+
+  it('AP-17: the success screen renders the ONE payment the run returns', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(RecordPaymentComponent);
+    const comp = fixture.componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+    // The backend returns a single object, not an array.
+    apService.paymentRun.mockReturnValue(of({
+      uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS',
+      tenderType: 'BANK_TRANSFER', bankReference: 'REF1', allocations: [],
+      cashBankAccountName: 'CRDB Main', cashBankAccountNumber: '0150-1',
+    }));
+
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500)]);
+    comp.toggleBill('B1', true);
+    comp.submit();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Payment recorded');
+    expect(text).toContain('PMT-001');
+    expect(text).toContain('Paid from CRDB Main');
+    expect(text).not.toContain('undefined');
   });
 });

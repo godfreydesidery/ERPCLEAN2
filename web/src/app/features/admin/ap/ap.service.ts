@@ -122,8 +122,12 @@ export class ApService {
     return this.http.post<ApPaymentDto>(`${this.base}/payments/single`, request);
   }
 
-  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto[]> {
-    return this.http.post<ApPaymentDto[]>(`${this.base}/payments/payment-run`, request);
+  /**
+   * A payment run posts ONE payment (allocated across the selected bills) — the backend returns a
+   * single ApPaymentDto, not a list (AP-17: typing it as an array broke the success screen).
+   */
+  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto> {
+    return this.http.post<ApPaymentDto>(`${this.base}/payments/payment-run`, request);
   }
 
   listPayments(
