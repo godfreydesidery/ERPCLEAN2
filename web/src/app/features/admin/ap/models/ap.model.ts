@@ -340,6 +340,24 @@ export interface ApAgeingRowDto {
 }
 
 /**
+ * One creditors-ageing row per supplier and currency (AP-11), net of unapplied debit notes.
+ * Backed by GET /api/v1/ap/statement/ageing/by-supplier. Amounts are wire numbers.
+ */
+export interface ApSupplierAgeingRowDto {
+  supplierId: string;
+  supplierUid: string | null;
+  supplierCode: string | null;
+  supplierName: string | null;
+  current: number | string;
+  days1to30: number | string;
+  days31to60: number | string;
+  days61to90: number | string;
+  days91Plus: number | string;
+  total: number | string;
+  currency: string;
+}
+
+/**
  * A foreign-currency amount with no reliable base-currency value (old rows whose stored rate is
  * the V62 back-fill of 1). Shown in its own currency; never part of a base-currency total.
  */

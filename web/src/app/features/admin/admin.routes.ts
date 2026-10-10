@@ -1464,6 +1464,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./ar/ar-ageing.component').then((m) => m.ArAgeingComponent),
   },
+  {
+    path: 'ap/ageing',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-ageing.component').then((m) => m.ApAgeingComponent),
+  },
   // ── AP Payments list + detail ─────────────────────────────────────────────
   {
     path: 'ap/payments',

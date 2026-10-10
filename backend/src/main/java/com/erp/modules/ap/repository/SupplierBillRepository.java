@@ -138,6 +138,15 @@ public interface SupplierBillRepository extends JpaRepository<SupplierBill, Long
     List<SupplierBill> findOpenForStatement(@Param("companyId") Long companyId,
                                              @Param("supplierId") Long supplierId);
 
+    /** Open bills of EVERY supplier in a company — the company-wide creditors ageing (AP-11). */
+    @Query("""
+            SELECT b FROM SupplierBill b
+            WHERE b.companyId = :companyId
+              AND b.status IN ('MATCHED','APPROVED','PARTIALLY_PAID')
+            ORDER BY b.supplierId ASC, b.dueDate ASC
+            """)
+    List<SupplierBill> findOpenForCompany(@Param("companyId") Long companyId);
+
     /** Sub-ledger total for reconciliation (ADR-0015 D-7/D-8). */
     @Query("""
             SELECT COALESCE(SUM(b.outstandingAmount), 0)

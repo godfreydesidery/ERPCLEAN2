@@ -291,6 +291,7 @@ export class ShellComponent {
         { label: 'Enter Bill', route: '/admin/ap/supplier-bills/enter', icon: 'bi-file-earmark-plus', available: true, permission: 'AP.BILL.ENTER' },
         { label: 'Record Payment', route: '/admin/ap/payments/record', icon: 'bi-cash-stack', available: true, permission: 'AP.PAYMENT.RUN' },
         { label: 'Payments', route: '/admin/ap/payments', icon: 'bi-cash-stack', available: true, permission: 'AP.VIEW' },
+        { label: 'AP Ageing', route: '/admin/ap/ageing', icon: 'bi-bar-chart-steps', available: true, permission: 'AP.VIEW' },
         { label: 'Supplier Statement', route: '/admin/ap/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AP.VIEW' },
         { label: 'AP Opening Balance', route: '/admin/ap/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AP.OPENING.SET' },
         { label: 'Cash & Bank Accounts', route: '/admin/cash/accounts', icon: 'bi-wallet2', available: true, permission: 'CASH.VIEW' },

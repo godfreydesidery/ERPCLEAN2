@@ -3,6 +3,8 @@ package com.erp.modules.ap.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.ap.domain.dto.ApAgeingRowDto;
+import com.erp.modules.ap.domain.dto.ApSupplierAgeingRowDto;
+import com.erp.modules.ap.domain.dto.RaiseDebitNoteRequest;
 import com.erp.modules.ap.domain.dto.SetApOpeningBalanceRequest;
 import com.erp.modules.ar.domain.enums.AgeingBucket;
 import com.erp.modules.gl.service.ChartOfAccountService;
@@ -49,6 +51,7 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
     @Autowired private ApAgeingQuery          ageingQuery;
     @Autowired private ApOpeningBalanceService openingBalanceService;
     @Autowired private ApGlSeeder             apGlSeeder;
+    @Autowired private ApDebitNoteService     debitNoteService;
     @Autowired private SupplierService        supplierService;
     @Autowired private ChartOfAccountService  chartOfAccountService;
     @Autowired private FiscalCalendarService  fiscalCalendarService;
@@ -201,6 +204,56 @@ class ApAgeingQueryIT extends PostgresIntegrationTest {
                 .as("the USD bill must not land in a TZS bucket").isEqualByComparingTo("0");
         assertThat(amount(rows, AgeingBucket.D31_60, "USD")).isEqualByComparingTo("400.00");
         assertThat(amount(rows, AgeingBucket.CURRENT, "USD")).isEqualByComparingTo("0");
+    }
+
+    // =========================================================================
+    // LBO-15: an unapplied debit note is netted, so ageing agrees with the balance
+    // =========================================================================
+
+    @Test
+    void ageing_unappliedDebitNote_isNettedAsCredit() {
+        openingBalance("OB-AGE-DN", new BigDecimal("1000.00"), LocalDate.now().plusDays(5));
+        debitNoteService.raise(new RaiseDebitNoteRequest(companyUid, supplierUid, null,
+                LocalDate.now(), new BigDecimal("150.00"), null, "Short delivery", null));
+
+        List<ApAgeingRowDto> rows = ageingQuery.ageing(company.getId(), supplierId, LocalDate.now());
+
+        assertThat(bucketAmount(rows, AgeingBucket.CURRENT)).isEqualByComparingTo("850.00");
+    }
+
+    // =========================================================================
+    // AP-11: company-wide creditors ageing, one row per supplier
+    // =========================================================================
+
+    @Test
+    void supplierAgeing_everySupplierWithAnOpenBalance_oneRowEach() {
+        openingBalance("OB-AGE-S1", new BigDecimal("700.00"), LocalDate.now().minusDays(45));
+        var other = supplierService.create(new CreateSupplierRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Another Supplier",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                SupplierKind.GOODS, null, null));
+        openingBalanceService.setOpeningBalance(new SetApOpeningBalanceRequest(
+                companyUid, other.uid(), new BigDecimal("300.00"), "TZS",
+                LocalDate.now(), LocalDate.now().plusDays(3), "OB-AGE-S2"));
+        supplierService.create(new CreateSupplierRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Nothing Owed Supplier",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                SupplierKind.GOODS, null, null));
+
+        List<ApSupplierAgeingRowDto> rows =
+                ageingQuery.supplierAgeing(company.getId(), LocalDate.now());
+
+        assertThat(rows).extracting(ApSupplierAgeingRowDto::supplierName)
+                .containsExactly("Ageing Supplier", "Another Supplier");
+        assertThat(rows.get(0).days31to60()).isEqualByComparingTo("700.00");
+        assertThat(rows.get(0).total()).isEqualByComparingTo("700.00");
+        assertThat(rows.get(0).supplierUid()).isEqualTo(supplierUid);
+        assertThat(rows.get(1).current()).isEqualByComparingTo("300.00");
+        assertThat(rows.get(1).currency()).isEqualTo("TZS");
+
+        List<ApAgeingRowDto> summary = ageingQuery.ageing(company.getId(), null, LocalDate.now());
+        assertThat(bucketAmount(summary, AgeingBucket.CURRENT)).isEqualByComparingTo("300.00");
+        assertThat(bucketAmount(summary, AgeingBucket.D31_60)).isEqualByComparingTo("700.00");
     }
 
     // =========================================================================
