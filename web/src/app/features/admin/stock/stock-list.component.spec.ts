@@ -12,7 +12,7 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -539,6 +539,15 @@ describe('StockListComponent', () => {
     comp.submitAdjust();
     await vi.runAllTimersAsync();
     expect(adjustSpy.mock.calls[0][0].locationUid).toBe('LOC-B');
+  });
+
+  it('the Adjust Stock menu route opens the toolbar Adjust form (ADM-29)', async () => {
+    makeBed();
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { snapshot: { data: { openAdjust: true } } } });
+    const comp = TestBed.createComponent(StockListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.showAdjustForm()).toBe(true);
   });
 
   it('opening balance sends the chosen unit and cost (STK-08, PRD-07)', async () => {

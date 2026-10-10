@@ -279,6 +279,14 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/stock-list.component').then((m) => m.StockListComponent),
   },
+  // ADM-29: menu entry "Adjust Stock" — the On-Hand screen with its Adjust Stock form open.
+  {
+    path: 'stock/adjust',
+    canActivate: [requirePermission('STOCK.VIEW')],
+    data: { openAdjust: true },
+    loadComponent: () =>
+      import('./stock/stock-list.component').then((m) => m.StockListComponent),
+  },
   // ── Stock Locations / Batches / Serials ──────────────────────────────────
   {
     path: 'stock/locations',

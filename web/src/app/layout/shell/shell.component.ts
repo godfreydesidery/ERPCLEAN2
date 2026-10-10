@@ -218,6 +218,16 @@ export class ShellComponent {
           keywords: ['price check', 'item lookup', 'how many left', 'available quantity', 'barcode', 'cost'],
         },
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
+        // ADM-29: "where do I adjust stock?" was a daily question — the only way in was a per-row
+        // action on Stock On-Hand. This opens the same screen with the Adjust Stock form open.
+        {
+          label: 'Adjust Stock',
+          route: '/admin/stock/adjust',
+          icon: 'bi-plus-slash-minus',
+          available: true,
+          allPermissions: ['STOCK.VIEW', 'STOCK.ADJUST'],
+          keywords: ['adjust', 'adjustment', 'stock adjustment', 'damage', 'damaged', 'write-off', 'write off', 'breakage', 'expired', 'shrinkage', 'correct stock', 'marekebisho', 'rekebisha stock', 'kuharibika'],
+        },
         { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
         { label: 'Stock Locations', route: '/admin/stock/locations', icon: 'bi-geo-alt', available: true, permission: 'STOCK.LOCATION.VIEW' },
         { label: 'Stock Batches', route: '/admin/stock/batches', icon: 'bi-layers', available: true, permission: 'STOCK.VIEW' },

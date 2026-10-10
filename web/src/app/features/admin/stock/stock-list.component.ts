@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -57,6 +58,7 @@ export class StockListComponent {
   private readonly productService = inject(ProductService);
   private readonly alerts = inject(AlertService);
   private readonly unitOptions = inject(StockUnitOptionsService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   protected readonly session = inject(SessionStore);
 
   // ── Company / Branch context ──────────────────────────────────────────────────
@@ -241,6 +243,10 @@ export class StockListComponent {
 
     this.wireByProductSearch();
     this.loadCompanies();
+    // ADM-29: the "Adjust Stock" menu entry lands here with the form already open.
+    if (this.route?.snapshot.data?.['openAdjust'] && this.canAdjust()) {
+      this.openAdjustFormStandalone();
+    }
   }
 
   // ── Company / Branch loading ──────────────────────────────────────────────────
