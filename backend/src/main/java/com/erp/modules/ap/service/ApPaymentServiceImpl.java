@@ -174,10 +174,18 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // The caller named this one bill, so refuse it outright rather than quietly doing nothing.
         assertRatified(bill);
 
-        BigDecimal toAllocate = req.amount().min(bill.getOutstandingAmount());
-        if (toAllocate.compareTo(BigDecimal.ZERO) <= 0) {
+        if (bill.getOutstandingAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("This bill has zero outstanding amount.");
         }
+        // AP-18: an amount above what is owed used to be cut down silently to the outstanding
+        // balance, so the books showed less cash out than really left. Refuse it and say why.
+        if (req.amount().compareTo(bill.getOutstandingAmount()) > 0) {
+            throw new ConflictException("The amount entered (" + req.amount().toPlainString()
+                    + ") is more than this bill's outstanding balance ("
+                    + bill.getOutstandingAmount().toPlainString()
+                    + "). Enter at most the outstanding balance.");
+        }
+        BigDecimal toAllocate = req.amount();
         assertWhtFits(req.whtTypeUid(), req.whtAmount(), toAllocate);
 
         String currency = bill.getCurrency().value();

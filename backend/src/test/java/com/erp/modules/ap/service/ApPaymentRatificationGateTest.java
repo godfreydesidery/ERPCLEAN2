@@ -171,6 +171,20 @@ class ApPaymentRatificationGateTest {
     }
 
     @Test
+    void paySingle_moreThanOutstanding_isRefusedNotSilentlyTruncated() {
+        // AP-18: 1,200 typed against a 1,000 bill used to be saved as 1,000 without a word.
+        givenOpenBill(BILL_UID, null);
+        PaySingleBillRequest over = new PaySingleBillRequest(
+                COMPANY_UID, BILL_UID, new BigDecimal("1200"), TODAY, "CASH", null,
+                null, null, null, null, null);
+
+        assertThatThrownBy(() -> service.paySingle(over))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("more than this bill's outstanding balance");
+        verify(glPosting, org.mockito.Mockito.never()).post(any());
+    }
+
+    @Test
     void paySingle_billWithNoPurchaseOrder_isUnaffected() {
         givenOpenBill(BILL_UID, null);
 
