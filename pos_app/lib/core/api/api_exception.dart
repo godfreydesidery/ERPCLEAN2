@@ -61,6 +61,15 @@ class ApiException implements Exception {
   /// must reconcile-before-resend rather than assume failure.
   bool get isAmbiguous => statusCode == null && (isTimeout || isNetwork);
 
+  /// True when the ERP could not be reached at all (no HTTP answer). A lookup
+  /// that fails this way says NOTHING about whether the item exists (POS-17).
+  bool get isUnreachable => isAmbiguous;
+
+  /// What the cashier is told when a lookup could not reach the ERP — never
+  /// "No match", which sends them hunting for a product that is on the shelf.
+  static const String unreachableMessage =
+      "Can't reach the ERP — check the connection.";
+
   /// Like [isAmbiguous] but also true for a 5xx: a server error AFTER a write
   /// (e.g. a 502/504 once the sale row committed) is an unknown outcome too, so
   /// the idempotent sale path must reconcile-by-resending the same key — never

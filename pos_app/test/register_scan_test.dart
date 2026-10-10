@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/core/api/api_exception.dart';
 import 'package:pos_app/core/money.dart';
 import 'package:pos_app/features/register/supermarket_register.dart';
 import 'package:pos_app/models/catalog.dart';
@@ -121,6 +122,20 @@ void main() {
     expect(cartNames(tester), ['Product B']);
     expect(dropdownRow(a), findsNothing);
   });
+
+  testWidgets('a dropped connection says so instead of "No match" (POS-17)',
+      (tester) async {
+    await pumpRegister(tester);
+    catalog.offline = true;
+
+    await tester.enterText(find.byType(TextField).first, 'sugar');
+    await tester.testTextInput.receiveAction(TextInputAction.go);
+    await settle(tester);
+
+    expect(find.text(ApiException.unreachableMessage), findsOneWidget);
+    expect(find.textContaining('No match'), findsNothing);
+    await tester.pump(const Duration(seconds: 4)); // let the toast expire
+  });
 }
 
 class _TestApp extends AppController {
@@ -149,6 +164,12 @@ class _FakeCatalog implements CatalogService {
 
   List<Product> get all => byBarcode.values.toList();
 
+  /// When true every call fails the way a dropped link does (no HTTP answer).
+  bool offline = false;
+
+  ApiException get _down => ApiException(
+      statusCode: null, isNetwork: true, message: 'Cannot reach the ERP.');
+
   @override
   Future<ProductBarcode> lookupBarcode(String companyId, String barcode) async {
     await Future<void>.delayed(const Duration(milliseconds: 40));
@@ -168,6 +189,7 @@ class _FakeCatalog implements CatalogService {
   Future<List<Product>> searchProducts(String companyId,
       {String? q, int page = 0, int size = 50}) async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
+    if (offline) throw _down;
     final s = (q ?? '').toLowerCase();
     return [
       for (final e in byBarcode.entries)

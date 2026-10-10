@@ -232,6 +232,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         hits = await ref
             .read(catalogServiceProvider)
             .searchProducts(_companyId, q: value, size: 40);
+      } on ApiException {
+        rethrow; // unreachable / refused — reported below, never as "No match"
       } catch (_) {
         hits = const [];
       }
@@ -257,7 +259,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _refreshPrices(hits);
       }
     } on ApiException catch (e) {
-      if (mounted) showToast(context, e.message);
+      // POS-17: a dropped connection is not "this product does not exist".
+      if (mounted) {
+        showToast(context,
+            e.isUnreachable ? ApiException.unreachableMessage : e.message);
+      }
     } finally {
       if (mounted) setState(() => _busyScan = false);
     }
@@ -287,6 +293,13 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _setResults(hits, q);
         _refreshStock(q);
         _refreshPrices(hits);
+      }
+    } on ApiException catch (e) {
+      if (mounted && _isCurrentQuery(q)) {
+        _setResults(const [], q);
+        // POS-17: say why the dropdown is empty when it is the link, not the
+        // catalogue.
+        if (e.isUnreachable) showToast(context, ApiException.unreachableMessage);
       }
     } catch (_) {
       if (mounted && _isCurrentQuery(q)) _setResults(const [], q);

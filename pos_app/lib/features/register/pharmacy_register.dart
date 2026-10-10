@@ -165,6 +165,10 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
           return;
         }
       } on ApiException catch (e) {
+        if (e.isUnreachable) {
+          if (mounted) showToast(context, ApiException.unreachableMessage);
+          return; // POS-17: never fall through to "No match" when offline
+        }
         if (!e.isNotFound && mounted) showToast(context, e.message);
       }
       if (!mounted) return;
@@ -175,6 +179,12 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       hits = await ref
           .read(catalogServiceProvider)
           .searchProducts(_companyId, q: v, size: 10);
+    } on ApiException catch (e) {
+      if (mounted) {
+        showToast(context,
+            e.isUnreachable ? ApiException.unreachableMessage : e.message);
+      }
+      return;
     } catch (_) {
       hits = const [];
     }
