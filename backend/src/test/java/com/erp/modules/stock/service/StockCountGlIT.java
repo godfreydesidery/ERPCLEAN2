@@ -215,7 +215,7 @@ class StockCountGlIT extends PostgresIntegrationTest {
         setCtx();
         stockService.adjust(new AdjustStockRequest(
                 p.uid(), new BigDecimal("-3"), AdjustmentReason.DAMAGE, "after counting",
-                null, null));
+                null, null, null));
         BigDecimal inventoryBefore = inventoryBalance();
 
         // 6pm: post the count.
