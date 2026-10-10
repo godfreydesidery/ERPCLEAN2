@@ -10,8 +10,11 @@ import com.erp.modules.purchases.domain.enums.PoApprovalStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseOrderOrigin;
 import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.CurrencyConversionService;
+import com.erp.platform.common.money.FxRateNotFoundException;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,11 +38,15 @@ public class PoApprovalGate {
 
     private final PurchaseSettingsRepository settings;
     private final ApprovalEngine             approvalEngine;
+    /** PUR-22: brings a foreign-currency order total into the threshold's currency. */
+    private final CurrencyConversionService  fx;
 
     public PoApprovalGate(PurchaseSettingsRepository settings,
-                           ApprovalEngine approvalEngine) {
+                           ApprovalEngine approvalEngine,
+                           CurrencyConversionService fx) {
         this.settings       = settings;
         this.approvalEngine = approvalEngine;
+        this.fx             = fx;
     }
 
     /**
@@ -115,12 +122,42 @@ public class PoApprovalGate {
         BigDecimal poTotal   = po.getOrderTotalAmount() != null ? po.getOrderTotalAmount() : BigDecimal.ZERO;
         String currency      = CurrencyCode.value(s.getCurrency());
 
-        if (threshold != null && poTotal.compareTo(threshold) < 0) {
-            return new Decision(ApprovalRequirement.BELOW_THRESHOLD, threshold, currency);
+        if (threshold != null) {
+            // PUR-22: the threshold is in the settings currency, the order total in the order's.
+            // Comparing the bare numbers let a USD 9,000 import (about TZS 22M) slip under a
+            // TZS 5,000,000 ceiling. Convert the total first; with no rate to convert at, fail
+            // closed — the order is reviewed rather than waved through on an unknown value.
+            BigDecimal comparable = poTotalIn(po, poTotal, currency);
+            if (comparable == null) {
+                return new Decision(ApprovalRequirement.REQUIRED, threshold, currency);
+            }
+            if (comparable.compareTo(threshold) < 0) {
+                return new Decision(ApprovalRequirement.BELOW_THRESHOLD, threshold, currency);
+            }
         }
 
         // NULL threshold = every order is reviewed once the switch is on (see PurchaseSettings).
         return new Decision(ApprovalRequirement.REQUIRED, threshold, currency);
+    }
+
+    /**
+     * The order total expressed in {@code thresholdCurrency}; the total itself when the currencies
+     * match (or either is unknown); null when a conversion is needed but no rate is available.
+     */
+    private BigDecimal poTotalIn(PurchaseOrder po, BigDecimal poTotal, String thresholdCurrency) {
+        String poCurrency = CurrencyCode.value(po.getCurrency());
+        if (poCurrency == null || thresholdCurrency == null
+                || poCurrency.equalsIgnoreCase(thresholdCurrency)) {
+            return poTotal;
+        }
+        try {
+            return fx.convert(poTotal, poCurrency, thresholdCurrency, po.getCompanyId(),
+                    LocalDate.now()).baseAmount();
+        } catch (FxRateNotFoundException ex) {
+            log.warn("PoApprovalGate: no {}->{} rate for PO uid={} — approval required (fail closed)",
+                    poCurrency, thresholdCurrency, po.getUid());
+            return null;
+        }
     }
 
     /**
