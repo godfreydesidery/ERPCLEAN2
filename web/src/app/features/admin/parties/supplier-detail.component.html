@@ -177,6 +177,51 @@
                      [ngModel]="fDistrict()" (ngModelChange)="fDistrict.set($event)"
                      [disabled]="saving() || !canManage()" />
             </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fCountry">Country (2-letter code)</label>
+              <input id="fCountry" name="fCountry" type="text" maxlength="2" class="form-control"
+                     placeholder="TZ"
+                     [ngModel]="fCountry()" (ngModelChange)="fCountry.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+
+            <!-- AP-10: payment terms, currency and WHT defaults -->
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fPaymentTermsDays">Payment terms (days)</label>
+              <input id="fPaymentTermsDays" name="fPaymentTermsDays" type="number" min="0" step="1"
+                     class="form-control"
+                     [ngModel]="fPaymentTermsDays()" (ngModelChange)="fPaymentTermsDays.set(($event ?? '') + '')"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fDefaultCurrency">Default currency</label>
+              <input id="fDefaultCurrency" name="fDefaultCurrency" type="text" maxlength="3"
+                     class="form-control" placeholder="TZS"
+                     [ngModel]="fDefaultCurrency()" (ngModelChange)="fDefaultCurrency.set($event)"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small text-muted mb-1" for="fLeadTimeDays">Lead time (days)</label>
+              <input id="fLeadTimeDays" name="fLeadTimeDays" type="number" min="0" step="1"
+                     class="form-control"
+                     [ngModel]="fLeadTimeDays()" (ngModelChange)="fLeadTimeDays.set(($event ?? '') + '')"
+                     [disabled]="saving() || !canManage()" />
+            </div>
+            @if (canViewWht()) {
+              <div class="col-sm-4">
+                <label class="form-label small text-muted mb-1" for="fDefaultWhtTypeId">Default withholding tax</label>
+                <select id="fDefaultWhtTypeId" name="fDefaultWhtTypeId" class="form-select"
+                        [ngModel]="fDefaultWhtTypeId()" (ngModelChange)="fDefaultWhtTypeId.set($event)"
+                        [disabled]="saving() || !canManage()">
+                  <option value="">None</option>
+                  @for (w of whtTypes(); track w.id) {
+                    @if (w.active || w.id === fDefaultWhtTypeId()) {
+                      <option [value]="w.id">{{ w.code }} — {{ w.name }} ({{ w.ratePct }}%)</option>
+                    }
+                  }
+                </select>
+              </div>
+            }
           </div>
 
           @if (saveError(); as msg) {
