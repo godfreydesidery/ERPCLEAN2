@@ -43,7 +43,12 @@ function makeTransfer(overrides: Partial<StockTransferDto> = {}): StockTransferD
   };
 }
 
-function makeBed(opts: { transfer?: StockTransferDto; getByUidImpl?: () => any } = {}) {
+function makeBed(opts: {
+  transfer?: StockTransferDto;
+  getByUidImpl?: () => any;
+  activeBranchUid?: string | null;
+  isRoot?: boolean;
+} = {}) {
   const transfer = opts.transfer ?? makeTransfer();
   TestBed.configureTestingModule({
     imports: [StockTransferDetailComponent],
@@ -67,9 +72,9 @@ function makeBed(opts: { transfer?: StockTransferDto; getByUidImpl?: () => any }
         useValue: {
           hasPermission: vi.fn(() => true),
           isAuthenticated: signal(true),
-          user: signal(null),
+          user: signal(opts.isRoot ? { isRoot: true, activeBranchUid: null } : null),
           permissions: signal([]),
-          activeBranchUid: signal(null),
+          activeBranchUid: signal(opts.activeBranchUid ?? null),
         },
       },
     ],
@@ -226,5 +231,48 @@ describe('StockTransferDetailComponent — line value', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.totalValue()).toBeNull();
+  });
+});
+
+describe('StockTransferDetailComponent — branch gate (STK-05)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  const draft = () => makeTransfer({ status: 'DRAFT', sourceBranchUid: 'BR-SRC', destBranchUid: 'BR-DST' });
+  const dispatched = () => makeTransfer({ status: 'DISPATCHED', sourceBranchUid: 'BR-SRC', destBranchUid: 'BR-DST' });
+
+  async function load(opts: Parameters<typeof makeBed>[0]) {
+    makeBed(opts);
+    const fixture = createFixture();
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('offers Dispatch only at the source branch', async () => {
+    const atSource = await load({ transfer: draft(), activeBranchUid: 'BR-SRC' });
+    expect(atSource.componentInstance.canDispatch()).toBe(true);
+    TestBed.resetTestingModule();
+
+    const atDest = await load({ transfer: draft(), activeBranchUid: 'BR-DST' });
+    expect(atDest.componentInstance.canDispatch()).toBe(false);
+    expect((atDest.nativeElement as HTMLElement).textContent)
+      .toContain('Switch to Head Office to dispatch this transfer.');
+  });
+
+  it('offers Receive only at the destination branch', async () => {
+    const atDest = await load({ transfer: dispatched(), activeBranchUid: 'BR-DST' });
+    expect(atDest.componentInstance.canReceiveTransfer()).toBe(true);
+    TestBed.resetTestingModule();
+
+    const atSource = await load({ transfer: dispatched(), activeBranchUid: 'BR-SRC' });
+    expect(atSource.componentInstance.canReceiveTransfer()).toBe(false);
+    expect((atSource.nativeElement as HTMLElement).textContent)
+      .toContain('Switch to Mwanza Branch to receive this transfer.');
+  });
+
+  it('root may receive from any branch', async () => {
+    const fixture = await load({ transfer: dispatched(), activeBranchUid: 'BR-SRC', isRoot: true });
+    expect(fixture.componentInstance.canReceiveTransfer()).toBe(true);
   });
 });

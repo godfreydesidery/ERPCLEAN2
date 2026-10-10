@@ -35,18 +35,51 @@ export class StockTransferDetailComponent {
   readonly canCreate = computed(() => this.session.hasPermission('STOCK.TRANSFER.CREATE'));
   readonly canReceive = computed(() => this.session.hasPermission('STOCK.TRANSFER.RECEIVE'));
 
+  // ── Branch gate (STK-05, owner ruling 2026-10-10) ────────────────────────────
+  // Dispatch / complete happen at the SOURCE branch and Receive at the DESTINATION branch; root is
+  // exempt. The API enforces it — this only stops offering a button that would be refused.
+  private readonly activeBranchUid = computed(
+    () => this.session.activeBranchUid() ?? this.session.user()?.activeBranchUid ?? null);
+  private readonly isRoot = computed(() => this.session.user()?.isRoot === true);
+
+  /** True when the caller may act for `branchUid` from the active branch (unknown → let the API decide). */
+  private atBranch(branchUid: string | null | undefined): boolean {
+    if (this.isRoot()) return true;
+    const active = this.activeBranchUid();
+    if (!branchUid || !active) return true;
+    return branchUid === active;
+  }
+
   // ── Derived booleans gated by status ─────────────────────────────────────────
+  private readonly dispatchable = computed(() => {
+    const e = this.entity();
+    return this.canCreate() && e?.status === 'DRAFT';
+  });
   readonly canDispatch = computed(() => {
     const e = this.entity();
-    return this.canCreate() && e?.status === 'DRAFT' && e?.transferMode === 'IN_TRANSIT';
+    return this.dispatchable() && e?.transferMode === 'IN_TRANSIT' && this.atBranch(e?.sourceBranchUid);
   });
   readonly canCompleteInstant = computed(() => {
     const e = this.entity();
-    return this.canCreate() && e?.status === 'DRAFT' && e?.transferMode === 'INSTANT';
+    return this.dispatchable() && e?.transferMode === 'INSTANT' && this.atBranch(e?.sourceBranchUid);
   });
   readonly canReceiveTransfer = computed(() => {
     const e = this.entity();
-    return this.canReceive() && e?.status === 'DISPATCHED';
+    return this.canReceive() && e?.status === 'DISPATCHED' && this.atBranch(e?.destBranchUid);
+  });
+
+  /** Why Dispatch/Receive is not offered here — tells the user which branch to switch to. */
+  readonly switchBranchHint = computed(() => {
+    const e = this.entity();
+    if (!e) return null;
+    if (this.dispatchable() && !this.atBranch(e.sourceBranchUid)) {
+      const verb = e.transferMode === 'INSTANT' ? 'complete' : 'dispatch';
+      return `Switch to ${e.sourceBranchName ?? 'the source branch'} to ${verb} this transfer.`;
+    }
+    if (this.canReceive() && e.status === 'DISPATCHED' && !this.atBranch(e.destBranchUid)) {
+      return `Switch to ${e.destBranchName ?? 'the destination branch'} to receive this transfer.`;
+    }
+    return null;
   });
   readonly canCancel = computed(() => {
     const e = this.entity();
