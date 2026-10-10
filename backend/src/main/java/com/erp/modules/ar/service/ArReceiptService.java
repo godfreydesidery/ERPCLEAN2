@@ -25,4 +25,10 @@ public interface ArReceiptService {
     Page<ArReceiptDto> listByCompany(Long companyId, Pageable pageable);
 
     Page<ArReceiptDto> listByCustomer(Long companyId, Long customerId, Pageable pageable);
+
+    /**
+     * The Receipts list with its customer filter (ARC-02): the customer may be named by id or by
+     * uid (resolved inside {@code companyId}); both null = every customer.
+     */
+    Page<ArReceiptDto> list(Long companyId, Long customerId, String customerUid, Pageable pageable);
 }

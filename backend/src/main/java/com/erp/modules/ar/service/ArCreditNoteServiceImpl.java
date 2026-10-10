@@ -124,9 +124,21 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         String baseCurrency = company.getBaseCurrency();
 
-        Long customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
-                .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Customer not found."));
+        // ARC-03: a credit note raised against an invoice may leave the customer blank — the
+        // invoice already names it. A customer that IS named must still own the invoice (below).
+        boolean customerNamed = req.customerUid() != null && !req.customerUid().isBlank();
+        Long customerId;
+        if (!customerNamed && req.arInvoiceUid() != null && !req.arInvoiceUid().isBlank()) {
+            customerId = invoices.findByCompanyIdAndUid(companyId, req.arInvoiceUid())
+                    .map(ArInvoice::getCustomerId)
+                    .orElseThrow(() -> new NotFoundException("Invoice not found."));
+        } else if (!customerNamed) {
+            throw new IllegalArgumentException("Choose the customer for this credit note.");
+        } else {
+            customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
+                    .map(c -> c.getId())
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
+        }
 
         // D-6: carry the document currency from the request; default to base when blank.
         String docCurrency = (req.currency() != null && !req.currency().isBlank())

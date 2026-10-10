@@ -20,10 +20,12 @@ import { CashbankService } from './cashbank.service';
  *
  * Flow:
  *  1. Pick company + bank account.
- *  2. Open a reconciliation (statement date + closing balance).
- *  3. Account's transactions load — each has a cleared checkbox.
- *  4. Running cleared-book-balance vs statement-closing-balance shows the difference.
- *  5. Complete button is enabled ONLY when clearedBookBalance == statementClosingBalance (within 0.000001).
+ *  2. Open a reconciliation (statement date + closing balance; opening balance optional — blank
+ *     carries forward the last completed reconciliation's closing balance).
+ *  3. Account's transactions load — each has a cleared checkbox (items cleared by an earlier
+ *     reconciliation are locked and already inside the opening balance).
+ *  4. Running balance = opening + cleared-in-this-reconciliation, vs statement closing balance.
+ *  5. Complete button is enabled ONLY when that running balance == statementClosingBalance.
  *
  * Money arrives as number on wire — coerce with +v throughout.
  * NEVER call .startsWith/.trim on a money value.
@@ -54,6 +56,8 @@ export class BankReconciliationComponent {
   readonly showOpenForm = signal(false);
   readonly statementDate = signal('');
   readonly statementClosingBalanceInput = signal('');
+  /** Optional; blank = carry forward the last completed reconciliation's closing balance. */
+  readonly statementOpeningBalanceInput = signal('');
   readonly opening = signal(false);
   readonly openError = signal<string | null>(null);
 
@@ -82,15 +86,22 @@ export class BankReconciliationComponent {
     return recon ? +(recon.statementClosingBalance ?? 0) : 0;
   });
 
+  /** The statement opening balance (null/absent = 0, the first-ever reconciliation). */
+  readonly statementOpeningBalance = computed(() => {
+    const recon = this.reconciliation();
+    return recon ? +(recon.statementOpeningBalance ?? 0) : 0;
+  });
+
   /**
-   * Running cleared book balance:
-   * Start from zero and add/subtract only the cleared transactions.
+   * Running cleared book balance (ARC-09): the statement OPENING balance plus the transactions
+   * cleared in THIS reconciliation. Items cleared by an earlier reconciliation are already inside
+   * the opening balance, so they are not counted again.
    * IN = credit to cash (positive), OUT = debit from cash (negative).
    */
   readonly clearedBookBalance = computed(() => {
     const cleared = this.clearedUids();
-    return this.transactions()
-      .filter((t) => cleared.has(t.uid))
+    return this.statementOpeningBalance() + this.transactions()
+      .filter((t) => cleared.has(t.uid) && !this.reconciledEarlier(t))
       .reduce((sum, t) => {
         const amt = +(t.amount ?? 0);
         return sum + (t.direction === 'IN' ? amt : -amt);
@@ -190,6 +201,7 @@ export class BankReconciliationComponent {
     this.openError.set(null);
     this.statementDate.set(new Date().toISOString().slice(0, 10));
     this.statementClosingBalanceInput.set('');
+    this.statementOpeningBalanceInput.set('');
   }
 
   cancelOpenRecon(): void {
@@ -209,12 +221,17 @@ export class BankReconciliationComponent {
     const company = this.companies().find((c) => c.id === this.selectedCompanyId());
     if (!company) { this.openError.set('Could not resolve company.'); return; }
 
+    const opening = String(this.statementOpeningBalanceInput() ?? '').trim();
+    if (opening && isNaN(+opening)) { this.openError.set('Enter a valid statement opening balance.'); return; }
+
     const request: OpenReconciliationRequest = {
       companyUid: company.uid,
       cashBankAccountUid: accountUid,
       statementDate: date,
       statementClosingBalance: balance,
     };
+    // Blank = the server carries forward the last completed reconciliation's closing balance.
+    if (opening) request.statementOpeningBalance = opening;
 
     this.opening.set(true);
     this.openError.set(null);
@@ -270,6 +287,13 @@ export class BankReconciliationComponent {
 
   isCleared(uid: string): boolean {
     return this.clearedUids().has(uid);
+  }
+
+  /** True when the transaction was cleared by a different (earlier) reconciliation — locked here. */
+  reconciledEarlier(t: CashTransactionDto): boolean {
+    const recon = this.reconciliation();
+    if (!t.cleared || t.clearedInReconciliationId == null) return false;
+    return !recon || String(t.clearedInReconciliationId) !== String(recon.id);
   }
 
   // ── Complete reconciliation ────────────────────────────────────────────────

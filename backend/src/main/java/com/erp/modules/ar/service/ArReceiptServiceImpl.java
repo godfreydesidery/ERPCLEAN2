@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +89,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final OutboxPublisher outbox;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final ArCustomerNames customerNames;
 
     private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
 
@@ -105,7 +107,9 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  CurrencyConversionService fxConversion,
                                  OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 ArCustomerNames customerNames) {
+        this.customerNames           = customerNames;
         this.receipts                = receipts;
         this.invoices                = invoices;
         this.allocations             = allocations;
@@ -149,6 +153,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 BigDecimal.ONE, currency, companyId, req.receiptDate());
         BigDecimal settlementRate = settlementConv.rate();
 
+        // 3b. Tender must be one the ar_receipts CHECK admits (V11) — a friendly 400, not a
+        //     constraint error (ARC-18: the screen used to offer "Other").
+        String tenderType = normaliseTender(req.tenderType());
+
         // 4. Generate receipt number
         String receiptNumber = numberGen.nextReceipt(companyId);
 
@@ -161,11 +169,21 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 req.receiptDate(),
                 req.amount(),
                 currency,
-                req.tenderType(),
+                tenderType,
                 actorId());
         // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
         receipt.setFxRate(settlementRate);
         receipt.setRateAt(settlementConv.rateAt());
+        // ARC-18 / LSF-18: keep the M-Pesa code / transfer ref / cheque no. the cashier typed —
+        // it is how a disputed payment is traced later. Column is VARCHAR(80).
+        if (req.bankReference() != null && !req.bankReference().isBlank()) {
+            String ref = req.bankReference().trim();
+            if (ref.length() > 80) {
+                throw new IllegalArgumentException(
+                        "The payment reference is too long — use at most 80 characters.");
+            }
+            receipt.setBankReference(ref);
+        }
         // ADR-0041 D3: link the funding INBOUND cheque (lets a later bounce locate + reverse this receipt)
         if (req.chequeUid() != null && !req.chequeUid().isBlank()) {
             receipt.setChequeUid(req.chequeUid());
@@ -390,7 +408,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         customer.getDisplayName(), amountFormatted,
                         currency, Instant.now()));
 
-        return toDto(receipt, savedAllocs, invoices);
+        return toDto(receipt, savedAllocs, invoices)
+                .withCustomer(customer.getUid(), customer.getCode(), customer.getDisplayName());
     }
 
     @Override
@@ -495,7 +514,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         receipt.getId(), receipt.getUid())
                 .detail(Map.of("action", "reallocate")));
 
-        return toDto(receipt, saved, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, saved, invoices));
     }
 
     @Override
@@ -504,23 +523,47 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(uid), "ArReceipt", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
         List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
-        return toDto(receipt, allocs, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, allocs, invoices));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyId(companyId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyId(companyId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCustomer(Long companyId, Long customerId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ArReceiptDto> list(Long companyId, Long customerId, String customerUid,
+                                   Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Long custId = (customerUid != null && !customerUid.isBlank())
+                ? customerNames.idOf(companyId, customerUid)
+                : customerId;
+        return custId != null
+                ? listByCustomer(companyId, custId, pageable)
+                : listByCompany(companyId, pageable);
+    }
+
+    /** One receipt carrying its customer's uid, code and name. */
+    private ArReceiptDto named(Long companyId, ArReceiptDto dto) {
+        return customerNames.fillReceipts(companyId, List.of(dto)).get(0);
+    }
+
+    /** The page with each receipt's customer named. */
+    private Page<ArReceiptDto> named(Long companyId, Page<ArReceiptDto> page) {
+        return new PageImpl<>(customerNames.fillReceipts(companyId, page.getContent()),
+                page.getPageable(), page.getTotalElements());
     }
 
     // -------------------------------------------------------------------------
@@ -593,6 +636,20 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         if (allocated.compareTo(BigDecimal.ZERO) > 0
                 && unallocated.compareTo(BigDecimal.ZERO) > 0) return ArReceiptStatus.PARTIAL;
         return ArReceiptStatus.ALLOCATED;
+    }
+
+    /** The tender values the ar_receipts CHECK admits (V11 chk_ar_receipt_tender). */
+    static final java.util.Set<String> ALLOWED_TENDERS =
+            java.util.Set.of("CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CHEQUE", "CARD");
+
+    /** Upper-cased, trimmed tender; anything the CHECK would reject is a friendly 400. */
+    static String normaliseTender(String tender) {
+        String t = tender == null ? "" : tender.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ALLOWED_TENDERS.contains(t)) {
+            throw new IllegalArgumentException(
+                    "Choose how the customer paid: Cash, Bank transfer, Mobile money, Cheque or Card.");
+        }
+        return t;
     }
 
     /**

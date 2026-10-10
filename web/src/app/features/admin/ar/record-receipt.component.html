@@ -29,6 +29,9 @@
         <li>Unallocated (on-account): <span class="mono">{{ fmtMoney(receipt.unallocatedAmount) }}</span></li>
         <li>Date: {{ receipt.receiptDate }}</li>
         <li>Tender: {{ receipt.tenderType }}</li>
+        @if (receipt.bankReference) {
+          <li>Reference: <span class="mono">{{ receipt.bankReference }}</span></li>
+        }
       </ul>
     </div>
     <div class="d-flex gap-2 mt-3">
@@ -163,18 +166,18 @@
                 <option value="CASH">Cash</option>
                 <option value="CHEQUE">Cheque</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
-                <option value="OTHER">Other</option>
+                <option value="MOBILE_MONEY">Mobile Money (M-Pesa, Tigo Pesa, Airtel Money)</option>
+                <option value="CARD">Card</option>
               </select>
             </div>
 
-            <!-- Bank reference (optional) -->
+            <!-- Payment reference (optional) — kept on the receipt for tracing a disputed payment -->
             <div class="col-sm-8">
               <label class="form-label" for="bankRef">
-                Bank Reference <span class="text-muted small">(optional)</span>
+                Payment Reference <span class="text-muted small">(optional)</span>
               </label>
-              <input id="bankRef" name="bankRef" type="text"
-                     class="form-control" placeholder="Cheque no., transfer ref…"
+              <input id="bankRef" name="bankRef" type="text" maxlength="80"
+                     class="form-control" placeholder="M-Pesa code, cheque no., transfer ref…"
                      [ngModel]="bankReference()"
                      (ngModelChange)="bankReference.set($event)"
                      [disabled]="submitting()" autocomplete="off" />

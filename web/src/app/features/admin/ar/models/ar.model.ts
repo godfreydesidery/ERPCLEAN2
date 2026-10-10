@@ -13,7 +13,8 @@
 export type ArInvoiceStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'WRITTEN_OFF';
 export type ArInvoiceSource = 'SALE' | 'OPENING_BALANCE';
 export type AgeingBucket = 'CURRENT' | 'D1_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
-export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'OTHER';
+/** Exactly the values the ar_receipts tender CHECK admits (V11) — there is no 'OTHER'. */
+export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CARD';
 
 // ── AR Invoice ────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,10 @@ export interface ArInvoiceDto {
   dueDate: string | null;
   status: ArInvoiceStatus;
   source: ArInvoiceSource;
+  /** Read-time fill: the customer's uid / code / name. Absent on older servers. */
+  customerUid?: string | null;
+  customerCode?: string | null;
+  customerName?: string | null;
 }
 
 // ── AR Receipt ────────────────────────────────────────────────────────────────
@@ -59,7 +64,14 @@ export interface ArReceiptDto {
   unallocatedAmount: number | string;
   currency: string;
   tenderType: TenderType;
+  /** Bank / M-Pesa / cheque reference typed at the counter. */
+  bankReference?: string | null;
+  status?: string;
   allocations: AllocationLineDto[];
+  /** Read-time fill: the customer's uid / code / name. Absent on older servers. */
+  customerUid?: string | null;
+  customerCode?: string | null;
+  customerName?: string | null;
 }
 
 /** Allocation line inside RecordReceiptRequest. */

@@ -56,6 +56,16 @@
                      [ngModel]="statementDate()" (ngModelChange)="statementDate.set($event)" required />
             </div>
             <div class="erp-field">
+              <label for="reconOpeningBal">Statement Opening Balance</label>
+              <input id="reconOpeningBal" type="number" class="form-control form-control-sm" step="0.01"
+                     [ngModel]="statementOpeningBalanceInput()"
+                     (ngModelChange)="statementOpeningBalanceInput.set($event)"
+                     placeholder="Last reconciled balance" aria-describedby="reconOpeningHelp" />
+              <div id="reconOpeningHelp" class="form-text">
+                Leave blank to carry forward the closing balance of the last completed reconciliation.
+              </div>
+            </div>
+            <div class="erp-field">
               <label for="reconClosingBal">Statement Closing Balance <span aria-hidden="true">*</span></label>
               <input id="reconClosingBal" type="number" class="form-control form-control-sm" step="0.01"
                      [ngModel]="statementClosingBalanceInput()"
@@ -95,11 +105,15 @@
           <!-- Balance KPIs -->
           <div class="d-flex flex-wrap gap-3 mb-3">
             <div class="erp-kpi">
+              <div class="erp-kpi__label">Statement Opening Balance</div>
+              <div class="erp-kpi__value">{{ fmtMoney(statementOpeningBalance()) }}</div>
+            </div>
+            <div class="erp-kpi">
               <div class="erp-kpi__label">Statement Closing Balance</div>
               <div class="erp-kpi__value">{{ fmtMoney(statementClosingBalance()) }}</div>
             </div>
             <div class="erp-kpi">
-              <div class="erp-kpi__label">Cleared Book Balance</div>
+              <div class="erp-kpi__label">Opening + Cleared This Statement</div>
               <div class="erp-kpi__value">{{ fmtMoney(clearedBookBalance()) }}</div>
             </div>
             <div class="erp-kpi">
@@ -139,7 +153,7 @@
             </button>
             <div id="completeHelp" class="form-text mt-1">
               @if (!isBalanced()) {
-                Complete is disabled until the cleared book balance equals the statement closing balance.
+                Complete is disabled until the opening balance plus the items cleared on this statement equals the statement closing balance.
               }
             </div>
           }
@@ -179,7 +193,10 @@
               @for (txn of transactions(); track txn.uid) {
                 <tr [style.background]="isCleared(txn.uid) ? 'var(--erp-ok-bg)' : ''">
                   <td>
-                    @if (reconciliation() && reconciliation()!.status !== 'COMPLETED') {
+                    @if (reconciledEarlier(txn)) {
+                      <i role="img" class="bi bi-lock-fill" style="color:var(--erp-text-2)"
+                         aria-label="Reconciled on an earlier statement" title="Reconciled on an earlier statement"></i>
+                    } @else if (reconciliation() && reconciliation()!.status !== 'COMPLETED') {
                       <div class="form-check mb-0">
                         <input class="form-check-input" type="checkbox"
                                [id]="'clr-' + txn.uid"

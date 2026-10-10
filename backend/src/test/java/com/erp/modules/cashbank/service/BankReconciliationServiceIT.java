@@ -198,4 +198,80 @@ class BankReconciliationServiceIT extends PostgresIntegrationTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already been completed");
     }
+
+    // ── ARC-09: consecutive statements ────────────────────────────────────────
+
+    @Test
+    void secondMonth_openingPlusClearedThisStatement_equalsClosing_completes() {
+        LocalDate oct = LocalDate.now().minusDays(40);
+        LocalDate nov = LocalDate.now().minusDays(10);
+        CashTransactionDto octIn = entry(CashTxnDirection.IN, "11100000", oct);
+        CashTransactionDto novIn = entry(CashTxnDirection.IN, "1500000", nov);
+        CashTransactionDto novOut = entry(CashTxnDirection.OUT, "200000", nov);
+
+        // October: opening 0 (first statement), closing 11,100,000
+        BankReconciliationDto r1 = reconService.open(new OpenReconciliationRequest(
+                companyUid, bankAccount.uid(), oct, null, new BigDecimal("11100000")));
+        reconService.markCleared(r1.uid(), new MarkClearedRequest(List.of(octIn.uid()), true));
+        assertThat(reconService.complete(r1.uid()).status()).isEqualTo(ReconciliationStatus.COMPLETED);
+
+        // November: opening carried forward (blank), closing 12,400,000 = 11.1m + 1.5m − 0.2m
+        BankReconciliationDto r2 = reconService.open(new OpenReconciliationRequest(
+                companyUid, bankAccount.uid(), nov, null, new BigDecimal("12400000")));
+        assertThat(r2.statementOpeningBalance()).isEqualByComparingTo("11100000");
+        reconService.markCleared(r2.uid(),
+                new MarkClearedRequest(List.of(novIn.uid(), novOut.uid()), true));
+
+        BankReconciliationDto done = reconService.complete(r2.uid());
+
+        assertThat(done.status()).isEqualTo(ReconciliationStatus.COMPLETED);
+        assertThat(done.clearedBookBalance()).isEqualByComparingTo("1300000");
+        assertThat(done.unreconciledAmount()).isEqualByComparingTo("0");
+        assertThat(accountService.getByUid(bankAccount.uid()).lastReconciledBalance())
+                .isEqualByComparingTo("12400000");
+    }
+
+    @Test
+    void secondMonth_openingThatDoesNotFollowTheLastStatement_isRefused() {
+        LocalDate oct = LocalDate.now().minusDays(40);
+        CashTransactionDto octIn = entry(CashTxnDirection.IN, "5000", oct);
+        BankReconciliationDto r1 = reconService.open(new OpenReconciliationRequest(
+                companyUid, bankAccount.uid(), oct, null, new BigDecimal("5000")));
+        reconService.markCleared(r1.uid(), new MarkClearedRequest(List.of(octIn.uid()), true));
+        reconService.complete(r1.uid());
+
+        OpenReconciliationRequest gap = new OpenReconciliationRequest(companyUid, bankAccount.uid(),
+                LocalDate.now(), new BigDecimal("4000"), new BigDecimal("6000"));
+
+        assertThatThrownBy(() -> reconService.open(gap))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must equal the closing balance of the last completed reconciliation");
+    }
+
+    @Test
+    void secondMonth_itemReconciledLastMonth_cannotBeMovedOrUncleared() {
+        LocalDate oct = LocalDate.now().minusDays(40);
+        CashTransactionDto octIn = entry(CashTxnDirection.IN, "5000", oct);
+        BankReconciliationDto r1 = reconService.open(new OpenReconciliationRequest(
+                companyUid, bankAccount.uid(), oct, null, new BigDecimal("5000")));
+        reconService.markCleared(r1.uid(), new MarkClearedRequest(List.of(octIn.uid()), true));
+        reconService.complete(r1.uid());
+
+        BankReconciliationDto r2 = reconService.open(new OpenReconciliationRequest(
+                companyUid, bankAccount.uid(), LocalDate.now(), null, new BigDecimal("5000")));
+        String r2Uid = r2.uid();
+        MarkClearedRequest unclear = new MarkClearedRequest(List.of(octIn.uid()), false);
+
+        assertThatThrownBy(() -> reconService.markCleared(r2Uid, unclear))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("reconciled on an earlier bank statement");
+        // A statement with no new movement still completes: opening 5000 + 0 == closing 5000.
+        assertThat(reconService.complete(r2Uid).status()).isEqualTo(ReconciliationStatus.COMPLETED);
+    }
+
+    private CashTransactionDto entry(CashTxnDirection dir, String amount, LocalDate date) {
+        return directEntryService.recordDirectEntry(new RecordDirectEntryRequest(
+                companyUid, bankAccount.uid(), dir, new BigDecimal(amount), date, incomeGlUid,
+                "Bank movement"));
+    }
 }

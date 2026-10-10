@@ -40,18 +40,34 @@ public class ArInvoiceController {
     }
 
     /**
-     * Paged list by company, with optional customer filter.
-     * companyId is the numeric Long id (as used by the service layer).
+     * Paged list by company, with optional customer and status filters (ARC-02).
+     * companyId is the numeric Long id (as used by the service layer). The customer may be named
+     * by {@code customerId} or by {@code customerUid} (what the web screen sends; resolved inside
+     * the company). {@code status} is one status or a comma-separated list.
      */
     @GetMapping
     @PreAuthorize("@perm.has('AR.VIEW')")
     public ApiResponse<List<ArInvoiceDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid,
+            @RequestParam(required = false) String status,
             Pageable pageable) {
-        Page<ArInvoiceDto> page = customerId != null
-                ? service.listByCustomer(companyId, customerId, pageable)
-                : service.listByCompany(companyId, pageable);
+        Page<ArInvoiceDto> page = service.list(companyId, customerId, customerUid, status, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
+    }
+
+    /**
+     * Every open / part-paid item of one customer, oldest due date first — the allocation grid
+     * on Record Receipt and Apply-to-invoices (ARC-02, ARC-06). Not paged. Readable by whoever
+     * can view receivables or record a receipt.
+     */
+    @GetMapping("/open")
+    @PreAuthorize("@perm.has('AR.VIEW') or @perm.has('AR.RECEIPT.RECORD')")
+    public List<ArInvoiceDto> listOpen(
+            @RequestParam Long companyId,
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid) {
+        return service.listOpenForCustomer(companyId, customerId, customerUid);
     }
 }

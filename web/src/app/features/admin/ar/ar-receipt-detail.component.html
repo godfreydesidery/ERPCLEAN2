@@ -49,6 +49,8 @@
               <dd class="col-sm-8 mono">{{ fmtMoney(r.unallocatedAmount) }}</dd>
               <dt class="col-sm-4">Tender Type</dt>
               <dd class="col-sm-8">{{ r.tenderType }}</dd>
+              <dt class="col-sm-4">Reference</dt>
+              <dd class="col-sm-8 mono">{{ r.bankReference || '—' }}</dd>
             </dl>
           </div>
         </div>

@@ -249,13 +249,10 @@ export class RecordReceiptComponent {
     this.openInvoicesState.set('loading');
     this.allocationRows.set([]);
 
-    // Load up to 200 open/partial invoices for the allocation editor.
-    this.arService.listInvoices(companyId, customerUid, undefined, 0, 200).subscribe({
-      next: ({ rows }) => {
-        const open = rows.filter((inv) =>
-          inv.status === 'OPEN' || inv.status === 'PARTIAL',
-        );
-        this.allocationRows.set(open.map((inv) => ({ invoice: inv, allocInput: '' })));
+    // Every open / part-paid item of THIS customer, oldest due date first (server-side filter).
+    this.arService.listOpenInvoices(companyId, customerUid).subscribe({
+      next: (rows) => {
+        this.allocationRows.set(rows.map((inv) => ({ invoice: inv, allocInput: '' })));
         this.openInvoicesState.set('idle');
       },
       error: () => this.openInvoicesState.set('error'),

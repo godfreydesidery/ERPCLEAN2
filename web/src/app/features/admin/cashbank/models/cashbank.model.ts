@@ -210,6 +210,8 @@ export interface BankReconciliationDto {
   cashBankAccountId: string;
   reconciliationNumber: string;
   statementDate: string;
+  /** Wire: number | null — the bank statement's opening balance (carried from the last completed reconciliation). */
+  statementOpeningBalance?: number | string | null;
   /** Wire: number — coerce with +v */
   statementClosingBalance: number | string;
   /** Wire: number — coerce with +v */
@@ -224,6 +226,8 @@ export interface OpenReconciliationRequest {
   companyUid: string;
   cashBankAccountUid: string;
   statementDate: string;
+  /** Send as string. Omit to carry forward the last completed reconciliation's closing balance. */
+  statementOpeningBalance?: string;
   /** Send as string */
   statementClosingBalance: string;
 }

@@ -30,8 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Bank reconciliation lifecycle: DRAFT → COMPLETED.
  * Invariants:
  *   - BANK accounts only (FR-CASH-13, BR-CASH-11).
- *   - Completion: clearedBookBalance must equal statementClosingBalance (BigDecimal.compareTo, BR-CASH-06).
- *   - Once COMPLETED, cleared flags are immutable (BR-CASH-07).
+ *   - Opening balance: the previous COMPLETED statement's closing balance (carried forward when
+ *     omitted; a different value is refused). The first statement takes what it is given (null = 0).
+ *   - Completion: opening + Σ cleared on THIS statement must equal statementClosingBalance
+ *     (BigDecimal.compareTo, BR-CASH-06, ARC-09).
+ *   - Once COMPLETED, cleared flags are immutable (BR-CASH-07) — also from a later statement.
  */
 @Service
 @Transactional
@@ -87,6 +90,19 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         if (req.statementClosingBalance() == null)
             throw new IllegalArgumentException("statementClosingBalance is required.");
 
+        // ARC-09: this statement's opening balance is the last completed statement's closing
+        // balance. Omitted → carried forward; given and different → refused (a gap or overlap
+        // between statements). The first-ever reconciliation takes what it is given (null = 0).
+        BankReconciliation previous = lastCompleted(account.getId());
+        BigDecimal opening = req.statementOpeningBalance();
+        if (previous != null) {
+            if (opening == null) {
+                opening = previous.getStatementClosingBalance();
+            } else {
+                assertOpeningFollows(opening, previous);
+            }
+        }
+
         String reconNumber = numbers.nextReconciliation(companyId);
         Long actor  = actorId();
         Long branch = branchId();
@@ -94,7 +110,7 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
         BankReconciliation recon = new BankReconciliation(
                 companyId, branch, account.getId(),
                 reconNumber, req.statementDate(),
-                req.statementOpeningBalance(),
+                opening,
                 req.statementClosingBalance(), actor);
         recon = reconciliations.save(recon);
 
@@ -128,6 +144,16 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
             if (!t.getCashBankAccountId().equals(recon.getCashBankAccountId()))
                 throw new IllegalArgumentException(
                         "One or more transactions do not belong to the reconciled account.");
+            // BR-CASH-07 / ARC-09: an item cleared on an earlier, COMPLETED statement is already
+            // inside this statement's opening balance — it cannot be moved or un-cleared.
+            Long clearedIn = t.getClearedInReconciliationId();
+            if (clearedIn != null && !clearedIn.equals(recon.getId())
+                    && reconciliations.findById(clearedIn)
+                            .map(r -> r.getStatus() == ReconciliationStatus.COMPLETED)
+                            .orElse(false))
+                throw new IllegalStateException(
+                        "Transaction " + t.getTxnNumber() + " was reconciled on an earlier bank"
+                                + " statement and cannot be changed.");
             if (req.cleared()) {
                 t.setCleared(true);
                 t.setClearedInReconciliationId(recon.getId());
@@ -162,23 +188,44 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
             throw new IllegalStateException(
                     "This reconciliation is already COMPLETED.");
 
-        // Compute the cleared book balance for this reconciliation (D-6)
+        // ARC-09: another statement may have been completed since this one was opened — the
+        // opening balance must still follow on from the latest completed one.
+        BankReconciliation previous = lastCompleted(recon.getCashBankAccountId());
+        BigDecimal opening = recon.getStatementOpeningBalance() != null
+                ? recon.getStatementOpeningBalance() : BigDecimal.ZERO;
+        if (previous != null) {
+            assertOpeningFollows(opening, previous);
+        }
+
+        // The movement cleared on THIS statement (D-6)
         BigDecimal clearedBalance = txns.clearedBookBalance(recon.getId());
         if (clearedBalance == null) clearedBalance = BigDecimal.ZERO;
 
-        // BR-CASH-06: cleared book balance must equal the statement closing balance before completing
-        if (clearedBalance.compareTo(recon.getStatementClosingBalance()) != 0) {
+        // BR-CASH-06 / ARC-09: opening + what cleared on this statement must equal its closing
+        // balance. (Comparing only this statement's items to the closing balance ignored the
+        // opening balance, so every statement after the first was refused.)
+        BigDecimal reconciled = opening.add(clearedBalance);
+        if (reconciled.compareTo(recon.getStatementClosingBalance()) != 0) {
             throw new IllegalStateException(String.format(
-                    "The reconciliation cannot be completed: the total of cleared transactions (%s) "
-                            + "does not match the bank statement closing balance (%s). "
-                            + "Please mark the correct transactions as cleared before completing.",
-                    clearedBalance.toPlainString(),
+                    "The reconciliation cannot be completed: the opening balance (%s) plus the "
+                            + "transactions cleared on this statement (%s) comes to %s, which does not "
+                            + "match the bank statement closing balance (%s). Please mark the correct "
+                            + "transactions as cleared before completing.",
+                    opening.toPlainString(), clearedBalance.toPlainString(),
+                    reconciled.toPlainString(),
                     recon.getStatementClosingBalance().toPlainString()));
         }
 
         Long actor = actorId();
         recon.setClearedBookBalance(clearedBalance);
-        recon.setUnreconciledAmount(recon.getStatementClosingBalance().subtract(clearedBalance));
+        recon.setUnreconciledAmount(recon.getStatementClosingBalance().subtract(reconciled));
+
+        // The account remembers where it was last reconciled to (columns exist since V13).
+        final BankReconciliation done = recon;
+        accounts.findById(done.getCashBankAccountId()).ifPresent(a -> {
+            a.setLastReconciledDate(done.getStatementDate());
+            a.setLastReconciledBalance(done.getStatementClosingBalance());
+        });
         recon.setStatus(ReconciliationStatus.COMPLETED);
         recon.setReconciledBy(actor);
         recon.setCompletedAt(Instant.now());
@@ -222,6 +269,27 @@ public class BankReconciliationServiceImpl implements BankReconciliationService 
     }
 
     // -------------------------------------------------------------------------
+
+    /** The account's latest COMPLETED reconciliation, or null when none has been completed. */
+    private BankReconciliation lastCompleted(Long accountId) {
+        return reconciliations
+                .findFirstByCashBankAccountIdAndStatusOrderByStatementDateDescIdDesc(
+                        accountId, ReconciliationStatus.COMPLETED)
+                .orElse(null);
+    }
+
+    /** The opening balance must equal the previous completed statement's closing balance. */
+    private static void assertOpeningFollows(BigDecimal opening, BankReconciliation previous) {
+        if (opening.compareTo(previous.getStatementClosingBalance()) != 0) {
+            throw new IllegalArgumentException(String.format(
+                    "The statement opening balance (%s) must equal the closing balance of the last "
+                            + "completed reconciliation %s dated %s (%s). Check the bank statement, "
+                            + "or leave the opening balance blank to carry it forward.",
+                    opening.toPlainString(), previous.getReconciliationNumber(),
+                    previous.getStatementDate(),
+                    previous.getStatementClosingBalance().toPlainString()));
+        }
+    }
 
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();

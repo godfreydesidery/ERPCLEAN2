@@ -66,6 +66,15 @@ export class ArService {
       );
   }
 
+  /**
+   * Every open / part-paid item of ONE customer, oldest due date first (not paged). Feeds the
+   * allocation grid on Record Receipt and Apply-to-invoices.
+   */
+  listOpenInvoices(companyId: string, customerUid: string): Observable<ArInvoiceDto[]> {
+    const params = new HttpParams().set('companyId', companyId).set('customerUid', customerUid);
+    return this.http.get<ArInvoiceDto[]>(`${this.base}/invoices/open`, { params });
+  }
+
   getInvoice(uid: string): Observable<ArInvoiceDto> {
     return this.http.get<ArInvoiceDto>(`${this.base}/invoices/uid/${uid}`);
   }
