@@ -48,4 +48,25 @@ public enum ControlType {
     public boolean blocksManualPosting() {
         return this != CASH && this != BANK;
     }
+
+    /**
+     * Where an accountant posts to an account of this control type instead of a manual journal
+     * (ACC-18) — the sentence the manual-journal refusal and the account picker show.
+     */
+    public String manualPostingGuidance() {
+        return switch (this) {
+            case AR -> "Customer balances are posted from Receivables: record a receipt, credit note"
+                    + " or write-off there.";
+            case AP -> "Supplier balances are posted from Payables: enter a supplier bill, payment or"
+                    + " debit note there.";
+            case INVENTORY -> "Stock accounts are posted by the Stock module: use a goods receipt,"
+                    + " stock adjustment or opening stock instead.";
+            case TAX -> "VAT and tax accounts are posted by sales, purchases and the VAT Return"
+                    + " screen, not by manual journals.";
+            case PAYROLL_CLEARING -> "Payroll liability accounts are posted by payroll runs.";
+            case FX_CLEARING -> "Exchange gain and loss accounts are posted by FX revaluation and"
+                    + " settlement.";
+            case CASH, BANK -> "Cash and bank accounts can take manual journals.";
+        };
+    }
 }

@@ -29,6 +29,10 @@ export interface AccountDto {
   normalBalance: NormalBalance;
   active: boolean;
   status: string;
+  /** False on accounts closed to manual journals (control accounts by default). */
+  allowManualPosting?: boolean;
+  /** AR / AP / INVENTORY / TAX / PAYROLL_CLEARING / FX_CLEARING / CASH / BANK, or null. */
+  controlType?: string | null;
 }
 
 export interface CreateAccountRequest {
