@@ -64,8 +64,11 @@ public class PurchaseOrderController {
      * PO (read-gate widening only, tenant scope unchanged).
      */
     @GetMapping("/uid/{uid}")
+    // LRB-04: Enter Bill (AP.BILL.ENTER) opens the order it bills against; the list endpoint already
+    // admits AP.BILL.ENTER, so the detail read must too or 3-way matching dead-ends for finance.
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
-            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'AP.BILL.ENTER')")
     public ApiResponse<PurchaseOrderDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
@@ -145,8 +148,10 @@ public class PurchaseOrderController {
      * company (read-gate widening only).
      */
     @GetMapping("/uid/{uid}/lines")
+    // LRB-04: Enter Bill links each bill line to a PO line from this list.
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
-            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'AP.BILL.ENTER')")
     public ApiResponse<List<PurchaseOrderLineDto>> listLines(@PathVariable String uid) {
         return ApiResponse.ok(service.listLines(uid));
     }
