@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.iam.domain.dto.ChangeOwnPasswordRequest;
 import com.erp.modules.iam.domain.dto.LoginRequest;
 import com.erp.modules.iam.domain.dto.MeResponse;
 import com.erp.modules.iam.domain.dto.RefreshRequest;
@@ -55,6 +56,19 @@ public class AuthController {
     @PreAuthorize("isAuthenticated()")
     public MeResponse me() {
         return auth.me();
+    }
+
+    /**
+     * Self-service password change (ADM-02 / PAR-14): the current password is required, the new
+     * one goes through the password policy, every other session is signed out, and a fresh
+     * session is returned for this one.
+     */
+    @PostMapping("/me/password")
+    @PreAuthorize("isAuthenticated()")
+    public TokenResponse changeMyPassword(@Valid @RequestBody ChangeOwnPasswordRequest request,
+                                          HttpServletRequest httpRequest) {
+        return auth.changeOwnPassword(request.currentPassword(), request.newPassword(),
+                httpRequest.getRemoteAddr());
     }
 
     /** The caller's own switchable branches (ADR-0003 D-6) — self-scoped, no USER.VIEW required. */

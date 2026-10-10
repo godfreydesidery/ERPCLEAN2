@@ -170,6 +170,18 @@
               </select>
             </div>
 
+            <!-- Age restriction (PRD-33) -->
+            <div class="col-sm-2">
+              <label class="form-label" for="masterRestrictedKind">Age restriction</label>
+              <select id="masterRestrictedKind" name="masterRestrictedKind" class="form-select"
+                      [ngModel]="fRestrictedKind()" (ngModelChange)="fRestrictedKind.set($event)"
+                      [disabled]="saving()">
+                <option value="NONE">None</option>
+                <option value="AGE_18">18+ (ask for ID)</option>
+                <option value="AGE_21">21+ (ask for ID)</option>
+              </select>
+            </div>
+
             <!-- Description -->
             <div class="col-sm-8">
               <label class="form-label" for="masterDescription">Description</label>

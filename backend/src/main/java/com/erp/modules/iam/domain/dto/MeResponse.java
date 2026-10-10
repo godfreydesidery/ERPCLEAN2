@@ -16,5 +16,7 @@ public record MeResponse(
         boolean isRoot,
         String activeCompanyUid,
         String activeBranchUid,
-        List<String> permissions) {
+        List<String> permissions,
+        /** ADM-02: an administrator set this password; the client must force a change. */
+        boolean mustChangePassword) {
 }

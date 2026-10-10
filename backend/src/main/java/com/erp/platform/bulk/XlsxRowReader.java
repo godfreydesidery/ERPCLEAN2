@@ -1,13 +1,16 @@
 package com.erp.platform.bulk;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -68,7 +71,7 @@ public class XlsxRowReader {
                         continue;
                     }
                     Cell cell = row.getCell(c);
-                    String value = cell == null ? "" : formatter.formatCellValue(cell).trim();
+                    String value = cell == null ? "" : cellText(cell, header);
                     if (!value.isEmpty()) {
                         anyValue = true;
                     }
@@ -90,6 +93,28 @@ public class XlsxRowReader {
         } catch (IOException e) {
             throw new IllegalArgumentException("The file could not be read as a spreadsheet.");
         }
+    }
+
+    /**
+     * PRD-08: a long run of digits typed into a General-formatted cell is stored by Excel as a
+     * number, and {@link DataFormatter} renders it in scientific notation from 1E11 up
+     * (6002323018469 → "6.00232E+12"). An integral numeric cell in an identifier column (code,
+     * barcode, phone, TIN …), or any integral numeric cell that large, is therefore read back as
+     * its plain digits. Everything else keeps the formatter's rendering.
+     */
+    String cellText(Cell cell, String header) {
+        if (cell.getCellType() == CellType.NUMERIC && !DateUtil.isCellDateFormatted(cell)) {
+            double d = cell.getNumericCellValue();
+            boolean integral = d == Math.rint(d) && !Double.isInfinite(d);
+            if (integral && (Math.abs(d) >= 1e11 || isIdentifierHeader(header))) {
+                return new BigDecimal(d).toPlainString();
+            }
+        }
+        return formatter.formatCellValue(cell).trim();
+    }
+
+    private static boolean isIdentifierHeader(String header) {
+        return ColumnSpec.of(header, false, "").identifierLike();
     }
 
     private List<String> readHeaders(Row headerRow) {

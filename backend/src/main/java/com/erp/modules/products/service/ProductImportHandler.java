@@ -8,6 +8,7 @@ import com.erp.modules.products.domain.dto.UpdateProductRequest;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBarcode;
 import com.erp.modules.products.domain.enums.ProductType;
+import com.erp.modules.products.domain.enums.RestrictedKind;
 import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.repository.ProductBarcodeRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -68,6 +69,10 @@ public class ProductImportHandler implements BulkImportHandler {
     private static final String COL_LEAD_TIME = "Lead Time Days";
     private static final String COL_PURCHASABLE = "Purchasable";
     private static final String COL_BARCODE = "Barcode";
+    // PRD-03 / PRD-33: descriptive + age-restriction columns (appended so older sheets still map).
+    private static final String COL_DEPARTMENT = "Department";
+    private static final String COL_BRAND = "Brand";
+    private static final String COL_RESTRICTED = "Age Restriction";
 
     private final ProductService productService;
     private final ProductRepository products;
@@ -132,7 +137,14 @@ public class ProductImportHandler implements BulkImportHandler {
                 ColumnSpec.number(COL_LEAD_TIME, false, "Optional supply lead time in days."),
                 ColumnSpec.choice(COL_PURCHASABLE, false, "Can this be bought?", yesNo),
                 ColumnSpec.of(COL_BARCODE, false,
-                        "Primary barcode (scannable). Must be unique across products; leave blank for none."));
+                        "Primary barcode (scannable). Must be unique across products; leave blank for none."),
+                ColumnSpec.of(COL_DEPARTMENT, false,
+                        "Department / category label, e.g. Beers. Used by reports."),
+                ColumnSpec.of(COL_BRAND, false, "Optional brand, e.g. Serengeti."),
+                ColumnSpec.choice(COL_RESTRICTED, false,
+                        "NONE, AGE_18 or AGE_21. The till asks for ID on restricted items.",
+                        List.of(RestrictedKind.NONE.name(), RestrictedKind.AGE_18.name(),
+                                RestrictedKind.AGE_21.name())));
     }
 
     @Override
@@ -141,6 +153,22 @@ public class ProductImportHandler implements BulkImportHandler {
         Product existing = code.isEmpty()
                 ? null
                 : products.findByCompanyIdAndCode(companyId, code.trim().toUpperCase()).orElse(null);
+
+        // PRD-17: names are unique per company, so two rows naming the same product must fail at
+        // Validate (each validate row runs in its own rolled-back transaction and could not see
+        // the other) rather than at Commit.
+        String name = row.get(COL_NAME);
+        if (!name.isBlank()
+                && !ctx.claimSet("name").add(name.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT))) {
+            throw new IllegalArgumentException(
+                    "'" + COL_NAME + "' '" + name.trim() + "' is used more than once in this file.");
+        }
+        // PRD-17: a blank-code row naming an existing product updates it (re-upload of a fixed
+        // sheet) instead of failing with "already exists".
+        if (existing == null && code.isEmpty() && !name.isBlank()) {
+            existing = products.findByCompanyIdAndNormalizedName(companyId, name).stream()
+                    .findFirst().orElse(null);
+        }
 
         String barcode = ImportParsers.text(row, COL_BARCODE);
         validateBarcode(companyId, barcode, existing, ctx);
@@ -218,7 +246,11 @@ public class ProductImportHandler implements BulkImportHandler {
                 ImportParsers.parseInt(row, COL_LEAD_TIME),
                 ImportParsers.parseBool(row, COL_PURCHASABLE, null),
                 null,
-                null);
+                ImportParsers.parseEnum(RestrictedKind.class, row, COL_RESTRICTED, null),
+                ImportParsers.text(row, COL_DEPARTMENT),
+                ImportParsers.text(row, COL_BRAND),
+                null, null, null, null,
+                null, null, null);
     }
 
     private UpdateProductRequest buildUpdate(Long companyId, Product existing, ImportRow row) {
@@ -240,7 +272,14 @@ public class ProductImportHandler implements BulkImportHandler {
                 row.has(COL_LEAD_TIME) ? ImportParsers.parseInt(row, COL_LEAD_TIME) : cur.leadTimeDays(),
                 row.has(COL_PURCHASABLE) ? ImportParsers.parseBool(row, COL_PURCHASABLE, cur.purchasable()) : cur.purchasable(),
                 cur.preferredSupplierId(),
-                cur.restrictedKind());
+                row.has(COL_RESTRICTED)
+                        ? ImportParsers.parseEnum(RestrictedKind.class, row, COL_RESTRICTED, cur.restrictedKind())
+                        : null,
+                row.has(COL_DEPARTMENT) ? row.get(COL_DEPARTMENT) : null,
+                row.has(COL_BRAND) ? row.get(COL_BRAND) : null,
+                null, null, null, null,
+                null, null, null,
+                null);
     }
 
     // -- export -------------------------------------------------------------------------------------
@@ -273,6 +312,9 @@ public class ProductImportHandler implements BulkImportHandler {
             r.put(COL_LEAD_TIME, d.leadTimeDays() != null ? d.leadTimeDays().toString() : "");
             r.put(COL_PURCHASABLE, yn(d.purchasable()));
             r.put(COL_BARCODE, nz(primaryBarcodes.get(p.getId())));
+            r.put(COL_DEPARTMENT, nz(d.category()));
+            r.put(COL_BRAND, nz(d.brand()));
+            r.put(COL_RESTRICTED, d.restrictedKind() != null ? d.restrictedKind().name() : "");
             rows.add(r);
             if (rows.size() >= EXPORT_MAX) {
                 break;

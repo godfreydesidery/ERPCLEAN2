@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { INVALID_AMOUNT_MESSAGE, normaliseAmount } from '../../../shared/money.util';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -428,7 +429,10 @@ export class RecordPaymentComponent {
 
     // Optional WHT (WHT_ON_PAYMENT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
-    const whtAmt = String(this.whtAmount() ?? '').trim();
+    // LUI-04: "1,800" used to read as NaN and the WHT was silently dropped from the payment.
+    const whtNorm = normaliseAmount(this.whtAmount());
+    if (whtNorm === null) { this.formError.set(INVALID_AMOUNT_MESSAGE); return; }
+    const whtAmt = whtNorm;
     if (whtUid && whtAmt && +whtAmt > 0) {
       request.whtTypeUid = whtUid;
       request.whtAmount = whtAmt;

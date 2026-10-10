@@ -31,6 +31,8 @@ import {
   SetProductPriceRequest,
   SetProductWeighingRequest,
   UnitOfMeasureDto,
+  RestrictedKind,
+  ClearableProductField,
   UpdateProductRequest,
   VatStatus,
 } from '../models/product.model';
@@ -187,6 +189,8 @@ export class ProductMasterComponent implements OnInit {
   readonly fStockable = signal(true);
   readonly fPurchasable = signal(true);
   readonly fVatStatus = signal<VatStatus>('STANDARD');
+  /** PRD-33: age restriction the till enforces (18+/21+). */
+  readonly fRestrictedKind = signal<RestrictedKind>('NONE');
   readonly fHsCode = signal('');
   readonly fImageUrl = signal('');
   readonly fNotes = signal('');
@@ -547,13 +551,18 @@ export class ProductMasterComponent implements OnInit {
       next: (rows) => {
         // Merge with companyBranches.
         const branchIdSet = new Set(rows.map((r) => r.branchId));
+        // PRD-09: show the saved branch overrides (BigDecimal → JSON number; coerce to string).
+        const byBranch = new Map(rows.map((r) => [r.branchId, r]));
         this.branchRows.set(
-          this.companyBranches().map((b) => ({
-            branch: b,
-            active: branchIdSet.has(b.id),
-            reorderLevel: '',
-            branchPrice: '',
-          })),
+          this.companyBranches().map((b) => {
+            const saved = byBranch.get(b.id);
+            return {
+              branch: b,
+              active: branchIdSet.has(b.id),
+              reorderLevel: saved?.reorderLevel != null ? String(saved.reorderLevel) : '',
+              branchPrice: saved?.branchPrice != null ? String(saved.branchPrice) : '',
+            };
+          }),
         );
         if (branchIdSet.size > 0) {
           this.allBranchesToggle.set(false);
@@ -575,6 +584,7 @@ export class ProductMasterComponent implements OnInit {
     this.fStockable.set(p.stockable);
     this.fPurchasable.set(p.purchasable ?? true);
     this.fVatStatus.set(p.vatStatus ?? 'STANDARD');
+    this.fRestrictedKind.set(p.restrictedKind ?? 'NONE');
     this.fHsCode.set(p.hsCode ?? '');
     this.fImageUrl.set(p.imageUrl ?? '');
     this.fNotes.set(p.notes ?? '');
@@ -585,11 +595,12 @@ export class ProductMasterComponent implements OnInit {
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
     this.fBaseUnitUid.set(p.baseUnitUid ?? '');
     this.loadedBaseUnitUid.set(p.baseUnitUid ?? '');
-    this.fReorderLevel.set(p.reorderLevel ?? '');
-    this.fReorderQty.set(p.reorderQty ?? '');
-    this.fSafetyStock.set(p.safetyStock ?? '');
-    this.fMinStock.set(p.minStock ?? '');
-    this.fMaxStock.set(p.maxStock ?? '');
+    // BigDecimal → JSON number on the wire: String()-coerce so a later .trim() never throws.
+    this.fReorderLevel.set(p.reorderLevel != null ? String(p.reorderLevel) : '');
+    this.fReorderQty.set(p.reorderQty != null ? String(p.reorderQty) : '');
+    this.fSafetyStock.set(p.safetyStock != null ? String(p.safetyStock) : '');
+    this.fMinStock.set(p.minStock != null ? String(p.minStock) : '');
+    this.fMaxStock.set(p.maxStock != null ? String(p.maxStock) : '');
     if (p.preferredSupplierId) {
       this.fPreferredSupplierId.set(p.preferredSupplierId);
     }
@@ -946,6 +957,7 @@ export class ProductMasterComponent implements OnInit {
       safetyStock: this.fSafetyStock().trim() || undefined,
       minStock: this.fMinStock().trim() || undefined,
       maxStock: this.fMaxStock().trim() || undefined,
+      restrictedKind: this.fRestrictedKind(),
     };
     return this.productService.create(req);
   }
@@ -965,23 +977,43 @@ export class ProductMasterComponent implements OnInit {
       baseUnitUid,
       cost,
       vatStatus: this.fVatStatus(),
-      category: this.fCategory().trim() || undefined,
-      brand: this.fBrand().trim() || undefined,
-      manufacturer: this.fManufacturer().trim() || undefined,
+      // PRD-03: '' clears a descriptive field on update; absent would leave it unchanged.
+      category: this.fCategory().trim(),
+      brand: this.fBrand().trim(),
+      manufacturer: this.fManufacturer().trim(),
       preferredSupplierId: this.fPreferredSupplierId() || undefined,
-      hsCode: this.fHsCode().trim() || undefined,
-      imageUrl: this.fImageUrl().trim() || undefined,
-      notes: this.fNotes().trim() || undefined,
-      lotTracked: this.fLotTracked() || undefined,
-      serialTracked: this.fSerialTracked() || undefined,
-      expiryTracked: this.fExpiryTracked() || undefined,
+      hsCode: this.fHsCode().trim(),
+      imageUrl: this.fImageUrl().trim(),
+      notes: this.fNotes().trim(),
+      // PRD-04: explicit booleans so switching tracking OFF is also saved.
+      lotTracked: this.fLotTracked(),
+      serialTracked: this.fSerialTracked(),
+      expiryTracked: this.fExpiryTracked(),
       reorderLevel: this.fReorderLevel().trim() || undefined,
       reorderQty: this.fReorderQty().trim() || undefined,
       safetyStock: this.fSafetyStock().trim() || undefined,
       minStock: this.fMinStock().trim() || undefined,
       maxStock: this.fMaxStock().trim() || undefined,
+      restrictedKind: this.fRestrictedKind(),
+      clearFields: this.emptiedPlanningFields(),
     };
     return this.productService.update(this.uid()!, req);
+  }
+
+  /**
+   * PRD-05: the server leaves an omitted planning field unchanged, so a field this form shows and
+   * the user emptied must be named explicitly to be cleared.
+   */
+  private emptiedPlanningFields(): ClearableProductField[] {
+    const fields: [ClearableProductField, string][] = [
+      ['reorderLevel', this.fReorderLevel()],
+      ['reorderQty', this.fReorderQty()],
+      ['safetyStock', this.fSafetyStock()],
+      ['minStock', this.fMinStock()],
+      ['maxStock', this.fMaxStock()],
+      ['preferredSupplierId', this.fPreferredSupplierId()],
+    ];
+    return fields.filter(([, v]) => !String(v ?? '').trim()).map(([k]) => k);
   }
 
   private runSubSteps(productUid: string): void {
@@ -1059,7 +1091,7 @@ export class ProductMasterComponent implements OnInit {
           isPrimary: row.isPrimary,
           primary: row.isPrimary, // compat
           barcodeType: row.barcodeType || undefined,
-          uomUid: row.uomUid || undefined,
+          unitUid: row.uomUid || undefined,
         };
         this.productService.addBarcode(productUid, req).subscribe({
           next: (saved) => {
@@ -1153,8 +1185,8 @@ export class ProductMasterComponent implements OnInit {
         const req: AssignProductBranchRequest = {
           branchUid: row.branch.uid,
           active: row.active,
-          reorderLevel: row.reorderLevel.trim() || undefined,
-          branchPrice: row.branchPrice.trim() || undefined,
+          reorderLevel: String(row.reorderLevel ?? '').trim() || undefined,
+          branchPrice: String(row.branchPrice ?? '').trim() || undefined,
         };
         this.productService.assignBranch(productUid, req).subscribe({
           next: () => runNext(idx + 1),

@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { normaliseAmount, parseAmount } from '../../../shared/money.util';
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -190,7 +191,7 @@ export class PosSaleComponent {
   readonly vatTotal = computed<number>(() => this.grossTotal() - this.subtotal());
 
   readonly change = computed<number>(() => {
-    const tendered = +this.tenderedAmount() || 0;
+    const tendered = parseAmount(this.tenderedAmount()) ?? 0;
     return tendered - this.grossTotal();
   });
 
@@ -623,7 +624,8 @@ export class PosSaleComponent {
     const curr = this.currency().trim();
     // A `type="number"` input stores a number (or null) in the signal via NumberValueAccessor,
     // so coerce to string before trimming — `.trim()` on a number throws (DEFECT-POS-TENDER).
-    const tendered = String(this.tenderedAmount() ?? '').trim();
+    // LUI-04: the tender field is free text so "10,000" can be typed; normalise it here.
+    const tendered = normaliseAmount(this.tenderedAmount()) ?? '';
 
     const validationError = this.validateSaleForm(sessionUid, customerUid, agentUid, curr, tendered);
     if (validationError) { this.formError.set(validationError); return; }

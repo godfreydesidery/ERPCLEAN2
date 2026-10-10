@@ -48,7 +48,9 @@ class AuthLoginNameResolutionTest {
         auth = new AuthServiceImpl(users, mock(RefreshTokenRepository.class),
                 mock(BranchRepository.class), mock(CompanyRepository.class),
                 mock(UserBranchRepository.class), encoder, mock(JwtService.class),
-                mock(JwtProperties.class), attempts, mock(PermissionResolver.class), organisations);
+                mock(JwtProperties.class), attempts, mock(PermissionResolver.class), organisations,
+                mock(com.erp.platform.security.password.PasswordPolicy.class),
+                mock(com.erp.platform.audit.AuditService.class));
         when(users.findByUsername(anyString())).thenReturn(Optional.empty());
         when(users.findByUsername("asha@duka")).thenReturn(Optional.of(cashier));
         when(encoder.matches(anyString(), any())).thenReturn(false);

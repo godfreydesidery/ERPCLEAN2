@@ -12,7 +12,12 @@ import static org.mockito.Mockito.when;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
+import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
+import com.erp.modules.products.domain.dto.UpdateProductRequest;
+import com.erp.modules.products.domain.entity.ProductBranch;
+import com.erp.modules.products.domain.enums.RestrictedKind;
+import com.erp.modules.stock.service.StockReservationService;
 import com.erp.modules.products.domain.dto.UpdateBulkPackRequest;
 import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
@@ -134,6 +139,7 @@ class ProductServiceImplTest {
     private ScopeGuard scopeGuard;
     private AuditService audit;
     private BarcodeSymbologyRuleService symbologyRules;
+    private StockReservationService stock;
     private ProductServiceImpl service;
 
     private Product product;
@@ -160,10 +166,11 @@ class ProductServiceImplTest {
         scopeGuard = mock(ScopeGuard.class);
         audit = mock(AuditService.class);
         symbologyRules = mock(BarcodeSymbologyRuleService.class);
+        stock = mock(StockReservationService.class);
 
         service = new ProductServiceImpl(products, productBranches, bulkPacks, barcodes, prices,
                 components, priceLists, units, companies, suppliers, codeGen, branchGuard,
-                compositionGuard, scopeGuard, audit, symbologyRules);
+                compositionGuard, scopeGuard, audit, symbologyRules, stock);
 
         baseUnit = unitWithId(1L, "BASEUID0000000000000030", "PCS");
         boxUnit = unitWithId(2L, "BOXUID00000000000000030", "BOX");
@@ -442,5 +449,120 @@ class ProductServiceImplTest {
         ReflectionTestUtils.setField(pl, "id", id);
         ReflectionTestUtils.setField(pl, "uid", uid);
         return pl;
+    }
+
+    // -------------------------------------------------------------------------
+    // PRD-05 / PRD-03 / PRD-04 / PRD-09
+    // -------------------------------------------------------------------------
+
+    private UpdateProductRequest renameOnly(String name) {
+        // The shape the old detail screen sent: no planning fields, no restriction.
+        return new UpdateProductRequest(name, null, ProductType.GOODS, true, true,
+                baseUnit.getUid(), null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    private UpdateProductRequest withTracking(Boolean lot, Boolean serial, Boolean expiry) {
+        return new UpdateProductRequest("Test Product", null, ProductType.GOODS, true, true,
+                baseUnit.getUid(), null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, lot, serial, expiry, null);
+    }
+
+    @Test
+    void update_nullPlanningFields_keepReorderSupplierAndAgeRestriction() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+        product.setReorderLevel(new BigDecimal("12"));
+        product.setReorderQty(new BigDecimal("48"));
+        product.setLeadTimeDays(5);
+        product.setPreferredSupplierId(77L);
+        product.setRestrictedKind(RestrictedKind.AGE_18);
+        product.setCategory("Beers");
+
+        service.updateByUid(product.getUid(), renameOnly("Renamed"));
+
+        assertThat(product.getName()).isEqualTo("Renamed");
+        assertThat(product.getReorderLevel()).isEqualByComparingTo("12");
+        assertThat(product.getReorderQty()).isEqualByComparingTo("48");
+        assertThat(product.getLeadTimeDays()).isEqualTo(5);
+        assertThat(product.getPreferredSupplierId()).isEqualTo(77L);
+        assertThat(product.getRestrictedKind()).isEqualTo(RestrictedKind.AGE_18);
+        assertThat(product.getCategory()).isEqualTo("Beers");
+    }
+
+    @Test
+    void update_clearFields_clearsNamedPlanningFieldsOnly() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+        product.setReorderLevel(new BigDecimal("12"));
+        product.setPreferredSupplierId(77L);
+
+        service.updateByUid(product.getUid(), new UpdateProductRequest("Test Product", null,
+                ProductType.GOODS, true, true, baseUnit.getUid(), null, null, null, null, null,
+                null, null, null, null, null, null, "  Spirits ", "", null, null, null, null,
+                null, null, null, List.of("preferredSupplierId")));
+
+        assertThat(product.getPreferredSupplierId()).isNull();
+        assertThat(product.getReorderLevel()).isEqualByComparingTo("12");
+        assertThat(product.getCategory()).isEqualTo("Spirits");
+        assertThat(product.getBrand()).isNull();
+    }
+
+    @Test
+    void update_turnSerialTrackingOnWithStock_isRefused() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+        when(stock.hasStockOnHand(COMPANY_ID, product.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateByUid(product.getUid(), withTracking(null, true, null)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("stock on hand");
+        assertThat(product.isSerialTracked()).isFalse();
+    }
+
+    @Test
+    void update_turnLotAndExpiryOnWithoutStock_isApplied() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+        when(stock.hasStockOnHand(COMPANY_ID, product.getId())).thenReturn(false);
+
+        service.updateByUid(product.getUid(), withTracking(true, null, true));
+
+        assertThat(product.isLotTracked()).isTrue();
+        assertThat(product.isExpiryTracked()).isTrue();
+    }
+
+    @Test
+    void update_lotAndSerialTogether_isRejectedWithFriendlyMessage() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+
+        assertThatThrownBy(() -> service.updateByUid(product.getUid(), withTracking(true, true, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not both");
+    }
+
+    @Test
+    void assignBranch_existingAssociation_updatesOverridesInsteadOfConflict() {
+        when(branchGuard.resolveAndAssertSameCompany(COMPANY_ID, "BRUID")).thenReturn(5L);
+        ProductBranch assoc = new ProductBranch(product, 5L, 1L);
+        when(productBranches.findByProductIdAndBranchId(product.getId(), 5L))
+                .thenReturn(Optional.of(assoc));
+
+        var dto = service.assignBranch(product.getUid(),
+                new AssignProductBranchRequest("BRUID", false, new BigDecimal("6"), new BigDecimal("2500")));
+
+        assertThat(dto.active()).isFalse();
+        assertThat(assoc.getReorderLevel()).isEqualByComparingTo("6");
+        assertThat(assoc.getBranchPrice()).isEqualByComparingTo("2500");
+        verify(productBranches, never()).save(any());
+    }
+
+    @Test
+    void assignBranch_new_persistsOverrides() {
+        when(branchGuard.resolveAndAssertSameCompany(COMPANY_ID, "BRUID")).thenReturn(5L);
+        when(productBranches.findByProductIdAndBranchId(product.getId(), 5L)).thenReturn(Optional.empty());
+        when(productBranches.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var dto = service.assignBranch(product.getUid(),
+                new AssignProductBranchRequest("BRUID", null, null, new BigDecimal("2500")));
+
+        assertThat(dto.active()).isTrue();
+        assertThat(dto.branchPrice()).isEqualByComparingTo("2500");
+        assertThat(dto.reorderLevel()).isNull();
     }
 }

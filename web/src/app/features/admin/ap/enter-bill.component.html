@@ -260,6 +260,7 @@
                          [ngModel]="supplierSearchQ()"
                          (ngModelChange)="onSupplierSearchChange($event)"
                          [disabled]="submitting()" />
+                  <app-lookup-notice [state]="supplierLookup()" what="supplier" />
                   @if (supplierResults().length > 0) {
                     <ul class="list-group position-absolute w-100 shadow-sm z-3"
                         role="listbox" aria-label="Supplier suggestions"
@@ -349,7 +350,9 @@
                 <span id="poPickerLabel" class="form-label d-block">
                   Purchase Order <span class="text-muted small">(optional — for 3-way match)</span>
                 </span>
-                @if (poListUnavailable()) {
+                @if (poListUnavailable() && poListLookup() === 'forbidden') {
+                  <app-lookup-notice [state]="poListLookup()" what="purchase order" />
+                } @else if (poListUnavailable()) {
                   <p class="form-text text-info d-flex align-items-center gap-1 mb-0" role="note">
                     <i class="bi bi-info-circle-fill flex-shrink-0" aria-hidden="true"></i>
                     Purchase order list could not be loaded. Bill entry continues — PO matching can be done later.

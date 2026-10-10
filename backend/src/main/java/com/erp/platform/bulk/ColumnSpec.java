@@ -18,6 +18,29 @@ import java.util.List;
 public record ColumnSpec(String header, boolean required, String help, List<String> allowedValues,
                          boolean reference, boolean numeric) {
 
+    /**
+     * PRD-08: an identifier column (code, barcode, phone, TIN, VRN, SKU, IMEI, serial …) whose value
+     * is a string of digits, not a number. Excel would otherwise turn 6002323018469 into 6.00232E+12
+     * and drop leading zeros, so the template formats such a column as Text and the reader reads a
+     * numeric cell in it back as plain digits.
+     */
+    public boolean identifierLike() {
+        if (numeric() || header == null) {
+            return false;
+        }
+        for (String token : header.toLowerCase(java.util.Locale.ROOT).split("[^a-z]+")) {
+            if (IDENTIFIER_TOKENS.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Header words that mark an identifier column (see {@link #identifierLike()}). */
+    public static final java.util.Set<String> IDENTIFIER_TOKENS = java.util.Set.of(
+            "code", "barcode", "phone", "mobile", "tin", "vrn", "sku", "ean", "upc", "imei",
+            "serial");
+
     /** A free-text column. */
     public static ColumnSpec of(String header, boolean required, String help) {
         return new ColumnSpec(header, required, help, null, false, false);
