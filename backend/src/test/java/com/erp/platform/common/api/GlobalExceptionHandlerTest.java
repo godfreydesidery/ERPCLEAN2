@@ -77,6 +77,58 @@ class GlobalExceptionHandlerTest {
                 .containsIgnoringCase("could not be read");
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // ACC-21: accounting-setup refusals — operators get a plain sentence, accountants the detail
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    void accountingSetup_onAnOperationalScreen_showsThePlainSentence_notGlJargon() {
+        var ex = new AccountingSetupException(
+                "No account is mapped for Stock Adjustment (STOCK_ADJUSTMENT) postings.");
+        var request = new org.springframework.mock.web.MockHttpServletRequest(
+                "POST", "/api/v1/stock/adjustments");
+
+        var response = handler.handleAccountingSetup(ex, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(errorOf(response))
+                .isEqualTo(AccountingSetupException.DEFAULT_USER_MESSAGE)
+                .doesNotContain("STOCK_ADJUSTMENT")
+                .doesNotContainIgnoringCase("posting role");
+    }
+
+    @Test
+    void accountingSetup_carriesASpecificOperatorSentence_whenTheThrowerGaveOne() {
+        var ex = new AccountingSetupException(
+                "The fiscal period covering 2027-01-02 is closed.",
+                "The accounting period for 2027-01-02 is closed. Ask your accountant.");
+        var request = new org.springframework.mock.web.MockHttpServletRequest(
+                "POST", "/api/v1/ar/receipts");
+
+        assertThat(errorOf(handler.handleAccountingSetup(ex, request)))
+                .isEqualTo("The accounting period for 2027-01-02 is closed. Ask your accountant.");
+    }
+
+    @Test
+    void accountingSetup_onTheGlScreens_keepsTheAccountantMessage() {
+        var ex = new AccountingSetupException(
+                "No account is mapped for Retained Earnings (RETAINED_EARNINGS) postings.");
+        for (String path : java.util.List.of(
+                "/api/v1/gl/journals", "/api/v1/gl/periods/fiscal-years/uid/X/close",
+                "/api/v1/vat/returns/uid/X/file", "/api/v1/fixed-assets/depreciation-runs",
+                "/api/v1/fx/revaluation-runs", "/api/v1/hr/payroll-runs/uid/X/finalise")) {
+            var request = new org.springframework.mock.web.MockHttpServletRequest("POST", path);
+            assertThat(errorOf(handler.handleAccountingSetup(ex, request)))
+                    .as(path)
+                    .contains("Retained Earnings");
+        }
+    }
+
+    @Test
+    void accountingSetup_isStillAnIllegalStateException_soExistingCatchesKeepWorking() {
+        assertThat(new AccountingSetupException("x")).isInstanceOf(IllegalStateException.class);
+    }
+
     private static String errorOf(org.springframework.http.ResponseEntity<ApiResponse<Void>> r) {
         assertThat(r.getBody()).isNotNull();
         assertThat(r.getBody().errors()).hasSize(1);

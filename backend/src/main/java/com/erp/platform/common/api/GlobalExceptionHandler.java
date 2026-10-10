@@ -231,6 +231,45 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Request paths whose callers are the people who maintain the books — the GL screens, VAT,
+     * depreciation, FX revaluation and payroll posting. They get the accountant's version of an
+     * {@link AccountingSetupException} (which period, which posting role, what to change).
+     */
+    private static final List<String> ACCOUNTING_PATH_PREFIXES = List.of(
+            "/api/v1/gl/",
+            "/api/v1/vat/",
+            "/api/v1/fixed-assets/depreciation-runs",
+            "/api/v1/fx/revaluation-runs",
+            "/api/v1/hr/payroll-runs");
+
+    /**
+     * The accounts cannot take a posting (no period for the date, period closed, posting role not
+     * mapped) → 409 (ACC-21). Accounting screens get the accountant's explanation; everyone else —
+     * a cashier, a storekeeper — gets a plain sentence telling them to ask the accountant, because
+     * "posting role" and "fiscal period" are nothing they can act on. The detail is always logged.
+     */
+    @ExceptionHandler(AccountingSetupException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountingSetup(
+            AccountingSetupException ex, jakarta.servlet.http.HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : null;
+        log.warn("Accounting setup refused a posting on {}: {}", path, ex.getMessage());
+        String message = isAccountingPath(path) ? ex.getMessage() : ex.userMessage();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(message));
+    }
+
+    private static boolean isAccountingPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (String prefix : ACCOUNTING_PATH_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Business-rule state conflict (operation not valid for the resource's current state) → 409.
      * e.g. finalising an unpaid or empty invoice, mutating a finalised invoice, voiding a
      * non-finalised invoice. Surfaces the rule message to the caller instead of a generic 500.

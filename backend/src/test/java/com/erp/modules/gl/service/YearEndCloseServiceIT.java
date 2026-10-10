@@ -343,6 +343,61 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // ACC-15 — a period of a CLOSED year cannot be reopened on its own
+    // =========================================================================
+
+    @Test
+    void reopenPeriod_ofAClosedYear_isRefused_untilTheYearIsReopened() {
+        post2026(cashAccountId, salesAccountId, new BigDecimal("1000"));
+        FiscalYearDto fy2026 = fy2026();
+        yearEndCloseService.closeFiscalYear(fy2026.uid());
+        FiscalPeriodDto december = fiscalCalendarService.listPeriodsForYear(fy2026.uid()).get(11);
+
+        assertThatThrownBy(() -> fiscalCalendarService.reopenPeriod(december.uid()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Reopen the fiscal year first");
+        assertThat(fiscalCalendarService.getPeriodByUid(december.uid()).status())
+                .isEqualTo(PeriodStatus.CLOSED);
+
+        // The supported route still works: reopening the year reopens its periods.
+        yearEndCloseService.reopenFiscalYear(fy2026.uid());
+        assertThat(fiscalCalendarService.listPeriodsForYear(fy2026.uid()))
+                .allMatch(p -> p.status() == PeriodStatus.OPEN);
+    }
+
+    // =========================================================================
+    // ACC-16 — close works after December was closed, and opens the next year
+    // =========================================================================
+
+    @Test
+    void closeFiscalYear_afterLastPeriodAlreadyClosed_postsClosingJournal_andOpensNextYear() {
+        post2026(cashAccountId, salesAccountId, new BigDecimal("1000"));
+        FiscalYearDto fy2026 = fy2026();
+        FiscalPeriodDto december = fiscalCalendarService.listPeriodsForYear(fy2026.uid()).get(11);
+        fiscalCalendarService.closePeriod(december.uid());
+        FiscalPeriodDto decClosed = fiscalCalendarService.getPeriodByUid(december.uid());
+
+        FiscalYearDto closed = yearEndCloseService.closeFiscalYear(fy2026.uid());
+
+        assertThat(closed.status()).isEqualTo(PeriodStatus.CLOSED);
+        assertThat(closed.closingJournalUid()).isNotNull();
+        assertThat(netBalance(salesAccountId)).isEqualByComparingTo(BigDecimal.ZERO);
+        FiscalPeriodDto decAfter = fiscalCalendarService.getPeriodByUid(december.uid());
+        assertThat(decAfter.status()).isEqualTo(PeriodStatus.CLOSED);
+        assertThat(decAfter.closedAt()).isEqualTo(decClosed.closedAt());
+        assertThat(fiscalCalendarService.listPeriodsForYear(fy2026.uid()))
+                .allMatch(p -> p.status() == PeriodStatus.CLOSED);
+
+        // The following year is ready for posting.
+        assertThat(fiscalCalendarService.listFiscalYears(company.getId()))
+                .anySatisfy(y -> {
+                    assertThat(y.yearCode()).isEqualTo("FY2027");
+                    assertThat(y.startDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+                    assertThat(y.status()).isEqualTo(PeriodStatus.OPEN);
+                });
+    }
+
+    // =========================================================================
     // Bar 5 — close ↔ Reporting consistency (BR-CLOSE-12)
     // =========================================================================
 
@@ -412,6 +467,11 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
      * always within period 1 which is OPEN at setup time).
      * DR debitAccountId / CR creditAccountId, same amount.
      */
+    private FiscalYearDto fy2026() {
+        return fiscalCalendarService.listFiscalYears(company.getId()).stream()
+                .filter(y -> y.yearCode().equals("FY2026")).findFirst().orElseThrow();
+    }
+
     private void post2026(Long debitAccountId, Long creditAccountId, BigDecimal amount) {
         LocalDate postingDate = FY2026_START.plusDays(10);
         glPostingService.post(new JournalEntryDraft(

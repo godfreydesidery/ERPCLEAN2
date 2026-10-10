@@ -536,8 +536,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         BigDecimal variance = session.getVarianceAmount();
         Long journalId = null;
         if (variance != null && variance.compareTo(BigDecimal.ZERO) != 0) {
-            var journalEntry = postVarianceGl(session, variance);
-            journalId = journalEntry != null ? journalEntry.id() : null;
+            journalId = postVarianceGlOrRefuse(session, variance).id();
         }
 
         session.setVarianceJournalId(journalId);
@@ -1078,7 +1077,29 @@ public class PosSessionServiceImpl implements PosSessionService {
                 "POS session variance " + session.getSessionNumber(),
                 JournalSourceType.POS_VARIANCE, session.getUid(),
                 null, actorId(), List.of(debitLine, creditLine));
-        return glInvoker.postInNewTx(draft);
+        // ACC-20: posted in the reconcile's OWN transaction so the journal and the RECONCILED status
+        // commit together or not at all. The former glInvoker.postInNewTx swallowed every failure
+        // and returned null, so the session read "reconciled" while the shortage never reached the
+        // P&L.
+        return glPosting.post(draft);
+    }
+
+    /**
+     * Posts the variance journal or refuses the reconcile with a sentence a supervisor can act on
+     * (ACC-20). The technical reason goes to the log only.
+     */
+    private com.erp.modules.gl.domain.dto.JournalEntryDto postVarianceGlOrRefuse(
+            PosSession session, BigDecimal variance) {
+        try {
+            return postVarianceGl(session, variance);
+        } catch (RuntimeException ex) {
+            log.warn("POS variance GL posting failed for company={} session={} — reconcile refused: {}",
+                    session.getCompanyId(), session.getSessionNumber(), ex.toString());
+            throw new ConflictException(
+                    "This till could not be reconciled because the cash difference could not be"
+                    + " recorded in the accounts. Ask your accountant to check the accounts setup"
+                    + " for this date, then try again.");
+        }
     }
 
     /**
