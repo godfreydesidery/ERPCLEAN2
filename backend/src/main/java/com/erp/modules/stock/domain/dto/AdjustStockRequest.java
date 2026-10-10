@@ -17,7 +17,7 @@ import java.math.BigDecimal;
  */
 public record AdjustStockRequest(
         @NotBlank String productUid,
-        /** Signed delta in base units. May be positive or negative (± ADJUSTMENT). */
+        /** Signed delta in {@code unitUid} (base units when null). May be positive or negative. */
         @NotNull BigDecimal quantity,
         @NotNull AdjustmentReason reasonCode,
         String note,
@@ -29,5 +29,20 @@ public record AdjustStockRequest(
          * and not its in-transit location. Null = where the product actually sits in the branch
          * (ignoring empty and in-transit rows), or the branch default on first touch.
          */
-        String locationUid
-) {}
+        String locationUid,
+        /**
+         * Optional unit {@code quantity} is stated in (STK-08 / OPN-01): the product's base unit or
+         * one of its pack sizes. Null = base unit (every caller that predates this). The quantity is
+         * converted to base units with the pack factor before it is posted.
+         */
+        String unitUid
+) {
+
+    /** Pre-STK-08 shape: quantity in base units. */
+    public AdjustStockRequest(String productUid, BigDecimal quantity, AdjustmentReason reasonCode,
+                              String note, String costCentreValueUid, String departmentValueUid,
+                              String locationUid) {
+        this(productUid, quantity, reasonCode, note, costCentreValueUid, departmentValueUid,
+                locationUid, null);
+    }
+}

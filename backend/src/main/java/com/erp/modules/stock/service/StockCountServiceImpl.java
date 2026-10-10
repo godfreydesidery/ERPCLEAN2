@@ -74,6 +74,8 @@ public class StockCountServiceImpl implements StockCountService {
     private final OutboxPublisher          outbox;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    /** STK-08: counted quantities may be stated in a pack size. Stateless, so built here. */
+    private final StockUnitResolver        unitResolver;
 
     public StockCountServiceImpl(StockCountRepository counts,
                                   StockCountLineRepository countLines,
@@ -101,6 +103,7 @@ public class StockCountServiceImpl implements StockCountService {
         this.outbox           = outbox;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
+        this.unitResolver     = new StockUnitResolver(productService);
     }
 
     // -------------------------------------------------------------------------
@@ -143,15 +146,18 @@ public class StockCountServiceImpl implements StockCountService {
             // no exception on miss — so it never poisons the outer transaction.
             String code = String.valueOf(soh.getProductId());
             String name = code;
+            String unitName = null;
             try {
                 var p = productService.getById(soh.getProductId());
-                if (p != null) { code = p.code(); name = p.name(); }
+                if (p != null) { code = p.code(); name = p.name(); unitName = p.baseUnitName(); }
             } catch (Exception ignored) { /* product not found: keep numeric defaults */ }
 
             StockCountLine line = new StockCountLine(
                     count.getId(), principal.companyId(), loc.getBranchId(), lineNo,
                     soh.getProductId(), code, name,
-                    null, null,
+                    // STK-08: system and counted quantities are in BASE units — name it, so the Unit
+                    // column stops being blank. unitId stays null (ProductDto exposes no unit id).
+                    null, unitName,
                     soh.getQuantity(), BASE_CURRENCY, principal.userId());
             countLines.save(line);
         }
@@ -191,7 +197,17 @@ public class StockCountServiceImpl implements StockCountService {
                 throw new IllegalArgumentException(
                         "One or more count lines do not belong to the specified stock count.");
             }
-            line.enterCount(entry.countedQty(), entry.reasonCode(), principal.userId());
+            // STK-08 / OPN-01: "4 cartons" is stored as the base quantity those cartons contain.
+            BigDecimal counted = entry.countedQty();
+            if (entry.unitUid() != null && !entry.unitUid().isBlank()) {
+                var product = productService.getById(line.getProductId());
+                if (product == null) {
+                    throw new IllegalArgumentException(
+                            "One of the counted items no longer exists. Enter it in its base unit.");
+                }
+                counted = unitResolver.toBase(product, counted, entry.unitUid());
+            }
+            line.enterCount(counted, entry.reasonCode(), principal.userId());
             countLines.save(line);
         }
 
@@ -440,14 +456,27 @@ public class StockCountServiceImpl implements StockCountService {
                 .toList();
     }
 
-    private static StockCountDto toDto(StockCount c, List<StockCountLine> lines) {
+    private StockCountDto toDto(StockCount c, List<StockCountLine> lines) {
+        // productUid lets the screen offer the item's pack sizes (STK-08); one lookup per product.
+        Map<Long, String> productUids = new java.util.HashMap<>();
+        for (StockCountLine l : lines) {
+            productUids.computeIfAbsent(l.getProductId(), id -> {
+                try {
+                    var p = productService.getById(id);
+                    return p != null ? p.uid() : null;
+                } catch (Exception e) {
+                    return null;
+                }
+            });
+        }
         List<StockCountLineDto> lineDtos = lines.stream()
                 .map(l -> new StockCountLineDto(
                         l.getId(), l.getUid(), l.getLineNo(),
                         l.getProductId(), l.getProductCode(), l.getProductName(),
                         l.getUnitName(), l.getSystemQty(), l.getCountedQty(),
                         l.getVarianceQty(), l.getUnitCostAmount(), l.getVarianceValue(),
-                        l.getReasonCode(), l.getMovementUid(), l.getCurrency()))
+                        l.getReasonCode(), l.getMovementUid(), l.getCurrency(),
+                        productUids.get(l.getProductId())))
                 .toList();
         return new StockCountDto(
                 c.getId(), c.getUid(), c.getCompanyId(), c.getBranchId(),

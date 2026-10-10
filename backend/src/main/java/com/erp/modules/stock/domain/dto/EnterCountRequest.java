@@ -16,6 +16,17 @@ public record EnterCountRequest(
     public record LineEntry(
             @NotNull Long lineId,
             @NotNull BigDecimal countedQty,
-            String reasonCode
-    ) {}
+            String reasonCode,
+            /**
+             * Optional unit {@code countedQty} is stated in (STK-08 / OPN-01): the product's base
+             * unit or one of its pack sizes. Null = base unit. Stored converted to base.
+             */
+            String unitUid
+    ) {
+
+        /** Pre-STK-08 shape: counted quantity in base units. */
+        public LineEntry(Long lineId, BigDecimal countedQty, String reasonCode) {
+            this(lineId, countedQty, reasonCode, null);
+        }
+    }
 }
