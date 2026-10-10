@@ -30,6 +30,7 @@ function setup(perms: string[] = ['AR.VIEW', 'AR.RECEIPT.ALLOCATE']) {
     getReceipt: vi.fn(() => of(RECEIPT)),
     listOpenInvoices: vi.fn(() => of(OPEN)),
     reallocateReceipt: vi.fn(() => of({ ...RECEIPT, unallocatedAmount: 0 })),
+    reverseReceipt: vi.fn(() => of({ ...RECEIPT, unallocatedAmount: 0, reversedAt: '2026-10-10T08:00:00Z' })),
   };
   TestBed.configureTestingModule({
     imports: [ArReceiptDetailComponent],
@@ -84,5 +85,31 @@ describe('ArReceiptDetailComponent — apply on-account money (ARC-06)', () => {
     comp.updateApply('INV2', '400');
     expect(comp.applyInvalid()).toBe(true);
     expect(comp.applyDisabled()).toBe(true);
+  });
+});
+
+describe('ArReceiptDetailComponent — reverse a wrong receipt (ARC-04)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('offers "Reverse receipt" only with AR.RECEIPT.REVERSE', () => {
+    expect(setup().comp.showReverse()).toBe(false);
+    TestBed.resetTestingModule();
+    expect(setup(['AR.VIEW', 'AR.RECEIPT.REVERSE']).comp.showReverse()).toBe(true);
+  });
+
+  it('needs a reason, then reverses and shows the receipt as reversed', () => {
+    const { comp, ar } = setup(['AR.VIEW', 'AR.RECEIPT.ALLOCATE', 'AR.RECEIPT.REVERSE']);
+    comp.openReverse();
+    expect(comp.reverseDisabled()).toBe(true);
+    comp.confirmReverse();
+    expect(ar.reverseReceipt).not.toHaveBeenCalled();
+
+    comp.reverseReason.set('  Keyed against the wrong bar ');
+    comp.confirmReverse();
+    expect(ar.reverseReceipt).toHaveBeenCalledWith('RC1', 'Keyed against the wrong bar');
+    expect(comp.isReversed()).toBe(true);
+    expect(comp.reverseOpen()).toBe(false);
+    expect(comp.showReverse()).toBe(false);
+    expect(comp.showApply()).toBe(false);
   });
 });

@@ -13,6 +13,11 @@
           <i class="bi bi-list-check me-1" aria-hidden="true"></i>Apply to Invoices
         </button>
       }
+      @if (showReverse() && !reverseOpen()) {
+        <button type="button" class="btn btn-outline-danger btn-sm" (click)="openReverse()">
+          <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reverse receipt
+        </button>
+      }
       <a routerLink="/admin/ar/receipts" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receipts
       </a>
@@ -41,8 +46,17 @@
         <div class="erp-card mt-3" style="max-width:560px">
           <div class="erp-card__head">
             <h2>Receipt Details</h2>
+            @if (isReversed()) {
+              <span class="badge text-bg-danger ms-2">Reversed</span>
+            }
           </div>
           <div class="erp-card__body">
+            @if (isReversed()) {
+              <p class="small text-muted mb-2">
+                This receipt was reversed on {{ r.reversedAt?.slice(0, 10) }}. Its invoices are owed
+                again and the money has been taken back out of the cash book.
+              </p>
+            }
             <dl class="row mb-0">
               <dt class="col-sm-4">Receipt Number</dt>
               <dd class="col-sm-8 mono fw-semibold">{{ r.receiptNumber }}</dd>
@@ -63,6 +77,41 @@
             </dl>
           </div>
         </div>
+
+        <!-- ARC-04: reverse a wrong receipt — confirmed here, with a required reason -->
+        @if (reverseOpen()) {
+          <div class="erp-card mt-3" style="max-width:560px" role="region" aria-labelledby="reverse_title">
+            <div class="erp-card__head">
+              <h2 id="reverse_title">Reverse receipt {{ r.receiptNumber }}?</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small mb-2">
+                This takes {{ r.currency }} {{ fmtMoney(r.amount) }} back out of the cash book, posts the
+                reversing journal and makes the invoices it paid owed again. It cannot be undone; record a
+                new receipt if the customer did pay.
+              </p>
+              <label for="reverse_reason" class="form-label small fw-semibold">Reason (required)</label>
+              <textarea id="reverse_reason" name="reverse_reason" class="form-control form-control-sm"
+                        rows="2" maxlength="200" autocomplete="off"
+                        [ngModel]="reverseReason()" (ngModelChange)="reverseReason.set($event)"
+                        [disabled]="reversing()"></textarea>
+              @if (reverseError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeReverse()"
+                        [disabled]="reversing()">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger" (click)="confirmReverse()"
+                        [disabled]="reverseDisabled()">
+                  @if (reversing()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Reverse receipt
+                </button>
+              </div>
+            </div>
+          </div>
+        }
 
         <!-- ARC-06: apply money held on account to the customer's open invoices -->
         @if (applyOpen()) {

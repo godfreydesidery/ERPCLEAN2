@@ -74,6 +74,8 @@ export interface ArReceiptDto {
   customerUid?: string | null;
   customerCode?: string | null;
   customerName?: string | null;
+  /** ARC-04: when the receipt was reversed (bounced cheque or "Reverse receipt"); null when live. */
+  reversedAt?: string | null;
 }
 
 /** Allocation line inside RecordReceiptRequest. */
