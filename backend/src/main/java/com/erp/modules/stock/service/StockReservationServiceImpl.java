@@ -180,4 +180,11 @@ public class StockReservationServiceImpl implements StockReservationService {
         soh.applyReservationDelta(newReserved.subtract(soh.getReservedQty()), actorId);
         onHands.save(soh);
     }
+
+    @Override
+    public boolean hasStockOnHand(Long companyId, Long productId) {
+        return onHands.findByCompanyIdAndProductId(companyId, productId).stream()
+                .anyMatch(soh -> soh.getQuantity() != null
+                        && soh.getQuantity().compareTo(BigDecimal.ZERO) != 0);
+    }
 }

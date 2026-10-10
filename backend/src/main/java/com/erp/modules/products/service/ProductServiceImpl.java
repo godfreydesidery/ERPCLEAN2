@@ -57,6 +57,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import com.erp.modules.stock.service.StockReservationService;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -86,6 +87,7 @@ public class ProductServiceImpl implements ProductService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final BarcodeSymbologyRuleService symbologyRules;
+    private final StockReservationService stock;
 
     public ProductServiceImpl(ProductRepository products,
                               ProductBranchRepository productBranches,
@@ -102,7 +104,8 @@ public class ProductServiceImpl implements ProductService {
                               ProductCompositionGuard compositionGuard,
                               ScopeGuard scopeGuard,
                               AuditService audit,
-                              BarcodeSymbologyRuleService symbologyRules) {
+                              BarcodeSymbologyRuleService symbologyRules,
+                              StockReservationService stock) {
         this.products = products;
         this.productBranches = productBranches;
         this.bulkPacks = bulkPacks;
@@ -119,6 +122,7 @@ public class ProductServiceImpl implements ProductService {
         this.scopeGuard = scopeGuard;
         this.audit = audit;
         this.symbologyRules = symbologyRules;
+        this.stock = stock;
     }
 
     // -------------------------------------------------------------------------
@@ -158,6 +162,15 @@ public class ProductServiceImpl implements ProductService {
         applyPlanningFields(p, companyId, req.reorderLevel(), req.reorderQty(), req.safetyStock(),
                 req.minStock(), req.maxStock(), req.leadTimeDays(), req.purchasable(),
                 req.preferredSupplierId());
+        // PRD-03: descriptive attributes the Product Master collects (columns pre-existed).
+        p.setCategory(blankToNull(req.category()));
+        p.setBrand(blankToNull(req.brand()));
+        p.setManufacturer(blankToNull(req.manufacturer()));
+        p.setHsCode(blankToNull(req.hsCode()));
+        p.setImageUrl(blankToNull(req.imageUrl()));
+        p.setNotes(blankToNull(req.notes()));
+        // PRD-04: a brand-new product has no stock, so no on-hand guard is needed here.
+        applyTracking(p, req.lotTracked(), req.serialTracked(), req.expiryTracked(), false);
 
         Product saved = products.save(p);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_CREATE, "products",
@@ -261,10 +274,32 @@ public class ProductServiceImpl implements ProductService {
         p.setBaseUnit(baseUnit);
         p.setCost(MoneyDto.toMoney(req.cost()));
         p.setVatStatus(req.vatStatus() != null ? req.vatStatus() : VatStatus.STANDARD);
-        p.setRestrictedKind(req.restrictedKind() != null ? req.restrictedKind() : RestrictedKind.NONE);
-        applyPlanningFields(p, p.getCompanyId(), req.reorderLevel(), req.reorderQty(),
-                req.safetyStock(), req.minStock(), req.maxStock(), req.leadTimeDays(),
-                req.purchasable(), req.preferredSupplierId());
+        // PRD-05: null = unchanged. A screen that does not show the 18+ flag must not clear it.
+        if (req.restrictedKind() != null) {
+            p.setRestrictedKind(req.restrictedKind());
+        }
+        applyPlanningUpdate(p, req);
+        // PRD-03: null = unchanged, blank = clear.
+        if (req.category() != null) {
+            p.setCategory(blankToNull(req.category()));
+        }
+        if (req.brand() != null) {
+            p.setBrand(blankToNull(req.brand()));
+        }
+        if (req.manufacturer() != null) {
+            p.setManufacturer(blankToNull(req.manufacturer()));
+        }
+        if (req.hsCode() != null) {
+            p.setHsCode(blankToNull(req.hsCode()));
+        }
+        if (req.imageUrl() != null) {
+            p.setImageUrl(blankToNull(req.imageUrl()));
+        }
+        if (req.notes() != null) {
+            p.setNotes(blankToNull(req.notes()));
+        }
+        // PRD-04: tracking flags (null = unchanged), refused while untracked stock exists.
+        applyTracking(p, req.lotTracked(), req.serialTracked(), req.expiryTracked(), true);
         p.setUpdatedAt(Instant.now());
         p.setUpdatedBy(actorId());
 
@@ -349,13 +384,38 @@ public class ProductServiceImpl implements ProductService {
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         Long branchId = branchGuard.resolveAndAssertSameCompany(p.getCompanyId(), req.branchUid());
 
-        if (productBranches.findByProductIdAndBranchId(p.getId(), branchId).isPresent()) {
-            throw new ConflictException("Product is already associated with that branch.");
+        // PRD-09: re-saving the Product Master re-sends every assigned branch, so an existing
+        // association is updated in place (only the overrides the request carries) rather than
+        // refused - the old 409 stopped the save at the first already-assigned branch.
+        java.util.Optional<ProductBranch> existing =
+                productBranches.findByProductIdAndBranchId(p.getId(), branchId);
+        if (existing.isPresent()) {
+            ProductBranch assoc = existing.get();
+            if (req.active() != null) {
+                assoc.setActive(req.active());
+            }
+            if (req.reorderLevel() != null) {
+                assoc.setReorderLevel(req.reorderLevel());
+            }
+            if (req.branchPrice() != null) {
+                assoc.setBranchPrice(req.branchPrice());
+            }
+            audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
+                    .detail(Map.of("action", "BRANCH_OVERRIDES",
+                            "branchUid", req.branchUid(),
+                            "active", String.valueOf(assoc.isActive()),
+                            "reorderLevel", String.valueOf(assoc.getReorderLevel()),
+                            "branchPrice", String.valueOf(assoc.getBranchPrice()))));
+            return ProductBranchDto.from(assoc);
         }
-        ProductBranch assoc = productBranches.save(new ProductBranch(p, branchId, actorId()));
+        ProductBranch assoc = new ProductBranch(p, branchId, actorId());
+        assoc.setActive(req.active() == null || req.active());
+        assoc.setReorderLevel(req.reorderLevel());
+        assoc.setBranchPrice(req.branchPrice());
+        assoc = productBranches.save(assoc);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BRANCH_ADD, "products", p.getId(), p.getUid())
                 .detail(Map.of("branchUid", req.branchUid())));
-        return ProductBranchDto.of(assoc.getBranchId(), assoc.getAssignedAt(), assoc.getAssignedBy());
+        return ProductBranchDto.from(assoc);
     }
 
     @Override
@@ -1052,6 +1112,95 @@ public class ProductServiceImpl implements ProductService {
         } else {
             p.setPreferredSupplierId(null);
         }
+    }
+
+    /**
+     * PRD-05: update-path planning fields - null means "unchanged" so a screen that does not show
+     * a field cannot wipe it; a field named in {@code clearFields} is cleared explicitly.
+     */
+    private void applyPlanningUpdate(Product p, UpdateProductRequest req) {
+        if (req.reorderLevel() != null) {
+            p.setReorderLevel(req.reorderLevel());
+        } else if (req.clears("reorderLevel")) {
+            p.setReorderLevel(null);
+        }
+        if (req.reorderQty() != null) {
+            p.setReorderQty(req.reorderQty());
+        } else if (req.clears("reorderQty")) {
+            p.setReorderQty(null);
+        }
+        if (req.safetyStock() != null) {
+            p.setSafetyStock(req.safetyStock());
+        } else if (req.clears("safetyStock")) {
+            p.setSafetyStock(null);
+        }
+        if (req.minStock() != null) {
+            p.setMinStock(req.minStock());
+        } else if (req.clears("minStock")) {
+            p.setMinStock(null);
+        }
+        if (req.maxStock() != null) {
+            p.setMaxStock(req.maxStock());
+        } else if (req.clears("maxStock")) {
+            p.setMaxStock(null);
+        }
+        if (req.leadTimeDays() != null) {
+            p.setLeadTimeDays(req.leadTimeDays());
+        } else if (req.clears("leadTimeDays")) {
+            p.setLeadTimeDays(null);
+        }
+        if (req.purchasable() != null) {
+            p.setPurchasable(req.purchasable());
+        }
+        if (req.preferredSupplierId() != null) {
+            // Same company-scoped validation as create (applyPlanningFields).
+            applyPlanningFields(p, p.getCompanyId(), p.getReorderLevel(), p.getReorderQty(),
+                    p.getSafetyStock(), p.getMinStock(), p.getMaxStock(), p.getLeadTimeDays(),
+                    null, req.preferredSupplierId());
+        } else if (req.clears("preferredSupplierId")) {
+            p.setPreferredSupplierId(null);
+        }
+    }
+
+    /**
+     * PRD-04: applies the lot/serial/expiry tracking flags (null = keep the current value).
+     *
+     * <p>Lot and serial tracking are mutually exclusive (DB CHECK chk_product_tracking_exclusive),
+     * and expiry dates live on batches, so expiry needs lot tracking. When {@code guardStock} is
+     * set, switching lot or serial tracking ON is refused while the item has stock on hand: that
+     * stock was received without batch/serial numbers, so it could never be issued again.
+     */
+    private void applyTracking(Product p, Boolean lot, Boolean serial, Boolean expiry,
+                               boolean guardStock) {
+        boolean newLot = lot != null ? lot : p.isLotTracked();
+        boolean newSerial = serial != null ? serial : p.isSerialTracked();
+        boolean newExpiry = expiry != null ? expiry : p.isExpiryTracked();
+        if (newLot && newSerial) {
+            throw new IllegalArgumentException(
+                    "An item can be tracked by batch/lot or by serial number, not both. Choose one.");
+        }
+        if (newExpiry && !newLot) {
+            throw new IllegalArgumentException(
+                    "Expiry dates are recorded on batches. Turn on batch/lot tracking to track expiry.");
+        }
+        boolean turningOn = (newLot && !p.isLotTracked()) || (newSerial && !p.isSerialTracked());
+        if (guardStock && turningOn && p.getId() != null
+                && stock.hasStockOnHand(p.getCompanyId(), p.getId())) {
+            throw new ConflictException(p.getName() + " has stock on hand that was received without "
+                    + "batch or serial numbers, so tracking cannot be switched on now. Count the stock "
+                    + "to zero first, or create a new item for the tracked stock.");
+        }
+        p.setLotTracked(newLot);
+        p.setSerialTracked(newSerial);
+        p.setExpiryTracked(newExpiry);
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String t = value.trim();
+        return t.isEmpty() ? null : t;
     }
 
     /**
