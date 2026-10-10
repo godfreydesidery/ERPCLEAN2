@@ -153,6 +153,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 BigDecimal.ONE, currency, companyId, req.receiptDate());
         BigDecimal settlementRate = settlementConv.rate();
 
+        // 3b. Tender must be one the ar_receipts CHECK admits (V11) — a friendly 400, not a
+        //     constraint error (ARC-18: the screen used to offer "Other").
+        String tenderType = normaliseTender(req.tenderType());
+
         // 4. Generate receipt number
         String receiptNumber = numberGen.nextReceipt(companyId);
 
@@ -165,11 +169,21 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 req.receiptDate(),
                 req.amount(),
                 currency,
-                req.tenderType(),
+                tenderType,
                 actorId());
         // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
         receipt.setFxRate(settlementRate);
         receipt.setRateAt(settlementConv.rateAt());
+        // ARC-18 / LSF-18: keep the M-Pesa code / transfer ref / cheque no. the cashier typed —
+        // it is how a disputed payment is traced later. Column is VARCHAR(80).
+        if (req.bankReference() != null && !req.bankReference().isBlank()) {
+            String ref = req.bankReference().trim();
+            if (ref.length() > 80) {
+                throw new IllegalArgumentException(
+                        "The payment reference is too long — use at most 80 characters.");
+            }
+            receipt.setBankReference(ref);
+        }
         // ADR-0041 D3: link the funding INBOUND cheque (lets a later bounce locate + reverse this receipt)
         if (req.chequeUid() != null && !req.chequeUid().isBlank()) {
             receipt.setChequeUid(req.chequeUid());
@@ -622,6 +636,20 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         if (allocated.compareTo(BigDecimal.ZERO) > 0
                 && unallocated.compareTo(BigDecimal.ZERO) > 0) return ArReceiptStatus.PARTIAL;
         return ArReceiptStatus.ALLOCATED;
+    }
+
+    /** The tender values the ar_receipts CHECK admits (V11 chk_ar_receipt_tender). */
+    static final java.util.Set<String> ALLOWED_TENDERS =
+            java.util.Set.of("CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CHEQUE", "CARD");
+
+    /** Upper-cased, trimmed tender; anything the CHECK would reject is a friendly 400. */
+    static String normaliseTender(String tender) {
+        String t = tender == null ? "" : tender.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ALLOWED_TENDERS.contains(t)) {
+            throw new IllegalArgumentException(
+                    "Choose how the customer paid: Cash, Bank transfer, Mobile money, Cheque or Card.");
+        }
+        return t;
     }
 
     /**

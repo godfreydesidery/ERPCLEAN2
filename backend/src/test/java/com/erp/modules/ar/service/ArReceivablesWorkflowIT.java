@@ -217,6 +217,18 @@ class ArReceivablesWorkflowIT extends PostgresIntegrationTest {
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
     }
 
+    // ── ARC-18 / LSF-18: the M-Pesa code is kept ──────────────────────────────
+
+    @Test
+    void receipt_keepsTheMobileMoneyReference() {
+        ArReceiptDto saved = receiptService.recordAndAllocate(new RecordReceiptRequest(companyUid,
+                kiboUid, new BigDecimal("5000"), TZS, LocalDate.now(), "MOBILE_MONEY",
+                " QJK7XY12AB ", List.of()));
+
+        assertThat(saved.bankReference()).isEqualTo("QJK7XY12AB");
+        assertThat(receiptService.getByUid(saved.uid()).bankReference()).isEqualTo("QJK7XY12AB");
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private String creditCustomer(String name) {

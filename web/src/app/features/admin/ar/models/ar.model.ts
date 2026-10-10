@@ -13,7 +13,8 @@
 export type ArInvoiceStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'WRITTEN_OFF';
 export type ArInvoiceSource = 'SALE' | 'OPENING_BALANCE';
 export type AgeingBucket = 'CURRENT' | 'D1_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
-export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'OTHER';
+/** Exactly the values the ar_receipts tender CHECK admits (V11) — there is no 'OTHER'. */
+export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CARD';
 
 // ── AR Invoice ────────────────────────────────────────────────────────────────
 

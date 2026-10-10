@@ -124,6 +124,33 @@ describe('RecordReceiptComponent — allocation guard', () => {
   });
 });
 
+describe('RecordReceiptComponent — tender and reference (ARC-18)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('offers only tenders the server accepts: Card instead of Other', () => {
+    makeBed();
+    const fixture = TestBed.createComponent(RecordReceiptComponent);
+    fixture.detectChanges();
+    const values = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('#tenderType option'),
+    ).map((o) => (o as HTMLOptionElement).value);
+    expect(values).toContain('CARD');
+    expect(values).not.toContain('OTHER');
+  });
+
+  it('sends the typed M-Pesa code as bankReference', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.tenderType.set('MOBILE_MONEY');
+    comp.bankReference.set(' QJK7XY12AB ');
+    comp.submit();
+    expect(ar.recordReceipt.mock.calls[0][0].bankReference).toBe('QJK7XY12AB');
+    expect(ar.recordReceipt.mock.calls[0][0].tenderType).toBe('MOBILE_MONEY');
+  });
+});
+
 describe('RecordReceiptComponent — the chosen customer\'s invoices only (ARC-02)', () => {
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
