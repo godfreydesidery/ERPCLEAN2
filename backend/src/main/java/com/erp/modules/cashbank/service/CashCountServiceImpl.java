@@ -21,6 +21,7 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.repository.GlConfigRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
@@ -47,6 +48,17 @@ import org.springframework.transaction.annotation.Transactional;
  * synchronously in-TX (fail-fast, like {@link CashDirectEntryServiceImpl}) against the till's OWN
  * linked GL account (not the generic {@code gl_configs.CASH}), and additionally writes a linked
  * {@code DIRECT_ENTRY} cash_transaction so the cash-book and GL move together to the counted amount.
+ *
+ * <p><b>ARC-01 — not on the sales cash account.</b> "Expected" is the till's cash-book balance
+ * (ADR-0050 D-7.2), but sales never write the cash book: a cash sale posts its gross straight to
+ * the GL {@code CASH} account (whatever the tender), and POS payouts and POS session variances
+ * post there too. Counting the account linked to GL {@code CASH} therefore "expected" roughly the
+ * debtor receipts and direct entries only, and booked the day's takings a second time as cash-over
+ * income (DR till / CR POS_CASH_OVER). Folding sales into "expected" was rejected: cash-tender
+ * payments net of change still miss POS payouts, POS session variances already posted, voids and
+ * the branch-less default account taking every branch's sales, so the figure could not be made
+ * to equal the drawer reliably. A count on that account is refused instead; that drawer is counted
+ * at the POS session close (ADR-0029), which ADR-0050's boundary note already required.
  */
 @Service
 @Transactional
@@ -57,6 +69,7 @@ public class CashCountServiceImpl implements CashCountService {
     private final CashBankAccountRepository         accounts;
     private final CashTransactionRepository         txns;
     private final CompanyRepository                 companies;
+    private final GlConfigRepository                glConfigs;
     private final CashBankNumberGenerator           numbers;
     private final GLConfigResolver                  glConfig;
     private final GLPostingService                  glPosting;
@@ -68,6 +81,7 @@ public class CashCountServiceImpl implements CashCountService {
                                  CashBankAccountRepository accounts,
                                  CashTransactionRepository txns,
                                  CompanyRepository companies,
+                                 GlConfigRepository glConfigs,
                                  CashBankNumberGenerator numbers,
                                  GLConfigResolver glConfig,
                                  GLPostingService glPosting,
@@ -78,6 +92,7 @@ public class CashCountServiceImpl implements CashCountService {
         this.accounts      = accounts;
         this.txns          = txns;
         this.companies     = companies;
+        this.glConfigs     = glConfigs;
         this.numbers       = numbers;
         this.glConfig      = glConfig;
         this.glPosting     = glPosting;
@@ -101,6 +116,7 @@ public class CashCountServiceImpl implements CashCountService {
         if (!till.isActive()) {
             throw new IllegalStateException("The selected till is inactive and cannot be counted.");
         }
+        assertNotTheSalesCashAccount(companyId, till);
         // One live count per till/day: a second non-reconciled count would derive the same expected
         // and reconcile independently, posting the variance to GL + the cash book twice (D-7 review).
         if (counts.existsByCashAccountIdAndBusinessDateAndStatusIn(
@@ -183,14 +199,19 @@ public class CashCountServiceImpl implements CashCountService {
                     "Record the denomination count before reconciling this cash count.");
         }
 
+        // ARC-01: a count opened on the sales cash account before this guard existed must not
+        // post either — its "over" is the day's takings, already in the GL through the sales.
+        CashBankAccount countedTill = accounts
+                .findByCompanyIdAndId(count.getCompanyId(), count.getCashAccountId())
+                .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
+        assertNotTheSalesCashAccount(count.getCompanyId(), countedTill);
+
         Long actor = actorId();
         BigDecimal variance = count.getVarianceAmount();
         String journalUid = null;
 
         if (variance != null && variance.compareTo(BigDecimal.ZERO) != 0) {
-            // Company-scoped reload (TenantScopingRulesTest) — never a bare findById.
-            CashBankAccount till = accounts.findByCompanyIdAndId(count.getCompanyId(), count.getCashAccountId())
-                    .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
+            CashBankAccount till = countedTill;
 
             String currency = count.getCurrency().value();
             BigDecimal abs = variance.abs();
@@ -270,6 +291,24 @@ public class CashCountServiceImpl implements CashCountService {
     }
 
     // -------------------------------------------------------------------------
+
+    /**
+     * ARC-01: refuses a count on the cash account linked to the GL {@code CASH} account that cash
+     * sales post to — its expected figure cannot see the sales, so any count there books the
+     * takings twice. See the class comment.
+     */
+    private void assertNotTheSalesCashAccount(Long companyId, CashBankAccount till) {
+        Long salesCashGl = glConfigs.findByCompanyIdAndConfigKey(companyId, GlConfigKey.CASH)
+                .map(c -> c.getAccountId())
+                .orElse(null);
+        if (salesCashGl != null && salesCashGl.equals(till.getGlAccountId())) {
+            throw new ConflictException(
+                    "This cash account receives your sales takings, so it cannot be counted here: "
+                            + "the count would record the day's sales a second time. Count this "
+                            + "drawer when you close the POS till session, or count a separate "
+                            + "cash till that does not take sales.");
+        }
+    }
 
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();

@@ -21,8 +21,10 @@ import com.erp.modules.cashbank.domain.enums.CashCountStatus;
 import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
 import com.erp.modules.cashbank.domain.enums.CashTxnType;
 import com.erp.modules.cashbank.repository.CashTransactionRepository;
+import com.erp.modules.gl.domain.dto.CreateAccountRequest;
 import com.erp.modules.gl.domain.entity.JournalEntry;
 import com.erp.modules.gl.domain.entity.JournalLine;
+import com.erp.modules.gl.domain.enums.AccountType;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
@@ -45,6 +47,7 @@ import com.erp.modules.iam.repository.PermissionRepository;
 import com.erp.modules.iam.repository.RoleRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
 import com.erp.modules.iam.service.UserRoleService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
@@ -148,10 +151,13 @@ class CashCountIT extends PostgresIntegrationTest {
         fiscalCalendarService.seedCurrentYear(company.getId());
         glConfigService.seedDefaults(company.getId());
 
-        String cashGlUid = glUid(company.getId(), "1000");
+        // ARC-01: the till under test has its OWN GL cash account. The seeded 1000 Cash is the
+        // GL CASH account cash sales post to, and a count on the till linked to it is refused.
+        String tillGlUid = chartOfAccountService.create(new CreateAccountRequest(
+                companyUid, "1010", "Front Till", AccountType.ASSET)).uid();
         till = accountService.create(new CreateCashBankAccountRequest(
                 companyUid, null, "Main Till", CashBankAccountType.CASH,
-                null, null, null, cashGlUid, false));
+                null, null, null, tillGlUid, false));
     }
 
     @AfterEach
@@ -308,6 +314,24 @@ class CashCountIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> cashCountService.open(
                 new OpenCashCountRequest(companyUid, bankAccount.uid(), LocalDate.now())))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // -------------------------------------------------------------------------
+    // ARC-01: no count on the cash account that cash sales post to
+    // -------------------------------------------------------------------------
+
+    @Test
+    void open_onTheTillLinkedToSalesCashGl_refused() {
+        CashBankAccountDto salesTill = accountService.create(new CreateCashBankAccountRequest(
+                companyUid, null, "Sales Till", CashBankAccountType.CASH,
+                null, null, null, glUid(company.getId(), "1000"), false));
+
+        assertThatThrownBy(() -> cashCountService.open(
+                new OpenCashCountRequest(companyUid, salesTill.uid(), LocalDate.now())))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("POS till session");
+        assertThat(cashCountService.listByAccount(company.getId(),
+                accountService.getByUid(salesTill.uid()).id())).isEmpty();
     }
 
     // -------------------------------------------------------------------------
