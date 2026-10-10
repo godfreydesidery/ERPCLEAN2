@@ -1,27 +1,20 @@
 package com.erp.modules.ar.events;
 
 import com.erp.modules.ar.domain.entity.ArReceipt;
-import com.erp.modules.ar.domain.entity.ArReceiptAllocation;
-import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
-import com.erp.modules.ar.repository.ArInvoiceRepository;
-import com.erp.modules.ar.repository.ArReceiptAllocationRepository;
 import com.erp.modules.ar.repository.ArReceiptRepository;
+import com.erp.modules.ar.service.ArReceiptReversalSupport;
 import com.erp.modules.cashbank.domain.dto.ChequeBouncedPayload;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
-import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -51,24 +44,18 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
 
     private final IdempotencyGuard guard;
     private final ArReceiptRepository receipts;
-    private final ArReceiptAllocationRepository allocations;
-    private final ArInvoiceRepository invoices;
-    private final CompanyRepository companies;
+    private final ArReceiptReversalSupport reversalSupport;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
 
     public ChequeBounceReversalHandler(IdempotencyGuard guard,
                                        ArReceiptRepository receipts,
-                                       ArReceiptAllocationRepository allocations,
-                                       ArInvoiceRepository invoices,
-                                       CompanyRepository companies,
+                                       ArReceiptReversalSupport reversalSupport,
                                        GLPostingSafeInvoker safeInvoker,
                                        ObjectMapper objectMapper) {
         this.guard        = guard;
-        this.receipts     = receipts;
-        this.allocations  = allocations;
-        this.invoices     = invoices;
-        this.companies    = companies;
+        this.receipts        = receipts;
+        this.reversalSupport = reversalSupport;
         this.safeInvoker  = safeInvoker;
         this.objectMapper = objectMapper;
     }
@@ -154,58 +141,14 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
             return;
         }
 
-        // Restore the invoice outstanding relieved by this receipt's allocations (face + base).
-        // Mirrors ArReceiptServiceImpl.reallocate restore math.
-        int baseScale = baseMinorUnits(companies.findById(companyId)
-                .map(c -> c.getBaseCurrency()).orElse("TZS"));
-        List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
-        for (ArReceiptAllocation alloc : allocs) {
-            invoices.findById(alloc.getArInvoiceId()).ifPresent(inv -> {
-                inv.setOutstandingAmount(inv.getOutstandingAmount().add(alloc.getAllocatedAmount()));
-                if (alloc.getBaseAllocatedAmount() != null) {
-                    BigDecimal invoiceRate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
-                    BigDecimal baseRelievedRestored = alloc.getAllocatedAmount()
-                            .multiply(invoiceRate).setScale(baseScale, RoundingMode.HALF_UP);
-                    BigDecimal newBase = (inv.getBaseOutstandingAmount() != null
-                            ? inv.getBaseOutstandingAmount() : BigDecimal.ZERO)
-                            .add(baseRelievedRestored);
-                    BigDecimal cap = inv.getBaseOriginalAmount() != null
-                            ? inv.getBaseOriginalAmount() : inv.getOriginalAmount();
-                    inv.setBaseOutstandingAmount(newBase.min(cap));
-                }
-                inv.setStatus(deriveInvoiceStatus(inv.getOutstandingAmount(), inv.getOriginalAmount()));
-                inv.setUpdatedAt(Instant.now());
-                invoices.save(inv);
-            });
-        }
-
-        // The GL reversal put the WHOLE receipt back on AR-control (allocated + on-account), so
-        // nothing of it is on account any more. Leaving a remainder would keep netting it off the
-        // sub-ledger and the AR reconciliation would read short by exactly that amount.
-        receipt.setUnallocatedAmount(BigDecimal.ZERO);
-        // Stamp reversal markers (append-only on the header; the journal itself is never mutated).
-        receipt.setReversedAt(Instant.now());
-        receipt.setUpdatedAt(Instant.now());
-        receipts.save(receipt);
+        // Restore the invoice outstanding relieved by this receipt's allocations (face + base),
+        // zero the on-account remainder (the GL reversal put the WHOLE receipt back on AR-control)
+        // and stamp reversed_at — shared with the manual "reverse receipt" command (ARC-04).
+        reversalSupport.restoreAndMarkReversed(receipt, null /* SYSTEM actor */);
 
         log.info("ChequeBounceReversalHandler: reversed receipt uid={} (reversal entry {}) for "
                         + "bounced cheque uid={} company={}",
                 receipt.getUid(), reversal.uid(), payload.chequeUid(), companyId);
-    }
-
-    private static ArInvoiceStatus deriveInvoiceStatus(BigDecimal outstanding, BigDecimal original) {
-        if (outstanding.compareTo(BigDecimal.ZERO) == 0) return ArInvoiceStatus.PAID;
-        if (outstanding.compareTo(original) < 0) return ArInvoiceStatus.PARTIAL;
-        return ArInvoiceStatus.OPEN;
-    }
-
-    private static int baseMinorUnits(String currencyCode) {
-        if (currencyCode == null) return 2;
-        return switch (currencyCode) {
-            case "TZS", "JPY", "KRW" -> 0;
-            case "BHD", "KWD", "OMR" -> 3;
-            default -> 2;
-        };
     }
 
     private ChequeBouncedPayload deserialise(String json) {

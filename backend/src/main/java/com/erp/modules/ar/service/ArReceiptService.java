@@ -20,6 +20,14 @@ public interface ArReceiptService {
      */
     ArReceiptDto reallocate(String receiptUid, java.util.List<RecordReceiptRequest.AllocationLineRequest> allocations);
 
+    /**
+     * Reverse a posted receipt (ARC-04): posts the reversing journal of its cash leg, writes the
+     * opposite cash-book row on the same cash/bank account, restores the invoices its allocations
+     * relieved and stamps {@code reversed_at}. Refused when already reversed, when the receipt's
+     * own accounting period is closed, or when withholding tax was deducted from it.
+     */
+    ArReceiptDto reverse(String receiptUid, String reason);
+
     ArReceiptDto getByUid(String uid);
 
     Page<ArReceiptDto> listByCompany(Long companyId, Pageable pageable);

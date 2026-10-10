@@ -24,6 +24,7 @@ import com.erp.modules.cashbank.service.CashBankAccountResolver;
 import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.service.FiscalPeriodResolver;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
@@ -35,6 +36,7 @@ import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.AccountingSetupException;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
@@ -48,9 +50,14 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -90,6 +97,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final ArCustomerNames customerNames;
+    private final FiscalPeriodResolver fiscalPeriods;
+    private final ArReceiptReversalSupport reversalSupport;
 
     private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
 
@@ -108,8 +117,12 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
-                                 ArCustomerNames customerNames) {
+                                 ArCustomerNames customerNames,
+                                 FiscalPeriodResolver fiscalPeriods,
+                                 ArReceiptReversalSupport reversalSupport) {
         this.customerNames           = customerNames;
+        this.fiscalPeriods           = fiscalPeriods;
+        this.reversalSupport         = reversalSupport;
         this.receipts                = receipts;
         this.invoices                = invoices;
         this.allocations             = allocations;
@@ -523,6 +536,85 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     }
 
     @Override
+    public ArReceiptDto reverse(String receiptUid, String reason) {
+        ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(receiptUid), "ArReceipt", receiptUid);
+        Long companyId = receipt.getCompanyId();
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        String why = reason == null ? "" : reason.trim();
+        if (why.isEmpty()) {
+            throw new IllegalArgumentException("Give a reason for reversing this receipt.");
+        }
+        if (why.length() > 200) {
+            throw new IllegalArgumentException("Keep the reason to 200 characters or fewer.");
+        }
+        if (receipt.getReversedAt() != null) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " has already been reversed.");
+        }
+        if (receipt.getGlEntryUid() == null) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " has no ledger entry, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // The receipt's own period must still be open: undoing money in a period that has been
+        // closed (and possibly reported) is an accountant's decision, not a cashier correction.
+        try {
+            fiscalPeriods.resolveOpen(companyId, receipt.getReceiptDate());
+        } catch (AccountingSetupException closed) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber() + " is dated "
+                    + receipt.getReceiptDate().format(
+                            DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                    + ", in an accounting period that is closed, so it cannot be reversed."
+                    + " Ask your accountant to reopen the period or post a correcting journal.");
+        }
+
+        // Withholding tax: the receipt carries a WHT certificate the reversal cannot cancel, so
+        // reversing it here would leave the certificate claiming tax that was never withheld.
+        // The cash book holds the NET cash, so a shortfall against the receipt amount is the WHT.
+        Optional<BigDecimal> cashIn = cashTxnRecorder.settledAmount(
+                companyId, receipt.getUid(), CashTxnType.AR_RECEIPT, CashTxnDirection.IN);
+        if (cashIn.isPresent() && cashIn.get().compareTo(receipt.getAmount()) < 0) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " had withholding tax deducted, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // Dated today (never before the receipt itself), like a bounced-cheque reversal.
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate reversalDate = today.isBefore(receipt.getReceiptDate())
+                ? receipt.getReceiptDate() : today;
+
+        // APPEND-ONLY reversal of the receipt's journal: every leg swapped (DR AR / CR Cash, and
+        // the FX leg if any), so debits equal credits by construction. Same TX: a GL refusal rolls
+        // back the whole command and leaves the sub-ledger untouched.
+        JournalEntryDto reversal = glPosting.postReversal(
+                receipt.getGlEntryUid(), reversalDate, JournalSourceType.AR_RECEIPT,
+                receipt.getUid(), actorId(),
+                "receipt " + receipt.getReceiptNumber() + " reversed: " + why);
+
+        // The cash book moves with the GL: the opposite row on the same cash/bank account.
+        cashTxnRecorder.recordSettlementReversal(
+                companyId, receipt.getUid(), CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
+                reversal.uid(), reversalDate,
+                "Reversal of receipt " + receipt.getReceiptNumber() + " - " + why, actorId());
+
+        receipt = reversalSupport.restoreAndMarkReversed(receipt, actorId());
+
+        audit.record(AuditEvent.of(AuditActions.AR_RECEIPT_REVERSE, "ar_receipts",
+                        receipt.getId(), receipt.getUid())
+                .detail(Map.of(
+                        "receiptNumber", receipt.getReceiptNumber(),
+                        "amount", receipt.getAmount().toPlainString(),
+                        "reversalEntryUid", reversal.uid(),
+                        "reason", why)));
+
+        List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
+        return named(companyId, toDto(receipt, allocs, invoices));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public ArReceiptDto getByUid(String uid) {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(uid), "ArReceipt", uid);
@@ -724,6 +816,6 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
                 r.getReceiptNumber(), r.getReceiptDate(), r.getAmount(), r.getUnallocatedAmount(),
                 r.getCurrency().value(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
-                r.getStatus(), allocDtos);
+                r.getStatus(), allocDtos).withReversedAt(r.getReversedAt());
     }
 }

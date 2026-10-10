@@ -10,6 +10,7 @@ import com.erp.platform.audit.AuditService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,5 +77,103 @@ public class CashTransactionRecorder {
                         "accountId",   String.valueOf(cashBankAccountId))));
 
         return txn.getId();
+    }
+
+    /**
+     * The amount of the live settlement row a document wrote (ARC-04): the {@code txnType} /
+     * {@code direction} row whose {@code source_ref} is the document uid and which is not itself a
+     * reversal. Empty for a document recorded before the cash book existed.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<BigDecimal> settledAmount(Long companyId, String sourceRef,
+                                              CashTxnType txnType, CashTxnDirection direction) {
+        return findSettlement(companyId, sourceRef, txnType, direction).map(CashTransaction::getAmount);
+    }
+
+    private Optional<CashTransaction> findSettlement(Long companyId, String sourceRef,
+                                                     CashTxnType txnType, CashTxnDirection direction) {
+        return txns.findByCompanyIdAndSourceRef(companyId, sourceRef).stream()
+                .filter(t -> t.getTxnType() == txnType && t.getDirection() == direction
+                        && t.getReversalOfTransactionId() == null)
+                .findFirst();
+    }
+
+    /**
+     * Appends the mirror of a settlement row (ARC-04): same account, amount and currency, the
+     * opposite direction, linked back through {@code reversal_of_transaction_id}. The original row
+     * is never touched (the cash book is append-only like the GL).
+     *
+     * @return the saved reversal row id, or empty when the document has no live settlement row
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Long> recordSettlementReversal(Long companyId, String sourceRef,
+                                                   CashTxnType txnType, CashTxnDirection direction,
+                                                   String journalEntryRef, LocalDate txnDate,
+                                                   String memo, Long actorId) {
+        CashTransaction original = findSettlement(companyId, sourceRef, txnType, direction)
+                .orElse(null);
+        if (original == null) {
+            return Optional.empty();
+        }
+        CashTxnDirection opposite = original.getDirection() == CashTxnDirection.IN
+                ? CashTxnDirection.OUT : CashTxnDirection.IN;
+        String txnNumber = numbers.nextTransaction(original.getCompanyId());
+        CashTransaction txn = new CashTransaction(
+                original.getCompanyId(), original.getBranchId(), original.getCashBankAccountId(),
+                txnNumber, txnDate,
+                opposite, original.getAmount(), original.getCurrency().value(),
+                original.getTxnType(), original.getSourceRef(), original.getCounterGlAccountId(),
+                truncate(memo, 255), actorId);
+        txn.setJournalEntryRef(journalEntryRef);
+        txn.setReversalOfTransactionId(original.getId());
+        txn = txns.save(txn);
+
+        audit.record(AuditEvent.of(AuditActions.CASH_SETTLEMENT_RECORD, "cash_transactions",
+                        txn.getId(), txn.getUid())
+                .detail(Map.of(
+                        "txnType",       original.getTxnType().name(),
+                        "sourceRef",     original.getSourceRef() != null ? original.getSourceRef() : "",
+                        "amount",        original.getAmount().toPlainString(),
+                        "accountId",     String.valueOf(original.getCashBankAccountId()),
+                        "reversalOfTxn", String.valueOf(original.getId()))));
+        return Optional.of(txn.getId());
+    }
+
+    /**
+     * A cash/bank account paying money into (or receiving it back from) a petty-cash fund
+     * (ARC-10). Written as a DIRECT_ENTRY whose counter account is the petty-cash GL account, so
+     * the cash book of the source account moves with the GL it was posted to.
+     *
+     * @return the saved row id
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Long recordPettyCashFunding(Long companyId, Long branchId, Long cashBankAccountId,
+                                       CashTxnDirection direction, BigDecimal amount,
+                                       String currency, Long pettyCashGlAccountId,
+                                       String sourceRef, String journalEntryRef,
+                                       LocalDate txnDate, String memo, Long actorId) {
+        String txnNumber = numbers.nextTransaction(companyId);
+        CashTransaction txn = new CashTransaction(
+                companyId, branchId, cashBankAccountId,
+                txnNumber, txnDate,
+                direction, amount, currency,
+                CashTxnType.DIRECT_ENTRY, sourceRef, pettyCashGlAccountId,
+                truncate(memo, 255), actorId);
+        txn.setJournalEntryRef(journalEntryRef);
+        txn = txns.save(txn);
+
+        audit.record(AuditEvent.of(AuditActions.CASH_SETTLEMENT_RECORD, "cash_transactions",
+                        txn.getId(), txn.getUid())
+                .detail(Map.of(
+                        "txnType",   CashTxnType.DIRECT_ENTRY.name(),
+                        "sourceRef", sourceRef != null ? sourceRef : "",
+                        "amount",    amount.toPlainString(),
+                        "accountId", String.valueOf(cashBankAccountId))));
+        return txn.getId();
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() <= max ? s : s.substring(0, max);
     }
 }

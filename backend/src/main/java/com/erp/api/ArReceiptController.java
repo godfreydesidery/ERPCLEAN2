@@ -3,6 +3,7 @@ package com.erp.api;
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
 import com.erp.modules.ar.domain.dto.ReallocateReceiptRequest;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest;
+import com.erp.modules.ar.domain.dto.ReverseReceiptRequest;
 import com.erp.modules.ar.service.ArReceiptService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -60,6 +61,19 @@ public class ArReceiptController {
     public ArReceiptDto reallocate(@PathVariable String uid,
                                    @Valid @RequestBody ReallocateReceiptRequest req) {
         return service.reallocate(uid, req.allocations());
+    }
+
+    /**
+     * Reverse a posted receipt (ARC-04): a receipt keyed against the wrong customer, for the wrong
+     * amount, or for money that never arrived. Posts the reversing journal, writes the opposite
+     * cash-book row and restores the invoices it settled. Gated by AR.RECEIPT.REVERSE (finance
+     * seats only) and scoped to the receipt's company. The reason is required.
+     */
+    @PostMapping("/uid/{uid}/reverse")
+    @PreAuthorize("@perm.scoped(#uid,'arreceipt','AR.RECEIPT.REVERSE')")
+    public ArReceiptDto reverse(@PathVariable String uid,
+                                @Valid @RequestBody ReverseReceiptRequest req) {
+        return service.reverse(uid, req.reason());
     }
 
     /** Single receipt by uid. */
