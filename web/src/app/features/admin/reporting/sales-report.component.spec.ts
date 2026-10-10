@@ -137,6 +137,33 @@ describe('SalesReportComponent', () => {
     expect(text).toContain('margin total covers only part');
   });
 
+  it('omits the Margin column when the server withholds cost (costVisible=false)', async () => {
+    // Owner ruling 2026-10-10 (ADM-14): counter staff without INVENTORY.VALUATION.VIEW keep the
+    // report but not the margin. A withheld margin must not read as "not costed" either.
+    const withheld: SalesReportDto = {
+      ...MOCK_REPORT,
+      rows: [{ ...MOCK_REPORT.rows[0], margin: null }],
+      totals: { ...MOCK_REPORT.totals, margin: null, marginRowsUnknown: 1 },
+      costVisible: false,
+    };
+    makeBed({ salesReportSpy: vi.fn(() => of(withheld)) });
+    const fixture = TestBed.createComponent(SalesReportComponent);
+    const comp = fixture.componentInstance;
+    comp.fromDate.set('2026-07-01');
+    comp.toDate.set('2026-07-19');
+    comp.run();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const headers = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('thead th'),
+    ).map((th) => th.textContent?.trim());
+    expect(headers).not.toContain('Margin');
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).not.toContain('not costed');
+    expect(text).not.toContain('margin total covers only part');
+  });
+
   it('run() calls salesReport with the filled filter form', () => {
     const { salesReportSpy } = makeBed();
     const comp = TestBed.createComponent(SalesReportComponent).componentInstance;
