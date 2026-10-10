@@ -84,4 +84,18 @@ describe('PurchaseReturnService', () => {
 
     expect((result as { status: string }).status).toBe('CONFIRMED');
   });
+
+  it('exportBlob() GETs /uid/{uid}/export with the format, as a blob', () => {
+    let result: Blob | undefined;
+    service.exportBlob('RET1', 'XLSX').subscribe((b) => (result = b));
+
+    const req = http.expectOne(
+      (r) => r.url === `${BASE}/uid/RET1/export` && r.params.get('format') === 'XLSX',
+    );
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+    req.flush(new Blob(['x']));
+
+    expect(result).toBeInstanceOf(Blob);
+  });
 });

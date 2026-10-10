@@ -32,6 +32,10 @@ import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptLineRequest;
 import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
+import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
+import com.erp.modules.documents.service.DocumentRenderService;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
@@ -116,6 +120,8 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     @Autowired private ProductService          productService;
     @Autowired private UnitOfMeasureService    unitService;
     @Autowired private PurchaseSettingsService purchaseSettingsService;
+    @Autowired private PurchaseReturnService   purchaseReturnService;
+    @Autowired private DocumentRenderService   documentRenderService;
     @Autowired private PurchaseOrderRepository   poRepo;
     @Autowired private PurchaseOrderLineRepository poLineRepo;
     @Autowired private GoodsReceiptRepository    grRepo;
@@ -319,6 +325,57 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
 
         assertThat(printed.lines()).hasSize(1);
         assertThat(printed.lines().get(0).lastCostPrice()).isNull();
+    }
+
+    /**
+     * Kilimanjaro "cannot print purchase return": the print model's native SQL resolves against a
+     * real database — the GRN and PO numbers, the supplier, the lines in the line's unit, the stored
+     * totals, a formatted (not ISO) date — and the stream-only PDF renders from it.
+     */
+    @Test
+    void purchaseReturnPrintByUid_resolvesTheNoteAndRendersAPdf() {
+        ProductDto product = stockableProduct("ReturnPrint-Widget");
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("10"), new BigDecimal("250"));
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(placed.lines().get(0).uid(), new BigDecimal("10")))));
+
+        PurchaseReturnDto ret = purchaseReturnService.create(new CreatePurchaseReturnRequest(
+                companyA.getUid(), gr.uid(), "Damaged in transit",
+                List.of(new CreatePurchaseReturnRequest.ReturnLineRequest(
+                        gr.lines().get(0).uid(), new BigDecimal("4")))));
+
+        PurchaseReturnPrintDto printed = purchaseReturnService.printByUid(ret.uid());
+
+        assertThat(printed.returnNumber()).isEqualTo(ret.returnNumber());
+        assertThat(printed.status()).isEqualTo("DRAFT");
+        assertThat(printed.goodsReceiptNumber()).isEqualTo(gr.receiptNumber());
+        assertThat(printed.purchaseOrderNumber()).isEqualTo(placed.orderNumber());
+        assertThat(printed.supplierName()).isEqualTo("Test Supplier");
+        assertThat(printed.reason()).isEqualTo("Damaged in transit");
+        assertThat(printed.returnDate()).matches("\\d{2}-[A-Z][a-z]{2}-\\d{4}");
+        assertThat(printed.debitNoteNumber()).isNull();
+        assertThat(printed.lines()).hasSize(1);
+        var line = printed.lines().get(0);
+        assertThat(line.productCode()).isEqualTo(product.code());
+        assertThat(line.returnedQty()).isEqualByComparingTo("4");
+        assertThat(line.unitCost()).isEqualByComparingTo("250");
+        assertThat(line.lineValue()).isEqualByComparingTo("1000");
+        assertThat(printed.netAmount()).isEqualByComparingTo("1000.00");
+        assertThat(printed.totalAmount()).isEqualByComparingTo("1000.00");
+
+        byte[] pdf = documentRenderService.renderPurchaseReturn(printed);
+        assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+    }
+
+    /** A uid that does not exist is a friendly not-found, never a stack trace. */
+    @Test
+    void purchaseReturnPrintByUid_unknownUidIsNotFound() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> purchaseReturnService.printByUid("01J00000000000000000000XXX"))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class)
+                .hasMessage("Purchase return not found.");
     }
 
     /**

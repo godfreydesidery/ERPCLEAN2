@@ -95,6 +95,45 @@
                 <p class="text-danger small mt-2" role="alert">{{ msg }}</p>
               }
             }
+
+            @if (canPrint()) {
+              <div class="mt-3 d-flex flex-wrap gap-2 align-items-center"
+                   role="group" aria-label="Print or export purchase return">
+                <button type="button" class="btn btn-outline-secondary"
+                        [disabled]="exporting() !== null"
+                        (click)="download('PDF')">
+                  @if (exporting() === 'PDF') {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-printer me-1" aria-hidden="true"></i>
+                  }
+                  Print PDF
+                </button>
+                <button type="button" class="btn btn-outline-secondary"
+                        [disabled]="exporting() !== null"
+                        (click)="download('XLSX')">
+                  @if (exporting() === 'XLSX') {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-file-earmark-excel me-1" aria-hidden="true"></i>
+                  }
+                  Export Excel
+                </button>
+                <button type="button" class="btn btn-outline-secondary"
+                        [disabled]="exporting() !== null"
+                        (click)="download('CSV')">
+                  @if (exporting() === 'CSV') {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  } @else {
+                    <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>
+                  }
+                  Export CSV
+                </button>
+                @if (exportError(); as msg) {
+                  <span class="text-danger small align-self-center" role="alert">{{ msg }}</span>
+                }
+              </div>
+            }
           </div>
         </div>
 
