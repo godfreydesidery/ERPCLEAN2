@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -14,7 +15,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -53,17 +53,20 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
     private final InventoryValuationService valuation;
     private final InventoryGlPoster         glPoster;
     private final ObjectMapper              objectMapper;
+    private final CompanyCalendar calendar;
 
     public DeliveryReturnStockHandler(IdempotencyGuard guard,
                                       StockPostingService posting,
                                       InventoryValuationService valuation,
                                       InventoryGlPoster glPoster,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      CompanyCalendar calendar) {
         this.guard        = guard;
         this.posting      = posting;
         this.valuation    = valuation;
         this.glPoster     = glPoster;
         this.objectMapper = objectMapper;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -103,9 +106,7 @@ public class DeliveryReturnStockHandler implements DomainEventHandler {
 
             // Post one DR INVENTORY / CR COGS GL journal for the entire return (ADR-0021 D-11)
             if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
-                LocalDate postingDate = payload.returnedAt() != null
-                        ? payload.returnedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                        : LocalDate.now();
+                LocalDate postingDate = calendar.dateOf(event.getCompanyId(), payload.returnedAt());
                 String glEntryUid = glPoster.postSaleReversalInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
                         payload.returnUid(), payload.returnNumber(), "TZS", totalOriginalValue);

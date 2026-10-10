@@ -7,6 +7,7 @@ import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -14,7 +15,6 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,19 +47,22 @@ public class SaleReversalStockHandler implements DomainEventHandler {
     private final InventoryValuationService  valuation;
     private final InventoryGlPoster          glPoster;
     private final ObjectMapper               objectMapper;
+    private final CompanyCalendar calendar;
 
     public SaleReversalStockHandler(IdempotencyGuard guard,
                                      StockPostingService posting,
                                      StockMovementRepository movementRepository,
                                      InventoryValuationService valuation,
                                      InventoryGlPoster glPoster,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     CompanyCalendar calendar) {
         this.guard              = guard;
         this.posting            = posting;
         this.movementRepository = movementRepository;
         this.valuation          = valuation;
         this.glPoster           = glPoster;
         this.objectMapper       = objectMapper;
+        this.calendar           = calendar;
     }
 
     @Override
@@ -143,7 +146,7 @@ public class SaleReversalStockHandler implements DomainEventHandler {
             // Post one GL journal DR INVENTORY / CR COGS for the entire void (D-5).
             if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
                 String glEntryUid = glPoster.postSaleReversalInNewTx(
-                        event.getCompanyId(), event.getBranchId(), LocalDate.now(),
+                        event.getCompanyId(), event.getBranchId(), calendar.today(event.getCompanyId()),
                         payload.invoiceUid(), payload.invoiceNumber(), "TZS", totalOriginalValue);
                 if (glEntryUid == null) {
                     log.warn("SaleReversalStockHandler: sale reversal GL post returned null " +

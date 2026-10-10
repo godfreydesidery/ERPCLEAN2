@@ -74,7 +74,9 @@ class StandingOrderSweepPrincipalTest {
                 mock(com.erp.modules.products.repository.UnitOfMeasureRepository.class),
                 mock(com.erp.platform.events.OutboxPublisher.class),
                 mock(com.erp.platform.security.ScopeGuard.class),
-                mock(com.erp.platform.audit.AuditService.class));
+                mock(com.erp.platform.audit.AuditService.class),
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                        com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     private static StandingOrder dueOrder() {

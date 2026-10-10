@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.service.InventoryGlPoster;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockPostingService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -12,7 +13,6 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -41,17 +41,20 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
     private final InventoryValuationService valuation;
     private final InventoryGlPoster         glPoster;
     private final ObjectMapper              objectMapper;
+    private final CompanyCalendar calendar;
 
     public PurchaseReturnStockHandler(IdempotencyGuard guard,
                                        StockPostingService posting,
                                        InventoryValuationService valuation,
                                        InventoryGlPoster glPoster,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       CompanyCalendar calendar) {
         this.guard        = guard;
         this.posting      = posting;
         this.valuation    = valuation;
         this.glPoster     = glPoster;
         this.objectMapper = objectMapper;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -134,7 +137,7 @@ public class PurchaseReturnStockHandler implements DomainEventHandler {
                             payload.purchaseReturnUid());
                 }
                 String glEntryUid = glPoster.postPurchaseReturnInNewTx(
-                        payload.companyId(), payload.branchId(), LocalDate.now(),
+                        payload.companyId(), payload.branchId(), calendar.today(payload.companyId()),
                         payload.purchaseReturnUid(), payload.returnNumber(), currency, totalReturnValue);
                 if (glEntryUid == null) {
                     log.warn("PurchaseReturnStockHandler: GL post returned null for return={} " +

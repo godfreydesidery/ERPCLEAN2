@@ -7,6 +7,7 @@ import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.sales.domain.dto.DropshipFulfilledPayload;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -14,9 +15,7 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,15 +51,18 @@ public class DropshipFulfilCogsHandler implements DomainEventHandler {
     private final GLPostingSafeInvoker glInvoker;
     private final GLConfigResolver    glConfig;
     private final ObjectMapper        objectMapper;
+    private final CompanyCalendar calendar;
 
     public DropshipFulfilCogsHandler(IdempotencyGuard guard,
                                       GLPostingSafeInvoker glInvoker,
                                       GLConfigResolver glConfig,
-                                      ObjectMapper objectMapper) {
+                                      ObjectMapper objectMapper,
+                                      CompanyCalendar calendar) {
         this.guard        = guard;
         this.glInvoker    = glInvoker;
         this.glConfig     = glConfig;
         this.objectMapper = objectMapper;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -102,9 +104,7 @@ public class DropshipFulfilCogsHandler implements DomainEventHandler {
         var cogsAcct = glConfig.resolve(event.getCompanyId(), GlConfigKey.COGS);
         var grniAcct = glConfig.resolve(event.getCompanyId(), GlConfigKey.GRNI);
 
-        LocalDate postingDate = event.getOccurredAt() != null
-                ? event.getOccurredAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        LocalDate postingDate = calendar.dateOf(event.getCompanyId(), event.getOccurredAt());
 
         var draft = new JournalEntryDraft(
                 event.getCompanyId(), event.getBranchId(), postingDate,

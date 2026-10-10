@@ -4,6 +4,7 @@ import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -11,7 +12,6 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -40,15 +40,18 @@ public class SalesPostingHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public SalesPostingHandler(IdempotencyGuard guard,
                                 SalesInvoiceService salesInvoiceService,
                                 GLPostingSafeInvoker safeInvoker,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                CompanyCalendar calendar) {
         this.guard               = guard;
         this.salesInvoiceService = salesInvoiceService;
         this.safeInvoker         = safeInvoker;
         this.objectMapper        = objectMapper;
+        this.calendar            = calendar;
     }
 
     @Override
@@ -111,9 +114,9 @@ public class SalesPostingHandler implements DomainEventHandler {
             return;
         }
 
-        LocalDate postingDate = totals.finalisedAt() != null
-                ? totals.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        // Business date in the COMPANY's zone (owner ruling 2026-10-10): a 00:30 EAT sale on the 1st
+        // is 21:30 UTC on the last day of the previous month, and belongs to the 1st.
+        LocalDate postingDate = calendar.dateOf(companyId, totals.finalisedAt());
 
         // Resolve accounts AND post inside ONE REQUIRES_NEW TX (ADR-0013 D-6). Account resolution
         // must NOT run in this handler's (dispatchOne's) TX — a missing gl_config there would mark

@@ -12,6 +12,7 @@ import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockBatchService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.modules.stock.service.StockSerialService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -20,7 +21,6 @@ import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -58,6 +58,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
     private final StockSerialService         serialService;
     private final StockLocationRepository    locationRepo;
     private final ObjectMapper               objectMapper;
+    private final CompanyCalendar calendar;
 
     public GoodsReceiptStockHandler(IdempotencyGuard guard,
                                      StockPostingService posting,
@@ -67,7 +68,8 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
                                      StockBatchService batchService,
                                      StockSerialService serialService,
                                      StockLocationRepository locationRepo,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     CompanyCalendar calendar) {
         this.guard          = guard;
         this.posting        = posting;
         this.productService = productService;
@@ -77,6 +79,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
         this.serialService  = serialService;
         this.locationRepo   = locationRepo;
         this.objectMapper   = objectMapper;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -173,9 +176,7 @@ public class GoodsReceiptStockHandler implements DomainEventHandler {
 
             // (5) Post one GL journal DR INVENTORY / CR GRNI for the whole receipt (D-4a).
             if (!glLegs.isEmpty()) {
-                LocalDate postingDate = payload.receivedAt() != null
-                        ? payload.receivedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                        : LocalDate.now();
+                LocalDate postingDate = calendar.dateOf(event.getCompanyId(), payload.receivedAt());
                 String glEntryUid = glPoster.postReceiptInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
                         payload.receiptUid(), payload.receiptNumber(), "TZS", glLegs);

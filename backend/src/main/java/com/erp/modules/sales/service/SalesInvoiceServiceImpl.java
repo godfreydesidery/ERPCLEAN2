@@ -39,6 +39,7 @@ import com.erp.modules.sales.domain.dto.TaxRateDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
@@ -67,7 +68,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -139,6 +139,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final DeliveryService deliveryService;
     /** SAL-02: a POS sale whose till session is still OPEN is reversed at the till, not here. */
     private final com.erp.modules.sales.repository.PosSessionRepository posSessions;
+    private final CompanyCalendar calendar;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -172,7 +173,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    CreditExposureCalculator creditExposure,
                                    CounterAgentProvisioner counterAgents,
                                    DeliveryService deliveryService,
-                                   com.erp.modules.sales.repository.PosSessionRepository posSessions) {
+                                   com.erp.modules.sales.repository.PosSessionRepository posSessions,
+                                   CompanyCalendar calendar) {
         this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
@@ -206,6 +208,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.creditExposure = creditExposure;
         this.deliveryService = deliveryService;
         this.posSessions = posSessions;
+        this.calendar    = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -276,9 +279,6 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return invoices.findByCompanyId(companyId, pageable).map(this::toDto);
     }
 
-    /** Calendar days on the list's date filter are the house time zone's days. */
-    private static final java.time.ZoneId LIST_ZONE = java.time.ZoneId.of("Africa/Dar_es_Salaam");
-
     @Override
     @Transactional(readOnly = true)
     public Page<SalesInvoiceDto> list(Long companyId, String q, String status, LocalDate fromDate,
@@ -297,9 +297,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             throw new IllegalArgumentException("The end date cannot be before the start date.");
         }
         Instant from = fromDate != null
-                ? fromDate.atStartOfDay(LIST_ZONE).toInstant() : Instant.EPOCH;
+                ? calendar.startOfDay(companyId, fromDate) : Instant.EPOCH;
         Instant to = toDate != null
-                ? toDate.plusDays(1).atStartOfDay(LIST_ZONE).toInstant()
+                ? calendar.endOfDayExclusive(companyId, toDate)
                 : Instant.parse("9999-12-31T00:00:00Z");
         boolean anyText = q == null || q.isBlank();
         String pattern = anyText ? "%" : "%" + q.strip().toLowerCase()
@@ -405,7 +405,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // without a rate — OQ-FX-06). The poster (GLPostingSafeInvoker) re-applies the same effective
         // rate on the same posting date, so the stamped base equals the posted-journal base.
         ConvertedAmount fxConv = fxConverter.toBase(
-                inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(), LocalDate.now());
+                inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(),
+                calendar.today(inv.getCompanyId()));
         inv.setFxRate(fxConv.rate());
         inv.setBaseGrossTotalAmount(fxConv.baseAmount());
         inv.setRateAt(fxConv.rateAt());
@@ -470,7 +471,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 CreditExposureCalculator.Assessment exposure = creditExposure.assess(
                         inv.getCompanyId(), inv.getCustomerId(), unpaidOnThisInvoice,
                         com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
-                        creditLimit, LocalDate.now());
+                        creditLimit, calendar.today(inv.getCompanyId()));
                 if (exposure.breached()) {
                     boolean hasOverride = permissionResolver.hasPermission(
                             RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
@@ -773,7 +774,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 LinePriceResolver.query(inv.getCompanyId(), product.getId(), unit.getId(),
                         LinePriceResolver.pricingCustomer(customers, inv.getCompanyId(),
                                 inv.getCustomerId()),
-                        inv.getCurrency() == null ? null : inv.getCurrency().value(), quantity),
+                        inv.getCurrency() == null ? null : inv.getCurrency().value(), quantity,
+                        calendar.today(inv.getCompanyId())),
                 statedPrice);
         BigDecimal listPrice = resolvedPrice.amount();
 
@@ -1245,7 +1247,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             Long companyId, java.time.LocalDate start, java.time.LocalDate end) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        // Direct JPQL projection — finalised invoices with finalised_at::date in [start, end].
+        // Direct JPQL projection — finalised invoices whose finalised_at falls on [start, end] in
+        // the COMPANY's zone (owner ruling 2026-10-10): a 00:30 EAT sale on 1 November is
+        // 21:30 UTC on 31 October and belongs to November's return.
         // Sum vat_total_amount and parse tax_summary JSONB band breakdown per invoice.
         //
         // BASE CURRENCY (live defect: USD VAT was added to a TZS return as if it were TZS). Every
@@ -1259,8 +1263,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // single-currency company's figures are unchanged.
         List<SalesInvoice> finalisedInPeriod = invoices.findFinalisedInPeriod(
                 companyId,
-                start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
-                end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+                calendar.startOfDay(companyId, start),
+                calendar.endOfDayExclusive(companyId, end));
 
         // findScopedById: companyId was scope-asserted above (assertCanActIn) — self-scope lookup.
         final int baseScale = minorUnits.of(companies.findScopedById(companyId)

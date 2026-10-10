@@ -10,6 +10,7 @@ import com.erp.modules.cashbank.domain.dto.ChequeBouncedPayload;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.modules.iam.repository.CompanyRepository;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -20,7 +21,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +56,7 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
     private final CompanyRepository companies;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public ChequeBounceReversalHandler(IdempotencyGuard guard,
                                        ArReceiptRepository receipts,
@@ -63,7 +64,8 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
                                        ArInvoiceRepository invoices,
                                        CompanyRepository companies,
                                        GLPostingSafeInvoker safeInvoker,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       CompanyCalendar calendar) {
         this.guard        = guard;
         this.receipts     = receipts;
         this.allocations  = allocations;
@@ -71,6 +73,7 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
         this.companies    = companies;
         this.safeInvoker  = safeInvoker;
         this.objectMapper = objectMapper;
+        this.calendar     = calendar;
     }
 
     @Override
@@ -135,7 +138,7 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
             return;
         }
 
-        LocalDate reversalDate = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
+        LocalDate reversalDate = calendar.today(companyId);
 
         // APPEND-ONLY reversal of the receipt's cash-leg journal. The engine reverses every leg of
         // the original (DR Cash / CR AR → DR AR / CR Cash), so ΣDR == ΣCR by construction.

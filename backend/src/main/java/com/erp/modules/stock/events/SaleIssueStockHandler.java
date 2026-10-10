@@ -10,6 +10,7 @@ import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.RecipeExplosionResolver;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.modules.stock.service.StockReservationService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -18,7 +19,6 @@ import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -75,6 +75,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
     private final InventoryGlPoster          glPoster;
     private final StockReservationService    reservations;
     private final ObjectMapper               objectMapper;
+    private final CompanyCalendar calendar;
 
     public SaleIssueStockHandler(IdempotencyGuard guard,
                                   StockPostingService posting,
@@ -83,7 +84,8 @@ public class SaleIssueStockHandler implements DomainEventHandler {
                                   InventoryValuationService valuation,
                                   InventoryGlPoster glPoster,
                                   StockReservationService reservations,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  CompanyCalendar calendar) {
         this.guard          = guard;
         this.posting        = posting;
         this.productService = productService;
@@ -92,6 +94,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
         this.glPoster       = glPoster;
         this.reservations   = reservations;
         this.objectMapper   = objectMapper;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -131,9 +134,7 @@ public class SaleIssueStockHandler implements DomainEventHandler {
 
             // One COGS journal per SALE.FINALISED event (one per invoice), all components combined.
             if (!cogsLegs.isEmpty()) {
-                LocalDate postingDate = payload.finalisedAt() != null
-                        ? payload.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                        : LocalDate.now();
+                LocalDate postingDate = calendar.dateOf(event.getCompanyId(), payload.finalisedAt());
                 String glEntryUid = glPoster.postCogsInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
                         payload.invoiceUid(), payload.invoiceNumber(), "TZS", cogsLegs);
