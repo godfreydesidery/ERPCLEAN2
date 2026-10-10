@@ -22,6 +22,7 @@ import { UnitOfMeasureDto } from '../models/product.model';
 import { ProductService } from '../products/product.service';
 import { DocumentsService } from '../documents/documents.service';
 import { SalesService } from './sales.service';
+import { INVALID_AMOUNT_MESSAGE, normaliseAmount, parseAmount } from '../../../shared/money.util';
 import {
   ManagerApproval,
   ManagerApprovalDialogComponent,
@@ -132,8 +133,8 @@ export class SalesInvoiceDetailComponent {
   /** True when the line being added carries a discount at all — nothing to approve otherwise. */
   readonly newLineHasDiscount = computed(
     () =>
-      Number(this.newLineDiscountAmount().trim() || '0') > 0 ||
-      Number(this.newLineDiscountPercent().trim() || '0') > 0,
+      (parseAmount(this.newLineDiscountAmount()) ?? 0) > 0 ||
+      (parseAmount(this.newLineDiscountPercent()) ?? 0) > 0,
   );
 
   /** Show the "Ask a supervisor" button only where it could actually help. */
@@ -405,11 +406,19 @@ export class SalesInvoiceDetailComponent {
     // outright (@Positive), and a zero is worse than a refusal: it gives the goods away and, reading
     // as equal to the resolved price, would slip past the override gate unmarked. Catch it here so
     // the answer names the way out instead of arriving as a bare rejection.
-    const price = this.newLineUnitPrice().trim();
-    if (price && (isNaN(Number(price)) || Number(price) <= 0)) {
+    // LUI-04: "1,800" is a price, not an error — normalise grouped input before checking it.
+    const priceNorm = normaliseAmount(this.newLineUnitPrice());
+    const price = priceNorm ?? '';
+    if (priceNorm === null || (price && Number(price) <= 0)) {
       this.lineFormError.set(
         'Enter a unit price greater than zero, or leave it blank to use the catalogue price.',
       );
+      return;
+    }
+
+    const discountAmount = normaliseAmount(this.newLineDiscountAmount());
+    if (discountAmount === null) {
+      this.lineFormError.set(INVALID_AMOUNT_MESSAGE);
       return;
     }
 
@@ -423,7 +432,7 @@ export class SalesInvoiceDetailComponent {
       // Omitted unless typed: an absent field means "price it from the catalogue", which is what
       // every ordinary line wants.
       unitPriceOverride: price || undefined,
-      lineDiscountAmount: this.newLineDiscountAmount().trim() || undefined,
+      lineDiscountAmount: discountAmount || undefined,
       lineDiscountPercent: this.newLineDiscountPercent().trim() || undefined,
       // K7: only ever sent when a supervisor actually signed for THIS discount. The server
       // re-resolves the uid and requires that user to be active and to genuinely hold the override
@@ -519,7 +528,7 @@ export class SalesInvoiceDetailComponent {
   }
 
   saveOverridePrice(line: SalesInvoiceLineDto): void {
-    const entered = this.overridePriceInput().trim();
+    const entered = normaliseAmount(this.overridePriceInput()) ?? '';
     const price = Number(entered);
     if (!entered || Number.isNaN(price) || price <= 0) {
       this.overridePriceError.set('Enter a valid unit price greater than zero.');
@@ -590,7 +599,8 @@ export class SalesInvoiceDetailComponent {
   }
 
   addPayment(): void {
-    const amount = this.newPaymentAmount().trim();
+    // LUI-04: accept "68,300" — it used to be refused, or silently read as 0 elsewhere.
+    const amount = normaliseAmount(this.newPaymentAmount()) ?? '';
     const currency = this.invoice()?.currency ?? 'TZS';
 
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {

@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { INVALID_AMOUNT_MESSAGE, normaliseAmount } from '../../../shared/money.util';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -353,7 +354,9 @@ export class DirectGoodsReceiptComponent {
     const product = this.selectedProduct();
     const unitUid = this.newLineUnitUid();
     const qtyStr = this.asStr(this.newLineQty());
-    const costStr = this.asStr(this.newLineCost());
+    // LUI-04: accept a grouped cost such as "1,800".
+    const costNorm = normaliseAmount(this.asStr(this.newLineCost()));
+    const costStr = costNorm ?? '';
     const qty = Number(qtyStr);
     const cost = Number(costStr);
     const note = this.asStr(this.newLineNote());
@@ -362,6 +365,10 @@ export class DirectGoodsReceiptComponent {
     if (!unitUid) { this.lineFormError.set('Select the unit it was delivered in.'); return; }
     if (!qtyStr || !Number.isFinite(qty) || qty <= 0) {
       this.lineFormError.set('Enter a quantity greater than zero.');
+      return;
+    }
+    if (costNorm === null) {
+      this.lineFormError.set(INVALID_AMOUNT_MESSAGE);
       return;
     }
     if (!costStr || !Number.isFinite(cost) || cost < 0) {

@@ -134,6 +134,24 @@ describe('DirectGoodsReceiptComponent', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
+  // LUI-04: "1,800" is a cost, not an error; junk gets the shared friendly message.
+  it('accepts a grouped unit cost and refuses junk with the shared message', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    await stageOneLine(comp, '1,800');
+    expect(comp.stagedLines()[0].unitCost).toBe('1800');
+
+    comp.selectProduct(STUB_PRODUCT as never);
+    await vi.runAllTimersAsync();
+    comp.newLineQty.set('1');
+    comp.newLineCost.set('12abc');
+    comp.addLine();
+    expect(comp.lineFormError()).toContain('for example 1800');
+  });
+
   it('submits the supplier, currency and lines the backend expects', async () => {
     const { receiveDirectSpy } = makeBed();
     const fixture = TestBed.createComponent(DirectGoodsReceiptComponent);
