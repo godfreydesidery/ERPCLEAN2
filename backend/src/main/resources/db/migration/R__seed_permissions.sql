@@ -19,6 +19,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('AP.DEBITNOTE', 'ap', 'Raise a debit note / adjustment against an open payable'),
     ('AP.OPENING.SET', 'ap', 'Enter AP opening balances at go-live'),
     ('AP.PAYMENT.RUN', 'ap', 'Pay a single bill and run a payment run (PAYRUN-####)'),
+    -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): undo a wrong supplier payment.
+    ('AP.PAYMENT.REVERSE', 'ap', 'Reverse a posted supplier payment'),
     ('AP.VIEW', 'ap', 'View the AP sub-ledger, balances, ageing, and the reconciliation read'),
     ('APPROVALS.ADMIN', 'approvals', 'Recall/cancel any approval request; override a stuck chain'),
     ('APPROVALS.DECIDE', 'approvals', 'Approve/reject approval-request steps and see the approvals inbox'),
@@ -33,6 +35,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('AR.RECEIPT.RECORD', 'ar', 'Record a customer receipt (RCT-####) and post its cash leg'),
     -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): undo a wrong receipt.
     ('AR.RECEIPT.REVERSE', 'ar', 'Reverse a posted customer receipt'),
+    -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): pay a customer's credit back.
+    ('AR.REFUND', 'ar', 'Refund a customer over-payment, deposit or unused credit note'),
     ('AR.STATEMENT.VIEW', 'ar', 'View or print a customer statement'),
     ('AR.VIEW', 'ar', 'View the AR sub-ledger, balances, ageing, and the reconciliation read'),
     ('AR.WRITEOFF', 'ar', 'Write off an uncollectable open item (bad debt)'),
@@ -516,6 +520,9 @@ SELECT r.id, p.id FROM (VALUES
   -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
   -- finance seat, not the cashier who recorded it.
   ('ACCOUNTANT','AR.RECEIPT.REVERSE'),
+  -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): money handed back to a customer is
+  -- paid out by the finance seat, like a receipt reversal.
+  ('ACCOUNTANT','AR.REFUND'),
   ('ACCOUNTANT','AR.CREDITNOTE'),
   ('ACCOUNTANT','AR.WRITEOFF'),
   ('ACCOUNTANT','AR.STATEMENT.VIEW'),
@@ -530,6 +537,9 @@ SELECT r.id, p.id FROM (VALUES
   -- is not the ability to create one, so this is a grant bug, not segregation of duties.
   ('ACCOUNTANT','PURCHASE.GOODS_RECEIPT.VIEW'),
   ('ACCOUNTANT','AP.PAYMENT.RUN'),
+  -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): a wrong supplier payment is reversed
+  -- by the finance seat.
+  ('ACCOUNTANT','AP.PAYMENT.REVERSE'),
   ('ACCOUNTANT','AP.DEBITNOTE'),
   ('ACCOUNTANT','AP.OPENING.SET'),
   ('ACCOUNTANT','CASH.VIEW'),
@@ -861,6 +871,9 @@ SELECT r.id, p.id FROM (VALUES
   -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
   -- finance seat, not the cashier who recorded it.
   ('FINANCE_DIRECTOR','AR.RECEIPT.REVERSE'),
+  -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): money handed back to a customer is
+  -- paid out by the finance seat, like a receipt reversal.
+  ('FINANCE_DIRECTOR','AR.REFUND'),
   ('FINANCE_DIRECTOR','AR.CREDITNOTE'),
   ('FINANCE_DIRECTOR','AR.WRITEOFF'),
   ('FINANCE_DIRECTOR','AR.STATEMENT.VIEW'),
@@ -870,6 +883,9 @@ SELECT r.id, p.id FROM (VALUES
   ('FINANCE_DIRECTOR','AP.BILL.ENTER'),
   ('FINANCE_DIRECTOR','AP.BILL.MATCH'),
   ('FINANCE_DIRECTOR','AP.PAYMENT.RUN'),
+  -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): a wrong supplier payment is reversed
+  -- by the finance seat.
+  ('FINANCE_DIRECTOR','AP.PAYMENT.REVERSE'),
   ('FINANCE_DIRECTOR','AP.DEBITNOTE'),
   ('FINANCE_DIRECTOR','AP.OPENING.SET'),
   ('FINANCE_DIRECTOR','CASH.VIEW'),
