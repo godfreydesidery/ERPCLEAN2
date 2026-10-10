@@ -778,6 +778,39 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
                 .isEqualByComparingTo("60000");
     }
 
+    /**
+     * SAL-17: a FIXED line discount belongs to the whole ordered quantity. 10 ordered at 1,000 with
+     * 1,000 off, delivered and invoiced 4 + 6: the invoices take 400 and 600 off — not 1,000 each.
+     */
+    @Test
+    void partialInvoices_shareAFixedLineDiscount_insteadOfRepeatingIt() {
+        ProductDto product = stockableProduct("DiscSplitWidget", "1000");
+        publishAndDispatchReceipt(product, new BigDecimal("20"), new BigDecimal("500"));
+
+        SalesOrderDto so = createAndConfirmPackOrder(product, pcsUid,
+                new BigDecimal("10"), new BigDecimal("1000"), new BigDecimal("1000"));
+        String solUid = salesOrderService.listLines(so.uid()).get(0).uid();
+
+        BigDecimal[] nets = new BigDecimal[2];
+        String[] qtys = {"4", "6"};
+        for (int i = 0; i < 2; i++) {
+            setCtx();
+            DeliveryDto d = deliveryService.create(new CreateDeliveryRequest(
+                    so.uid(), LocalDate.now(), null,
+                    List.of(new CreateDeliveryRequest.DeliveryLineRequest(solUid, new BigDecimal(qtys[i])))));
+            dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+            setCtx();
+            SalesInvoiceDto draft = deliveryService.createInvoiceFromDelivery(d.uid());
+            setCtx();
+            nets[i] = salesInvoiceService.getByUid(draft.uid()).netTotalAmount();
+        }
+        assertThat(nets[0]).as("4 × 1,000 − 400").isEqualByComparingTo("3600");
+        assertThat(nets[1]).as("6 × 1,000 − 600").isEqualByComparingTo("5400");
+        assertThat(nets[0].add(nets[1]))
+                .as("the two invoices together carry the order line's discount exactly once")
+                .isEqualByComparingTo("9000");
+    }
+
     // =========================================================================
     // Bar 8 (owner decision 2026-07-05, V87) — configurable "block negative stock on sale":
     // an over-reserved SO (BR-SO-05/OQ-SO-02 explicitly allows reserving beyond on-hand) is

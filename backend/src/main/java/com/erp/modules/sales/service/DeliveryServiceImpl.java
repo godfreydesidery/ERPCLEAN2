@@ -26,6 +26,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyMinorUnits;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -82,6 +83,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final ProductRepository          productRepository;
     /** Owner decision 2026-07-05 (V87): synchronous "block negative stock on sale" pre-check. */
     private final NegativeStockGuard         negativeStockGuard;
+    /** Order-currency minor units — fixed line discounts are pro-rated to them (SAL-17). */
+    private final CurrencyMinorUnits         minorUnits;
 
     public DeliveryServiceImpl(DeliveryRepository deliveries,
                                DeliveryLineRepository deliveryLines,
@@ -97,7 +100,8 @@ public class DeliveryServiceImpl implements DeliveryService {
                                AuditService audit,
                                OutboxPublisher outbox,
                                ProductRepository productRepository,
-                               NegativeStockGuard negativeStockGuard) {
+                               NegativeStockGuard negativeStockGuard,
+                               CurrencyMinorUnits minorUnits) {
         this.deliveries        = deliveries;
         this.deliveryLines     = deliveryLines;
         this.salesOrders       = salesOrders;
@@ -113,6 +117,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         this.outbox            = outbox;
         this.productRepository = productRepository;
         this.negativeStockGuard = negativeStockGuard;
+        this.minorUnits        = minorUnits;
     }
 
     // -------------------------------------------------------------------------
@@ -341,6 +346,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         // discounted net, not the full-order discount applied to fewer lines.
         // docDiscountPercent is copied verbatim — same rate gives the correct per-line share.
         BigDecimal invoiceDocDiscountAmount = order.getDocDiscountAmount();
+        // Minor units of the order currency — the rounding the invoice totals use.
+        final int currencyScale = minorUnits.of(order.getCurrency());
         if (invoiceDocDiscountAmount != null
                 && invoiceDocDiscountAmount.compareTo(BigDecimal.ZERO) > 0) {
             // Compute SO total raw net (unitPrice × qty − lineDiscount, floored at 0) for ratio.
@@ -373,9 +380,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                                 "Sales order line not found."));
                 BigDecimal qty = SalesLineUnits.toLineUnit(sol, dl.openInvoiceQtyBase());
                 BigDecimal gross = sol.getUnitPriceAmount().multiply(qty);
+                // SAL-17: only the invoiced share of a fixed line discount counts here too.
                 BigDecimal dis = sol.getLineDiscountAmount() != null
                         && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
-                        ? sol.getLineDiscountAmount()
+                        ? SalesLineUnits.proRatedLineDiscount(sol.getLineDiscountAmount(),
+                                sol.getQtyOrderedBase(), sol.getQtyInvoicedBase(),
+                                dl.openInvoiceQtyBase(), currencyScale)
                         : sol.getLineDiscountPercent() != null
                         && sol.getLineDiscountPercent().compareTo(BigDecimal.ZERO) > 0
                         ? gross.multiply(sol.getLineDiscountPercent())
@@ -433,7 +443,14 @@ public class DeliveryServiceImpl implements DeliveryService {
                     sol.getListPriceAmount(), sol.getUnitPriceAmount(),
                     sol.getVatStatus(), sol.getVatRate(),
                     actorId());
-            invLine.setLineDiscountAmount(sol.getLineDiscountAmount());
+            // SAL-17: a FIXED line discount belongs to the whole ordered quantity, so each
+            // partial invoice takes only its share (telescoped over the line's cumulative
+            // invoiced quantity so the shares add back to exactly the order line's discount).
+            // Copying it whole gave 4 + 6 delivered out of 10 the full discount twice. A
+            // percentage discount is a rate and is copied as is.
+            invLine.setLineDiscountAmount(SalesLineUnits.proRatedLineDiscount(
+                    sol.getLineDiscountAmount(), sol.getQtyOrderedBase(),
+                    sol.getQtyInvoicedBase(), qtyToInvoice, currencyScale));
             invLine.setLineDiscountPercent(sol.getLineDiscountPercent());
             // Carry the VAT-inclusive/exclusive stance snapshot from the SO line, else the
             // totals recompute below would treat an inclusive (gross) unit price as net and
