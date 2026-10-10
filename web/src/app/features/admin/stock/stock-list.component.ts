@@ -81,6 +81,8 @@ export class StockListComponent {
   // which adds its own product search so a product can be adjusted without scrolling to its row.
   // Only one of the two is ever open at a time (each open* method closes the other).
   readonly adjustingUid = signal<string | null>(null);
+  /** Location of the row being adjusted (per-row entry point only) — sent so the right row is corrected. */
+  readonly adjustLocationUid = signal<string | null>(null);
   readonly showAdjustForm = signal(false);
   readonly adjustProductQ = signal('');
   readonly adjustProductResults = signal<ProductModel[]>([]);
@@ -272,6 +274,7 @@ export class StockListComponent {
     const label = rowProductLabel(row);
     this.showAdjustForm.set(false); // mutual exclusion with the toolbar-triggered form
     this.adjustingUid.set(row.uid);
+    this.adjustLocationUid.set(row.locationUid ?? null);
     this.adjustMode.set('delta');
     this.adjustCurrentQty.set(row.quantity);
     this.adjustNewQty.set('');
@@ -297,6 +300,7 @@ export class StockListComponent {
 
   private openAdjustFormStandalone(): void {
     this.adjustingUid.set(null); // mutual exclusion with any per-row form
+    this.adjustLocationUid.set(null);
     this.showAdjustForm.set(true);
     this.adjustMode.set('delta');
     this.adjustCurrentQty.set('0');
@@ -358,7 +362,11 @@ export class StockListComponent {
   private refreshAdjustCurrentQty(productCode: string): void {
     this.stockService.listOnHand(productCode, 0, 10).subscribe({
       next: ({ rows }) => {
-        const found = rows.find((r) => r.productCode === productCode);
+        // The server corrects the one location that holds the product, ignoring empty rows (a
+        // received transfer leaves a zero row at In-Transit) — show that row's quantity.
+        const mine = rows.filter((r) => r.productCode === productCode);
+        const holding = mine.filter((r) => Number(r.quantity) !== 0);
+        const found = holding.length === 1 ? holding[0] : mine[0];
         this.adjustCurrentQty.set(found?.quantity ?? '0');
       },
       error: () => this.adjustCurrentQty.set('0'),
@@ -400,6 +408,8 @@ export class StockListComponent {
       reasonCode: this.adjustReason(),
       note: this.adjustNote().trim() || undefined,
     };
+    const locationUid = this.adjustingUid() ? this.adjustLocationUid() : null;
+    if (locationUid) request.locationUid = locationUid;
     this.stockService.adjust(request).subscribe({
       next: () => {
         this.adjusting.set(false);
@@ -477,11 +487,7 @@ export class StockListComponent {
       },
       error: (err) => {
         this.openingError.set(
-          this.messageFrom(
-            err,
-            'Could not record opening balance.',
-            'An opening balance already exists for this product.',
-          ),
+          this.messageFrom(err, 'Could not record opening balance.'),
         );
         this.openingBusy.set(false);
       },

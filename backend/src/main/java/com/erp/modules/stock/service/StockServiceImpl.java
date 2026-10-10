@@ -20,6 +20,7 @@ import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -64,6 +65,7 @@ public class StockServiceImpl implements StockService {
     private final StockLocationRepository   locations;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    private final AdjustTargetResolver     adjustTargets;
 
     public StockServiceImpl(StockOnHandRepository onHands,
                             StockMovementRepository movements,
@@ -74,7 +76,8 @@ public class StockServiceImpl implements StockService {
                             LocationResolver locationResolver,
                             StockLocationRepository locations,
                             ScopeGuard scopeGuard,
-                            AuditService audit) {
+                            AuditService audit,
+                            AdjustTargetResolver adjustTargets) {
         this.onHands           = onHands;
         this.movements         = movements;
         this.posting           = posting;
@@ -85,6 +88,7 @@ public class StockServiceImpl implements StockService {
         this.locations         = locations;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.adjustTargets     = adjustTargets;
     }
 
     // -------------------------------------------------------------------------
@@ -101,21 +105,31 @@ public class StockServiceImpl implements StockService {
         }
 
         // An adjustment corrects the stock WHERE IT ALREADY SITS. On-hand is keyed per location, so
-        // read every on-hand row for the product in this branch rather than assuming a single one:
-        //  - exactly one row  → adjust THAT location (which may not be the branch default).
-        //  - no row yet       → first touch; fall through to the branch default location below.
-        //  - more than one    → ambiguous (which location did the count correct?). Say so plainly.
-        // Resolving the location from the branch default unconditionally (as this did) posted the
-        // correction to the default location while the stock lived in another — splitting the product
-        // across two on-hand rows, and then failing on the single-row re-read below.
-        List<StockOnHand> onHandRows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
-                product.companyId(), principal.branchId(), product.id());
-        if (onHandRows.size() > 1) {
-            throw new IllegalArgumentException(
-                    "This product is held at more than one location in this branch. Adjust it from "
-                  + "the location's stock screen so the correction lands on the right one.");
+        // the target is chosen from the product's on-hand rows in this branch (AdjustTargetResolver):
+        // an explicit locationUid wins; otherwise the one location that actually holds it, or the
+        // branch default on first touch. Resolving from the branch default unconditionally (as this
+        // once did) split a product across two rows; refusing whenever more than one ROW existed
+        // (as it did until STK-01) blocked every product that had ever arrived by transfer, because
+        // receipt leaves a zero-quantity row behind at the in-transit location.
+        AdjustTargetResolver.Target target = adjustTargets.resolve(
+                product.companyId(), principal.branchId(), product.id(), request.locationUid());
+        StockOnHand sohBefore = target.onHand();
+
+        // STK-15: a decrease may not take the location below zero unless the location allows
+        // negative stock — the same location-level rule transfers already enforce. A typo of −120
+        // for −12 used to drive the shelf to −108 silently. Checked against ON-HAND, not available:
+        // reservations are soft (over-reservation is allowed), and goods that are physically broken
+        // must be writable-off even when a sales order has reserved them.
+        if (request.quantity().signum() < 0 && !locationResolver.isAllowNegative(target.locationId())) {
+            BigDecimal current = sohBefore != null && sohBefore.getQuantity() != null
+                    ? sohBefore.getQuantity() : BigDecimal.ZERO;
+            if (current.add(request.quantity()).signum() < 0) {
+                throw new ConflictException(
+                        "Not enough stock to remove " + request.quantity().abs().stripTrailingZeros().toPlainString()
+                      + " — only " + current.max(BigDecimal.ZERO).stripTrailingZeros().toPlainString()
+                      + " on hand at this location, which does not allow negative stock.");
+            }
         }
-        StockOnHand sohBefore = onHandRows.isEmpty() ? null : onHandRows.get(0);
 
         // FIX C (adversarial review): resolve avg_cost BEFORE posting so the movement row
         // carries unit_cost_amount + value_amount immediately (columns are immutable/updatable=false
@@ -144,9 +158,7 @@ public class StockServiceImpl implements StockService {
 
         // Post where the stock already is; ADR-0028 D-3's branch default only applies on first touch
         // (no on-hand row yet) — which is what a location-unaware caller means by "the branch".
-        Long locationId = sohBefore != null && sohBefore.getLocationId() != null
-                ? sohBefore.getLocationId()
-                : locationResolver.defaultLocationId(product.companyId(), principal.branchId());
+        Long locationId = target.locationId();
 
         String movementUid = posting.post(
                 product.companyId(),
@@ -195,12 +207,16 @@ public class StockServiceImpl implements StockService {
         RequestContext.Principal principal = RequestContext.get();
         ProductDto product = resolveStockableProduct(request.productUid(), principal);
 
-        // Opening balance is only for a never-tracked (product, active branch).
-        if (onHands.existsByCompanyIdAndBranchIdAndProductId(
+        // Opening balance is only for a never-tracked (product, active branch): no movement of any
+        // kind yet (D-11). STK-17: this used to test for an on-hand ROW, which a sales-order
+        // reservation creates without moving stock, and the screen then claimed "an opening balance
+        // already exists" when none had ever been entered. Say what actually blocks it.
+        if (movements.existsByCompanyIdAndBranchIdAndProductId(
                 product.companyId(), principal.branchId(), product.id())) {
             throw new IllegalStateException(
-                    "An on-hand record already exists for this product at the active branch. " +
-                    "Use an ADJUSTMENT to correct an existing level.");
+                    "This product already has stock activity at this branch (a sale, receipt, "
+                  + "transfer or adjustment), so an opening balance can no longer be entered. "
+                  + "Use Adjust Stock to correct the quantity.");
         }
 
         // ADR-0028 D-3: resolve the branch's default location for location-unaware callers.

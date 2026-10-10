@@ -415,7 +415,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> stockService.openingBalance(
                 new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), "second")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("already exists");
+                .hasMessageContaining("already has stock activity");
     }
 
     // =========================================================================
@@ -429,13 +429,70 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("10"), AdjustmentReason.COUNT_CORRECTION, null,
-                null, null));
+                null, null, null));
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "broken",
-                null, null));
+                null, null, null));
 
         assertThat(onHand(product.id()).quantity()).isEqualByComparingTo(new BigDecimal("55")); // 50+10−5
         assertLedgerMatchesOnHand(product.id());
+    }
+
+    /** The branch's in-transit location (what V31 / StockLocationSeeder create), made if absent. */
+    private Long transitLocationIdForBranchA() {
+        String code = "TRANSIT-" + branchA.getCode();
+        return stockLocationRepo.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                        companyA.getId(), branchA.getId(), com.erp.platform.common.domain.MasterStatus.ACTIVE)
+                .stream().filter(l -> code.equals(l.getCode())).findFirst()
+                .map(com.erp.modules.stock.domain.entity.StockLocation::getId)
+                .orElseGet(() -> stockLocationRepo.save(new com.erp.modules.stock.domain.entity.StockLocation(
+                        companyA.getId(), branchA.getId(), code, "In-Transit",
+                        com.erp.modules.stock.domain.enums.LocationType.OTHER, false, null)).getId());
+    }
+
+    @Test
+    void adjustment_afterTransferReceipt_ignoresTheEmptyInTransitRow_stk01() {
+        ProductDto product = stockableProduct("TrfWidget");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), null));
+        // What every received transfer leaves behind: a zero-quantity row at In-Transit.
+        stockOnHandRepo.saveAndFlush(new com.erp.modules.stock.domain.entity.StockOnHand(
+                companyA.getId(), branchA.getId(), transitLocationIdForBranchA(), product.id()));
+
+        stockService.adjust(new AdjustStockRequest(
+                product.uid(), new BigDecimal("-5"), AdjustmentReason.SHRINKAGE, null,
+                null, null, null));
+
+        BigDecimal total = stockOnHandRepo
+                .findAllByCompanyIdAndBranchIdAndProductId(companyA.getId(), branchA.getId(), product.id())
+                .stream().map(com.erp.modules.stock.domain.entity.StockOnHand::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(total).isEqualByComparingTo(new BigDecimal("45"));
+    }
+
+    @Test
+    void adjustment_belowZeroAtANoNegativeLocation_refused_stk15() {
+        ProductDto product = stockableProduct("TypoWidget");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("12"), null));
+
+        assertThatThrownBy(() -> stockService.adjust(new AdjustStockRequest(
+                product.uid(), new BigDecimal("-120"), AdjustmentReason.DAMAGE, null,
+                null, null, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("only 12 on hand");
+        assertThat(onHand(product.id()).quantity()).isEqualByComparingTo(new BigDecimal("12"));
+    }
+
+    @Test
+    void openingBalance_allowedWhenOnlyAnEmptyRowExists_stk17() {
+        ProductDto product = stockableProduct("ResvWidget");
+        // A sales-order reservation creates an on-hand row without moving any stock.
+        stockOnHandRepo.saveAndFlush(new com.erp.modules.stock.domain.entity.StockOnHand(
+                companyA.getId(), branchA.getId(), transitLocationIdForBranchA(), product.id()));
+
+        StockMovementDto mov = stockService.openingBalance(
+                new OpeningBalanceRequest(product.uid(), new BigDecimal("12"), null));
+
+        assertThat(mov.movementType()).isEqualTo(MovementType.OPENING_BALANCE);
     }
 
     @Test
@@ -444,7 +501,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> stockService.adjust(
                 new AdjustStockRequest(product.uid(), BigDecimal.ZERO,
-                        AdjustmentReason.COUNT_CORRECTION, null, null, null)))
+                        AdjustmentReason.COUNT_CORRECTION, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("non-zero");
     }
@@ -571,7 +628,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("7"), AdjustmentReason.COUNT_CORRECTION, null,
-                null, null));
+                null, null, null));
 
         List<AuditLog> logs = auditRepository.findAll();
         assertThat(logs.size()).isGreaterThan((int) auditBefore);

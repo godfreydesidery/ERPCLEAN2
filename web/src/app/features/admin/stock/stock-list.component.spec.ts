@@ -449,6 +449,38 @@ describe('StockListComponent', () => {
     expect(adjustSpy.mock.calls[0][0].quantity).toBe('4');
   });
 
+  it('row Adjust corrects the row\'s own location (STK-01)', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm({ ...STUB_ON_HAND_ROW, locationUid: 'LOC-BACK' });
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.adjustQty.set('-2');
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+
+    expect(adjustSpy.mock.calls[0][0].locationUid).toBe('LOC-BACK');
+  });
+
+  it('opening balance shows the server\'s reason on a 409 (STK-17)', async () => {
+    const openingBalanceSpy = vi.fn(() => throwError(() => new HttpErrorResponse({
+      status: 409, error: { errors: ['This product already has stock activity at this branch.'] },
+    })));
+    makeBed({ openingBalanceSpy });
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openingSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test' });
+    comp.openingQty.set('5');
+    comp.submitOpeningBalance();
+    await vi.runAllTimersAsync();
+
+    expect(comp.openingError()).toBe('This product already has stock activity at this branch.');
+  });
+
   // ── 7. Reorder level edit ─────────────────────────────────────────────────
 
   it('calls setReorderLevel with correct payload', async () => {
