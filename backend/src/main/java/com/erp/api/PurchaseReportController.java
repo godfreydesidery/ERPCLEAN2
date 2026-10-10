@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.purchases.domain.dto.GoodsReceivedRegisterDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceivedRegisterRowDto;
 import com.erp.modules.purchases.domain.dto.OpenPurchaseOrderRowDto;
@@ -86,6 +87,14 @@ public class PurchaseReportController {
     // Goods Received Register
     // =========================================================================
 
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping("/goods-received")
     @PreAuthorize("@perm.has('PURCHASE.GOODS_RECEIPT.VIEW')")
     public GoodsReceivedRegisterDto goodsReceived(
@@ -111,7 +120,8 @@ public class PurchaseReportController {
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         GoodsReceivedRegisterDto dto = registerQuery.reportForExport(companyId(), fromDate, toDate,
                 branchUid, supplierUid, productUid);
-        return download(exporter.export(flattenRegister(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenRegister(dto), branchGuard, branchUid), format));
     }
 
     // =========================================================================
@@ -137,7 +147,8 @@ public class PurchaseReportController {
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         PurchasesBySupplierDto dto = bySupplierQuery.report(companyId(), fromDate, toDate, branchUid,
                 perm.has("PURCHASE.RETURN.VIEW"), perm.has("AP.VIEW"));
-        return download(exporter.export(flattenBySupplier(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenBySupplier(dto), branchGuard, branchUid), format));
     }
 
     // =========================================================================
@@ -161,7 +172,8 @@ public class PurchaseReportController {
             @RequestParam(required = false) String supplierUid,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         OpenPurchaseOrdersDto dto = openOrdersQuery.report(companyId(), asOfDate, branchUid, supplierUid);
-        return download(exporter.export(flattenOpenOrders(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenOpenOrders(dto), branchGuard, branchUid), format));
     }
 
     // =========================================================================
@@ -190,7 +202,8 @@ public class PurchaseReportController {
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         PurchasePriceVarianceDto dto = varianceQuery.report(companyId(), fromDate, toDate, branchUid,
                 supplierUid, perm.has("AP.VIEW"));
-        return download(exporter.export(flattenVariance(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenVariance(dto), branchGuard, branchUid), format));
     }
 
     // =========================================================================
