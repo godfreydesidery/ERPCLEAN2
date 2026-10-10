@@ -138,6 +138,8 @@ export interface BillLineRequest {
   productId?: number | null;
   poLineUid?: string | null;
   grLineUid?: string | null;
+  /** AP-16: expense / asset account (uid) for a non-stock line; omitted = Purchases. */
+  glAccountUid?: string | null;
   /** Required. */
   description: string;
   /** Send as string; backend parses BigDecimal. */

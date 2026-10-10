@@ -522,6 +522,28 @@ class SupplierBillServiceImplTest {
                 BigDecimal.ZERO, "TZS", null, List.of(line));
     }
 
+    // -------------------------------------------------------------------------
+    // AP-16 — the per-line expense account is resolved inside the bill's company
+    // -------------------------------------------------------------------------
+
+    @Test
+    void enterBill_accountFromAnotherCompany_isRefusedNotSilentlyDropped() {
+        when(chartOfAccounts.findByCompanyIdAndUid(COMPANY_ID, "ACC-FOREIGN"))
+                .thenReturn(Optional.empty());
+        BillLineRequest line = new BillLineRequest(null, null, null, "Shop rent",
+                new BigDecimal("1"), new BigDecimal("900.00"), null, null, "ACC-FOREIGN");
+        EnterBillRequest req = new EnterBillRequest(
+                COMPANY_UID, SUPP_UID, "INV-RENT-1", null,
+                LocalDate.of(2026, 6, 18), null, BigDecimal.ZERO, "TZS", null, List.of(line));
+
+        assertThatThrownBy(() -> service.enterBill(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("line 1")
+                .hasMessageContaining("not found");
+        org.mockito.Mockito.verify(chartOfAccounts, org.mockito.Mockito.never())
+                .findByUid(anyString());
+    }
+
     private EnterBillRequest validBillRequest(LocalDate billDate, LocalDate dueDate) {
         BillLineRequest line = new BillLineRequest(
                 null, null, null, "Test item",

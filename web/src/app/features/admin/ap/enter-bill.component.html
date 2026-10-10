@@ -426,6 +426,7 @@
                     <th scope="col" class="num" style="min-width:110px">Billed Qty</th>
                     <th scope="col" class="num" style="min-width:130px">Unit Cost</th>
                     <th scope="col" class="num" style="min-width:130px">Line Net</th>
+                    <th scope="col" style="min-width:200px">Account <span class="text-muted small">(non-stock)</span></th>
                     <th scope="col" style="min-width:180px">PO Line <span class="text-muted small">(opt.)</span></th>
                     <th scope="col" style="min-width:230px">Goods Receipt Line <span class="text-muted small">(checks the qty)</span></th>
                     <th scope="col"><span class="visually-hidden">Remove</span></th>
@@ -460,6 +461,21 @@
                       </td>
                       <td class="num fw-semibold">
                         {{ fmtMoney(lineNetAmount(line)) }}
+                      </td>
+                      <td>
+                        <span [id]="'acctLabel_' + i" class="visually-hidden">Account for line {{ i + 1 }}</span>
+                        @if (isStockLine(line)) {
+                          <p class="form-text mb-0">Stock — posts through the receipt.</p>
+                        } @else if (accountOptions().length > 0) {
+                          <app-uid-picker [ngModel]="line.glAccountUid"
+                                          (ngModelChange)="updateLine(i, 'glAccountUid', $event)"
+                                          [options]="accountOptions()"
+                                          placeholder="Purchases (default)"
+                                          [name]="'acct_' + i"
+                                          [ariaLabelledby]="'acctLabel_' + i" />
+                        } @else {
+                          <p class="form-text mb-0">Purchases</p>
+                        }
                       </td>
                       <td>
                         <span [id]="'poLineLabel_' + i" class="visually-hidden">PO line for line {{ i + 1 }}</span>
@@ -512,7 +528,7 @@
                   <tr>
                     <td colspan="3" class="text-end small fw-semibold">Total Net:</td>
                     <td class="num fw-bold">{{ fmtMoney(totalNet) }}</td>
-                    <td colspan="3"></td>
+                    <td colspan="4"></td>
                   </tr>
                 </tfoot>
               </table>
