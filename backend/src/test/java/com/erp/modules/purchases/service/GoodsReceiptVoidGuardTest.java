@@ -47,6 +47,7 @@ class GoodsReceiptVoidGuardTest {
     private PurchaseOrderServiceImpl   poService;
     private OutboxPublisher            outbox;
     private ReceiptVoidStockGuard      stockGuard;
+    private com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
     private GoodsReceiptServiceImpl    service;
 
     private GoodsReceipt gr;
@@ -60,12 +61,13 @@ class GoodsReceiptVoidGuardTest {
         poService = mock(PurchaseOrderServiceImpl.class);
         outbox    = mock(OutboxPublisher.class);
         stockGuard = mock(ReceiptVoidStockGuard.class);
+        billingReader = mock(com.erp.modules.purchases.domain.dto.ReceiptBillingReader.class);
         service = new GoodsReceiptServiceImpl(
                 receipts, grLines, mock(GoodsReceiptLineSerialRepository.class), orders,
                 mock(PurchaseOrderLineRepository.class), mock(ProductRepository.class),
                 mock(PurchaseSettingsRepository.class), mock(PurchaseNumberGenerator.class),
                 tracker, poService, mock(ScopeGuard.class), mock(AuditService.class), outbox,
-                mock(GoodsReceiptPrintQuery.class), stockGuard);
+                mock(GoodsReceiptPrintQuery.class), stockGuard, billingReader);
 
         RequestContext.set(new RequestContext.Principal(1L, "u@test", false, 10L, 20L, null));
 
@@ -94,6 +96,25 @@ class GoodsReceiptVoidGuardTest {
         assertThatThrownBy(() -> service.voidReceipt("GR-UID", new VoidGoodsReceiptRequest("typo")))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already been returned to the supplier");
+
+        verify(gr, never()).setStatus(any());
+        verify(tracker, never()).reverseReceipt(anyList());
+        verify(outbox, never()).publish(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void void_isRefusedOnceASupplierBillClaimsTheReceipt() {
+        GoodsReceiptLine billed = line(BigDecimal.ZERO);
+        when(billed.getUid()).thenReturn("GRL-1");
+        when(grLines.findByGoodsReceiptIdOrderByLineNo(40L)).thenReturn(List.of(billed));
+        when(billingReader.billsClaimingReceiptLines(10L, List.of("GRL-1")))
+                .thenReturn(List.of("INV-77"));
+
+        assertThatThrownBy(() -> service.voidReceipt("GR-UID", new VoidGoodsReceiptRequest("typo")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already been billed")
+                .hasMessageContaining("INV-77")
+                .hasMessageContaining("purchase return");
 
         verify(gr, never()).setStatus(any());
         verify(tracker, never()).reverseReceipt(anyList());
