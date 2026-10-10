@@ -245,31 +245,19 @@ When a customer wants to return just one item out of a larger basket, you have t
 | Situation | What to do |
 |---|---|
 | Customer returns **one item** from a multi-item sale, and the sale's shift is still open | **Reverse the whole sale** (section 5), then **ring a fresh sale** for the items the customer is keeping. The net effect is that only the returned item is refunded. |
-| You must **hand cash back** that is not tied to a reversible sale (a goodwill cash-back, or a return for a sale from an already-closed shift) | Record a **cash payout** of type **Refund** instead (section 7). |
+| You must **hand cash back** that is not tied to a reversible sale (a goodwill cash-back, or a return for a sale from an already-closed shift) | Send the customer to the back office for a sales return — the till has no cash refund payout any more (section 7). |
 
 > **Tip.** "Reverse the whole sale, then re-ring the rest" keeps the books accurate, because each step is a complete, properly-accounted transaction. It takes a few more steps, but it is the right way. The re-rung sale gets a new receipt number.
 
 ---
 
-## 7. The cash-drawer refund payout (the alternative)
+## 7. There is no cash-drawer refund payout
 
-**What it is.** A **cash payout** records cash physically leaving the drawer. One of its two types is **Refund** — money handed back to a customer that is **not** linked to reversing a particular sale. (The other type, **Paid out**, is for cash leaving the drawer for another reason, such as a drop to the safe. A business expense paid from the till is recorded with **Till expense** instead — see the *Starting and Ending a Shift* chapter, Chapter 2.)
+Earlier versions of OrbixPOS let a cashier hand cash back as a **Refund** *cash payout*. That is gone. A refund payout took money out of the drawer on a typed reason alone: the goods stayed "sold", stock was not returned, VAT and revenue were not reversed, and the drawer still balanced — so nobody could see it.
 
-**When it happens.** Only when the proper whole-sale reversal (section 5) is not available or not appropriate. If the sale can be reversed, **always prefer Refund / reverse** — it handles cash *and* stock *and* tax, which a payout does not.
+**What to do instead.** Refund the sale with **Refund / reverse** (section 5). It needs a manager's approval, and it puts the stock back and corrects the sales, VAT and ledger in one step. If the sale cannot be reversed at the till (for example it was rung on a shift that is already closed, or only some items are coming back), send the customer to the back office for a sales return.
 
-**How it works.**
-
-1. Press **☰** to open the **Session** panel.
-2. Press **Cash payout** (*Refund or drawer drop — reason required*). It is only available while the shift is open.
-3. At the top, choose **Refund**. (The box opens on **Paid out** — make sure you switch it.)
-4. Enter the **Amount (TZS)**.
-5. Type the **Reason (required)** — say why the cash is leaving, in a few words, for example "Cash refund, returned goods, ref INV-2026-004218". Quote the original receipt number if you have it.
-6. Press **Record**.
-7. You see *Payout recorded.* (or *Payout recorded and posted to the ledger.*). The amount is now taken off the cash your drawer is expected to hold at close.
-
-If the reason is too short you see *Say what the cash is for (at least a few words).*; if the amount is empty, *Enter an amount.*
-
-> **Warning — what a refund payout does *not* do.** A refund payout is **cash bookkeeping only**. It does **not** put stock back, it does **not** reverse VAT or revenue, and it is **not** linked to any receipt. It only keeps your drawer's expected cash correct. If the goods are coming back into the shop and the sale could be reversed, use **Refund / reverse** instead.
+> A till that has not been updated yet may still show **Refund** in the **Cash payout** dialog. The server now refuses it with *"A cash refund needs a supervisor. To give a customer their money back, reverse the sale from Today's sales instead."* A supervisor who is allowed to reverse sales can still record one from their own login, and it is recorded with their name.
 
 ---
 
@@ -290,11 +278,11 @@ If the reason is too short you see *Say what the cash is for (at least a few wor
 | *You can only reverse sales rung on your own till session.* | It is a colleague's sale. Ask a supervisor to reverse it. (Rare — normally the button is not shown on a colleague's sale.) |
 | *Not approved — the sale stands.* | The approval was cancelled. Nothing changed. |
 | Customer wants to return just one item from a bigger sale | Reverse the whole sale, then re-ring the items they are keeping (section 6). |
-| You must hand cash back but there is no reversible sale | **☰** › **Cash payout** › **Refund** › amount and reason › **Record** (section 7). |
+| You must hand cash back but there is no reversible sale | Ask the back office for a sales return — there is no till refund payout (section 7). |
 | The item area shows `(line detail not loaded)` | Totals are still correct. Reprint from **Today's sales** to pull the full breakdown. |
 
 > **Remember the four rules of this chapter:**
 > 1. The receipt is built from the **finalised sale** — the ERP's official record. It is an ordinary sales receipt, **not** a TRA fiscal receipt.
 > 2. **Reprinting never creates a new sale** and never charges the customer.
 > 3. Refunds at the till are **whole-sale only**, only while the shift is open, and always **approved by a manager** (or done by one).
-> 4. For anything else, reverse-and-re-ring, or record a **Refund** cash payout.
+> 4. For anything else, reverse-and-re-ring, or ask the back office for a sales return.

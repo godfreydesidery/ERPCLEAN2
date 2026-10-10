@@ -123,6 +123,8 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 | A message that the session "has been reconciled — open its Z-read for the final figures" | X-read is not available after reconciling. | Use **Z-read (reprint)** instead. |
 | **Enter the counted cash.** / **Count the drawer and enter the cash total.** | The count field was empty. | Type the counted amount. |
 | **Enter an amount.** / **Say what the cash is for (at least a few words).** | A cash payout or till expense is missing its amount or reason. | Fill in both. |
+| A **Manager approval — cash payout** or **Manager approval — till expense** box opens | Cash leaving the drawer needs a manager. | Ask a supervisor or branch manager to type their own username and password and press **Approve**. |
+| The X-read has no **Expected cash** line, or the closed session shows only **Counted** | Blind cash-up: a cashier does not see the expected figure or the variance. | Nothing is wrong. Count honestly; the supervisor sees the result when they reconcile. |
 | **Choose or type a category (2 to 40 letters).** | A till expense has no category, or a very long one. | Tap a quick choice (**Transport**, **Cleaning**, …) or type a short category. |
 | **Till expense** is missing from the Session menu | Your account is not allowed to record till expenses. | Ask your supervisor how the expense should be recorded, or ask your administrator to review your role. |
 
@@ -251,6 +253,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 |---|---|
 | **No match for "…".** after a scan | Scan again — the first read may have been partial. Hold the scanner steady and aim at the whole barcode. |
 | **No match for "…".** after typing | Check for a typo. Try part of the **product name** instead. |
+| **Can't reach the ERP — check the connection.** after a scan or search | The till could not reach the ERP at that moment; the product may well exist. Check the network cable or Wi-Fi and try again. If it keeps happening, see **Cannot reach the server**. |
 | A drop-down list of items appears | Several products matched. Click the right one (or use the arrow keys and **Enter**). |
 | The item is found by name, but its barcode always says no match | The barcode is not registered against the product in the ERP — sometimes it was typed into the product's code instead of its barcodes. Tell your supervisor; master-data staff need to add the barcode to the product. Meanwhile, add the item by name. |
 | **Price-embedded labels aren't supported yet — enter … manually.** | The label carries a price inside the barcode, which the till cannot use. Search for the item by name and enter the quantity. |
@@ -260,7 +263,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 **Symptom.** After a scan the search list stays open over an empty box, and the *next* scan adds the **previous** item again instead of the one you just scanned.
 
-**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look under **Server setup** on the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.5.4+12**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
+**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look under **Server setup** on the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.6.0+13**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
 
 ### The scanner is a "keyboard wedge" — keep the field focused
 
@@ -313,7 +316,7 @@ A reprint prints the name of the cashier who **rang** the sale on its **CASHIER:
 
 **Why it matters.** Customers ask for a second copy; a receipt jams; you need to confirm a sale posted. Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
 
-> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. It does not do partial or single-line refunds. To return one item from a multi-item sale, either reverse the whole sale and ring the rest again, or pay the cash back with a **Refund** cash payout in the **Session** menu, following your shop's policy. See Chapter 6.
+> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. It does not do partial or single-line refunds. To return one item from a multi-item sale, reverse the whole sale and ring the rest again. There is no cash refund payout at the till; anything the till cannot reverse goes to the back office as a sales return. See Chapter 6.
 
 ---
 
@@ -325,7 +328,7 @@ Finish the sale in front of you — ring, take payment, hand over the receipt �
 
 ### Verify the printed total matches the screen
 
-The money you see while building a basket is a **preview**. After you complete the sale, glance at the receipt's total and confirm it matches what you expected and what the customer is paying. If they differ, do **not** improvise — the receipt (from the finalised invoice) is the truth; investigate before handing over change.
+The money you see while building a basket is a **preview**. It is worked out the same way as the receipt — for the chosen customer's prices and with discounts taken off the same way — so the two should agree. After you complete the sale, glance at the receipt's total and confirm it matches what you expected and what the customer is paying. If they differ, do **not** improvise — the receipt (from the finalised invoice) is the truth; investigate before handing over change.
 
 ### Never re-ring a sale when you are unsure — retry the *same* one
 
@@ -377,6 +380,9 @@ If a message stops you, read it and match it to a table in this chapter. If it i
 | **Tendered … is less than the total …** | Underpaid. | Add tender until **Paid** covers **Total**. |
 | **Age-restricted items** / **Sale stopped: age not verified.** | Restricted item in basket; **Cancel** was pressed. | Check ID → **Age verified**, or remove the line. |
 | **No match for "…".** | Barcode, code or name not found. | Re-scan, search by name, pick from the list; report missing barcodes. |
+| **Can't reach the ERP — check the connection.** (when scanning or searching) | Network dropped for a moment. | Check the network, scan again. Not a missing product. |
+| **A cash refund needs a supervisor…** | An older till offered a **Refund** payout. | Refund with **Refund / reverse** on the sale instead; update the till to 1.6.0. |
+| **Expected cash** missing from the X-read, or **Expected cash 0.00** | Blind cash-up: only a supervisor sees the expected figure. | Count the drawer as normal; the supervisor compares. |
 | Next scan adds the previous item; list stays open | Fault in versions before 1.5.2. | Upgrade to 1.5.2 or later; check lines meanwhile. |
 | Scan does nothing / lands in the wrong box | Cursor not in the search field. | Click the search field, then scan. |
 | **No receipt printer set — configure one in Setup.** | No printer chosen. | Sign out → **Server setup** → pick printer → **Save**. |

@@ -52,7 +52,9 @@ The Pharmacy register is for a dispensing counter. A **patient and prescription 
 1. Tap the **Patient** tile.
 2. The **Customer** picker opens. Type a name, code or phone number in the **Search name / code / phone…** box.
 3. Tap the patient in the list. A tick marks the one currently selected.
-4. The picker closes and the **Patient** tile shows the chosen name.
+4. The picker closes and the **Patient** tile shows the chosen name. If medicines are already on the sale, their prices are read again **for this patient** — a registered customer may have their own prices.
+
+After each sale the tile goes back to **Walk-in** by itself, so the next customer never inherits the last one's name or prices.
 
 > **Walk-in is fine.** If the customer is not registered, leave the tile on **Walk-in**. A walk-in patient is not written into the note; only a named, registered patient is.
 
@@ -84,6 +86,7 @@ OrbixPOS finds your item like this:
 | An exact product code | That product is added. |
 | Part of a name or code | The **first** match is added — there is no list to choose from. |
 | Something with no match | *No match for "…"*. Nothing is added. |
+| Anything, while the network is down | **Can't reach the ERP — check the connection.** Nothing is added. The product may exist — check the network and try again. |
 
 > **Check what was added when you search by name.** Unlike the supermarket till, the pharmacy box does not show a list of matches — it adds the first one it finds. Typing `para` may add a different paracetamol from the one you meant. Look at the new line, and if it is wrong, remove it (**✕**) and type more of the name, or scan or type the exact code.
 
@@ -125,6 +128,7 @@ When the sale is complete, the table clears and the cursor returns to the search
 
 - No list of search matches — a name search adds the first match (section 2.2).
 - No line discounts, no void tick box, no number pad and no typing a quantity; quantities change one at a time with **–** / **+**.
+- No **Hold** / **Recall** — putting a sale on hold is on the Supermarket register only.
 - No prescription register, no batch or expiry selection, no dosage labels.
 - The patient, prescriber and Rx number are saved as a note on the sale but are not printed on the receipt.
 
