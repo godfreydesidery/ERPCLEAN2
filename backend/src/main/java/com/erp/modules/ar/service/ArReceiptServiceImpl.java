@@ -42,6 +42,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -51,7 +52,6 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -99,6 +99,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final ArCustomerNames customerNames;
     private final FiscalPeriodResolver fiscalPeriods;
     private final ArReceiptReversalSupport reversalSupport;
+    private final CompanyCalendar calendar;
 
     private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
 
@@ -119,7 +120,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  AuditService audit,
                                  ArCustomerNames customerNames,
                                  FiscalPeriodResolver fiscalPeriods,
-                                 ArReceiptReversalSupport reversalSupport) {
+                                 ArReceiptReversalSupport reversalSupport,
+                                 CompanyCalendar calendar) {
         this.customerNames           = customerNames;
         this.fiscalPeriods           = fiscalPeriods;
         this.reversalSupport         = reversalSupport;
@@ -138,6 +140,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         this.outbox                  = outbox;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
+        this.calendar                = calendar;
     }
 
     @Override
@@ -582,7 +585,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         }
 
         // Dated today (never before the receipt itself), like a bounced-cheque reversal.
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today = calendar.today(companyId);
         LocalDate reversalDate = today.isBefore(receipt.getReceiptDate())
                 ? receipt.getReceiptDate() : today;
 

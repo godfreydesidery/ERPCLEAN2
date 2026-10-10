@@ -274,7 +274,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         String docCurrency = po != null && po.getCurrency() != null
                 ? CurrencyCode.value(po.getCurrency()) : baseCurrency;
         LocalDate receiptDate = gr.getReceivedAt() != null
-                ? receiptFxDate(gr.getReceivedAt()) : null;
+                ? receiptFxDate(ret.getCompanyId(), gr.getReceivedAt()) : null;
 
         // Build outbox payload and update GR line returned_qty_in_base
         List<PurchaseReturnedPayload.ReturnLine> payloadLines = new ArrayList<>();
@@ -467,8 +467,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     }
 
     /** Same date derivation as the receipt itself (GoodsReceiptServiceImpl.receiptFxDate). */
-    private static LocalDate receiptFxDate(Instant receivedAt) {
-        return receivedAt.atZone(java.time.ZoneOffset.UTC).toLocalDate();
+    private LocalDate receiptFxDate(Long companyId, Instant receivedAt) {
+        return calendar.dateOf(companyId, receivedAt);
     }
 
     /** PUR-03: goods can only go back to the supplier from a receipt that still stands. */

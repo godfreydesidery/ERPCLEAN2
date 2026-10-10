@@ -4,15 +4,14 @@ import com.erp.modules.ar.service.ArCreditNoteService;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -45,15 +44,18 @@ public class ArSaleVoidedHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final ArCreditNoteService creditNotes;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public ArSaleVoidedHandler(IdempotencyGuard guard,
                                SalesInvoiceService salesInvoiceService,
                                ArCreditNoteService creditNotes,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               CompanyCalendar calendar) {
         this.guard               = guard;
         this.salesInvoiceService = salesInvoiceService;
         this.creditNotes         = creditNotes;
         this.objectMapper        = objectMapper;
+        this.calendar            = calendar;
     }
 
     @Override
@@ -79,7 +81,7 @@ public class ArSaleVoidedHandler implements DomainEventHandler {
                     .findPostingTotalsByUidAndCompany(payload.invoiceUid(), companyId)
                     .orElse(null);
             // Same date basis as the GL reversal the void posts (SaleVoidingHandler).
-            LocalDate noteDate = LocalDate.ofInstant(Instant.now(), ZoneOffset.UTC);
+            LocalDate noteDate = calendar.today(companyId);
             creditNotes.raiseForSaleVoid(companyId, payload.invoiceUid(), payload.invoiceNumber(),
                             noteDate,
                             totals != null ? totals.grossTotalAmount() : null,

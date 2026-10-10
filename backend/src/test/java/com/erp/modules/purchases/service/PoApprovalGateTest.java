@@ -40,7 +40,7 @@ class PoApprovalGateTest {
     void setUp() {
         settings = mock(PurchaseSettingsRepository.class);
         fx = mock(com.erp.platform.common.money.CurrencyConversionService.class);
-        gate = new PoApprovalGate(settings, mock(ApprovalEngine.class), fx);
+        gate = new PoApprovalGate(settings, mock(ApprovalEngine.class), fx, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     /** PUR-22: a USD order is measured in the threshold's currency, not by its bare number. */

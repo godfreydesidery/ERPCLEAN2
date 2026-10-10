@@ -31,6 +31,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -88,6 +89,7 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final FxDocumentConverter        fxConverter;
     /** ACC-17: carries the on-hand share of a bill-vs-receipt cost difference to the stock module. */
     private final OutboxPublisher            outbox;
+    private final CompanyCalendar calendar;
 
     public BillMatchServiceImpl(SupplierBillRepository bills,
                                  SupplierBillLineRepository lines,
@@ -101,7 +103,8 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  AuditService audit,
                                  JdbcTemplate jdbc,
                                  FxDocumentConverter fxConverter,
-                                 OutboxPublisher outbox) {
+                                 OutboxPublisher outbox,
+                                 CompanyCalendar calendar) {
         this.bills          = bills;
         this.lines          = lines;
         this.matches        = matches;
@@ -115,6 +118,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.jdbc           = jdbc;
         this.fxConverter    = fxConverter;
         this.outbox         = outbox;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -739,7 +743,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         BigDecimal baseLineCost = currency == null
                 ? lineCost
                 : fxConverter.toBase(lineCost, currency, companyId,
-                        receiptFxDate(((java.sql.Timestamp) receivedAt).toInstant())).baseAmount();
+                        receiptFxDate(companyId, ((java.sql.Timestamp) receivedAt).toInstant())).baseAmount();
         BigDecimal baseUnitCost = baseLineCost.divide(qtyInBase, 4, RoundingMode.HALF_UP);
         BigDecimal billedBaseQty = l.getBilledQty().compareTo(receivedQty) >= 0
                 ? qtyInBase
@@ -784,8 +788,8 @@ public class BillMatchServiceImpl implements BillMatchService {
      * The receipt's conversion date, derived from its received instant exactly as the receipt
      * itself derived it ({@code GoodsReceiptServiceImpl.receiptFxDate}) so both use the same rate.
      */
-    private static java.time.LocalDate receiptFxDate(Instant receivedAt) {
-        return receivedAt.atZone(java.time.ZoneOffset.UTC).toLocalDate();
+    private java.time.LocalDate receiptFxDate(Long companyId, Instant receivedAt) {
+        return calendar.dateOf(companyId, receivedAt);
     }
 
     /**

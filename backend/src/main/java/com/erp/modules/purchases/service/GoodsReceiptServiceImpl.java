@@ -31,6 +31,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -38,7 +39,6 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -98,6 +98,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
     /** PUR-07 / ACC-08: converts a foreign-currency receipt's cost to base before it is valued. */
     private final FxDocumentConverter              fxConverter;
+    private final CompanyCalendar calendar;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -116,7 +117,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    ReceiptVoidStockGuard voidStockGuard,
                                    com.erp.modules.purchases.domain.dto.ReceiptBillingReader
                                            billingReader,
-                                   FxDocumentConverter fxConverter) {
+                                   FxDocumentConverter fxConverter,
+                                   CompanyCalendar calendar) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -134,6 +136,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.voidStockGuard = voidStockGuard;
         this.billingReader  = billingReader;
         this.fxConverter    = fxConverter;
+        this.calendar       = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -196,7 +199,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         // PUR-07 / ACC-08: the payload's unit cost is valued straight into stock and the GL, which
         // are kept in BASE currency — so a USD order's cost is converted at the receipt date first.
         List<StockReceivedPayload.LineItem> payloadLines = buildPayloadLines(savedLines,
-                CurrencyCode.value(po.getCurrency()), po.getCompanyId(), receiptFxDate(receivedAt));
+                CurrencyCode.value(po.getCurrency()), po.getCompanyId(),
+                receiptFxDate(po.getCompanyId(), receivedAt));
         outbox.publish(
                 DomainEventType.STOCK_RECEIVED,
                 DomainEventType.AGG_GOODS_RECEIPT,
@@ -571,13 +575,12 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     }
 
     /**
-     * The date a receipt's cost is converted at — the day the goods were received, derived exactly
-     * as {@code GoodsReceiptStockHandler} derives the GL posting date from the same instant, so the
-     * rate and the journal date always agree. Kept in one place so a change to how business dates
-     * are derived only has to touch this line.
+     * The date a receipt's cost is converted at — the day the goods were received in the COMPANY's
+     * zone (owner ruling 2026-10-10), derived exactly as {@code GoodsReceiptStockHandler} derives
+     * the GL posting date from the same instant, so the rate and the journal date always agree.
      */
-    private static LocalDate receiptFxDate(Instant receivedAt) {
-        return receivedAt.atZone(ZoneOffset.UTC).toLocalDate();
+    private LocalDate receiptFxDate(Long companyId, Instant receivedAt) {
+        return calendar.dateOf(companyId, receivedAt);
     }
 
     /** Resolve product uid from id — needed to populate the outbox payload (ADR-0011 D-8). */

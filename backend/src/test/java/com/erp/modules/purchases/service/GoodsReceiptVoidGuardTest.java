@@ -68,7 +68,7 @@ class GoodsReceiptVoidGuardTest {
                 mock(PurchaseSettingsRepository.class), mock(PurchaseNumberGenerator.class),
                 tracker, poService, mock(ScopeGuard.class), mock(AuditService.class), outbox,
                 mock(GoodsReceiptPrintQuery.class), stockGuard, billingReader,
-                mock(com.erp.platform.common.money.FxDocumentConverter.class));
+                mock(com.erp.platform.common.money.FxDocumentConverter.class), com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         RequestContext.set(new RequestContext.Principal(1L, "u@test", false, 10L, 20L, null));
 

@@ -12,9 +12,9 @@ import com.erp.modules.purchases.repository.PurchaseSettingsRepository;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.common.money.FxRateNotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,13 +40,16 @@ public class PoApprovalGate {
     private final ApprovalEngine             approvalEngine;
     /** PUR-22: brings a foreign-currency order total into the threshold's currency. */
     private final CurrencyConversionService  fx;
+    private final CompanyCalendar calendar;
 
     public PoApprovalGate(PurchaseSettingsRepository settings,
                            ApprovalEngine approvalEngine,
-                           CurrencyConversionService fx) {
+                           CurrencyConversionService fx,
+                           CompanyCalendar calendar) {
         this.settings       = settings;
         this.approvalEngine = approvalEngine;
         this.fx             = fx;
+        this.calendar       = calendar;
     }
 
     /**
@@ -152,7 +155,7 @@ public class PoApprovalGate {
         }
         try {
             return fx.convert(poTotal, poCurrency, thresholdCurrency, po.getCompanyId(),
-                    LocalDate.now()).baseAmount();
+                    calendar.today(po.getCompanyId())).baseAmount();
         } catch (FxRateNotFoundException ex) {
             log.warn("PoApprovalGate: no {}->{} rate for PO uid={} — approval required (fail closed)",
                     poCurrency, thresholdCurrency, po.getUid());

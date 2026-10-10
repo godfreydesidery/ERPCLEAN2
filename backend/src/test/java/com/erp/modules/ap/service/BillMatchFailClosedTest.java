@@ -127,7 +127,7 @@ class BillMatchFailClosedTest {
                 glPosting, glConfig, journalEntries,
                 mock(ApBillNumberGenerator.class),
                 mock(ScopeGuard.class), mock(AuditService.class), jdbc, fxConverter,
-                mock(com.erp.platform.events.OutboxPublisher.class));
+                mock(com.erp.platform.events.OutboxPublisher.class), com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         // A clerk, not root: root short-circuits authorisation and hides real-world behaviour.
         RequestContext.set(new RequestContext.Principal(
