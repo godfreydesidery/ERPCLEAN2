@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.SalesSummaryTotalsDto;
 import com.erp.modules.sales.domain.enums.SalesSummaryGroupBy;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -100,11 +101,11 @@ public class SalesSummaryReportQuery {
         OffsetDateTime to   = toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
         NamedRef branch = resolveBranch(branchUid, companyId);
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
 
         Grouping g = Grouping.of(by);
-        Map<String, Cogs> cogs = queryCogs(g, zone, companyId, from, to, branch);
-        List<SalesSummaryRowDto> rows = queryRows(g, by, zone, companyId, from, to, branch, cogs);
+        Map<String, Cogs> cogs = queryCogs(g, zone, companyId, from, to, branch, scope);
+        List<SalesSummaryRowDto> rows = queryRows(g, by, zone, companyId, from, to, branch, scope, cogs);
 
         return new SalesSummaryReportDto(
                 header.toDto(),
@@ -148,7 +149,7 @@ public class SalesSummaryReportQuery {
 
     private List<SalesSummaryRowDto> queryRows(Grouping g, SalesSummaryGroupBy by, ZoneId zone,
                                                Long companyId, OffsetDateTime from,
-                                               OffsetDateTime to, NamedRef branch,
+                                               OffsetDateTime to, NamedRef branch, BranchReadScope scope,
                                                Map<String, Cogs> cogs) {
         List<Object> params = new ArrayList<>();
         if (g.bindsZone()) {
@@ -157,7 +158,7 @@ public class SalesSummaryReportQuery {
         params.add(companyId);
         params.add(from);
         params.add(to);
-        String branchSql = "";
+        String branchSql = scope.sql("i.branch_id");
         if (branch != null) {
             branchSql = " AND i.branch_id = ?";
             params.add(branch.id());
@@ -249,7 +250,8 @@ public class SalesSummaryReportQuery {
     private record Cogs(BigDecimal value, long unvalued) {}
 
     private Map<String, Cogs> queryCogs(Grouping g, ZoneId zone, Long companyId,
-                                        OffsetDateTime from, OffsetDateTime to, NamedRef branch) {
+                                        OffsetDateTime from, OffsetDateTime to, NamedRef branch,
+                                        BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         if (g.bindsZone()) {
             params.add(zone.getId());
@@ -258,7 +260,7 @@ public class SalesSummaryReportQuery {
         params.add(companyId);
         params.add(from);
         params.add(to);
-        String branchSql = "";
+        String branchSql = scope.sql("i.branch_id");
         if (branch != null) {
             branchSql = " AND i.branch_id = ?";
             params.add(branch.id());

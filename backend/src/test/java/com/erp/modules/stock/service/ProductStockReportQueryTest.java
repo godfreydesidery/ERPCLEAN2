@@ -224,8 +224,9 @@ class ProductStockReportQueryTest {
     /**
      * A caller who reached this report HOLDS the report permission, so a permission-shaped refusal
      * sends them to an administrator to ask for something they already have and leaves them believing
-     * the screen is broken. The real remedy is a branch assignment, or no branch filter — and the
-     * refusal has to say so.
+     * the screen is broken. The real remedy is one of their own branches, or "All branches" — which
+     * for a branch-limited caller means THEIR branches, so the refusal must not promise the whole
+     * company (owner ruling 2026-10-10).
      */
     @Test
     void branchRefusal_namesTheRealReasonAndTheRemedy() {
@@ -236,7 +237,8 @@ class ProductStockReportQueryTest {
                         + "permission, they are short of a branch assignment")
                 .isNotEqualTo(ForbiddenException.notPermitted().getMessage())
                 .containsIgnoringCase("not assigned to that branch")
-                .containsIgnoringCase("whole company");
+                .containsIgnoringCase("All branches")
+                .doesNotContainIgnoringCase("whole company");
     }
 
     /** User-facing text: no uids, no ids, no internal reference codes, no table names. */

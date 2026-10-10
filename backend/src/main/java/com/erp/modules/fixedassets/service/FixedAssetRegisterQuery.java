@@ -6,6 +6,7 @@ import com.erp.modules.fixedassets.domain.dto.FixedAssetRegisterTotalDto;
 import com.erp.modules.fixedassets.domain.enums.FixedAssetStatus;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -70,7 +71,7 @@ public class FixedAssetRegisterQuery {
                 "That branch could not be found.");
         NamedRef costCentre = resolve("dimension_values", "name", costCentreUid, companyId,
                 "That cost centre could not be found.");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         String locationFilter = location != null && !location.isBlank() ? location.trim() : null;
 
         List<Object> params = new ArrayList<>();
@@ -78,7 +79,7 @@ public class FixedAssetRegisterQuery {
         params.add(date);            // posted-charge roll-back
         params.add(companyId);       // a.company_id
         params.add(date);            // acquisition_date <= ?
-        StringBuilder filters = new StringBuilder();
+        StringBuilder filters = new StringBuilder(scope.sql("a.branch_id"));
         if (category != null) {
             filters.append(" AND a.category_id = ?");
             params.add(category.id());

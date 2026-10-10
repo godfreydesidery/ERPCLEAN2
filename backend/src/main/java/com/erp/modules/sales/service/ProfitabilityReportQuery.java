@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.ProfitabilityRowDto;
 import com.erp.modules.sales.domain.dto.ProfitabilityTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -97,9 +98,9 @@ public class ProfitabilityReportQuery {
 
         NamedRef branch = resolveNamedRef("branches", "name", branchUid, companyId, "Branch");
 
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
 
-        String filterSql = "";
+        String filterSql = scope.sql("i.branch_id");
         List<Object> filterParams = new ArrayList<>();
         if (branch != null) {
             filterSql = " AND i.branch_id = ?";

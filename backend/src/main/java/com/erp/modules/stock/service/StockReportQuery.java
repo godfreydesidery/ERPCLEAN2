@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.dto.StockReportDto;
 import com.erp.modules.stock.domain.dto.StockReportRowDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -75,12 +76,12 @@ public class StockReportQuery {
         CompanyHeader header = loadCompanyHeader(companyId);
         Long defaultPriceListId = resolveDefaultPriceListId(companyId);
         NamedRef branch = resolveNamedRef("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
 
         List<Object> params = new ArrayList<>();
         params.add(defaultPriceListId);
         params.add(companyId);
-        String branchSql = "";
+        String branchSql = scope.sql("soh.branch_id");
         if (branch != null) {
             branchSql = " AND soh.branch_id = ?";
             params.add(branch.id());

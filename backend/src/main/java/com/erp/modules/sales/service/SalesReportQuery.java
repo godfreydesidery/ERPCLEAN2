@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.SalesReportRowDto;
 import com.erp.modules.sales.domain.dto.SalesReportTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -78,9 +79,10 @@ public class SalesReportQuery {
         NamedRef route    = resolveNamedRef("routes",    "name",         routeUid,    companyId, "Route");
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId,
+                branch != null ? branch.id() : null);
 
-        StringBuilder filterSql = new StringBuilder();
+        StringBuilder filterSql = new StringBuilder(scope.sql("i.branch_id"));
         List<Object> filterParams = new ArrayList<>();
         if (branch != null) {
             filterSql.append(" AND i.branch_id = ?");
@@ -104,7 +106,7 @@ public class SalesReportQuery {
         // read at a counter as a stock discrepancy. Only the branch narrows it: agent/route/supplier
         // filter the sales, not where the goods physically are.
         List<SalesReportRowDto> rows = queryRows(companyId, from, to, filterSql.toString(),
-                filterParams, branch != null ? branch.id() : null);
+                filterParams, branch != null ? branch.id() : null, scope.sql("branch_id"));
 
         BigDecimal totalQty = BigDecimal.ZERO;
         BigDecimal totalDiscount = BigDecimal.ZERO;
@@ -149,7 +151,7 @@ public class SalesReportQuery {
 
     private List<SalesReportRowDto> queryRows(Long companyId, OffsetDateTime from, OffsetDateTime to,
                                                String filterSql, List<Object> filterParams,
-                                               Long stockBranchId) {
+                                               Long stockBranchId, String stockScopeSql) {
         List<Object> mainParams = new ArrayList<>();
         mainParams.add(companyId); // stock_on_hand subquery
         // Bound twice by design: the predicate is "this branch, or every branch when none was
@@ -191,6 +193,7 @@ public class SalesReportQuery {
                     FROM stock_on_hand
                     WHERE company_id = ?
                       AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                      /*branch-scope*/
                     GROUP BY product_id
                 ) soh ON soh.product_id = l.product_id
                 WHERE i.company_id = ?
@@ -202,6 +205,9 @@ public class SalesReportQuery {
                 GROUP BY l.product_id, l.product_code, l.product_name, soh.qty
                 ORDER BY l.product_code NULLS LAST
                 """;
+        // The on-hand column follows the caller's branch scope too ("All branches" for a
+        // branch-limited caller is their branches' stock, not the company's).
+        mainSql = mainSql.replace("/*branch-scope*/", stockScopeSql);
 
         List<Object[]> mainRows = jdbc.query(mainSql,
                 (rs, rowNum) -> new Object[]{
