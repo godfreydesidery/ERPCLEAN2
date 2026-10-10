@@ -93,8 +93,9 @@ export class PurchaseReturnCreateComponent {
     if (!companyId) return;
     this.purchasesService.listReceipts(companyId, undefined, 0, 100).subscribe({
       next: ({ rows }) => {
+        // PUR-03: a voided receipt cannot take a return (the server refuses it too).
         this.grOptions.set(
-          rows.map((gr) => ({
+          rows.filter((gr) => gr.status !== 'VOID').map((gr) => ({
             uid: gr.uid,
             label: gr.receiptNumber,
             hint: gr.status,
@@ -141,6 +142,41 @@ export class PurchaseReturnCreateComponent {
     );
   }
 
+  // ── Unit helpers (PUR-02) ───────────────────────────────────────────────────
+  // A return is entered in the RECEIPT LINE's unit (crates for a line received in crates), exactly
+  // like the receipt itself; the server converts to base units with the line's own factor.
+
+  /** Base units per one of the line's unit (qtyInBase ÷ receivedQty); 1 when unknown. */
+  lineFactor(line: GoodsReceiptLineDto): number {
+    const received = Number(line.receivedQty);
+    const base = Number(line.qtyInBase);
+    return received > 0 && base > 0 ? base / received : 1;
+  }
+
+  /** True when the line was received in a pack unit (factor ≠ 1). */
+  isPackLine(line: GoodsReceiptLineDto): boolean {
+    return Math.abs(this.lineFactor(line) - 1) > 1e-9;
+  }
+
+  /** What is still returnable, in the line's unit (received less confirmed returns). */
+  returnableQty(line: GoodsReceiptLineDto): number {
+    const base = Number(line.qtyInBase);
+    const returned = Number(line.returnedQtyInBase ?? 0) || 0;
+    const remainingBase = Math.max(0, base - returned);
+    return this.round(remainingBase / this.lineFactor(line));
+  }
+
+  /** Preview of the entered quantity in base units, or null when nothing valid is entered. */
+  baseQtyPreview(entry: ReturnLineEntry): number | null {
+    const qty = Number(entry.returnedQty);
+    if (!entry.returnedQty.trim() || !Number.isFinite(qty) || qty <= 0) return null;
+    return this.round(qty * this.lineFactor(entry.line));
+  }
+
+  private round(n: number): number {
+    return Number(n.toFixed(6));
+  }
+
   toggleLineInclude(index: number, include: boolean): void {
     this.returnLines.update((entries) =>
       entries.map((e, i) => (i === index ? { ...e, include } : e)),
@@ -163,6 +199,11 @@ export class PurchaseReturnCreateComponent {
       const qty = Number(entry.returnedQty);
       if (!entry.returnedQty.trim() || isNaN(qty) || qty <= 0) {
         errors[entry.line.uid] = 'Quantity must be greater than zero.';
+        valid = false;
+      } else if (qty > this.returnableQty(entry.line) + 1e-9) {
+        // Hint only — the server is authoritative (it re-checks against the base remainder).
+        errors[entry.line.uid] =
+          `You can return at most ${this.returnableQty(entry.line)} ${entry.line.unitName}.`;
         valid = false;
       }
     }

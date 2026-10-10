@@ -9,6 +9,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.service.PurchaseCostSuggestionService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.platform.common.api.ApiResponse;
@@ -101,8 +102,11 @@ public class PurchaseOrderController {
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
             @RequestParam(required = false, defaultValue = "false") boolean includeDirectReceipts,
+            // PUR-11: optional status filter; repeat or comma-separate for several
+            // (?status=ORDERED,PARTIALLY_RECEIVED). Absent = every status, as before.
+            @RequestParam(required = false) List<PurchaseOrderStatus> status,
             Pageable pageable) {
-        Page<PurchaseOrderDto> page = service.list(companyId, q, includeDirectReceipts, pageable);
+        Page<PurchaseOrderDto> page = service.list(companyId, q, includeDirectReceipts, status, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 

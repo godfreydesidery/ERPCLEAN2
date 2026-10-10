@@ -91,6 +91,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final AuditService                     audit;
     private final OutboxPublisher                  outbox;
     private final GoodsReceiptPrintQuery           printQuery;
+    private final ReceiptVoidStockGuard            voidStockGuard;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -105,7 +106,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
                                    OutboxPublisher outbox,
-                                   GoodsReceiptPrintQuery printQuery) {
+                                   GoodsReceiptPrintQuery printQuery,
+                                   ReceiptVoidStockGuard voidStockGuard) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -120,6 +122,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.audit         = audit;
         this.outbox        = outbox;
         this.printQuery    = printQuery;
+        this.voidStockGuard = voidStockGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -261,9 +264,26 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         GoodsReceipt gr = requireReceipt(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), gr.getCompanyId());
         if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
-            throw new IllegalStateException(
-                    "Only RECEIVED receipts can be voided; current status: " + gr.getStatus());
+            throw new IllegalStateException("This goods receipt has already been voided.");
         }
+
+        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
+
+        // PUR-03: goods already sent back to the supplier left stock on the return. The void
+        // reverses the WHOLE receipt, so voiding now would take those goods out a second time.
+        // Refuse rather than reverse a partial quantity: the return and its debit note stand, and
+        // what is left on the receipt can go back on a further return.
+        boolean hasReturns = lineList.stream().anyMatch(l ->
+                l.getReturnedQtyInBase() != null && l.getReturnedQtyInBase().signum() > 0);
+        if (hasReturns) {
+            throw new IllegalStateException(
+                    "Some of these goods have already been returned to the supplier, so this "
+                            + "receipt can't be voided. Raise a purchase return for the rest instead.");
+        }
+
+        // OPN-13 (owner ruling 2026-10-10): refuse once the receipt's stock has partly been sold or
+        // used — the reversal would drive the branch negative and distort the moving average.
+        voidStockGuard.assertStockStillOnHand(gr, lineList);
 
         // 1. Transition to VOID
         gr.setStatus(GoodsReceiptStatus.VOID);
@@ -274,7 +294,6 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         gr.setUpdatedBy(actorId());
 
         // 2. Reverse PO line outstanding (OutstandingTracker, same TX, ADR-0011 D-3)
-        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
         tracker.reverseReceipt(lineList);
 
         // 3. Recompute PO status (ADR-0011 D-4)
@@ -404,10 +423,20 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
             log.warn("Over-receipt rejected (BR-PURCH-10, ADR-0011 D-3) on PO line id={} uid={}: "
                             + "outstanding={}, tolerancePct={}, ceiling={}, requestedQtyInBase={}",
                     poLine.getId(), poLine.getUid(), outstanding, tolerancePct, ceiling, qtyInBase);
+            // PUR-01 / LBO-05: say what IS still outstanding, in the line's own unit (the unit the
+            // storekeeper types in), so "reduce it" comes with the number to reduce it to.
+            BigDecimal outstandingInUnit = outstanding.max(BigDecimal.ZERO)
+                    .multiply(poLine.getOrderedQty())
+                    .divide(poLine.getOrderedQtyInBase(), BASE_QTY_SCALE, java.math.RoundingMode.HALF_UP)
+                    .stripTrailingZeros();
+            if (outstandingInUnit.scale() < 0) {
+                outstandingInUnit = outstandingInUnit.setScale(0);
+            }
             throw new IllegalStateException(
                     "Over-receipt rejected for " + poLine.getProductName()
-                            + ": the quantity received exceeds the outstanding amount on this line. "
-                            + "Reduce it and try again.");
+                            + ": the quantity received exceeds the outstanding amount on this line"
+                            + " (outstanding: " + outstandingInUnit.toPlainString() + " "
+                            + poLine.getUnitName() + "). Reduce it and try again.");
         }
 
         short nextLineNo = (short) (grLines.findMaxLineNo(gr.getId()) + 1);

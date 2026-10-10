@@ -50,6 +50,15 @@ public interface DomainEventRepository extends JpaRepository<DomainEvent, Long> 
             """, nativeQuery = true)
     Optional<DomainEvent> claimPendingForUpdate(@Param("id") Long id);
 
+    /**
+     * Whether an aggregate still has an event of this type in one of the given statuses — e.g. "has
+     * this goods receipt's STOCK.RECEIVED not been applied yet?". Served by
+     * {@code ix_domain_events_aggregate (aggregate_type, aggregate_id)}.
+     */
+    boolean existsByAggregateTypeAndAggregateIdAndEventTypeAndStatusIn(
+            String aggregateType, Long aggregateId, String eventType,
+            java.util.Collection<DomainEventStatus> statuses);
+
     /** Count of events in a given status — backs the {@code erp.outbox.failed} gauge (D-8 / #2). */
     long countByStatus(DomainEventStatus status);
 

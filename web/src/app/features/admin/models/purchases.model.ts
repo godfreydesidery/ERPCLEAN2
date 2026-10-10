@@ -113,6 +113,12 @@ export interface GoodsReceiptLineDto {
   manufactureDate: string | null;   // 'YYYY-MM-DD'
   expiryDate: string | null;        // 'YYYY-MM-DD'
   serialNumbers: string[];          // [] when none
+  /**
+   * Base quantity already returned to the supplier on confirmed returns (PUR-02). A BigDecimal, so it
+   * arrives as a JSON number despite the string typing — always go through Number(). Absent on
+   * older servers.
+   */
+  returnedQtyInBase?: string;
 }
 
 // ── GoodsReceiptDto ─────────────────────────────────────────────────────────────

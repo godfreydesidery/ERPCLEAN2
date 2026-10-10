@@ -128,3 +128,44 @@ describe('PurchaseReturnCreateComponent — number-input coercion', () => {
     expect(payload.lines[0].returnedQty).toBe('15');
   });
 });
+
+// ── PUR-02: a return is entered in the receipt LINE's unit ──────────────────
+
+const CRATE_LINE = {
+  ...STUB_GR_LINE,
+  uid: 'GL2', unitName: 'Crate',
+  // 8 crates of 25 = 200 bottles; 3 crates (75 bottles) already returned.
+  receivedQty: 8, qtyInBase: 200, returnedQtyInBase: 75,
+};
+
+describe('PurchaseReturnCreateComponent — pack-unit lines (PUR-02)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('shows what is still returnable in the line unit and previews the base quantity', async () => {
+    makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const line = CRATE_LINE as any;
+    expect(comp.isPackLine(line)).toBe(true);
+    expect(comp.returnableQty(line)).toBe(5);
+    expect(comp.baseQtyPreview({ line, returnedQty: '2', include: true })).toBe(50);
+    expect(comp.baseQtyPreview({ line, returnedQty: '', include: true })).toBeNull();
+  });
+
+  it('blocks a quantity above the returnable crates before calling the server', async () => {
+    const { createSpy } = makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectedGrUid.set('GR1');
+    comp.reason.set('Damaged');
+    comp.returnLines.set([{ line: CRATE_LINE as any, returnedQty: '150', include: true }]);
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(comp.lineErrors()['GL2']).toBe('You can return at most 5 Crate.');
+  });
+});

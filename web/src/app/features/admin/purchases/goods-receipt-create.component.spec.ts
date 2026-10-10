@@ -220,6 +220,30 @@ describe('GoodsReceiptCreateComponent', () => {
     expect(createReceiptSpy.mock.calls[0][0].lines[0].receivedQty).toBe('60');
   });
 
+  // ── PUR-01 / LBO-05 / LUI-02: a crate line is prefilled and shown in CRATES ──
+  it('prefills and shows the outstanding in the line unit for a pack line, not in base units', async () => {
+    // 10 crates of 25 ordered (250 bottles); 2 crates (50 bottles) already received.
+    const crateLine = {
+      ...STUB_LINE, unitName: 'Crate',
+      orderedQty: 10, orderedQtyInBase: 250,
+      receivedQtyInBase: 50, outstandingQtyInBase: 200,
+    } as unknown as typeof STUB_LINE;
+    const { createReceiptSpy } = makeBed({ listOrderLinesSpy: vi.fn(() => of([crateLine])) });
+    const fixture = TestBed.createComponent(GoodsReceiptCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    const entry = comp.receiveLines()[0];
+    expect(entry.receivedQty).toBe('8');                       // 8 crates, not 200 bottles
+    expect(comp.receivedInLineUnit(entry.line)).toBe(2);
+    expect(comp.outstandingInLineUnit(entry.line)).toBe(8);
+    expect(comp.baseQtyPreview(entry)).toBe(200);              // "= 200 base units"
+
+    comp.submit();
+    await vi.runAllTimersAsync();
+    expect(createReceiptSpy.mock.calls[0][0].lines[0].receivedQty).toBe('8');
+  });
+
   // ── 4. 409 over-receipt surfaces in formError ──────────────────────────────
 
   it('surfaces the server 409 message (not a canned string) as formError', async () => {

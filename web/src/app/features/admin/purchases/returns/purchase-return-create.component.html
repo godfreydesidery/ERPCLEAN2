@@ -81,8 +81,9 @@
                   <th scope="col"><span class="visually-hidden">Include</span></th>
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
-                  <th scope="col" class="num">Received Qty</th>
-                  <th scope="col" class="num">Return Qty</th>
+                  <th scope="col" class="num">Received</th>
+                  <th scope="col" class="num">Returnable</th>
+                  <th scope="col" class="num">Return Qty (in line unit)</th>
                   <th scope="col"></th>
                 </tr>
               </thead>
@@ -105,18 +106,31 @@
                       <div class="text-muted small">{{ entry.line.productName }}</div>
                     </td>
                     <td class="small">{{ entry.line.unitName }}</td>
-                    <td class="num small">{{ +entry.line.qtyInBase | number:'1.2-2' }}</td>
+                    <td class="num small">
+                      {{ +entry.line.receivedQty | number:'1.0-3' }} {{ entry.line.unitName }}
+                      @if (isPackLine(entry.line)) {
+                        <div class="text-muted">= {{ +entry.line.qtyInBase | number:'1.0-3' }} base units</div>
+                      }
+                    </td>
+                    <td class="num small">{{ returnableQty(entry.line) | number:'1.0-3' }} {{ entry.line.unitName }}</td>
                     <td>
                       @if (entry.include) {
                         <input type="number" class="form-control form-control-sm"
                                style="max-width:110px"
                                [id]="'qty-' + entry.line.uid"
-                               [attr.aria-label]="'Return quantity for ' + entry.line.productName"
+                               [attr.aria-label]="'Return quantity in ' + entry.line.unitName + ' for ' + entry.line.productName"
+                               [attr.aria-describedby]="'qtyBase-' + entry.line.uid"
                                [ngModel]="entry.returnedQty"
                                (ngModelChange)="updateLineQty(i, $event)"
                                [ngModelOptions]="{standalone: true}"
                                min="0.001" step="any"
                                [disabled]="submitting()" />
+                        <p [id]="'qtyBase-' + entry.line.uid" class="form-text small text-muted mb-0">
+                          {{ entry.line.unitName }}
+                          @if (isPackLine(entry.line) && baseQtyPreview(entry); as base) {
+                            = {{ base | number:'1.0-3' }} base units
+                          }
+                        </p>
                       }
                     </td>
                     <td>
