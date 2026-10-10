@@ -21,6 +21,8 @@ import {
   PostJournalRequest,
   SetGlConfigRequest,
   TrialBalanceDto,
+  TrialBalanceRangeDto,
+  TrialBalanceRangeFilter,
   UpdateAccountRequest,
 } from './models/gl.model';
 
@@ -250,6 +252,15 @@ export class GlService {
     });
   }
 
+  /** Trial balance as at a date with opening / movement / closing; optional range and branch (ACC-14). */
+  getTrialBalanceRange(companyId: string, filter: TrialBalanceRangeFilter = {}): Observable<TrialBalanceRangeDto> {
+    let params = new HttpParams().set('companyId', companyId);
+    if (filter.from) params = params.set('from', filter.from);
+    if (filter.asAt) params = params.set('asAt', filter.asAt);
+    if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
+    return this.http.get<TrialBalanceRangeDto>(`${this.base}/trial-balance/range`, { params });
+  }
+
   /**
    * The trial balance as a file. Server-gated GL.VIEW + REPORT.EXPORT (an export discloses more
    * than one on-screen page, so it needs the screen's own permission as well as the export one).
@@ -260,9 +271,16 @@ export class GlService {
     companyId: string,
     format: ExportFormat,
     periodId?: string | null,
+    range?: TrialBalanceRangeFilter,
   ): Observable<Blob> {
     let params = new HttpParams().set('companyId', companyId).set('format', format);
     if (periodId) params = params.set('periodId', periodId);
+    if (range) {
+      // An "as at" export prints the closing balances (ACC-14).
+      params = params.set('asAt', range.asAt || new Date().toISOString().slice(0, 10));
+      if (range.from) params = params.set('from', range.from);
+      if (range.branchUid) params = params.set('branchUid', range.branchUid);
+    }
     return this.http.get(`${this.base}/trial-balance/export`, { params, responseType: 'blob' });
   }
 }

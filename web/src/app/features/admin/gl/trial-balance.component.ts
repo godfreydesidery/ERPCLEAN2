@@ -9,8 +9,12 @@ import {
   AccountType,
   FiscalPeriodDto,
   TrialBalanceDto,
+  TrialBalanceRangeDto,
+  TrialBalanceRangeFilter,
   TrialBalanceRowDto,
 } from './models/gl.model';
+import { Branch } from '../models/branch.model';
+import { BranchService } from '../branch/branch.service';
 import { GlService } from './gl.service';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
@@ -35,7 +39,17 @@ export class TrialBalanceComponent {
   private readonly glService = inject(GlService);
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
+  private readonly branchService = inject(BranchService);
   protected readonly session = inject(SessionStore);
+
+  // ── "As at" basis (ACC-14): opening / movement / closing, optional range and branch ──
+  /** 'totals' = the classic all-periods / one-period totals; 'asAt' = balances as at a date. */
+  readonly basis = signal<'totals' | 'asAt'>('totals');
+  readonly rangeFrom = signal('');
+  readonly asAt = signal(new Date().toISOString().slice(0, 10));
+  readonly branchUid = signal('');
+  readonly branches = signal<Branch[]>([]);
+  readonly range = signal<TrialBalanceRangeDto | null>(null);
 
   // ── Company context ────────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -85,8 +99,20 @@ export class TrialBalanceComponent {
     ACCOUNT_TYPE_ORDER.filter((t) => (this.groupedByType().get(t)?.length ?? 0) > 0),
   );
 
-  readonly totalDebits = computed(() => this.tb()?.totalDebits ?? '0.00');
-  readonly totalCredits = computed(() => this.tb()?.totalCredits ?? '0.00');
+  readonly totalDebits = computed(() =>
+    this.basis() === 'asAt' ? String(this.range()?.closingDebit ?? '0.00') : (this.tb()?.totalDebits ?? '0.00'));
+  readonly totalCredits = computed(() =>
+    this.basis() === 'asAt' ? String(this.range()?.closingCredit ?? '0.00') : (this.tb()?.totalCredits ?? '0.00'));
+
+  /** "As at" rows in canonical account-type order. */
+  readonly rangeRows = computed(() => {
+    const rows = this.range()?.rows ?? [];
+    return [...rows].sort((a, b) => {
+      const ai = ACCOUNT_TYPE_ORDER.indexOf(a.accountType);
+      const bi = ACCOUNT_TYPE_ORDER.indexOf(b.accountType);
+      return ai !== bi ? ai - bi : a.accountCode.localeCompare(b.accountCode);
+    });
+  });
 
   readonly isBalanced = computed(() => {
     const dr = Number.parseFloat(this.totalDebits() || '0');
@@ -136,11 +162,38 @@ export class TrialBalanceComponent {
     this.selectedCompanyId.set(id);
     this.selectedPeriodId.set('');
     this.tb.set(null);
+    this.range.set(null);
     this.periods.set([]);
+    this.branches.set([]);
+    this.branchUid.set('');
     if (id) {
       this.loadPeriods(id);
+      if (this.basis() === 'asAt') this.loadBranches();
       this.loadTrialBalance();
     }
+  }
+
+  onBasisChange(basis: 'totals' | 'asAt'): void {
+    this.basis.set(basis);
+    if (basis === 'asAt' && this.branches().length === 0) this.loadBranches();
+    this.loadTrialBalance();
+  }
+
+  private loadBranches(): void {
+    const company = this.companies().find((c) => c.id === this.selectedCompanyId());
+    if (!company) return;
+    this.branchService.list(company.uid).subscribe({
+      next: (list) => this.branches.set(list),
+      error: () => this.branches.set([]),
+    });
+  }
+
+  private rangeFilter(): TrialBalanceRangeFilter {
+    return {
+      from: this.rangeFrom() || undefined,
+      asAt: this.asAt() || undefined,
+      branchUid: this.branchUid() || undefined,
+    };
   }
 
   onPeriodChange(periodId: string): void {
@@ -152,6 +205,18 @@ export class TrialBalanceComponent {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
     this.state.set('loading');
+
+    if (this.basis() === 'asAt') {
+      this.glService.getTrialBalanceRange(companyId, this.rangeFilter()).subscribe({
+        next: (data) => {
+          this.range.set(data);
+          this.state.set('idle');
+        },
+        error: (err) =>
+          this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
+      });
+      return;
+    }
 
     const periodId = this.selectedPeriodId();
     const call$ = periodId
@@ -178,8 +243,10 @@ export class TrialBalanceComponent {
     if (!companyId || this.exporting()) return;
 
     this.exporting.set(true);
-    this.glService
-      .exportTrialBalance(companyId, format, this.selectedPeriodId() || null)
+    const file$ = this.basis() === 'asAt'
+      ? this.glService.exportTrialBalance(companyId, format, null, this.rangeFilter())
+      : this.glService.exportTrialBalance(companyId, format, this.selectedPeriodId() || null);
+    file$
       .subscribe({
         next: (blob) => {
           downloadBlob(blob, `trial-balance_${this.today()}.${format.toLowerCase()}`);

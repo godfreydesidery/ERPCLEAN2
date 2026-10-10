@@ -164,6 +164,48 @@ export interface TrialBalanceDto {
   totalCredits: string;
 }
 
+// ── Trial balance as at / range (ACC-14) ────────────────────────────────────
+
+/** Opening / movement / closing for one account. Amounts are JSON numbers. */
+export interface TrialBalanceRangeRowDto {
+  accountId: string;
+  accountUid: string;
+  accountCode: string;
+  accountName: string;
+  accountType: AccountType;
+  normalBalance: NormalBalance;
+  openingDebit: number | string;
+  openingCredit: number | string;
+  movementDebit: number | string;
+  movementCredit: number | string;
+  closingDebit: number | string;
+  closingCredit: number | string;
+}
+
+export interface TrialBalanceRangeDto {
+  companyId: string;
+  baseCurrency: string | null;
+  from: string | null;
+  asAt: string;
+  branchUid: string | null;
+  branchName: string | null;
+  periodLabel: string;
+  rows: TrialBalanceRangeRowDto[];
+  openingDebit: number | string;
+  openingCredit: number | string;
+  movementDebit: number | string;
+  movementCredit: number | string;
+  closingDebit: number | string;
+  closingCredit: number | string;
+}
+
+/** Filters of the "as at" trial balance; dates are yyyy-MM-dd. */
+export interface TrialBalanceRangeFilter {
+  from?: string;
+  asAt?: string;
+  branchUid?: string;
+}
+
 // ── Posting exceptions (ACC-02) ──────────────────────────────────────────────
 
 /**
