@@ -65,6 +65,16 @@ DEBIT_NOTE_VAT adjustments (user manual 08-finance.md:950 is outdated); legacy U
 GRNI/Inventory repair; night sales (00:00–03:00 EAT) now post to the EAT day; manual reversal of system
 journals is refused; control accounts are refused on bill lines.
 
+### Upgrade rehearsal on real client databases (2026-10-10)
+
+| Database | Postgres | From → to | Result |
+|---|---|---|---|
+| Kilimanjaro production copy (14-Aug-2026) | 15 | V98 → V106 (incl. multitenancy V99–V104) | 9 migrations applied in 0.14 s; booted healthy; FY2027 auto-opened; 22 key endpoints 200; no errors |
+| Client go-live copy `testdb` (10-Oct-2026, 30,587 products) | 18 | V105 → V106 | Applied in 0.06 s; booted healthy; 12 endpoints 200, all under 0.4 s; no errors |
+
+Found and fixed during the rehearsal: the sales-vs-GL tie-out reported voided invoices as missing revenue.
+Note: Flyway warns that Postgres 18 is newer than its tested range — plan a Flyway upgrade for PG 18 estates.
+
 ### Wave 2 (2026-10-10, no schema) — on `develop` 53650e48
 
 Green: 1,804 unit + 1,360 integration tests, 229 web spec files, production build, migration gate.
