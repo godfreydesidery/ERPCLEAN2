@@ -1,5 +1,7 @@
 package com.erp.modules.parties.service;
 
+import com.erp.modules.ar.domain.dto.ArBalanceDto;
+import com.erp.modules.ar.service.ArBalanceService;
 import com.erp.modules.parties.domain.dto.AssignPartyBranchRequest;
 import com.erp.modules.parties.domain.dto.CreateCustomerRequest;
 import com.erp.modules.parties.domain.dto.CustomerDto;
@@ -51,6 +53,8 @@ public class CustomerServiceImpl implements CustomerService {
     private final PartyBranchGuard branchGuard;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    /** ARC-29: the archive guard reads the AR balance (cross-module via ArBalanceDto). */
+    private final ArBalanceService arBalance;
 
     public CustomerServiceImpl(CustomerRepository customers,
                                CustomerBranchRepository customerBranches,
@@ -60,7 +64,9 @@ public class CustomerServiceImpl implements CustomerService {
                                PartyCodeGenerator codeGen,
                                PartyBranchGuard branchGuard,
                                ScopeGuard scopeGuard,
-                               AuditService audit) {
+                               AuditService audit,
+                               ArBalanceService arBalance) {
+        this.arBalance = arBalance;
         this.customers = customers;
         this.customerBranches = customerBranches;
         this.paymentTermsRepo = paymentTermsRepo;
@@ -154,12 +160,41 @@ public class CustomerServiceImpl implements CustomerService {
     public void archiveByUid(String uid) {
         Customer c = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), c.getCompanyId());
+        assertNoOpenBalance(c);
         MasterStatus prev = c.getStatus();
         c.setStatus(MasterStatus.ARCHIVED);
         c.setUpdatedAt(Instant.now());
         c.setUpdatedBy(actorId());
         audit.record(AuditEvent.of(AuditActions.CUSTOMER_ARCHIVE, "customers", c.getId(), c.getUid())
                 .detail(Map.of("previousStatus", prev.name(), "newStatus", MasterStatus.ARCHIVED.name())));
+    }
+
+    /**
+     * ARC-29: an archived customer disappears from the pickers (Record Receipt only offers ACTIVE
+     * customers) while the debt stays in ageing, so it could never be collected. Refuse while the
+     * AR balance — base total or any foreign amount — is not zero, either way (owed, or money held
+     * on account for them). Cross-module through the AR balance service's DTO, as sales does.
+     */
+    private void assertNoOpenBalance(Customer c) {
+        ArBalanceDto b = arBalance.currentBalance(c.getCompanyId(), c.getId());
+        if (b == null) {
+            return;
+        }
+        boolean baseOpen = b.balance() != null && b.balance().signum() != 0;
+        boolean foreignOpen = b.unconverted() != null && b.unconverted().stream()
+                .anyMatch(u -> u.amount() != null && u.amount().signum() != 0);
+        if (!baseOpen && !foreignOpen) {
+            return;
+        }
+        String figure = baseOpen
+                ? (b.currency() != null ? b.currency() + " " : "")
+                        + new java.text.DecimalFormat("#,##0.00").format(b.balance())
+                : "in a foreign currency";
+        String what = baseOpen && b.balance().signum() < 0
+                ? "money held on account of " + figure + ". Refund or apply it"
+                : "an unpaid balance of " + figure + ". Collect it, credit it or write it off";
+        throw new ConflictException("This customer cannot be archived while they have " + what
+                + " first — an archived customer can no longer be picked to record a payment.");
     }
 
     @Override

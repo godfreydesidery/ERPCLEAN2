@@ -482,11 +482,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                             exposure.missingRateCurrencies())
                                             + " You do not have permission to override the credit limit.");
                         }
+                        // ARC-21: name the limit, the exposure and the shortfall so the counter can
+                        // tell the customer exactly how much to pay to continue.
                         throw new IllegalStateException(
-                                "This customer's credit limit has been reached. "
-                                        + "The outstanding balance would exceed the allowed limit "
-                                        + "if this invoice is finalised. "
-                                        + "You do not have permission to override the credit limit.");
+                                CreditExposureCalculator.breachSentence(exposure)
+                                        + " You do not have permission to override the credit limit.");
                     }
                     Map<String, Object> detail = new java.util.LinkedHashMap<>();
                     detail.put("customerUid", customer.getUid());

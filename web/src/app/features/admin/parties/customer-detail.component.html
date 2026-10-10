@@ -58,6 +58,52 @@
   </header>
 
   @if (customerState() !== 'loading' && customer()) {
+    <!-- ARC-21: what the customer owes and how much credit is left -->
+    @if (canViewAr()) {
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Account Balance</h2>
+          <span class="spacer"></span>
+          <a routerLink="/admin/ar/statement" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Statement
+          </a>
+        </div>
+        <div class="erp-card__body">
+          @switch (arBalanceState()) {
+            @case ('loading') {
+              <p class="text-muted small mb-0" aria-live="polite">Loading balance…</p>
+            }
+            @case ('error') {
+              <p class="text-danger small mb-0" role="alert">Could not load this customer's balance.</p>
+            }
+            @default {
+              @if (arBalance(); as b) {
+                <dl class="row mb-0">
+                  <dt class="col-sm-4">Balance owed</dt>
+                  <dd class="col-sm-8 mono fw-semibold">{{ b.currency }} {{ fmtMoney(b.balance) }}</dd>
+                  @if (customer()!.creditLimit; as lim) {
+                    <dt class="col-sm-4">Credit limit</dt>
+                    <dd class="col-sm-8 mono">{{ lim.currency }} {{ fmtMoney(lim.amount) }}</dd>
+                    @if (availableCredit() !== null) {
+                      <dt class="col-sm-4">Credit available</dt>
+                      <dd class="col-sm-8 mono" [class.text-danger]="availableCredit()! < 0">
+                        {{ b.currency }} {{ fmtMoney(availableCredit()) }}
+                        @if (availableCredit()! < 0) { <span class="small">(over the limit)</span> }
+                      </dd>
+                    }
+                  }
+                  @for (u of b.unconverted ?? []; track u.currency) {
+                    <dt class="col-sm-4">Also owed in {{ u.currency }}</dt>
+                    <dd class="col-sm-8 mono">{{ u.currency }} {{ fmtMoney(u.amount) }}</dd>
+                  }
+                </dl>
+              }
+            }
+          }
+        </div>
+      </div>
+    }
+
     <!-- Edit form -->
     <div class="erp-card mb-3">
       <div class="erp-card__head">

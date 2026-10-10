@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.cashbank.domain.dto.CashAccountOptionDto;
 import com.erp.modules.cashbank.domain.dto.CashBankAccountDto;
 import com.erp.modules.cashbank.domain.dto.CashTillOptionDto;
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
@@ -76,5 +77,18 @@ public class CashBankAccountController {
             + "or @perm.has('CASH.COUNT.VIEW')")
     public List<CashTillOptionDto> listCashTills(@RequestParam Long companyId) {
         return service.listCashTills(companyId);
+    }
+
+    /**
+     * Account picker for "which cash / bank / M-Pesa account did this money land in" (ARC-05):
+     * ACTIVE accounts of every type, as a narrow row with no balances or bank detail. Admits the
+     * receipt-recording and cash-entry codes so the Record Receipt screen can offer it to a cashier
+     * without granting CASH.VIEW. The service asserts the company is the caller's own.
+     */
+    @GetMapping("/options")
+    @PreAuthorize("@perm.has('CASH.VIEW') or @perm.has('AR.RECEIPT.RECORD') "
+            + "or @perm.has('CASH.ENTRY.RECORD')")
+    public List<CashAccountOptionDto> listAccountOptions(@RequestParam Long companyId) {
+        return service.listAccountOptions(companyId);
     }
 }

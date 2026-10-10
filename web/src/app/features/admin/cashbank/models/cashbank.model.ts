@@ -10,6 +10,8 @@
 export type CashBankAccountType = 'CASH' | 'BANK';
 export type CashTxnDirection = 'IN' | 'OUT';
 export type CashTxnType =
+  | 'AR_RECEIPT'
+  | 'AP_PAYMENT'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
   | 'DIRECT_ENTRY'
@@ -33,6 +35,25 @@ export interface CashTillOptionDto {
   name: string;
   branchId: string | null;
   currency: string | null;
+}
+
+/**
+ * CashAccountOptionDto — narrow account picker row from GET /cash/accounts/options (ARC-05): ACTIVE
+ * cash, bank and mobile-money accounts, no balances or bank detail. Reachable with
+ * AR.RECEIPT.RECORD / CASH.ENTRY.RECORD as well as CASH.VIEW. Mobile-money wallets are BANK-type.
+ */
+export interface CashAccountOptionDto {
+  /** Wire: JSON string (Long). */
+  id: string;
+  uid: string;
+  code: string;
+  name: string;
+  accountType: CashBankAccountType;
+  branchId: string | null;
+  currency: string | null;
+  isDefault: boolean;
+  /** True when the account belongs to the branch the caller is working in. */
+  inCurrentBranch: boolean;
 }
 
 /**

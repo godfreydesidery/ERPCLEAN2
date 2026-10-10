@@ -5,6 +5,7 @@ import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
+  AllocationLineRequest,
   ArBalanceDto,
   ArInvoiceDto,
   ArAgeingRowDto,
@@ -110,6 +111,15 @@ export class ArService {
 
   getReceipt(uid: string): Observable<ArReceiptDto> {
     return this.http.get<ArReceiptDto>(`${this.base}/receipts/uid/${uid}`);
+  }
+
+  /**
+   * Replace a receipt's allocation set (ARC-06): PUT /ar/receipts/uid/{uid}/allocations. The lines
+   * sent become the WHOLE set — include the existing allocations to keep them. Whatever the lines
+   * do not cover stays on account. Posts nothing to the GL.
+   */
+  reallocateReceipt(uid: string, allocations: AllocationLineRequest[]): Observable<ArReceiptDto> {
+    return this.http.put<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/allocations`, { allocations });
   }
 
   // ── Write-offs ────────────────────────────────────────────────────────────

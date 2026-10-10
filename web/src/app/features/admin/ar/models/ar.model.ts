@@ -55,6 +55,8 @@ export interface AllocationLineDto {
 
 export interface ArReceiptDto {
   uid: string;
+  /** Wire: JSON string (Long). The receipt's company — used to load the customer's open items. */
+  companyId?: string;
   customerId: string;
   receiptNumber: string;
   receiptDate: string;
@@ -91,6 +93,17 @@ export interface RecordReceiptRequest {
   tenderType: TenderType;
   bankReference?: string;
   allocations: AllocationLineRequest[];
+  /**
+   * Optional: the cash / bank / M-Pesa account the money landed in (ARC-05). Omitted = the
+   * company's default cash/bank account (ADR-0016 D-10).
+   */
+  cashBankAccountUid?: string;
+  /**
+   * How the money is applied (ARC-20). MANUAL = exactly `allocations`, the rest on account (an
+   * empty list keeps it all on account); AUTO = oldest-first, send no lines; ON_ACCOUNT = none
+   * applied. Omitted = the old server rule (no lines → AUTO), so this screen always sends MANUAL.
+   */
+  allocationMode?: 'AUTO' | 'MANUAL' | 'ON_ACCOUNT';
   /**
    * Optional WHT_ON_RECEIPT capture (ADR-0017 D-9).
    * When set, the cash DR is reduced by whtAmount and a WHT receivable leg is posted.

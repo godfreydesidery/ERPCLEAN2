@@ -21,6 +21,8 @@ import {
 import { ArService } from './ar.service';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import {
   INVALID_AMOUNT_MESSAGE,
@@ -36,6 +38,32 @@ interface AllocationRow {
   invoice: ArInvoiceDto;
   /** User-entered allocation amount (string so the input stays reactive). */
   allocInput: string;
+}
+
+const MOBILE_MONEY_NAME = /m-?pesa|mobile|tigo|airtel|halo ?pesa|t-?pesa|wallet|lipa/i;
+
+/** Mobile-money wallets are BANK-type accounts; the code or name tells them apart (ARC-05). */
+export function isMobileMoneyAccount(a: CashAccountOptionDto): boolean {
+  return a.accountType === 'BANK' && MOBILE_MONEY_NAME.test(`${a.code} ${a.name}`);
+}
+
+/**
+ * The account a receipt most likely landed in, from its tender (ARC-05): cash → a cash account of
+ * this branch, M-Pesa → a mobile-money account, cheque / transfer / card → a bank account. Within a
+ * kind, the current branch's account wins, then the company default, then the first listed.
+ * Returns '' when nothing fits, which lets the server fall back to the company default account.
+ */
+export function suggestAccountForTender(tender: TenderType, options: CashAccountOptionDto[]): string {
+  const pick = (cands: CashAccountOptionDto[]): string =>
+    (cands.find((a) => a.inCurrentBranch) ?? cands.find((a) => a.isDefault) ?? cands[0])?.uid ?? '';
+  const cash = options.filter((a) => a.accountType === 'CASH');
+  const mobile = options.filter(isMobileMoneyAccount);
+  const bank = options.filter((a) => a.accountType === 'BANK' && !isMobileMoneyAccount(a));
+  let chosen = '';
+  if (tender === 'CASH') chosen = pick(cash);
+  else if (tender === 'MOBILE_MONEY') chosen = pick(mobile) || pick(bank);
+  else chosen = pick(bank) || pick(mobile);
+  return chosen || (options.find((a) => a.isDefault)?.uid ?? '');
 }
 
 /**
@@ -65,6 +93,7 @@ export class RecordReceiptComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly customerService = inject(CustomerService);
   private readonly taxService = inject(TaxService);
+  private readonly cashbankService = inject(CashbankService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -86,6 +115,14 @@ export class RecordReceiptComponent {
   readonly receiptDate = signal('');
   readonly tenderType = signal<TenderType>('CASH');
   readonly bankReference = signal('');
+
+  // ── Deposit-to account (ARC-05) ───────────────────────────────────────────
+  /** Active cash / bank / M-Pesa accounts the money can land in. Empty = server default only. */
+  readonly accountOptions = signal<CashAccountOptionDto[]>([]);
+  /** Chosen account uid; '' = let the server use the company default account. */
+  readonly cashBankAccountUid = signal('');
+  /** Once the user picks an account by hand, changing the tender no longer overrides it. */
+  private accountChosenByUser = false;
 
   // ── Allocation editor ──────────────────────────────────────────────────────
   readonly allocationRows = signal<AllocationRow[]>([]);
@@ -205,6 +242,7 @@ export class RecordReceiptComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
+              this.loadAccountOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -226,7 +264,45 @@ export class RecordReceiptComponent {
     this.selectedCompanyId.set(id);
     this.resetCustomer();
     this.whtUnavailable.set(false);
-    if (id) this.loadWhtTypes(id);
+    this.accountChosenByUser = false;
+    this.accountOptions.set([]);
+    this.cashBankAccountUid.set('');
+    if (id) {
+      this.loadWhtTypes(id);
+      this.loadAccountOptions(id);
+    }
+  }
+
+  // ── Deposit-to account (ARC-05) ───────────────────────────────────────────
+
+  private loadAccountOptions(companyId: string): void {
+    this.cashbankService.listAccountOptions(companyId).subscribe({
+      next: (list) => {
+        this.accountOptions.set(list ?? []);
+        this.applySuggestedAccount();
+      },
+      // Non-fatal: without the list the receipt still posts to the company default account.
+      error: () => { this.accountOptions.set([]); this.cashBankAccountUid.set(''); },
+    });
+  }
+
+  onTenderChange(t: TenderType): void {
+    this.tenderType.set(t);
+    if (!this.accountChosenByUser) this.applySuggestedAccount();
+  }
+
+  onAccountChange(uid: string): void {
+    this.cashBankAccountUid.set(uid ?? '');
+    this.accountChosenByUser = true;
+  }
+
+  private applySuggestedAccount(): void {
+    this.cashBankAccountUid.set(suggestAccountForTender(this.tenderType(), this.accountOptions()));
+  }
+
+  accountLabel(a: CashAccountOptionDto): string {
+    const kind = a.accountType === 'CASH' ? 'Cash' : isMobileMoneyAccount(a) ? 'Mobile money' : 'Bank';
+    return `${a.code} — ${a.name} (${kind}${a.isDefault ? ', default' : ''})`;
   }
 
   // ── Customer picker ────────────────────────────────────────────────────────
@@ -363,7 +439,15 @@ export class RecordReceiptComponent {
       tenderType: this.tenderType(),
       bankReference: bankRef || undefined,
       allocations,
+      // ARC-20: what the screen shows is what is saved — the lines typed (or auto-filled) here, and
+      // whatever they leave over stays on account. Without this the server would apply blank
+      // allocations oldest-first while the screen said "On-account".
+      allocationMode: 'MANUAL',
     };
+
+    // ARC-05: the account the money landed in; omitted = company default account.
+    const accountUid = String(this.cashBankAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
 
     // Optional WHT (WHT_ON_RECEIPT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
