@@ -141,6 +141,21 @@ public interface InventoryValuationService {
     }
 
     /**
+     * Value-only twin of {@link #revalueAdjustment}: moves {@code on_hand_value} by
+     * {@code |adjustQty| × avg_cost} exactly as {@code revalueAdjustment} does, but posts NO GL
+     * entry. For callers that post their own aggregated journal for the same value — the stock
+     * count posts one net-variance journal per count (ADR-0028 D-6). Calling the GL-posting form
+     * there as well booked every count variance to the GL twice (LBO-03).
+     *
+     * @param movementUid the uid of the ADJUSTMENT movement (log context only)
+     * @param soh         the on-hand row the movement landed on
+     * @param adjustQty   the signed adjustment quantity
+     * @return the signed value applied to {@code on_hand_value} (negative = decrease), or
+     *         {@code null} when the product has no average cost yet (nothing is revalued)
+     */
+    BigDecimal revalueAdjustmentWithoutGl(String movementUid, StockOnHand soh, BigDecimal adjustQty);
+
+    /**
      * Move cost value from a source stock-on-hand row to a destination row (ADR-0028 D-5).
      *
      * <p>Used by the stock-transfer completion and dispatch/receive handlers to keep

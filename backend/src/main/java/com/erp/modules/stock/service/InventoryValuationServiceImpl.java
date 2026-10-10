@@ -523,27 +523,34 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
         }
     }
 
+    @Override
+    public BigDecimal revalueAdjustmentWithoutGl(String movementUid, StockOnHand soh,
+                                                  BigDecimal adjustQty) {
+        try {
+            return applyAdjustmentValue(movementUid, soh, adjustQty);
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            log.debug("InventoryValuation: optimistic lock clash on revalueAdjustmentWithoutGl " +
+                              "company={} movement={} — retrying once (FIX D / NFR-INV-05)",
+                    soh.getCompanyId(), movementUid);
+            StockOnHand freshSoh = (soh.getLocationId() != null)
+                    ? onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                            soh.getCompanyId(), soh.getBranchId(), soh.getLocationId(), soh.getProductId())
+                            .orElse(soh)
+                    : soh;
+            return applyAdjustmentValue(movementUid, freshSoh, adjustQty);
+        }
+    }
+
     private void doRevalueAdjustment(String movementUid, StockOnHand soh, BigDecimal adjustQty,
                                       LocalDate postingDate,
                                       Long costCentreValueId, Long departmentValueId,
                                       String productCode, String reasonCode) {
-        if (soh.getAvgCost() == null) {
-            log.warn("InventoryValuation: revalueAdjustment — avg_cost IS NULL for company={} product={} " +
-                             "movement={} — GL leg skipped (D-2 edge)", soh.getCompanyId(), soh.getProductId(), movementUid);
-            return;
+        BigDecimal signedValue = applyAdjustmentValue(movementUid, soh, adjustQty);
+        if (signedValue == null) {
+            return; // no avg cost yet — nothing revalued, no GL leg (D-2 edge)
         }
-
-        BigDecimal avgCost = soh.getAvgCost();
-        BigDecimal absQty  = adjustQty.abs();
-        BigDecimal value   = round4(absQty.multiply(avgCost));
-        boolean decrease   = adjustQty.compareTo(BigDecimal.ZERO) < 0;
-
-        // Update on_hand_value: decrease subtracts, increase adds (avg unchanged — BR-INV-09)
-        BigDecimal newValue = decrease
-                ? soh.getOnHandValue().subtract(value)
-                : soh.getOnHandValue().add(value);
-        soh.applyCostRecompute(soh.getAvgCost(), newValue, actorId(RequestContext.get()));
-        onHands.save(soh);
+        BigDecimal value  = signedValue.abs();
+        boolean decrease  = adjustQty.compareTo(BigDecimal.ZERO) < 0;
 
         // Post GL directly — a missing config MUST fail the operator's command (BR-INV-12)
         // ADR-0025 D-6: pass dimension ids to tag the expense leg (null = untagged)
@@ -555,6 +562,31 @@ public class InventoryValuationServiceImpl implements InventoryValuationService 
                         actorId(RequestContext.get()),
                         costCentreValueId, departmentValueId,
                         productCode, reasonCode));
+    }
+
+    /**
+     * The on_hand_value leg of an adjustment, shared by the GL-posting and value-only forms so
+     * the two can never disagree on the amount. Returns the signed value applied, or null when
+     * the product has no average cost yet (nothing revalued).
+     */
+    private BigDecimal applyAdjustmentValue(String movementUid, StockOnHand soh, BigDecimal adjustQty) {
+        if (soh.getAvgCost() == null) {
+            log.warn("InventoryValuation: revalueAdjustment — avg_cost IS NULL for company={} product={} " +
+                             "movement={} — GL leg skipped (D-2 edge)", soh.getCompanyId(), soh.getProductId(), movementUid);
+            return null;
+        }
+
+        BigDecimal avgCost = soh.getAvgCost();
+        BigDecimal value   = round4(adjustQty.abs().multiply(avgCost));
+        boolean decrease   = adjustQty.compareTo(BigDecimal.ZERO) < 0;
+
+        // Update on_hand_value: decrease subtracts, increase adds (avg unchanged — BR-INV-09)
+        BigDecimal newValue = decrease
+                ? soh.getOnHandValue().subtract(value)
+                : soh.getOnHandValue().add(value);
+        soh.applyCostRecompute(soh.getAvgCost(), newValue, actorId(RequestContext.get()));
+        onHands.save(soh);
+        return decrease ? value.negate() : value;
     }
 
     // -------------------------------------------------------------------------

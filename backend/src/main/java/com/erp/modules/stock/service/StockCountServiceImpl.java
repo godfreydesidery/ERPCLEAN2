@@ -253,6 +253,7 @@ public class StockCountServiceImpl implements StockCountService {
                     : BigDecimal.ZERO;
             boolean    decrease          = varianceQty.compareTo(BigDecimal.ZERO) < 0;
             BigDecimal varianceSignedVal = decrease ? varianceAbsValue.negate() : varianceAbsValue;
+            // (reassigned below to the value the valuation engine actually applied)
             // posting.post value_amount: positive = increase value, negative = decrease value
             BigDecimal postingValue = varianceSignedVal;
 
@@ -263,17 +264,23 @@ public class StockCountServiceImpl implements StockCountService {
                     reasonCode, null, Instant.now(), principal.userId(),
                     avgCost, postingValue);
 
-            // Revalue via ADR-0020 engine; re-read fresh SOH after posting delta applied
+            // Revalue via ADR-0020 engine; re-read fresh SOH after posting delta applied.
+            // LBO-03: VALUE ONLY — no per-line GL entry. The count's single net-variance journal
+            // below is the one GL effect (D-6: "one journal per count"); the GL-posting
+            // revalueAdjustment used here before booked every variance to the GL twice.
             StockOnHand freshSoh = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
                     companyId, branchId, locationId, line.getProductId())
                     .orElse(sohOpt.orElse(null));
+            BigDecimal appliedValue = null;
             if (freshSoh != null) {
-                // FOLLOW-001: pass productCode + reasonCode so per-line GL memo avoids raw ULID.
-                valuation.revalueAdjustment(movementUid, freshSoh, varianceQty, postingDate,
-                        null, null, line.getProductCode(), reasonCode);
+                appliedValue = valuation.revalueAdjustmentWithoutGl(movementUid, freshSoh, varianceQty);
                 // I6: stamp last_counted_at on the authoritative (post-posting) row.
                 freshSoh.markCounted(Instant.now(), principal.userId());
             }
+            // The journal must move the GL by exactly what on_hand_value moved, so the
+            // Σ on_hand_value == Inventory GL tie holds: take the engine's applied value, and
+            // nothing when it revalued nothing (no avg cost yet / no on-hand row).
+            varianceSignedVal = appliedValue != null ? appliedValue : BigDecimal.ZERO;
 
             netVarianceValue = netVarianceValue.add(varianceSignedVal);
 
