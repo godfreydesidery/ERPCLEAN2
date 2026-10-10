@@ -7,8 +7,8 @@ import '../../app/theme.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
+import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
-import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
@@ -30,9 +30,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   bool _sent = false;
   Timer? _debounce;
 
-  Catalogue get _cache => ref.read(catalogProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
-  String get _currency => ref.read(cartProvider).currency;
 
   @override
   void initState() {
@@ -75,13 +73,9 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     cart.addProduct(p, unit);
     final id = ref.read(cartProvider).selectedId;
     if (id != null) {
-      _cache.previewPrice(p.uid, _currency).then((pp) {
-        if (pp != null && mounted) {
-          cart.setLinePrice(
-              id,
-              app.grossUnitPrice(pp.amount, p.vatStatus,
-                  vatInclusive: pp.vatInclusive));
-        }
+      // Server-priced for the basket's customer (PRD-01).
+      ref.read(basketPricerProvider).price(lineIds: [id]).then((_) {
+        if (mounted) setState(() {});
       });
     }
     setState(() => _sent = false);

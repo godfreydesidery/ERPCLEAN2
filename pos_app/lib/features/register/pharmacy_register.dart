@@ -7,6 +7,7 @@ import '../../core/barcode.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
+import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/providers.dart';
@@ -32,7 +33,6 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
-  String get _currency => ref.read(cartProvider).currency;
 
   /// Best-effort branch on-hand refresh so a dispensed line can warn when the
   /// drug is short before checkout (repaints when it lands).
@@ -100,15 +100,10 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   /// pack price where one is set, otherwise `base × factor`. Same resolution
   /// order as the server, so the preview matches the authoritative price.
   void _priceLine(String lineId, Product p, SaleUnit unit) {
-    final app = ref.read(appControllerProvider);
-    final cart = ref.read(cartProvider.notifier);
-    _cache.previewPrice(p.uid, _currency, unit: unit).then((pp) {
-      if (pp != null && mounted) {
-        cart.setLinePrice(
-            lineId,
-            app.grossUnitPrice(pp.amount, p.vatStatus,
-                vatInclusive: pp.vatInclusive));
-      }
+    // Priced by the SERVER for the basket's customer and currency (PRD-01),
+    // so an account customer's own price shows before payment, not after.
+    ref.read(basketPricerProvider).price(lineIds: [lineId]).then((_) {
+      if (mounted) setState(() {});
     });
   }
 

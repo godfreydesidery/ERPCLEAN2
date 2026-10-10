@@ -11,6 +11,7 @@ import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
+import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
 import '../../state/catalog_cache.dart';
 import '../../state/price_cache.dart';
@@ -75,7 +76,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// approximate the pricing rules and then disagree with the posted sale.
   void _refreshPrices(List<Product> results) {
     if (results.isEmpty) return;
-    _prices.refreshFor(results.map((p) => p.uid)).then((_) {
+    final cart = ref.read(cartProvider);
+    _prices
+        .refreshFor(results.map((p) => p.uid),
+            customerUid: cart.customer?.uid, currency: cart.currency)
+        .then((_) {
       if (mounted) setState(() {});
     });
   }
@@ -136,15 +141,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// `base × factor` otherwise — the same order the server resolves in, so the
   /// preview matches the authoritative total either way.
   void _priceLine(String lineId, Product p, SaleUnit unit) {
-    final app = ref.read(appControllerProvider);
-    final cart = ref.read(cartProvider.notifier);
-    _cache.previewPrice(p.uid, _currency, unit: unit).then((pp) {
-      if (pp != null && mounted) {
-        cart.setLinePrice(
-            lineId,
-            app.grossUnitPrice(pp.amount, p.vatStatus,
-                vatInclusive: pp.vatInclusive));
-      }
+    // Priced by the SERVER for the basket's customer and currency (PRD-01),
+    // so an account customer's own price shows before payment, not after.
+    ref.read(basketPricerProvider).price(lineIds: [lineId]).then((_) {
+      if (mounted) setState(() {});
     });
   }
 

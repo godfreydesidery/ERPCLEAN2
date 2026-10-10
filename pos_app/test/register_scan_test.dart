@@ -185,7 +185,7 @@ class _FakeCatalog implements CatalogService {
 
   @override
   Future<List<ResolvedUnitPrice>> resolvePrices(List<String> productUids,
-          {String? unitUid}) async =>
+          {String? unitUid, String? customerUid, String? currency}) async =>
       const [];
 
   @override
