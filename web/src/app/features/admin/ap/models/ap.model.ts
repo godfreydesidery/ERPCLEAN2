@@ -283,6 +283,11 @@ export interface PaymentRunRequest {
   whtTypeUid?: string | null;
   /** Send as string. */
   whtAmount?: string | null;
+  /**
+   * AP-07: part-payment per bill uid (send as string). A bill in billUids without an entry is
+   * paid in full. Each amount must be > 0 and <= the bill's outstanding.
+   */
+  billAmounts?: Record<string, string>;
 }
 
 // ── Debit note ────────────────────────────────────────────────────────────────
