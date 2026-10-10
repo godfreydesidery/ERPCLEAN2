@@ -666,12 +666,27 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // The cash that leaves the account is the payment NET of the tax withheld (the WHT stays
         // with us until it is remitted to TRA) — the same figure the GL credits to the bank above.
         // Recording the gross here made the cash book disagree with the GL by the WHT amount.
+        //
+        // AP-23: the cash book is kept in the ACCOUNT's currency. A USD payment out of a TZS account
+        // used to be written as "5,000" in the TZS book while the GL credited the bank 13 million.
+        // A USD account paying a USD bill records the USD face amount (what left the account); any
+        // other account records the base amount the GL credited to it (cashCrBase).
         BigDecimal cashOut = hasWht ? payment.getAmount().subtract(whtAmount) : payment.getAmount();
+        String cashCurrency = currency;
+        String accountCurrency = cashAccounts
+                .findByCompanyIdAndId(companyId, cashRes.cashBankAccountId())
+                .map(a -> com.erp.platform.common.money.CurrencyCode.value(a.getCurrency()))
+                .orElse(baseCurrency);
+        if (currency != null && !currency.equalsIgnoreCase(baseCurrency)
+                && !currency.equalsIgnoreCase(accountCurrency)) {
+            cashOut = cashCrBase;
+            cashCurrency = baseCurrency;
+        }
         payment.setCashBankAccountId(cashRes.cashBankAccountId());
         cashTxnRecorder.recordSettlement(
                 companyId, branchId, cashRes.cashBankAccountId(),
                 CashTxnType.AP_PAYMENT, CashTxnDirection.OUT,
-                cashOut, currency,
+                cashOut, cashCurrency,
                 payment.getUid(), posted.uid(),
                 payment.getPaymentDate(), actorId());
 
