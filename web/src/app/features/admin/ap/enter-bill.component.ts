@@ -184,7 +184,10 @@ export class EnterBillComponent {
 
   private loadPoOptions(companyId: string): void {
     this.poListUnavailable.set(false);
-    this.purchasesService.listOrders(companyId, undefined, 'ORDERED', 0, 200).subscribe({
+    // No status filter: the server used to ignore 'ORDERED' (PUR-11), so this picker has always
+    // listed every PO — and a bill usually arrives AFTER the goods (PO already RECEIVED). Now that the
+    // filter works, sending 'ORDERED' would silently hide every received PO from bill entry.
+    this.purchasesService.listOrders(companyId, undefined, undefined, 0, 200).subscribe({
       next: ({ rows }) => {
         this.poOptions.set(
           rows.map((po) => ({

@@ -55,6 +55,26 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
                                @Param("origins") Collection<PurchaseOrderOrigin> origins,
                                Pageable pageable);
 
+    /**
+     * PUR-11: {@link #search} restricted to a set of statuses; {@code q} may be null (browse).
+     * The same provenance rule applies, so a status filter cannot surface hidden backing orders.
+     */
+    @Query("""
+            SELECT p FROM PurchaseOrder p
+            WHERE p.companyId = :companyId
+              AND p.origin IN :origins
+              AND p.status IN :statuses
+              AND (:q IS NULL OR
+                   LOWER(p.supplierName) LIKE LOWER(CONCAT('%', :q, '%'))
+                   OR p.orderNumber = :q
+                   OR p.supplierCode = :q)
+            """)
+    Page<PurchaseOrder> searchByStatus(@Param("companyId") Long companyId,
+                                       @Param("q") String q,
+                                       @Param("origins") Collection<PurchaseOrderOrigin> origins,
+                                       @Param("statuses") Collection<PurchaseOrderStatus> statuses,
+                                       Pageable pageable);
+
     /** ScopeGuard target-type projection (ADR-0011 D-10). */
     @Query("SELECT p.companyId FROM PurchaseOrder p WHERE p.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);

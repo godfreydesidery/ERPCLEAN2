@@ -18,6 +18,9 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
 import { PurchaseSettingsService } from './settings/purchase-settings.service';
 
+/** Statuses a goods receipt can be recorded against (comma-separated for the list endpoint). */
+const RECEIVABLE_PO_STATUSES = 'ORDERED,PARTIALLY_RECEIVED';
+
 interface ReceiveLineEntry {
   line: PurchaseOrderLineDto;
   /** User-editable received qty — defaults to outstanding. */
@@ -111,19 +114,15 @@ export class GoodsReceiptCreateComponent {
         switchMap((q) => {
           const companyId = this.selectedCompanyId();
           if (!companyId || !q.trim()) { this.poResults.set([]); return []; }
-          return this.purchasesService.listOrders(companyId, q.trim(), 'ORDERED', 0, 10);
+          // PUR-11: one call for exactly the receivable statuses. The server now honours the
+          // filter (it used to ignore it, so two calls listed every PO — drafts, closed, void —
+          // twice).
+          return this.purchasesService.listOrders(companyId, q.trim(), RECEIVABLE_PO_STATUSES, 0, 10);
         }),
         takeUntilDestroyed(),
       )
       .subscribe({
-        next: ({ rows }) => {
-          // Also show PARTIALLY_RECEIVED
-          this.purchasesService.listOrders(this.selectedCompanyId(), this.poSearchQ(), 'PARTIALLY_RECEIVED', 0, 10)
-            .subscribe({
-              next: ({ rows: pr }) => this.poResults.set([...rows, ...pr]),
-              error: () => this.poResults.set(rows),
-            });
-        },
+        next: ({ rows }) => this.poResults.set(rows),
         error: () => this.poResults.set([]),
       });
 

@@ -1371,6 +1371,31 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         assertThat(snapshots).containsOnlyKeys(ownOrder.uid());
     }
 
+    /** PUR-11: the status filter is honoured, for one status or several, with and without a search. */
+    @Test
+    void list_filtersByStatus() {
+        ProductDto product = stockableProduct("StatusFilter-Widget");
+        PurchaseOrderDto draft = createDraftWithLine(product.uid(), BigDecimal.ONE, BigDecimal.TEN);
+        PurchaseOrderDto ordered = placeOrderWithLine(product.uid(), new BigDecimal("4"), BigDecimal.TEN);
+        PurchaseOrderDto partial = placeOrderWithLine(product.uid(), new BigDecimal("4"), BigDecimal.TEN);
+        grService.createAndReceive(new CreateGoodsReceiptRequest(partial.uid(), null,
+                List.of(new GoodsReceiptLineRequest(partial.lines().get(0).uid(), BigDecimal.ONE))));
+
+        var onlyOrdered = poService.list(companyA.getId(), null, false,
+                List.of(PurchaseOrderStatus.ORDERED), Pageable.unpaged()).getContent();
+        assertThat(onlyOrdered).extracting(PurchaseOrderDto::uid).containsExactly(ordered.uid());
+
+        var receivable = poService.list(companyA.getId(), "Test Supplier", false,
+                List.of(PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED),
+                Pageable.unpaged()).getContent();
+        assertThat(receivable).extracting(PurchaseOrderDto::uid)
+                .containsExactlyInAnyOrder(ordered.uid(), partial.uid())
+                .doesNotContain(draft.uid());
+
+        assertThat(poService.list(companyA.getId(), null, false, List.of(), Pageable.unpaged())
+                .getContent()).hasSize(3);
+    }
+
     /** Creates a PO in another company, from that company's own context. */
     private String createForeignOrder(Company company, Branch branch) {
         setContext(company, branch);
