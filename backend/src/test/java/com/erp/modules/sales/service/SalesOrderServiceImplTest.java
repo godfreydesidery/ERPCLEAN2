@@ -20,6 +20,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
@@ -341,7 +342,7 @@ class SalesOrderServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000001"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -357,7 +358,7 @@ class SalesOrderServiceImplTest {
 
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("100.0000");
         assertThat(dto.qtyOrderedBase()).isEqualByComparingTo(BigDecimal.TEN);
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 900L, 910L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L));
     }
 
     @Test
@@ -379,7 +380,7 @@ class SalesOrderServiceImplTest {
                 .thenReturn(Optional.of(boxUnit));
         // Base price is 100; the BOX pack is explicitly priced at 1150 (non-linear override) —
         // NOT 100 (the bug) and not necessarily 1200 (100 x factor 12) either.
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -399,7 +400,7 @@ class SalesOrderServiceImplTest {
         // qtyInBase still scales by the pack factor — pricing and base-quantity conversion are
         // independent concerns (D-1 only changes the price, not computeQtyInBase's math).
         assertThat(dto.qtyOrderedBase()).isEqualByComparingTo(new BigDecimal("12"));
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L));
     }
 
     @Test
@@ -417,7 +418,7 @@ class SalesOrderServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000003"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 940L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 902L, 940L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -727,7 +728,7 @@ class SalesOrderServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000040"))
                 .thenReturn(Optional.of(baseUnit));
         // No price list exists anywhere in this company — the live UAT condition.
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 920L, 970L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 920L, 970L)))
                 .thenReturn(UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -759,7 +760,7 @@ class SalesOrderServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000041"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 921L, 971L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 921L, 971L)))
                 .thenReturn(UnitPriceQuoteResult.resolved(
                         new UnitPriceQuoteDto(new BigDecimal("100.0000"), "TZS", false)));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
@@ -878,5 +879,16 @@ class SalesOrderServiceImplTest {
         Branch b = new Branch(null, code, name);
         ReflectionTestUtils.setField(b, "uid", uid);
         return b;
+    }
+
+    /**
+     * Matches the selling-price question for (company, product, unit) whatever the customer side
+     * carries (PRD-01 threads the document's customer through; these tests pin the price, not who).
+     */
+    private static SellingPriceQuery sellingQuery(Long companyId, Long productId, Long unitId) {
+        return org.mockito.ArgumentMatchers.argThat(q -> q != null
+                && companyId.equals(q.companyId())
+                && productId.equals(q.productId())
+                && unitId.equals(q.unitId()));
     }
 }

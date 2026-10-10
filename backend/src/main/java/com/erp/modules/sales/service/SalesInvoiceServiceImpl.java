@@ -617,9 +617,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // originating list (ADR-0056), threaded onto the line below. When the catalogue cannot price
         // the line, a price stated on the request stands in for the list price (see
         // LinePriceResolver) — otherwise a company with no price list can invoice nothing at all.
+        //
+        // Priced for THIS invoice's customer (PRD-01 / LSF-02): their contract price, else their
+        // default price list, else the company default list. A POS sale reaches here too, through
+        // PosSaleServiceImpl, so the till's posted price follows the same rule.
         BigDecimal statedPrice = req.unitPriceOverride();
         UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
-                priceResolutionService, inv.getCompanyId(), product.getId(), unit.getId(),
+                priceResolutionService,
+                LinePriceResolver.query(inv.getCompanyId(), product.getId(), unit.getId(),
+                        LinePriceResolver.pricingCustomer(customers, inv.getCompanyId(),
+                                inv.getCustomerId()),
+                        inv.getCurrency() == null ? null : inv.getCurrency().value(), quantity),
                 statedPrice);
         BigDecimal listPrice = resolvedPrice.amount();
 
@@ -698,6 +706,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         lineDetail.put("unitPrice", appliedPrice.toPlainString());
         lineDetail.put("listPrice", listPrice.toPlainString());
         lineDetail.put("priceOverridden", String.valueOf(overridesListPrice));
+        // Which rule priced the line (LIST_PRICE / CUSTOMER_PRICE) — answers "why did this customer
+        // pay this?" from the trail; audit detail is JSONB, so no schema.
+        lineDetail.put("priceSource", String.valueOf(resolvedPrice.source()));
         lineDetail.put("lineDiscountAmount", plainOrEmpty(req.lineDiscountAmount()));
         lineDetail.put("lineDiscountPercent", plainOrEmpty(req.lineDiscountPercent()));
         lineDetail.put("discountAuthorisedBy",

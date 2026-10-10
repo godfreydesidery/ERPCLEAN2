@@ -169,8 +169,15 @@ public class QuotationServiceImpl implements QuotationService {
         }
         // Carries the VAT-inclusive stance of the originating list (ADR-0056), threaded onto the
         // line below regardless of whether the price is overridden.
+        // Priced for the quotation's customer (PRD-01): contract price, else their default price
+        // list, else the company default list.
         UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
-                priceResolutionService, q.getCompanyId(), product.getId(), unit.getId(),
+                priceResolutionService,
+                LinePriceResolver.query(q.getCompanyId(), product.getId(), unit.getId(),
+                        LinePriceResolver.pricingCustomer(customers, q.getCompanyId(),
+                                q.getCustomerId()),
+                        q.getCurrency() == null ? null : q.getCurrency().value(),
+                        req.quantity()),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
