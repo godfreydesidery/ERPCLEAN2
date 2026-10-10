@@ -10,7 +10,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long> {
+public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<JournalEntry> {
+
+    /** Entries of the given source documents (company-scoped) — document-ref lookup (ACC-19). */
+    List<JournalEntry> findByCompanyIdAndSourceRefIn(Long companyId,
+                                                     java.util.Collection<String> sourceRefs);
 
     Optional<JournalEntry> findByUid(String uid);
 

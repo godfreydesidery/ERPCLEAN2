@@ -16,6 +16,7 @@ import {
   GlPostingRepostResultDto,
   GlSalesTieOutDto,
   JournalEntryDto,
+  JournalFilter,
   OpenFiscalYearRequest,
   PostJournalRequest,
   SetGlConfigRequest,
@@ -106,11 +107,19 @@ export class GlService {
 
   // ── Journals ──────────────────────────────────────────────────────────────
 
-  listJournals(companyId: string, page = 0, size = 20): Observable<JournalPage> {
-    const params = new HttpParams()
+  /** Journal list, newest first; every filter optional (ACC-19). */
+  listJournals(companyId: string, page = 0, size = 20, filter: JournalFilter = {}): Observable<JournalPage> {
+    let params = new HttpParams()
       .set('companyId', companyId)
       .set('page', String(page))
-      .set('size', String(size));
+      .set('size', String(size))
+      .append('sort', 'postingDate,desc')
+      .append('sort', 'id,desc');
+    if (filter.from) params = params.set('from', filter.from);
+    if (filter.to) params = params.set('to', filter.to);
+    if (filter.sourceType) params = params.set('sourceType', filter.sourceType);
+    if (filter.accountUid) params = params.set('accountUid', filter.accountUid);
+    if (filter.q?.trim()) params = params.set('q', filter.q.trim());
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
