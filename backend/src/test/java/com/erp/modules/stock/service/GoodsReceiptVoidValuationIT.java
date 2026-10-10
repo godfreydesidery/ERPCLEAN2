@@ -282,31 +282,29 @@ class GoodsReceiptVoidValuationIT extends PostgresIntegrationTest {
     //   the void still takes out the receipt's FULL quantity at its FULL original value (the GL
     //   reverses GRNI for the whole receipt, so stock must match); COGS already posted for the units
     //   sold is NOT re-costed (moving average cannot un-post an issue).
+    //   Since OPN-13 (2026-10-10) the void is only allowed while the branch still holds at least
+    //   the receipt's quantity; below that it is refused (see the first test).
     // =========================================================================
 
     @Test
-    void voidAfterPartSold_onlyStock_goesNegativeAtTheReceiptCost_andStillTies() {
+    void voidAfterPartSold_onlyStock_isRefused_andNothingMoves() {
+        // OPN-13 (owner ruling 2026-10-10): this used to be allowed and drove on-hand to −20.
+        // A receipt whose stock is partly consumed is now corrected with a return or adjustment.
         ProductDto p = product("PART-SOLD-1");
 
         in(br02);
         GoodsReceiptDto voided = receiveViaPo(p, "30", "2200");
         sell(p, "20");                                  // COGS 44,000; 10 left worth 22,000
-        voidReceipt(voided);
 
-        assertThat(onHandQty(p)).as("30 issued back against 10 on hand").isEqualByComparingTo("-20");
-        assertThat(onHandValue(p)).as("22,000 − 66,000").isEqualByComparingTo("-44000");
-        assertThat(companyAvg(p))
-                .as("nothing positive left to average — last known average kept, never negative")
-                .isEqualByComparingTo("2200");
-        assertThat(onHandValue(p)).as("Σ on-hand value == GL 1300").isEqualByComparingTo(inventoryBalance());
-        assertThat(grniBalance()).as("GRNI fully reversed").isEqualByComparingTo("0");
-        assertThat(cogsBalance()).as("COGS of the units sold stays posted").isEqualByComparingTo("44000");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> voidReceipt(voided))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already been sold or used")
+                .hasMessageContaining("purchase return or a stock adjustment");
 
-        // The replacement receipt at the same cost puts everything back square.
-        receiveViaPo(p, "30", "2200");
-        assertThat(onHandQty(p)).isEqualByComparingTo("10");
+        assertThat(onHandQty(p)).as("nothing reversed").isEqualByComparingTo("10");
         assertThat(onHandValue(p)).isEqualByComparingTo("22000");
-        assertThat(onHandValue(p)).isEqualByComparingTo(inventoryBalance());
+        assertThat(onHandValue(p)).as("Σ on-hand value == GL 1300").isEqualByComparingTo(inventoryBalance());
+        assertThat(cogsBalance()).as("COGS of the units sold stays posted").isEqualByComparingTo("44000");
     }
 
     @Test
