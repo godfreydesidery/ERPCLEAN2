@@ -670,6 +670,9 @@ SELECT r.id, p.id FROM (VALUES
   -- Gap review 2026-10-10 (ADM-13, owner-approved): the sales manager reads every sales report but
   -- could not export one to PDF/Excel.
   ('SALES_MANAGER','REPORT.EXPORT'),
+  -- Gap review 2026-10-10 (ADM-14 ruling, owner-approved): cost and margin now require
+  -- INVENTORY.VALUATION.VIEW so counter staff no longer see them; the sales manager keeps them.
+  ('SALES_MANAGER','INVENTORY.VALUATION.VIEW'),
   -- BRANCH_MANAGER (56 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
