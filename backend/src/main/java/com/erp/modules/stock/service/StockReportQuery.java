@@ -94,8 +94,15 @@ public class StockReportQuery {
                        SUM(soh.quantity)                                        AS total_qty,
                        SUM(soh.on_hand_value) / NULLIF(SUM(soh.quantity), 0)   AS avg_cost,
                        SUM(soh.on_hand_value)                                   AS total_value,
-                       pp.amount                                                AS selling_price
+                       pp.amount                                                AS selling_price,
+                       -- STK-06: goods dispatched to a branch but not yet received are booked at
+                       -- its in-transit location (TRANSIT-<branch> convention). They are part of
+                       -- the total, but are on the truck, not on the shelf, so they are also shown
+                       -- on their own.
+                       SUM(CASE WHEN loc.code LIKE 'TRANSIT-%' AND NOT loc.is_default
+                                THEN soh.quantity ELSE 0 END)                   AS transit_qty
                 FROM stock_on_hand soh
+                LEFT JOIN stock_locations loc ON loc.id = soh.location_id
                 LEFT JOIN products p ON p.id = soh.product_id
                 LEFT JOIN product_prices pp ON pp.product_id = soh.product_id
                        AND pp.price_list_id = ? AND pp.unit_id IS NULL
@@ -111,7 +118,8 @@ public class StockReportQuery {
                         rs.getBigDecimal("total_qty"),
                         rs.getBigDecimal("avg_cost"),
                         rs.getBigDecimal("total_value"),
-                        rs.getBigDecimal("selling_price")
+                        rs.getBigDecimal("selling_price"),
+                        rs.getBigDecimal("transit_qty")
                 },
                 params.toArray());
 
@@ -125,7 +133,8 @@ public class StockReportQuery {
                     (BigDecimal) r[2],
                     (BigDecimal) r[3],
                     (BigDecimal) r[5],
-                    value));
+                    value,
+                    (BigDecimal) r[6]));
             totalValue = totalValue.add(value != null ? value : BigDecimal.ZERO);
         }
 
