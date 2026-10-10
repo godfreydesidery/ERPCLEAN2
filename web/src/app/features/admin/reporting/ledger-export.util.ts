@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { firstOfMonthLocal, todayLocal } from '../../../shared/date.util';
 
 /**
  * Small helpers shared by the sub-ledger export controls (customer / supplier / cash statements,
@@ -9,13 +10,13 @@ export function localIsoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Today in the business (company) zone — see shared/date.util. */
 export function todayIso(): string {
-  return localIsoDate(new Date());
+  return todayLocal();
 }
 
 export function firstOfMonthIso(): string {
-  const d = new Date();
-  return localIsoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  return firstOfMonthLocal();
 }
 
 /** A friendly, detail-free message for a failed export download. */

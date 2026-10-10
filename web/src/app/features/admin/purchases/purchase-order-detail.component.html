@@ -58,7 +58,7 @@
               <dd class="col-sm-9 mb-0">{{ p.currency }}</dd>
               @if (p.expectedDate) {
                 <dt class="col-sm-3 text-muted fw-normal">Expected</dt>
-                <dd class="col-sm-9 mb-0">{{ p.expectedDate }}</dd>
+                <dd class="col-sm-9 mb-0">{{ p.expectedDate | appDate }}</dd>
               }
               @if (p.notes) {
                 <dt class="col-sm-3 text-muted fw-normal">Notes</dt>
@@ -66,7 +66,7 @@
               }
               @if (p.orderedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Ordered</dt>
-                <dd class="col-sm-9 mb-0">{{ p.orderedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+                <dd class="col-sm-9 mb-0">{{ p.orderedAt | appDate:'datetime' }}</dd>
               }
               @if (p.voidReason) {
                 <dt class="col-sm-3 text-muted fw-normal">Void reason</dt>
@@ -74,7 +74,7 @@
               }
               @if (p.closedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Closed</dt>
-                <dd class="col-sm-9 mb-0">{{ p.closedAt | date:'dd/MM/yyyy HH:mm' }}</dd>
+                <dd class="col-sm-9 mb-0">{{ p.closedAt | appDate:'datetime' }}</dd>
               }
             </dl>
 
@@ -419,7 +419,7 @@
                   @if (costSuggestion(); as suggestion) {
                     <p id="lineUnitCostHint" class="form-text small text-muted mb-0" aria-live="polite">
                       {{ costSourceLabel(suggestion.source)
-                      }}@if (suggestion.asOf) {, {{ suggestion.asOf | date: 'd MMM y' }}}. You can change it.
+                      }}@if (suggestion.asOf) {, {{ suggestion.asOf | appDate }}}. You can change it.
                       @if (costCurrencyMismatch()) {
                         <span class="d-block text-warning-emphasis">
                           That price is in {{ suggestion.currency }} and this order is in

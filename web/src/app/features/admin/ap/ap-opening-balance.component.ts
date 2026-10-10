@@ -14,6 +14,7 @@ import { SupplierService } from '../parties/supplier.service';
 import { SetApOpeningBalanceRequest, SupplierBillDto } from './models/ap.model';
 import { ApService } from './ap.service';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Set AP Opening Balance. Gated AP.OPENING.SET.
@@ -73,8 +74,8 @@ export class ApOpeningBalanceComponent {
   private readonly supplierSearch$ = new Subject<string>();
 
   constructor() {
-    this.billDate.set(new Date().toISOString().slice(0, 10));
-    this.dueDate.set(new Date().toISOString().slice(0, 10));
+    this.billDate.set(todayLocal());
+    this.dueDate.set(todayLocal());
 
     this.supplierSearch$
       .pipe(
@@ -190,8 +191,8 @@ export class ApOpeningBalanceComponent {
   private resetForm(): void {
     this.grossAmount.set('');
     this.supplierInvoiceNo.set('');
-    this.billDate.set(new Date().toISOString().slice(0, 10));
-    this.dueDate.set(new Date().toISOString().slice(0, 10));
+    this.billDate.set(todayLocal());
+    this.dueDate.set(todayLocal());
     this.selectedSupplier.set(null);
     this.supplierSearchQ.set('');
     this.supplierResults.set([]);

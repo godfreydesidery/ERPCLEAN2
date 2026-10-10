@@ -101,7 +101,7 @@
               @for (row of rows(); track row.uid) {
                 <tr>
                   <td class="mono">{{ transferLabel(row) }}</td>
-                  <td>{{ row.transferDate | date:'yyyy-MM-dd' }}</td>
+                  <td>{{ row.transferDate | appDate }}</td>
                   <td>{{ row.transferMode }}</td>
                   <td>
                     <span class="status-tag"

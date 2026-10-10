@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
+import { DecimalPipe, NgClass } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -8,6 +8,8 @@ import { SessionStore } from '../../../../core/auth/session.store';
 import { StockCountDto, StockCountLineDto } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
 import { StockUnitOption, StockUnitOptionsService, packBreakdown, toBaseQty, unitFactor } from '../stock-units';
+import { todayLocal } from '../../../../shared/date.util';
+import { AppDatePipe } from '../../../../shared/app-date.pipe';
 
 /** Counts up to this many distinct products load their pack sizes up front; larger ones on focus. */
 const EAGER_UNIT_PRODUCTS = 50;
@@ -23,7 +25,7 @@ const EAGER_UNIT_PRODUCTS = 50;
  */
 @Component({
   selector: 'app-stock-count-detail',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, NgClass],
+  imports: [AppDatePipe, FormsModule, RouterLink, DecimalPipe, NgClass],
   templateUrl: './stock-count-detail.component.html',
   styleUrl: './stock-count-detail.component.scss',
 })
@@ -53,7 +55,7 @@ export class StockCountDetailComponent {
 
   // ── Post form ─────────────────────────────────────────────────────────────────
   readonly showPostForm = signal(false);
-  readonly postingDate = signal(new Date().toISOString().substring(0, 10));
+  readonly postingDate = signal(todayLocal());
   readonly posting = signal(false);
   readonly postError = signal<string | null>(null);
 

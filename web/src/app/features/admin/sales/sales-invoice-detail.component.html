@@ -56,7 +56,7 @@
               }
               @if (inv.finalisedAt) {
                 <dt class="col-sm-3 text-muted fw-normal">Finalised</dt>
-                <dd class="col-sm-9 mb-0">{{ inv.finalisedAt }} by {{ inv.finalisedBy }}</dd>
+                <dd class="col-sm-9 mb-0">{{ inv.finalisedAt | appDate:'datetime' }} by {{ inv.finalisedBy }}</dd>
               }
               @if (inv.postedGlEntryUid) {
                 <dt class="col-sm-3 text-muted fw-normal">GL Entry</dt>
@@ -642,7 +642,7 @@
                         <td class="num">{{ pay.amount }}</td>
                         <td class="num">{{ pay.changeAmount }}</td>
                         <td class="small text-muted">{{ pay.reference ?? '—' }}</td>
-                        <td class="small text-muted">{{ pay.receivedAt ?? pay.createdAt }}</td>
+                        <td class="small text-muted">{{ (pay.receivedAt ?? pay.createdAt) | appDate:'datetime' }}</td>
                         @if (isDraft() && canSettle()) {
                           <td>
                             <button type="button" class="btn btn-sm btn-outline-danger"

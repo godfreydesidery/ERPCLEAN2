@@ -22,6 +22,7 @@ import {
   FixedAssetRegisterTotalDto,
   FixedAssetStatus,
 } from './models/fixed-assets.model';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -230,6 +231,6 @@ export class FaRegisterReportComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 }

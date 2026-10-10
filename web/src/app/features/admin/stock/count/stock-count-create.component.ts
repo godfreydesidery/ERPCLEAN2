@@ -17,6 +17,7 @@ import { ProductService } from '../../products/product.service';
 import { ProductModel } from '../../models/product.model';
 import { CreateStockCountRequest } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
+import { todayLocal } from '../../../../shared/date.util';
 
 /**
  * Create a new stock count document.
@@ -53,7 +54,7 @@ export class StockCountCreateComponent {
 
   // ── Form fields ───────────────────────────────────────────────────────────────
   readonly fLocationUid = signal('');
-  readonly fCountDate = signal(new Date().toISOString().substring(0, 10));
+  readonly fCountDate = signal(todayLocal());
   readonly fCountType = signal<'FULL' | 'CYCLE'>('FULL');
   readonly fNotes = signal('');
 

@@ -62,15 +62,15 @@
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Opened At</span>
-                <span class="erp-kpi__value">{{ s.openedAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.openedAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Closed At</span>
-                <span class="erp-kpi__value">{{ s.closedAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.closedAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Reconciled At</span>
-                <span class="erp-kpi__value">{{ s.reconciledAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.reconciledAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Opening Float</span>

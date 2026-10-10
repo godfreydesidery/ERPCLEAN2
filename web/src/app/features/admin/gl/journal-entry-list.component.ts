@@ -12,6 +12,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { JournalEntryDto } from './models/gl.model';
 import { GlService } from './gl.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -22,7 +23,7 @@ const DEFAULT_SIZE = 20;
  */
 @Component({
   selector: 'app-journal-entry-list',
-  imports: [FormsModule, RouterLink, PaginatorComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, PaginatorComponent],
   templateUrl: './journal-entry-list.component.html',
   styleUrl: './journal-entry-list.component.scss',
 })

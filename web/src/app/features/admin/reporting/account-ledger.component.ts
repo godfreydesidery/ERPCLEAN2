@@ -14,6 +14,7 @@ import { PageMeta } from '../../../core/api/api-response.model';
 import { GlService } from '../gl/gl.service';
 import { AccountDto } from '../gl/models/gl.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -225,7 +226,7 @@ export class AccountLedgerComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfCurrentMonth(): string {

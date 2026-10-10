@@ -17,6 +17,7 @@ import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { formatMoney } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -140,8 +141,8 @@ export class ArInvoicesListComponent {
       });
 
     // Default write-off date to today
-    this.writeOffDate.set(new Date().toISOString().slice(0, 10));
-    this.creditNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.writeOffDate.set(todayLocal());
+    this.creditNoteDate.set(todayLocal());
 
     this.loadCompanies();
   }
@@ -231,7 +232,7 @@ export class ArInvoicesListComponent {
     this.writeOffInvoice.set(inv);
     this.writeOffError.set(null);
     this.writeOffReason.set('');
-    this.writeOffDate.set(new Date().toISOString().slice(0, 10));
+    this.writeOffDate.set(todayLocal());
   }
 
   closeWriteOff(): void {
@@ -279,7 +280,7 @@ export class ArInvoicesListComponent {
     this.creditNoteVat.set('0');
     this.creditNoteCurrency.set(String(inv.currency ?? 'TZS'));
     this.creditNoteReason.set('');
-    this.creditNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.creditNoteDate.set(todayLocal());
   }
 
   closeCreditNote(): void {

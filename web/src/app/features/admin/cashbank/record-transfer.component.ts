@@ -12,6 +12,7 @@ import {
   RecordTransferRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Record Transfer screen. Gated CASH.TRANSFER.
@@ -84,7 +85,7 @@ export class RecordTransferComponent {
   );
 
   constructor() {
-    this.transferDate.set(new Date().toISOString().slice(0, 10));
+    this.transferDate.set(todayLocal());
     this.loadCompanies();
   }
 
@@ -206,7 +207,7 @@ export class RecordTransferComponent {
     this.reference.set('');
     this.sourceBalance.set(null);
     this.destBalance.set(null);
-    this.transferDate.set(new Date().toISOString().slice(0, 10));
+    this.transferDate.set(todayLocal());
     this.formError.set(null);
   }
 

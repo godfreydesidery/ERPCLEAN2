@@ -5,6 +5,7 @@ import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { JournalEntryDto } from './models/gl.model';
 import { GlService } from './gl.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -16,7 +17,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-journal-entry-detail',
-  imports: [RouterLink],
+  imports: [AppDatePipe, RouterLink],
   templateUrl: './journal-entry-detail.component.html',
   styleUrl: './journal-entry-detail.component.scss',
 })

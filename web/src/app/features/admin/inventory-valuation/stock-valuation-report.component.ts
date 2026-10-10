@@ -6,6 +6,7 @@ import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { StockValuationReportDto } from './models/inventory-valuation.model';
 import { InventoryValuationService } from './inventory-valuation.service';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -102,6 +103,6 @@ export class StockValuationReportComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 }

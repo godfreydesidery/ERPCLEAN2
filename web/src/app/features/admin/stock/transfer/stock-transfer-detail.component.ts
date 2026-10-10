@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
@@ -8,10 +8,11 @@ import { StockTransferDto } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
 import { downloadBlob } from '../../reporting/reporting.utils';
+import { AppDatePipe } from '../../../../shared/app-date.pipe';
 
 @Component({
   selector: 'app-stock-transfer-detail',
-  imports: [DatePipe, DecimalPipe, RouterLink],
+  imports: [AppDatePipe, DecimalPipe, RouterLink],
   templateUrl: './stock-transfer-detail.component.html',
   styleUrl: './stock-transfer-detail.component.scss',
 })

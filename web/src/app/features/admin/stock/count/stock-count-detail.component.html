@@ -28,7 +28,7 @@
               <i class="bi bi-clipboard2-check me-1" aria-hidden="true"></i>
               Stock Count {{ c.countNumber }}
             </h1>
-            <p class="subtitle">{{ c.countType }} &bull; {{ c.countDate }}</p>
+            <p class="subtitle">{{ c.countType }} &bull; {{ c.countDate | appDate }}</p>
           </div>
           <div class="erp-page-head__actions">
             <span class="status-tag fs-6"
@@ -50,7 +50,7 @@
             <dl class="row g-2 mb-0">
               <div class="col-sm-4 col-md-3">
                 <dt class="text-muted small mb-1">Count Date</dt>
-                <dd class="mb-0">{{ c.countDate }}</dd>
+                <dd class="mb-0">{{ c.countDate | appDate }}</dd>
               </div>
               <div class="col-sm-4 col-md-3">
                 <dt class="text-muted small mb-1">Type</dt>
@@ -59,19 +59,19 @@
               @if (c.frozenAt) {
                 <div class="col-sm-4 col-md-3">
                   <dt class="text-muted small mb-1">Frozen At</dt>
-                  <dd class="mb-0">{{ c.frozenAt | date:'medium' }}</dd>
+                  <dd class="mb-0">{{ c.frozenAt | appDate:'datetime' }}</dd>
                 </div>
               }
               @if (c.postedAt) {
                 <div class="col-sm-4 col-md-3">
                   <dt class="text-muted small mb-1">Posted At</dt>
-                  <dd class="mb-0">{{ c.postedAt | date:'medium' }}</dd>
+                  <dd class="mb-0">{{ c.postedAt | appDate:'datetime' }}</dd>
                 </div>
               }
               @if (c.cancelledAt) {
                 <div class="col-sm-4 col-md-3">
                   <dt class="text-muted small mb-1">Cancelled At</dt>
-                  <dd class="mb-0">{{ c.cancelledAt | date:'medium' }}</dd>
+                  <dd class="mb-0">{{ c.cancelledAt | appDate:'datetime' }}</dd>
                 </div>
               }
               @if (c.varianceGlEntryUid) {

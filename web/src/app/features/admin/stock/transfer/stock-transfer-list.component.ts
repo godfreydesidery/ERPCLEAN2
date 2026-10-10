@@ -1,5 +1,4 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
@@ -10,6 +9,7 @@ import { PaginatorComponent } from '../../../../shared/paginator/paginator.compo
 import { StockTransferDto } from './stock-transfer.model';
 import { StockTransferListFilters, StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
+import { AppDatePipe } from '../../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -19,7 +19,7 @@ interface LoadTrigger {
 
 @Component({
   selector: 'app-stock-transfer-list',
-  imports: [DatePipe, RouterLink, PaginatorComponent],
+  imports: [AppDatePipe, RouterLink, PaginatorComponent],
   templateUrl: './stock-transfer-list.component.html',
   styleUrl: './stock-transfer-list.component.scss',
 })

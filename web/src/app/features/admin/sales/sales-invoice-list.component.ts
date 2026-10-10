@@ -1,5 +1,4 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -25,6 +24,7 @@ import { SalesService } from './sales.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { formatMoney } from '../../../shared/money.util';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -37,7 +37,7 @@ interface LoadTrigger { q: string; status: string; page: number }
  */
 @Component({
   selector: 'app-sales-invoice-list',
-  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent, CurrencySelectComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './sales-invoice-list.component.html',
   styleUrl: './sales-invoice-list.component.scss',
 })

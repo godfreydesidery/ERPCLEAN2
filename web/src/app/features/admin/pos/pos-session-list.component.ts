@@ -19,6 +19,7 @@ import { UserService } from '../user/user.service';
 import { PosService } from './pos.service';
 import type { PosSessionPage } from './pos.service';
 import { OpenSessionRequest, PosSessionDto, PosSessionStatus, PosTillDto } from './models/pos.model';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -35,7 +36,7 @@ interface LoadTrigger { page: number }
  */
 @Component({
   selector: 'app-pos-session-list',
-  imports: [FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, DecimalPipe, PaginatorComponent, UidPickerComponent],
   templateUrl: './pos-session-list.component.html',
   styleUrl: './pos-session-list.component.scss',
 })

@@ -29,6 +29,7 @@ import {
   ManagerApprovalDialogComponent,
 } from '../../../shared/manager-approval/manager-approval-dialog.component';
 import { DISCOUNT_OVERRIDE_PERMISSION, DiscountPolicyService } from './discount-policy.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -50,7 +51,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-sales-invoice-detail',
-  imports: [FormsModule, RouterLink, ManagerApprovalDialogComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, ManagerApprovalDialogComponent],
   templateUrl: './sales-invoice-detail.component.html',
   styleUrl: './sales-invoice-detail.component.scss',
 })

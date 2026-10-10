@@ -21,6 +21,7 @@ import {
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 import { formatMoney } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Petty Cash fund screen (ADR-0050 D-7 PR-B). Dual mode, one component (mirrors the PR-A
@@ -156,7 +157,7 @@ export class PettyCashFundDetailComponent {
       this.loadCompaniesForNew();
       this.loadUsers();
     }
-    this.txnDate.set(new Date().toISOString().slice(0, 10));
+    this.txnDate.set(todayLocal());
   }
 
   private loadExisting(uid: string): void {
@@ -305,7 +306,7 @@ export class PettyCashFundDetailComponent {
     this.txnGlAccountUid.set('');
     this.txnReference.set('');
     this.txnDescription.set('');
-    this.txnDate.set(new Date().toISOString().slice(0, 10));
+    this.txnDate.set(todayLocal());
   }
 
   // ── Display helpers ────────────────────────────────────────────────────────

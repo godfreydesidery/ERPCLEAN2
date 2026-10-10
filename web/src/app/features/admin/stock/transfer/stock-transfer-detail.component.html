@@ -82,7 +82,7 @@
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Transfer Date</dt>
-                <dd class="mb-0">{{ t.transferDate | date:'yyyy-MM-dd' }}</dd>
+                <dd class="mb-0">{{ t.transferDate | appDate }}</dd>
               </div>
               <div class="col-sm-6 col-lg-3">
                 <dt class="text-muted small mb-1">Source</dt>
@@ -107,13 +107,13 @@
               @if (t.dispatchedAt) {
                 <div class="col-sm-6 col-lg-3">
                   <dt class="text-muted small mb-1">Dispatched At</dt>
-                  <dd class="mb-0">{{ t.dispatchedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                  <dd class="mb-0">{{ t.dispatchedAt | appDate:'datetime' }}</dd>
                 </div>
               }
               @if (t.receivedAt) {
                 <div class="col-sm-6 col-lg-3">
                   <dt class="text-muted small mb-1">Received At</dt>
-                  <dd class="mb-0">{{ t.receivedAt | date:'yyyy-MM-dd HH:mm' }}</dd>
+                  <dd class="mb-0">{{ t.receivedAt | appDate:'datetime' }}</dd>
                 </div>
               }
               @if (t.notes) {

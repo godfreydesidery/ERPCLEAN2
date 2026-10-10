@@ -20,6 +20,7 @@ import {
   VanReconciliationDto,
 } from './van-reconciliation.model';
 import { VanReconciliationService } from './van-reconciliation.service';
+import { todayLocal } from '../../../../shared/date.util';
 
 /** Per-line raw edit state (string-backed inputs, coerced with + at compute time). */
 interface LineEditRow {
@@ -215,7 +216,7 @@ export class VanReconciliationComponent {
     if (uid) {
       this.loadExisting(uid);
     } else {
-      this.fBusinessDate.set(new Date().toISOString().slice(0, 10));
+      this.fBusinessDate.set(todayLocal());
       this.loadCompaniesForCreate();
     }
   }

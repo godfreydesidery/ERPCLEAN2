@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { PurchasesService } from './purchases.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -25,7 +26,7 @@ interface LoadTrigger { q: string; page: number }
  */
 @Component({
   selector: 'app-goods-receipt-list',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, PaginatorComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, DecimalPipe, PaginatorComponent],
   templateUrl: './goods-receipt-list.component.html',
   styleUrl: './goods-receipt-list.component.scss',
 })

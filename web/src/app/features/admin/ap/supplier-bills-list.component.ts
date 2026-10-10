@@ -22,6 +22,7 @@ import { BillComparisonBadgeComponent } from './bill-comparison-badge.component'
 import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { formatMoney } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -160,7 +161,7 @@ export class SupplierBillsListComponent {
         error: () => this.supplierFilterResults.set([]),
       });
 
-    this.debitNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.debitNoteDate.set(todayLocal());
     this.loadCompanies();
   }
 
@@ -273,7 +274,7 @@ export class SupplierBillsListComponent {
     this.debitNoteNet.set('');
     this.debitNoteVat.set('0');
     this.debitNoteReason.set('');
-    this.debitNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.debitNoteDate.set(todayLocal());
   }
 
   closeDebitNote(): void {

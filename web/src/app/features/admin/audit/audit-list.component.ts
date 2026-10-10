@@ -8,6 +8,7 @@ import { PaginatorComponent } from '../../../shared/paginator/paginator.componen
 import { UserService } from '../user/user.service';
 import { User } from '../models/user.model';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { formatDateTime } from '../../../shared/date.util';
 
 /** Default page size — matches backend default. */
 const DEFAULT_SIZE = 50;
@@ -93,15 +94,8 @@ export class AuditListComponent {
   // ── Formatting helpers (used by template) ────────────────────────────────
 
   formatAt(iso: string): string {
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        year: 'numeric', month: 'short', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false,
-      }).format(new Date(iso));
-    } catch {
-      return iso;
-    }
+    // dd-MMM-yyyy HH:mm in the business (company) zone — owner ruling 2026-10-10.
+    return formatDateTime(iso);
   }
 
   /** Returns the first 8 chars of a uid for compact display, or '—' if null/empty. */
