@@ -65,6 +65,15 @@ public class SalesReportQuery {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
 
+        // RPT-29: same guard as the Profitability and Sales Summary reports — an inverted range
+        // used to return an empty register that read as "no sales".
+        if (fromDate == null || toDate == null) {
+            throw new IllegalArgumentException("Choose the dates this report should cover.");
+        }
+        if (toDate.isBefore(fromDate)) {
+            throw new IllegalArgumentException("The end date cannot be before the start date.");
+        }
+
         CompanyHeader header = loadCompanyHeader(companyId);
         ZoneId zone = ZoneId.of(header.timeZone() != null ? header.timeZone() : DEFAULT_TIME_ZONE);
 
