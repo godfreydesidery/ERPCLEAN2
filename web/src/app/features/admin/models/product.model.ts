@@ -322,11 +322,11 @@ export interface ProductPriceDto {
 /** `POST /product-prices/resolve` (SAL-28): what the server will charge, in a given unit. */
 export interface ResolveUnitPricesRequest {
   productUids: string[];
-  /** Absent = each product's own base unit. */
-  unitUid?: string;
-  /** Absent = walk-in pricing. */
-  customerUid?: string;
-  currency?: string;
+  /** Absent/null = each product's own base unit. */
+  unitUid?: string | null;
+  /** Absent/null = walk-in pricing. */
+  customerUid?: string | null;
+  currency?: string | null;
 }
 
 export interface ResolvedUnitPriceDto {
@@ -335,7 +335,9 @@ export interface ResolvedUnitPriceDto {
   /** BigDecimal on the wire — a JSON number (null when unpriced). */
   amount: number | string | null;
   currency: string | null;
+  /** true ⇒ `amount` is GROSS (VAT-inclusive list); false ⇒ NET. */
   vatInclusive: boolean;
+  /** RESOLVED | NO_PRICE | UNIT_NOT_APPLICABLE */
   status: string;
   priceSource?: string | null;
   priceListUid?: string | null;
