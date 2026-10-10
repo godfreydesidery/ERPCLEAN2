@@ -23,23 +23,28 @@ SAM Electronix) reported missing basic features and difficulty performing daily 
 
 ## Fix tracking
 
-Wave 1 (started 2026-10-10, no schema). Status is updated as each package merges into `develop`.
+Wave 1 (2026-10-10, no schema) is integrated on `integration/gap-review-wave1`: 1,735 unit + 1,341
+integration tests, 221 web spec files and the production build all green. It reaches `develop`
+only with the owner's OK.
 
-| Package (branch) | Findings | Status |
+| Package (branch) | Fixed | Not done (carried to wave 2) |
 |---|---|---|
-| `fix/gl-fiscal-year` | ACC-01, ACC-09, ACC-15, ACC-16, ACC-20, ACC-21, ACC-29 | In progress |
-| `fix/stock-count-cash-count` | LBO-03, STK-02, ARC-01 | In progress |
-| `fix/sales-pack-units` | SAL-01/LSF-01, SAL-07, SAL-17, RPT-01/LSF-11, RPT-02, RPT-16/LSF-12, RPT-29 | In progress |
-| `fix/purchasing-pack-units` | PUR-01/LBO-05/LUI-02, PUR-02/LBO-01/LBO-02, PUR-03, PUR-04/LBO-04, PUR-08, PUR-09, PUR-11, PUR-25, LBO-08 | In progress |
-| `fix/ap-billing` | AP-01, AP-05, AP-06/LBO-07, AP-07, AP-08, AP-09, AP-10, AP-11/RPT-03/LBO-14, AP-12, AP-14, AP-16, AP-17, AP-18, AP-20, AP-28 | In progress |
-| `fix/stock-operations` | LUI-01, STK-01/LBO-06, STK-06/OPN-02, STK-07/STK-23/LBO-29, STK-10/LBO-16, STK-13, STK-15, STK-17, STK-19, STK-20, STK-26, ADM-29 | In progress |
-| `fix/ar-cash` | ARC-02, ARC-03, ARC-05, ARC-06, ARC-09, ARC-12, ARC-15, ARC-17, ARC-18/LSF-18, ARC-19, ARC-20, ARC-21, ARC-29, ARC-33 | In progress |
-| `fix/price-list-resolution` | PRD-01/SAL-04/POS-12/LSF-02, PRD-02, PRD-25, SAL-28 | In progress |
-| `fix/role-gates-ui-blockers` | LRB-01..05, LRB-07, LRB-10, LRB-11, LRB-14, ADM-01, ADM-10, ADM-18, ADM-28, LUI-03, LUI-04/ADM-25, LSF-04/LUI-06, LUI-16 | In progress |
-| `fix/report-scope-margin` | RPT-05, RPT-06/LRB-06, RPT-08, ADM-14 | In progress |
+| `fix/gl-fiscal-year` | ACC-01 (next FY auto-opened at boot + daily), ACC-09, ACC-15, ACC-16, ACC-20, ACC-21, ACC-29 | — |
+| `fix/stock-count-cash-count` | LBO-03, STK-02, ARC-01 (count on the sales cash account refused) | Historic LBO-03 repair: `docs/ops/lbo-03-double-posted-stock-counts.sql` |
+| `fix/sales-pack-units` | SAL-01/LSF-01, SAL-02 (void & refund), SAL-07, SAL-17, RPT-29 | RPT-01/LSF-11, RPT-02, RPT-16/LSF-12; invoices already raised from old pack deliveries need manual correction |
+| `fix/purchasing-pack-units` | PUR-01/LBO-05/LUI-02, PUR-02/LBO-01/LBO-02, PUR-03, PUR-09/PUR-28, PUR-11, LBO-08, OPN-13 (void blocked after sale) | PUR-04/LBO-04 (void after billing), PUR-08 (picker search), PUR-25 reason |
+| `fix/ap-billing` | AP-01, AP-05, AP-06/LBO-07, AP-08, AP-09, AP-14, AP-17, AP-18, AP-20, AP-28 | AP-07, AP-10, AP-11/RPT-03/LBO-14, AP-12, AP-16 |
+| `fix/stock-operations` | LUI-01, STK-01/LBO-06, STK-05 (ruling), STK-07/STK-23/LBO-29, STK-15, STK-17 (partial), STK-20, STK-26, STK-06/OPN-02 (sellability) | STK-06 in-transit column, STK-10/LBO-16, STK-13, STK-19, ADM-29, adjust location picker on toolbar |
+| `fix/ar-cash` | ARC-02, ARC-03, ARC-09, ARC-18/LSF-18, ARC-33 | ARC-05, ARC-06, ARC-12/LBO-17, ARC-15, ARC-17, ARC-19 (needs cheque API), ARC-20, ARC-21, ARC-29 |
+| `fix/price-list-resolution` | PRD-01/SAL-04/POS-12/LSF-02 (customer price → customer list → company default → old fallback), PRD-02 contract prices | PRD-02 tiers/promotions (owner decision), PRD-25 scheduled prices (schema), SAL-28; **POS app must re-price for account customers** |
+| `fix/role-gates-ui-blockers` | LRB-01, LRB-03/ADM-01, LRB-04, LRB-05, LRB-07, LRB-14, ADM-18, LUI-16, LSF-04/LUI-06 (root → Counter agent); backend gates for LRB-02/LRB-10/LRB-11 | Picker "no access" notice on van recon, batch/serial, petty cash, Enter Bill (ADM-28); LUI-03 downloads; money-parser sweep (LUI-04) on invoice/POS/GRN/payment inputs |
+| `fix/report-scope-margin` | RPT-06/LRB-06 (staff see their branches), ADM-14 (cost/margin need INVENTORY.VALUATION.VIEW), RPT-08, RPT-05 on sales exports | RPT-05 headers on other exports, OrbixHQ scope label, branch picker list for branch-limited users |
+| Seed grants (owner-approved) | BRANCH_MANAGER +7, ACCOUNTANT +5, SALES_MANAGER REPORT.EXPORT + INVENTORY.VALUATION.VIEW, PRODUCTION_MANAGER STOCK.LOCATION.VIEW | — |
 
-Rulings folded into existing packages: SAL-02 → `fix/sales-pack-units`, OPN-13 → `fix/purchasing-pack-units`,
-STK-05 → `fix/stock-operations`.
+**Deploy cautions:** the deployed till shows walk-in prices but the server now charges account
+customers their own price; the default till can no longer be cash-counted; stock stranded in
+TRANSIT before the 2026-09-29 fix is no longer sellable; check in-flight transfers; purchase-return
+drafts on pack lines saved before this change must be re-entered.
 
 Everything not listed above is still open; the consolidated list below sets the order for later waves.
 
