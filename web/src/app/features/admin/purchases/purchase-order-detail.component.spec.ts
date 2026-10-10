@@ -744,3 +744,28 @@ describe('PurchaseOrderDetailComponent — stock on hand', () => {
     expect(comp.stockState()).toBe('idle');
   });
 });
+
+// ── PUR-25: Close Order is confirmed first ─────────────────────────────────────
+
+describe('PurchaseOrderDetailComponent — Close Order confirmation (PUR-25)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('the button only opens the confirmation; the order closes on "Yes"', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(PurchaseOrderDetailComponent);
+    fixture.componentRef.setInput('uid', 'PO-UID-1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    const closeOrder = TestBed.inject(PurchasesService).closeOrder as ReturnType<typeof vi.fn>;
+
+    comp.askClose();
+    expect(comp.showCloseConfirm()).toBe(true);
+    expect(closeOrder).not.toHaveBeenCalled();
+
+    comp.close();
+    await vi.runAllTimersAsync();
+    expect(closeOrder).toHaveBeenCalledWith('PO-UID-1');
+    expect(comp.showCloseConfirm()).toBe(false);
+  });
+});

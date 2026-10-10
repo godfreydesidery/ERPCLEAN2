@@ -626,6 +626,14 @@ export class PurchaseOrderDetailComponent {
 
   // ── Close ──────────────────────────────────────────────────────────────────
 
+  /** PUR-25: the button only opens the confirmation; {@link close} runs on "Yes, close order". */
+  readonly showCloseConfirm = signal(false);
+
+  askClose(): void {
+    this.closeError.set(null);
+    this.showCloseConfirm.set(true);
+  }
+
   close(): void {
     if (this.closing()) return;
     this.closing.set(true);
@@ -633,6 +641,7 @@ export class PurchaseOrderDetailComponent {
     this.purchasesService.closeOrder(this.uid()).subscribe({
       next: () => {
         this.closing.set(false);
+        this.showCloseConfirm.set(false);
         this.alerts.success('Order closed');
         this.loadPo();
       },

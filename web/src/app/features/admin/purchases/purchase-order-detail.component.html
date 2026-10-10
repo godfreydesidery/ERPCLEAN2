@@ -180,7 +180,9 @@
             @if (isCloseable() && canCreate()) {
               <button type="button" class="btn btn-outline-secondary"
                       [disabled]="closing()"
-                      (click)="close()">
+                      (click)="askClose()"
+                      [attr.aria-expanded]="showCloseConfirm()"
+                      aria-controls="closeConfirm">
                 @if (closing()) {
                   <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 }
@@ -221,6 +223,30 @@
           </div>
 
           <!-- Void form -->
+          <!-- PUR-25: closing is final, so it is confirmed first (a mis-click beside Receive Goods
+               used to close the LPO for good). -->
+          @if (showCloseConfirm()) {
+            <div id="closeConfirm" class="erp-card mt-2 mb-3" style="max-width:480px"
+                 role="alertdialog" aria-labelledby="closeConfirmTitle" aria-describedby="closeConfirmText">
+              <div class="erp-card__head"><h2 id="closeConfirmTitle">Close this order?</h2></div>
+              <div class="erp-card__body">
+                <p id="closeConfirmText" class="small mb-2">
+                  Anything still outstanding on this order can no longer be received against it.
+                  This cannot be undone.
+                </p>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-primary" [disabled]="closing()" (click)="close()">
+                    Yes, close order
+                  </button>
+                  <button type="button" class="btn btn-outline-secondary" [disabled]="closing()"
+                          (click)="showCloseConfirm.set(false)">
+                    Keep it open
+                  </button>
+                </div>
+              </div>
+            </div>
+          }
+
           @if (showVoidForm()) {
             <form class="erp-card mt-2 mb-3" style="max-width:480px"
                   (ngSubmit)="submitVoid()" aria-label="Void purchase order">
