@@ -23,7 +23,10 @@ import {
 import {
   PayrollRunStatutoryReportDto,
   PayrollStatutoryPeriodReportDto,
+  RecordStatutoryPaymentRequest,
   StatutoryExportFormat,
+  StatutoryLiabilityBalanceDto,
+  StatutoryPaymentResultDto,
 } from './models/payroll-statutory.model';
 
 export interface EmployeePage {
@@ -63,6 +66,7 @@ export class HrPayrollService {
   private readonly loanBase = `${environment.apiBaseUrl}/hr/loans`;
   private readonly payslipBase = `${environment.apiBaseUrl}/hr/payslips`;
   private readonly statutoryReportBase = `${environment.apiBaseUrl}/reports/payroll-statutory`;
+  private readonly statutoryPaymentBase = `${environment.apiBaseUrl}/hr/payroll/statutory-payments`;
 
   // ── Employees ─────────────────────────────────────────────────────────────────
 
@@ -209,6 +213,16 @@ export class HrPayrollService {
   ): Observable<Blob> {
     const params = new HttpParams().set('fromDate', fromDate).set('toDate', toDate).set('format', format);
     return this.http.get(`${this.statutoryReportBase}/export`, { params, responseType: 'blob' });
+  }
+
+  /** ACC-07: what is still owed per statutory liability (ledger balance). Gated HR.PAYROLL.VIEW. */
+  getStatutoryOutstanding(): Observable<StatutoryLiabilityBalanceDto[]> {
+    return this.http.get<StatutoryLiabilityBalanceDto[]>(`${this.statutoryPaymentBase}/outstanding`);
+  }
+
+  /** ACC-07: pay a statutory liability from a cash/bank account. Gated HR.PAYROLL.DISBURSE. */
+  payStatutory(request: RecordStatutoryPaymentRequest): Observable<StatutoryPaymentResultDto> {
+    return this.http.post<StatutoryPaymentResultDto>(this.statutoryPaymentBase, request);
   }
 
   // ── Payslips ───────────────────────────────────────────────────────────────────

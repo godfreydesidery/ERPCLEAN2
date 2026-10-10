@@ -92,7 +92,7 @@ public class PayrollStatutoryPaymentServiceImpl implements PayrollStatutoryPayme
                 continue;
             }
             out.add(new StatutoryLiabilityBalanceDto(l, c.accountCode(), c.accountName(),
-                    creditBalance(companyId, c.accountId())));
+                    creditBalance(companyId, c.accountId()), companyId));
         }
         return out;
     }

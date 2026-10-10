@@ -8,6 +8,8 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { WhtRegisterDto } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { exportErrorMessage } from '../reporting/ledger-export.util';
@@ -34,6 +36,7 @@ export class WhtRegisterComponent {
   private readonly companyService = inject(CompanyService);
   private readonly organisationService = inject(OrganisationService);
   private readonly _alerts = inject(AlertService);
+  private readonly cashbankService = inject(CashbankService);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -144,6 +147,74 @@ export class WhtRegisterComponent {
       error: (err) => {
         this.exportError.set(exportErrorMessage(err));
         this.exporting.set(false);
+      },
+    });
+  }
+
+  // ── Record payment to TRA (ACC-07) ─────────────────────────────────────────
+  /** Remitting / paying WHT is WHT.REMIT. */
+  readonly canPay = computed(() => this.session.hasPermission('WHT.REMIT'));
+  private readonly unpaidRows = computed(() =>
+    (this.register()?.payableRows ?? []).filter((r) => !r.remitted));
+  readonly unpaidCount = computed(() => this.unpaidRows().length);
+  readonly unpaidTotal = computed(() =>
+    this.unpaidRows().reduce((sum, r) => sum + +(r.whtAmount ?? 0), 0));
+  readonly showPayForm = signal(false);
+  readonly paying = signal(false);
+  readonly payError = signal<string | null>(null);
+  readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
+  readonly payAccountUid = signal('');
+  readonly payDate = signal(new Date().toISOString().slice(0, 10));
+  readonly payRef = signal('');
+
+  openPayForm(): void {
+    const loaded = this.loadedFor();
+    if (!loaded) return;
+    this.showPayForm.set(true);
+    this.payError.set(null);
+    this.payRef.set('');
+    this.cashbankService.listAccountOptions(loaded.companyId).subscribe({
+      next: (list) => {
+        this.cashAccounts.set(list ?? []);
+        const preferred = list.find((a) => a.accountType === 'BANK' && a.isDefault)
+          ?? list.find((a) => a.isDefault);
+        if (preferred && !this.payAccountUid()) this.payAccountUid.set(preferred.uid);
+      },
+      error: () => this.payError.set('Could not load the cash and bank accounts.'),
+    });
+  }
+
+  submitPayment(): void {
+    const loaded = this.loadedFor();
+    const reg = this.register();
+    if (!loaded || !reg) return;
+    const ref = String(this.payRef() ?? '').trim();
+    if (!this.payAccountUid()) { this.payError.set('Choose the account the payment was made from.'); return; }
+    if (!this.payDate()) { this.payError.set('Payment date is required.'); return; }
+    if (!ref) { this.payError.set('Enter the TRA payment reference.'); return; }
+
+    this.paying.set(true);
+    this.payError.set(null);
+    this.taxService.payWhtPeriod({
+      companyId: loaded.companyId,
+      periodStart: reg.periodStart,
+      periodEnd: reg.periodEnd,
+      cashBankAccountUid: this.payAccountUid(),
+      paymentDate: this.payDate(),
+      remittanceRef: ref,
+    }).subscribe({
+      next: (res) => {
+        this.paying.set(false);
+        this.showPayForm.set(false);
+        this._alerts.success('WHT payment recorded',
+          `${res.certificatesRemitted} certificate(s), ${this.fmtMoney(res.amountPaid)}`);
+        this.load();
+      },
+      error: (err) => {
+        this.paying.set(false);
+        const errors = err instanceof HttpErrorResponse
+          ? (err.error as { errors?: string[] })?.errors : undefined;
+        this.payError.set(errors?.[0] ?? 'Could not record the payment.');
       },
     });
   }

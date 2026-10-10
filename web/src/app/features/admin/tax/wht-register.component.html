@@ -129,7 +129,59 @@
           WHT Payable to TRA
           <small class="text-muted fw-normal ms-1">(on payments made to suppliers)</small>
         </h2>
+        <!-- ACC-07: pay the period's unpaid supplier WHT to TRA from a bank account -->
+        @if (canPay() && unpaidCount() > 0 && !showPayForm()) {
+          <button type="button" class="btn btn-primary btn-sm" (click)="openPayForm()">
+            <i class="bi bi-bank" aria-hidden="true"></i> Record payment to TRA
+          </button>
+        }
       </div>
+      @if (showPayForm()) {
+        <div class="erp-card__body border-bottom">
+          <form aria-label="Record WHT payment" (ngSubmit)="submitPayment()">
+            @if (payError()) {
+              <div class="alert alert-danger py-2" role="alert">{{ payError() }}</div>
+            }
+            <p class="text-muted small mb-3">
+              Pays the {{ unpaidCount() }} unpaid certificate(s) of this period,
+              <strong>{{ fmtMoney(unpaidTotal()) }}</strong>, and marks them remitted. Books
+              DR WHT Payable / CR the chosen account.
+            </p>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" for="whtPayAccount">Paid from <span aria-hidden="true">*</span></label>
+                <select id="whtPayAccount" class="form-select form-select-sm" name="whtPayAccount"
+                        [ngModel]="payAccountUid()" (ngModelChange)="payAccountUid.set($event)" required>
+                  <option value="">— select cash / bank account —</option>
+                  @for (acc of cashAccounts(); track acc.uid) {
+                    <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="whtPayDate">Payment date <span aria-hidden="true">*</span></label>
+                <input id="whtPayDate" type="date" class="form-control form-control-sm" name="whtPayDate"
+                       [ngModel]="payDate()" (ngModelChange)="payDate.set($event)" required />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="whtPayRef">TRA reference <span aria-hidden="true">*</span></label>
+                <input id="whtPayRef" type="text" maxlength="80" class="form-control form-control-sm"
+                       name="whtPayRef" [ngModel]="payRef()" (ngModelChange)="payRef.set($event)" required />
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm" [disabled]="paying()">
+                @if (paying()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Record payment
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="showPayForm.set(false)">Cancel</button>
+            </div>
+          </form>
+        </div>
+      }
       @if (register()!.payableRows.length === 0) {
         <div class="erp-card__body">
           <div class="erp-empty py-2">
@@ -148,6 +200,7 @@
                 <th scope="col" class="num">Taxable Base</th>
                 <th scope="col" class="num">WHT Amount</th>
                 <th scope="col">Date</th>
+                <th scope="col">TRA</th>
               </tr>
             </thead>
             <tbody>
@@ -162,6 +215,7 @@
                   <td class="num">{{ fmtMoney(row.taxableBase) }}</td>
                   <td class="num text-danger fw-semibold">{{ fmtMoney(row.whtAmount) }}</td>
                   <td>{{ row.certificateDate }}</td>
+                  <td>{{ row.remitted ? 'Remitted' : 'Unpaid' }}</td>
                 </tr>
               }
             </tbody>
@@ -169,6 +223,7 @@
               <tr>
                 <td colspan="4" class="text-end">Total Payable</td>
                 <td class="num text-danger">{{ fmtMoney(register()!.totalPayable) }}</td>
+                <td></td>
                 <td></td>
               </tr>
             </tfoot>

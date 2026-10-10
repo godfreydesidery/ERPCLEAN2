@@ -10,6 +10,7 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { HrPayrollService } from './hr-payroll.service';
+import { CashbankService } from '../cashbank/cashbank.service';
 import { PayrollStatutoryReportComponent } from './payroll-statutory-report.component';
 import type { PayrollStatutoryPeriodReportDto } from './models/payroll-statutory.model';
 import { assertA11y } from '../../../../testing/a11y.helper';
@@ -46,7 +47,16 @@ function makeBed() {
         useValue: {
           getStatutoryPeriodReport: vi.fn(() => of(REPORT)),
           exportStatutoryPeriodReport: vi.fn(() => of(new Blob())),
+          getStatutoryOutstanding: vi.fn(() => of([
+            { liability: 'PAYE', accountCode: '2500', accountName: 'PAYE Payable',
+              outstanding: 210000, companyId: '10' },
+          ])),
+          payStatutory: vi.fn(),
         },
+      },
+      {
+        provide: CashbankService,
+        useValue: { listAccountOptions: vi.fn(() => of([])) },
       },
       {
         provide: SessionStore,
@@ -76,6 +86,15 @@ describe('PayrollStatutoryReportComponent — a11y', () => {
     makeBed();
     const fixture = TestBed.createComponent(PayrollStatutoryReportComponent);
     fixture.componentInstance.run();
+    fixture.detectChanges();
+    await assertA11y(fixture);
+  }, 20_000);
+
+  it('has no axe violations with the statutory payment form open (ACC-07)', async () => {
+    makeBed();
+    const fixture = TestBed.createComponent(PayrollStatutoryReportComponent);
+    fixture.detectChanges();
+    fixture.componentInstance.openPay(fixture.componentInstance.outstanding()[0]);
     fixture.detectChanges();
     await assertA11y(fixture);
   }, 20_000);

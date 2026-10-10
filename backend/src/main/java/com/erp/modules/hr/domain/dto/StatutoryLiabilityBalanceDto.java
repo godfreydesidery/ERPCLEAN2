@@ -11,5 +11,7 @@ public record StatutoryLiabilityBalanceDto(
         StatutoryLiability liability,
         String accountCode,
         String accountName,
-        BigDecimal outstanding
+        BigDecimal outstanding,
+        /** The company the balance belongs to (the caller's own) — for the account picker. */
+        Long companyId
 ) {}

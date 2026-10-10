@@ -83,8 +83,44 @@ export interface VatReturnDto {
   zeroRatedSales: number | string | null;
   /** Wire: number | null — exempt portion of salesTurnover. Coerce with +v. */
   exemptSales: number | string | null;
+  /** ACC-07: when the latest payment to TRA was recorded (ISO instant), null until paid. */
+  paidAt?: string | null;
+  /** Wire: number | null — cumulative amount paid to TRA. Coerce with +v. */
+  paidAmount?: number | string | null;
+  paymentReference?: string | null;
   bands: VatReturnBandDto[];
 }
+
+/** ACC-07: pay a filed return's VAT from a cash/bank account (POST .../payments). */
+export interface RecordTaxPaymentRequest {
+  cashBankAccountUid: string;
+  paymentDate: string;
+  /** Omit to pay everything still owed. */
+  amount?: string;
+  reference?: string;
+}
+
+/** ACC-07: pay all unpaid supplier WHT of a period to TRA (POST /wht/register/payments). */
+export interface WhtPeriodPaymentRequest {
+  /** Wire: number */
+  companyId: string;
+  periodStart: string;
+  periodEnd: string;
+  cashBankAccountUid: string;
+  paymentDate: string;
+  remittanceRef: string;
+}
+
+/** ACC-07: outcome of a WHT payment. */
+export interface WhtPaymentResultDto {
+  certificatesRemitted: number;
+  /** Wire: number — coerce with +v. */
+  amountPaid: number | string;
+  cashTransactionUid: string | null;
+}
+
+/** RPT-14 / PAR-06: which VAT schedule to export. */
+export type VatScheduleKind = 'sales' | 'purchases';
 
 // ── VAT Adjustment ─────────────────────────────────────────────────────────────
 
@@ -181,6 +217,10 @@ export interface WhtRegisterRowDto {
   /** Wire: number — coerce with +(dto.whtAmount) */
   whtAmount: number | string;
   certificateDate: string;
+  /** ACC-07: the certificate's uid (handle for remit); absent on older servers. */
+  uid?: string | null;
+  /** ACC-07: already remitted to TRA. */
+  remitted?: boolean;
 }
 
 /**

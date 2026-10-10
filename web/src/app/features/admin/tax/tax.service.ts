@@ -9,9 +9,13 @@ import {
   CreateWhtTypeRequest,
   FileVatReturnRequest,
   OpenVatReturnRequest,
+  RecordTaxPaymentRequest,
   UpdateWhtTypeRequest,
   VatAdjustmentDto,
   VatReturnDto,
+  VatScheduleKind,
+  WhtPaymentResultDto,
+  WhtPeriodPaymentRequest,
   WhtRegisterDto,
   WhtTypeDto,
 } from './models/tax.model';
@@ -76,6 +80,23 @@ export class TaxService {
     return this.http.post<VatReturnDto>(`${this.vatBase}/returns/uid/${uid}/file`, request);
   }
 
+  /** ACC-07: pay a FILED return's VAT to TRA from a cash/bank account (gated VAT.RETURN.FILE). */
+  recordReturnPayment(uid: string, request: RecordTaxPaymentRequest): Observable<VatReturnDto> {
+    return this.http.post<VatReturnDto>(`${this.vatBase}/returns/uid/${uid}/payments`, request);
+  }
+
+  /**
+   * RPT-14 / PAR-06: the per-document sales or purchases schedule behind the return
+   * (binary; gated VAT.VIEW + REPORT.EXPORT, like the return export).
+   */
+  exportSchedule(uid: string, kind: VatScheduleKind, format: ExportFormat): Observable<Blob> {
+    const params = new HttpParams().set('format', format);
+    return this.http.get(`${this.vatBase}/returns/uid/${uid}/schedules/${kind}/export`, {
+      params,
+      responseType: 'blob',
+    });
+  }
+
   // ── VAT Adjustments ────────────────────────────────────────────────────────
 
   listAdjustments(returnUid: string): Observable<VatAdjustmentDto[]> {
@@ -125,6 +146,14 @@ export class TaxService {
       .set('periodStart', periodStart)
       .set('periodEnd', periodEnd);
     return this.http.get<WhtRegisterDto>(`${this.whtBase}/register`, { params });
+  }
+
+  /**
+   * ACC-07: pay every unpaid supplier-WHT certificate of the period to TRA in one cash/bank payment
+   * (DR WHT Payable / CR the account) and mark them remitted. Gated WHT.REMIT.
+   */
+  payWhtPeriod(request: WhtPeriodPaymentRequest): Observable<WhtPaymentResultDto> {
+    return this.http.post<WhtPaymentResultDto>(`${this.whtBase}/register/payments`, request);
   }
 
   /**

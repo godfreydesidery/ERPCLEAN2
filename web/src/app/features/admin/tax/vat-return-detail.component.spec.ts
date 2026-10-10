@@ -18,6 +18,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { TaxService } from './tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
 import { VatReturnDetailComponent } from './vat-return-detail.component';
 import type { VatReturnBandDto, VatReturnDto } from './models/tax.model';
 
@@ -60,7 +61,9 @@ function makeReturn(overrides: Partial<VatReturnDto> = {}): VatReturnDto {
 function makeBed(taxService: Partial<{
   getReturn: ReturnType<typeof vi.fn>;
   listAdjustments: ReturnType<typeof vi.fn>;
-}> = {}) {
+  recordReturnPayment: ReturnType<typeof vi.fn>;
+  exportSchedule: ReturnType<typeof vi.fn>;
+}> = {}, permissions: string[] = []) {
   const svc = {
     getReturn: vi.fn(() => of(makeReturn())),
     listAdjustments: vi.fn(() => of([])),
@@ -68,6 +71,8 @@ function makeBed(taxService: Partial<{
     fileReturn: vi.fn(() => of(makeReturn())),
     addAdjustment: vi.fn(),
     removeAdjustment: vi.fn(),
+    recordReturnPayment: vi.fn(() => of(makeReturn())),
+    exportSchedule: vi.fn(() => of(new Blob(['x']))),
     ...taxService,
   };
 
@@ -76,11 +81,20 @@ function makeBed(taxService: Partial<{
     providers: [
       provideRouter([]),
       { provide: TaxService, useValue: svc },
+      {
+        provide: CashbankService,
+        useValue: {
+          listAccountOptions: vi.fn(() => of([
+            { id: '5', uid: 'bank-1', code: 'CRDB', name: 'CRDB Main', accountType: 'BANK',
+              branchId: null, currency: 'TZS', isDefault: true, inCurrentBranch: true },
+          ])),
+        },
+      },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       {
         provide: SessionStore,
         useValue: {
-          hasPermission: vi.fn(() => false),
+          hasPermission: vi.fn((code: string) => permissions.includes(code)),
           isAuthenticated: signal(true),
           user: signal(null),
           permissions: signal([]),
@@ -92,8 +106,8 @@ function makeBed(taxService: Partial<{
   return svc;
 }
 
-function createAndLoad(taxService: Parameters<typeof makeBed>[0] = {}) {
-  const svc = makeBed(taxService);
+function createAndLoad(taxService: Parameters<typeof makeBed>[0] = {}, permissions: string[] = []) {
+  const svc = makeBed(taxService, permissions);
   const fixture = TestBed.createComponent(VatReturnDetailComponent);
   fixture.componentRef.setInput('uid', 'vat-1');
   vi.runAllTimers();
@@ -202,5 +216,83 @@ describe('VatReturnDetailComponent — summary area turnover figures', () => {
     });
     const summary = fixture.nativeElement.querySelector('table[aria-label="VAT return summary"]');
     expect(summary!.textContent).toContain('800,000.00');
+  });
+});
+
+// ── ACC-07: record payment on a FILED return ───────────────────────────────────
+
+describe('VatReturnDetailComponent — record payment (ACC-07)', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  const filed = (o: Partial<VatReturnDto> = {}) => makeReturn({
+    status: 'FILED', filingReference: 'TRA-1', filingDate: '2026-07-15', netVat: 107400, ...o,
+  });
+
+  it('offers "Record payment" only on a FILED return with VAT still owed, to VAT.RETURN.FILE', () => {
+    const { fixture } = createAndLoad({ getReturn: vi.fn(() => of(filed())) }, ['VAT.RETURN.FILE']);
+    expect(fixture.componentInstance.canRecordPayment()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Record payment');
+    TestBed.resetTestingModule();
+
+    const draft = createAndLoad({}, ['VAT.RETURN.FILE']);
+    expect(draft.fixture.componentInstance.canRecordPayment()).toBe(false);
+    TestBed.resetTestingModule();
+
+    const paid = createAndLoad({ getReturn: vi.fn(() => of(filed({ paidAmount: 107400 }))) },
+      ['VAT.RETURN.FILE']);
+    expect(paid.fixture.componentInstance.canRecordPayment()).toBe(false);
+    TestBed.resetTestingModule();
+
+    const noPerm = createAndLoad({ getReturn: vi.fn(() => of(filed())) });
+    expect(noPerm.fixture.componentInstance.canRecordPayment()).toBe(false);
+  });
+
+  it('prefills the outstanding amount and the default bank, then posts the payment', () => {
+    const recordReturnPayment = vi.fn(() => of(filed({ paidAmount: 107400 })));
+    const { fixture } = createAndLoad(
+      { getReturn: vi.fn(() => of(filed({ paidAmount: 7400 }))), recordReturnPayment },
+      ['VAT.RETURN.FILE']);
+    const comp = fixture.componentInstance;
+    comp.openPayForm();
+    expect(+comp.payAmount()).toBe(100000);
+    expect(comp.payAccountUid()).toBe('bank-1');
+
+    comp.payRef.set('PRN-9');
+    comp.submitPayment();
+    expect(recordReturnPayment).toHaveBeenCalledWith('vat-1', expect.objectContaining({
+      cashBankAccountUid: 'bank-1', amount: '100000', reference: 'PRN-9',
+    }));
+    expect(comp.showPayForm()).toBe(false);
+    expect(comp.outstanding()).toBe(0);
+  });
+
+  it('refuses to submit without an account', () => {
+    const recordReturnPayment = vi.fn();
+    const { fixture } = createAndLoad(
+      { getReturn: vi.fn(() => of(filed())), recordReturnPayment }, ['VAT.RETURN.FILE']);
+    const comp = fixture.componentInstance;
+    comp.showPayForm.set(true);
+    comp.payAccountUid.set('');
+    comp.submitPayment();
+    expect(recordReturnPayment).not.toHaveBeenCalled();
+    expect(comp.payError()).toContain('account');
+  });
+});
+
+// ── RPT-14 / PAR-06: schedule exports ──────────────────────────────────────────
+
+describe('VatReturnDetailComponent — VAT schedules (RPT-14)', () => {
+  afterEach(() => { vi.clearAllTimers(); TestBed.resetTestingModule(); });
+
+  it('shows the schedule buttons to REPORT.EXPORT and requests the chosen schedule', () => {
+    const exportSchedule = vi.fn(() => of(new Blob(['x'])));
+    const { fixture } = createAndLoad({ exportSchedule }, ['REPORT.EXPORT']);
+    expect(fixture.nativeElement.textContent).toContain('Sales schedule');
+    expect(fixture.nativeElement.textContent).toContain('Purchases schedule');
+
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    fixture.componentInstance.exportSchedule('purchases', 'CSV');
+    expect(exportSchedule).toHaveBeenCalledWith('vat-1', 'purchases', 'CSV');
   });
 });
