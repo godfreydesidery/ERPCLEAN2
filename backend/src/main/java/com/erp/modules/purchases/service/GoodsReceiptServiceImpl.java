@@ -91,6 +91,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final AuditService                     audit;
     private final OutboxPublisher                  outbox;
     private final GoodsReceiptPrintQuery           printQuery;
+    private final ReceiptVoidStockGuard            voidStockGuard;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -105,7 +106,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
                                    OutboxPublisher outbox,
-                                   GoodsReceiptPrintQuery printQuery) {
+                                   GoodsReceiptPrintQuery printQuery,
+                                   ReceiptVoidStockGuard voidStockGuard) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -120,6 +122,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.audit         = audit;
         this.outbox        = outbox;
         this.printQuery    = printQuery;
+        this.voidStockGuard = voidStockGuard;
     }
 
     // -------------------------------------------------------------------------
@@ -277,6 +280,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                     "Some of these goods have already been returned to the supplier, so this "
                             + "receipt can't be voided. Raise a purchase return for the rest instead.");
         }
+
+        // OPN-13 (owner ruling 2026-10-10): refuse once the receipt's stock has partly been sold or
+        // used — the reversal would drive the branch negative and distort the moving average.
+        voidStockGuard.assertStockStillOnHand(gr, lineList);
 
         // 1. Transition to VOID
         gr.setStatus(GoodsReceiptStatus.VOID);

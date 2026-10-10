@@ -46,6 +46,7 @@ class GoodsReceiptVoidGuardTest {
     private OutstandingTracker         tracker;
     private PurchaseOrderServiceImpl   poService;
     private OutboxPublisher            outbox;
+    private ReceiptVoidStockGuard      stockGuard;
     private GoodsReceiptServiceImpl    service;
 
     private GoodsReceipt gr;
@@ -58,12 +59,13 @@ class GoodsReceiptVoidGuardTest {
         tracker   = mock(OutstandingTracker.class);
         poService = mock(PurchaseOrderServiceImpl.class);
         outbox    = mock(OutboxPublisher.class);
+        stockGuard = mock(ReceiptVoidStockGuard.class);
         service = new GoodsReceiptServiceImpl(
                 receipts, grLines, mock(GoodsReceiptLineSerialRepository.class), orders,
                 mock(PurchaseOrderLineRepository.class), mock(ProductRepository.class),
                 mock(PurchaseSettingsRepository.class), mock(PurchaseNumberGenerator.class),
                 tracker, poService, mock(ScopeGuard.class), mock(AuditService.class), outbox,
-                mock(GoodsReceiptPrintQuery.class));
+                mock(GoodsReceiptPrintQuery.class), stockGuard);
 
         RequestContext.set(new RequestContext.Principal(1L, "u@test", false, 10L, 20L, null));
 
@@ -108,6 +110,20 @@ class GoodsReceiptVoidGuardTest {
         verify(gr).setStatus(GoodsReceiptStatus.VOID);
         verify(tracker).reverseReceipt(anyList());
         verify(outbox).publish(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void void_isRefusedWhenTheStockGuardFindsTheGoodsPartlySold() {
+        GoodsReceiptLine untouched = line(BigDecimal.ZERO);
+        List<GoodsReceiptLine> lines = List.of(untouched);
+        when(grLines.findByGoodsReceiptIdOrderByLineNo(40L)).thenReturn(lines);
+        org.mockito.Mockito.doThrow(new IllegalStateException("already been sold or used"))
+                .when(stockGuard).assertStockStillOnHand(gr, lines);
+
+        assertThatThrownBy(() -> service.voidReceipt("GR-UID", new VoidGoodsReceiptRequest("typo")))
+                .hasMessageContaining("already been sold or used");
+        verify(gr, never()).setStatus(any());
+        verify(outbox, never()).publish(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
