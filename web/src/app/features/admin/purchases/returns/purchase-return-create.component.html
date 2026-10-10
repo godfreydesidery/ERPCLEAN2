@@ -40,6 +40,7 @@
               [(ngModel)]="selectedGrUid"
               name="grPicker"
               [options]="grOptions()"
+              [search]="searchGr"
               placeholder="Select goods receipt"
               [required]="true"
               (ngModelChange)="onGrPick($event)" />

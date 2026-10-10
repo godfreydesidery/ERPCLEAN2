@@ -16,7 +16,8 @@ import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PurchasesService } from '../purchases.service';
 import { LandedCostService } from './landed-cost.service';
-import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { UidPickerComponent, UidOption, UidSearchFn } from '../../../../shared/uid-picker/uid-picker.component';
+import { map, tap } from 'rxjs';
 
 interface ChargeEntry {
   chargeType: LandedCostChargeType;
@@ -92,7 +93,9 @@ export class LandedCostCreateComponent {
   private loadGrOptions(): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.purchasesService.listReceipts(companyId, undefined, 0, 100).subscribe({
+    // PUR-08: the newest 50 as a seed (the server lists newest first); anything older is found by
+    // typing its number — the picker searches the server.
+    this.purchasesService.listReceipts(companyId, undefined, 0, 50).subscribe({
       next: ({ rows }) => {
         this.grOptions.set(
           rows
@@ -127,8 +130,20 @@ export class LandedCostCreateComponent {
     this.selectedGrUids.update((uids) => uids.filter((u) => u !== uid));
   }
 
+  /** Labels of receipts found by search (not in the seed), so a chosen one still shows its number. */
+  private readonly searchedGrLabels = new Map<string, string>();
+
+  /** PUR-08: server-side receipt-number search for the picker (RECEIVED receipts only). */
+  readonly searchGr: UidSearchFn = (q: string) =>
+    this.purchasesService.listReceipts(this.selectedCompanyId(), q, 0, 20).pipe(
+      map(({ rows }) => rows
+        .filter((gr) => gr.status === 'RECEIVED')
+        .map((gr) => ({ uid: gr.uid, label: gr.receiptNumber, hint: gr.status }))),
+      tap((opts) => opts.forEach((o) => this.searchedGrLabels.set(o.uid, o.label))),
+    );
+
   grLabel(uid: string): string {
-    return this.grOptions().find((o) => o.uid === uid)?.label ?? uid;
+    return this.grOptions().find((o) => o.uid === uid)?.label ?? this.searchedGrLabels.get(uid) ?? uid;
   }
 
   addCharge(): void {

@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
+import { debounceTime, distinctUntilChanged, map, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { Company } from '../../models/company.model';
@@ -17,7 +17,7 @@ import { CompanyService } from '../../company/company.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { PurchasesService } from '../purchases.service';
 import { PurchaseReturnService } from './purchase-return.service';
-import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { UidPickerComponent, UidOption, UidSearchFn } from '../../../../shared/uid-picker/uid-picker.component';
 
 interface ReturnLineEntry {
   line: GoodsReceiptLineDto;
@@ -91,7 +91,9 @@ export class PurchaseReturnCreateComponent {
   private loadGrOptions(): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
-    this.purchasesService.listReceipts(companyId, undefined, 0, 100).subscribe({
+    // PUR-08: the newest 50 as a seed (the server lists newest first); anything older is found by
+    // typing its number — the picker searches the server.
+    this.purchasesService.listReceipts(companyId, undefined, 0, 50).subscribe({
       next: ({ rows }) => {
         // PUR-03: a voided receipt cannot take a return (the server refuses it too).
         this.grOptions.set(
@@ -105,6 +107,14 @@ export class PurchaseReturnCreateComponent {
       error: () => {},
     });
   }
+
+  /** PUR-08: server-side receipt-number search for the picker (voided receipts excluded). */
+  readonly searchGr: UidSearchFn = (q: string) =>
+    this.purchasesService.listReceipts(this.selectedCompanyId(), q, 0, 20).pipe(
+      map(({ rows }) => rows
+        .filter((gr) => gr.status !== 'VOID')
+        .map((gr) => ({ uid: gr.uid, label: gr.receiptNumber, hint: gr.status }))),
+    );
 
   onGrPick(uid: string): void {
     this.selectedGrUid.set(uid);

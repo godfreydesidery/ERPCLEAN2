@@ -409,6 +409,10 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                 List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("4")))));
 
         assertThat(gr2.receiptNumber()).isEqualTo("GRN-0002");
+        // PUR-08: the number search matches a fragment, case-insensitively (was an exact match).
+        assertThat(grService.list(gr2.companyId(), "grn-0002",
+                        org.springframework.data.domain.PageRequest.of(0, 20)).getContent())
+                .extracting(GoodsReceiptDto::uid).containsExactly(gr2.uid());
         PurchaseOrderDto afterGr2 = poService.getByUid(placed.uid());
         assertThat(afterGr2.status()).isEqualTo(PurchaseOrderStatus.RECEIVED);
 
