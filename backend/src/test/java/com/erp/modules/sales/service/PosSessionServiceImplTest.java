@@ -268,13 +268,13 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcct = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S3", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
         JournalEntryDraft draft = captor.getValue();
 
         // All lines must carry TZS (company currency), not USD
@@ -300,13 +300,13 @@ class PosSessionServiceImplTest {
         ChartOfAccount shortAcct = mockCoa(30L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S4", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
 
         // Must post on 2026-06-12, not today
         assertThat(captor.getValue().postingDate()).isEqualTo(LocalDate.of(2026, 6, 12));
@@ -317,7 +317,7 @@ class PosSessionServiceImplTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void reconcileSession_missingGlConfig_propagatesException() {
+    void reconcileSession_missingGlConfig_refusesTheReconcile_withAFriendlyMessage() {
         PosSession session = closedSession(1L, new BigDecimal("50.00"),
                 Instant.parse("2026-06-12T22:00:00Z"));
 
@@ -332,10 +332,34 @@ class PosSessionServiceImplTest {
 
         // The exception must propagate out of reconcileSession — no silent swallow
         assertThatThrownBy(() -> service.reconcileSession("S5", new ReconcileSessionRequest(null)))
-                .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("POS_CASH_OVER");
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("could not be reconciled")
+                .hasMessageNotContaining("POS_CASH_OVER");
 
-        // GL must NOT have been posted (exception fired before postInNewTx)
+        // GL must NOT have been posted (exception fired before the post)
+        verify(glPosting, never()).post(any());
+    }
+
+    @Test
+    void reconcileSession_variancePostFails_sessionIsNotMarkedReconciled() {
+        // ACC-20: a closed period / missing fiscal year used to be swallowed by postInNewTx — the
+        // session read RECONCILED while the shortage never reached the P&L.
+        PosSession session = closedSession(1L, new BigDecimal("-75.00"),
+                Instant.parse("2026-06-12T22:00:00Z"));
+        Company company = mockCompany(1L, "TZS");
+        when(sessions.findByUid("S5b")).thenReturn(Optional.of(session));
+        when(companies.findById(1L)).thenReturn(Optional.of(company));
+        ChartOfAccount cash = mockCoa(10L);
+        ChartOfAccount shortAcct = mockCoa(30L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cash);
+        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
+        when(glPosting.post(any())).thenThrow(new com.erp.platform.common.api.AccountingSetupException(
+                "The fiscal period October 2026 is closed."));
+
+        assertThatThrownBy(() -> service.reconcileSession("S5b", new ReconcileSessionRequest(null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("could not be reconciled");
+        assertThat(session.getStatus()).isNotEqualTo(PosSessionStatus.RECONCILED);
         verify(glInvoker, never()).postInNewTx(any());
     }
 
@@ -356,7 +380,7 @@ class PosSessionServiceImplTest {
 
         service.reconcileSession("S6", new ReconcileSessionRequest(null));
 
-        verify(glInvoker, never()).postInNewTx(any());
+        verify(glPosting, never()).post(any());
         assertThat(session.getVarianceJournalId()).isNull();
     }
 
@@ -377,13 +401,13 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcctS7 = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcctS7);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcctS7);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S7", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
         JournalEntryDraft draft = captor.getValue();
 
         BigDecimal totalDebit  = draft.lines().stream()
@@ -731,7 +755,7 @@ class PosSessionServiceImplTest {
         assertThat(session.getVarianceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 
         service.reconcileSession("K8-6", new ReconcileSessionRequest(null));
-        verify(glInvoker, never()).postInNewTx(any());
+        verify(glPosting, never()).post(any());
     }
 
     /** The detail behind the merged "Payouts" line — previously only a SUM existed. */
