@@ -108,6 +108,12 @@ public class StockCountServiceImpl implements StockCountService {
 
         StockLocation loc = locationResolver.resolveLocation(
                 request.locationUid(), principal.companyId());
+        // STK-23: in-transit stock is on the road, not on a shelf — and posting a count variance
+        // there would corrupt every transfer still waiting to be received.
+        if (locationResolver.isInTransitLocation(loc)) {
+            throw new IllegalArgumentException(
+                    "The in-transit location can't be counted. Choose a store or warehouse.");
+        }
 
         String number = numberGenerator.nextCount(principal.companyId());
         String type   = request.countType() != null ? request.countType().toUpperCase() : "FULL";

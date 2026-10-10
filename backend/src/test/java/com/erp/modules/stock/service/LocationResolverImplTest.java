@@ -118,6 +118,60 @@ class LocationResolverImplTest {
     }
 
     // =========================================================================
+    // STK-07: resolved by the TRANSIT- code convention, not "first OTHER by code"
+    // =========================================================================
+
+    @Test
+    void inTransitLocationId_userOtherLocationSortingFirst_doesNotHijackTransit_stk07() {
+        StockLocation warehouse = makeLocation(1L, LocationType.WAREHOUSE, true,  MasterStatus.ACTIVE);
+        StockLocation bond      = makeLocation(2L, LocationType.OTHER,     false, MasterStatus.ACTIVE);
+        StockLocation transit   = makeLocation(3L, LocationType.OTHER,     false, MasterStatus.ACTIVE);
+        when(bond.getCode()).thenReturn("BOND");
+        when(transit.getCode()).thenReturn("TRANSIT-BR01");
+        when(mockLocations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                COMPANY_ID, BRANCH_ID, MasterStatus.ACTIVE))
+                .thenReturn(List.of(bond, transit, warehouse)); // BOND sorts before TRANSIT-
+
+        assertThat(resolver.inTransitLocationId(COMPANY_ID, BRANCH_ID)).isEqualTo(3L);
+        assertThat(resolver.isInTransitLocation(transit)).isTrue();
+        assertThat(resolver.isInTransitLocation(bond)).isFalse();
+    }
+
+    @Test
+    void inTransitLocationId_transitRetypedByUser_stillResolvedByCode_stk07() {
+        StockLocation damaged = makeLocation(2L, LocationType.OTHER,     false, MasterStatus.ACTIVE);
+        StockLocation transit = makeLocation(3L, LocationType.WAREHOUSE, false, MasterStatus.ACTIVE);
+        when(damaged.getCode()).thenReturn("DAMAGED");
+        when(transit.getCode()).thenReturn("transit-br01"); // case-insensitive
+        when(mockLocations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                COMPANY_ID, BRANCH_ID, MasterStatus.ACTIVE))
+                .thenReturn(List.of(damaged, transit));
+
+        assertThat(resolver.inTransitLocationId(COMPANY_ID, BRANCH_ID)).isEqualTo(3L);
+    }
+
+    @Test
+    void inTransitLocationId_noConventionalCode_fallsBackToLegacyOtherRule_stk07() {
+        // A branch whose transit location was set up by hand before the convention keeps working,
+        // so a transfer already dispatched there still receives from the same row.
+        StockLocation handMade = makeLocation(2L, LocationType.OTHER, false, MasterStatus.ACTIVE);
+        when(handMade.getCode()).thenReturn("ROAD");
+        when(mockLocations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                COMPANY_ID, BRANCH_ID, MasterStatus.ACTIVE))
+                .thenReturn(List.of(handMade));
+
+        assertThat(resolver.findInTransitLocationId(COMPANY_ID, BRANCH_ID)).contains(2L);
+    }
+
+    @Test
+    void hasTransitCode_matchesPrefixOnly() {
+        assertThat(LocationResolver.hasTransitCode("TRANSIT-KILI003")).isTrue();
+        assertThat(LocationResolver.hasTransitCode(" transit-x")).isTrue();
+        assertThat(LocationResolver.hasTransitCode("INTRANSIT")).isFalse();
+        assertThat(LocationResolver.hasTransitCode(null)).isFalse();
+    }
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 

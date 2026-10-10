@@ -109,6 +109,12 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (srcLoc.getId().equals(dstLoc.getId())) {
             throw new IllegalArgumentException("Source and destination locations must be different.");
         }
+        // STK-23: the in-transit location is filled and emptied only by dispatch and receive.
+        // Moving stock into or out of it by hand corrupts every transfer still on the road.
+        if (locationResolver.isInTransitLocation(srcLoc) || locationResolver.isInTransitLocation(dstLoc)) {
+            throw new IllegalArgumentException(
+                    "The in-transit location can't be chosen on a transfer. Pick a store or warehouse.");
+        }
 
         String number = numberGenerator.nextTransfer(principal.companyId());
         String mode   = request.transferMode() != null ? request.transferMode().toUpperCase() : "IN_TRANSIT";

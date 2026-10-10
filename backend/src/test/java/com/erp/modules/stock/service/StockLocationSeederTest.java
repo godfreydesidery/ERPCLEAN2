@@ -96,6 +96,7 @@ class StockLocationSeederTest {
         StockLocation inTransit = mock(StockLocation.class);
         when(inTransit.isDefault()).thenReturn(false);
         when(inTransit.getLocationType()).thenReturn(LocationType.OTHER);
+        when(inTransit.getCode()).thenReturn("TRANSIT-" + BRANCH_CODE);
         when(locations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
                 eq(COMPANY_ID), eq(BRANCH_ID), eq(MasterStatus.ACTIVE)))
                 .thenReturn(List.of(inTransit));
@@ -103,5 +104,34 @@ class StockLocationSeederTest {
         seeder.seedDefaults(COMPANY_ID, BRANCH_ID, BRANCH_CODE);
 
         verify(locations, never()).save(any(StockLocation.class));
+    }
+
+    /**
+     * STK-07: a user-made OTHER location ("BOND") must not count as the in-transit location — the
+     * seeder still creates the TRANSIT- one, flagged non-sellable and non-pickable (LBO-29).
+     */
+    @Test
+    void seedDefaults_userOtherLocationOnly_stillSeedsNonSellableTransit() {
+        StockLocation warehouse = mock(StockLocation.class);
+        when(locations.findByCompanyIdAndBranchIdAndIsDefaultTrue(COMPANY_ID, BRANCH_ID))
+                .thenReturn(Optional.of(warehouse));
+        StockLocation bond = mock(StockLocation.class);
+        when(bond.isDefault()).thenReturn(false);
+        when(bond.getLocationType()).thenReturn(LocationType.OTHER);
+        when(bond.getCode()).thenReturn("BOND");
+        when(locations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                eq(COMPANY_ID), eq(BRANCH_ID), eq(MasterStatus.ACTIVE)))
+                .thenReturn(List.of(bond));
+        when(locations.save(any(StockLocation.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        seeder.seedDefaults(COMPANY_ID, BRANCH_ID, BRANCH_CODE);
+
+        org.mockito.ArgumentCaptor<StockLocation> saved =
+                org.mockito.ArgumentCaptor.forClass(StockLocation.class);
+        verify(locations).save(saved.capture());
+        org.assertj.core.api.Assertions.assertThat(saved.getValue().getCode())
+                .isEqualTo("TRANSIT-" + BRANCH_CODE);
+        org.assertj.core.api.Assertions.assertThat(saved.getValue().isSellable()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(saved.getValue().isPickable()).isFalse();
     }
 }

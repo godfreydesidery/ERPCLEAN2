@@ -38,19 +38,22 @@ public class StockLocationServiceImpl implements StockLocationService {
     private final AgentService            agentService;
     private final ScopeGuard              scopeGuard;
     private final AuditService            audit;
+    private final LocationResolver        locationResolver;
 
     public StockLocationServiceImpl(StockLocationRepository locations,
                                      BranchRepository branches,
                                      UserBranchRepository userBranches,
                                      AgentService agentService,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
-        this.locations    = locations;
-        this.branches     = branches;
-        this.userBranches = userBranches;
-        this.agentService = agentService;
-        this.scopeGuard   = scopeGuard;
-        this.audit        = audit;
+                                     AuditService audit,
+                                     LocationResolver locationResolver) {
+        this.locations        = locations;
+        this.branches         = branches;
+        this.userBranches     = userBranches;
+        this.agentService     = agentService;
+        this.scopeGuard       = scopeGuard;
+        this.audit            = audit;
+        this.locationResolver = locationResolver;
     }
 
     @Override
@@ -75,6 +78,24 @@ public class StockLocationServiceImpl implements StockLocationService {
                     "A stock location with code " + request.code() + " already exists in this company.");
         }
 
+        // STK-07: the TRANSIT- code prefix is how LocationResolver recognises the branch's in-transit
+        // location. A second one would be ambiguous, and a default or non-Other one makes no sense,
+        // so the prefix is only accepted to (re)create a missing in-transit location by hand.
+        boolean transitCode = LocationResolver.hasTransitCode(request.code());
+        if (transitCode) {
+            boolean branchHasTransit = locations
+                    .findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                            principal.companyId(), branch.getId(), MasterStatus.ACTIVE)
+                    .stream()
+                    .anyMatch(l -> !l.isDefault() && LocationResolver.hasTransitCode(l.getCode()));
+            if (branchHasTransit || request.makeDefault()
+                    || request.locationType() != LocationType.OTHER) {
+                throw new IllegalArgumentException(
+                        "Codes starting with " + LocationResolver.TRANSIT_CODE_PREFIX
+                      + " are reserved for the branch's in-transit location. Choose a different code.");
+            }
+        }
+
         // If makeDefault, clear any existing default first and FLUSH immediately.
         // Without the flush the Hibernate batch could INSERT the new is_default=true row
         // before the UPDATE clearing the old one reaches the DB, violating the partial
@@ -93,6 +114,11 @@ public class StockLocationServiceImpl implements StockLocationService {
                 request.code(), request.name(), request.locationType(),
                 request.makeDefault(), principal.userId());
         applyAgentAssignment(loc, request.agentUid());
+        if (transitCode) {
+            // LBO-29: goods on the road can be neither sold nor picked.
+            loc.setSellable(false);
+            loc.setPickable(false);
+        }
         locations.save(loc);
 
         audit.record(AuditEvent.of(AuditActions.STOCK_LOCATION_CREATE, "stock_locations",
@@ -108,6 +134,16 @@ public class StockLocationServiceImpl implements StockLocationService {
     public StockLocationDto update(String locationUid, UpdateStockLocationRequest request) {
         RequestContext.Principal principal = RequestContext.get();
         StockLocation loc = findAndAssertScope(locationUid, principal);
+
+        // STK-07: the in-transit location is system-managed. Renaming it is harmless; retyping it
+        // (or giving it a van agent) is not — every dispatched transfer holds its goods there.
+        if (locationResolver.isInTransitLocation(loc)
+                && (request.locationType() != loc.getLocationType()
+                    || (request.agentUid() != null && !request.agentUid().isBlank()))) {
+            throw new IllegalArgumentException(
+                    "The in-transit location is managed by the system. You can rename it, but not "
+                  + "change its type.");
+        }
 
         loc.update(request.name(), request.locationType(), principal.userId());
         applyAgentAssignment(loc, request.agentUid());
@@ -128,6 +164,12 @@ public class StockLocationServiceImpl implements StockLocationService {
         if (loc.isDefault()) {
             throw new IllegalStateException(
                     "Cannot deactivate the branch default location. Set a different default first.");
+        }
+        // STK-07: deactivating it would strand every dispatched transfer ("No in-transit location
+        // is configured…" on Receive).
+        if (locationResolver.isInTransitLocation(loc)) {
+            throw new IllegalStateException(
+                    "The in-transit location is managed by the system and cannot be deactivated.");
         }
         loc.deactivate(principal.userId());
         locations.save(loc);
@@ -153,6 +195,12 @@ public class StockLocationServiceImpl implements StockLocationService {
     public StockLocationDto setDefault(String locationUid) {
         RequestContext.Principal principal = RequestContext.get();
         StockLocation loc = findAndAssertScope(locationUid, principal);
+
+        // STK-07: sales and receipts would then post into the in-transit holding location.
+        if (locationResolver.isInTransitLocation(loc)) {
+            throw new IllegalStateException(
+                    "The in-transit location cannot be the branch default. Choose another location.");
+        }
 
         // Clear the current default and flush immediately so the UPDATE reaches Postgres before
         // the UPDATE that sets the new default row — prevents a momentary two-row violation on
@@ -238,9 +286,15 @@ public class StockLocationServiceImpl implements StockLocationService {
                 .orElseThrow(() -> NotFoundException.of("Branch", branchUid));
         scopeGuard.assertCanActIn(principal, branch.getCompany().getId());
 
-        return locations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
-                        branch.getCompany().getId(), branch.getId(), MasterStatus.ACTIVE)
-                .stream().map(l -> toDto(l)).toList();
+        // STK-23: this list feeds pickers (stock count, van reconciliation). The in-transit location
+        // is filled and emptied only by transfer dispatch/receive — counting it, or choosing it by
+        // hand, corrupts the transit balance — so it is not offered.
+        List<StockLocation> active = locations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                branch.getCompany().getId(), branch.getId(), MasterStatus.ACTIVE);
+        Long transitId = LocationResolver.pickInTransit(active).map(StockLocation::getId).orElse(null);
+        return active.stream()
+                .filter(l -> !l.getId().equals(transitId))
+                .map(l -> toDto(l)).toList();
     }
 
     // -------------------------------------------------------------------------

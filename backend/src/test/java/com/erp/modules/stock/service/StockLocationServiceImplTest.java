@@ -1,6 +1,7 @@
 package com.erp.modules.stock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -29,6 +30,7 @@ import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -79,7 +81,8 @@ class StockLocationServiceImplTest {
         audit        = mock(AuditService.class);
 
         service = new StockLocationServiceImpl(
-                locations, branches, userBranches, agentService, scopeGuard, audit);
+                locations, branches, userBranches, agentService, scopeGuard, audit,
+                new LocationResolver(locations));
 
         RequestContext.set(new RequestContext.Principal(
                 USER_ID, "user@test.com", false, COMPANY_ID, BRANCH_ID, null));
@@ -337,6 +340,89 @@ class StockLocationServiceImplTest {
         service.update("VAN-UID-1", req);
 
         verify(existing).setAgentId(null);
+    }
+
+    // -------------------------------------------------------------------------
+    // STK-07 / STK-23: the in-transit location is system-managed
+    // -------------------------------------------------------------------------
+
+    private StockLocation stubTransit() {
+        StockLocation transit = mock(StockLocation.class);
+        when(transit.getId()).thenReturn(900L);
+        when(transit.getUid()).thenReturn("TRANSIT-UID");
+        when(transit.getCompanyId()).thenReturn(COMPANY_ID);
+        when(transit.getBranchId()).thenReturn(BRANCH_ID);
+        when(transit.getCode()).thenReturn("TRANSIT-BR01");
+        when(transit.getName()).thenReturn("In-Transit");
+        when(transit.getLocationType()).thenReturn(LocationType.OTHER);
+        when(transit.isDefault()).thenReturn(false);
+        when(transit.getStatus()).thenReturn(MasterStatus.ACTIVE);
+        when(locations.findByUid("TRANSIT-UID")).thenReturn(Optional.of(transit));
+        return transit;
+    }
+
+    private void branchLocations(StockLocation... locs) {
+        when(locations.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                COMPANY_ID, BRANCH_ID, MasterStatus.ACTIVE)).thenReturn(List.of(locs));
+    }
+
+    @Test
+    void deactivate_transitLocation_refused_stk07() {
+        StockLocation transit = stubTransit();
+        branchLocations(transit);
+
+        assertThatThrownBy(() -> service.deactivate("TRANSIT-UID"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("in-transit");
+        verify(transit, never()).deactivate(any());
+    }
+
+    @Test
+    void setDefault_transitLocation_refused_stk07() {
+        StockLocation transit = stubTransit();
+        branchLocations(transit);
+
+        assertThatThrownBy(() -> service.setDefault("TRANSIT-UID"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("in-transit");
+    }
+
+    @Test
+    void update_transitLocation_retype_refused_but_rename_allowed_stk07() {
+        StockLocation transit = stubTransit();
+        branchLocations(transit);
+
+        assertThatThrownBy(() -> service.update("TRANSIT-UID",
+                new UpdateStockLocationRequest("Bond store", LocationType.WAREHOUSE, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("in-transit");
+
+        service.update("TRANSIT-UID",
+                new UpdateStockLocationRequest("Goods on the road", LocationType.OTHER, null));
+        verify(transit).update("Goods on the road", LocationType.OTHER, USER_ID);
+    }
+
+    @Test
+    void create_transitPrefixedCode_whenBranchAlreadyHasTransit_refused_stk07() {
+        StockLocation transit = stubTransit();
+        branchLocations(transit);
+
+        assertThatThrownBy(() -> service.create(new CreateStockLocationRequest(
+                "TRANSIT-EXTRA", "Extra", LocationType.OTHER, "BRANCH-UID", false, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("reserved");
+        verify(locations, never()).save(any());
+    }
+
+    @Test
+    void activeForBranch_omitsTransitLocation_stk23() {
+        StockLocation transit = stubTransit();
+        StockLocation main = stubNewLocation(true);
+        branchLocations(main, transit);
+
+        List<StockLocationDto> result = service.activeForBranch("BRANCH-UID");
+
+        assertThat(result).extracting(StockLocationDto::uid).containsExactly("LOC-UID-001");
     }
 
     // -------------------------------------------------------------------------
