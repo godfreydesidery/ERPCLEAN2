@@ -1626,9 +1626,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     /** Build response DTO with enriched customer, agent, route and creator fields. */
     private SalesInvoiceDto toDto(SalesInvoice inv) {
         String createdByName = creatorNameOf(inv);
-        String customerName = customers.findById(inv.getCustomerId())
-                .map(c -> c.getDisplayName())
-                .orElse(null);
+        var customer = customers.findById(inv.getCustomerId());
+        String customerName = customer.map(c -> c.getDisplayName()).orElse(null);
+        String customerUid = customer.map(c -> c.getUid()).orElse(null);
         String agentName = agents.findById(inv.getAgentId())
                 .map(a -> a.getDisplayName())
                 .orElse(null);
@@ -1647,7 +1647,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
         String postedGlEntryUid = resolvePostedGlEntryUid(inv);
         return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName,
-                postedGlEntryUid, createdByName);
+                postedGlEntryUid, createdByName, customerUid);
     }
 
     /**

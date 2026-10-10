@@ -214,6 +214,8 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThat(dto.grossTotalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(dto.uid()).isNotBlank();
         assertThat(dto.companyId()).isEqualTo(companyA.getId());
+        assertThat(dto.customerUid()).as("SAL-28: exposed for customer-aware pricing")
+                .isEqualTo(customerAUid);
     }
 
     // -----------------------------------------------------------------------
