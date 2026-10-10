@@ -154,6 +154,14 @@ export class ApService {
       );
   }
 
+  /**
+   * Reverse a posted supplier payment (AP-03): POST /ap/payments/uid/{uid}/reverse. Posts the
+   * reversing journal and cash-book row and restores the bills it settled. Gated AP.PAYMENT.REVERSE.
+   */
+  reversePayment(uid: string, reason: string): Observable<ApPaymentDto> {
+    return this.http.post<ApPaymentDto>(`${this.base}/payments/uid/${uid}/reverse`, { reason });
+  }
+
   getPayment(uid: string): Observable<ApPaymentDto> {
     return this.http.get<ApPaymentDto>(`${this.base}/payments/uid/${uid}`);
   }

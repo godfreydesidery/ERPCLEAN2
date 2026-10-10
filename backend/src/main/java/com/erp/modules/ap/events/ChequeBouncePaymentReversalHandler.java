@@ -1,27 +1,23 @@
 package com.erp.modules.ap.events;
 
+import com.erp.modules.ap.service.ApPaymentReversalSupport;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.ap.domain.entity.ApPayment;
-import com.erp.modules.ap.domain.entity.ApPaymentAllocation;
-import com.erp.modules.ap.domain.enums.SupplierBillStatus;
-import com.erp.modules.ap.repository.ApPaymentAllocationRepository;
 import com.erp.modules.ap.repository.ApPaymentRepository;
-import com.erp.modules.ap.repository.SupplierBillRepository;
 import com.erp.modules.cashbank.domain.dto.ChequeBouncedPayload;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
-import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -50,24 +46,21 @@ public class ChequeBouncePaymentReversalHandler implements DomainEventHandler {
 
     private final IdempotencyGuard guard;
     private final ApPaymentRepository payments;
-    private final ApPaymentAllocationRepository allocations;
-    private final SupplierBillRepository bills;
-    private final CompanyRepository companies;
+    private final ApPaymentReversalSupport reversalSupport;
+    private final CashTransactionRecorder cashTxnRecorder;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
 
     public ChequeBouncePaymentReversalHandler(IdempotencyGuard guard,
                                               ApPaymentRepository payments,
-                                              ApPaymentAllocationRepository allocations,
-                                              SupplierBillRepository bills,
-                                              CompanyRepository companies,
+                                              ApPaymentReversalSupport reversalSupport,
+                                              CashTransactionRecorder cashTxnRecorder,
                                               GLPostingSafeInvoker safeInvoker,
                                               ObjectMapper objectMapper) {
         this.guard        = guard;
         this.payments     = payments;
-        this.allocations  = allocations;
-        this.bills        = bills;
-        this.companies    = companies;
+        this.reversalSupport = reversalSupport;
+        this.cashTxnRecorder = cashTxnRecorder;
         this.safeInvoker  = safeInvoker;
         this.objectMapper = objectMapper;
     }
@@ -152,52 +145,19 @@ public class ChequeBouncePaymentReversalHandler implements DomainEventHandler {
             return;
         }
 
-        // Restore the bill outstanding relieved by this payment's allocations (face + base).
-        int baseScale = baseMinorUnits(companies.findById(companyId)
-                .map(c -> c.getBaseCurrency()).orElse("TZS"));
-        List<ApPaymentAllocation> allocs = allocations.findByApPaymentId(payment.getId());
-        for (ApPaymentAllocation alloc : allocs) {
-            bills.findById(alloc.getSupplierBillId()).ifPresent(bill -> {
-                bill.setOutstandingAmount(bill.getOutstandingAmount().add(alloc.getAllocatedAmount()));
-                if (alloc.getBaseAllocatedAmount() != null) {
-                    BigDecimal billRate = bill.getFxRate() != null ? bill.getFxRate() : BigDecimal.ONE;
-                    BigDecimal baseRelievedRestored = alloc.getAllocatedAmount()
-                            .multiply(billRate).setScale(baseScale, RoundingMode.HALF_UP);
-                    BigDecimal newBase = (bill.getBaseOutstandingAmount() != null
-                            ? bill.getBaseOutstandingAmount() : BigDecimal.ZERO)
-                            .add(baseRelievedRestored);
-                    BigDecimal cap = bill.getBaseGrossAmount() != null
-                            ? bill.getBaseGrossAmount() : bill.getGrossAmount();
-                    bill.setBaseOutstandingAmount(newBase.min(cap));
-                }
-                bill.setStatus(bill.getOutstandingAmount().compareTo(BigDecimal.ZERO) == 0
-                        ? SupplierBillStatus.PAID
-                        : SupplierBillStatus.PARTIALLY_PAID);
-                bill.setUpdatedAt(Instant.now());
-                bills.save(bill);
-            });
-        }
+        // The cash book moves with the GL: the money comes back IN on the paying account.
+        cashTxnRecorder.recordSettlementReversal(
+                companyId, payment.getUid(), CashTxnType.AP_PAYMENT, CashTxnDirection.OUT,
+                reversal.uid(), reversalDate,
+                "Bounced cheque - payment " + payment.getPaymentNumber() + " reversed", null);
 
-        // The GL reversal put the WHOLE payment back on AP-control (allocated + on-account), so
-        // nothing of it is on account any more. Leaving a remainder would keep netting it off the
-        // sub-ledger and the AP reconciliation would read short by exactly that amount.
-        payment.setUnallocatedAmount(BigDecimal.ZERO);
-        payment.setReversedAt(Instant.now());
-        payment.setUpdatedAt(Instant.now());
-        payments.save(payment);
+        // Restore the relieved bills (face + base), zero the on-account remainder and stamp
+        // reversed_at — shared with the "reverse payment" command (AP-03).
+        reversalSupport.restoreAndMarkReversed(payment, null /* SYSTEM actor */);
 
         log.info("ChequeBouncePaymentReversalHandler: reversed payment uid={} (reversal entry {}) "
                         + "for bounced cheque uid={} company={}",
                 payment.getUid(), reversal.uid(), payload.chequeUid(), companyId);
-    }
-
-    private static int baseMinorUnits(String currencyCode) {
-        if (currencyCode == null) return 2;
-        return switch (currencyCode) {
-            case "TZS", "JPY", "KRW" -> 0;
-            case "BHD", "KWD", "OMR" -> 3;
-            default -> 2;
-        };
     }
 
     private ChequeBouncedPayload deserialise(String json) {

@@ -231,6 +231,8 @@ public final class AuditActions {
     /** AP-01: an unposted (DRAFT / HELD) bill removed so it can be entered again correctly. */
     public static final String AP_BILL_DELETE      = "AP.BILL.DELETE";
     public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
+    /** A posted supplier payment was reversed by hand (AP-03); detail carries the reason. */
+    public static final String AP_PAYMENT_REVERSE  = "AP.PAYMENT.REVERSE";
     public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
     public static final String AP_OPENING_SET      = "AP.OPENING.SET";
 

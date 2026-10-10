@@ -31,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ApPaymentController {
 
     private final ApPaymentService service;
+    private final com.erp.modules.ap.service.ApPaymentReversalService reversalService;
 
-    public ApPaymentController(ApPaymentService service) {
+    public ApPaymentController(ApPaymentService service,
+                               com.erp.modules.ap.service.ApPaymentReversalService reversalService) {
         this.service = service;
+        this.reversalService = reversalService;
     }
 
     @PostMapping("/single")
@@ -48,6 +51,18 @@ public class ApPaymentController {
     @PreAuthorize("@perm.has('AP.PAYMENT.RUN')")
     public ApPaymentDto paymentRun(@Valid @RequestBody PaymentRunRequest req) {
         return service.paymentRun(req);
+    }
+
+    /**
+     * Reverse a posted supplier payment (AP-03): posts the reversing journal, writes the opposite
+     * cash-book row and restores the bills it settled. Gated by AP.PAYMENT.REVERSE and scoped to
+     * the payment's company. The reason is required.
+     */
+    @PostMapping("/uid/{uid}/reverse")
+    @PreAuthorize("@perm.scoped(#uid,'appayment','AP.PAYMENT.REVERSE')")
+    public ApPaymentDto reverse(@PathVariable String uid,
+                                @Valid @RequestBody com.erp.modules.ap.domain.dto.ReversePaymentRequest req) {
+        return reversalService.reverse(uid, req.reason());
     }
 
     @GetMapping("/uid/{uid}")

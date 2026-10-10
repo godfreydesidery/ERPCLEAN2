@@ -55,7 +55,9 @@ public record ApPaymentDto(
         String chequeUid,
         // ADR-0041 D3: grouping run id (null for single-bill payments)
         Long paymentRunId,
-        List<PaymentAllocationDto> allocations
+        List<PaymentAllocationDto> allocations,
+        // AP-03: set once the payment has been reversed (bounced cheque or "reverse payment")
+        java.time.Instant reversedAt
 ) {
     public record PaymentAllocationDto(
             Long id,
