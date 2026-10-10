@@ -11,6 +11,8 @@ export interface SalesReportRowDto {
   productName: string;
   currentStock: number | string | null;
   qtySold: number | string | null;
+  /** Unit qtySold is counted in (the product's base unit); absent from older servers. */
+  baseUnit?: string | null;
   discount: number | string | null;
   vat: number | string | null;
   /**

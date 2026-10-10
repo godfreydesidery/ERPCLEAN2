@@ -206,7 +206,7 @@
                     <td class="mono">{{ row.productCode }}</td>
                     <td>{{ row.productName }}</td>
                     <td class="num mono">{{ fmtQty(row.currentStock) }}</td>
-                    <td class="num mono">{{ fmtQty(row.qtySold) }}</td>
+                    <td class="num mono">{{ fmtQty(row.qtySold) }}@if (row.baseUnit) { <span class="muted">{{ row.baseUnit }}</span>}</td>
                     <td class="num mono">{{ fmtMoney(row.discount) }}</td>
                     <td class="num mono">{{ fmtMoney(row.vat) }}</td>
                     @if (r.costVisible !== false) {
