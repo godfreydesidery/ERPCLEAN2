@@ -107,6 +107,127 @@ class FiscalCalendarServiceImplTest {
     }
 
     // ---------------------------------------------------------------------------------------------
+    // ACC-01: rollover keeps a year covering today and the year after it open
+    // ---------------------------------------------------------------------------------------------
+
+    private void existing(FiscalYear... ys) {
+        List<FiscalYear> desc = new ArrayList<>(List.of(ys));
+        desc.sort((a, b) -> b.getStartDate().compareTo(a.getStartDate()));
+        when(years.findByCompanyIdOrderByStartDateDesc(COMPANY)).thenReturn(desc);
+    }
+
+    @Test
+    void rollover_inOctober_opensNextCalendarYear_withTwelveMonthlyPeriods_andAuditsIt() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)));
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10));
+
+        assertThat(created).singleElement().satisfies(y -> {
+            assertThat(y.yearCode()).isEqualTo("FY2027");
+            assertThat(y.startDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+            assertThat(y.endDate()).isEqualTo(LocalDate.of(2027, 12, 31));
+            assertThat(y.startMonth()).isEqualTo(1);
+        });
+        org.mockito.ArgumentCaptor<FiscalPeriod> p = org.mockito.ArgumentCaptor.forClass(FiscalPeriod.class);
+        verify(periods, org.mockito.Mockito.times(12)).save(p.capture());
+        assertThat(p.getAllValues().get(0).getStartDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+        assertThat(p.getAllValues().get(11).getEndDate()).isEqualTo(LocalDate.of(2027, 12, 31));
+        verify(audit).record(any(com.erp.platform.audit.AuditEvent.class));
+    }
+
+    @Test
+    void rollover_isIdempotent_whenTheNextYearAlreadyExists() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)), year("FY2027", LocalDate.of(2027, 1, 1)));
+
+        assertThat(service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10))).isEmpty();
+        verify(years, never()).save(any());
+    }
+
+    @Test
+    void rollover_afterNewYearWithNothingOpened_catchesUp_currentAndNext() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)));
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2027, 1, 2));
+
+        assertThat(created).extracting(d -> d.yearCode()).containsExactly("FY2027", "FY2028");
+    }
+
+    @Test
+    void rollover_julyToJuneYear_keepsItsStartMonth_andItsCodeConvention() {
+        // FY2027 = 1 Jul 2026 – 30 Jun 2027
+        existing(year("FY2027", LocalDate.of(2026, 7, 1)));
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10));
+
+        assertThat(created).singleElement().satisfies(y -> {
+            assertThat(y.yearCode()).isEqualTo("FY2028");
+            assertThat(y.startDate()).isEqualTo(LocalDate.of(2027, 7, 1));
+            assertThat(y.endDate()).isEqualTo(LocalDate.of(2028, 6, 30));
+            assertThat(y.startMonth()).isEqualTo(7);
+        });
+    }
+
+    @Test
+    void rollover_takenCode_getsASuffix_insteadOfColliding() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)));
+        when(years.findByCompanyIdAndYearCode(COMPANY, "FY2027"))
+                .thenReturn(Optional.of(year("FY2027", LocalDate.of(2030, 1, 1))));
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10));
+
+        assertThat(created).extracting(d -> d.yearCode()).containsExactly("FY2027-2");
+    }
+
+    @Test
+    void rollover_codeWithoutATrailingYear_fallsBackToFyAndTheStartYear() {
+        existing(year("Year One", LocalDate.of(2026, 1, 1)));
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10));
+
+        assertThat(created).extracting(d -> d.yearCode()).containsExactly("FY2027");
+    }
+
+    @Test
+    void rollover_neverCreatesAnOverlappingYear() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)));
+        when(years.findOverlapping(eq(COMPANY), any(), any()))
+                .thenReturn(List.of(year("X", LocalDate.of(2027, 3, 1))));
+
+        assertThat(service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10))).isEmpty();
+        verify(years, never()).save(any());
+    }
+
+    @Test
+    void rollover_companyWithNoCalendar_getsTheCurrentAndNextCalendarYears() {
+        existing();
+
+        var created = service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2026, 10, 10));
+
+        assertThat(created).extracting(d -> d.yearCode()).containsExactly("FY2026", "FY2027");
+    }
+
+    @Test
+    void rollover_dateBeforeTheFirstYear_isLeftToTheAccountant() {
+        existing(year("FY2026", LocalDate.of(2026, 1, 1)));
+
+        assertThat(service.ensureCurrentAndNextYear(COMPANY, LocalDate.of(2025, 6, 1))).isEmpty();
+        verify(years, never()).save(any());
+    }
+
+    @Test
+    void ensureFollowingYear_opensTheSuccessor_onlyWhenNoneExists() {
+        FiscalYear fy2026 = year("FY2026", LocalDate.of(2026, 1, 1));
+        when(years.findByUid("Y26")).thenReturn(Optional.of(fy2026));
+        existing(fy2026);
+
+        assertThat(service.ensureFollowingYear("Y26")).hasValueSatisfying(
+                y -> assertThat(y.yearCode()).isEqualTo("FY2027"));
+
+        existing(fy2026, year("FY2027", LocalDate.of(2027, 1, 1)));
+        assertThat(service.ensureFollowingYear("Y26")).isEmpty();
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // ACC-15: a period of a CLOSED year cannot be reopened on its own
     // ---------------------------------------------------------------------------------------------
 

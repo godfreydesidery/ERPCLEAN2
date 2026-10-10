@@ -22,9 +22,13 @@ import java.time.LocalDate;
 import java.time.Year;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,6 +42,19 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
 
     private static final DateTimeFormatter DAY =
             DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
+
+    /** Audit "trigger" values for a year opened by the system rather than by a person. */
+    static final String TRIGGER_ROLLOVER       = "automatic-rollover";
+    static final String TRIGGER_YEAR_END_CLOSE = "year-end-close";
+
+    /** Upper bound on years created in one catch-up pass — a guard, not an expected case. */
+    private static final int MAX_CATCH_UP_YEARS = 5;
+
+    /** fiscal_years.year_code is VARCHAR(12). */
+    private static final int YEAR_CODE_MAX = 12;
+
+    /** "FY2026" → ("FY", "2026"); "2026" → ("", "2026"). */
+    private static final Pattern TRAILING_YEAR = Pattern.compile("^(.*?)(\\d{4})$");
 
     private final FiscalYearRepository years;
     private final FiscalPeriodRepository periods;
@@ -198,6 +215,153 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         }
         createYearWithPeriods(companyId, yearCode, 1, calendarYear, null);
         log.info("Seeded fiscal year {} for company {}.", yearCode, companyId);
+    }
+
+    // -------------------------------------------------------------------------
+    // ACC-01: fiscal-year rollover (provisioning, not a data migration)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public List<FiscalYearDto> ensureCurrentAndNextYear(Long companyId, LocalDate today) {
+        List<FiscalYear> all = new ArrayList<>(years.findByCompanyIdOrderByStartDateDesc(companyId));
+        List<FiscalYear> created = new ArrayList<>();
+
+        if (all.isEmpty()) {
+            // A company with no calendar at all (seedCurrentYear never ran): give it the calendar
+            // year containing today, exactly as company provisioning would have.
+            LocalDate start = LocalDate.of(today.getYear(), 1, 1);
+            addIfCreated(created, createAutoYear(companyId, "FY" + today.getYear(), start, all,
+                    TRIGGER_ROLLOVER));
+        }
+
+        FiscalYear covering = covering(all, today);
+        if (covering == null && !all.isEmpty()) {
+            FiscalYear latest = latestByEnd(all);
+            if (latest.getEndDate().isBefore(today)) {
+                // The books ran past the last year (e.g. the server was down over New Year): roll
+                // forward year by year, each starting the day after the previous one ends, so the
+                // calendar stays contiguous.
+                FiscalYear base = latest;
+                for (int i = 0; i < MAX_CATCH_UP_YEARS && base != null
+                        && base.getEndDate().isBefore(today); i++) {
+                    base = createSuccessor(base, all, TRIGGER_ROLLOVER);
+                    addIfCreated(created, base);
+                }
+                covering = covering(all, today);
+            } else {
+                // Today is before the first year or in a gap between years. Placing a year there
+                // automatically could collide with what the accountant intends — leave it to them.
+                log.warn("Fiscal year rollover: no fiscal year covers {} for company={} and it is"
+                        + " not after the latest year; not created automatically.", today, companyId);
+            }
+        }
+
+        if (covering != null && !hasYearStartingAfter(all, covering.getEndDate())) {
+            addIfCreated(created, createSuccessor(latestByEnd(all), all, TRIGGER_ROLLOVER));
+        }
+        return created.stream().map(this::toYearDto).toList();
+    }
+
+    @Override
+    public Optional<FiscalYearDto> ensureFollowingYear(String fiscalYearUid) {
+        FiscalYear year = requireYearByUid(fiscalYearUid);
+        List<FiscalYear> all =
+                new ArrayList<>(years.findByCompanyIdOrderByStartDateDesc(year.getCompanyId()));
+        if (hasYearStartingAfter(all, year.getEndDate())) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(createSuccessor(latestByEnd(all), all, TRIGGER_YEAR_END_CLOSE))
+                .map(this::toYearDto);
+    }
+
+    /**
+     * Creates the year that starts the day after {@code base} ends: same start month, twelve
+     * monthly periods. Returns {@code null} (and logs) when it cannot be placed safely — the base
+     * does not end on a month end, or the slot is already (partly) taken by another year.
+     */
+    private FiscalYear createSuccessor(FiscalYear base, List<FiscalYear> all, String trigger) {
+        LocalDate start = base.getEndDate().plusDays(1);
+        if (start.getDayOfMonth() != 1) {
+            log.warn("Fiscal year rollover: {} for company={} does not end on a month end;"
+                    + " the next year must be opened by hand.", base.getYearCode(), base.getCompanyId());
+            return null;
+        }
+        String code = nextYearCode(base, start, all);
+        if (code == null) {
+            log.warn("Fiscal year rollover: no free year code after {} for company={};"
+                    + " the next year must be opened by hand.", base.getYearCode(), base.getCompanyId());
+            return null;
+        }
+        return createAutoYear(base.getCompanyId(), code, start, all, trigger);
+    }
+
+    /** Creates and audits one automatically opened year, unless it would overlap another. */
+    private FiscalYear createAutoYear(Long companyId, String code, LocalDate start,
+                                      List<FiscalYear> all, String trigger) {
+        LocalDate end = start.plusMonths(12).minusDays(1);
+        if (!years.findOverlapping(companyId, start, end).isEmpty()) {
+            log.warn("Fiscal year rollover: {} to {} would overlap an existing year for company={};"
+                    + " not created.", start, end, companyId);
+            return null;
+        }
+        FiscalYear year = createYearWithPeriods(
+                companyId, code, start.getMonthValue(), start.getYear(), actorId());
+        all.add(year);
+        audit.record(AuditEvent.of(AuditActions.GL_PERIOD_OPEN, "fiscal_years",
+                        year.getId(), year.getUid())
+                .detail(Map.of("yearCode", code, "trigger", trigger)));
+        log.info("Fiscal year rollover: opened {} ({} to {}) for company={} [{}].",
+                code, start, end, companyId, trigger);
+        return year;
+    }
+
+    /**
+     * The code for the year after {@code base}. Follows the base's own convention when it ends in a
+     * four-digit year ("FY2026" → "FY2027", "2026" → "2027"); otherwise "FY" + the start year. A
+     * taken code gets a "-2", "-3"… suffix. {@code null} when nothing fits the 12-character column.
+     */
+    private String nextYearCode(FiscalYear base, LocalDate start, List<FiscalYear> all) {
+        Matcher m = TRAILING_YEAR.matcher(base.getYearCode());
+        String candidate = m.matches()
+                ? m.group(1) + (Integer.parseInt(m.group(2))
+                        + (start.getYear() - base.getStartDate().getYear()))
+                : "FY" + start.getYear();
+        if (candidate.length() > YEAR_CODE_MAX) {
+            candidate = "FY" + start.getYear();
+        }
+        for (int n = 1; n <= 9; n++) {
+            String code = n == 1 ? candidate : candidate + "-" + n;
+            if (code.length() > YEAR_CODE_MAX) {
+                return null;
+            }
+            boolean taken = all.stream().anyMatch(y -> y.getYearCode().equalsIgnoreCase(code))
+                    || years.findByCompanyIdAndYearCode(base.getCompanyId(), code).isPresent();
+            if (!taken) {
+                return code;
+            }
+        }
+        return null;
+    }
+
+    private static FiscalYear covering(List<FiscalYear> all, LocalDate date) {
+        return all.stream()
+                .filter(y -> !y.getStartDate().isAfter(date) && !y.getEndDate().isBefore(date))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static FiscalYear latestByEnd(List<FiscalYear> all) {
+        return all.stream().max(Comparator.comparing(FiscalYear::getEndDate)).orElseThrow();
+    }
+
+    private static boolean hasYearStartingAfter(List<FiscalYear> all, LocalDate date) {
+        return all.stream().anyMatch(y -> y.getStartDate().isAfter(date));
+    }
+
+    private static void addIfCreated(List<FiscalYear> created, FiscalYear year) {
+        if (year != null) {
+            created.add(year);
+        }
     }
 
     // -------------------------------------------------------------------------
