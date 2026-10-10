@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
@@ -216,6 +217,31 @@ describe('EnterBillComponent', () => {
     comp.supplierInvoiceNo.set('INV-100');
     comp.billDate.set('2026-06-01');
     comp.dueDate.set('2026-07-01');
+    expect(comp.submitDisabled()).toBe(false);
+  });
+
+  it('AP-20: a failed match shows the server reason (e.g. missing exchange rate)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(EnterBillComponent).componentInstance as any;
+    const api = TestBed.inject(ApService) as any;
+    api.runMatch = vi.fn(() => throwError(() => new HttpErrorResponse({
+      status: 409, error: { errors: ['No exchange rate is set for USD to TZS on 2026-10-10.'] },
+    })));
+    comp.runMatch('BILL-1');
+    expect(comp.matchState()).toBe('error');
+    expect(comp.matchError()).toContain('No exchange rate is set for USD');
+  });
+
+  it('AP-09: due date starts empty and is not required (server derives it from terms)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(EnterBillComponent).componentInstance as any;
+    expect(comp.dueDate()).toBe('');
+    comp.selectedCompanyId.set('10');
+    comp.selectedSupplier.set({ id: 'SUP-ID-1', uid: 'SUP1', label: 'Supplier A' });
+    comp.supplierInvoiceNo.set('INV-100');
+    comp.billDate.set('2026-06-01');
     expect(comp.submitDisabled()).toBe(false);
   });
 

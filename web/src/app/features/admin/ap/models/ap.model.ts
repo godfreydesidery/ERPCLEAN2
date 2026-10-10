@@ -152,7 +152,8 @@ export interface EnterBillRequest {
   supplierInvoiceNo: string;
   purchaseOrderUid?: string | null;
   billDate: string;
-  dueDate: string;
+  /** AP-09: null/omitted = derived by the server from the supplier's payment terms. */
+  dueDate?: string | null;
   /** Send as string; 0 if no VAT. */
   vatAmount: string;
   currency: string;
