@@ -36,9 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Petty-cash imprest funds + movements (ADR-0050 D-7 PR-B).
  *
- * <p>RECORD-ONLY this slice: no GL leg is posted. {@code gl_account_id} on a disbursement is
- * captured only, for a future manual journal or the GL fast-follow — {@code journal_entry_ref}
- * stays {@code null}.
+ * <p>ARC-10 / ACC-12: every movement now posts to the GL in the same transaction through
+ * {@link PettyCashGlPoster} (disbursement DR expense / CR Petty Cash; replenishment DR Petty Cash /
+ * CR source cash-bank plus its cash-book row; adjustment against cash over/short) and stamps
+ * {@code journal_entry_ref}. Movements recorded before this stay as they were.
  */
 @Service
 @Transactional
@@ -53,6 +54,7 @@ public class PettyCashServiceImpl implements PettyCashService {
     private final CashBankNumberGenerator        numbers;
     private final ScopeGuard                     scopeGuard;
     private final AuditService                   audit;
+    private final PettyCashGlPoster              glPoster;
 
     public PettyCashServiceImpl(PettyCashFundRepository funds,
                                 PettyCashTransactionRepository txns,
@@ -62,7 +64,8 @@ public class PettyCashServiceImpl implements PettyCashService {
                                 ChartOfAccountRepository glAccounts,
                                 CashBankNumberGenerator numbers,
                                 ScopeGuard scopeGuard,
-                                AuditService audit) {
+                                AuditService audit,
+                                PettyCashGlPoster glPoster) {
         this.funds      = funds;
         this.txns       = txns;
         this.companies  = companies;
@@ -72,6 +75,7 @@ public class PettyCashServiceImpl implements PettyCashService {
         this.numbers    = numbers;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
+        this.glPoster   = glPoster;
     }
 
     @Override
@@ -167,11 +171,17 @@ public class PettyCashServiceImpl implements PettyCashService {
 
         Long glAccountId = resolveGlAccount(fund.getCompanyId(), req.glAccountUid());
 
+        // ARC-10: resolve and check what the movement posts against before anything is saved.
+        PettyCashGlPoster.Plan plan = glPoster.plan(fund, req.type(), amount, glAccountId,
+                req.sourceCashBankAccountUid());
+
         Long actor = actorId();
         String txnNumber = numbers.nextPettyCashTxn(fund.getCompanyId());
         PettyCashTransaction txn = new PettyCashTransaction(fund.getId(), fund.getCompanyId(),
                 fund.getBranchId(), txnNumber, req.type(), req.txnDate(), persistedAmount, newBalance,
-                glAccountId, req.reference(), req.description(), actor);
+                plan.counterGlAccountId(), req.reference(), req.description(), actor);
+        txn = txns.save(txn);
+        txn.setJournalEntryRef(glPoster.post(fund, txn, plan, actor));
         txn = txns.save(txn);
 
         fund.setUpdatedAt(Instant.now());
@@ -289,7 +299,8 @@ public class PettyCashServiceImpl implements PettyCashService {
                 : null;
         return new PettyCashTransactionDto(txn.getId(), txn.getUid(), fundUid, txn.getTxnNumber(),
                 txn.getTxnType(), txn.getTxnDate(), txn.getAmount(), txn.getBalanceAfter(),
-                glAccountUid, txn.getReference(), txn.getDescription(), txn.getCreatedAt());
+                glAccountUid, txn.getReference(), txn.getDescription(), txn.getCreatedAt(),
+                txn.getJournalEntryRef());
     }
 
     private String displayNameOrUsername(AppUser user) {

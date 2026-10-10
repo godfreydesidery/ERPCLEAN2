@@ -86,8 +86,9 @@ public class CashBankAccountController {
      * without granting CASH.VIEW. The service asserts the company is the caller's own.
      */
     @GetMapping("/options")
+    // ARC-10: the petty-cash top-up "paid in from" picker fires it for a PETTY_CASH.MANAGE holder.
     @PreAuthorize("@perm.has('CASH.VIEW') or @perm.has('AR.RECEIPT.RECORD') "
-            + "or @perm.has('CASH.ENTRY.RECORD')")
+            + "or @perm.has('CASH.ENTRY.RECORD') or @perm.has('PETTY_CASH.MANAGE')")
     public List<CashAccountOptionDto> listAccountOptions(@RequestParam Long companyId) {
         return service.listAccountOptions(companyId);
     }

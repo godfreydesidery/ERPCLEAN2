@@ -60,6 +60,7 @@ class PettyCashServiceImplTest {
     private CashBankNumberGenerator        numbers;
     private ScopeGuard                     scopeGuard;
     private AuditService                   audit;
+    private PettyCashGlPoster              glPoster;
     private PettyCashServiceImpl           service;
 
     @BeforeEach
@@ -73,6 +74,12 @@ class PettyCashServiceImplTest {
         numbers    = mock(CashBankNumberGenerator.class);
         scopeGuard = mock(ScopeGuard.class);
         audit      = mock(AuditService.class);
+        glPoster   = mock(PettyCashGlPoster.class);
+        // ARC-10: the GL side is PettyCashGlPoster's (covered by PettyCashIT); here it echoes the
+        // captured account back and returns a journal uid.
+        when(glPoster.plan(any(), any(), any(), any(), any())).thenAnswer(inv ->
+                new PettyCashGlPoster.Plan(1010L, inv.getArgument(3), null, false));
+        when(glPoster.post(any(), any(), any(), any())).thenReturn("JE-UID-1");
 
         when(numbers.nextPettyCashFund(anyLong())).thenReturn("PCF-0001");
         when(numbers.nextPettyCashTxn(anyLong())).thenReturn("PC-0001");
@@ -80,7 +87,7 @@ class PettyCashServiceImplTest {
         when(txns.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service = new PettyCashServiceImpl(funds, txns, companies, branches, users, glAccounts,
-                numbers, scopeGuard, audit);
+                numbers, scopeGuard, audit, glPoster);
 
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, COMPANY_ID, BRANCH_ID, null));
     }
@@ -295,9 +302,9 @@ class PettyCashServiceImplTest {
     }
 
     @Test
-    void recordTransaction_neverPostsGl_journalEntryRefStaysNull() {
-        // RECORD-ONLY (ADR-0050 D-7.1): the DTO carries no journalEntryRef field at all — assert the
-        // txn is captured with glAccountId resolved but no GL posting collaborator is even injected.
+    void recordTransaction_postsGl_andStampsJournalEntryRef() {
+        // ARC-10 / ACC-12: the movement is posted through PettyCashGlPoster with the resolved
+        // account, and the posted entry's uid is stamped on the movement.
         PettyCashFund fund = activeFund(new BigDecimal("1000"));
         when(funds.findByUid("F10")).thenReturn(Optional.of(fund));
         ChartOfAccount coa = mock(ChartOfAccount.class);
@@ -311,6 +318,8 @@ class PettyCashServiceImplTest {
                 "GLUID", null, "Office supplies"));
 
         assertThat(dto.glAccountUid()).isEqualTo("GL-UID-77");
+        assertThat(dto.journalEntryRef()).isEqualTo("JE-UID-1");
+        verify(glPoster).plan(any(), any(), any(), org.mockito.ArgumentMatchers.eq(77L), any());
     }
 
     @Test
