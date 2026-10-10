@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { signal } from '@angular/core';
 
 import { CustomerDetailComponent } from './customer-detail.component';
@@ -61,6 +61,19 @@ describe('CustomerDetailComponent — account balance (ARC-21)', () => {
     expect(ar.getBalance).toHaveBeenCalledWith('10', 'KIBO');
     expect(+comp.arBalance()!.balance).toBe(1150000);
     expect(comp.availableCredit()).toBe(-150000);
+  });
+
+  it('ARC-29: a refused archive shows the server\'s reason as an alert', async () => {
+    const { comp } = setup();
+    const cs = TestBed.inject(CustomerService) as unknown as { archive: ReturnType<typeof vi.fn> };
+    const alerts = TestBed.inject(AlertService) as unknown as { error: ReturnType<typeof vi.fn> };
+    cs.archive = vi.fn(() => throwError(() => new HttpErrorResponse({
+      status: 409, error: { errors: ['This customer cannot be archived while they have an unpaid balance.'] },
+    })));
+    comp.archive();
+    expect(alerts.error).toHaveBeenCalledWith('Customer not archived',
+      'This customer cannot be archived while they have an unpaid balance.');
+    expect(comp.archiving()).toBe(false);
   });
 
   it('does not ask for the balance without AR.VIEW', async () => {

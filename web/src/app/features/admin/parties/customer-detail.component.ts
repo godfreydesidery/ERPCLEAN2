@@ -365,7 +365,11 @@ export class CustomerDetailComponent {
       },
       error: (err) => {
         this.archiving.set(false);
-        this.saveError.set(this.messageFrom(err, 'Could not archive the customer.'));
+        // ARC-29: the server refuses while the customer has a balance — say why next to the button
+        // as well, since the form's error line is far below it.
+        const msg = this.messageFrom(err, 'Could not archive the customer.');
+        this.saveError.set(msg);
+        this.alerts.error('Customer not archived', msg);
       },
     });
   }
