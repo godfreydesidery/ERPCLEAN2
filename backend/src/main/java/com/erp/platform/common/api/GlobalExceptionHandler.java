@@ -184,6 +184,20 @@ public class GlobalExceptionHandler {
     }
 
     /** Lacks permission, or acting outside the active scope (service-layer ScopeGuard) → 403. */
+    /**
+     * AP-20: a missing exchange rate is a business condition the user can fix (enter the day's
+     * rate), not a server fault. It used to fall through to the generic 500, so a USD bill just
+     * said "match failed". The message names only the two currencies and the date.
+     */
+    @ExceptionHandler(com.erp.platform.common.money.FxRateNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleFxRateNotFound(
+            com.erp.platform.common.money.FxRateNotFoundException ex) {
+        String msg = "No exchange rate is set for " + ex.getFromCurrency() + " to "
+                + ex.getToCurrency() + " on " + ex.getAsOf()
+                + ". Enter the rate on the exchange-rate screen, then try again.";
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(msg));
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
