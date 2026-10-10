@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.dto.StockAgeingReportDto;
 import com.erp.modules.stock.domain.dto.StockAgeingRowDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -82,14 +83,14 @@ public class StockAgeingReportQuery {
                        COUNT(*) FILTER (WHERE avg_cost IS NOT NULL) AS valued_rows
                 FROM stock_on_hand
                 WHERE company_id = ?
-                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT)) /*branch-scope*/
                 GROUP BY product_id
             ),
             later AS (
                 SELECT product_id, SUM(quantity) AS qty
                 FROM stock_movements
                 WHERE company_id = ?
-                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT)) /*branch-scope*/
                   AND occurred_at >= ?
                 GROUP BY product_id
             )
@@ -122,12 +123,12 @@ public class StockAgeingReportQuery {
         OffsetDateTime asOfEnd = asOfDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
         NamedRef branch = resolveBranch(branchUid, companyId);
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         Long branchId = branch != null ? branch.id() : null;
 
-        List<ProductOnHand> products = queryOnHand(companyId, branchId, asOfEnd);
-        Map<Long, List<Layer>> layers = queryLayers(companyId, branchId, asOfEnd, zone);
-        Map<Long, LocalDate> lastSale = queryLastSale(companyId, branchId, asOfEnd, zone);
+        List<ProductOnHand> products = queryOnHand(companyId, branchId, asOfEnd, scope.sql("branch_id"));
+        Map<Long, List<Layer>> layers = queryLayers(companyId, branchId, asOfEnd, zone, scope.sql("branch_id"));
+        Map<Long, LocalDate> lastSale = queryLastSale(companyId, branchId, asOfEnd, zone, scope.sql("branch_id"));
 
         List<StockAgeingRowDto> rows = new ArrayList<>();
         int negative = 0;
@@ -314,7 +315,7 @@ public class StockAgeingReportQuery {
     }
 
     private List<ProductOnHand> queryOnHand(Long companyId, Long branchId,
-                                            OffsetDateTime asOfEnd) {
+                                            OffsetDateTime asOfEnd, String scopeSql) {
         List<Object> params = onHandParams(companyId, branchId, asOfEnd);
         params.add(companyId);
         String sql = "WITH " + ON_HAND_CTE + """
@@ -330,7 +331,7 @@ public class StockAgeingReportQuery {
                 LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 ORDER BY p.code
                 """;
-        return jdbc.query(sql, (rs, rowNum) -> new ProductOnHand(
+        return jdbc.query(sql.replace("/*branch-scope*/", scopeSql), (rs, rowNum) -> new ProductOnHand(
                 rs.getLong("id"),
                 rs.getString("uid"),
                 rs.getString("code"),
@@ -351,7 +352,8 @@ public class StockAgeingReportQuery {
      * dragged across the wire to be discarded.
      */
     private Map<Long, List<Layer>> queryLayers(Long companyId, Long branchId,
-                                               OffsetDateTime asOfEnd, ZoneId zone) {
+                                               OffsetDateTime asOfEnd, ZoneId zone,
+                                               String scopeSql) {
         List<Object> params = new ArrayList<>(onHandParams(companyId, branchId, asOfEnd));
         params.add(companyId);
         params.add(branchId);
@@ -369,7 +371,7 @@ public class StockAgeingReportQuery {
                            source_document_uid
                     FROM stock_movements
                     WHERE company_id = ?
-                      AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                      AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT)) /*branch-scope*/
                       AND occurred_at < ?
                 ),
                 inbound AS (
@@ -407,7 +409,7 @@ public class StockAgeingReportQuery {
                 """;
 
         Map<Long, List<Layer>> out = new HashMap<>();
-        jdbc.query(sql, rs -> {
+        jdbc.query(sql.replace("/*branch-scope*/", scopeSql), rs -> {
             OffsetDateTime at = rs.getObject("occurred_at", OffsetDateTime.class);
             out.computeIfAbsent(rs.getLong("product_id"), k -> new ArrayList<>())
                     .add(new Layer(at.atZoneSameInstant(zone).toLocalDate(),
@@ -417,17 +419,18 @@ public class StockAgeingReportQuery {
     }
 
     private Map<Long, LocalDate> queryLastSale(Long companyId, Long branchId,
-                                               OffsetDateTime asOfEnd, ZoneId zone) {
+                                               OffsetDateTime asOfEnd, ZoneId zone,
+                                               String scopeSql) {
         Map<Long, LocalDate> out = new HashMap<>();
         jdbc.query("""
                 SELECT product_id, MAX(occurred_at) AS last_sale
                 FROM stock_movements
                 WHERE company_id = ?
-                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                  AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT)) /*branch-scope*/
                   AND movement_type = 'SALE_ISSUE'
                   AND occurred_at < ?
                 GROUP BY product_id
-                """, rs -> {
+                """.replace("/*branch-scope*/", scopeSql), rs -> {
                     OffsetDateTime at = rs.getObject("last_sale", OffsetDateTime.class);
                     out.put(rs.getLong("product_id"), at.atZoneSameInstant(zone).toLocalDate());
                 }, companyId, branchId, branchId, asOfEnd);

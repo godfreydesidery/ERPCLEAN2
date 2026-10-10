@@ -4,6 +4,7 @@ import com.erp.modules.purchases.domain.dto.PurchasePriceVarianceDto;
 import com.erp.modules.purchases.domain.dto.PurchasePriceVarianceRowDto;
 import com.erp.modules.purchases.domain.dto.PurchasePriceVarianceTotalsDto;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -77,7 +78,7 @@ public class PurchasePriceVarianceQuery {
 
         PurchaseReportSupport.Ref branch =
                 support.resolve("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         PurchaseReportSupport.Ref supplier =
                 support.resolve("suppliers", "display_name", supplierUid, companyId, "Supplier");
 
@@ -116,7 +117,7 @@ public class PurchasePriceVarianceQuery {
         params.add(companyId);
         params.add(from);
         params.add(to);
-        StringBuilder filterSql = new StringBuilder();
+        StringBuilder filterSql = new StringBuilder(scope.sql("gr.branch_id"));
         if (branch != null) {
             filterSql.append(" AND gr.branch_id = ?");
             params.add(branch.id());

@@ -17,6 +17,8 @@ import com.erp.modules.sales.domain.dto.SalesSummaryRowDto;
 import com.erp.modules.sales.domain.dto.SalesSummaryTotalsDto;
 import com.erp.modules.sales.domain.enums.SalesSummaryGroupBy;
 import com.erp.modules.sales.service.SalesSummaryReportQuery;
+import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -48,10 +50,23 @@ public class SalesSummaryReportController {
 
     private final SalesSummaryReportQuery query;
     private final TabularExporter         exporter;
+    private final PermissionChecks        perm;
+    private final BranchReadGuard         branchGuard;
 
-    public SalesSummaryReportController(SalesSummaryReportQuery query, TabularExporter exporter) {
-        this.query    = query;
-        this.exporter = exporter;
+    public SalesSummaryReportController(SalesSummaryReportQuery query, TabularExporter exporter,
+                                        PermissionChecks perm, BranchReadGuard branchGuard) {
+        this.query       = query;
+        this.exporter    = exporter;
+        this.perm        = perm;
+        this.branchGuard = branchGuard;
+    }
+
+    /**
+     * Counter staff (SALES.INVOICE.VIEW without INVENTORY.VALUATION.VIEW) keep the summary but
+     * not its cost of sales, margin or margin % (owner ruling 2026-10-10, ADM-14).
+     */
+    private SalesSummaryReportDto visibleTo(SalesSummaryReportDto dto) {
+        return perm.has(SalesReportController.COST_PERMISSION) ? dto : dto.withoutCost();
     }
 
     @GetMapping
@@ -61,7 +76,8 @@ public class SalesSummaryReportController {
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
             @RequestParam(defaultValue = "CUSTOMER") SalesSummaryGroupBy groupBy,
             @RequestParam(required = false) String branchUid) {
-        return query.report(RequestContext.get().companyId(), fromDate, toDate, groupBy, branchUid);
+        return visibleTo(query.report(
+                RequestContext.get().companyId(), fromDate, toDate, groupBy, branchUid));
     }
 
     /**
@@ -76,9 +92,11 @@ public class SalesSummaryReportController {
             @RequestParam(defaultValue = "CUSTOMER") SalesSummaryGroupBy groupBy,
             @RequestParam(required = false) String branchUid,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        SalesSummaryReportDto dto = query.report(
-                RequestContext.get().companyId(), fromDate, toDate, groupBy, branchUid);
-        return download(exporter.export(flatten(dto), format));
+        Long companyId = RequestContext.get().companyId();
+        SalesSummaryReportDto dto = visibleTo(
+                query.report(companyId, fromDate, toDate, groupBy, branchUid));
+        return download(exporter.export(
+                flatten(dto, branchGuard.scopeHeaderLine(companyId, branchUid)), format));
     }
 
     // -------------------------------------------------------------------------
@@ -94,12 +112,12 @@ public class SalesSummaryReportController {
         };
     }
 
-    private TabularRenderModel flatten(SalesSummaryReportDto dto) {
+    /** @param scopeLine the branches the summary really covers (RPT-05) */
+    private TabularRenderModel flatten(SalesSummaryReportDto dto, String scopeLine) {
         List<String> headerLines = new ArrayList<>(ReportExportFormat.companyLines(dto.company()));
         headerLines.add("From " + dto.fromDate() + " To " + dto.toDate());
         headerLines.add("Grouped by: " + groupHeader(dto.groupBy()));
-        headerLines.add("Branch: " + (dto.branchName() != null
-                ? dto.branchName() : "All branches (whole company)"));
+        headerLines.add(scopeLine);
         headerLines.add("Finalised invoices only. Returns and credit notes are not deducted. "
                 + "Qty is in base units.");
         long foreignInvoices = dto.rows().stream()
@@ -117,47 +135,55 @@ public class SalesSummaryReportController {
                     + " item(s) sold before their stock had ever been costed");
         }
 
-        List<Column> columns = List.of(
+        // Cost columns exist only for a caller who may see cost — omitted, not printed blank.
+        boolean cost = dto.costVisible();
+        List<Column> columns = new ArrayList<>(List.of(
                 new Column(groupHeader(dto.groupBy()), Align.LEFT),
                 new Column("Invoices", Align.RIGHT),
                 new Column("Qty", Align.RIGHT),
                 new Column("Gross", Align.RIGHT),
                 new Column("Discount", Align.RIGHT),
                 new Column("VAT", Align.RIGHT),
-                new Column("Net", Align.RIGHT),
-                new Column("Cost of Sales", Align.RIGHT),
-                new Column("Margin", Align.RIGHT),
-                new Column("Margin %", Align.RIGHT));
+                new Column("Net", Align.RIGHT)));
+        if (cost) {
+            columns.addAll(List.of(
+                    new Column("Cost of Sales", Align.RIGHT),
+                    new Column("Margin", Align.RIGHT),
+                    new Column("Margin %", Align.RIGHT)));
+        }
 
         List<List<String>> rows = new ArrayList<>(dto.rows().size());
         for (SalesSummaryRowDto r : dto.rows()) {
             String label = r.groupCode() != null && !r.groupCode().isBlank()
                     ? text(r.groupLabel()) + " (" + r.groupCode() + ")"
                     : text(r.groupLabel());
-            rows.add(List.of(
+            List<String> row = new ArrayList<>(List.of(
                     label,
                     String.valueOf(r.invoiceCount()),
                     quantity(r.qty()),
                     amount(r.grossAmount()),
                     amount(r.discount()),
                     amount(r.vatAmount()),
-                    amount(r.netAmount()),
-                    amount(r.costOfSales()),
-                    amount(r.margin()),
-                    percent(r.marginPercent())));
+                    amount(r.netAmount())));
+            if (cost) {
+                row.addAll(List.of(
+                        amount(r.costOfSales()), amount(r.margin()), percent(r.marginPercent())));
+            }
+            rows.add(row);
         }
 
-        List<String> totalsRow = List.of(
+        List<String> totalsRow = new ArrayList<>(List.of(
                 "TOTAL",
                 String.valueOf(t.invoiceCount()),
                 quantity(t.qty()),
                 amount(t.grossAmount()),
                 amount(t.discount()),
                 amount(t.vatAmount()),
-                amount(t.netAmount()),
-                amount(t.costOfSales()),
-                amount(t.margin()),
-                percent(t.marginPercent()));
+                amount(t.netAmount())));
+        if (cost) {
+            totalsRow.addAll(List.of(
+                    amount(t.costOfSales()), amount(t.margin()), percent(t.marginPercent())));
+        }
 
         return new TabularRenderModel("Sales Summary by " + groupHeader(dto.groupBy()),
                 headerLines, dto.generatedAt(), columns, rows, totalsRow);

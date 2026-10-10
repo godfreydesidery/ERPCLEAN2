@@ -67,6 +67,17 @@
                               placeholder="All suppliers" />
             </div>
           }
+          <!-- RPT-08: the shared branch picker. Blank = All branches — for branch-limited staff
+               that is the branches they work in, never the whole company. -->
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sr-branch" name="sr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()"
@@ -173,14 +184,19 @@
                   <th scope="col" class="num">Qty</th>
                   <th scope="col" class="num">Disc</th>
                   <th scope="col" class="num">VAT</th>
-                  <th scope="col" class="num">Margin</th>
+                  <!-- Margin is cost data: shown only when the server says this caller may see
+                       cost (INVENTORY.VALUATION.VIEW, owner ruling 2026-10-10). An older server
+                       sends no flag, which reads as visible. -->
+                  @if (r.costVisible !== false) {
+                    <th scope="col" class="num">Margin</th>
+                  }
                   <th scope="col" class="num">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 @if (r.rows.length === 0) {
                   <tr>
-                    <td colspan="8" class="text-center text-muted py-4">
+                    <td [attr.colspan]="r.costVisible !== false ? 8 : 7" class="text-center text-muted py-4">
                       No sales recorded for this period.
                     </td>
                   </tr>
@@ -193,6 +209,7 @@
                     <td class="num mono">{{ fmtQty(row.qtySold) }}</td>
                     <td class="num mono">{{ fmtMoney(row.discount) }}</td>
                     <td class="num mono">{{ fmtMoney(row.vat) }}</td>
+                    @if (r.costVisible !== false) {
                     <td class="num mono">
                       @if (row.margin === null || row.margin === undefined) {
                         <!-- Not zero: unknown. fmtMoney would render 0.00 here, which reads as
@@ -203,6 +220,7 @@
                         {{ fmtMoney(row.margin) }}
                       }
                     </td>
+                    }
                     <td class="num mono">{{ fmtMoney(row.amount) }}</td>
                   </tr>
                 }
@@ -213,15 +231,17 @@
                   <td class="num mono">{{ fmtQty(r.totals.qtySold) }}</td>
                   <td class="num mono">{{ fmtMoney(r.totals.discount) }}</td>
                   <td class="num mono">{{ fmtMoney(r.totals.vat) }}</td>
+                  @if (r.costVisible !== false) {
                   <td class="num mono">
                     {{ fmtMoney(r.totals.margin) }}@if (r.totals.marginRowsUnknown > 0) {<span aria-hidden="true">&nbsp;*</span>}
                   </td>
+                  }
                   <td class="num mono">{{ fmtMoney(r.totals.amount) }}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
-          @if (r.totals.marginRowsUnknown > 0) {
+          @if (r.costVisible !== false && r.totals.marginRowsUnknown > 0) {
             <p class="small text-muted mt-2 mb-0">
               * The margin total covers only part of these sales. It leaves out
               {{ r.totals.marginRowsUnknown }}

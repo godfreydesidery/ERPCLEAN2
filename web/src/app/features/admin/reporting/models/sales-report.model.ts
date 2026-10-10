@@ -47,6 +47,11 @@ export interface SalesReportDto {
   rows: SalesReportRowDto[];
   totals: SalesReportTotalsDto;
   generatedAt: string;
+  /**
+   * False when the caller may not see cost (no INVENTORY.VALUATION.VIEW): every margin is null
+   * because it was withheld, not because the cost is unknown. Absent from older servers.
+   */
+  costVisible?: boolean;
 }
 
 /** Query filter for GET /api/v1/reports/sales (and its /export counterpart). */

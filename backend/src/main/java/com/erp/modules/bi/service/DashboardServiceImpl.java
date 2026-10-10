@@ -40,10 +40,12 @@ import com.erp.modules.sales.domain.dto.BranchSalesAggregateDto;
 import com.erp.modules.sales.service.SalesByBranchQuery;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.service.StockValuationQuery;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -170,7 +172,12 @@ public class DashboardServiceImpl implements DashboardService {
         // A branch filter must also be a branch the caller is assigned to — the same bar every
         // report clears (BranchReadGuard); company membership alone let a one-branch user read
         // any sibling branch's sales and pipeline here.
-        branchGuard.assertMayRead(RequestContext.get(), branchId);
+        BranchReadScope readScope = branchGuard.readScope(RequestContext.get(), companyId, branchId);
+        // Group-wide panels (GL finance, working capital, inventory value, trends) cannot be
+        // narrowed to branches, so a branch-limited caller does not get them: "All branches" for
+        // them means their own branches, never the whole company (owner ruling 2026-10-10).
+        boolean groupWide = branchGuard.seesWholeCompany(RequestContext.get(), companyId);
+        Long    crmBranch = crmBranchId(readScope, branchId);
 
         // REPORTING-BI-041/062: validate company existence before building any panel; a bogus
         // companyId must 404 here rather than degrade silently or NPE inside a downstream query.
@@ -194,13 +201,15 @@ public class DashboardServiceImpl implements DashboardService {
         boolean canOps     = permChecks.has("BI.OPS.VIEW");
         boolean canCrm     = permChecks.has("BI.CRM.VIEW");
 
-        FinanceSummaryDto   financePanel   = canFinance ? safeFinance(companyId, effectiveFrom, effectiveTo, health) : null;
-        WorkingCapitalDto   wcPanel        = canFinance ? safeWorkingCapital(companyId, health) : null;
-        InventorySummaryDto inventoryPanel = canOps     ? safeInventory(companyId, health)      : null;
-        CrmSnapshotDto      crmPanel       = canCrm     ? safeCrm(companyId, branchId, effectiveFrom, effectiveTo) : null;
-        TrendDto            revTrend       = canFinance ? safeRevenueTrend(companyId, currency) : null;
-        TrendDto            netTrend       = canFinance ? safeNetProfitTrend(companyId, currency) : null;
-        SalesByBranchDto    salesPanel     = canFinance ? safeSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency) : null;
+        boolean canGroupFinance = canFinance && groupWide;
+        FinanceSummaryDto   financePanel   = canGroupFinance ? safeFinance(companyId, effectiveFrom, effectiveTo, health) : null;
+        WorkingCapitalDto   wcPanel        = canGroupFinance ? safeWorkingCapital(companyId, health) : null;
+        InventorySummaryDto inventoryPanel = canOps && groupWide ? safeInventory(companyId, health) : null;
+        CrmSnapshotDto      crmPanel       = canCrm && crmAnswerable(readScope, crmBranch)
+                ? safeCrm(companyId, crmBranch, effectiveFrom, effectiveTo) : null;
+        TrendDto            revTrend       = canGroupFinance ? safeRevenueTrend(companyId, currency) : null;
+        TrendDto            netTrend       = canGroupFinance ? safeNetProfitTrend(companyId, currency) : null;
+        SalesByBranchDto    salesPanel     = canFinance ? safeSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency, readScope) : null;
 
         // Echo the branch the request was actually filtered to (UAT, 2026-08). Resolved from the
         // BRANCH row, scoped to the company already asserted above — never from the caller's
@@ -209,7 +218,8 @@ public class DashboardServiceImpl implements DashboardService {
 
         BiHeaderDto header = new BiHeaderDto(
                 companyId, companyName,
-                branchScope.uid(), branchScope.name(), branchScope.label(),
+                branchScope.uid(), branchScope.name(),
+                readScope.limitedToAssigned() ? readScope.label() : branchScope.label(),
                 currency, periodLabel,
                 effectiveFrom, effectiveTo, LocalDate.now(), Instant.now());
 
@@ -347,9 +357,30 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public CrmSnapshotDto crmSnapshot(Long companyId, Long branchId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        branchGuard.assertMayRead(RequestContext.get(), branchId);
+        BranchReadScope readScope = branchGuard.readScope(RequestContext.get(), companyId, branchId);
+        Long crmBranch = crmBranchId(readScope, branchId);
+        if (!crmAnswerable(readScope, crmBranch)) {
+            throw new ForbiddenException(
+                    "Choose one of your branches to see its CRM figures.");
+        }
         requireCompanyExists(companyId);
-        return buildCrm(companyId, branchId, from, to);
+        return buildCrm(companyId, crmBranch, from, to);
+    }
+
+    /**
+     * The CRM pipeline queries take one branch or none. A branch-limited caller asking for "All
+     * branches" is answered for their single branch when they have exactly one; with several, the
+     * pipeline cannot be narrowed to the set, so it is not answered unfiltered at all.
+     */
+    private static Long crmBranchId(BranchReadScope scope, Long requestedBranchId) {
+        if (scope.limitedToAssigned() && scope.branchIds().size() == 1) {
+            return scope.branchIds().get(0);
+        }
+        return requestedBranchId;
+    }
+
+    private static boolean crmAnswerable(BranchReadScope scope, Long crmBranchId) {
+        return !scope.limitedToAssigned() || crmBranchId != null;
     }
 
     private CrmSnapshotDto buildCrm(Long companyId, Long branchId, LocalDate from, LocalDate to) {
@@ -426,21 +457,25 @@ public class DashboardServiceImpl implements DashboardService {
     public SalesByBranchDto salesByBranch(Long companyId, Long branchId,
                                           LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        branchGuard.assertMayRead(RequestContext.get(), branchId);
+        BranchReadScope readScope = branchGuard.readScope(RequestContext.get(), companyId, branchId);
         com.erp.modules.iam.domain.entity.Company company = requireCompanyExists(companyId);
         String currency = company.getBaseCurrency() != null ? company.getBaseCurrency() : "TZS";
         LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
         LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
-        return buildSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency);
+        return buildSalesByBranch(companyId, branchId, effectiveFrom, effectiveTo, currency, readScope);
     }
 
     private SalesByBranchDto buildSalesByBranch(Long companyId, Long branchId,
-                                                LocalDate from, LocalDate to, String currency) {
+                                                LocalDate from, LocalDate to, String currency,
+                                                BranchReadScope readScope) {
         Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant toInstant   = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
 
+        // The aggregate is one row per branch, so the caller's branch scope is applied to its rows.
         List<BranchSalesAggregateDto> aggregates =
-                salesByBranchQuery.sumByBranch(companyId, fromInstant, toInstant, branchId);
+                salesByBranchQuery.sumByBranch(companyId, fromInstant, toInstant, branchId).stream()
+                        .filter(agg -> readScope.includes(agg.branchId()))
+                        .toList();
 
         if (aggregates.isEmpty()) {
             return new SalesByBranchDto(currency, BigDecimal.ZERO, 0L, List.of());
@@ -523,9 +558,10 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private SalesByBranchDto safeSalesByBranch(Long companyId, Long branchId,
-                                               LocalDate from, LocalDate to, String currency) {
+                                               LocalDate from, LocalDate to, String currency,
+                                               BranchReadScope readScope) {
         try {
-            return buildSalesByBranch(companyId, branchId, from, to, currency);
+            return buildSalesByBranch(companyId, branchId, from, to, currency, readScope);
         } catch (Exception ex) {
             log.warn("BI sales-by-branch panel failed for company {}: {}", companyId, ex.getMessage());
             return null;

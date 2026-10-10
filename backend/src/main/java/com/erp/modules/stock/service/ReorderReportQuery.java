@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.dto.ReorderReportDto;
 import com.erp.modules.stock.domain.dto.ReorderRowDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -73,10 +74,10 @@ public class ReorderReportQuery {
 
         Company company = loadCompany(companyId);
         NamedRef branch = resolve("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         NamedRef supplier = resolve("suppliers", "display_name", supplierUid, companyId, "Supplier");
 
-        List<ReorderRowDto> rows = queryRows(companyId, branch, supplier, includeCost);
+        List<ReorderRowDto> rows = queryRows(companyId, branch, supplier, includeCost, scope);
 
         BigDecimal orderValue = BigDecimal.ZERO;
         int withoutCost = 0;
@@ -104,10 +105,10 @@ public class ReorderReportQuery {
     // -------------------------------------------------------------------------
 
     private List<ReorderRowDto> queryRows(Long companyId, NamedRef branch, NamedRef supplier,
-                                          boolean includeCost) {
+                                          boolean includeCost, BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
-        StringBuilder filter = new StringBuilder();
+        StringBuilder filter = new StringBuilder(scope.sql("soh.branch_id"));
         if (branch != null) {
             filter.append(" AND soh.branch_id = ?");
             params.add(branch.id());
