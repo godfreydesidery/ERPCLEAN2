@@ -24,4 +24,16 @@ public interface JournalService {
      */
     JournalEntryDto postManualReversal(String originalEntryUid, java.time.LocalDate reversalDate,
                                        String reason);
+
+    /**
+     * A posted entry by its source document, inside {@code companyId} (ARC-08): how the cash book
+     * finds the sale / sale-reversal journal it mirrors. Empty when the source has no such entry.
+     * Company-scoped by construction — never a bare id lookup.
+     */
+    java.util.Optional<JournalEntryDto> findPostedBySource(
+            Long companyId, com.erp.modules.gl.domain.enums.JournalSourceType sourceType,
+            String sourceRef);
+
+    /** A posted entry by its uid, inside {@code companyId} (ARC-08). Empty when not found there. */
+    java.util.Optional<JournalEntryDto> findPostedByUid(Long companyId, String uid);
 }

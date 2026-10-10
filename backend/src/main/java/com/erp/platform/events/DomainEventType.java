@@ -164,6 +164,15 @@ public final class DomainEventType {
     public static final String VAN_RECONCILED           = "VAN.RECONCILED";
     public static final String AGG_VAN_RECONCILIATION    = "VAN_RECONCILIATION";
 
+    // --- POS till cash (gap review wave 3, ARC-08) ---
+
+    /**
+     * A POS till payout / expense or a session over/short has been posted to the GL. The cash
+     * book consumes it and writes the matching cash_transactions row (it never posts to the GL).
+     */
+    public static final String POS_CASH_MOVED           = "POS.CASH.MOVED";
+    public static final String AGG_POS_SESSION          = "POS_SESSION";
+
     private DomainEventType() {
     }
 }

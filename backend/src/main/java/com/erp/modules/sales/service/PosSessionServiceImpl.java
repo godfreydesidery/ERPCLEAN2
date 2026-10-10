@@ -214,6 +214,18 @@ public class PosSessionServiceImpl implements PosSessionService {
      */
     private final StepUpAuthService          stepUpAuth;
 
+    /**
+     * ARC-08: tells the cash book that till cash moved in the GL (payout / expense / over-short),
+     * in the same transaction as the journal. Setter-injected so the existing constructor (and the
+     * unit tests that build this service by hand) keep working; null there means "no cash book".
+     */
+    private com.erp.platform.events.OutboxPublisher outbox;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setOutbox(com.erp.platform.events.OutboxPublisher outbox) {
+        this.outbox = outbox;
+    }
+
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
                                   PosSessionPayoutRepository payouts,
@@ -562,7 +574,13 @@ public class PosSessionServiceImpl implements PosSessionService {
         BigDecimal variance = session.getVarianceAmount();
         Long journalId = null;
         if (variance != null && variance.compareTo(BigDecimal.ZERO) != 0) {
-            journalId = postVarianceGlOrRefuse(session, variance).id();
+            var varianceJournal = postVarianceGlOrRefuse(session, variance);
+            journalId = varianceJournal.id();
+            publishCashMoved(session, session.getId(), session.getUid(),
+                    com.erp.modules.sales.domain.dto.PosCashMovedPayload.KIND_VARIANCE,
+                    varianceJournal.uid(),
+                    (variance.signum() > 0 ? "Till over " : "Till short ")
+                            + session.getSessionNumber());
         }
 
         session.setVarianceJournalId(journalId);
@@ -1052,6 +1070,11 @@ public class PosSessionServiceImpl implements PosSessionService {
             // Persist the account and the journal on the row itself — this is what makes the next
             // attempt a no-op and what the expense report reads back.
             payout.markPostedToGl(expenseAcct.getId(), journalUid);
+            // ARC-08: the cash book mirrors the cash leg (POS-03 semantics unchanged: same entry).
+            publishCashMoved(session, payout.getId(), payout.getUid(),
+                    com.erp.modules.sales.domain.dto.PosCashMovedPayload.KIND_PAYOUT, journalUid,
+                    (isExpense ? "Till expense " : "Till payout ") + session.getSessionNumber()
+                            + (isExpense ? " - " + payout.getCategory() : ""));
             return journalUid;
         } catch (RuntimeException ex) {
             // Fail-fast, and take the payout row down with it: cash that cannot be accounted for
@@ -1063,6 +1086,23 @@ public class PosSessionServiceImpl implements PosSessionService {
                     + " Ask your accountant to check the till expense and cash account setup,"
                     + " then try again.");
         }
+    }
+
+    /**
+     * ARC-08: one {@code POS.CASH.MOVED} outbox row, in the caller's transaction, so the cash book
+     * writes the cash leg of the journal just posted. Carries no amounts — the consumer reads the
+     * posted journal back, so the cash row and the ledger cannot disagree.
+     */
+    private void publishCashMoved(PosSession session, Long aggregateId, String sourceUid,
+                                  String kind, String journalUid, String memo) {
+        if (outbox == null || journalUid == null) {
+            return;
+        }
+        outbox.publish(com.erp.platform.events.DomainEventType.POS_CASH_MOVED,
+                com.erp.platform.events.DomainEventType.AGG_POS_SESSION,
+                aggregateId, sourceUid, session.getCompanyId(), session.getBranchId(),
+                new com.erp.modules.sales.domain.dto.PosCashMovedPayload(
+                        kind, sourceUid, journalUid, memo));
     }
 
     /**
