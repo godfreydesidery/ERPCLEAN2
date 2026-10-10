@@ -296,7 +296,9 @@ export class ShellComponent {
         { label: 'Cash & Bank Accounts', route: '/admin/cash/accounts', icon: 'bi-wallet2', available: true, permission: 'CASH.VIEW' },
         { label: 'Cash Transfer', route: '/admin/cash/transfers/record', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.TRANSFER' },
         { label: 'Transfers', route: '/admin/cash/transfers', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.VIEW' },
-        { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD' },
+        // ARC-12 / LBO-17: this is where a day-to-day expense is paid out of cash, so the palette
+        // must find it by what the owner calls it.
+        { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD', keywords: ['expense', 'expenses', 'record expense', 'pay expense', 'matumizi', 'gharama', 'rent', 'kodi', 'electricity', 'umeme', 'water', 'maji', 'transport', 'usafiri', 'fuel', 'mafuta', 'cash out', 'money paid', 'money received'] },
         { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
         { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },

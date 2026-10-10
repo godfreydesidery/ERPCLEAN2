@@ -9,16 +9,26 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { AccountDto } from '../gl/models/gl.model';
 import { GlService } from '../gl/gl.service';
 import {
-  CashBankAccountDto,
+  CashAccountOptionDto,
   CashTransactionDto,
   CashTxnDirection,
   RecordDirectEntryRequest,
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 
+/** Counter-account types in the order they are offered: what the money most likely was first. */
+const COUNTER_ORDER: Record<CashTxnDirection, readonly string[]> = {
+  OUT: ['EXPENSE', 'EQUITY', 'INCOME'],
+  IN: ['INCOME', 'EQUITY', 'EXPENSE'],
+};
+
 /**
  * Record Direct Cash/Bank Entry screen. Gated CASH.ENTRY.RECORD.
  * Account, direction (IN/OUT), amount, date, counter GL account picker, memo.
+ *
+ * ARC-12 / LBO-17: this is the screen an owner uses to pay rent, electricity or transport out of
+ * cash, so it now defaults to money OUT, offers expense accounts first, and lists the entries
+ * already recorded on the chosen account (CASH.VIEW) so today's expenses can be checked.
  */
 @Component({
   selector: 'app-record-entry',
@@ -40,8 +50,25 @@ export class RecordEntryComponent {
   readonly companyState = signal<'loading' | 'idle' | 'error'>('loading');
 
   // ── Cash accounts ──────────────────────────────────────────────────────────
-  readonly cashAccounts = signal<CashBankAccountDto[]>([]);
+  /** Narrow option rows (GET /cash/accounts/options) — open to CASH.ENTRY.RECORD, no CASH.VIEW needed. */
+  readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
   readonly cashAccountsState = signal<'idle' | 'loading' | 'error'>('idle');
+
+  // ── Entries already on the chosen account (needs CASH.VIEW) ───────────────
+  readonly entries = signal<CashTransactionDto[]>([]);
+  readonly entriesState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly canViewEntries = computed(() => this.session.hasPermission('CASH.VIEW'));
+  /** Direct entries only (receipts / payments / transfers live on their own screens), newest first. */
+  readonly recentEntries = computed(() =>
+    this.entries()
+      .filter((t) => t.txnType === 'DIRECT_ENTRY')
+      .slice()
+      .reverse()
+      .slice(0, 25),
+  );
+  readonly selectedAccount = computed(() =>
+    this.cashAccounts().find((a) => a.uid === this.selectedAccountUid()) ?? null,
+  );
 
   // ── GL accounts (counter) ──────────────────────────────────────────────────
   readonly glAccounts = signal<AccountDto[]>([]);
@@ -49,7 +76,8 @@ export class RecordEntryComponent {
 
   // ── Form fields ────────────────────────────────────────────────────────────
   readonly selectedAccountUid = signal('');
-  readonly direction = signal<CashTxnDirection>('IN');
+  /** ARC-12: most entries made here are expenses paid out, so money OUT is the default. */
+  readonly direction = signal<CashTxnDirection>('OUT');
   readonly amount = signal('');
   readonly txnDate = signal('');
   readonly counterGlAccountUid = signal('');
@@ -78,12 +106,19 @@ export class RecordEntryComponent {
     this.submitting(),
   );
 
-  /** GL accounts that are not the cash/bank asset account — income/expense/equity for counter. */
-  readonly counterGlOptions = computed(() =>
-    this.glAccounts().filter((a) =>
-      a.accountType === 'INCOME' || a.accountType === 'EXPENSE' || a.accountType === 'EQUITY',
-    ),
-  );
+  /**
+   * GL accounts that are not the cash/bank asset account — income/expense/equity for counter.
+   * Ordered by what the money most likely was: expenses first for money out, income first for in.
+   */
+  readonly counterGlOptions = computed(() => {
+    const order = COUNTER_ORDER[this.direction()] ?? COUNTER_ORDER.OUT;
+    return this.glAccounts()
+      .filter((a) => order.includes(a.accountType))
+      .sort((a, b) =>
+        order.indexOf(a.accountType) - order.indexOf(b.accountType) ||
+        String(a.accountCode).localeCompare(String(b.accountCode)),
+      );
+  });
 
   constructor() {
     this.txnDate.set(new Date().toISOString().slice(0, 10));
@@ -113,13 +148,48 @@ export class RecordEntryComponent {
 
   private loadCashAccounts(companyId: string): void {
     this.cashAccountsState.set('loading');
-    this.cashbankService.listAllAccounts(companyId).subscribe({
+    this.cashbankService.listAccountOptions(companyId).subscribe({
       next: (list) => {
-        this.cashAccounts.set(list);
+        this.cashAccounts.set(list ?? []);
         this.cashAccountsState.set('idle');
+        // Preselect this branch's cash drawer (then the company default) — where expenses are paid from.
+        const preferred =
+          list.find((a) => a.accountType === 'CASH' && a.inCurrentBranch) ??
+          list.find((a) => a.isDefault);
+        if (preferred && !this.selectedAccountUid()) this.onAccountChange(preferred.uid);
       },
       error: () => this.cashAccountsState.set('error'),
     });
+  }
+
+  onAccountChange(uid: string): void {
+    this.selectedAccountUid.set(uid ?? '');
+    this.loadEntries();
+  }
+
+  /** The chosen account's direct entries (GET /cash/entries needs companyId AND accountId). */
+  loadEntries(): void {
+    const account = this.selectedAccount();
+    const companyId = this.selectedCompanyId();
+    if (!account || !companyId || !this.canViewEntries()) {
+      this.entries.set([]);
+      this.entriesState.set('idle');
+      return;
+    }
+    this.entriesState.set('loading');
+    this.cashbankService.listEntries(companyId, String(account.id)).subscribe({
+      next: (rows) => {
+        this.entries.set(rows ?? []);
+        this.entriesState.set('idle');
+      },
+      error: () => this.entriesState.set('error'),
+    });
+  }
+
+  counterAccountLabel(id: string | null): string {
+    if (id == null) return '—';
+    const gl = this.glAccounts().find((a) => String(a.id) === String(id));
+    return gl ? `${gl.accountCode} — ${gl.name}` : '—';
   }
 
   private loadGlAccounts(companyId: string): void {
@@ -137,6 +207,7 @@ export class RecordEntryComponent {
     this.selectedCompanyId.set(id);
     this.selectedAccountUid.set('');
     this.counterGlAccountUid.set('');
+    this.entries.set([]);
     if (id) {
       this.loadCashAccounts(id);
       this.loadGlAccounts(id);
@@ -178,6 +249,7 @@ export class RecordEntryComponent {
         this.submitting.set(false);
         this.alerts.success('Entry recorded', String(txn.txnNumber ?? ''));
         this.savedEntry.set(txn);
+        this.loadEntries();
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not record entry.'));
@@ -187,9 +259,9 @@ export class RecordEntryComponent {
   }
 
   reset(): void {
+    // Keep the chosen cash account (and its list): the next expense is usually paid from the same drawer.
     this.savedEntry.set(null);
-    this.selectedAccountUid.set('');
-    this.direction.set('IN');
+    this.direction.set('OUT');
     this.amount.set('');
     this.counterGlAccountUid.set('');
     this.memo.set('');

@@ -49,7 +49,7 @@
           <div class="erp-field full">
             <label for="entAccount">Cash / Bank Account <span aria-hidden="true">*</span></label>
             <select id="entAccount" class="form-select form-select-sm"
-                    [ngModel]="selectedAccountUid()" (ngModelChange)="selectedAccountUid.set($event)"
+                    [ngModel]="selectedAccountUid()" (ngModelChange)="onAccountChange($event)"
                     required>
               <option value="">— select account —</option>
               @for (acc of cashAccounts(); track acc.uid) {
@@ -62,8 +62,8 @@
             <label for="entDirection">Direction <span aria-hidden="true">*</span></label>
             <select id="entDirection" class="form-select form-select-sm"
                     [ngModel]="direction()" (ngModelChange)="direction.set($event)">
+              <option value="OUT">OUT (Money paid — expense)</option>
               <option value="IN">IN (Money received)</option>
-              <option value="OUT">OUT (Money paid)</option>
             </select>
           </div>
 
@@ -82,7 +82,10 @@
           </div>
 
           <div class="erp-field full">
-            <label for="entCounterGl">Counter GL Account <span aria-hidden="true">*</span></label>
+            <label for="entCounterGl">
+              {{ direction() === 'OUT' ? 'Expense Account (what was paid for)' : 'Income Account (what the money is for)' }}
+              <span aria-hidden="true">*</span>
+            </label>
             <select id="entCounterGl" class="form-select form-select-sm"
                     [ngModel]="counterGlAccountUid()" (ngModelChange)="counterGlAccountUid.set($event)"
                     required>
@@ -112,6 +115,68 @@
         </div>
       </div>
     </div>
+
+    <!-- ARC-12 / LBO-17: what has already been recorded on this account -->
+    @if (canViewEntries() && selectedAccount(); as acc) {
+      <div class="erp-card mt-3">
+        <div class="erp-card__head">
+          <h2>Entries on {{ acc.code }} — {{ acc.name }}</h2>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" (click)="loadEntries()"
+                  [disabled]="entriesState() === 'loading'">
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+          </button>
+        </div>
+        <div class="erp-card__body p-0">
+          @switch (entriesState()) {
+            @case ('loading') {
+              <p class="text-muted small p-3 mb-0" aria-live="polite">Loading entries…</p>
+            }
+            @case ('error') {
+              <p class="text-danger small p-3 mb-0" role="alert">Could not load the entries for this account.</p>
+            }
+            @default {
+              @if (recentEntries().length === 0) {
+                <div class="erp-empty">No cash or bank entries recorded on this account yet.</div>
+              } @else {
+                <div class="erp-table-wrap">
+                  <table class="erp-table" aria-label="Recent cash and bank entries">
+                    <thead>
+                      <tr>
+                        <th scope="col">No.</th>
+                        <th scope="col">Date</th>
+                        <th scope="col">Direction</th>
+                        <th scope="col">Account</th>
+                        <th scope="col">Memo</th>
+                        <th scope="col" class="num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (t of recentEntries(); track t.uid) {
+                        <tr>
+                          <td class="mono">{{ t.txnNumber }}</td>
+                          <td>{{ t.txnDate }}</td>
+                          <td>
+                            <span class="status-tag"
+                                  [class.status-tag--ok]="t.direction === 'IN'"
+                                  [class.status-tag--danger]="t.direction === 'OUT'">
+                              {{ t.direction === 'OUT' ? 'Paid out' : 'Received' }}
+                            </span>
+                          </td>
+                          <td>{{ counterAccountLabel(t.counterGlAccountId) }}</td>
+                          <td>{{ t.memo ?? '' }}</td>
+                          <td class="num mono">{{ fmtMoney(t.amount) }} {{ t.currency }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            }
+          }
+        </div>
+      </div>
+    }
 
   }
 </section>

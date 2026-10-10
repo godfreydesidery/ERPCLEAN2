@@ -10,6 +10,8 @@
 export type CashBankAccountType = 'CASH' | 'BANK';
 export type CashTxnDirection = 'IN' | 'OUT';
 export type CashTxnType =
+  | 'AR_RECEIPT'
+  | 'AP_PAYMENT'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
   | 'DIRECT_ENTRY'
