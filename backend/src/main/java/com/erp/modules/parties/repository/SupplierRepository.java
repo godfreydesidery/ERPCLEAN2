@@ -16,6 +16,13 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
     Optional<Supplier> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped batch lookup by internal id — for resolving the suppliers a page of AP
+     * documents points at in one query (AP-28: a bill must carry its supplier's uid so "Pay" can
+     * open the payment screen on the right supplier).
+     */
+    List<Supplier> findByCompanyIdAndIdIn(Long companyId, Collection<Long> ids);
+
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
     /** Resolve a supplier by its (system-generated) code within a company (bulk import upsert). */

@@ -126,6 +126,10 @@ export interface SupplierBillDto {
    */
   comparisonState?: BillComparisonState | null;
   lines: SupplierBillLineDto[];
+  /** The supplier's uid (AP-28) — lets "Pay" open Record Payment on this supplier. */
+  supplierUid?: string | null;
+  /** The supplier's display name (AP-28). */
+  supplierName?: string | null;
 }
 
 // ── Enter Bill request ────────────────────────────────────────────────────────

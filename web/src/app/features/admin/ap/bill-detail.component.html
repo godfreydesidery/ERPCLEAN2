@@ -130,7 +130,8 @@
                   {{ paymentHoldNote(b) }}
                 </p>
               } @else {
-                <a routerLink="/admin/ap/payments/record" class="btn btn-primary btn-sm">
+                <a routerLink="/admin/ap/payments/record" [queryParams]="payQueryParams(b)"
+                   class="btn btn-primary btn-sm">
                   <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Record Payment
                 </a>
               }

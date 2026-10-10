@@ -77,7 +77,7 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(host.textContent).not.toContain('Ratified');
     expect(host.querySelector('.alert')).toBeNull();
     // and the Record Payment link stays live
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).not.toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).not.toBeNull();
   });
 
   it('shows no ratification notice when the field is absent', () => {
@@ -94,7 +94,7 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(alert!.textContent).toContain('manager');
     expect(host.textContent).toContain('Awaiting ratification');
 
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).toBeNull();
     const payButton = host.querySelector('button[disabled]');
     expect(payButton).not.toBeNull();
     expect(payButton!.textContent).toContain('Record Payment');
@@ -110,9 +110,16 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     const alert = host.querySelector('.alert');
     expect(alert!.classList.contains('alert-danger')).toBe(true);
     expect(host.textContent).toContain('Ratification refused');
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).toBeNull();
     expect(host.querySelector('button[disabled]')).not.toBeNull();
     expect(host.textContent).toContain('a manager refused this delivery');
+  });
+
+  it('AP-28: the Pay link carries the bill and its supplier', () => {
+    const host = mount({ ...makeBill('NOT_APPLICABLE'), supplierUid: 'SUP9' });
+    const link = host.querySelector('a[href^="/admin/ap/payments/record"]') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toContain('billUid=bill-uid-1');
+    expect(link.getAttribute('href')).toContain('supplierUid=SUP9');
   });
 
   it('RATIFIED reassures quietly and leaves payment available', () => {
@@ -120,7 +127,7 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(host.querySelector('.alert')).toBeNull();
     expect(host.textContent).toContain('Ratified');
     expect(host.textContent).toContain('pays as normal');
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).not.toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).not.toBeNull();
   });
 });
 

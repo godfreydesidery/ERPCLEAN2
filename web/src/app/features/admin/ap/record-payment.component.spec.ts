@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { signal } from '@angular/core';
 
@@ -29,7 +29,7 @@ function makeSession(canPay = true) {
   };
 }
 
-function makeBed(canPay = true) {
+function makeBed(canPay = true, queryParams: Record<string, string> = {}) {
   TestBed.configureTestingModule({
     imports: [RecordPaymentComponent],
     providers: [
@@ -41,6 +41,7 @@ function makeBed(canPay = true) {
         useValue: {
           listBills: vi.fn(() => of({ rows: [], meta: {} })),
           paymentRun: vi.fn(() => of(null)),
+          getBill: vi.fn(() => of({ ...makePayableBill('B2', 300), supplierUid: 'SUP9', supplierName: 'Serengeti Breweries' })),
         },
       },
       { provide: SupplierService, useValue: { list: vi.fn(() => of({ rows: [], meta: {} })) } },
@@ -48,6 +49,7 @@ function makeBed(canPay = true) {
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore, useValue: makeSession(canPay) },
+      { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(queryParams) } } },
       {
         provide: CashbankService,
         useValue: {
@@ -191,6 +193,22 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
     expect(apService.paymentRun).toHaveBeenCalledWith(
       expect.objectContaining({ cashBankAccountUid: 'ACC-MPESA' }),
     );
+  });
+
+  it('AP-28: Pay from a bill selects its supplier and ticks the bill', () => {
+    vi.useFakeTimers();
+    makeBed(true, { billUid: 'B2', supplierUid: 'SUP9' });
+    const apService = TestBed.inject(ApService) as any;
+    apService.listBills.mockReturnValue(of({
+      rows: [makePayableBill('B1', 500), makePayableBill('B2', 300)], meta: {},
+    }));
+    const comp = TestBed.createComponent(RecordPaymentComponent).componentInstance as any;
+
+    expect(apService.getBill).toHaveBeenCalledWith('B2');
+    expect(comp.selectedSupplier()).toEqual({ uid: 'SUP9', label: 'Serengeti Breweries' });
+    expect(apService.listBills).toHaveBeenCalledWith('10', 'SUP9', undefined, 0, 200);
+    expect(comp.isBillSelected('B2')).toBe(true);
+    expect(comp.isBillSelected('B1')).toBe(false);
   });
 
   it('AP-17: the success screen renders the ONE payment the run returns', () => {

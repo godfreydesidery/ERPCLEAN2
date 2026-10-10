@@ -180,6 +180,13 @@ export class BillDetailComponent implements OnInit {
     return bill.status === 'MATCHED' || bill.status === 'APPROVED' || bill.status === 'PARTIALLY_PAID';
   }
 
+  /** AP-28: open Record Payment on this bill's supplier with this bill ticked. */
+  payQueryParams(bill: SupplierBillDto): Record<string, string> {
+    const qp: Record<string, string> = { billUid: bill.uid };
+    if (bill.supplierUid) qp['supplierUid'] = bill.supplierUid;
+    return qp;
+  }
+
   /** True only for bills backed by a direct goods receipt — ordinary bills show no notice. */
   showsRatification(bill: SupplierBillDto): boolean {
     return hasRatificationNotice(bill.directReceiptRatification);

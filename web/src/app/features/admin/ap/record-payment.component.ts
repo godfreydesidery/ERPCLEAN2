@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -50,6 +50,7 @@ export class RecordPaymentComponent {
   private readonly taxService = inject(TaxService);
   private readonly cashbank = inject(CashbankService);
   private readonly alerts = inject(AlertService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -155,6 +156,7 @@ export class RecordPaymentComponent {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
               this.loadCashAccounts(list[0].id);
+              this.applyDeepLink();
             }
           },
           error: () => this.companyState.set('error'),
@@ -162,6 +164,35 @@ export class RecordPaymentComponent {
       },
       error: () => this.companyState.set('error'),
     });
+  }
+
+  /**
+   * AP-28: "Pay" on a bill opens this screen with ?billUid= (and ?supplierUid= when known). Select
+   * the bill's supplier and tick the bill, so the clerk does not search and tick it all over again.
+   * Anything that cannot be resolved simply leaves the screen as it was — the manual path still works.
+   */
+  private applyDeepLink(): void {
+    const qp = this.route.snapshot?.queryParamMap;
+    const billUid = qp?.get('billUid') ?? '';
+    const supplierUid = qp?.get('supplierUid') ?? '';
+    if (billUid) {
+      this.apService.getBill(billUid).subscribe({
+        next: (bill) => {
+          const uid = bill.supplierUid || supplierUid;
+          if (!uid) return;
+          const label = bill.supplierName || this.supplierSearchQ() || 'Selected supplier';
+          this.selectedSupplier.set({ uid, label });
+          this.supplierSearchQ.set(label);
+          this.loadPayableBills(uid, bill.uid);
+        },
+        error: () => {},
+      });
+    } else if (supplierUid) {
+      this.supplierService.getByUid(supplierUid).subscribe({
+        next: (s) => this.selectSupplier(s),
+        error: () => {},
+      });
+    }
   }
 
   private loadWhtTypes(companyId: string): void {
@@ -234,7 +265,7 @@ export class RecordPaymentComponent {
 
   // ── Load payable bills (MATCHED, APPROVED, PARTIALLY_PAID) ────────────────
 
-  private loadPayableBills(supplierUid: string): void {
+  private loadPayableBills(supplierUid: string, preselectBillUid?: string): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
     this.billsState.set('loading');
@@ -249,6 +280,9 @@ export class RecordPaymentComponent {
         );
         this.bills.set(payable);
         this.billsState.set('idle');
+        if (preselectBillUid && payable.some((b) => b.uid === preselectBillUid)) {
+          this.selectedBillUids.set(new Set([preselectBillUid]));
+        }
       },
       error: () => this.billsState.set('error'),
     });
