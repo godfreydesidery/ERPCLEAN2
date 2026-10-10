@@ -404,6 +404,53 @@ class PurchaseReturnServiceImplTest {
         verify(apDebitNoteService, org.mockito.Mockito.never()).raise(any());
     }
 
+    // -------------------------------------------------------------------------
+    // PUR-09: a return posts at the RECEIPT's branch, not the user's current one
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_fromAnotherBranch_recordsTheReturnAtTheReceivingBranch() {
+        // The user is working in branch 77; the goods were received at branch 20.
+        RequestContext.set(new RequestContext.Principal(1L, "user@test.com", false, 10L, 77L, null));
+        stubCreatableReceipt();
+        stubPackGrLine(new BigDecimal("8"), new BigDecimal("200"),
+                new BigDecimal("45000"), new BigDecimal("360000"));
+        when(returnLines.sumReturnedQtyInBaseForGrLine(7L)).thenReturn(BigDecimal.ZERO);
+
+        service.create(createRequest("1"));
+
+        ArgumentCaptor<PurchaseReturn> header = forClass(PurchaseReturn.class);
+        verify(returns).save(header.capture());
+        assertThat(header.getValue().getBranchId()).isEqualTo(20L);
+        ArgumentCaptor<PurchaseReturnLine> line = forClass(PurchaseReturnLine.class);
+        verify(returnLines).save(line.capture());
+        assertThat(line.getValue().getBranchId()).isEqualTo(20L);
+    }
+
+    @Test
+    void confirm_postsStockAtTheReceivingBranchEvenForAnOldDraftRaisedElsewhere() {
+        // Old draft header says branch 77 (the raiser's); the receipt is at branch 20.
+        PurchaseReturn ret = stubConfirmableReturn("PRET-UID-BR", 10L, 77L, 50L);
+        GoodsReceipt receipt = mock(GoodsReceipt.class);
+        when(receipt.getStatus()).thenReturn(GoodsReceiptStatus.RECEIVED);
+        when(receipt.getBranchId()).thenReturn(20L);
+        when(grRepo.findByCompanyIdAndUid(10L, "GR-OF-PRET-UID-BR")).thenReturn(Optional.of(receipt));
+        PurchaseReturnLine line = stubReturnLine(1L, "GRL-BR", 1L,
+                new BigDecimal("10.00"), new BigDecimal("100.00"));
+        when(returnLines.findByPurchaseReturnIdOrderByLineNo(any())).thenReturn(List.of(line));
+        GoodsReceiptLine grLine = stubGrLine(1L, new BigDecimal("20.00"), BigDecimal.ZERO);
+        when(grLineRepo.findById(1L)).thenReturn(Optional.of(grLine));
+        stubDebitNoteParties();
+
+        service.confirm("PRET-UID-BR");
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.eq(20L), payload.capture());
+        assertThat(((PurchaseReturnedPayload) payload.getValue()).branchId()).isEqualTo(20L);
+        assertThat(ret.getBranchId()).isEqualTo(77L);
+    }
+
     @Test
     void conversionHelpers_roundOnceAndSnapTheLastUlp() {
         GoodsReceiptLine thirds = mock(GoodsReceiptLine.class);

@@ -103,13 +103,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 .orElseThrow(() -> new NotFoundException("Company not found."));
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
-        Long branchId = branchId(ctx);
 
         GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, req.goodsReceiptUid())
                 .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
         // PUR-03: a voided receipt already took its goods back out of stock. Returning against it
         // would take them out a second time and raise a debit note for goods never kept.
         assertReturnable(gr);
+        // PUR-09: the goods leave the branch that RECEIVED them, whatever branch the user happens
+        // to be working in — scope from the loaded entity, never from the caller's context.
+        Long branchId = gr.getBranchId();
 
         // Resolve supplier snapshot from the linked PO
         PurchaseOrder po = poRepo.findById(gr.getPurchaseOrderId())
@@ -287,14 +289,17 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // receipts (the common case).  When the receipt WAS billed before the return, the GRNI
         // re-open is a known accepted imprecision (ADR-0027 OQ-RETURN-GL); the AP debit note raised
         // below reduces the payable regardless.
+        // PUR-09: stock and GL post at the RECEIPT's branch. A draft raised before this fix carries
+        // the raiser's branch on its header; the receipt is the authority for where the goods are.
+        Long stockBranchId = gr.getBranchId();
         PurchaseReturnedPayload payload = new PurchaseReturnedPayload(
-                ret.getUid(), ret.getCompanyId(), ret.getBranchId(),
+                ret.getUid(), ret.getCompanyId(), stockBranchId,
                 totalReturnValue, DEFAULT_CURRENCY, false, payloadLines,
                 ret.getReturnNumber());
         outbox.publish(DomainEventType.PURCHASE_RETURNED,
                 DomainEventType.AGG_PURCHASE_RETURN,
                 ret.getId(), ret.getUid(),
-                ret.getCompanyId(), ret.getBranchId(), payload);
+                ret.getCompanyId(), stockBranchId, payload);
 
         // Raise AP debit note synchronously in this TX (ADR-0027 D-7 step 4).
         // DR AP / CR Purchases to reduce the supplier payable for the returned goods.
@@ -430,11 +435,5 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();
         return p != null ? p.userId() : null;
-    }
-
-    private Long branchId(RequestContext.Principal ctx) {
-        Long id = ctx != null ? ctx.branchId() : null;
-        if (id == null) throw new IllegalStateException("No active branch in context.");
-        return id;
     }
 }
