@@ -25,6 +25,7 @@ import {
   SetProductPriceRequest,
   SetProductWeighingRequest,
   UnitOfMeasureDto,
+  RestrictedKind,
   UpdateProductRequest,
   VatStatus,
 } from '../models/product.model';
@@ -73,6 +74,8 @@ export class ProductDetailComponent {
   readonly fCostAmount = signal('');
   readonly fCostCurrency = signal('TZS');
   readonly fVatStatus = signal<VatStatus>('STANDARD');
+  /** PRD-33: age restriction the till enforces (18+/21+). */
+  readonly fRestrictedKind = signal<RestrictedKind>('NONE');
 
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -384,6 +387,7 @@ export class ProductDetailComponent {
     this.fCostAmount.set(p.cost?.amount ?? '');
     this.fCostCurrency.set(p.cost?.currency ?? 'TZS');
     this.fVatStatus.set(p.vatStatus ?? 'STANDARD');
+    this.fRestrictedKind.set(p.restrictedKind ?? 'NONE');
     this.patchWeighingForm(p);
   }
 
@@ -456,6 +460,23 @@ export class ProductDetailComponent {
         this.addingBarcode.set(false);
       },
     });
+  }
+
+  /** PRD-05: the loaded product's planning fields, as an update request expects them. */
+  private loadedPlanningFields(): Partial<UpdateProductRequest> {
+    const p = this.product();
+    if (!p) return {};
+    const str = (v: unknown): string | undefined => (v != null && v !== '' ? String(v) : undefined);
+    return {
+      reorderLevel: str(p.reorderLevel),
+      reorderQty: str(p.reorderQty),
+      safetyStock: str(p.safetyStock),
+      minStock: str(p.minStock),
+      maxStock: str(p.maxStock),
+      leadTimeDays: p.leadTimeDays ?? undefined,
+      purchasable: p.purchasable,
+      preferredSupplierId: str(p.preferredSupplierId),
+    };
   }
 
   /**
@@ -874,6 +895,10 @@ export class ProductDetailComponent {
       baseUnitUid,
       cost,
       vatStatus: this.fVatStatus(),
+      restrictedKind: this.fRestrictedKind(),
+      // PRD-05: this screen does not edit planning fields, so pass the loaded values through
+      // (the server also treats an omitted one as unchanged — belt and braces).
+      ...this.loadedPlanningFields(),
     };
 
     this.productService.update(this.uid(), request).subscribe({

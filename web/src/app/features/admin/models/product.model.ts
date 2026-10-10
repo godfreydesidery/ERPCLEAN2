@@ -11,6 +11,17 @@ export type ProductStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type UomStatus = 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 /** VAT classification for a product. Mirrors VatStatus on the backend. */
 export type VatStatus = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT';
+/** Age restriction the till enforces (ADR-0044 D-3a). Mirrors RestrictedKind on the backend. */
+export type RestrictedKind = 'NONE' | 'AGE_18' | 'AGE_21';
+/** Planning fields an update may clear explicitly (PRD-05: null/absent means "unchanged"). */
+export type ClearableProductField =
+  | 'reorderLevel'
+  | 'reorderQty'
+  | 'safetyStock'
+  | 'minStock'
+  | 'maxStock'
+  | 'leadTimeDays'
+  | 'preferredSupplierId';
 /**
  * Physical dimension family of a unit (P2 D5, ADR-0041 D5). Groups units for conversion
  * semantics — e.g. weighed goods (ADR-0044 D-1b) require the product's base unit to be WEIGHT.
@@ -94,6 +105,10 @@ export interface ProductModel {
   safetyStock?: string | null;
   minStock?: string | null;
   maxStock?: string | null;
+  /** Supply lead time in days. */
+  leadTimeDays?: number | null;
+  /** Age restriction (18+/21+) the till enforces. Defaults to NONE server-side. */
+  restrictedKind?: RestrictedKind;
   /**
    * ADR-0044 D-1b: sell-by-weight configuration. `weighed` requires the product's base unit to
    * be a WEIGHT unit (e.g. kg) — enforced server-side. tare/scaleStep/maxSaleWeight are cleared
@@ -162,6 +177,8 @@ export interface CreateProductRequest {
   minStock?: string;
   /** Maximum allowed stock level. */
   maxStock?: string;
+  /** Age restriction. Omitted = NONE. */
+  restrictedKind?: RestrictedKind;
 }
 
 // ── UpdateProductRequest ──────────────────────────────────────────────────────
@@ -194,6 +211,14 @@ export interface UpdateProductRequest {
   safetyStock?: string;
   minStock?: string;
   maxStock?: string;
+  leadTimeDays?: number;
+  /** Age restriction. Omitted = unchanged (send NONE to remove one). */
+  restrictedKind?: RestrictedKind;
+  /**
+   * PRD-05: on update an omitted field is left unchanged, so a cleared planning field must be
+   * named here to be removed. Descriptive text (category, brand, …) is cleared by sending ''.
+   */
+  clearFields?: ClearableProductField[];
 }
 
 // ── SetProductWeighingRequest (ADR-0044 D-1b) ─────────────────────────────────

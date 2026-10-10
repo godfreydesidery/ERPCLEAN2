@@ -585,6 +585,42 @@ describe('ProductDetailComponent — Bulk pack inline size edit', () => {
   });
 });
 
+// ── PRD-05 / PRD-33: saving must not wipe planning fields or the 18+ flag ───────
+
+describe('ProductDetailComponent — save() keeps loaded fields (PRD-05, PRD-33)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends the restriction and passes loaded reorder/supplier/lead-time through', async () => {
+    const loaded = {
+      ...PRODUCT, restrictedKind: 'AGE_18' as const, reorderLevel: 12 as unknown as string,
+      leadTimeDays: 5, preferredSupplierId: '77', purchasable: true,
+    };
+    makeBed({ getByUid: vi.fn(() => of(loaded)), update: vi.fn(() => of(loaded)) });
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+    const svc = asMock(TestBed.inject(ProductService));
+
+    expect(comp.fRestrictedKind()).toBe('AGE_18');
+    comp.fName.set('Widget renamed');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const [, request] = svc['update'].mock.calls[0];
+    expect(request.restrictedKind).toBe('AGE_18');
+    expect(request.reorderLevel).toBe('12');
+    expect(request.leadTimeDays).toBe(5);
+    expect(request.preferredSupplierId).toBe('77');
+  });
+
+  it('offers a labelled age-restriction select', async () => {
+    makeBed();
+    const fixture = await createDetail();
+    expect(fixture.nativeElement.querySelector('label[for="fRestrictedKind"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('#fRestrictedKind')).toBeTruthy();
+  });
+});
+
 // ── PRD-06: a crate barcode must carry its unit ─────────────────────────────────
 
 describe('ProductDetailComponent — addBarcode() unit binding (PRD-06)', () => {
