@@ -41,6 +41,30 @@ only with the owner's OK.
 | `fix/report-scope-margin` | RPT-06/LRB-06 (staff see their branches), ADM-14 (cost/margin need INVENTORY.VALUATION.VIEW), RPT-08, RPT-05 on sales exports | RPT-05 headers on other exports, OrbixHQ scope label, branch picker list for branch-limited users |
 | Seed grants (owner-approved) | BRANCH_MANAGER +7, ACCOUNTANT +5, SALES_MANAGER REPORT.EXPORT + INVENTORY.VALUATION.VIEW, PRODUCTION_MANAGER STOCK.LOCATION.VIEW | — |
 
+### Wave 3 (2026-10-10) — books and money
+
+Green: 1,840 unit + 1,404 integration tests, 237 web spec files, production build, migration gate.
+Owner-approved schema/seed: **V106** (widens `chk_cash_transaction_type`; explicit `LOCK TABLE …
+ACCESS EXCLUSIVE` + `lock_timeout 10s`) and codes `AR.RECEIPT.REVERSE`, `AP.PAYMENT.REVERSE`, `AR.REFUND`
+(→ ACCOUNTANT, FINANCE_DIRECTOR). Time ruling: store UTC; derive business dates and display in the
+company time zone.
+
+| Package (branch) | Fixed |
+|---|---|
+| `fix/w3-timezone` | ACC-03, SAL-23, LSF-15, PUR-15, RPT-09, RPT-21, ADM-26, ADM-27 (main screens), print dates |
+| `fix/w3-sales-postings` | SAL-06/ACC-04 (deposit to cash), ACC-05/LSF-06/POS-09 (tender → its own GL), SAL-03 (void clears AR) |
+| `fix/w3-purchase-fx` | PUR-07/ACC-08, bill FX stamp, AP-15/LBO-09, PUR-14/LBO-10, ACC-17/LBO-13/PUR-21, PUR-22, AP-23 |
+| `fix/w3-tax` | ACC-06/ACC-24 (VAT nets credits/debits/voids; GL clears), ACC-07 (pay VAT/WHT/PAYE/NSSF/SDL/WCF), RPT-14/PAR-06 schedules, ACC-13 VAT on cash expenses |
+| `fix/w3-gl-exceptions` | ACC-02 (posting exceptions + exactly-once re-post), ACC-19, ACC-14, ACC-18, ACC-26, ACC-23 |
+| `fix/w3-reversals` | ARC-04 receipt reversal, ARC-10/ACC-12 petty cash to GL |
+| `fix/w3b-cashbook-refunds` | ARC-08 (sales, voids, payouts, over/short in the cash book), ARC-01 cash counts re-enabled (go-live gap carried), AP-03, ARC-11, bounced-cheque cash row |
+
+**Wave-3 deploy cautions:** boot V106 against a restored customer DB first; post a one-off opening
+journal per existing petty-cash fund (DR Petty Cash / CR source); stop hand-keying CREDIT_NOTE_VAT /
+DEBIT_NOTE_VAT adjustments (user manual 08-finance.md:950 is outdated); legacy USD goods receipts need a
+GRNI/Inventory repair; night sales (00:00–03:00 EAT) now post to the EAT day; manual reversal of system
+journals is refused; control accounts are refused on bill lines.
+
 ### Wave 2 (2026-10-10, no schema) — on `develop` 53650e48
 
 Green: 1,804 unit + 1,360 integration tests, 229 web spec files, production build, migration gate.
