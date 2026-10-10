@@ -659,6 +659,28 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
   });
 
+  // PRD-06: the backend AddBarcodeRequest reads `unitUid`; `uomUid` was silently dropped, so a
+  // crate barcode rang a single bottle at the till.
+  it('sends a barcode row unit as unitUid', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.newBarcodeValue.set('6001234567890');
+    comp.newBarcodeUomUid.set('U2');
+    comp.addBarcodeRow();
+
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const [, req] = svc['addBarcode'].mock.calls[0];
+    expect(req.unitUid).toBe('U2');
+    expect('uomUid' in req).toBe(false);
+  });
+
   // Regression (Kilimanjaro 2026-08-11): on EDIT the wizard re-POSTed packs it had just loaded from
   // the server. The first one 409'd on uq_product_bulk_pack_unit and the error branch abandoned the
   // loop, so a pack the user added in that same session was silently never created — while the

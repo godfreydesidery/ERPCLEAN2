@@ -105,6 +105,8 @@ export class ProductDetailComponent {
   readonly barcodesState = signal<LoadState>('loading');
   readonly newBarcode = signal('');
   readonly newBarcodePrimary = signal(false);
+  /** PRD-06: unit the new barcode rings ('' = base unit / product generally, or a pack unit uid). */
+  readonly newBarcodeUnitUid = signal('');
   readonly addingBarcode = signal(false);
   readonly barcodeFormError = signal<string | null>(null);
   readonly rowBusyBarcodeId = signal<string | null>(null);
@@ -434,11 +436,17 @@ export class ProductDetailComponent {
     }
     this.addingBarcode.set(true);
     this.barcodeFormError.set(null);
-    const request: AddBarcodeRequest = { barcode, primary: this.newBarcodePrimary() };
+    const unitUid = this.newBarcodeUnitUid();
+    const request: AddBarcodeRequest = {
+      barcode,
+      primary: this.newBarcodePrimary(),
+      ...(unitUid ? { unitUid } : {}),
+    };
     this.productService.addBarcode(this.uid(), request).subscribe({
       next: () => {
         this.newBarcode.set('');
         this.newBarcodePrimary.set(false);
+        this.newBarcodeUnitUid.set('');
         this.addingBarcode.set(false);
         this.alerts.success('Barcode added');
         this.loadBarcodes();
@@ -448,6 +456,17 @@ export class ProductDetailComponent {
         this.addingBarcode.set(false);
       },
     });
+  }
+
+  /**
+   * PRD-06: label for the unit a barcode rings. `uomId` is the numeric unit id; it is matched
+   * against the configured packs and the company units. Null = the product generally (base unit).
+   */
+  barcodeUnitLabel(bc: ProductBarcodeDto): string {
+    if (!bc.uomId) return 'Base unit';
+    const unit = this.companyUnits().find((u) => u.id === bc.uomId);
+    if (unit) return unit.name;
+    return 'Pack unit';
   }
 
   removeBarcode(bc: ProductBarcodeDto): void {

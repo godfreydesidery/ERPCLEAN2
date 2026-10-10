@@ -240,8 +240,12 @@ export interface AddBarcodeRequest {
   isPrimary?: boolean;
   /** Barcode type (EAN_13, QR, UPC_A, …). Optional. */
   barcodeType?: string;
-  /** Unit of measure uid this barcode is keyed to. Optional. */
-  uomUid?: string;
+  /**
+   * uid of the unit this barcode is keyed to — the base unit or a configured bulk-pack unit
+   * (e.g. CRATE), so a scan rings that pack. Optional; absent = the product generally.
+   * Must be `unitUid`: the backend AddBarcodeRequest ignores any other spelling (PRD-06).
+   */
+  unitUid?: string;
 }
 
 // ── ProductBulkPackDto ────────────────────────────────────────────────────────

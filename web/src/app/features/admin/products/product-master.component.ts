@@ -1059,7 +1059,7 @@ export class ProductMasterComponent implements OnInit {
           isPrimary: row.isPrimary,
           primary: row.isPrimary, // compat
           barcodeType: row.barcodeType || undefined,
-          uomUid: row.uomUid || undefined,
+          unitUid: row.uomUid || undefined,
         };
         this.productService.addBarcode(productUid, req).subscribe({
           next: (saved) => {

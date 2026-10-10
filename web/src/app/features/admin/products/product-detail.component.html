@@ -351,6 +351,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Barcode</th>
+                      <th scope="col">Rings up as</th>
                       <th scope="col">Primary</th>
                       @if (canManage()) {
                         <th scope="col"><span class="sr-only">Actions</span></th>
@@ -361,6 +362,7 @@
                     @for (bc of barcodes(); track bc.uid) {
                       <tr>
                         <td class="mono">{{ bc.barcode }}</td>
+                        <td>{{ barcodeUnitLabel(bc) }}</td>
                         <td>
                           @if (bc.primary) {
                             <span class="status-tag status-tag--ok">Primary</span>
@@ -394,7 +396,7 @@
           <form class="border-top pt-3" (ngSubmit)="addBarcode()" aria-label="Add barcode">
             <p class="erp-section-title">Add Barcode</p>
             <div class="row g-2 align-items-end">
-              <div class="col-sm-5">
+              <div class="col-sm-4">
                 <label class="form-label small text-muted mb-1" for="newBarcode">
                   Barcode value <span class="text-danger" aria-hidden="true">*</span>
                 </label>
@@ -402,7 +404,20 @@
                        [ngModel]="newBarcode()" (ngModelChange)="newBarcode.set($event)"
                        [disabled]="addingBarcode()" autocomplete="off" />
               </div>
-              <div class="col-sm-3 d-flex align-items-end pb-1">
+              <div class="col-sm-3">
+                <label class="form-label small text-muted mb-1" for="newBarcodeUnit">Rings up as</label>
+                <select id="newBarcodeUnit" name="newBarcodeUnit" class="form-select"
+                        aria-describedby="newBarcodeUnitHelp"
+                        [ngModel]="newBarcodeUnitUid()" (ngModelChange)="newBarcodeUnitUid.set($event)"
+                        [disabled]="addingBarcode()">
+                  <option value="">Base unit</option>
+                  @for (bp of bulkPacks(); track bp.uid) {
+                    <option [value]="bp.unitUid">{{ bp.unitName }} ({{ bp.factorToBase }})</option>
+                  }
+                </select>
+                <span id="newBarcodeUnitHelp" class="form-text small">A crate or carton barcode must ring up as that pack.</span>
+              </div>
+              <div class="col-sm-2 d-flex align-items-end pb-1">
                 <div class="form-check">
                   <input id="newBarcodePrimary" name="newBarcodePrimary" type="checkbox" class="form-check-input"
                          [ngModel]="newBarcodePrimary()" (ngModelChange)="newBarcodePrimary.set($event)"
@@ -410,7 +425,7 @@
                   <label class="form-check-label small" for="newBarcodePrimary">Set as primary</label>
                 </div>
               </div>
-              <div class="col-sm-4">
+              <div class="col-sm-3">
                 <button type="submit" class="btn btn-primary w-100" [disabled]="addingBarcode()">
                   @if (addingBarcode()) {
                     <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>

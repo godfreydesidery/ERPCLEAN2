@@ -584,3 +584,51 @@ describe('ProductDetailComponent — Bulk pack inline size edit', () => {
     expect(updateBulkPack).not.toHaveBeenCalled();
   });
 });
+
+// ── PRD-06: a crate barcode must carry its unit ─────────────────────────────────
+
+describe('ProductDetailComponent — addBarcode() unit binding (PRD-06)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('offers the pack units in a labelled "Rings up as" select', async () => {
+    makeBed({ addBarcode: vi.fn(() => of({})) });
+    const fixture = await createDetail();
+    const select: HTMLSelectElement | null = fixture.nativeElement.querySelector('#newBarcodeUnit');
+    expect(select).toBeTruthy();
+    const labels = Array.from(select!.options).map((o) => o.textContent?.trim());
+    expect(labels).toContain('Base unit');
+    expect(labels.some((l) => l?.startsWith('Carton'))).toBe(true);
+    expect(fixture.nativeElement.querySelector('label[for="newBarcodeUnit"]')).toBeTruthy();
+  });
+
+  it('sends unitUid (not uomUid) when a pack unit is chosen', async () => {
+    makeBed({ addBarcode: vi.fn(() => of({})) });
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+    const svc = asMock(TestBed.inject(ProductService));
+
+    comp.newBarcode.set('6001234567890');
+    comp.newBarcodeUnitUid.set('U2');
+    comp.addBarcode();
+    await vi.runAllTimersAsync();
+
+    const [, request] = svc['addBarcode'].mock.calls[0];
+    expect(request.unitUid).toBe('U2');
+    expect('uomUid' in request).toBe(false);
+  });
+
+  it('omits unitUid for a base-unit barcode', async () => {
+    makeBed({ addBarcode: vi.fn(() => of({})) });
+    const fixture = await createDetail();
+    const comp = fixture.componentInstance;
+    const svc = asMock(TestBed.inject(ProductService));
+
+    comp.newBarcode.set('6001234567890');
+    comp.addBarcode();
+    await vi.runAllTimersAsync();
+
+    const [, request] = svc['addBarcode'].mock.calls[0];
+    expect('unitUid' in request).toBe(false);
+  });
+});
