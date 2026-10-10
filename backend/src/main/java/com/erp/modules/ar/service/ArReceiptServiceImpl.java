@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +89,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final OutboxPublisher outbox;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final ArCustomerNames customerNames;
 
     private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
 
@@ -105,7 +107,9 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  CurrencyConversionService fxConversion,
                                  OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 ArCustomerNames customerNames) {
+        this.customerNames           = customerNames;
         this.receipts                = receipts;
         this.invoices                = invoices;
         this.allocations             = allocations;
@@ -390,7 +394,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         customer.getDisplayName(), amountFormatted,
                         currency, Instant.now()));
 
-        return toDto(receipt, savedAllocs, invoices);
+        return toDto(receipt, savedAllocs, invoices)
+                .withCustomer(customer.getUid(), customer.getCode(), customer.getDisplayName());
     }
 
     @Override
@@ -495,7 +500,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         receipt.getId(), receipt.getUid())
                 .detail(Map.of("action", "reallocate")));
 
-        return toDto(receipt, saved, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, saved, invoices));
     }
 
     @Override
@@ -504,23 +509,47 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(uid), "ArReceipt", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
         List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
-        return toDto(receipt, allocs, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, allocs, invoices));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyId(companyId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyId(companyId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCustomer(Long companyId, Long customerId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ArReceiptDto> list(Long companyId, Long customerId, String customerUid,
+                                   Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Long custId = (customerUid != null && !customerUid.isBlank())
+                ? customerNames.idOf(companyId, customerUid)
+                : customerId;
+        return custId != null
+                ? listByCustomer(companyId, custId, pageable)
+                : listByCompany(companyId, pageable);
+    }
+
+    /** One receipt carrying its customer's uid, code and name. */
+    private ArReceiptDto named(Long companyId, ArReceiptDto dto) {
+        return customerNames.fillReceipts(companyId, List.of(dto)).get(0);
+    }
+
+    /** The page with each receipt's customer named. */
+    private Page<ArReceiptDto> named(Long companyId, Page<ArReceiptDto> page) {
+        return new PageImpl<>(customerNames.fillReceipts(companyId, page.getContent()),
+                page.getPageable(), page.getTotalElements());
     }
 
     // -------------------------------------------------------------------------

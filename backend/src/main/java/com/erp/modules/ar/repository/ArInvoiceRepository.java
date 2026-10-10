@@ -1,6 +1,7 @@
 package com.erp.modules.ar.repository;
 
 import com.erp.modules.ar.domain.entity.ArInvoice;
+import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
 import com.erp.platform.common.money.CurrencyCode;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +35,16 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
     Page<ArInvoice> findByCompanyId(Long companyId, Pageable pageable);
 
     Page<ArInvoice> findByCompanyIdAndCustomerId(Long companyId, Long customerId, Pageable pageable);
+
+    /** Receivables list filtered by status (ARC-02). */
+    Page<ArInvoice> findByCompanyIdAndStatusIn(Long companyId,
+                                               java.util.Collection<ArInvoiceStatus> statuses,
+                                               Pageable pageable);
+
+    /** Receivables list filtered by customer and status (ARC-02). */
+    Page<ArInvoice> findByCompanyIdAndCustomerIdAndStatusIn(Long companyId, Long customerId,
+                                                            java.util.Collection<ArInvoiceStatus> statuses,
+                                                            Pageable pageable);
 
     /**
      * Open items for oldest-first allocation + ageing. Ordered by due_date ASC.

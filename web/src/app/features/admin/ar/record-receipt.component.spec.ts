@@ -123,3 +123,22 @@ describe('RecordReceiptComponent — allocation guard', () => {
     expect(comp.submitDisabled()).toBe(false);
   });
 });
+
+describe('RecordReceiptComponent — the chosen customer\'s invoices only (ARC-02)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('picking a customer loads THAT customer\'s open items from the server', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { listOpenInvoices: ReturnType<typeof vi.fn> };
+    ar.listOpenInvoices.mockReturnValue(of([
+      { uid: 'ARI9', outstandingAmount: 500, status: 'OPEN', invoiceDate: '2026-10-01' },
+    ]));
+    comp.selectedCompanyId.set('10');
+
+    comp.selectCustomer({ uid: 'KIBO', code: 'C001', displayName: 'Kibo Bar' });
+
+    expect(ar.listOpenInvoices).toHaveBeenCalledWith('10', 'KIBO');
+    expect(comp.allocationRows().map((r: any) => r.invoice.uid)).toEqual(['ARI9']);
+  });
+});

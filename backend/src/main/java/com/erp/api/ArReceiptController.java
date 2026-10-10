@@ -54,18 +54,18 @@ public class ArReceiptController {
     }
 
     /**
-     * Paged list by company, with optional customer filter.
-     * companyId is the numeric Long id.
+     * Paged list by company, with optional customer filter (ARC-02). companyId is the numeric Long
+     * id; the customer may be named by {@code customerId} or {@code customerUid} (what the web
+     * screen sends; resolved inside the company).
      */
     @GetMapping
     @PreAuthorize("@perm.has('AR.VIEW')")
     public ApiResponse<List<ArReceiptDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerUid,
             Pageable pageable) {
-        Page<ArReceiptDto> page = customerId != null
-                ? service.listByCustomer(companyId, customerId, pageable)
-                : service.listByCompany(companyId, pageable);
+        Page<ArReceiptDto> page = service.list(companyId, customerId, customerUid, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 }
