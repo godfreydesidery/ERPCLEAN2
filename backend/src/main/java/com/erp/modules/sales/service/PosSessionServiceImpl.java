@@ -136,6 +136,27 @@ public class PosSessionServiceImpl implements PosSessionService {
     private static final String READ_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
 
     /**
+     * POS-02: the authority a cash REFUND payout needs - the same one a sale reversal needs
+     * ({@code PosSaleServiceImpl.REVERSAL_AUTHORITY_PERMISSION}). A refund payout hands cash back
+     * with no reversal of revenue, VAT, stock or GL, so it must never rest on a cashier's own say-so.
+     */
+    static final String REFUND_PAYOUT_APPROVAL_PERMISSION = "SALES.INVOICE.VOID";
+
+    /**
+     * POS-05: the authority that approves a paid-out or till expense - the manager who settles the
+     * till ({@code POS.SESSION.RECONCILE}: BRANCH_MANAGER holds it, CASHIER does not).
+     */
+    static final String PAYOUT_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
+
+    /** Audit values for how a payout was authorised (POS-05). */
+    private static final String PAYOUT_AUTH_SELF     = "SELF";
+    private static final String PAYOUT_AUTH_APPROVED = "APPROVED";
+    private static final String PAYOUT_AUTH_NONE     = "NONE";
+
+    /** Who authorised a payout: how ({@code SELF}/{@code APPROVED}/{@code NONE}), and by whom. */
+    private record PayoutApproval(String mode, String username, String uid) {}
+
+    /**
      * Stands in for a cashier the IAM lookup can no longer name (account removed).
      *
      * <p>Same rule as {@code PosTillServiceImpl.UNNAMED_CASHIER}: a label is a phrase a person can
@@ -298,10 +319,13 @@ public class PosSessionServiceImpl implements PosSessionService {
                     + " category and charged to the right account.");
         }
 
+        String reason = requireReason(req.reason());
+        PayoutApproval approval = requirePayoutAuthority(session, req.payoutType(),
+                req.authorisedByUid());
         var payout = new PosSessionPayout(session.getCompanyId(), session.getBranchId(),
                 session.getId(), req.payoutType(), req.amount(),
-                requireReason(req.reason()), actorId());
-        return savePostAndAudit(session, payout);
+                reason, actorId());
+        return savePostAndAudit(session, payout, approval);
     }
 
     @Override
@@ -356,10 +380,12 @@ public class PosSessionServiceImpl implements PosSessionService {
         if (!keyed) {
             rejectRepeatedExpense(session, req.amount(), category, reason);
         }
+        PayoutApproval approval = requirePayoutAuthority(session, PosPayoutType.EXPENSE,
+                req.authorisedByUid());
 
         var payout = PosSessionPayout.expense(session.getCompanyId(), session.getBranchId(),
                 session.getId(), req.amount(), category, reason, actorId());
-        PosPayoutDto recorded = savePostAndAudit(session, payout);
+        PosPayoutDto recorded = savePostAndAudit(session, payout, approval);
 
         // Stamp in the SAME transaction as the payout, so the instant this commits a concurrent
         // duplicate sees the finished answer rather than a half-claimed key.
@@ -496,7 +522,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         var session = requireSession(sessionUid);
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
 
-        XReadDto report = buildXRead(session);
+        XReadDto report = blindUnlessReconciler(buildXRead(session), false);
         auditReadPrint(session, AuditActions.POS_SESSION_XREAD, null, null);
         return report;
     }
@@ -517,7 +543,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
 
         String approver = requireReadAuthority(session, request, AuditActions.POS_SESSION_XREAD);
-        XReadDto report = buildXRead(session);
+        XReadDto report = blindUnlessReconciler(buildXRead(session), approver != null);
         auditReadPrint(session, AuditActions.POS_SESSION_XREAD, approver, uidOf(request));
         return report;
     }
@@ -776,7 +802,8 @@ public class PosSessionServiceImpl implements PosSessionService {
      * {@link #recordPayout} and {@link #recordExpense} go through here so a REFUND, a PAID_OUT and an
      * EXPENSE cannot drift apart in how they are stored, posted or logged.
      */
-    private PosPayoutDto savePostAndAudit(PosSession session, PosSessionPayout payout) {
+    private PosPayoutDto savePostAndAudit(PosSession session, PosSessionPayout payout,
+                                          PayoutApproval approval) {
         PosSessionPayout saved = payouts.save(payout);
         postPayoutGl(session, saved);
 
@@ -785,9 +812,90 @@ public class PosSessionServiceImpl implements PosSessionService {
         detail.put("amount", saved.getAmount().toPlainString());
         detail.put("category", saved.getCategory() == null ? "" : saved.getCategory());
         detail.put("glEntryUid", saved.getJournalEntryUid() == null ? "" : saved.getJournalEntryUid());
+        // POS-05: how this cash left the drawer - on the operator's own authority, approved by a
+        // named manager, or (an older till sending no approval) with nobody's approval at all.
+        detail.put("authorisation", approval.mode());
+        detail.put("authorisedBy", approval.username() == null ? "" : approval.username());
+        detail.put("authorisedByUid", approval.uid() == null ? "" : approval.uid());
         audit.record(AuditEvent.of(AuditActions.POS_SESSION_PAYOUT, "pos_session_payouts",
                 saved.getId(), saved.getUid()).detail(detail));
         return toDto(saved);
+    }
+
+    /**
+     * Decides on whose authority cash may leave the drawer (POS-02, POS-05).
+     *
+     * <ul>
+     *   <li>A caller who holds the authority themselves needs nobody - they are the person a cashier
+     *       would have called over.</li>
+     *   <li>Otherwise a manager's step-up uid is re-resolved here, exactly as a sale reversal's is:
+     *       a real, active, different user who holds the authority in THIS session's company. A uid
+     *       that does not check out is refused and the attempt audited.</li>
+     *   <li>No uid at all: a REFUND is refused - it returns cash with no reversal of revenue, VAT,
+     *       stock or GL, so it goes through the sale reversal instead. A PAID_OUT or EXPENSE is still
+     *       accepted so OrbixPOS 1.5.x tills keep working, and is audited {@code NONE}
+     *       (unapproved) so the owner can see every one.</li>
+     * </ul>
+     *
+     * <p>The refusal for a REFUND without approval is a 409 with a plain sentence rather than a 403,
+     * because a 1.5.x till shows the server's text only for non-403 errors - a 403 would read as a
+     * bare "You do not have permission".
+     */
+    private PayoutApproval requirePayoutAuthority(PosSession session, PosPayoutType type,
+                                                  String authorisedByUid) {
+        boolean refund = type == PosPayoutType.REFUND;
+        String needed = refund ? REFUND_PAYOUT_APPROVAL_PERMISSION : PAYOUT_APPROVAL_PERMISSION;
+        if (permissionResolver.hasPermission(RequestContext.get(), needed,
+                System.currentTimeMillis())) {
+            return new PayoutApproval(PAYOUT_AUTH_SELF, null, null);
+        }
+
+        String uid = authorisedByUid == null || authorisedByUid.isBlank()
+                ? null : authorisedByUid.strip();
+        if (uid == null) {
+            if (refund) {
+                auditPayoutRefusal(session, type, OUTCOME_NO_APPROVAL, null);
+                throw new ConflictException(
+                        "A cash refund needs a supervisor. To give a customer their money back, "
+                        + "reverse the sale from Today's sales instead.");
+            }
+            return new PayoutApproval(PAYOUT_AUTH_NONE, null, null);
+        }
+
+        var verdict = stepUpAuth.verifyAuthoriserUid(uid, needed, session.getCompanyId());
+        if (!verdict.authorised()) {
+            auditPayoutRefusal(session, type, OUTCOME_NOT_AUTHORISED, uid);
+            throw new ForbiddenException(refund
+                    ? "That supervisor is not authorised to approve a refund. "
+                      + "Ask a supervisor who can reverse sales to approve it, then try again."
+                    : "That manager is not authorised to approve cash out of the till. "
+                      + "Ask a manager who can settle the till to approve it, then try again.");
+        }
+        return new PayoutApproval(PAYOUT_AUTH_APPROVED, verdict.authoriserUsername(), uid);
+    }
+
+    /** A refused payout, recorded outside the transaction the refusal rolls back. */
+    private void auditPayoutRefusal(PosSession session, PosPayoutType type, String outcome,
+                                    String attemptedApproverUid) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("outcome", outcome);
+        detail.put("type", type.name());
+        detail.put("sessionUid", session.getUid());
+        detail.put("authorisedByUid", attemptedApproverUid == null ? "" : attemptedApproverUid);
+        audit.recordIndependent(AuditEvent.of(AuditActions.POS_SESSION_PAYOUT, "pos_sessions",
+                session.getId(), session.getUid()).detail(detail));
+    }
+
+    /**
+     * POS-04 blind cash-up: only someone who may settle the till sees what the drawer should hold.
+     * A manager-approved read was approved by exactly such a person, so it is served whole.
+     */
+    private XReadDto blindUnlessReconciler(XReadDto report, boolean managerApproved) {
+        if (managerApproved || permissionResolver.hasPermission(RequestContext.get(),
+                READ_APPROVAL_PERMISSION, System.currentTimeMillis())) {
+            return report;
+        }
+        return report.withoutExpectedCash();
     }
 
     /**

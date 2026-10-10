@@ -71,6 +71,12 @@ enum GatedAction {
 
   /// Giving up on an unfinished sale whose outcome is still unknown.
   abandonUnfinishedSale,
+
+  /// POS-05: cash paid out of the drawer (paid-out).
+  payout,
+
+  /// POS-05: a categorised till expense paid out of the drawer.
+  expense,
 }
 
 /// How one [GatedAction] is treated.
@@ -162,6 +168,20 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'SALES.DISCOUNT.OVERRIDE',
     title: 'Manager approval — discount',
     purpose: 'Allow a discount larger than a cashier may give alone.',
+  ),
+  GatedAction.payout: StepUpRule(
+    requiresApproval: true,
+    // Must equal PosSessionServiceImpl.PAYOUT_APPROVAL_PERMISSION: the payout carries the
+    // approver's uid and the server re-resolves it against this same code.
+    permissionCode: 'POS.SESSION.RECONCILE',
+    title: 'Manager approval — cash payout',
+    purpose: 'Take cash out of the drawer.',
+  ),
+  GatedAction.expense: StepUpRule(
+    requiresApproval: true,
+    permissionCode: 'POS.SESSION.RECONCILE',
+    title: 'Manager approval — till expense',
+    purpose: 'Pay a business expense out of the drawer.',
   ),
   GatedAction.abandonUnfinishedSale: StepUpRule(
     requiresApproval: true,

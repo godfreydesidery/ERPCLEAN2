@@ -136,13 +136,29 @@ class PosSessionAuthorisedReadTest {
 
         var report = service.xReadAuthorised("S-HOLDER", new AuthorisedReadRequest(null));
 
-        assertThat(report.expectedCashAmount()).isEqualByComparingTo(new BigDecimal("1500.00"));
+        // POS-04 blind cash-up: a VIEW holder who may not settle the till reads the report without
+        // the figure the drawer "should" hold.
+        assertThat(report.expectedCashAmount()).isNull();
+        assertThat(report.cashTenderAmount()).isNotNull();
         verify(stepUpAuth, never()).verifyAuthoriserUid(anyString(), anyString(), anyLong());
         assertThat(printedAudit(AuditActions.POS_SESSION_XREAD).detail())
                 .containsEntry("outcome", "SERVED")
                 .containsEntry("viewer", "asha.cashier")
                 .as("no second person was involved, and the record must say so rather than imply one")
                 .containsEntry("authorisedBy", "");
+    }
+
+    /** POS-04: a holder who may also settle the till (RECONCILE) sees the expected cash. */
+    @Test
+    void xRead_reconcilerHolder_seesExpectedCash() {
+        callerHoldsView();
+        when(permissionResolver.hasPermission(any(), eq(APPROVAL_PERMISSION), anyLong()))
+                .thenReturn(true);
+        when(sessions.findByUid("S-RECON")).thenReturn(Optional.of(openSession()));
+
+        var report = service.xReadAuthorised("S-RECON", new AuthorisedReadRequest(null));
+
+        assertThat(report.expectedCashAmount()).isEqualByComparingTo(new BigDecimal("1500.00"));
     }
 
     /** A holder is served even if a body arrives with someone else's uid in it — it is ignored. */

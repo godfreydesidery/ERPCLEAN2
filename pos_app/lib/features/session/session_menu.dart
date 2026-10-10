@@ -184,7 +184,7 @@ class _SessionDrawer extends ConsumerWidget {
     }
     if (app.can(Perms.sessionOpen)) {
       out.add(_action(Icons.payments_outlined, 'Cash payout',
-          'Refund or drawer drop — reason required',
+          'Cash paid out of the drawer — manager approves',
           enabled: s != null && s.status.isOpen,
           disabledNote: 'Only while the session is open',
           onTap: () => _payout(context, ref)));
@@ -403,7 +403,7 @@ class _SessionDrawer extends ConsumerWidget {
       if (!context.mounted) return;
       showDialog(
         context: context,
-        builder: (_) => _XReadDialog(xRead: x),
+        builder: (_) => _XReadDialog(xRead: x, approved: approver != null),
       );
     } on ApiException catch (e) {
       if (context.mounted) {
@@ -571,8 +571,12 @@ Future<bool> _printReport(BuildContext context, String text) async {
 // ============================================================ X-read
 
 class _XReadDialog extends ConsumerStatefulWidget {
-  const _XReadDialog({required this.xRead});
+  const _XReadDialog({required this.xRead, this.approved = false});
   final XRead xRead;
+
+  /// True when a manager approved this read at the till — they may see the
+  /// expected cash; a cashier reading on their own does not (POS-04).
+  final bool approved;
   @override
   ConsumerState<_XReadDialog> createState() => _XReadDialogState();
 }
@@ -621,9 +625,14 @@ class _XReadDialogState extends ConsumerState<_XReadDialog> {
                   currency: app.currency),
               _PayoutBreakdown(subtotals: x.payoutSubtotals),
               const Divider(),
-              _ReportRow('Expected cash', x.expectedCashAmount,
-                  currency: app.currency, bold: true),
-              const Divider(),
+              // POS-04 blind cash-up: only someone who may settle the till
+              // (or a manager approving this read) sees what it should hold.
+              if (x.expectedCashAmount != null &&
+                  (widget.approved || app.can(Perms.sessionReconcile))) ...[
+                _ReportRow('Expected cash', x.expectedCashAmount!,
+                    currency: app.currency, bold: true),
+                const Divider(),
+              ],
               Text('${x.invoiceCount} invoices',
                   style: const TextStyle(color: AppColors.ink3)),
               const SizedBox(height: 4),
@@ -888,6 +897,47 @@ class _PayoutBreakdown extends StatelessWidget {
 
 // ============================================================ payout
 
+/// Sentinel: the cashier backed out of the manager prompt.
+const String _declined = '\u0000declined';
+
+/// POS-05: cash leaving the drawer needs a manager. Returns the approver's uid
+/// to send, null when the operator may settle the till themselves (no prompt),
+/// or [_declined] when the prompt was cancelled.
+///
+/// The uid is held only for the one request, as for the X-read approval.
+Future<String?> _managerApproval(
+  BuildContext context,
+  WidgetRef ref, {
+  required GatedAction action,
+  String? detail,
+}) async {
+  final app = ref.read(appControllerProvider);
+  if (app.can(stepUpRuleFor(action).permissionCode)) return null;
+  final outcome =
+      await approveIfRequired(context, ref, action: action, detail: detail);
+  if (!outcome.allowed) return _declined;
+  final uid = outcome.approval?.authoriserUid?.trim();
+  if (uid == null || uid.isEmpty) {
+    if (context.mounted) {
+      showToast(context, 'Could not confirm that approval. Please try again.');
+    }
+    return _declined;
+  }
+  return uid;
+}
+
+/// The server's own sentence for a refusal — a 403 here means the manager's
+/// approval did not check out, which the generic "no permission" text would
+/// misstate as the cashier's own refusal.
+String _serverSentence(ApiException e) {
+  if (!e.isForbidden) return e.message;
+  final server = e.errors
+      .map((x) => x.message.trim())
+      .where((m) => m.isNotEmpty)
+      .join('; ');
+  return server.isEmpty ? e.message : server;
+}
+
 class _PayoutDialog extends ConsumerStatefulWidget {
   const _PayoutDialog({required this.sessionUid, required this.currency});
   final String sessionUid;
@@ -897,7 +947,10 @@ class _PayoutDialog extends ConsumerStatefulWidget {
 }
 
 class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
-  PosPayoutType _type = PosPayoutType.paidOut;
+  // POS-02: a paid-out only. A "Refund" payout handed cash back with no
+  // reversal of the sale's revenue, VAT, stock or ledger entry — refunds go
+  // through Today's sales → Reverse, which undoes all of that.
+  static const PosPayoutType _type = PosPayoutType.paidOut;
   final _amount = TextEditingController();
   final _reason = TextEditingController();
   bool _busy = false;
@@ -922,11 +975,15 @@ class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
       showToast(context, 'Say what the cash is for (at least a few words).');
       return;
     }
+    final approver = await _managerApproval(context, ref,
+        action: GatedAction.payout,
+        detail: 'Pay out ${formatMoneyParts(amt, widget.currency)} — $reason');
+    if (approver == _declined || !mounted) return;
     setState(() => _busy = true);
     try {
-      final payout = await ref
-          .read(sessionServiceProvider)
-          .payout(widget.sessionUid, _type, amt, reason);
+      final payout = await ref.read(sessionServiceProvider).payout(
+          widget.sessionUid, _type, amt, reason,
+          authorisedByUid: approver);
       if (mounted) {
         Navigator.pop(context);
         showToast(
@@ -938,7 +995,7 @@ class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
       }
     } on ApiException catch (e) {
       setState(() => _busy = false);
-      if (mounted) showToast(context, e.message);
+      if (mounted) showToast(context, _serverSentence(e));
     }
   }
 
@@ -951,39 +1008,11 @@ class _PayoutDialogState extends ConsumerState<_PayoutDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            // Not EXPENSE: the payouts endpoint refuses it, and an expense needs
-            // a category — it has its own form (Till expense).
-            children: PosPayoutType.values
-                .where((t) => t != PosPayoutType.expense)
-                .map((t) {
-              final active = _type == t;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    borderRadius: AppRadii.brSm,
-                    onTap: () => setState(() => _type = t),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: active ? AppColors.brandSoft : AppColors.panel,
-                        borderRadius: AppRadii.brSm,
-                        border: Border.all(
-                            color: active ? AppColors.brand : AppColors.line2),
-                      ),
-                      child: Text(t.label,
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color:
-                                  active ? AppColors.brandD : AppColors.ink2)),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
+          const Text(
+              'To give a customer their money back, reverse the sale from '
+              "Today's sales instead — that also returns the stock and "
+              'corrects the VAT.',
+              style: TextStyle(fontSize: 12, color: AppColors.ink2)),
           const SizedBox(height: 14),
           OrbixField(
               label: 'Amount (${widget.currency})',
@@ -1073,10 +1102,18 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
       showToast(context, 'Say what the cash is for (at least a few words).');
       return;
     }
+    final approver = await _managerApproval(context, ref,
+        action: GatedAction.expense,
+        detail: '$category: ${formatMoneyParts(amt, widget.currency)} — $reason');
+    if (approver == _declined || !mounted) return;
     setState(() => _busy = true);
     try {
       await ref.read(sessionServiceProvider).recordExpense(widget.sessionUid,
-          amount: amt, category: category, reason: reason, entryId: _entryId);
+          amount: amt,
+          category: category,
+          reason: reason,
+          entryId: _entryId,
+          authorisedByUid: approver);
       if (mounted) {
         Navigator.pop(context);
         showToast(context, 'Expense recorded and posted to the ledger.',
@@ -1084,7 +1121,7 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
       }
     } on ApiException catch (e) {
       setState(() => _busy = false);
-      if (mounted) showToast(context, e.message);
+      if (mounted) showToast(context, _serverSentence(e));
     }
   }
 
@@ -1433,6 +1470,22 @@ class _CloseDialogState extends ConsumerState<_CloseDialog> {
   }
 
   Widget _variance(PosSession s) {
+    // POS-04 blind cash-up: a cashier who may not settle the till is not shown
+    // what the drawer should have held, or by how much they were out.
+    if (!ref.read(appControllerProvider).can(Perms.sessionReconcile)) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _vrow('Counted', s.countedCashAmount ?? 0),
+          const SizedBox(height: 8),
+          const Text(
+              'Session closed. A supervisor will check the count and settle '
+              'the drawer.',
+              style: TextStyle(fontSize: 12, color: AppColors.ink3)),
+        ],
+      );
+    }
     final variance = s.varianceAmount ?? 0;
     final over = variance >= 0;
     return Column(

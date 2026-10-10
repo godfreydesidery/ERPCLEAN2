@@ -24,5 +24,16 @@ import java.math.BigDecimal;
 public record PosPayoutRequest(
         @NotNull PosPayoutType payoutType,
         @NotNull @DecimalMin("0.01") BigDecimal amount,
-        @NotBlank @Size(min = 3, max = 255) String reason
-) {}
+        @NotBlank @Size(min = 3, max = 255) String reason,
+        // POS-02 / POS-05 (additive, optional): the uid a manager step-up returned. Re-resolved by
+        // the server - it names a person, it grants nothing. A REFUND is refused without one unless
+        // the caller holds the authority; a PAID_OUT without one is still accepted (older tills) and
+        // audited as unapproved.
+        @Size(max = 26, message = "The approval reference is not valid.") String authorisedByUid
+) {
+
+    /** Pre-POS-05 shape - what OrbixPOS 1.5.x and earlier send. */
+    public PosPayoutRequest(PosPayoutType payoutType, BigDecimal amount, String reason) {
+        this(payoutType, amount, reason, null);
+    }
+}
