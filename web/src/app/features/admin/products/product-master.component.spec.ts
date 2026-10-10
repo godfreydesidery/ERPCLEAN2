@@ -957,3 +957,67 @@ describe('ProductMasterComponent — barcode unit round-trip', () => {
     expect(comp.barcodeUnitLabel(row)).toBe('—');
   });
 });
+
+// ── LRB-01 / ADM-28: a refused price-list lookup says "no access", not "none" ──
+
+describe('ProductMasterComponent — price lists forbidden', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({
+      productServiceOverrides: {
+        listPriceLists: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
+      },
+    });
+  });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('marks the lookup forbidden and shows a no-access notice', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.priceListsState()).toBe('forbidden');
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain("You don't have access to the price list list");
+    expect(text).not.toContain('No active price lists');
+  });
+});
+
+// ── LUI-04: amounts typed with thousands separators ───────────────────────────
+
+describe('ProductMasterComponent — amounts with separators', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends "1,800" cost as "1800"', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.fCostAmount.set('1,800');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const req = (svc['create'].mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    expect((req['cost'] as { amount: string }).amount).toBe('1800');
+  });
+
+  it('stops on an unreadable cost with a message on the Pricing tab', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.fCostAmount.set('1,8');
+    comp.save();
+
+    expect(comp.formError()).toContain('Cost price');
+    expect(comp.activeTab()).toBe('pricing');
+    expect(asMock(TestBed.inject(ProductService))['create']).not.toHaveBeenCalled();
+  });
+});

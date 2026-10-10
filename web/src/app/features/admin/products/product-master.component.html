@@ -305,7 +305,7 @@
               <div class="col-sm-4">
                 <label class="form-label" for="masterCostAmount">Amount</label>
                 <input id="masterCostAmount" name="masterCostAmount" type="text" class="form-control"
-                       placeholder="e.g. 1000.00"
+                       inputmode="decimal" placeholder="e.g. 1,000.00"
                        [ngModel]="fCostAmount()" (ngModelChange)="fCostAmount.set($event)"
                        [disabled]="saving()" autocomplete="off" />
               </div>
@@ -332,6 +332,9 @@
             <p class="text-muted small" aria-live="polite">
               <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Loading price lists…
             </p>
+          } @else if (priceListsState() === 'forbidden' || priceListsState() === 'error') {
+            <!-- LRB-01 / ADM-28: a refused lookup is "no access", not "there are no price lists". -->
+            <app-lookup-notice [state]="priceListsState()" what="price list" />
           } @else if (priceLists().length === 0) {
             <p class="text-muted small">
               No active price lists.
@@ -355,7 +358,7 @@
                 <div class="col-sm-3">
                   <label [for]="'priceAmt_' + i" class="form-label small">Amount</label>
                   <input [id]="'priceAmt_' + i" [name]="'priceAmt_' + i" type="text"
-                         class="form-control form-control-sm" placeholder="e.g. 1500.00"
+                         class="form-control form-control-sm" inputmode="decimal" placeholder="e.g. 1,500.00"
                          [ngModel]="row.amount"
                          (ngModelChange)="updatePriceRow(i, { amount: $event })"
                          [disabled]="saving()" autocomplete="off" />
