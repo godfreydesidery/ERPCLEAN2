@@ -16,6 +16,14 @@ public interface ArCreditNoteRepository extends JpaRepository<ArCreditNote, Long
 
     Optional<ArCreditNote> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** ARC-11: the credit note locked for a refund, so two refunds cannot both spend its credit. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT n FROM ArCreditNote n WHERE n.companyId = :companyId AND n.uid = :uid")
+    Optional<ArCreditNote> findForUpdate(
+            @org.springframework.data.repository.query.Param("companyId") Long companyId,
+            @org.springframework.data.repository.query.Param("uid") String uid);
+
     /** ScopeGuard support. */
     @Query("SELECT n.companyId FROM ArCreditNote n WHERE n.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);

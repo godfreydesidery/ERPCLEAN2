@@ -193,6 +193,8 @@ public final class AuditActions {
     public static final String AR_RECEIPT_ALLOCATE = "AR.RECEIPT.ALLOCATE";
     /** A posted receipt was reversed by hand (ARC-04); detail carries the reason. */
     public static final String AR_RECEIPT_REVERSE  = "AR.RECEIPT.REVERSE";
+    /** Customer credit (on-account receipt money or an unused credit note) paid back (ARC-11). */
+    public static final String AR_REFUND           = "AR.REFUND";
     public static final String AR_WRITEOFF         = "AR.WRITEOFF";
     public static final String AR_CREDITNOTE_RAISE = "AR.CREDITNOTE.RAISE";
     public static final String AR_OPENING_SET      = "AR.OPENING.SET";

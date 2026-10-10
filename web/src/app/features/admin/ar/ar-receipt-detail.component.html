@@ -13,6 +13,11 @@
           <i class="bi bi-list-check me-1" aria-hidden="true"></i>Apply to Invoices
         </button>
       }
+      @if (showRefund() && !refundOpen()) {
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="openRefund()">
+          <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>Refund
+        </button>
+      }
       @if (showReverse() && !reverseOpen()) {
         <button type="button" class="btn btn-outline-danger btn-sm" (click)="openReverse()">
           <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reverse receipt
@@ -77,6 +82,49 @@
             </dl>
           </div>
         </div>
+
+        <!-- ARC-11: pay money held on account back to the customer -->
+        @if (refundOpen()) {
+          <div class="erp-card mt-3" style="max-width:560px" role="region" aria-labelledby="refund_title">
+            <div class="erp-card__head">
+              <h2 id="refund_title">Refund from receipt {{ r.receiptNumber }}</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small mb-2">
+                {{ r.currency }} {{ fmtMoney(onAccount()) }} of this receipt is held on account. The refund is
+                paid out of the default cash account and recorded in the cash book and the ledger.
+              </p>
+              <label for="refund_amount" class="form-label small fw-semibold">Amount to refund</label>
+              <input id="refund_amount" name="refund_amount" type="text" inputmode="decimal"
+                     class="form-control form-control-sm mono" autocomplete="off"
+                     [class.is-invalid]="refundAmountInvalid()"
+                     [ngModel]="refundAmount()" (ngModelChange)="refundAmount.set($event)"
+                     [disabled]="refunding()" />
+              @if (refundAmountInvalid()) {
+                <div class="invalid-feedback">Enter an amount above zero and no more than {{ fmtMoney(onAccount()) }}.</div>
+              }
+              <label for="refund_reason" class="form-label small fw-semibold mt-2">Reason (required)</label>
+              <textarea id="refund_reason" name="refund_reason" class="form-control form-control-sm"
+                        rows="2" maxlength="200" autocomplete="off"
+                        [ngModel]="refundReason()" (ngModelChange)="refundReason.set($event)"
+                        [disabled]="refunding()"></textarea>
+              @if (refundError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeRefund()"
+                        [disabled]="refunding()">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" (click)="confirmRefund()"
+                        [disabled]="refundDisabled()">
+                  @if (refunding()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Pay refund
+                </button>
+              </div>
+            </div>
+          </div>
+        }
 
         <!-- ARC-04: reverse a wrong receipt — confirmed here, with a required reason -->
         @if (reverseOpen()) {

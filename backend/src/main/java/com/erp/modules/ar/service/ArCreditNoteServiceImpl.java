@@ -88,6 +88,17 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
     private static final String ERR_COMPANY_NOT_FOUND = "Company not found.";
 
+    /**
+     * ARC-11: reads what has been refunded from a note (its OUT cash-book rows). Setter-injected so
+     * the existing constructor keeps working; null means "no refunds can exist".
+     */
+    private com.erp.modules.cashbank.service.CashTransactionRecorder cashTxnRecorder;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCashTxnRecorder(com.erp.modules.cashbank.service.CashTransactionRecorder recorder) {
+        this.cashTxnRecorder = recorder;
+    }
+
     public ArCreditNoteServiceImpl(ArCreditNoteRepository creditNotes,
                                     ArCreditNoteAllocationRepository cnAllocations,
                                     ArInvoiceRepository invoices,
@@ -379,6 +390,14 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         ArCreditNote initial = Lookups.orNotFound(
                 creditNotes.findByUid(req.creditNoteUid()), "ArCreditNote", req.creditNoteUid());
         scopeGuard.assertCanActIn(RequestContext.get(), initial.getCompanyId());
+        // ARC-11: re-applying resets the note to its full amount, which would bring back credit
+        // already paid out to the customer.
+        if (cashTxnRecorder != null && cashTxnRecorder.refundedAmount(
+                initial.getCompanyId(), initial.getUid()).signum() > 0) {
+            throw new ConflictException("Part of credit note " + initial.getCreditNoteNumber()
+                    + " was refunded to the customer, so its applications cannot be redone."
+                    + " Apply the credit that is left instead.");
+        }
 
         Long reapplyCompanyId = initial.getCompanyId();
         Company company = companies.findById(reapplyCompanyId)

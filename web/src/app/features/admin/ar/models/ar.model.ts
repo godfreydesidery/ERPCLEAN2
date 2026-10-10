@@ -53,6 +53,33 @@ export interface AllocationLineDto {
   allocatedAmount: number | string;
 }
 
+/** ARC-11: request for POST /ar/refunds — pay a customer's unused credit back. */
+export interface RefundCustomerRequest {
+  sourceType: 'RECEIPT' | 'CREDIT_NOTE';
+  sourceUid: string;
+  /** Wire: number. */
+  amount: number;
+  refundDate?: string | null;
+  cashBankAccountUid?: string | null;
+  reason: string;
+}
+
+/** ARC-11: a refund just paid (journal + cash-book row + reduced credit on the document). */
+export interface ArRefundDto {
+  sourceType: 'RECEIPT' | 'CREDIT_NOTE';
+  sourceUid: string;
+  documentNumber: string;
+  customerId: string | null;
+  /** Wire: number — coerce with +v */
+  amount: number | string;
+  currency: string;
+  refundDate: string;
+  cashBankAccountUid: string | null;
+  journalEntryUid: string;
+  /** Wire: number — credit still unused on the document after this refund. */
+  remainingCredit: number | string;
+}
+
 export interface ArReceiptDto {
   uid: string;
   /** Wire: JSON string (Long). The receipt's company — used to load the customer's open items. */

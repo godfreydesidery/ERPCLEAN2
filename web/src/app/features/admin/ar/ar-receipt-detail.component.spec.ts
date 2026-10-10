@@ -31,6 +31,11 @@ function setup(perms: string[] = ['AR.VIEW', 'AR.RECEIPT.ALLOCATE']) {
     listOpenInvoices: vi.fn(() => of(OPEN)),
     reallocateReceipt: vi.fn(() => of({ ...RECEIPT, unallocatedAmount: 0 })),
     reverseReceipt: vi.fn(() => of({ ...RECEIPT, unallocatedAmount: 0, reversedAt: '2026-10-10T08:00:00Z' })),
+    refundCustomer: vi.fn(() => of({
+      sourceType: 'RECEIPT', sourceUid: 'RC1', documentNumber: 'RCT-1', customerId: '5', amount: 300,
+      currency: 'TZS', refundDate: '2026-10-10', cashBankAccountUid: 'CB1', journalEntryUid: 'JE9',
+      remainingCredit: 400,
+    })),
   };
   TestBed.configureTestingModule({
     imports: [ArReceiptDetailComponent],
@@ -111,5 +116,32 @@ describe('ArReceiptDetailComponent — reverse a wrong receipt (ARC-04)', () => 
     expect(comp.reverseOpen()).toBe(false);
     expect(comp.showReverse()).toBe(false);
     expect(comp.showApply()).toBe(false);
+  });
+});
+
+describe('ArReceiptDetailComponent — refund money held on account (ARC-11)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('offers "Refund" only with AR.REFUND and money on account', () => {
+    expect(setup().comp.showRefund()).toBe(false);
+    TestBed.resetTestingModule();
+    expect(setup(['AR.VIEW', 'AR.REFUND']).comp.showRefund()).toBe(true);
+  });
+
+  it('caps the amount at the on-account money, needs a reason, then shows what is left', () => {
+    const { comp, ar } = setup(['AR.VIEW', 'AR.REFUND']);
+    comp.openRefund();
+    expect(comp.refundAmount()).toBe('700.00');
+    comp.refundAmount.set('701');
+    comp.refundReason.set('Event cancelled');
+    expect(comp.refundDisabled()).toBe(true);
+
+    comp.refundAmount.set('300');
+    comp.confirmRefund();
+    expect(ar.refundCustomer).toHaveBeenCalledWith({
+      sourceType: 'RECEIPT', sourceUid: 'RC1', amount: 300, reason: 'Event cancelled',
+    });
+    expect(comp.onAccount()).toBe(400);
+    expect(comp.refundOpen()).toBe(false);
   });
 });

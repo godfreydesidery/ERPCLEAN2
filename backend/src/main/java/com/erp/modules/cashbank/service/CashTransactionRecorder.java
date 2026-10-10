@@ -172,6 +172,52 @@ public class CashTransactionRecorder {
         return txn.getId();
     }
 
+    /**
+     * Money paid back to a customer out of a cash/bank account (ARC-11): an OUT {@code AR_RECEIPT}
+     * row against the receipt or credit note it refunds ({@code source_ref} = that document's uid),
+     * mirroring the refund journal (DR AR control / CR the account). Not a reversal: the original
+     * receipt row stays live, and {@link #refundedAmount} sums these rows.
+     *
+     * @return the saved row id
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Long recordCustomerRefund(Long companyId, Long branchId, Long cashBankAccountId,
+                                     BigDecimal amount, String currency, String sourceRef,
+                                     String journalEntryRef, LocalDate txnDate,
+                                     String memo, Long actorId) {
+        String txnNumber = numbers.nextTransaction(companyId);
+        CashTransaction txn = new CashTransaction(
+                companyId, branchId, cashBankAccountId,
+                txnNumber, txnDate,
+                CashTxnDirection.OUT, amount, currency,
+                CashTxnType.AR_RECEIPT, sourceRef, null, truncate(memo, 255), actorId);
+        txn.setJournalEntryRef(journalEntryRef);
+        txn = txns.save(txn);
+
+        audit.record(AuditEvent.of(AuditActions.CASH_SETTLEMENT_RECORD, "cash_transactions",
+                        txn.getId(), txn.getUid())
+                .detail(Map.of(
+                        "txnType",   "AR_REFUND",
+                        "sourceRef", sourceRef,
+                        "amount",    amount.toPlainString(),
+                        "accountId", String.valueOf(cashBankAccountId))));
+        return txn.getId();
+    }
+
+    /**
+     * What has been refunded against a receipt or credit note so far (ARC-11): the OUT
+     * {@code AR_RECEIPT} rows on its uid that are not themselves reversals. Zero when none.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BigDecimal refundedAmount(Long companyId, String sourceRef) {
+        return txns.findByCompanyIdAndSourceRef(companyId, sourceRef).stream()
+                .filter(t -> t.getTxnType() == CashTxnType.AR_RECEIPT
+                        && t.getDirection() == CashTxnDirection.OUT
+                        && t.getReversalOfTransactionId() == null)
+                .map(CashTransaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     private static String truncate(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);
