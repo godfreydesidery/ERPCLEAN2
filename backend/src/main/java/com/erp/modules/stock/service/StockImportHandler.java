@@ -95,17 +95,20 @@ public class StockImportHandler implements BulkImportHandler {
     private final StockOnHandRepository onHands;
     private final InventoryValuationService valuation;
     private final PermissionResolver permissionResolver;
+    private final AdjustTargetResolver adjustTargets;
 
     public StockImportHandler(StockService stockService,
                               ProductService productService,
                               StockOnHandRepository onHands,
                               InventoryValuationService valuation,
-                              PermissionResolver permissionResolver) {
+                              PermissionResolver permissionResolver,
+                              AdjustTargetResolver adjustTargets) {
         this.stockService = stockService;
         this.productService = productService;
         this.onHands = onHands;
         this.valuation = valuation;
         this.permissionResolver = permissionResolver;
+        this.adjustTargets = adjustTargets;
     }
 
     @Override
@@ -166,22 +169,21 @@ public class StockImportHandler implements BulkImportHandler {
         String productCode = ImportParsers.requireText(row, COL_PRODUCT).trim();
         ProductDto product = resolveProduct(companyId, productCode);
 
-        // On-hand rows for this product at the active branch, across every location.
-        List<StockOnHand> onHandRows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
-                companyId, activeBranchId(), product.id());
-        long locations = onHandRows.stream().map(StockOnHand::getLocationId).distinct().count();
-        if (locations > 1) {
-            // adjust() posts to the branch's default location and reads a single on-hand row, so it
-            // cannot set a product spread across several locations to one branch total. Skip it
-            // (never block the rest of the sheet) with a pointer to the per-location screens.
+        // The location this row sets — the same choice the single Adjust screen makes
+        // (AdjustTargetResolver): empty rows and the in-transit location are ignored (STK-01), so a
+        // product that once arrived by transfer is no longer skipped. A product genuinely held at
+        // several locations is still skipped (never blocks the rest of the sheet).
+        AdjustTargetResolver.Target where;
+        try {
+            where = adjustTargets.resolve(companyId, activeBranchId(), product.id(), null);
+        } catch (IllegalArgumentException severalLocations) {
             return RowOutcome.skip(row.rowNumber(), product.code(),
-                    "Stocked at " + locations + " locations in this branch — set its level from the "
-                  + "per-location stock screens (a bulk set adjusts a single location only).");
+                    "Stocked at several locations in this branch — set its level from Adjust "
+                  + "Stock, choosing the location (a bulk set adjusts a single location only).");
         }
 
-        BigDecimal current = onHandRows.stream()
-                .map(soh -> soh.getQuantity() != null ? soh.getQuantity() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal current = where.onHand() != null && where.onHand().getQuantity() != null
+                ? where.onHand().getQuantity() : BigDecimal.ZERO;
         // A blank quantity column is "leave the level alone", which is a zero delta — so a row that
         // carries only a cost still reaches the valuation step below.
         BigDecimal delta = target == null ? BigDecimal.ZERO : target.subtract(current);
@@ -191,7 +193,7 @@ public class StockImportHandler implements BulkImportHandler {
                     "Already at " + fmt(current) + " — no change.");
         }
         if (delta.signum() != 0) {
-            applyQuantity(product, delta, row);
+            applyQuantity(product, delta, row, where.locationUid());
         }
         // Cost AFTER quantity, deliberately: opening value is qty × cost, so valuing first would
         // value the level the row is replacing. An adjustment can only carry an average forward, it
@@ -199,7 +201,7 @@ public class StockImportHandler implements BulkImportHandler {
         // sit at zero value, drop out of the valuation report, and post NO cost-of-sale when sold.
         CostOutcome cost = unitCost == null
                 ? CostOutcome.NONE
-                : applyOpeningCost(companyId, product, unitCost);
+                : applyOpeningCost(companyId, product, unitCost, where.locationId());
 
         String detail = describeOutcome(product, target, delta, cost.note());
         // Report what actually happened. A row whose cost was refused and whose level did not move
@@ -215,14 +217,15 @@ public class StockImportHandler implements BulkImportHandler {
     }
 
     /** Post the level change through the same service the single Adjust screen uses. */
-    private void applyQuantity(ProductDto product, BigDecimal delta, ImportRow row) {
+    private void applyQuantity(ProductDto product, BigDecimal delta, ImportRow row,
+                               String locationUid) {
         AdjustmentReason reason = ImportParsers.parseEnum(
                 AdjustmentReason.class, row, COL_REASON, AdjustmentReason.COUNT_CORRECTION);
         String note = ImportParsers.text(row, COL_NOTE);
         // Negative-stock guard, moving-average valuation, GL posting, audit and outbox all fire
         // exactly as for a hand-entered adjustment. Branch comes from the request context.
         stockService.adjust(new AdjustStockRequest(
-                product.uid(), delta, reason, note, null, null));
+                product.uid(), delta, reason, note, null, null, locationUid));
     }
 
     private static String describeOutcome(ProductDto product, BigDecimal target,
@@ -247,27 +250,22 @@ public class StockImportHandler implements BulkImportHandler {
      *
      * @return a short outcome note, or null when there was nothing to value
      */
-    private CostOutcome applyOpeningCost(Long companyId, ProductDto product, BigDecimal unitCost) {
+    private CostOutcome applyOpeningCost(Long companyId, ProductDto product, BigDecimal unitCost,
+                                         Long locationId) {
         if (!permissionResolver.hasPermission(
                 RequestContext.get(), PERM_OPENING_SET, System.currentTimeMillis())) {
             throw new IllegalArgumentException(
                     "'" + COL_COST + "' needs the opening-valuation permission. Clear the column, or "
                   + "ask an administrator to grant it.");
         }
-        // Re-read: adjust() above may have created the row this values.
-        List<StockOnHand> rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
-                companyId, activeBranchId(), product.id());
-        if (rows.isEmpty()) {
+        // Re-read the row at the location the quantity was set on: adjust() above may have created it.
+        StockOnHand soh = locationId == null ? null : onHands
+                .findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                        companyId, activeBranchId(), locationId, product.id())
+                .orElse(null);
+        if (soh == null) {
             return new CostOutcome(false, "no stock here to value");
         }
-        if (rows.size() > 1) {
-            // Safety net on a GL-posting path. The single-location check above ran BEFORE the
-            // adjustment; adjust() corrects a row in place today, so this should not arise — but
-            // valuing an arbitrary bin would post the cost to the wrong row, so report instead.
-            return new CostOutcome(false, "cost not set (stocked at " + rows.size()
-                 + " locations — value it per location)");
-        }
-        StockOnHand soh = rows.get(0);
         boolean alreadyValued = soh.getAvgCost() != null
                 || soh.getOnHandValue().compareTo(BigDecimal.ZERO) != 0;
         if (alreadyValued) {

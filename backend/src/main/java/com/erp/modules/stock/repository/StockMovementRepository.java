@@ -73,6 +73,13 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
     boolean existsBySourceEventUidAndProductId(String sourceEventUid, Long productId);
 
     /**
+     * Whether ANY movement was ever posted for (company, branch, product) — the opening-balance
+     * guard (ADR-0010 D-11: "no prior movements"). An on-hand row alone is not evidence of stock
+     * activity: a sales-order reservation creates one with no movement (STK-17).
+     */
+    boolean existsByCompanyIdAndBranchIdAndProductId(Long companyId, Long branchId, Long productId);
+
+    /**
      * Per-product sum of a single movement type at a location within a business-time window
      * (ADR-0051 D-8.6) — the van-reconciliation derivation query. {@code loaded_qty} =
      * {@code sumByLocationTypeAndWindow(..., TRANSFER_IN, ...)}; {@code returned_qty} =

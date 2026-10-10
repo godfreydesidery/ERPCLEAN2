@@ -181,6 +181,15 @@ export class StockLocationListComponent {
     });
   }
 
+  /**
+   * The branch's in-transit location (STK-07): seeded with a `TRANSIT-` code and recognised by it
+   * server-side. It is managed by transfers, so it can be renamed but not retyped, made the
+   * default or deactivated — the API refuses those, and the buttons are not offered.
+   */
+  isTransit(row: StockLocationDto): boolean {
+    return (row.code ?? '').trim().toUpperCase().startsWith('TRANSIT-');
+  }
+
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     const company = this.companies().find((c) => c.id === id);

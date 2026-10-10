@@ -42,6 +42,9 @@ export interface StockOnHandDto {
   lastCountedAt: string | null;
   negative: boolean;
   low: boolean;
+  /** Location of this on-hand row (enriched server-side; optional for older servers). */
+  locationUid?: string | null;
+  locationName?: string | null;
   version: string | null;
   createdAt: string | null;
   createdBy: string | null;
@@ -79,6 +82,11 @@ export interface AdjustStockRequest {
   quantity: string;
   reasonCode: AdjustmentReason;
   note?: string;
+  /**
+   * Location to correct (STK-01). The per-row Adjust sends the row's own location; omitted, the
+   * server corrects the one location that holds the product (ignoring empty and in-transit rows).
+   */
+  locationUid?: string;
 }
 
 export interface OpeningBalanceRequest {

@@ -23,5 +23,11 @@ public record AdjustStockRequest(
         String note,
         // --- cost-centre (ADR-0025 D-6) ---
         String costCentreValueUid,   // nullable — untagged when null
-        String departmentValueUid    // nullable — untagged when null
+        String departmentValueUid,   // nullable — untagged when null
+        /**
+         * Optional location to correct (STK-01). Must be an active location of the ACTIVE branch,
+         * and not its in-transit location. Null = where the product actually sits in the branch
+         * (ignoring empty and in-transit rows), or the branch default on first touch.
+         */
+        String locationUid
 ) {}

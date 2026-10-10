@@ -24,6 +24,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -109,6 +110,28 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (srcLoc.getId().equals(dstLoc.getId())) {
             throw new IllegalArgumentException("Source and destination locations must be different.");
         }
+        // STK-23: the in-transit location is filled and emptied only by dispatch and receive.
+        // Moving stock into or out of it by hand corrupts every transfer still on the road.
+        if (locationResolver.isInTransitLocation(srcLoc) || locationResolver.isInTransitLocation(dstLoc)) {
+            throw new IllegalArgumentException(
+                    "The in-transit location can't be chosen on a transfer. Pick a store or warehouse.");
+        }
+
+        // STK-26: validate every line BEFORE a number is consumed or anything is saved. A service
+        // (non-stock) item would create phantom on-hand rows; the same product on two lines is
+        // almost always a typo and makes the printed note and the receipt hard to check.
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (CreateStockTransferRequest.LineRequest lineReq : request.lines()) {
+            ProductDto p = productService.getByUid(lineReq.productUid());
+            if (!p.stockable()) {
+                throw new IllegalArgumentException(
+                        p.name() + " is not a stock item, so it can't be transferred.");
+            }
+            if (!seen.add(p.uid())) {
+                throw new IllegalArgumentException(
+                        p.name() + " appears on more than one line. Combine them into one line.");
+            }
+        }
 
         String number = numberGenerator.nextTransfer(principal.companyId());
         String mode   = request.transferMode() != null ? request.transferMode().toUpperCase() : "IN_TRANSIT";
@@ -175,6 +198,8 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (transfer.getTransferMode() != StockTransferMode.INSTANT) {
             throw new IllegalStateException("This transfer is not an INSTANT transfer.");
         }
+        // STK-05: an instant transfer is the source branch sending its own stock.
+        assertActingFromBranch(principal, transfer.getSourceBranchId(), "complete");
 
         List<StockTransferLine> lines = transferLines
                 .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
@@ -253,6 +278,8 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (transfer.getTransferMode() != StockTransferMode.IN_TRANSIT) {
             throw new IllegalStateException("This transfer is not an IN_TRANSIT transfer.");
         }
+        // STK-05 (owner ruling 2026-10-10): only the source branch dispatches its own stock.
+        assertActingFromBranch(principal, transfer.getSourceBranchId(), "dispatch");
 
         List<StockTransferLine> lines = transferLines
                 .findByStockTransferIdOrderByLineNoAsc(transfer.getId());
@@ -319,6 +346,9 @@ public class StockTransferServiceImpl implements StockTransferService {
         if (transfer.getStatus() != StockTransferStatus.DISPATCHED) {
             throw new IllegalStateException("This transfer is not in DISPATCHED status.");
         }
+        // STK-05 (owner ruling 2026-10-10): receipt is the destination branch confirming the goods
+        // arrived. A sender who could also "receive" made that confirmation prove nothing.
+        assertActingFromBranch(principal, transfer.getDestBranchId(), "receive");
 
         transfer.receive(principal.userId());
         transfers.save(transfer);
@@ -391,6 +421,28 @@ public class StockTransferServiceImpl implements StockTransferService {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * STK-05 (owner ruling 2026-10-10): dispatch/complete must be done from the SOURCE branch and
+     * receive from the DESTINATION branch. The active branch comes from the request context, which
+     * the JWT filter has already verified against the caller's {@code user_branch} assignments
+     * (X-Branch-Uid). Root is exempt (and audited as always).
+     */
+    private void assertActingFromBranch(RequestContext.Principal principal, Long requiredBranchId,
+                                        String action) {
+        if (principal == null || principal.root()) {
+            return;
+        }
+        if (requiredBranchId != null && requiredBranchId.equals(principal.branchId())) {
+            return;
+        }
+        String branchName = requiredBranchId == null ? null : branches
+                .findByIdAndCompany_Id(requiredBranchId, principal.companyId())
+                .map(Branch::getName).orElse(null);
+        throw new ForbiddenException("Switch to "
+                + (branchName != null ? branchName : "the transfer's branch")
+                + " to " + action + " this transfer.");
+    }
 
     private StockTransfer findAndAssertScope(String uid, RequestContext.Principal principal) {
         StockTransfer t = transfers.findByUid(uid)
@@ -486,6 +538,8 @@ public class StockTransferServiceImpl implements StockTransferService {
                 t.getTransferDate(), t.getExpectedArrivalDate(),
                 t.getDispatchedAt(), t.getDispatchedBy(),
                 t.getReceivedAt(), t.getReceivedBy(),
-                t.getNotes(), lineDtos);
+                t.getNotes(), lineDtos,
+                srcBranch != null ? srcBranch.getUid() : null,
+                dstBranch != null ? dstBranch.getUid() : null);
     }
 }

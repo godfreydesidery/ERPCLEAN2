@@ -1,9 +1,15 @@
 package com.erp.modules.stock.service;
 
 import com.erp.modules.stock.domain.dto.StockAvailabilityDto;
+import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockOnHand;
+import com.erp.modules.stock.domain.enums.LocationType;
+import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -29,13 +35,16 @@ public class StockReservationServiceImpl implements StockReservationService {
 
     private static final Logger log = LoggerFactory.getLogger(StockReservationServiceImpl.class);
 
-    private final StockOnHandRepository onHands;
-    private final LocationResolver       locationResolver;
+    private final StockOnHandRepository   onHands;
+    private final LocationResolver        locationResolver;
+    private final StockLocationRepository locations;
 
     public StockReservationServiceImpl(StockOnHandRepository onHands,
-                                       LocationResolver locationResolver) {
+                                       LocationResolver locationResolver,
+                                       StockLocationRepository locations) {
         this.onHands          = onHands;
         this.locationResolver = locationResolver;
+        this.locations        = locations;
     }
 
     @Override
@@ -67,8 +76,12 @@ public class StockReservationServiceImpl implements StockReservationService {
         // lock still serialises every reserve for this (company, branch, product).
         BigDecimal qtyOnHand = BigDecimal.ZERO;
         BigDecimal reserved  = BigDecimal.ZERO;
-        for (StockOnHand soh : onHands.findAllByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId)) {
-            qtyOnHand = qtyOnHand.add(soh.getQuantity());
+        List<StockOnHand> rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId);
+        Set<Long> notSellable = notSellableLocationIds(companyId, branchId, rows);
+        for (StockOnHand soh : rows) {
+            if (!notSellable.contains(soh.getLocationId())) {
+                qtyOnHand = qtyOnHand.add(soh.getQuantity());
+            }
             reserved  = reserved.add(soh.getReservedQty());
         }
         StockAvailabilityDto before = new StockAvailabilityDto(
@@ -96,7 +109,8 @@ public class StockReservationServiceImpl implements StockReservationService {
         // rejected as "out of stock".
         //
         // Stock is fungible within a branch: what the cashier can sell is what the branch holds,
-        // regardless of which bin the paperwork put it in. Reservations still live on the
+        // regardless of which bin the paperwork put it in — except stock that is not on a shelf
+        // at all (in transit, quarantined): see notSellableLocationIds (STK-06). Reservations still live on the
         // default-location row (ADR-0028 D-3), so summing them changes nothing today and stays
         // correct if that ever spreads.
         var rows = onHands.findAllByCompanyIdAndBranchIdAndProductId(companyId, branchId, productId);
@@ -105,12 +119,43 @@ public class StockReservationServiceImpl implements StockReservationService {
         }
         BigDecimal qty = BigDecimal.ZERO;
         BigDecimal reserved = BigDecimal.ZERO;
+        Set<Long> notSellable = notSellableLocationIds(companyId, branchId, rows);
         for (StockOnHand soh : rows) {
-            qty = qty.add(soh.getQuantity());
+            if (!notSellable.contains(soh.getLocationId())) {
+                qty = qty.add(soh.getQuantity());
+            }
             reserved = reserved.add(soh.getReservedQty());
         }
         return new StockAvailabilityDto(companyId, branchId, productId,
                 qty, reserved, qty.subtract(reserved));
+    }
+
+    /**
+     * STK-06 / OPN-02: locations whose stock the branch cannot sell. Since transfers book the
+     * in-transit leg under the DESTINATION branch at dispatch, counting the in-transit location let
+     * that branch sell goods still on the lorry (the Main Store went negative while In-Transit showed
+     * positive). Damaged goods in a QUARANTINE location, and any location flagged not sellable, are
+     * excluded for the same reason. VAN locations stay in: route sales issue from the branch
+     * warehouse (ADR-0051 D-8.2), so the van's load must keep counting toward what the agent sells.
+     * Reservations still sum across every row (they live on the default row).
+     */
+    private Set<Long> notSellableLocationIds(Long companyId, Long branchId, List<StockOnHand> rows) {
+        Set<Long> excluded = new HashSet<>();
+        if (rows.isEmpty()) {
+            return excluded;
+        }
+        locationResolver.findInTransitLocationId(companyId, branchId).ifPresent(excluded::add);
+        List<Long> ids = rows.stream().map(StockOnHand::getLocationId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (!ids.isEmpty()) {
+            for (StockLocation l : locations.findByCompanyIdAndIdIn(companyId, ids)) {
+                if (!l.isDefault()
+                        && (l.getLocationType() == LocationType.QUARANTINE || !l.isSellable())) {
+                    excluded.add(l.getId());
+                }
+            }
+        }
+        return excluded;
     }
 
     private void doApply(Long companyId, Long branchId, Long productId,
