@@ -147,7 +147,7 @@ export class VatReturnDetailComponent implements OnInit {
   readonly payError = signal<string | null>(null);
   readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
   readonly payAccountUid = signal('');
-  readonly payDate = signal(new Date().toISOString().slice(0, 10));
+  readonly payDate = signal(todayLocal());
   readonly payAmount = signal<string | number>('');
   readonly payRef = signal('');
 
@@ -158,7 +158,7 @@ export class VatReturnDetailComponent implements OnInit {
     this.payError.set(null);
     this.payAmount.set(this.outstanding());
     this.payRef.set('');
-    this.payDate.set(new Date().toISOString().slice(0, 10));
+    this.payDate.set(todayLocal());
     if (this.cashAccounts().length === 0) {
       this.cashbankService.listAccountOptions(String(ret.companyId)).subscribe({
         next: (list) => {

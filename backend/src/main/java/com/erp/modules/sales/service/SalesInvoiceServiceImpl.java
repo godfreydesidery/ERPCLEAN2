@@ -1340,8 +1340,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // Window: the SAME derivation as findVatSummaryForPeriod (keep the two in step).
         List<SalesInvoice> voidedInPeriod = invoices.findVoidedInPeriod(
                 companyId,
-                start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
-                end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+                calendar.startOfDay(companyId, start),
+                calendar.endOfDayExclusive(companyId, end));
 
         final int baseScale = minorUnits.of(companies.findScopedById(companyId)
                 .map(c -> c.getBaseCurrency())

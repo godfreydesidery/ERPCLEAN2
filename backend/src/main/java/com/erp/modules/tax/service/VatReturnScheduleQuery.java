@@ -5,6 +5,7 @@ import com.erp.modules.tax.domain.entity.VatReturn;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
 import com.erp.modules.tax.repository.VatReturnRepository;
 import com.erp.platform.common.money.CurrencyMinorUnits;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -13,7 +14,6 @@ import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -42,13 +42,16 @@ public class VatReturnScheduleQuery {
     private final JdbcTemplate        jdbc;
     private final ScopeGuard          scopeGuard;
     private final CurrencyMinorUnits  minorUnits;
+    private final CompanyCalendar     calendar;
 
     public VatReturnScheduleQuery(VatReturnRepository returns, JdbcTemplate jdbc,
-                                  ScopeGuard scopeGuard, CurrencyMinorUnits minorUnits) {
+                                  ScopeGuard scopeGuard, CurrencyMinorUnits minorUnits,
+                                  CompanyCalendar calendar) {
         this.returns    = returns;
         this.jdbc       = jdbc;
         this.scopeGuard = scopeGuard;
         this.minorUnits = minorUnits;
+        this.calendar   = calendar;
     }
 
     /** The sales (output VAT) schedule of the return. */
@@ -58,12 +61,14 @@ public class VatReturnScheduleQuery {
         int scale = baseScale(companyId);
         // Window for the timestamp columns: the SAME derivation as
         // SalesInvoiceServiceImpl.findVatSummaryForPeriod (keep the three in step).
-        Timestamp from = Timestamp.from(r.getPeriodStart().atStartOfDay(ZoneOffset.UTC).toInstant());
-        Timestamp to   = Timestamp.from(r.getPeriodEnd().plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+        // The company's business zone: the window AND the printed document date use it.
+        Timestamp from = Timestamp.from(calendar.startOfDay(companyId, r.getPeriodStart()));
+        Timestamp to   = Timestamp.from(calendar.endOfDayExclusive(companyId, r.getPeriodEnd()));
+        String zone    = calendar.zoneOf(companyId).getId();
 
         List<VatScheduleDto.Row> rows = jdbc.query("""
                 SELECT * FROM (
-                    SELECT (si.finalised_at AT TIME ZONE 'UTC')::date AS doc_date, 'INVOICE' AS doc_type,
+                    SELECT (si.finalised_at AT TIME ZONE ?)::date AS doc_date, 'INVOICE' AS doc_type,
                            si.invoice_number AS doc_number, NULL AS our_ref,
                            c.display_name AS party, c.tin, c.vrn,
                            CASE WHEN si.fx_rate = 1 THEN si.net_total_amount
@@ -78,7 +83,7 @@ public class VatReturnScheduleQuery {
                     WHERE si.company_id = ? AND si.status IN ('FINALISED', 'VOID')
                       AND si.finalised_at >= ? AND si.finalised_at < ?
                     UNION ALL
-                    SELECT (si.voided_at AT TIME ZONE 'UTC')::date, 'VOID',
+                    SELECT (si.voided_at AT TIME ZONE ?)::date, 'VOID',
                            si.invoice_number, NULL,
                            c.display_name, c.tin, c.vrn,
                            -(CASE WHEN si.fx_rate = 1 THEN si.net_total_amount
@@ -102,12 +107,14 @@ public class VatReturnScheduleQuery {
                     LEFT JOIN customers c ON c.id = cn.customer_id AND c.company_id = cn.company_id
                     WHERE cn.company_id = ? AND cn.note_date BETWEEN ? AND ?
                       AND cn.created_at <= ?
+                      -- a SALE_VOID note posts no GL; its void row above already carries it
+                      AND cn.origin <> 'SALE_VOID' AND cn.gl_entry_uid IS NOT NULL
                 ) s
                 ORDER BY doc_date, doc_number
                 """.formatted(scale),
                 VatReturnScheduleQuery::row,
-                companyId, from, to,
-                companyId, from, to,
+                zone, companyId, from, to,
+                zone, companyId, from, to,
                 companyId, Date.valueOf(r.getPeriodStart()), Date.valueOf(r.getPeriodEnd()),
                 cutoff(r));
         return schedule(r, rows);

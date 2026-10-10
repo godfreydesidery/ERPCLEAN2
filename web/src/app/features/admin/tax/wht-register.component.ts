@@ -8,6 +8,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { WhtRegisterDto } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { todayLocal } from '../../../shared/date.util';
 import { CashbankService } from '../cashbank/cashbank.service';
 import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { ExportFormat } from '../reporting/models/reporting.model';
@@ -164,7 +165,7 @@ export class WhtRegisterComponent {
   readonly payError = signal<string | null>(null);
   readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
   readonly payAccountUid = signal('');
-  readonly payDate = signal(new Date().toISOString().slice(0, 10));
+  readonly payDate = signal(todayLocal());
   readonly payRef = signal('');
 
   openPayForm(): void {

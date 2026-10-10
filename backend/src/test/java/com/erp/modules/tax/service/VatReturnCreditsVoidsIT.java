@@ -112,7 +112,11 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
         @Bean
         @Primary
         Clock fixedClock() {
-            return Clock.fixed(Instant.parse("2099-12-31T00:00:00Z"), ZoneOffset.UTC);
+            // Year-end of the CURRENT year: both test months have ended (the filing guard), and the
+            // company calendar's "today" (the void reversal's posting date) is still inside the
+            // fiscal year seedCurrentYear opened. A 2099 clock left the reversal with no period.
+            return Clock.fixed(Instant.parse(LocalDate.now().getYear() + "-12-31T12:00:00Z"),
+                    ZoneOffset.UTC);
         }
     }
 
@@ -231,8 +235,10 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
     @Test
     void creditNote_debitNote_andLaterMonthVoid_fileCorrectly_andClearControlAccounts() {
         // ---- M1 activity ----------------------------------------------------------------------
-        String invA = finaliseInvoiceIn(m1.atDay(10));
-        String invB = finaliseInvoiceIn(m1.atDay(12));
+        // A: an ON-ACCOUNT sale (no payment) — voiding it raises a SALE_VOID credit note (SAL-03),
+        // which posts no GL and must not be netted a second time on top of the void.
+        String invA = finaliseInvoiceIn(m1.atDay(10), creditCustomerUid, false);
+        String invB = finaliseInvoiceIn(m1.atDay(12), walkInUid, true);
         creditNotes.raise(new RaiseCreditNoteRequest(companyUid, creditCustomerUid, null,
                 m1.atDay(20), new BigDecimal("500"), new BigDecimal("90"), "TZS", "Price adjustment"));
         matchedBillWithGl(m1.atDay(8), new BigDecimal("2000"), new BigDecimal("360"));
@@ -242,6 +248,14 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
         // ---- M2 activity: invoice A voided in M2, a second debit note ----------------------------
         salesInvoiceService.voidInvoice(invA, new VoidInvoiceRequest("Customer cancelled"));
         dispatch(DomainEventType.SALE_VOIDED, invA);
+        Integer saleVoidNotes = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM ar_credit_notes WHERE company_id = ? AND origin = 'SALE_VOID'",
+                Integer.class, company.getId());
+        assertThat(saleVoidNotes).as("SAL-03 raised a SALE_VOID credit note for the on-account sale")
+                .isEqualTo(1);
+        // Dated in the void month, so it falls inside M2's window like the void itself.
+        jdbc.update("UPDATE ar_credit_notes SET note_date = ? WHERE company_id = ? AND origin = 'SALE_VOID'",
+                m2.atDay(5), company.getId());
         jdbc.update("UPDATE sales_invoices SET voided_at = ? WHERE uid = ?",
                 Timestamp.from(m2.atDay(5).atTime(9, 0).toInstant(ZoneOffset.UTC)), invA);
         debitNotes.raise(new RaiseDebitNoteRequest(companyUid, supplierUid, null,
@@ -328,14 +342,19 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
                 rootId, "vatcv_root", true, company.getId(), branch.getId(), null));
     }
 
-    /** 1 × 1000 + 18% = 1180 cash invoice, finalised, posted, and its timestamp moved to {@code day}. */
-    private String finaliseInvoiceIn(LocalDate day) {
+    /**
+     * 1 × 1000 + 18% = 1180 invoice — paid in cash, or on account — finalised, posted, and its
+     * timestamp moved to {@code day}.
+     */
+    private String finaliseInvoiceIn(LocalDate day, String customerUid, boolean paidInCash) {
         SalesInvoiceDto draft = salesInvoiceService.create(
-                new CreateSalesInvoiceRequest(companyUid, walkInUid, agentUid, "TZS", null, null));
+                new CreateSalesInvoiceRequest(companyUid, customerUid, agentUid, "TZS", null, null));
         salesInvoiceService.addLine(draft.uid(), new AddInvoiceLineRequest(
                 productUid, pcsUid, BigDecimal.ONE, null, null));
-        salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
-                TenderType.CASH, new BigDecimal("1180"), "TZS", null));
+        if (paidInCash) {
+            salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
+                    TenderType.CASH, new BigDecimal("1180"), "TZS", null));
+        }
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
         dispatch(DomainEventType.SALE_FINALISED, draft.uid());
         jdbc.update("UPDATE sales_invoices SET finalised_at = ? WHERE uid = ?",

@@ -103,6 +103,10 @@ public class VatReturnComputationReader {
         // rate 1, as ArCreditNoteServiceImpl does) — so output VAT falls by exactly what the ledger already relieved. A credit
         // note carries no band split; VAT-bearing ones reduce the STANDARD band (the only band with
         // VAT), zero-VAT ones change no band.
+        //
+        // Only credit notes that posted their OWN VAT leg count. A SALE_VOID note (SAL-03, raised
+        // when an on-account invoice is voided) posts no GL — the void reversal already relieved
+        // 2200 and the void is counted above — so counting it again would net the sale twice.
         Map<String, Object> cn = jdbc.queryForMap(
                 """
                 SELECT COALESCE(SUM(ROUND(vat_amount * fx_rate, %1$d)), 0) AS vat,
@@ -111,6 +115,8 @@ public class VatReturnComputationReader {
                 FROM   ar_credit_notes
                 WHERE  company_id = ?
                   AND  note_date BETWEEN ? AND ?
+                  AND  origin <> 'SALE_VOID'
+                  AND  gl_entry_uid IS NOT NULL
                 """.formatted(baseScale),
                 companyId, start, end);
         BigDecimal cnVat    = (BigDecimal) cn.get("vat");

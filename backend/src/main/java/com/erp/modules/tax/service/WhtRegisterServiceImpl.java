@@ -9,6 +9,7 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.money.CurrencyMinorUnits;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.math.RoundingMode;
 import java.time.YearMonth;
 import com.erp.modules.tax.domain.dto.WhtRegisterRowDto;
@@ -53,19 +54,22 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
     private final TaxPaymentPoster        paymentPoster;
     private final CurrencyMinorUnits      minorUnits;
     private final AuditService            audit;
+    private final CompanyCalendar         calendar;
 
     public WhtRegisterServiceImpl(WhtTransactionRepository whtTransactions,
                                    ScopeGuard scopeGuard,
                                    JdbcTemplate jdbc,
                                    TaxPaymentPoster paymentPoster,
                                    CurrencyMinorUnits minorUnits,
-                                   AuditService audit) {
+                                   AuditService audit,
+                                   CompanyCalendar calendar) {
         this.whtTransactions = whtTransactions;
         this.scopeGuard      = scopeGuard;
         this.jdbc            = new NamedParameterJdbcTemplate(jdbc);
         this.paymentPoster   = paymentPoster;
         this.minorUnits      = minorUnits;
         this.audit           = audit;
+        this.calendar        = calendar;
     }
 
     @Override
@@ -128,7 +132,8 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
                         + " supplier payments can be paid from a bank account.");
             }
             paid = baseAmount(txn, baseScale(txn.getCompanyId()));
-            LocalDate date = req.paymentDate() != null ? req.paymentDate() : LocalDate.now();
+            LocalDate date = req.paymentDate() != null
+                    ? req.paymentDate() : calendar.today(txn.getCompanyId());
             cashTxnUid = paymentPoster.pay(txn.getCompanyId(), GlConfigKey.WHT_PAYABLE,
                     req.cashBankAccountUid(), paid, date,
                     "WHT payment " + txn.getWhtNumber() + " - " + req.remittanceRef()).uid();
