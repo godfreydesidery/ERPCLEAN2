@@ -146,6 +146,31 @@ class FiscalCalendarServiceIT extends PostgresIntegrationTest {
     }
 
     // ---------------------------------------------------------------------------
+    // ACC-09: overlapping fiscal years are refused (query runs against real Postgres)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void openFiscalYear_overlappingExistingYearUnderAnotherCode_rejected() {
+        fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY2031", 1, 2031));
+
+        // Same dates, different code — the unique (company, year_code) key does not catch this.
+        assertThatThrownBy(() -> fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "2031", 1, 2031)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("overlap");
+        // A July–June year straddling it is refused too.
+        assertThatThrownBy(() -> fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY31/32", 7, 2031)))
+                .isInstanceOf(ConflictException.class);
+        // The adjacent year is fine.
+        FiscalYearDto next = fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY2032", 1, 2032));
+        assertThat(next.startDate()).isEqualTo(LocalDate.of(2032, 1, 1));
+        assertThat(fiscalCalendarService.listFiscalYears(company.getId())).hasSize(2);
+    }
+
+    // ---------------------------------------------------------------------------
     // Cross-tenant isolation (BR-GL: per-company; assertCanActIn)
     // ---------------------------------------------------------------------------
 

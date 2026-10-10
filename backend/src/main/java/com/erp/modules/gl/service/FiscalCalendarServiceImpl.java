@@ -20,8 +20,10 @@ import com.erp.platform.security.ScopeGuard;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class FiscalCalendarServiceImpl implements FiscalCalendarService {
 
     private static final Logger log = LoggerFactory.getLogger(FiscalCalendarServiceImpl.class);
+
+    private static final DateTimeFormatter DAY =
+            DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
     private final FiscalYearRepository years;
     private final FiscalPeriodRepository periods;
@@ -60,6 +65,23 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         if (years.findByCompanyIdAndYearCode(company.getId(), req.yearCode()).isPresent()) {
             throw new ConflictException(
                     "Fiscal year " + req.yearCode() + " already exists for this company.");
+        }
+        if (req.startMonth() < 1 || req.startMonth() > 12) {
+            throw new IllegalArgumentException("The start month must be between 1 and 12.");
+        }
+
+        // ACC-09: years must not overlap — two open periods on one date break every posting.
+        LocalDate startDate = LocalDate.of(req.calendarYear(), req.startMonth(), 1);
+        LocalDate endDate   = startDate.plusMonths(12).minusDays(1);
+        List<FiscalYear> overlapping = years.findOverlapping(company.getId(), startDate, endDate);
+        if (!overlapping.isEmpty()) {
+            FiscalYear clash = overlapping.get(0);
+            throw new ConflictException(
+                    "Fiscal year " + req.yearCode() + " (" + startDate.format(DAY) + " to "
+                            + endDate.format(DAY) + ") would overlap fiscal year "
+                            + clash.getYearCode() + " (" + clash.getStartDate().format(DAY) + " to "
+                            + clash.getEndDate().format(DAY) + "). Fiscal years cannot overlap;"
+                            + " start the new year the day after the existing one ends.");
         }
 
         FiscalYear year = createYearWithPeriods(
