@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -37,11 +38,15 @@ import { formatMoney } from '../../../shared/money.util';
  */
 @Component({
   selector: 'app-petty-cash-fund-detail',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, LookupNoticeComponent],
   templateUrl: './petty-cash-fund-detail.component.html',
   styleUrl: './petty-cash-fund-detail.component.scss',
 })
 export class PettyCashFundDetailComponent {
+  /** ADM-28: why the custodian / expense-account pickers are empty (no access vs. load failure). */
+  readonly usersLookup = signal<LookupFailure | null>(null);
+  readonly glAccountsLookup = signal<LookupFailure | null>(null);
+
   /** Route input — bound from `:uid` via withComponentInputBinding. Absent on the `new` route. */
   readonly uid = input<string | undefined>();
 
@@ -182,7 +187,7 @@ export class PettyCashFundDetailComponent {
   private loadGlAccounts(companyId: string): void {
     this.glService.listAllActiveAccounts(companyId).subscribe({
       next: (list) => this.glAccounts.set(list),
-      error: () => {},
+      error: (err: unknown) => this.glAccountsLookup.set(lookupFailure(err)),
     });
   }
 
@@ -207,7 +212,7 @@ export class PettyCashFundDetailComponent {
   private loadUsers(): void {
     this.userService.list().subscribe({
       next: (rows) => this.users.set(rows),
-      error: () => {},
+      error: (err: unknown) => this.usersLookup.set(lookupFailure(err)),
     });
   }
 

@@ -133,6 +133,20 @@ describe('VanReconciliationComponent — new mode (create form)', () => {
     expect(comp.vanLocationOptions()[0].hint).toContain('Hamisi');
   });
 
+  // ADM-28: a 403 on the location list says "no access" instead of an unexplained failure.
+  it('shows a no-access notice when the van location list is forbidden', async () => {
+    vi.useFakeTimers();
+    makeBed();
+    const locations = TestBed.inject(StockLocationService) as unknown as { activeForBranch: ReturnType<typeof vi.fn> };
+    locations.activeForBranch.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 403 })));
+    const fixture = TestBed.createComponent(VanReconciliationComponent);
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.locationsState()).toBe('forbidden');
+    expect(fixture.nativeElement.textContent).toContain("You don't have access to the van location list");
+  });
+
   it('createReconciliation() posts the correct request and navigates to the detail route', async () => {
     vi.useFakeTimers();
     makeBed();

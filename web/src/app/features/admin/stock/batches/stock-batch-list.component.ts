@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../../shared/lookup-access';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -30,11 +31,15 @@ interface LoadTrigger { page: number; mode: 'location' | 'expiring' }
  */
 @Component({
   selector: 'app-stock-batch-list',
-  imports: [FormsModule, PaginatorComponent, UidPickerComponent],
+  imports: [FormsModule, PaginatorComponent, UidPickerComponent, LookupNoticeComponent],
   templateUrl: './stock-batch-list.component.html',
   styleUrl: './stock-batch-list.component.scss',
 })
 export class StockBatchListComponent {
+  /** ADM-28: why a picker is empty — no access (403) vs. failed to load. */
+  readonly locationsLookup = signal<LookupFailure | null>(null);
+  readonly productsLookup = signal<LookupFailure | null>(null);
+
   private readonly batchService = inject(StockBatchService);
   private readonly locationService = inject(StockLocationService);
   private readonly companyService = inject(CompanyService);
@@ -145,7 +150,10 @@ export class StockBatchListComponent {
     // the active list endpoint requires branchUid which we may not have.
     this.locationService.list(0, 200).subscribe({
       next: ({ rows }) => this.locations.set(rows.filter((l) => l.companyId === companyId)),
-      error: () => this.locations.set([]),
+      error: (err: unknown) => {
+        this.locations.set([]);
+        this.locationsLookup.set(lookupFailure(err));
+      },
     });
   }
 
@@ -156,7 +164,10 @@ export class StockBatchListComponent {
   private loadProducts(companyId: string): void {
     this.productService.list(companyId, '', 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows.filter((p) => p.status !== 'ARCHIVED')),
-      error: () => this.products.set([]),
+      error: (err: unknown) => {
+        this.products.set([]);
+        this.productsLookup.set(lookupFailure(err));
+      },
     });
   }
 

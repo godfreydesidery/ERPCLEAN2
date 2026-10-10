@@ -86,6 +86,7 @@
                 <option [value]="u.uid">{{ u.displayName }}</option>
               }
             </select>
+            <app-lookup-notice [state]="usersLookup()" what="user" />
           </div>
 
           <div class="erp-field">
@@ -196,6 +197,7 @@
                         <option [value]="gl.uid">{{ gl.accountCode }} — {{ gl.name }}</option>
                       }
                     </select>
+                    <app-lookup-notice [state]="glAccountsLookup()" what="GL account" />
                     <div class="form-text">Captured for the disbursement record; not posted to GL this slice.</div>
                   </div>
                 }

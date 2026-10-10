@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -59,7 +60,7 @@ interface LineRow {
  */
 @Component({
   selector: 'app-enter-bill',
-  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent],
+  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent, LookupNoticeComponent],
   templateUrl: './enter-bill.component.html',
   styleUrl: './enter-bill.component.scss',
 })
@@ -78,6 +79,10 @@ export class EnterBillComponent {
   readonly poLineOptions = signal<UidOption[]>([]);
   /** True when the PO list could not be loaded (non-fatal; PO matching is optional). */
   readonly poListUnavailable = signal(false);
+  /** ADM-28: a 403 on the PO list is "no access", not "could not be loaded". */
+  readonly poListLookup = signal<LookupFailure | null>(null);
+  /** ADM-28: the supplier search failed (403 = no access) — say so instead of showing nothing. */
+  readonly supplierLookup = signal<LookupFailure | null>(null);
 
   // ── Goods receipt line picker ─────────────────────────────────────────────
   /**
@@ -158,8 +163,14 @@ export class EnterBillComponent {
         takeUntilDestroyed(),
       )
       .subscribe({
-        next: ({ rows }) => this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE')),
-        error: () => this.supplierResults.set([]),
+        next: ({ rows }) => {
+          this.supplierLookup.set(null);
+          this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE'));
+        },
+        error: (err: unknown) => {
+          this.supplierResults.set([]);
+          this.supplierLookup.set(lookupFailure(err));
+        },
       });
 
     this.loadCompanies();
@@ -200,7 +211,11 @@ export class EnterBillComponent {
           })),
         );
       },
-      error: () => { this.poOptions.set([]); this.poListUnavailable.set(true); },
+      error: (err: unknown) => {
+        this.poOptions.set([]);
+        this.poListUnavailable.set(true);
+        this.poListLookup.set(lookupFailure(err));
+      },
     });
   }
 

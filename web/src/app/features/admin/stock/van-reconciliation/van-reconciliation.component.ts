@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../../shared/lookup-access';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -71,7 +72,7 @@ function numOrZero(v: string): number {
  */
 @Component({
   selector: 'app-van-reconciliation',
-  imports: [FormsModule, RouterLink, DecimalPipe, DatePipe, UidPickerComponent],
+  imports: [FormsModule, RouterLink, DecimalPipe, DatePipe, UidPickerComponent, LookupNoticeComponent],
   templateUrl: './van-reconciliation.component.html',
   styleUrl: './van-reconciliation.component.scss',
 })
@@ -99,7 +100,9 @@ export class VanReconciliationComponent {
 
   // ── VAN location picker (create mode only) ────────────────────────────────────
   readonly vanLocationOptions = signal<UidOption[]>([]);
-  readonly locationsState = signal<'idle' | 'loading' | 'error'>('idle');
+  /** ADM-28: a 403 reads as "no access", not as an empty list. */
+  readonly locationsState = signal<'idle' | 'loading' | LookupFailure>('idle');
+  readonly branchesState = signal<LookupFailure | null>(null);
   readonly fVanLocationUid = signal('');
   readonly fBusinessDate = signal('');
   readonly fNotes = signal('');
@@ -269,7 +272,10 @@ export class VanReconciliationComponent {
           this.selectedBranchUid.set('');
         }
       },
-      error: () => this.branches.set([]),
+      error: (err: unknown) => {
+        this.branches.set([]);
+        this.branchesState.set(lookupFailure(err));
+      },
     });
   }
 
@@ -290,7 +296,7 @@ export class VanReconciliationComponent {
         );
         this.locationsState.set('idle');
       },
-      error: () => this.locationsState.set('error'),
+      error: (err: unknown) => this.locationsState.set(lookupFailure(err)),
     });
   }
 
