@@ -67,6 +67,17 @@
                               placeholder="All suppliers" />
             </div>
           }
+          <!-- RPT-08: the shared branch picker. Blank = All branches — for branch-limited staff
+               that is the branches they work in, never the whole company. -->
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="sr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="sr-branch" name="sr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()"

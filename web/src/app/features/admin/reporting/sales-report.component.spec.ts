@@ -173,6 +173,7 @@ describe('SalesReportComponent', () => {
     comp.agentUid.set('AGENT-1');
     comp.routeUid.set('ROUTE-1');
     comp.supplierUid.set('SUPP-1');
+    comp.branchUid.set('BRANCH-1');
     comp.run();
 
     expect(salesReportSpy).toHaveBeenCalledOnce();
@@ -182,6 +183,7 @@ describe('SalesReportComponent', () => {
       agentUid: 'AGENT-1',
       routeUid: 'ROUTE-1',
       supplierUid: 'SUPP-1',
+      branchUid: 'BRANCH-1', // RPT-08: the branch picker reaches the server
     });
     expect(comp.report()).toEqual(MOCK_REPORT);
     expect(comp.state()).toBe('idle');
