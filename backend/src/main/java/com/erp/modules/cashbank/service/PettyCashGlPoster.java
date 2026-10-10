@@ -18,7 +18,7 @@ import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.repository.CompanyRepository;
-import com.erp.platform.common.api.ConflictException;
+import com.erp.platform.common.api.AccountingSetupException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyConversionService;
 import java.math.BigDecimal;
@@ -44,10 +44,11 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * <p><b>Petty Cash GL account.</b> A fund has no GL column and gl_configs has no PETTY_CASH key
- * (both would need a migration), so every fund of a company posts to one asset account, code
- * {@value #PETTY_CASH_CODE} "Petty Cash", created on first use when the company has none. Keeping it
- * apart from 1000 Cash matters: 1000 is the main till's account, and petty cash moving through it
- * would put the till's cash book and its GL account out of step.
+ * (both would need a migration), so every fund of a company posts to one asset account named
+ * "Petty Cash" — an existing one, else code {@value #PETTY_CASH_CODE}, else the first free code in
+ * 1011..1019, created on first use (see {@link #pettyCashAccount}). It is never an account a till
+ * or bank already posts to: petty cash moving through a till's GL account (1000 Cash, or a separate
+ * till account such as 1010) would put that till's cash book and its GL account out of step.
  *
  * <p>Runs inside the petty-cash command's transaction: a GL refusal (closed period, missing setup)
  * rolls back the whole movement. Historic petty-cash rows are never posted retroactively.
@@ -190,25 +191,68 @@ public class PettyCashGlPoster {
 
     // -------------------------------------------------------------------------
 
-    /** The company's Petty Cash asset account, created on first use (see class javadoc). */
+    /**
+     * The company's Petty Cash asset account (see class javadoc), resolved without ever borrowing
+     * an account that a cash/bank account (a till or a bank) already posts to — that would break the
+     * till's cash-book / GL tie-out (ARC-01 told companies to give each till its own GL account,
+     * often 1010):
+     * <ol>
+     *   <li>an active ASSET account named "Petty Cash" (any code, lowest code first);</li>
+     *   <li>else code 1010, when its name says petty cash;</li>
+     *   <li>else a new "Petty Cash" account on the first free code in 1011..1019.</li>
+     * </ol>
+     * Every candidate must be unlinked to any cash_bank_account.
+     */
     private ChartOfAccount pettyCashAccount(Long companyId) {
-        ChartOfAccount acct = glAccounts.findByCompanyIdAndAccountCode(companyId, PETTY_CASH_CODE)
+        java.util.Optional<ChartOfAccount> named = glAccounts
+                .findByCompanyIdAndAccountTypeIn(companyId, List.of(AccountType.ASSET)).stream()
+                .filter(a -> companyId.equals(a.getCompanyId()))
+                .filter(ChartOfAccount::isActive)
+                .filter(a -> a.getName() != null
+                        && PETTY_CASH_NAME.equalsIgnoreCase(a.getName().trim()))
+                .filter(a -> !isTillAccount(companyId, a.getId()))
+                .min(java.util.Comparator.comparing(ChartOfAccount::getAccountCode));
+        if (named.isPresent()) {
+            return named.get();
+        }
+
+        ChartOfAccount at1010 = glAccounts.findByCompanyIdAndAccountCode(companyId, PETTY_CASH_CODE)
                 .orElse(null);
-        if (acct == null) {
-            acct = new ChartOfAccount(companyId, PETTY_CASH_CODE, PETTY_CASH_NAME,
-                    AccountType.ASSET, null);
-            acct.setControlType(ControlType.CASH);
-            acct = glAccounts.save(acct);
-            log.info("PettyCashGlPoster: created GL account {} {} for company {}",
-                    PETTY_CASH_CODE, PETTY_CASH_NAME, companyId);
-            return acct;
+        if (at1010 != null && at1010.isActive() && at1010.getAccountType() == AccountType.ASSET
+                && at1010.getName() != null
+                && at1010.getName().toLowerCase(java.util.Locale.ROOT).contains("petty")
+                && !isTillAccount(companyId, at1010.getId())) {
+            return at1010;
         }
-        if (acct.getAccountType() != AccountType.ASSET || !acct.isActive()) {
-            throw new ConflictException("Account " + PETTY_CASH_CODE + " is where petty cash is"
-                    + " posted, but it is " + (acct.isActive() ? "not an asset account" : "inactive")
-                    + ". Ask your accountant to fix account " + PETTY_CASH_CODE + " first.");
+        if (at1010 == null) {
+            return create(companyId, PETTY_CASH_CODE);
         }
+        for (int code = 1011; code <= 1019; code++) {
+            String c = String.valueOf(code);
+            if (!glAccounts.existsByCompanyIdAndAccountCode(companyId, c)) {
+                return create(companyId, c);
+            }
+        }
+        throw new AccountingSetupException(
+                "Petty cash needs its own asset account named \"Petty Cash\", and codes 1010 to 1019"
+                        + " are all taken. Create an asset account named Petty Cash under General"
+                        + " Ledger, Chart of Accounts, then try again.");
+    }
+
+    private ChartOfAccount create(Long companyId, String code) {
+        ChartOfAccount acct = new ChartOfAccount(companyId, code, PETTY_CASH_NAME,
+                AccountType.ASSET, null);
+        acct.setControlType(ControlType.CASH);
+        acct = glAccounts.save(acct);
+        log.info("PettyCashGlPoster: created GL account {} {} for company {}",
+                code, PETTY_CASH_NAME, companyId);
         return acct;
+    }
+
+    /** True when a cash/bank account (till or bank) already posts to this GL account. */
+    private boolean isTillAccount(Long companyId, Long glAccountId) {
+        return glAccountId != null
+                && cashAccounts.findByCompanyIdAndGlAccountId(companyId, glAccountId).isPresent();
     }
 
     /** A captured expense/funding account, inside the company, that a voucher may post to. */
