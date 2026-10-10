@@ -51,6 +51,7 @@ class GlPostingExceptionIT extends PostgresIntegrationTest {
     @Autowired private GlConfigService glConfigService;
     @Autowired private ChartOfAccountRepository accountRepo;
     @Autowired private JournalEntryRepository entryRepo;
+    @Autowired private com.erp.modules.gl.repository.JournalLineRepository lineRepo;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
@@ -149,6 +150,35 @@ class GlPostingExceptionIT extends PostgresIntegrationTest {
         assertThat(tieOut.glRevenue()).isEqualByComparingTo("100.00");
         assertThat(tieOut.glVat()).isEqualByComparingTo("18.00");
         assertThat(tieOut.vatDifference()).isEqualByComparingTo("-18.00");
+    }
+
+    /** A re-post goes through the tender-split poster: same journal shape as a live sale. */
+    @Test
+    void tenderSplitSale_isRepostedWithItsTenderLegs() {
+        String invoiceUid = Ulid.next();
+        attempt(() -> invoker.postSaleWithTendersInNewTx(company.getId(), branch.getId(),
+                invoiceUid, "TZS", new BigDecimal("118.00"), new BigDecimal("100.00"),
+                new BigDecimal("18.00"), false,
+                List.of(new com.erp.modules.sales.domain.dto.InvoicePostingTenderDto(
+                        "CASH", null, new BigDecimal("50.00"))),
+                closedDate, null, null, null, null));
+        GlPostingExceptionDto ex = listOpen().get(0);
+        assertThat(ex.kind()).isEqualTo("SALE");
+
+        fiscalCalendarService.reopenPeriod(period1.uid());
+        GlPostingRepostResultDto result = exceptions.repost(company.getId(), ex.uid(), null);
+        assertThat(result.outcome()).isEqualTo("REPOSTED");
+
+        var entry = entryRepo.findByCompanyIdAndUid(company.getId(), result.journalEntryUid())
+                .orElseThrow();
+        var lines = lineRepo.findByEntryIdOrderByLineNo(entry.getId());
+        Long cash = account("1000");
+        Long ar = account("1200");
+        assertThat(lines).filteredOn(l -> l.getAccountId().equals(cash))
+                .singleElement().satisfies(l -> assertThat(l.getDebitAmount()).isEqualByComparingTo("50.00"));
+        assertThat(lines).filteredOn(l -> l.getAccountId().equals(ar))
+                .singleElement().satisfies(l -> assertThat(l.getDebitAmount()).isEqualByComparingTo("68.00"));
+        assertThat(entry.getTotalDebit()).isEqualByComparingTo("118.00");
     }
 
     @Test

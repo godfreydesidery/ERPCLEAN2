@@ -5,6 +5,7 @@ import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import { ExportFormat } from '../reporting/models/reporting.model';
+import { todayLocal } from '../../../shared/date.util';
 import {
   AccountDto,
   CreateAccountRequest,
@@ -284,7 +285,8 @@ export class GlService {
     if (periodId) params = params.set('periodId', periodId);
     if (range) {
       // An "as at" export prints the closing balances (ACC-14).
-      params = params.set('asAt', range.asAt || new Date().toISOString().slice(0, 10));
+      // Printing as at a date always names it (the screen's own date, else today, local).
+      params = params.set('asAt', range.asAt || todayLocal());
       if (range.from) params = params.set('from', range.from);
       if (range.branchUid) params = params.set('branchUid', range.branchUid);
     }

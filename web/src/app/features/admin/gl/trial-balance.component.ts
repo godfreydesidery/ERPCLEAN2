@@ -47,7 +47,7 @@ export class TrialBalanceComponent {
   /** 'totals' = the classic all-periods / one-period totals; 'asAt' = balances as at a date. */
   readonly basis = signal<'totals' | 'asAt'>('totals');
   readonly rangeFrom = signal('');
-  readonly asAt = signal(new Date().toISOString().slice(0, 10));
+  readonly asAt = signal(todayLocal());
   readonly branchUid = signal('');
   readonly branches = signal<Branch[]>([]);
   readonly range = signal<TrialBalanceRangeDto | null>(null);

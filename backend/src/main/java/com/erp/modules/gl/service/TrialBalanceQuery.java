@@ -4,6 +4,7 @@ import com.erp.modules.gl.domain.dto.TrialBalanceDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRangeDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRowDto;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.time.LocalDate;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
@@ -45,11 +46,14 @@ public class TrialBalanceQuery {
     private final ChartOfAccountRepository accountRepo;
     private final ScopeGuard scopeGuard;
     private final JdbcTemplate jdbc;
+    private final CompanyCalendar calendar;
 
     public TrialBalanceQuery(JournalLineRepository lineRepo,
                               ChartOfAccountRepository accountRepo,
                               ScopeGuard scopeGuard,
-                              JdbcTemplate jdbc) {
+                              JdbcTemplate jdbc,
+                              CompanyCalendar calendar) {
+        this.calendar    = calendar;
         this.lineRepo    = lineRepo;
         this.accountRepo = accountRepo;
         this.scopeGuard  = scopeGuard;
@@ -84,7 +88,7 @@ public class TrialBalanceQuery {
     public TrialBalanceRangeDto computeRange(Long companyId, LocalDate from, LocalDate asAt,
                                              String branchUid) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        LocalDate end = asAt != null ? asAt : LocalDate.now();
+        LocalDate end = asAt != null ? asAt : calendar.today(companyId);
         if (from != null && from.isAfter(end)) {
             throw new IllegalArgumentException("The start date must not be after the as-at date.");
         }

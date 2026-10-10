@@ -21,6 +21,7 @@ import com.erp.platform.audit.AuditOpenItemsQuery;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -79,6 +80,7 @@ public class GlPostingExceptionServiceImpl implements GlPostingExceptionService 
     private final SalesInvoiceService salesInvoices;
     private final GlConfigRepository glConfigs;
     private final JournalLineRepository lines;
+    private final CompanyCalendar calendar;
 
     public GlPostingExceptionServiceImpl(AuditOpenItemsQuery openItems, AuditService audit,
                                          JournalEntryRepository entries,
@@ -88,7 +90,9 @@ public class GlPostingExceptionServiceImpl implements GlPostingExceptionService 
                                          ScopeGuard scopeGuard, ObjectMapper mapper,
                                          SalesInvoiceService salesInvoices,
                                          GlConfigRepository glConfigs,
-                                         JournalLineRepository lines) {
+                                         JournalLineRepository lines,
+                                         CompanyCalendar calendar) {
+        this.calendar = calendar;
         this.salesInvoices = salesInvoices;
         this.glConfigs  = glConfigs;
         this.lines      = lines;
@@ -215,7 +219,7 @@ public class GlPostingExceptionServiceImpl implements GlPostingExceptionService 
     @Transactional(readOnly = true)
     public GlSalesTieOutDto salesTieOut(Long companyId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        LocalDate today = LocalDate.now();
+        LocalDate today = calendar.today(companyId);
         LocalDate start = from != null ? from : today.withDayOfMonth(1);
         LocalDate end   = to != null ? to : start.withDayOfMonth(start.lengthOfMonth());
         if (end.isBefore(start)) {
