@@ -173,6 +173,20 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
             // else exactly break-even and no P&L lines: nothing to post
 
             if (draftLines.size() >= 2) {
+                // ACC-16: the natural order is "close December, then close the year". The closing
+                // journal is dated the year's last day, so a CLOSED last period would refuse it.
+                // Open it for this post only and restore its original close stamps afterwards —
+                // same transaction, so nothing is ever left open (or half-done on failure).
+                FiscalPeriod lastPeriod = periodCovering(yearPeriods, year.getEndDate());
+                Instant lastClosedAt = null;
+                Long lastClosedBy = null;
+                boolean reopenedForClose = lastPeriod != null
+                        && lastPeriod.getStatus() == PeriodStatus.CLOSED;
+                if (reopenedForClose) {
+                    lastClosedAt = lastPeriod.getClosedAt();
+                    lastClosedBy = lastPeriod.getClosedBy();
+                    lastPeriod.setStatus(PeriodStatus.OPEN);
+                }
                 JournalEntryDraft closingDraft = new JournalEntryDraft(
                         year.getCompanyId(),
                         null,                         // branchId null — company-level journal
@@ -184,6 +198,11 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
                         actorId,
                         draftLines);
                 closing = glPostingService.post(closingDraft);
+                if (reopenedForClose) {
+                    lastPeriod.setStatus(PeriodStatus.CLOSED);
+                    lastPeriod.setClosedAt(lastClosedAt);
+                    lastPeriod.setClosedBy(lastClosedBy);
+                }
             }
         }
         // If draftLines < 2 (all-zero year), no journal posted; closing = null (D-4 edge)
@@ -203,6 +222,9 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
         year.setUpdatedAt(Instant.now());
         year.setUpdatedBy(actorId);
         years.save(year);
+
+        // 7b. ACC-16/ACC-01: leave the following year ready for posting.
+        fiscalCalendarService.ensureFollowingYear(year.getUid());
 
         // 8. Audit
         String journalUid = closing != null ? closing.uid() : "none";
@@ -313,6 +335,16 @@ public class YearEndCloseServiceImpl implements YearEndCloseService {
                             + ") must be CLOSED before closing " + year.getYearCode()
                             + ". Please close the prior fiscal year first.");
         }
+    }
+
+    private static FiscalPeriod periodCovering(List<FiscalPeriod> yearPeriods,
+                                               java.time.LocalDate date) {
+        for (FiscalPeriod p : yearPeriods) {
+            if (!p.getStartDate().isAfter(date) && !p.getEndDate().isBefore(date)) {
+                return p;
+            }
+        }
+        return null;
     }
 
     /** BR-CLOSE-10: only the most-recently-closed year may be reopened. */

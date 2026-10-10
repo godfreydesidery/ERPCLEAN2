@@ -366,6 +366,38 @@ class YearEndCloseServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // ACC-16 — close works after December was closed, and opens the next year
+    // =========================================================================
+
+    @Test
+    void closeFiscalYear_afterLastPeriodAlreadyClosed_postsClosingJournal_andOpensNextYear() {
+        post2026(cashAccountId, salesAccountId, new BigDecimal("1000"));
+        FiscalYearDto fy2026 = fy2026();
+        FiscalPeriodDto december = fiscalCalendarService.listPeriodsForYear(fy2026.uid()).get(11);
+        fiscalCalendarService.closePeriod(december.uid());
+        FiscalPeriodDto decClosed = fiscalCalendarService.getPeriodByUid(december.uid());
+
+        FiscalYearDto closed = yearEndCloseService.closeFiscalYear(fy2026.uid());
+
+        assertThat(closed.status()).isEqualTo(PeriodStatus.CLOSED);
+        assertThat(closed.closingJournalUid()).isNotNull();
+        assertThat(netBalance(salesAccountId)).isEqualByComparingTo(BigDecimal.ZERO);
+        FiscalPeriodDto decAfter = fiscalCalendarService.getPeriodByUid(december.uid());
+        assertThat(decAfter.status()).isEqualTo(PeriodStatus.CLOSED);
+        assertThat(decAfter.closedAt()).isEqualTo(decClosed.closedAt());
+        assertThat(fiscalCalendarService.listPeriodsForYear(fy2026.uid()))
+                .allMatch(p -> p.status() == PeriodStatus.CLOSED);
+
+        // The following year is ready for posting.
+        assertThat(fiscalCalendarService.listFiscalYears(company.getId()))
+                .anySatisfy(y -> {
+                    assertThat(y.yearCode()).isEqualTo("FY2027");
+                    assertThat(y.startDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+                    assertThat(y.status()).isEqualTo(PeriodStatus.OPEN);
+                });
+    }
+
+    // =========================================================================
     // Bar 5 — close ↔ Reporting consistency (BR-CLOSE-12)
     // =========================================================================
 
