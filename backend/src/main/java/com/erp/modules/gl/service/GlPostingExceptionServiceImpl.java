@@ -226,12 +226,14 @@ public class GlPostingExceptionServiceImpl implements GlPostingExceptionService 
             throw new IllegalArgumentException("The end date must not be before the start date.");
         }
 
-        VatOutputSummaryDto sales = salesInvoices.findVatSummaryForPeriod(companyId, start, end);
-        BigDecimal salesVat = nz(sales != null ? sales.totalOutputVat() : null);
-        BigDecimal salesNet = sales == null || sales.byBand() == null ? BigDecimal.ZERO
-                : sales.byBand().values().stream()
-                        .map(b -> nz(b.taxableBase()))
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Sales side = invoices finalised in the period MINUS invoices voided in the period — the
+        // same netting the VAT return uses. findVatSummaryForPeriod keeps an invoice that was voided
+        // later, while the GL nets it out through its SALES_REVERSAL journal; without subtracting the
+        // voids every voided sale showed up as "missing revenue" (seen on a restored client DB).
+        VatOutputSummaryDto sales  = salesInvoices.findVatSummaryForPeriod(companyId, start, end);
+        VatOutputSummaryDto voided = salesInvoices.findVatVoidSummaryForPeriod(companyId, start, end);
+        BigDecimal salesVat = outputVat(sales).subtract(outputVat(voided));
+        BigDecimal salesNet = taxableBase(sales).subtract(taxableBase(voided));
 
         Long revenueAcct = glConfigs.findByCompanyIdAndConfigKey(companyId, GlConfigKey.SALES_REVENUE)
                 .map(c -> c.getAccountId()).orElse(null);
@@ -251,6 +253,17 @@ public class GlPostingExceptionServiceImpl implements GlPostingExceptionService 
         }
         return new GlSalesTieOutDto(start, end, salesNet, salesVat, glRevenue, glVat,
                 salesNet.subtract(glRevenue), salesVat.subtract(glVat));
+    }
+
+    private static BigDecimal outputVat(VatOutputSummaryDto s) {
+        return nz(s != null ? s.totalOutputVat() : null);
+    }
+
+    private static BigDecimal taxableBase(VatOutputSummaryDto s) {
+        return s == null || s.byBand() == null ? BigDecimal.ZERO
+                : s.byBand().values().stream()
+                        .map(b -> nz(b.taxableBase()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private static BigDecimal nz(BigDecimal v) {
