@@ -171,6 +171,14 @@ public class StockLocationServiceImpl implements StockLocationService {
             throw new IllegalStateException(
                     "The in-transit location is managed by the system and cannot be deactivated.");
         }
+        // STK-20: an inactive location can't be counted or transferred out of, yet its stock still
+        // counts in the branch totals — so stock left there would be stranded. (Scope was asserted
+        // on the loaded location above; the probe is keyed by its id.)
+        if (locations.hasNonZeroOnHand(loc.getId())) {
+            throw new IllegalStateException(
+                    "This location still holds stock. Transfer or adjust it to zero before "
+                  + "deactivating the location.");
+        }
         loc.deactivate(principal.userId());
         locations.save(loc);
 

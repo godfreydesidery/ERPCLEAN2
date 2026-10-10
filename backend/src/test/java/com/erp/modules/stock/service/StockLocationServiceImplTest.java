@@ -378,6 +378,29 @@ class StockLocationServiceImplTest {
     }
 
     @Test
+    void deactivate_locationHoldingStock_refused_stk20() {
+        StockLocation back = stubNewLocation(false);
+        when(locations.findByUid("LOC-UID-001")).thenReturn(Optional.of(back));
+        when(locations.hasNonZeroOnHand(200L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deactivate("LOC-UID-001"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("still holds stock");
+        verify(back, never()).deactivate(any());
+    }
+
+    @Test
+    void deactivate_emptyLocation_allowed_stk20() {
+        StockLocation back = stubNewLocation(false);
+        when(locations.findByUid("LOC-UID-001")).thenReturn(Optional.of(back));
+        when(locations.hasNonZeroOnHand(200L)).thenReturn(false);
+
+        service.deactivate("LOC-UID-001");
+
+        verify(back).deactivate(USER_ID);
+    }
+
+    @Test
     void setDefault_transitLocation_refused_stk07() {
         StockLocation transit = stubTransit();
         branchLocations(transit);
