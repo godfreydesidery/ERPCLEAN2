@@ -203,6 +203,18 @@ class StockCountServiceImplTest {
     }
 
     @Test
+    void create_cycleWithNoProducts_isRefusedInsteadOfCountingTheWholeLocation_stk13() {
+        StockLocation loc = mock(StockLocation.class);
+        when(locationResolver.resolveLocation("LOC-UID-001", COMPANY_ID)).thenReturn(loc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(
+                        new CreateStockCountRequest("LOC-UID-001", LocalDate.now(), "CYCLE", List.of(), null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Choose the products to count");
+        verify(counts, never()).save(any(StockCount.class));
+    }
+
+    @Test
     void enterCount_inAPackUnit_storesTheBaseQuantity() {
         // STK-08 / OPN-01: "4 cartons" of a 12-piece carton is counted as 48 pieces.
         StockCount count = countInCounting(202L, "SC-UID-0004");

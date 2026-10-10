@@ -124,8 +124,14 @@ public class StockCountServiceImpl implements StockCountService {
                     "The in-transit location can't be counted. Choose a store or warehouse.");
         }
 
-        String number = numberGenerator.nextCount(principal.companyId());
         String type   = request.countType() != null ? request.countType().toUpperCase() : "FULL";
+        // STK-13: a CYCLE count with no products used to fall through to the whole location —
+        // the storekeeper asked for 10 fast movers and got a sheet of every product. Say so instead.
+        if ("CYCLE".equals(type) && (request.productUids() == null || request.productUids().isEmpty())) {
+            throw new IllegalArgumentException(
+                    "Choose the products to count for a cycle count, or use a FULL count.");
+        }
+        String number = numberGenerator.nextCount(principal.companyId());
 
         StockCount count = new StockCount(
                 principal.companyId(), loc.getBranchId(), number, type,
