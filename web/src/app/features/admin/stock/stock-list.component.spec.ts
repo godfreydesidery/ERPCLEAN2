@@ -357,6 +357,98 @@ describe('StockListComponent', () => {
     expect(comp.showAdjustForm()).toBe(false);
   });
 
+  // ── LUI-01: the forms must actually save through the DOM ─────────────────────
+  // The signal-level specs above never rendered the inputs, so they could not see that three of
+  // them sat inside a <form> with [ngModel] and no `name` — Angular throws NG01352 on that, the
+  // binding never attaches, and Save said "Enter a non-zero quantity" whatever was typed.
+
+  /** Type into an input the way a user does: set the value, then fire `input`. */
+  function typeInto(fixture: { nativeElement: HTMLElement }, selector: string, value: string): void {
+    const input = fixture.nativeElement.querySelector(selector) as HTMLInputElement | null;
+    expect(input, `${selector} should be rendered`).not.toBeNull();
+    input!.value = value;
+    input!.dispatchEvent(new Event('input'));
+  }
+
+  function submitForm(fixture: { nativeElement: HTMLElement }, selector: string): void {
+    const form = fixture.nativeElement.querySelector(selector) as HTMLFormElement | null;
+    expect(form, `${selector} should be rendered`).not.toBeNull();
+    form!.dispatchEvent(new Event('submit'));
+  }
+
+  it('toolbar Adjust Stock saves a +/- quantity typed into the form', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    comp.toggleAdjustForm();
+    fixture.detectChanges();
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    fixture.detectChanges();
+    // ngModel registers with its parent form in a microtask — let it attach before typing.
+    await vi.runAllTimersAsync();
+
+    typeInto(fixture, '#adjustQtyToolbar', '-3');
+    fixture.detectChanges();
+    submitForm(fixture, '#adjustStockForm');
+    await vi.runAllTimersAsync();
+
+    expect(comp.adjustError()).toBeNull();
+    expect(adjustSpy).toHaveBeenCalledOnce();
+    expect(adjustSpy.mock.calls[0][0].quantity).toBe('-3');
+  });
+
+  it('toolbar "Set to counted quantity" saves the delta from the typed count', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    comp.toggleAdjustForm();
+    comp.setAdjustMode('absolute');
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.adjustCurrentQty.set('100');
+    fixture.detectChanges();
+    // ngModel registers with its parent form in a microtask — let it attach before typing.
+    await vi.runAllTimersAsync();
+
+    typeInto(fixture, '#adjNewQtyToolbar', '97');
+    fixture.detectChanges();
+    submitForm(fixture, '#adjustStockForm');
+    await vi.runAllTimersAsync();
+
+    expect(comp.adjustError()).toBeNull();
+    expect(adjustSpy).toHaveBeenCalledOnce();
+    expect(adjustSpy.mock.calls[0][0].quantity).toBe('-3');
+  });
+
+  it('row "Set to counted quantity" saves the delta from the typed count', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW); // row.quantity = '100'
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.setAdjustMode('absolute');
+    fixture.detectChanges();
+    // ngModel registers with its parent form in a microtask — let it attach before typing.
+    await vi.runAllTimersAsync();
+
+    typeInto(fixture, '#adjNewQty', '104');
+    fixture.detectChanges();
+    submitForm(fixture, 'form[aria-label^="Adjust stock for"]');
+    await vi.runAllTimersAsync();
+
+    expect(comp.adjustError()).toBeNull();
+    expect(adjustSpy).toHaveBeenCalledOnce();
+    expect(adjustSpy.mock.calls[0][0].quantity).toBe('4');
+  });
+
   // ── 7. Reorder level edit ─────────────────────────────────────────────────
 
   it('calls setReorderLevel with correct payload', async () => {
