@@ -11,6 +11,10 @@ import {
   FiscalPeriodDto,
   FiscalYearDto,
   GlConfigDto,
+  GlPostingExceptionDto,
+  GlPostingExceptionFilter,
+  GlPostingRepostResultDto,
+  GlSalesTieOutDto,
   JournalEntryDto,
   OpenFiscalYearRequest,
   PostJournalRequest,
@@ -26,6 +30,11 @@ export interface AccountPage {
 
 export interface JournalPage {
   rows: JournalEntryDto[];
+  meta: PageMeta;
+}
+
+export interface PostingExceptionPage {
+  rows: GlPostingExceptionDto[];
   meta: PageMeta;
 }
 
@@ -124,6 +133,54 @@ export class GlService {
 
   reverseJournal(uid: string): Observable<JournalEntryDto> {
     return this.http.post<JournalEntryDto>(`${this.base}/journals/uid/${uid}/reverse`, {});
+  }
+
+  // ── Posting exceptions (ACC-02) ───────────────────────────────────────────
+
+  listPostingExceptions(
+    companyId: string,
+    filter: GlPostingExceptionFilter = {},
+    page = 0,
+    size = 20,
+  ): Observable<PostingExceptionPage> {
+    let params = new HttpParams()
+      .set('companyId', companyId)
+      .set('page', String(page))
+      .set('size', String(size))
+      .set('includeResolved', String(!!filter.includeResolved));
+    if (filter.sourceType) params = params.set('sourceType', filter.sourceType);
+    if (filter.from) params = params.set('from', filter.from);
+    if (filter.to) params = params.set('to', filter.to);
+
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http
+      .get<ApiResponse<GlPostingExceptionDto[]>>(`${this.base}/posting-exceptions`, { params, context })
+      .pipe(
+        map((env) => ({
+          rows: env.data ?? [],
+          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+        })),
+      );
+  }
+
+  /** Re-post one exception; `postingDate` (yyyy-MM-dd) moves it to another date, else the original. */
+  repostPostingException(
+    companyId: string,
+    uid: string,
+    postingDate?: string | null,
+  ): Observable<GlPostingRepostResultDto> {
+    return this.http.post<GlPostingRepostResultDto>(
+      `${this.base}/posting-exceptions/uid/${uid}/repost`,
+      { postingDate: postingDate || null },
+      { params: { companyId } },
+    );
+  }
+
+  getSalesTieOut(companyId: string, from?: string, to?: string): Observable<GlSalesTieOutDto> {
+    let params = new HttpParams().set('companyId', companyId);
+    if (from) params = params.set('from', from);
+    if (to) params = params.set('to', to);
+    return this.http.get<GlSalesTieOutDto>(`${this.base}/posting-exceptions/sales-tie-out`, { params });
   }
 
   // ── Fiscal Periods ────────────────────────────────────────────────────────

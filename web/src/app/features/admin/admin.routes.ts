@@ -446,6 +446,12 @@ export const ADMIN_ROUTES: Routes = [
       import('./gl/trial-balance.component').then((m) => m.TrialBalanceComponent),
   },
   {
+    path: 'gl/posting-exceptions',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/posting-exceptions.component').then((m) => m.PostingExceptionsComponent),
+  },
+  {
     path: 'gl/periods',
     canActivate: [requirePermission('GL.VIEW')],
     loadComponent: () =>

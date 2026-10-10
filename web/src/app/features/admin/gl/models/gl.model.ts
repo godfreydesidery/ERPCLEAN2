@@ -152,3 +152,54 @@ export interface TrialBalanceDto {
   totalDebits: string;
   totalCredits: string;
 }
+
+// ── Posting exceptions (ACC-02) ──────────────────────────────────────────────
+
+/**
+ * An automatic GL posting (sale, COGS, goods receipt, reversal…) that failed and was swallowed so
+ * its document could stand. BigDecimal `amount` arrives as a JSON number; format with formatMoney.
+ */
+export interface GlPostingExceptionDto {
+  uid: string;
+  kind: string;
+  sourceType: string | null;
+  sourceRef: string | null;
+  documentNumber: string | null;
+  postingDate: string | null;
+  amount: number | string | null;
+  reason: string | null;
+  failedAt: string;
+  status: 'OPEN' | 'RESOLVED';
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  outcome: 'REPOSTED' | 'ALREADY_POSTED' | null;
+  journalEntryUid: string | null;
+  batchNumber: string | null;
+}
+
+export interface GlPostingRepostResultDto {
+  exceptionUid: string;
+  outcome: 'REPOSTED' | 'ALREADY_POSTED';
+  journalEntryUid: string | null;
+  batchNumber: string | null;
+  postingDate: string | null;
+}
+
+export interface GlPostingExceptionFilter {
+  sourceType?: string;
+  from?: string;
+  to?: string;
+  includeResolved?: boolean;
+}
+
+/** Sales-vs-GL revenue/VAT tie-out (ACC-02). Amounts are JSON numbers. */
+export interface GlSalesTieOutDto {
+  from: string;
+  to: string;
+  salesNet: number | string;
+  salesVat: number | string;
+  glRevenue: number | string;
+  glVat: number | string;
+  revenueDifference: number | string;
+  vatDifference: number | string;
+}
