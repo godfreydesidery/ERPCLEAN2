@@ -10,6 +10,8 @@ import com.erp.modules.reporting.export.TabularRenderModel.Column;
 import com.erp.modules.sales.domain.dto.SalesReportDto;
 import com.erp.modules.sales.domain.dto.SalesReportRowDto;
 import com.erp.modules.sales.service.SalesReportQuery;
+import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.PermissionChecks;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -37,12 +39,29 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/reports/sales")
 public class SalesReportController {
 
+    /** Cost and margin are cost data (owner ruling 2026-10-10, ADM-14). */
+    static final String COST_PERMISSION = "INVENTORY.VALUATION.VIEW";
+
     private final SalesReportQuery salesReportQuery;
     private final TabularExporter  exporter;
+    private final PermissionChecks perm;
+    private final BranchReadGuard  branchGuard;
 
-    public SalesReportController(SalesReportQuery salesReportQuery, TabularExporter exporter) {
+    public SalesReportController(SalesReportQuery salesReportQuery, TabularExporter exporter,
+                                 PermissionChecks perm, BranchReadGuard branchGuard) {
         this.salesReportQuery = salesReportQuery;
         this.exporter         = exporter;
+        this.perm             = perm;
+        this.branchGuard      = branchGuard;
+    }
+
+    /**
+     * The report as this caller may see it: counter staff (SALES.INVOICE.VIEW without
+     * INVENTORY.VALUATION.VIEW) keep the report but get every margin withheld, flagged by
+     * {@code costVisible=false}. Root passes {@code perm.has} as usual.
+     */
+    private SalesReportDto visibleTo(SalesReportDto dto) {
+        return perm.has(COST_PERMISSION) ? dto : dto.withoutCost();
     }
 
     @GetMapping
@@ -55,7 +74,8 @@ public class SalesReportController {
             @RequestParam(required = false) String supplierUid,
             @RequestParam(required = false) String branchUid) {
         Long companyId = RequestContext.get().companyId();
-        return salesReportQuery.report(companyId, fromDate, toDate, agentUid, routeUid, supplierUid, branchUid);
+        return visibleTo(salesReportQuery.report(
+                companyId, fromDate, toDate, agentUid, routeUid, supplierUid, branchUid));
     }
 
     /**
@@ -74,14 +94,19 @@ public class SalesReportController {
             @RequestParam(required = false) String branchUid,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         Long companyId = RequestContext.get().companyId();
-        SalesReportDto dto = salesReportQuery.report(
-                companyId, fromDate, toDate, agentUid, routeUid, supplierUid, branchUid);
-        return download(exporter.export(flatten(dto), format));
+        SalesReportDto dto = visibleTo(salesReportQuery.report(
+                companyId, fromDate, toDate, agentUid, routeUid, supplierUid, branchUid));
+        return download(exporter.export(
+                flatten(dto, branchGuard.scopeHeaderLine(companyId, branchUid)), format));
     }
 
     // -------------------------------------------------------------------------
 
-    private TabularRenderModel flatten(SalesReportDto dto) {
+    /**
+     * @param scopeLine the branches the report really covers (RPT-05) — "Branch: All branches",
+     *                  one branch, or a branch-limited caller's own branches
+     */
+    TabularRenderModel flatten(SalesReportDto dto, String scopeLine) {
         List<String> headerLines = new ArrayList<>();
         ReportCompanyHeaderDto company = dto.company();
         if (company != null) {
@@ -106,6 +131,9 @@ public class SalesReportController {
             }
         }
         headerLines.add("From " + dto.fromDate() + " To " + dto.toDate());
+        if (scopeLine != null) {
+            headerLines.add(scopeLine);
+        }
         if (dto.agentName() != null) {
             headerLines.add("Agent: " + dto.agentName());
         }
@@ -116,36 +144,46 @@ public class SalesReportController {
             headerLines.add("Supplier: " + dto.supplierName());
         }
 
-        List<Column> columns = List.of(
+        // Margin is a column only for a caller who may see cost; for anyone else it is omitted,
+        // not printed blank (a blank column reads as "no margin", which is a different claim).
+        boolean cost = dto.costVisible();
+        List<Column> columns = new ArrayList<>(List.of(
                 new Column("Code", Align.LEFT),
                 new Column("Description", Align.LEFT),
                 new Column("Stock", Align.RIGHT),
                 new Column("Qty", Align.RIGHT),
                 new Column("Disc", Align.RIGHT),
-                new Column("VAT", Align.RIGHT),
-                new Column("Margin", Align.RIGHT),
-                new Column("Amount", Align.RIGHT));
+                new Column("VAT", Align.RIGHT)));
+        if (cost) {
+            columns.add(new Column("Margin", Align.RIGHT));
+        }
+        columns.add(new Column("Amount", Align.RIGHT));
 
         List<List<String>> rows = new ArrayList<>(dto.rows().size());
         for (SalesReportRowDto r : dto.rows()) {
-            rows.add(List.of(
+            List<String> row = new ArrayList<>(List.of(
                     nullToEmpty(r.productCode()),
                     nullToEmpty(r.productName()),
                     fmtQty(r.currentStock()),
                     fmtQty(r.qtySold()),
                     fmtAmt(r.discount()),
-                    fmtAmt(r.vat()),
-                    fmtAmt(r.margin()),
-                    fmtAmt(r.amount())));
+                    fmtAmt(r.vat())));
+            if (cost) {
+                row.add(fmtAmt(r.margin()));
+            }
+            row.add(fmtAmt(r.amount()));
+            rows.add(row);
         }
 
-        List<String> totalsRow = List.of(
+        List<String> totalsRow = new ArrayList<>(List.of(
                 "", "TOTAL", "",
                 fmtQty(dto.totals().qtySold()),
                 fmtAmt(dto.totals().discount()),
-                fmtAmt(dto.totals().vat()),
-                fmtAmt(dto.totals().margin()),
-                fmtAmt(dto.totals().amount()));
+                fmtAmt(dto.totals().vat())));
+        if (cost) {
+            totalsRow.add(fmtAmt(dto.totals().margin()));
+        }
+        totalsRow.add(fmtAmt(dto.totals().amount()));
 
         return new TabularRenderModel("Sales Report", headerLines, dto.generatedAt(),
                 columns, rows, totalsRow);
