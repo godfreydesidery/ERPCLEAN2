@@ -10,6 +10,8 @@ import com.erp.modules.ap.service.ApGlSeeder;
 import com.erp.modules.ap.service.ApOpeningBalanceService;
 import com.erp.modules.ap.service.ApPaymentService;
 import com.erp.modules.ar.service.ArGlSeeder;
+import com.erp.modules.cashbank.domain.dto.RecordDirectEntryRequest;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
 import com.erp.modules.cashbank.service.CashBankSeeder;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
@@ -95,6 +97,8 @@ class TaxLiabilityPaymentIT extends PostgresIntegrationTest {
     @Autowired private WhtRegisterService             whtRegisterService;
     @Autowired private WhtTypeService                 whtTypeService;
     @Autowired private PayrollStatutoryPaymentService statutoryPayments;
+    @Autowired private com.erp.modules.cashbank.service.CashDirectEntryService cashEntries;
+    @Autowired private VatReturnScheduleQuery         schedules;
     @Autowired private ApOpeningBalanceService        apOpeningBalanceService;
     @Autowired private ApPaymentService               apPaymentService;
     @Autowired private SupplierService                supplierService;
@@ -252,6 +256,39 @@ class TaxLiabilityPaymentIT extends PostgresIntegrationTest {
         statutoryPayments.pay(new RecordStatutoryPaymentRequest(
                 StatutoryLiability.PAYE, cashAccountUid, LocalDate.now(), new BigDecimal("75000"), "TRA-PAYE"));
         assertThat(balance("2500")).as("PAYE Payable paid down to zero").isEqualByComparingTo("0");
+    }
+
+    @Test
+    void cashExpenseWithInputVat_postsVatInput_andTheReturnClaimsIt() {
+        YearMonth jan = YearMonth.of(LocalDate.now().getYear(), 1);
+        String rentUid = jdbc.queryForObject(
+                "SELECT uid FROM chart_of_accounts WHERE company_id = ? AND account_code = '5200'",
+                String.class, company.getId());
+
+        assertThatThrownBy(() -> cashEntries.recordDirectEntry(new RecordDirectEntryRequest(
+                companyUid, cashAccountUid, CashTxnDirection.IN, new BigDecimal("1180"), jan.atDay(5),
+                rentUid, "Refund", new BigDecimal("180"))))
+                .as("input VAT only on money paid out").isInstanceOf(IllegalArgumentException.class);
+
+        cashEntries.recordDirectEntry(new RecordDirectEntryRequest(
+                companyUid, cashAccountUid, CashTxnDirection.OUT, new BigDecimal("1180"), jan.atDay(5),
+                rentUid, "Rent - Mlimani Properties", new BigDecimal("180")));
+        assertThat(balance("1400")).as("DR VAT Input 180").isEqualByComparingTo("180");
+        assertThat(balance("5200")).as("DR Rent 1000 (net)").isEqualByComparingTo("1000");
+
+        VatReturnDto r = vatReturnService.open(
+                new OpenVatReturnRequest(companyUid, jan.getYear(), jan.getMonthValue()));
+        assertThat(r.inputVat()).as("the cash expense's VAT is input VAT").isEqualByComparingTo("180");
+        var schedule = schedules.purchases(r.uid());
+        assertThat(schedule.rows()).singleElement().satisfies(row -> {
+            assertThat(row.documentType()).isEqualTo("CASH_EXPENSE");
+            assertThat(row.net()).isEqualByComparingTo("1000");
+            assertThat(row.vat()).isEqualByComparingTo("180");
+            assertThat(row.partyName()).isEqualTo("Rent - Mlimani Properties");
+        });
+
+        vatReturnService.file(r.uid(), new FileVatReturnRequest("TRA-CASH", jan.plusMonths(1).atDay(15)));
+        assertThat(balance("1400")).as("VAT Input clears on filing").isEqualByComparingTo("0");
     }
 
     // -------------------------------------------------------------------------

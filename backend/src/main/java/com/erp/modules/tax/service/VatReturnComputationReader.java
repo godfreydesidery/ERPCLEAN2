@@ -134,8 +134,25 @@ public class VatReturnComputationReader {
                 BigDecimal.class,
                 companyId, start, end);
 
+        // ACC-13 / PAR-08: input VAT claimed on cash/bank expense entries — the DR VAT Input legs of
+        // CASH_DIRECT journals dated in the period (only the direct-entry VAT option posts there).
+        BigDecimal cashVat = jdbc.queryForObject(
+                """
+                SELECT COALESCE(SUM(jl.debit_amount - jl.credit_amount), 0)
+                FROM   journal_lines jl
+                JOIN   journal_entries je ON je.id = jl.entry_id
+                JOIN   gl_configs g ON g.company_id = je.company_id
+                                   AND g.config_key = 'VAT_INPUT' AND g.account_id = jl.account_id
+                WHERE  je.company_id = ?
+                  AND  je.source_type = 'CASH_DIRECT'
+                  AND  je.posting_date BETWEEN ? AND ?
+                """,
+                BigDecimal.class,
+                companyId, start, end);
+
         BigDecimal totalInput = (inputVat != null ? inputVat : BigDecimal.ZERO)
-                .subtract(dnVat != null ? dnVat : BigDecimal.ZERO);
+                .subtract(dnVat != null ? dnVat : BigDecimal.ZERO)
+                .add(cashVat != null ? cashVat : BigDecimal.ZERO);
         return new VatReturnComputationDto(byBand, totalOutput, totalInput);
     }
 

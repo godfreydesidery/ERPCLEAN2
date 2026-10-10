@@ -186,6 +186,11 @@ export interface RecordDirectEntryRequest {
   /** uid of the counter GL account */
   counterGlAccountUid: string;
   memo?: string;
+  /**
+   * ACC-13 / PAR-08: input VAT included in `amount` (money OUT only). Posts DR VAT Input for it and
+   * DR the counter account for the rest; the VAT return claims it. Decimal string.
+   */
+  vatAmount?: string;
 }
 
 // ── Cheque ───────────────────────────────────────────────────────────────────

@@ -23,7 +23,9 @@ public record VatScheduleDto(
     /**
      * One document on the schedule.
      *
-     * @param documentType  INVOICE, VOID, CREDIT_NOTE (sales); BILL, DEBIT_NOTE (purchases)
+     * @param documentType  INVOICE, VOID, CREDIT_NOTE (sales); BILL, DEBIT_NOTE, CASH_EXPENSE
+     *                      (purchases — a cash/bank expense entry that claimed input VAT; its memo
+     *                      is the party column)
      * @param documentNumber our invoice / note number; for a bill, the SUPPLIER's tax invoice number
      * @param ourReference  for a bill, our bill number; otherwise null
      * @param fiscalNumber  the EFD / fiscal receipt number when one was issued; otherwise null

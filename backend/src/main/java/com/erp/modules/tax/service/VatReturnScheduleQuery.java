@@ -147,10 +147,26 @@ public class VatReturnScheduleQuery {
                     LEFT JOIN suppliers s ON s.id = dn.supplier_id AND s.company_id = dn.company_id
                     WHERE dn.company_id = ? AND dn.note_date BETWEEN ? AND ?
                       AND dn.created_at <= ?
+                    UNION ALL
+                    SELECT je.posting_date, 'CASH_EXPENSE', ct.txn_number, NULL,
+                           ct.memo, NULL, NULL,
+                           ct.amount - (jl.debit_amount - jl.credit_amount),
+                           jl.debit_amount - jl.credit_amount,
+                           NULL
+                    FROM journal_lines jl
+                    JOIN journal_entries je ON je.id = jl.entry_id
+                    JOIN gl_configs g ON g.company_id = je.company_id
+                         AND g.config_key = 'VAT_INPUT' AND g.account_id = jl.account_id
+                    LEFT JOIN cash_transactions ct ON ct.uid = je.source_ref
+                         AND ct.company_id = je.company_id
+                    WHERE je.company_id = ? AND je.source_type = 'CASH_DIRECT'
+                      AND je.posting_date BETWEEN ? AND ?
+                      AND je.posted_at <= ?
                 ) p
                 ORDER BY doc_date, doc_number
                 """.formatted(scale),
                 VatReturnScheduleQuery::row,
+                companyId, from, to, cutoff(r),
                 companyId, from, to, cutoff(r),
                 companyId, from, to, cutoff(r));
         return schedule(r, rows);
@@ -171,8 +187,12 @@ public class VatReturnScheduleQuery {
      * adjustment), so the schedule keeps reproducing the filed figures. A DRAFT takes them all.
      */
     private static Timestamp cutoff(VatReturn r) {
+        // filed_at is the APP clock; created_at / posted_at defaults are the DATABASE clock. A
+        // two-minute allowance absorbs clock skew between the two (a Docker VM clock drifts by
+        // seconds), so a document entered just before filing is never dropped; one entered in the
+        // first two minutes after filing would still be listed — far the lesser error.
         return r.getStatus() == VatReturnStatus.FILED && r.getFiledAt() != null
-                ? Timestamp.from(r.getFiledAt())
+                ? Timestamp.from(r.getFiledAt().plusSeconds(120))
                 : Timestamp.valueOf("9999-12-31 00:00:00");
     }
 

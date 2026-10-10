@@ -295,6 +295,7 @@ public class VatReturnController {
             case "CREDIT_NOTE" -> "Credit note";
             case "BILL"        -> "Bill";
             case "DEBIT_NOTE"  -> "Debit note";
+            case "CASH_EXPENSE" -> "Cash expense";
             default            -> t;
         };
     }

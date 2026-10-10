@@ -264,8 +264,11 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
 
         // A credit note back-dated into the already-FILED M1: it debits 2200 but no open return
         // window will ever read it, so M2 carries it as a CREDIT_NOTE_VAT adjustment.
-        creditNotes.raise(new RaiseCreditNoteRequest(companyUid, creditCustomerUid, null,
-                m1.atDay(25), new BigDecimal("100"), new BigDecimal("18"), "TZS", "Late credit"));
+        String lateCn = creditNotes.raise(new RaiseCreditNoteRequest(companyUid, creditCustomerUid, null,
+                m1.atDay(25), new BigDecimal("100"), new BigDecimal("18"), "TZS", "Late credit")).uid();
+        // Entered well after the filing (the schedule allows two minutes of app/DB clock skew).
+        jdbc.update("UPDATE ar_credit_notes SET created_at = created_at + interval '1 day' WHERE uid = ?",
+                lateCn);
 
         // ---- M2 return: the void and the debit note make both totals negative --------------------
         VatReturnDto r2 = vatReturnService.open(

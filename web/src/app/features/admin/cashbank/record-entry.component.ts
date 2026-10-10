@@ -82,6 +82,14 @@ export class RecordEntryComponent {
   readonly txnDate = signal('');
   readonly counterGlAccountUid = signal('');
   readonly memo = signal('');
+  /** ACC-13 / PAR-08: input VAT included in the amount — money OUT only. */
+  readonly vatAmount = signal('');
+
+  /** Fill the VAT field with 18/118 of the amount (VAT-inclusive standard rate). */
+  vatFromAmount(): void {
+    const amt = this.amountNum();
+    if (amt > 0) this.vatAmount.set((Math.round((amt * 18) / 118 * 100) / 100).toFixed(2));
+  }
 
   // ── Submit state ───────────────────────────────────────────────────────────
   readonly submitting = signal(false);
@@ -230,6 +238,11 @@ export class RecordEntryComponent {
     if (!amt || +amt <= 0) { this.formError.set('Enter a valid amount.'); return; }
     if (!date) { this.formError.set('Transaction date is required.'); return; }
     if (!counterUid) { this.formError.set('Counter GL account is required.'); return; }
+    const vat = this.direction() === 'OUT' ? String(this.vatAmount() ?? '').trim() : '';
+    if (vat && (!(+vat >= 0) || +vat >= +amt)) {
+      this.formError.set('The VAT must be less than the amount paid.');
+      return;
+    }
 
     const request: RecordDirectEntryRequest = {
       companyUid: company.uid,
@@ -239,6 +252,7 @@ export class RecordEntryComponent {
       txnDate: date,
       counterGlAccountUid: counterUid,
       memo: memoVal || undefined,
+      vatAmount: vat && +vat > 0 ? vat : undefined,
     };
 
     this.submitting.set(true);
@@ -263,6 +277,7 @@ export class RecordEntryComponent {
     this.savedEntry.set(null);
     this.direction.set('OUT');
     this.amount.set('');
+    this.vatAmount.set('');
     this.counterGlAccountUid.set('');
     this.memo.set('');
     this.txnDate.set(new Date().toISOString().slice(0, 10));
