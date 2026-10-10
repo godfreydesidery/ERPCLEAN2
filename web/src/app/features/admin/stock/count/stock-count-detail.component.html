@@ -228,9 +228,25 @@
                       <span class="fw-semibold mono">{{ line.productCode }}</span>
                       <span class="text-muted ms-1">{{ line.productName }}</span>
                     </td>
-                    <td>{{ line.unitName }}</td>
+                    <td>
+                      @if (isCounting() && canCreate() && unitsFor(line).length > 1) {
+                        <select class="form-select form-select-sm" style="min-width:90px"
+                                [ngModel]="editedUnits()[line.id] || ''"
+                                (ngModelChange)="onUnitChange(line.id, $event)"
+                                [attr.aria-label]="'Unit counted in for ' + line.productCode">
+                          @for (u of unitsFor(line); track u.unitUid) {
+                            <option [value]="u.unitUid">{{ u.name }}@if (u.factor !== 1) { ({{ u.factor }})}</option>
+                          }
+                        </select>
+                      } @else {
+                        {{ line.unitName }}
+                      }
+                    </td>
                     <td class="num">
                       {{ +line.systemQty | number:'1.0-4' }}
+                      @if (packs(line, line.systemQty); as p) {
+                        <div class="small text-muted">{{ p }}</div>
+                      }
                     </td>
                     <td class="num">
                       @if (isCounting() && canCreate()) {
@@ -239,10 +255,17 @@
                                style="width:100px; min-width:80px"
                                [ngModel]="editedQtys()[line.id]"
                                (ngModelChange)="onQtyChange(line.id, $event)"
+                               (focus)="loadUnits(line.productUid)"
                                [attr.aria-label]="'Counted qty for ' + line.productCode"
                                step="0.0001" />
+                        @if (basePreview(line); as preview) {
+                          <div class="small text-muted" aria-live="polite">{{ preview }}</div>
+                        }
                       } @else {
                         {{ line.countedQty !== null ? (+line.countedQty! | number:'1.0-4') : '—' }}
+                      }
+                      @if (line.countedQty !== null && packs(line, line.countedQty); as p) {
+                        <div class="small text-muted">{{ p }}</div>
                       }
                     </td>
                     @if (isPosted()) {

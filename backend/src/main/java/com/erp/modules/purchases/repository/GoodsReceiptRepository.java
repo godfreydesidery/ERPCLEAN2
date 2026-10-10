@@ -23,7 +23,7 @@ public interface GoodsReceiptRepository extends JpaRepository<GoodsReceipt, Long
     @Query("""
             SELECT g FROM GoodsReceipt g
             WHERE g.companyId = :companyId
-              AND (:q IS NULL OR g.receiptNumber = :q)
+              AND (:q IS NULL OR LOWER(g.receiptNumber) LIKE LOWER(CONCAT('%', :q, '%')))
             """)
     Page<GoodsReceipt> search(@Param("companyId") Long companyId,
                                @Param("q") String q,

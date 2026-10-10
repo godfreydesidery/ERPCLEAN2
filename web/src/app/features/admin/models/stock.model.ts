@@ -42,6 +42,11 @@ export interface StockOnHandDto {
   lastCountedAt: string | null;
   negative: boolean;
   low: boolean;
+  /**
+   * STK-10: the level `low` is judged against — this row's own `reorderLevel`, else the product's
+   * level for the branch, else the Product Master level. Absent on older servers.
+   */
+  effectiveReorderLevel?: string | null;
   /** Location of this on-hand row (enriched server-side; optional for older servers). */
   locationUid?: string | null;
   locationName?: string | null;
@@ -87,6 +92,8 @@ export interface AdjustStockRequest {
    * server corrects the one location that holds the product (ignoring empty and in-transit rows).
    */
   locationUid?: string;
+  /** STK-08: unit `quantity` is stated in (base unit or a pack size). Omitted = base unit. */
+  unitUid?: string;
 }
 
 export interface OpeningBalanceRequest {
@@ -94,6 +101,10 @@ export interface OpeningBalanceRequest {
   /** Must be positive — opening balance seeds an initial level. */
   quantity: string;
   note?: string;
+  /** STK-08: unit `quantity` is stated in. Omitted = base unit. */
+  unitUid?: string;
+  /** PRD-07: cost of one `unitUid` (needs INVENTORY.OPENING.SET). Omitted = the product cost. */
+  unitCost?: string;
 }
 
 export interface SetReorderLevelRequest {

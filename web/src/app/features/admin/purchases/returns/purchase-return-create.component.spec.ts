@@ -92,6 +92,26 @@ describe('PurchaseReturnCreateComponent — number-input coercion', () => {
     expect(comp.returnLines()[0].returnedQty).toBe('5');
   });
 
+  // ── PUR-08: newest-50 seed + server search, voided receipts excluded ─────
+
+  it('seeds the newest 50 receipts and searches the server by number', async () => {
+    makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    const purchases = TestBed.inject(PurchasesService) as unknown as { listReceipts: ReturnType<typeof vi.fn> };
+    expect(purchases.listReceipts).toHaveBeenCalledWith(STUB_COMPANY.id, undefined, 0, 50);
+
+    purchases.listReceipts.mockReturnValue(of({ rows: [
+      { uid: 'GR9', receiptNumber: 'GR-0042', status: 'RECEIVED' },
+      { uid: 'GRV', receiptNumber: 'GR-0043', status: 'VOID' },
+    ], meta: {} }));
+    let found: readonly { uid: string }[] = [];
+    comp.searchGr('0042').subscribe((opts) => (found = opts));
+
+    expect(purchases.listReceipts).toHaveBeenLastCalledWith(STUB_COMPANY.id, '0042', 0, 20);
+    expect(found.map((o) => o.uid)).toEqual(['GR9']);
+  });
+
   // ── 2. submit() does not throw when returnedQty set as a number ───────────
 
   it('submit() does not throw when returnedQty was set as a number', async () => {

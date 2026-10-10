@@ -14,7 +14,7 @@ public record CreateStockCountRequest(
         @NotNull LocalDate countDate,
         /** FULL or CYCLE */
         @NotBlank String countType,
-        /** For CYCLE counts: optional product uid subset. Empty/null = FULL location scope. */
+        /** The products a CYCLE count covers (required for CYCLE, STK-13); ignored for FULL. */
         @Size(max = 500) List<String> productUids,
         @Size(max = 500) String notes
 ) {}

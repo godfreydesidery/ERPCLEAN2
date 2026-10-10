@@ -139,7 +139,12 @@
                   <tr>
                     <td class="mono">{{ row.productCode }}</td>
                     <td>{{ row.productName }}</td>
-                    <td class="num mono">{{ fmtQty(row.quantityOnHand) }}</td>
+                    <td class="num mono">
+                      {{ fmtQty(row.quantityOnHand) }}
+                      @if (+(row.inTransitQty ?? 0) !== 0) {
+                        <div class="small text-muted">incl. {{ fmtQty(row.inTransitQty) }} in transit</div>
+                      }
+                    </td>
                     <td class="num mono">{{ fmtMoney(row.buyingPrice) }}</td>
                     <td class="num mono">{{ fmtMoney(row.sellingPrice) }}</td>
                     <td class="num mono">{{ fmtMoney(row.value) }}</td>

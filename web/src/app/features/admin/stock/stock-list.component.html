@@ -174,7 +174,33 @@
                      class="form-control"
                      [ngModel]="openingQty()" (ngModelChange)="openingQty.set($event)"
                      [disabled]="openingBusy()" />
+              @if (openingBasePreview(); as preview) {
+                <div class="form-text small" aria-live="polite">{{ preview }}</div>
+              }
             </div>
+            @if (openingUnits().length > 1) {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="openingUnit">Unit</label>
+                <select id="openingUnit" name="openingUnit" class="form-select"
+                        [ngModel]="openingUnitUid()" (ngModelChange)="openingUnitUid.set($event)"
+                        [disabled]="openingBusy()">
+                  @for (u of openingUnits(); track u.unitUid) {
+                    <option [value]="u.unitUid">{{ u.name }}@if (u.factor !== 1) { ({{ u.factor }})}</option>
+                  }
+                </select>
+              </div>
+            }
+            @if (canOpeningCost()) {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="openingUnitCost">Unit cost</label>
+                <input id="openingUnitCost" name="openingUnitCost" type="number" min="0" step="any"
+                       class="form-control" placeholder="Product cost"
+                       aria-describedby="openingUnitCostHint"
+                       [ngModel]="openingUnitCost()" (ngModelChange)="openingUnitCost.set($event)"
+                       [disabled]="openingBusy()" />
+                <div id="openingUnitCostHint" class="form-text small">Per unit chosen. Blank = the product's cost.</div>
+              </div>
+            }
             <!-- Note -->
             <div class="col-sm-3">
               <label class="form-label small text-muted mb-1" for="openingNote">Note</label>
@@ -264,6 +290,9 @@
                 <label class="form-label small text-muted mb-1" for="adjCurrentQtyToolbar">Current qty</label>
                 <input id="adjCurrentQtyToolbar" type="text" class="form-control form-control-sm"
                        [value]="adjustCurrentQty()" disabled readonly />
+                @if (adjustCurrentBreakdown(); as packs) {
+                  <div class="form-text small">{{ packs }}</div>
+                }
               </div>
               <div class="col-sm-2">
                 <label class="form-label small text-muted mb-1" for="adjNewQtyToolbar">
@@ -283,6 +312,36 @@
                        class="form-control form-control-sm"
                        [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
                        [disabled]="adjusting()" />
+              </div>
+            }
+            @if (adjustUnits().length > 1) {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="adjustUnitToolbar">Unit</label>
+                <select id="adjustUnitToolbar" name="adjustUnitToolbar" class="form-select form-select-sm"
+                        [ngModel]="adjustUnitUid()" (ngModelChange)="adjustUnitUid.set($event)"
+                        [disabled]="adjusting()">
+                  @for (u of adjustUnits(); track u.unitUid) {
+                    <option [value]="u.unitUid">{{ u.name }}@if (u.factor !== 1) { ({{ u.factor }})}</option>
+                  }
+                </select>
+                @if (adjustBasePreview(); as preview) {
+                  <div class="form-text small" aria-live="polite">{{ preview }}</div>
+                }
+              </div>
+            }
+            @if (adjustLocations().length > 1) {
+              <div class="col-sm-2">
+                <label class="form-label small text-muted mb-1" for="adjustLocationToolbar">
+                  Location <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <select id="adjustLocationToolbar" name="adjustLocationToolbar" class="form-select form-select-sm"
+                        [ngModel]="adjustLocationUid() ?? ''" (ngModelChange)="onAdjustLocationChange($event)"
+                        [disabled]="adjusting()">
+                  <option value="">Choose…</option>
+                  @for (l of adjustLocations(); track l.uid) {
+                    <option [value]="l.uid">{{ l.name }} ({{ l.quantity }})</option>
+                  }
+                </select>
               </div>
             }
 
@@ -402,7 +461,11 @@
                           <span class="text-danger small d-block mt-1" role="alert">{{ msg }}</span>
                         }
                       } @else {
-                        {{ row.reorderLevel ?? '—' }}
+                        @if (row.reorderLevel === null && row.effectiveReorderLevel) {
+                          <span class="text-muted" title="From the product (no level set for this location)">{{ row.effectiveReorderLevel }}*</span>
+                        } @else {
+                          {{ row.reorderLevel ?? '—' }}
+                        }
                         @if (canAdjust()) {
                           <button type="button" class="btn btn-link btn-sm p-0 ms-1"
                                   (click)="startReorderEdit(row)"
@@ -502,6 +565,9 @@
                                   <label class="form-label small text-muted mb-1" for="adjCurrentQty">Current qty</label>
                                   <input id="adjCurrentQty" type="text" class="form-control form-control-sm"
                                          [value]="adjustCurrentQty()" disabled readonly />
+                                  @if (adjustCurrentBreakdown(); as packs) {
+                                    <div class="form-text small">{{ packs }}</div>
+                                  }
                                 </div>
                                 <div class="col-sm-2">
                                   <label class="form-label small text-muted mb-1" for="adjNewQty">
@@ -522,6 +588,21 @@
                                          class="form-control form-control-sm"
                                          [ngModel]="adjustQty()" (ngModelChange)="adjustQty.set($event)"
                                          [disabled]="adjusting()" />
+                                </div>
+                              }
+                              @if (adjustUnits().length > 1) {
+                                <div class="col-sm-2">
+                                  <label class="form-label small text-muted mb-1" for="adjustUnit">Unit</label>
+                                  <select id="adjustUnit" name="adjustUnit" class="form-select form-select-sm"
+                                          [ngModel]="adjustUnitUid()" (ngModelChange)="adjustUnitUid.set($event)"
+                                          [disabled]="adjusting()">
+                                    @for (u of adjustUnits(); track u.unitUid) {
+                                      <option [value]="u.unitUid">{{ u.name }}@if (u.factor !== 1) { ({{ u.factor }})}</option>
+                                    }
+                                  </select>
+                                  @if (adjustBasePreview(); as preview) {
+                                    <div class="form-text small" aria-live="polite">{{ preview }}</div>
+                                  }
                                 </div>
                               }
                               <!-- Reason -->

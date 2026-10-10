@@ -118,6 +118,47 @@
               <span class="hint">FULL = entire location. CYCLE = selected products.</span>
             </div>
 
+            @if (fCountType() === 'CYCLE') {
+              <!-- STK-13: products to count -->
+              <div class="erp-field full position-relative">
+                <label class="form-label" for="cycleProductSearch">
+                  Products to count <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                <input id="cycleProductSearch" name="cycleProductSearch" type="search"
+                       class="form-control" autocomplete="off"
+                       placeholder="Search by name, code or barcode…"
+                       aria-autocomplete="list"
+                       [attr.aria-expanded]="cycleResults().length > 0"
+                       [ngModel]="cycleQ()" (ngModelChange)="onCycleSearch($event)" />
+                @if (cycleResults().length > 0) {
+                  <ul class="list-group position-absolute shadow-sm mt-1 w-100" role="listbox"
+                      aria-label="Product suggestions" style="z-index:1050;max-height:220px;overflow-y:auto;">
+                    @for (p of cycleResults(); track p.uid) {
+                      <li class="list-group-item list-group-item-action small py-1" role="option"
+                          tabindex="0" style="cursor:pointer"
+                          [attr.aria-selected]="false"
+                          (click)="addCycleProduct(p)" (keydown.enter)="addCycleProduct(p)">
+                        <strong>{{ p.code }}</strong> — {{ p.name }}
+                      </li>
+                    }
+                  </ul>
+                }
+                @if (cycleProducts().length > 0) {
+                  <ul class="list-unstyled d-flex flex-wrap gap-1 mt-2 mb-0" aria-label="Products to count">
+                    @for (p of cycleProducts(); track p.uid) {
+                      <li class="badge text-bg-light border d-inline-flex align-items-center gap-1">
+                        {{ p.label }}
+                        <button type="button" class="btn-close btn-close-sm" style="font-size:.6rem"
+                                [attr.aria-label]="'Remove ' + p.label"
+                                (click)="removeCycleProduct(p.uid)"></button>
+                      </li>
+                    }
+                  </ul>
+                }
+                <span class="hint">{{ cycleProducts().length }} selected. Only items held at this location are counted.</span>
+              </div>
+            }
+
             <!-- Notes -->
             <div class="erp-field full">
               <label class="form-label" for="notes">Notes</label>

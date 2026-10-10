@@ -203,6 +203,66 @@ class StockCountServiceImplTest {
     }
 
     @Test
+    void create_cycleWithNoProducts_isRefusedInsteadOfCountingTheWholeLocation_stk13() {
+        StockLocation loc = mock(StockLocation.class);
+        when(locationResolver.resolveLocation("LOC-UID-001", COMPANY_ID)).thenReturn(loc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(
+                        new CreateStockCountRequest("LOC-UID-001", LocalDate.now(), "CYCLE", List.of(), null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Choose the products to count");
+        verify(counts, never()).save(any(StockCount.class));
+    }
+
+    @Test
+    void enterCount_inAPackUnit_storesTheBaseQuantity() {
+        // STK-08 / OPN-01: "4 cartons" of a 12-piece carton is counted as 48 pieces.
+        StockCount count = countInCounting(202L, "SC-UID-0004");
+        StockCountLine line = countLine(302L, count.getId());
+        when(countLines.findById(302L)).thenReturn(Optional.of(line));
+        ProductDto product = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
+                "P001", "Widget A", null, null,
+                true, true, false, false, false, "BASE-UID", "PC", "Pieces",
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);
+        when(productService.getById(PRODUCT_ID)).thenReturn(product);
+        when(productService.listBulkPacks("PROD-UID-001")).thenReturn(List.of(
+                new com.erp.modules.products.domain.dto.ProductBulkPackDto(1L, "BP-1", PRODUCT_ID,
+                        "CTN-UID", "CTN", "Carton", new BigDecimal("12"), null, false, false,
+                        List.of())));
+
+        service.enterCount("SC-UID-0004", new EnterCountRequest(List.of(
+                new EnterCountRequest.LineEntry(302L, new BigDecimal("4"), null, "CTN-UID"))));
+
+        assertThat(line.getCountedQty()).isEqualByComparingTo("48");
+    }
+
+    @Test
+    void enterCount_unitNotOnTheProduct_isRefused() {
+        StockCount count = countInCounting(203L, "SC-UID-0005");
+        StockCountLine line = countLine(303L, count.getId());
+        when(countLines.findById(303L)).thenReturn(Optional.of(line));
+        ProductDto product = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
+                "P001", "Widget A", null, null,
+                true, true, false, false, false, "BASE-UID", "PC", "Pieces",
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);
+        when(productService.getById(PRODUCT_ID)).thenReturn(product);
+        when(productService.listBulkPacks("PROD-UID-001")).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.enterCount("SC-UID-0005",
+                        new EnterCountRequest(List.of(
+                                new EnterCountRequest.LineEntry(303L, BigDecimal.ONE, null, "CTN-UID")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be used for Widget A");
+        verify(countLines, never()).save(line);
+    }
+
+    @Test
     void enterCount_blankReasonCode_doesNotClobberAnAlreadyRecordedReason() {
         // A re-enter (e.g. correcting a typo'd quantity) with no reason supplied must not erase a
         // reason already recorded on an earlier enter for the same line.

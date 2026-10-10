@@ -41,6 +41,7 @@ import com.erp.modules.products.domain.dto.AddComponentRequest;
 import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
+import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
 import com.erp.modules.products.domain.enums.ProductType;
@@ -715,6 +716,75 @@ class InventoryValuationServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> inventoryValuationService.setOpeningValue(secondRequest, today))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already has an opening valuation");
+    }
+
+    // =========================================================================
+    // STK-08 / OPN-01 + PRD-07 / LSF-09: opening balance in cartons, with a cost
+    // =========================================================================
+
+    @Test
+    void openingBalance_inCartonsWithUnitCost_postsBaseQtyAndValuesItInTheSameTx() {
+        ProductDto product = stockableProduct("CartonWidget");
+        String ctnUid = cartonPack(product, "12");
+
+        setCtx();
+        stockService.openingBalance(new OpeningBalanceRequest(
+                product.uid(), new BigDecimal("2"), null, ctnUid, new BigDecimal("24000")));
+
+        StockOnHand soh = requireSoh(product.id());
+        assertThat(soh.getQuantity()).isEqualByComparingTo("24");            // 2 × 12
+        assertThat(soh.getAvgCost()).isEqualByComparingTo("2000");            // 24000 / 12
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo("48000");
+        assertThat(inventoryBalance()).isEqualByComparingTo("48000");
+
+        // Adjust out one carton: −12 pieces.
+        setCtx();
+        stockService.adjust(new AdjustStockRequest(product.uid(), new BigDecimal("-1"),
+                AdjustmentReason.DAMAGE, null, null, null, null, ctnUid));
+        assertThat(requireSoh(product.id()).getQuantity()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void openingBalance_withoutCost_usesTheProductCost() {
+        setCtx();
+        ProductDto product = productService.create(new CreateProductRequest(
+                company.getUid(), null, "CostedWidget", null,
+                ProductType.GOODS, true, true, pcsUid, new MoneyDto("1800", "TZS"),
+                VatStatus.STANDARD, null, null, null, null, null, null, null, null, null));
+
+        setCtx();
+        stockService.openingBalance(
+                new OpeningBalanceRequest(product.uid(), new BigDecimal("10"), null));
+
+        StockOnHand soh = requireSoh(product.id());
+        assertThat(soh.getAvgCost()).isEqualByComparingTo("1800");
+        assertThat(soh.getOnHandValue()).isEqualByComparingTo("18000");
+    }
+
+    @Test
+    void openingBalance_unitNotOnTheProduct_isRefused() {
+        ProductDto product = stockableProduct("NoPackWidget");
+        setCtx();
+        UnitOfMeasureDto box = unitService.create(
+                new CreateUnitOfMeasureRequest(company.getUid(), "BOXX", "Box"));
+
+        setCtx();
+        assertThatThrownBy(() -> stockService.openingBalance(new OpeningBalanceRequest(
+                product.uid(), BigDecimal.ONE, null, box.uid(), null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be used for NoPackWidget");
+    }
+
+    /** Adds a carton pack of {@code factor} base units to the product; returns the unit uid. */
+    private String cartonPack(ProductDto product, String factor) {
+        setCtx();
+        UnitOfMeasureDto ctn = unitService.create(
+                new CreateUnitOfMeasureRequest(company.getUid(), "CTN" + product.id(), "Carton"));
+        setCtx();
+        productService.addBulkPack(product.uid(),
+                new com.erp.modules.products.domain.dto.CreateBulkPackRequest(
+                        ctn.uid(), new BigDecimal(factor)));
+        return ctn.uid();
     }
 
     // =========================================================================

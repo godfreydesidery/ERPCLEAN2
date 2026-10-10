@@ -11,6 +11,10 @@ import { BranchService } from '../../branch/branch.service';
 import { OrganisationService } from '../../organisation/organisation.service';
 import { StockLocationService } from '../locations/stock-location.service';
 import { UidPickerComponent, UidOption } from '../../../../shared/uid-picker/uid-picker.component';
+import { Subject, debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ProductService } from '../../products/product.service';
+import { ProductModel } from '../../models/product.model';
 import { CreateStockCountRequest } from './stock-count.model';
 import { StockCountService } from './stock-count.service';
 
@@ -32,6 +36,7 @@ export class StockCountCreateComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly locationService = inject(StockLocationService);
   private readonly router = inject(Router);
+  private readonly productService = inject(ProductService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -52,6 +57,12 @@ export class StockCountCreateComponent {
   readonly fCountType = signal<'FULL' | 'CYCLE'>('FULL');
   readonly fNotes = signal('');
 
+  /** STK-13: the products a CYCLE count covers, picked by server-side search. */
+  readonly cycleProducts = signal<{ uid: string; label: string }[]>([]);
+  readonly cycleQ = signal('');
+  readonly cycleResults = signal<ProductModel[]>([]);
+  private readonly cycleSearch$ = new Subject<string>();
+
   // ── Reference-data availability ───────────────────────────────────────────────
   /** True when the branch list could not be loaded (non-fatal; location picker uses first branch only). */
   readonly branchesUnavailable = signal(false);
@@ -63,7 +74,41 @@ export class StockCountCreateComponent {
   readonly canCreate = computed(() => this.session.hasPermission('STOCK.COUNT.CREATE'));
 
   constructor() {
+    this.cycleSearch$
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((q) => {
+          const companyId = this.selectedCompanyId();
+          if (!companyId || !q.trim()) { this.cycleResults.set([]); return []; }
+          return this.productService.list(companyId, q.trim(), 0, 10);
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe({
+        next: ({ rows }) => this.cycleResults.set(
+          rows.filter((p) => p.status !== 'ARCHIVED' && p.stockable !== false),
+        ),
+        error: () => this.cycleResults.set([]),
+      });
     this.loadCompanies();
+  }
+
+  onCycleSearch(q: string): void {
+    this.cycleQ.set(q);
+    this.cycleSearch$.next(q);
+  }
+
+  addCycleProduct(p: ProductModel): void {
+    if (!this.cycleProducts().some((x) => x.uid === p.uid)) {
+      this.cycleProducts.update((list) => [...list, { uid: p.uid, label: `${p.code} — ${p.name}` }]);
+    }
+    this.cycleQ.set('');
+    this.cycleResults.set([]);
+  }
+
+  removeCycleProduct(uid: string): void {
+    this.cycleProducts.update((list) => list.filter((x) => x.uid !== uid));
   }
 
   // ── Loaders ───────────────────────────────────────────────────────────────────
@@ -155,6 +200,11 @@ export class StockCountCreateComponent {
       return;
     }
 
+    if (this.fCountType() === 'CYCLE' && this.cycleProducts().length === 0) {
+      this.formError.set('Choose the products to count, or use a FULL count.');
+      return;
+    }
+
     this.submitting.set(true);
     const request: CreateStockCountRequest = {
       locationUid: this.fLocationUid(),
@@ -162,6 +212,7 @@ export class StockCountCreateComponent {
       countType: this.fCountType(),
       notes: this.fNotes().trim() || undefined,
     };
+    if (this.fCountType() === 'CYCLE') request.productUids = this.cycleProducts().map((p) => p.uid);
 
     this.countService.create(request).subscribe({
       next: (created) => {

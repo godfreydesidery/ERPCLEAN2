@@ -142,6 +142,16 @@ public class NotificationScanner {
 
         // Fire notifications for rows at/below reorder level
         List<StockOnHand> atOrBelow = stockOnHand.findAtOrBelowReorderByCompany(companyId);
+        // STK-10: a row may be low against the product's (or branch's) level, not its own.
+        Map<Long, BigDecimal> effectiveLevel = new HashMap<>();
+        if (!atOrBelow.isEmpty()) {
+            for (Object[] r : stockOnHand.findEffectiveReorderLevels(companyId,
+                    atOrBelow.stream().map(StockOnHand::getId).toList())) {
+                if (r[0] != null && r[1] != null) {
+                    effectiveLevel.put(((Number) r[0]).longValue(), (BigDecimal) r[1]);
+                }
+            }
+        }
         for (StockOnHand row : atOrBelow) {
             String conditionKey = row.getUid() + ":" + row.getBranchId();
             Optional<NotificationScanMarker> existing =
@@ -161,7 +171,9 @@ public class NotificationScanner {
             vals.put("productName", "Product#" + row.getProductId());
             vals.put("branchName", "Branch#" + row.getBranchId());
             vals.put("onHandQty", row.getQuantity().toPlainString());
-            vals.put("reorderLevel", row.getReorderLevel().toPlainString());
+            BigDecimal level = row.getReorderLevel() != null
+                    ? row.getReorderLevel() : effectiveLevel.get(row.getId());
+            vals.put("reorderLevel", level != null ? level.toPlainString() : "");
             vals.put("sourceUid", row.getUid());
 
             // Trigger key includes date to distinguish daily crossings

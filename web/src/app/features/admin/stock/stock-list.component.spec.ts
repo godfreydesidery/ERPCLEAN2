@@ -12,7 +12,7 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -101,6 +101,10 @@ function makeBed(overrides: {
         useValue: {
           list: vi.fn(() => of(emptyPage())),
           listUnits: vi.fn(() => of(emptyPage())),
+          listProductUnits: vi.fn(() => of([{ uid: 'PCS-UID', code: 'PCS', name: 'Pieces' }])),
+          listBulkPacks: vi.fn(() => of([
+            { uid: 'BP1', unitUid: 'CTN-UID', unitCode: 'CTN', unitName: 'Carton', factorToBase: '12' },
+          ])),
         },
       },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
@@ -464,6 +468,108 @@ describe('StockListComponent', () => {
     expect(adjustSpy.mock.calls[0][0].locationUid).toBe('LOC-BACK');
   });
 
+  it('toolbar adjust in cartons sends the carton unit and previews the base quantity (STK-08)', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleAdjustForm();
+    comp.selectAdjustProduct({ uid: 'PROD-UID-1', code: 'P001', name: 'Test Product' } as never);
+    await vi.runAllTimersAsync();
+    expect(comp.adjustUnits().map((u) => u.unitUid)).toEqual(['', 'CTN-UID']);
+
+    comp.adjustUnitUid.set('CTN-UID');
+    comp.adjustQty.set('-2');
+    expect(comp.adjustBasePreview()).toBe('= -24 Pieces');
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+
+    expect(adjustSpy.mock.calls[0][0]).toMatchObject({ quantity: '-2', unitUid: 'CTN-UID' });
+  });
+
+  it('absolute mode in cartons converts the count to base before taking the delta (STK-08)', async () => {
+    const { adjustSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.openAdjustForm(STUB_ON_HAND_ROW); // current 100 pieces
+    comp.adjustSelectedProduct.set({ uid: 'PROD-UID-1', label: 'P001 — Test Product' });
+    comp.adjustUnits.set([
+      { unitUid: '', code: 'PCS', name: 'Pieces', factor: 1 },
+      { unitUid: 'CTN-UID', code: 'CTN', name: 'Carton', factor: 12 },
+    ]);
+    expect(comp.adjustCurrentBreakdown()).toBe('8 CTN + 4 PCS');
+    comp.setAdjustMode('absolute');
+    comp.adjustUnitUid.set('CTN-UID');
+    comp.adjustNewQty.set('9');                 // 108 pieces
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+
+    expect(adjustSpy.mock.calls[0][0].quantity).toBe('8');
+    expect(adjustSpy.mock.calls[0][0].unitUid).toBeUndefined();
+  });
+
+  it('toolbar adjust asks for a location when the product sits at two shelves', async () => {
+    const listOnHandSpy = vi.fn(() => of({
+      rows: [
+        { ...STUB_ON_HAND_ROW, uid: 'S1', quantity: '5', locationUid: 'LOC-A', locationName: 'Main Store' },
+        { ...STUB_ON_HAND_ROW, uid: 'S2', quantity: '7', locationUid: 'LOC-B', locationName: 'Back Store' },
+      ],
+      meta: { page: 0, size: 20, totalElements: 2, totalPages: 1, hasNext: false },
+    }));
+    const { adjustSpy } = makeBed({ listOnHandSpy });
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleAdjustForm();
+    comp.selectAdjustProduct({ uid: 'PROD-UID-1', code: 'P001', name: 'Test Product' } as never);
+    await vi.runAllTimersAsync();
+    expect(comp.adjustLocations().map((l) => l.uid)).toEqual(['LOC-A', 'LOC-B']);
+
+    comp.adjustQty.set('-1');
+    comp.submitAdjust();
+    expect(adjustSpy).not.toHaveBeenCalled();
+    expect(comp.adjustError()).toContain('choose the location');
+
+    comp.onAdjustLocationChange('LOC-B');
+    expect(comp.adjustCurrentQty()).toBe('7');
+    comp.submitAdjust();
+    await vi.runAllTimersAsync();
+    expect(adjustSpy.mock.calls[0][0].locationUid).toBe('LOC-B');
+  });
+
+  it('the Adjust Stock menu route opens the toolbar Adjust form (ADM-29)', async () => {
+    makeBed();
+    TestBed.overrideProvider(ActivatedRoute, { useValue: { snapshot: { data: { openAdjust: true } } } });
+    const comp = TestBed.createComponent(StockListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    expect(comp.showAdjustForm()).toBe(true);
+  });
+
+  it('opening balance sends the chosen unit and cost (STK-08, PRD-07)', async () => {
+    const { openingBalanceSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.toggleOpeningForm();
+    comp.selectOpeningProduct({ uid: 'PROD-UID-1', code: 'P001', name: 'Test Product' } as never);
+    await vi.runAllTimersAsync();
+    comp.openingUnitUid.set('CTN-UID');
+    comp.openingQty.set('3');
+    comp.openingUnitCost.set('24000');
+    expect(comp.openingBasePreview()).toBe('= 36 Pieces');
+    comp.submitOpeningBalance();
+    await vi.runAllTimersAsync();
+
+    expect(openingBalanceSpy.mock.calls[0][0]).toMatchObject({
+      productUid: 'PROD-UID-1', quantity: '3', unitUid: 'CTN-UID', unitCost: '24000',
+    });
+  });
   it('opening balance shows the server\'s reason on a 409 (STK-17)', async () => {
     const openingBalanceSpy = vi.fn(() => throwError(() => new HttpErrorResponse({
       status: 409, error: { errors: ['This product already has stock activity at this branch.'] },

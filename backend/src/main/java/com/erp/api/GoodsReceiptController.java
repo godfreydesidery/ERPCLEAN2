@@ -114,6 +114,10 @@ public class GoodsReceiptController {
     public ApiResponse<List<GoodsReceiptDto>> list(
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
+            // PUR-08: newest first unless the caller sorts (was unsorted, so the GRN pickers'
+            // first page held the OLDEST receipts and this week's delivery was missing).
+            @org.springframework.data.web.PageableDefault(size = 20, sort = "id",
+                    direction = org.springframework.data.domain.Sort.Direction.DESC)
             Pageable pageable) {
         Page<GoodsReceiptDto> page = service.list(companyId, q, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
