@@ -142,7 +142,11 @@
                    class="form-control"
                    [ngModel]="dueDate()"
                    (ngModelChange)="dueDate.set($event)"
+                   aria-describedby="obDueDateHelp"
                    [disabled]="saving()" />
+            <div id="obDueDateHelp" class="form-text">
+              Leave blank to use the customer's payment terms (or the invoice date if none are set).
+            </div>
           </div>
 
           <!-- Document No (optional) -->
