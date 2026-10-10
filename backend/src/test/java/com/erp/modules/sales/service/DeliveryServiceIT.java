@@ -811,6 +811,66 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
                 .isEqualByComparingTo("9000");
     }
 
+    /**
+     * SAL-07: voiding an order-billed invoice hands its quantities back to the delivery and the
+     * order, so the delivered goods can be invoiced again (the void used to strand them).
+     */
+    @Test
+    void voidingAnOrderBilledInvoice_releasesTheDelivery_forReinvoicing() {
+        ProductDto product = stockableProduct("VoidReleaseWidget", "1000");
+        publishAndDispatchReceipt(product, new BigDecimal("20"), new BigDecimal("500"));
+
+        setCtx();
+        String creditCustomerUid = customerService.create(new CreateCustomerRequest(
+                company.getId(), PartyType.INDIVIDUAL, "Del IT Credit Customer",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                CustomerKind.CREDIT_ACCOUNT, null, null, null)).uid();
+        setCtx();
+        SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
+                company.getUid(), creditCustomerUid, agentUid, "TZS",
+                LocalDate.now(), null, null, null, null));
+        setCtx();
+        salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
+                product.uid(), pcsUid, new BigDecimal("5"), null, null, null));
+        setCtx();
+        salesOrderService.confirm(so.uid());
+        String solUid = salesOrderService.listLines(so.uid()).get(0).uid();
+
+        setCtx();
+        DeliveryDto d = deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(solUid, new BigDecimal("5")))));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+        setCtx();
+        SalesInvoiceDto inv = deliveryService.createInvoiceFromDelivery(d.uid());
+        setCtx();
+        salesInvoiceService.finalise(inv.uid(), new FinaliseInvoiceRequest());
+        setCtx();
+        assertThat(salesOrderService.getByUid(so.uid()).status())
+                .isEqualTo(SalesOrderStatus.CLOSED.name());
+
+        setCtx();
+        salesInvoiceService.voidInvoice(inv.uid(),
+                new com.erp.modules.sales.domain.dto.VoidInvoiceRequest("Billed in error"));
+
+        setCtx();
+        assertThat(deliveryService.getByUid(d.uid()).lines().get(0).qtyInvoicedBase())
+                .isEqualByComparingTo("0");
+        setCtx();
+        assertThat(salesOrderService.listLines(so.uid()).get(0).qtyInvoicedBase())
+                .isEqualByComparingTo("0");
+        setCtx();
+        assertThat(salesOrderService.getByUid(so.uid()).status())
+                .isEqualTo(SalesOrderStatus.FULFILLED.name());
+
+        // ...and the delivery can be invoiced again.
+        setCtx();
+        SalesInvoiceDto again = deliveryService.createInvoiceFromDelivery(d.uid());
+        setCtx();
+        assertThat(salesInvoiceService.listLines(again.uid()).get(0).qtyInBase())
+                .isEqualByComparingTo("5");
+    }
+
     // =========================================================================
     // Bar 8 (owner decision 2026-07-05, V87) — configurable "block negative stock on sale":
     // an over-reserved SO (BR-SO-05/OQ-SO-02 explicitly allows reserving beyond on-hand) is

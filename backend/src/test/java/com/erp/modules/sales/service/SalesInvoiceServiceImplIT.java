@@ -535,34 +535,34 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
     }
 
     @Test
-    void void_fullyPaidDirectInvoice_rejected_FLOW_ORDER_TO_CASH_027() {
-        // CASH_WALK_IN customer with a full cash payment: effective settled = 1180 > 0.
-        // voidInvoice must throw ConflictException (FLOW-ORDER-TO-CASH-027 direct-payment path).
+    void void_fullyPaidCounterInvoice_isVoidedWithRefund_SAL02() {
+        // SAL-02 (owner ruling 2026-10-10): a paid counter (DIRECT) sale can be voided IN FULL
+        // with a refund of its counter payments. It used to be refused (FLOW-ORDER-TO-CASH-027).
         SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
         addStandardLine(draft.uid(), "1");
         addExactPayment(draft.uid(), "1180", TenderType.CASH);
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
 
-        assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
-                new VoidInvoiceRequest("should be blocked")))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("direct payments have been applied");
+        salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("Customer returned it"));
+
+        SalesInvoiceDto result = salesInvoiceService.getByUid(draft.uid());
+        assertThat(result.status()).isEqualTo(InvoiceStatus.VOID);
+        assertThat(result.voidReason()).isEqualTo("Customer returned it");
+        // The tender rows stay as the record of what was taken and refunded.
+        assertThat(salesInvoiceService.listPayments(draft.uid())).hasSize(1);
     }
 
     @Test
-    void void_partiallyPaidDirectInvoice_rejected_FLOW_ORDER_TO_CASH_027() {
-        // CREDIT_ACCOUNT customer with a partial cash payment: settled > 0, even though
-        // the invoice is not fully paid. The guard blocks on ANY applied tender.
+    void void_partiallyPaidCounterInvoice_isVoidedWithRefund_SAL02() {
         SalesInvoiceDto draft = salesInvoiceService.create(creditInvoiceRequest());
         addStandardLine(draft.uid(), "1");
         salesInvoiceService.addPayment(draft.uid(), new AddPaymentRequest(
                 TenderType.CASH, new BigDecimal("500"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
 
-        assertThatThrownBy(() -> salesInvoiceService.voidInvoice(draft.uid(),
-                new VoidInvoiceRequest("should be blocked")))
-                .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("direct payments have been applied");
+        salesInvoiceService.voidInvoice(draft.uid(), new VoidInvoiceRequest("Wrong customer"));
+
+        assertThat(salesInvoiceService.getByUid(draft.uid()).status()).isEqualTo(InvoiceStatus.VOID);
     }
 
     @Test

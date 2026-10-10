@@ -483,6 +483,59 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     // -------------------------------------------------------------------------
+    // SAL-07: release on void
+    // -------------------------------------------------------------------------
+
+    /**
+     * Gives back, per product, the base quantity a voided order-billed invoice had taken off this
+     * delivery. The invoice carries no per-line link to the delivery line, so the release is matched
+     * on product, delivery line by delivery line in line order, never taking more off a line than
+     * is invoiced on it — and the same amount comes off the sales-order line the delivery line
+     * fulfils. Without it the void left the delivery "fully invoiced" and the order INVOICED/CLOSED,
+     * so the goods could never be billed again.
+     */
+    @Override
+    public void releaseInvoicedQuantities(String deliveryUid,
+                                          Map<Long, BigDecimal> invoicedBaseByProduct) {
+        if (deliveryUid == null || invoicedBaseByProduct == null || invoicedBaseByProduct.isEmpty()) {
+            return;
+        }
+        Delivery delivery = deliveries.findByUid(deliveryUid).orElse(null);
+        if (delivery == null) {
+            log.warn("releaseInvoicedQuantities: source delivery not found — nothing released");
+            return;
+        }
+        Map<Long, SalesOrderLine> solById = new java.util.HashMap<>();
+        for (SalesOrderLine sol
+                : salesOrderLines.findBySalesOrderIdOrderByLineNo(delivery.getSalesOrderId())) {
+            solById.put(sol.getId(), sol);
+        }
+        Map<Long, BigDecimal> remaining = new java.util.HashMap<>(invoicedBaseByProduct);
+        for (DeliveryLine dl : deliveryLines.findByDeliveryIdOrderByLineNo(delivery.getId())) {
+            BigDecimal left = remaining.get(dl.getProductId());
+            if (left == null || left.signum() <= 0) {
+                continue;
+            }
+            BigDecimal take = left.min(dl.getQtyInvoicedBase());
+            if (take.signum() <= 0) {
+                continue;
+            }
+            dl.setQtyInvoicedBase(dl.getQtyInvoicedBase().subtract(take));
+            dl.setUpdatedAt(Instant.now());
+            dl.setUpdatedBy(actorId());
+            SalesOrderLine sol = solById.get(dl.getSalesOrderLineId());
+            if (sol != null) {
+                sol.setQtyInvoicedBase(sol.getQtyInvoicedBase().subtract(
+                        take.min(sol.getQtyInvoicedBase())));
+                sol.setUpdatedAt(Instant.now());
+                sol.setUpdatedBy(actorId());
+            }
+            remaining.put(dl.getProductId(), left.subtract(take));
+        }
+        salesOrderService.recomputeStatus(delivery.getSalesOrderId());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
