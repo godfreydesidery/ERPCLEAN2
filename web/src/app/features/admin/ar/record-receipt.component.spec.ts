@@ -233,3 +233,31 @@ describe('suggestAccountForTender — receipt lands in the right account (ARC-05
     expect(ar.recordReceipt.mock.calls[0][0].cashBankAccountUid).toBe('BK1');
   });
 });
+
+describe('RecordReceiptComponent — blank allocations stay on account (ARC-20)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends MANUAL with no lines when nothing is allocated, so the server keeps it on account', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.clearAllocations();
+    expect(comp.unallocated()).toBeCloseTo(100, 5);
+    comp.submit();
+    const sent = ar.recordReceipt.mock.calls[0][0];
+    expect(sent.allocationMode).toBe('MANUAL');
+    expect(sent.allocations).toEqual([]);
+  });
+
+  it('sends the auto-filled lines as MANUAL', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.submit();
+    const sent = ar.recordReceipt.mock.calls[0][0];
+    expect(sent.allocationMode).toBe('MANUAL');
+    expect(sent.allocations.map((l: any) => l.arInvoiceUid)).toEqual(['ARI1', 'ARI2']);
+  });
+});

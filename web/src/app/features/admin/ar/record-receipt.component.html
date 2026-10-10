@@ -379,6 +379,12 @@
                       {{ fmtMoney(unallocated()) }}
                     </span>
                   </div>
+                  @if (allocatedTotal() <= 0 && receiptAmountNum() > 0) {
+                    <span class="small text-muted w-100">
+                      Nothing allocated — the whole receipt will be kept on account. Use
+                      "Auto Oldest-first" to settle the oldest invoices instead.
+                    </span>
+                  }
                   @if (overAllocated()) {
                     <span class="status-tag status-tag--danger ms-auto" role="alert" aria-live="polite">
                       <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>

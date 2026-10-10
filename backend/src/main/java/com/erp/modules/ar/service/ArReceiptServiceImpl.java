@@ -157,6 +157,9 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         //     constraint error (ARC-18: the screen used to offer "Other").
         String tenderType = normaliseTender(req.tenderType());
 
+        // 3c. How the money is applied (ARC-20) — refused up front if contradictory.
+        String allocationMode = resolveAllocationMode(req);
+
         // 4. Generate receipt number
         String receiptNumber = numberGen.nextReceipt(companyId);
 
@@ -190,15 +193,17 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         }
         receipt = receipts.save(receipt);
 
-        // 6. Build allocation set
-        List<ArReceiptAllocation> allocationList;
-        if (req.allocations() == null || req.allocations().isEmpty()) {
+        // 6. Build allocation set — the mode decides (ARC-20, see RecordReceiptRequest javadoc)
+        List<ArReceiptAllocation> allocationList = switch (allocationMode) {
             // Oldest-first auto-allocation (BR-AR-03)
-            allocationList = autoAllocate(receipt, companyId, customer.getId());
-        } else {
-            // Manual override (BR-AR-03)
-            allocationList = manualAllocate(receipt, companyId, req.allocations());
-        }
+            case RecordReceiptRequest.MODE_AUTO -> autoAllocate(receipt, companyId, customer.getId());
+            // Exactly the lines sent; none = the whole receipt stays on account (BR-AR-05)
+            case RecordReceiptRequest.MODE_MANUAL -> hasLines(req)
+                    ? manualAllocate(receipt, companyId, req.allocations())
+                    : new ArrayList<>();
+            // Held on account in full (BR-AR-05)
+            default -> new ArrayList<>();
+        };
 
         // 7. Apply allocation — reduce open items, capture base amounts for FX
         //    ADR-0036 D-5: accumulate Σ base_relieved (AR booked at invoice rate) and
@@ -587,6 +592,39 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             }
         }
         return result;
+    }
+
+    private static boolean hasLines(RecordReceiptRequest req) {
+        return req.allocations() != null && !req.allocations().isEmpty();
+    }
+
+    /**
+     * ARC-20: the allocation mode the receipt is recorded under. Absent keeps the historical rule
+     * (lines = MANUAL, no lines = AUTO) so callers that send nothing behave exactly as before; an
+     * explicit AUTO or ON_ACCOUNT with lines is contradictory and refused rather than guessed.
+     */
+    static String resolveAllocationMode(RecordReceiptRequest req) {
+        String raw = req.allocationMode();
+        if (raw == null || raw.isBlank()) {
+            return hasLines(req) ? RecordReceiptRequest.MODE_MANUAL : RecordReceiptRequest.MODE_AUTO;
+        }
+        String mode = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        switch (mode) {
+            case RecordReceiptRequest.MODE_MANUAL:
+                return mode;
+            case RecordReceiptRequest.MODE_AUTO:
+            case RecordReceiptRequest.MODE_ON_ACCOUNT:
+                if (hasLines(req)) {
+                    throw new IllegalArgumentException(
+                            "Allocation lines can only be sent when the allocation is chosen by hand."
+                            + " Remove the lines, or choose to allocate manually.");
+                }
+                return mode;
+            default:
+                throw new IllegalArgumentException(
+                        "Choose how to apply the receipt: automatically to the oldest invoices,"
+                        + " to the invoices you pick, or keep it all on account.");
+        }
     }
 
     private List<ArReceiptAllocation> manualAllocate(ArReceipt receipt,

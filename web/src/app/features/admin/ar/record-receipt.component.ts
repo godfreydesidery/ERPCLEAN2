@@ -439,6 +439,10 @@ export class RecordReceiptComponent {
       tenderType: this.tenderType(),
       bankReference: bankRef || undefined,
       allocations,
+      // ARC-20: what the screen shows is what is saved — the lines typed (or auto-filled) here, and
+      // whatever they leave over stays on account. Without this the server would apply blank
+      // allocations oldest-first while the screen said "On-account".
+      allocationMode: 'MANUAL',
     };
 
     // ARC-05: the account the money landed in; omitted = company default account.

@@ -99,6 +99,12 @@ export interface RecordReceiptRequest {
    */
   cashBankAccountUid?: string;
   /**
+   * How the money is applied (ARC-20). MANUAL = exactly `allocations`, the rest on account (an
+   * empty list keeps it all on account); AUTO = oldest-first, send no lines; ON_ACCOUNT = none
+   * applied. Omitted = the old server rule (no lines → AUTO), so this screen always sends MANUAL.
+   */
+  allocationMode?: 'AUTO' | 'MANUAL' | 'ON_ACCOUNT';
+  /**
    * Optional WHT_ON_RECEIPT capture (ADR-0017 D-9).
    * When set, the cash DR is reduced by whtAmount and a WHT receivable leg is posted.
    */
