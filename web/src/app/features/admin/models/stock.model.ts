@@ -87,6 +87,8 @@ export interface AdjustStockRequest {
    * server corrects the one location that holds the product (ignoring empty and in-transit rows).
    */
   locationUid?: string;
+  /** STK-08: unit `quantity` is stated in (base unit or a pack size). Omitted = base unit. */
+  unitUid?: string;
 }
 
 export interface OpeningBalanceRequest {
@@ -94,6 +96,10 @@ export interface OpeningBalanceRequest {
   /** Must be positive — opening balance seeds an initial level. */
   quantity: string;
   note?: string;
+  /** STK-08: unit `quantity` is stated in. Omitted = base unit. */
+  unitUid?: string;
+  /** PRD-07: cost of one `unitUid` (needs INVENTORY.OPENING.SET). Omitted = the product cost. */
+  unitCost?: string;
 }
 
 export interface SetReorderLevelRequest {
