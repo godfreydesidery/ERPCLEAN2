@@ -25,6 +25,22 @@ public record MoneyDto(String amount, String currency) {
         if (dto == null || dto.amount() == null || dto.currency() == null) {
             return null;
         }
-        return new Money(new BigDecimal(dto.amount()), dto.currency());
+        return new Money(parseAmount(dto.amount()), dto.currency());
+    }
+
+    /**
+     * Parses a wire amount, refusing anything that is not a plain decimal with a friendly sentence
+     * (LUI-04). {@code new BigDecimal("1,800")} throws a NumberFormatException whose JDK text used
+     * to reach the user verbatim. Separators are rejected, not guessed at: "1,800" could be one
+     * thousand eight hundred or one point eight depending on the typist's locale.
+     */
+    static BigDecimal parseAmount(String raw) {
+        try {
+            return new BigDecimal(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "An amount is not a valid number. Enter digits only, without commas or spaces "
+                    + "(for example 1800.50).");
+        }
     }
 }
