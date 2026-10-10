@@ -1,20 +1,24 @@
 package com.erp.modules.gl.service;
 
+import com.erp.modules.gl.domain.dto.GlPostingFailure;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.domain.enums.GlPostingFailureKind;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.FxDocumentConverter;
+import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,15 +50,28 @@ public class GLPostingSafeInvoker {
     private final GLConfigResolver     configResolver;
     private final FxDocumentConverter  fxConverter;
     private final CompanyRepository    companies;
+    /** ACC-02: makes each swallowed failure durable and re-postable. Null only in unit fixtures. */
+    private final GlPostingFailureRecorder failures;
 
+    @Autowired
     public GLPostingSafeInvoker(GLPostingService    postingService,
                                 GLConfigResolver    configResolver,
                                 FxDocumentConverter fxConverter,
-                                CompanyRepository   companies) {
+                                CompanyRepository   companies,
+                                GlPostingFailureRecorder failures) {
         this.postingService = postingService;
         this.configResolver = configResolver;
         this.fxConverter    = fxConverter;
         this.companies      = companies;
+        this.failures       = failures;
+    }
+
+    /** Unit-fixture form: no failure recording. */
+    public GLPostingSafeInvoker(GLPostingService    postingService,
+                                GLConfigResolver    configResolver,
+                                FxDocumentConverter fxConverter,
+                                CompanyRepository   companies) {
+        this(postingService, configResolver, fxConverter, companies, null);
     }
 
     /**
@@ -134,6 +151,20 @@ public class GLPostingSafeInvoker {
             log.warn("GLPostingSafeInvoker: sale GL post failed for company={} invoice={} — "
                             + "GL not configured or period closed. error={}",
                     companyId, invoiceUid, ex.getMessage());
+            if (failures != null) {
+                failures.record(GlPostingFailure.of(GlPostingFailureKind.SALE, companyId, branchId,
+                                JournalSourceType.SALES, invoiceUid, null, postingDate)
+                        .amount(gross)
+                        .arg("currency", currency)
+                        .arg("gross", gross)
+                        .arg("net", net)
+                        .arg("vat", vat)
+                        .arg("cashSale", cashSale)
+                        .arg("costCentreValueId", costCentreValueId)
+                        .arg("departmentValueId", departmentValueId)
+                        .arg("projectId", projectId)
+                        .arg("projectTaskId", projectTaskId), ex);
+            }
             return null;
         }
     }
@@ -177,6 +208,16 @@ public class GLPostingSafeInvoker {
             log.warn("GLPostingSafeInvoker: GL post failed for company={} sourceRef={} — "
                             + "GL not configured or period closed. error={}",
                     draft.companyId(), draft.sourceRef(), ex.getMessage());
+            if (failures != null) {
+                BigDecimal total = draft.lines() == null ? null : draft.lines().stream()
+                        .map(l -> l.debitAmount() != null ? l.debitAmount() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                failures.record(GlPostingFailure.of(GlPostingFailureKind.JOURNAL_DRAFT,
+                                draft.companyId(), draft.branchId(), draft.sourceType(),
+                                draft.sourceRef(), draft.description(), draft.postingDate())
+                        .amount(total)
+                        .arg("draft", draft), ex);
+            }
             return null;
         }
     }
@@ -195,7 +236,28 @@ public class GLPostingSafeInvoker {
         } catch (Exception ex) {
             log.warn("GLPostingSafeInvoker: GL reversal failed for originalUid={} sourceRef={} — "
                             + "error={}", originalEntryUid, sourceRef, ex.getMessage());
+            recordReversalFailure(originalEntryUid, reversalDate, sourceType, sourceRef, postedBy, ex);
             return null;
         }
+    }
+
+    /**
+     * ACC-02: the reversal signature carries no company; the recorder reads it from the original
+     * entry in its own transaction (this one may be aborted). The branch is the request context's
+     * — the outbox handlers install a system principal for the source document's branch.
+     */
+    private void recordReversalFailure(String originalEntryUid, LocalDate reversalDate,
+                                       JournalSourceType sourceType, String sourceRef,
+                                       Long postedBy, Exception ex) {
+        if (failures == null) {
+            return;
+        }
+        RequestContext.Principal ctx = RequestContext.get();
+        failures.recordReversal(originalEntryUid, ctx != null ? ctx.companyId() : null,
+                ctx != null ? ctx.branchId() : null,
+                GlPostingFailure.of(GlPostingFailureKind.REVERSAL, null, null,
+                                sourceType, sourceRef, null, reversalDate)
+                        .arg("originalEntryUid", originalEntryUid)
+                        .arg("postedBy", postedBy), ex);
     }
 }

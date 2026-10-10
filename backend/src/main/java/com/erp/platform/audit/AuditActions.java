@@ -186,6 +186,17 @@ public final class AuditActions {
     public static final String GL_PERIOD_OPEN        = "GL.PERIOD.OPEN";
     public static final String GL_PERIOD_CLOSE       = "GL.PERIOD.CLOSE";
     public static final String GL_CONFIG_SET         = "GL.CONFIG.SET";
+    /**
+     * An automatic (system) GL posting failed and was swallowed so the business document could
+     * stand (ACC-02). The row IS the posting exception: target_type {@code gl_posting_exceptions},
+     * target_uid a fresh ULID naming the exception, detail carrying what is needed to re-post.
+     */
+    public static final String GL_POSTING_FAILED     = "GL.POSTING.FAILED";
+    /**
+     * Closes a {@link #GL_POSTING_FAILED} exception (same target_uid). Appended, never an edit of
+     * the FAILED row — audit_logs stays append-only.
+     */
+    public static final String GL_POSTING_RESOLVED   = "GL.POSTING.RESOLVED";
 
     // -- AR module (ADR-0014 D-13; target_type = plural table names) ---------
     public static final String AR_OPENITEM_CREATE  = "AR.OPENITEM.CREATE";

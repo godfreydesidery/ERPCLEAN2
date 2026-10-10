@@ -1,19 +1,23 @@
 package com.erp.modules.stock.service;
 
+import com.erp.modules.gl.domain.dto.GlPostingFailure;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.domain.enums.GlPostingFailureKind;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.gl.service.GlPostingFailureRecorder;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,11 +59,29 @@ public class InventoryGlPoster {
 
     private final GLPostingService  directPosting;
     private final GLConfigResolver  configResolver;
+    /** ACC-02: makes each swallowed failure durable and re-postable. Null only in unit fixtures. */
+    private final GlPostingFailureRecorder failures;
 
+    @Autowired
     public InventoryGlPoster(GLPostingService directPosting,
-                              GLConfigResolver configResolver) {
+                              GLConfigResolver configResolver,
+                              GlPostingFailureRecorder failures) {
         this.directPosting  = directPosting;
         this.configResolver = configResolver;
+        this.failures       = failures;
+    }
+
+    /** Unit-fixture form: no failure recording. */
+    public InventoryGlPoster(GLPostingService directPosting,
+                              GLConfigResolver configResolver) {
+        this(directPosting, configResolver, null);
+    }
+
+    /** ACC-02: hand a swallowed failure to the recorder (which never throws). */
+    private void recordFailure(GlPostingFailure failure, Exception ex) {
+        if (failures != null) {
+            failures.record(failure, ex);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -114,6 +136,13 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: receipt GL post failed for company={} receipt={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.STOCK_RECEIPT, companyId,
+                            branchId, JournalSourceType.STOCK_RECEIPT, receiptUid, receiptNumber,
+                            postingDate)
+                    .amount(legs.stream().map(ReceiptLeg::value)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .arg("currency", currency)
+                    .arg("legs", legs), ex);
             return null;
         }
     }
@@ -164,6 +193,13 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: COGS GL post failed for company={} invoice={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.SALE_COGS, companyId,
+                            branchId, JournalSourceType.COGS, invoiceUid, invoiceNumber,
+                            postingDate)
+                    .amount(legs.stream().map(CogsLeg::value)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .arg("currency", currency)
+                    .arg("legs", legs), ex);
             return null;
         }
     }
@@ -221,6 +257,14 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: project COGS GL post failed for company={} issue={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.PROJECT_COGS, companyId,
+                            branchId, JournalSourceType.COGS, issueRef, issueNumber, postingDate)
+                    .amount(legs.stream().map(ProjectCogsLeg::value)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .arg("currency", currency)
+                    .arg("projectId", projectId)
+                    .arg("projectTaskId", projectTaskId)
+                    .arg("legs", legs), ex);
             return null;
         }
     }
@@ -268,6 +312,12 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: receipt reversal GL post failed for company={} receipt={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.STOCK_RECEIPT_REVERSAL,
+                            companyId, branchId, JournalSourceType.STOCK_RECEIPT, receiptUid,
+                            receiptNumber, postingDate)
+                    .amount(totalOriginalValue)
+                    .arg("currency", currency)
+                    .arg("value", totalOriginalValue), ex);
             return null;
         }
     }
@@ -315,6 +365,12 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: sale reversal GL post failed for company={} invoice={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.SALE_COGS_REVERSAL,
+                            companyId, branchId, JournalSourceType.COGS, invoiceUid,
+                            invoiceNumber, postingDate)
+                    .amount(totalOriginalValue)
+                    .arg("currency", currency)
+                    .arg("value", totalOriginalValue), ex);
             return null;
         }
     }
@@ -468,6 +524,12 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: landed cost GL post failed for company={} landedCost={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.LANDED_COST, companyId,
+                            branchId, JournalSourceType.LANDED_COST, landedCostUid,
+                            landedCostNumber, postingDate)
+                    .amount(totalAmount)
+                    .arg("currency", currency)
+                    .arg("value", totalAmount), ex);
             return null;
         }
     }
@@ -516,6 +578,12 @@ public class InventoryGlPoster {
         } catch (Exception ex) {
             log.warn("InventoryGlPoster: purchase return GL post failed for company={} return={} — {}",
                     companyId, docLabel, ex.getMessage());
+            recordFailure(GlPostingFailure.of(GlPostingFailureKind.PURCHASE_RETURN, companyId,
+                            branchId, JournalSourceType.PURCHASE_RETURN, returnUid, returnNumber,
+                            postingDate)
+                    .amount(totalReturnValue)
+                    .arg("currency", currency)
+                    .arg("value", totalReturnValue), ex);
             return null;
         }
     }
