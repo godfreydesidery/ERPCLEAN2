@@ -1,7 +1,10 @@
 package com.erp.modules.products.service;
 
+import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.dto.ResolveUnitPricesRequest;
 import com.erp.modules.products.domain.dto.ResolvedUnitPriceDto;
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 import com.erp.modules.products.domain.entity.Product;
@@ -12,10 +15,12 @@ import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.RequestContext;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -25,7 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Batch wrapper over {@link PriceResolutionService#resolveUnitListPriceQuote} — see
+ * Batch wrapper over {@link PriceResolutionService#findSellingPriceQuote} — see
  * {@link UnitPriceLookupService} for why it exists. Deliberately contains no pricing rules.
  */
 @Service
@@ -43,13 +48,16 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
     private final ProductRepository products;
     private final UnitOfMeasureRepository units;
     private final PriceResolutionService priceResolution;
+    private final CustomerRepository customers;
 
     public UnitPriceLookupServiceImpl(ProductRepository products,
                                       UnitOfMeasureRepository units,
-                                      PriceResolutionService priceResolution) {
+                                      PriceResolutionService priceResolution,
+                                      CustomerRepository customers) {
         this.products = products;
         this.units = units;
         this.priceResolution = priceResolution;
+        this.customers = customers;
     }
 
     @Override
@@ -84,6 +92,12 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
             requestedUnitId = unit.getId();
         }
 
+        // Optional customer (PRD-01): resolved ONCE, scoped to the active company, so the price shown
+        // is the one that customer's invoice will carry — their contract prices and default list.
+        // Absent = the walk-in question, exactly what every client before this field asked.
+        PriceAudience audience = audienceOf(companyId, trimToNull(request.customerUid()),
+                normaliseCurrency(request.currency()));
+
         Map<String, Product> byUid = new LinkedHashMap<>();
         for (Product product : products.findByCompanyIdAndUidIn(companyId, requestedUids)) {
             byUid.put(product.getUid(), product);
@@ -98,36 +112,52 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
                 // and omitting both makes "does not exist" indistinguishable from "not yours".
                 continue;
             }
-            rows.add(resolveOne(product, requestedUnitId, requestedUnitUid));
+            rows.add(resolveOne(product, requestedUnitId, requestedUnitUid, audience));
         }
         return rows;
     }
 
     // ---- helpers ---------------------------------------------------------------
 
+    /** Who is buying, and in which currency — fixed for the whole batch. */
+    private record PriceAudience(Long customerId, Long customerPriceListId, String currency) {
+    }
+
+    private PriceAudience audienceOf(Long companyId, String customerUid, String currency) {
+        if (customerUid == null) {
+            return new PriceAudience(null, null, currency);
+        }
+        // A customer uid that is not in the caller's company reads as "not found", never as another
+        // tenant's prices.
+        Customer customer = customers.findByCompanyIdAndUid(companyId, customerUid)
+                .orElseThrow(() -> new NotFoundException("Customer not found."));
+        return new PriceAudience(customer.getId(), customer.getDefaultPriceListId(), currency);
+    }
+
     /**
      * Prices one product, converting the resolver's per-product rejections into a row status.
      * Company scope comes from the LOADED product, never from anything the caller supplied.
      *
-     * <p>Uses the resolver's NON-throwing {@code findUnitListPriceQuote}. It used to call the
-     * throwing {@code resolveUnitListPriceQuote} inside a try/catch, which looked tolerant and was
-     * not: {@code PriceResolutionServiceImpl} is itself {@code @Transactional} and joins THIS
-     * read-only transaction, so its {@code IllegalArgumentException} /
-     * {@code IllegalStateException} marked the shared transaction rollback-only on the way out of
-     * the proxy. Catching them here produced a perfectly good {@code List} and then an
-     * {@code UnexpectedRollbackException} at commit — HTTP 500 for the whole page, and the
-     * documented {@code NO_PRICE} / {@code UNIT_NOT_APPLICABLE} statuses were unreachable in
-     * production (110 of 917 live products have no price row, so a 50-row till page hits it often).
-     * Asking for the outcome as a value never touches the transaction.
+     * <p>Uses the resolver's NON-throwing {@code findSellingPriceQuote}. It used to call a throwing
+     * variant inside a try/catch, which looked tolerant and was not: {@code
+     * PriceResolutionServiceImpl} is itself {@code @Transactional} and joins THIS read-only
+     * transaction, so its {@code IllegalArgumentException} / {@code IllegalStateException} marked the
+     * shared transaction rollback-only on the way out of the proxy. Catching them here produced a
+     * perfectly good {@code List} and then an {@code UnexpectedRollbackException} at commit — HTTP 500
+     * for the whole page, and the documented {@code NO_PRICE} / {@code UNIT_NOT_APPLICABLE} statuses
+     * were unreachable in production (110 of 917 live products have no price row, so a 50-row till
+     * page hits it often). Asking for the outcome as a value never touches the transaction.
      */
     private ResolvedUnitPriceDto resolveOne(Product product, Long requestedUnitId,
-                                            String requestedUnitUid) {
+                                            String requestedUnitUid, PriceAudience audience) {
         UnitOfMeasure baseUnit = product.getBaseUnit();
         Long unitId = requestedUnitId != null ? requestedUnitId : baseUnit.getId();
         String unitUid = requestedUnitUid != null ? requestedUnitUid : baseUnit.getUid();
 
-        UnitPriceQuoteResult result = priceResolution.findUnitListPriceQuote(
-                product.getCompanyId(), product.getId(), unitId);
+        UnitPriceQuoteResult result = priceResolution.findSellingPriceQuote(new SellingPriceQuery(
+                product.getCompanyId(), product.getId(), unitId,
+                audience.customerId(), audience.customerPriceListId(), audience.currency(),
+                null, LocalDate.now()));
         Optional<UnitPriceQuoteDto> quote = result.quote();
         if (quote.isEmpty()) {
             // NO_PRICE (no usable price row) or UNIT_NOT_APPLICABLE (the requested unit is neither
@@ -139,7 +169,8 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
         }
         UnitPriceQuoteDto priced = quote.get();
         return new ResolvedUnitPriceDto(product.getUid(), unitUid, priced.amount(),
-                priced.currency(), priced.vatInclusive(), UnitPriceStatus.RESOLVED);
+                priced.currency(), priced.vatInclusive(), UnitPriceStatus.RESOLVED,
+                priced.source(), priced.priceListUid(), priced.priceListName());
     }
 
     /** The caller's active company, taken from the request context — never from the request body. */
@@ -149,6 +180,11 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
             throw new ForbiddenException("No active company for this session.");
         }
         return principal.companyId();
+    }
+
+    private static String normaliseCurrency(String value) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? null : trimmed.toUpperCase(Locale.ROOT);
     }
 
     private static String trimToNull(String value) {

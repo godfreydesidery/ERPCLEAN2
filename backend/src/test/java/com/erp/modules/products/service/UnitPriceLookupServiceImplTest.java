@@ -11,6 +11,10 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.enums.CustomerKind;
+import com.erp.modules.parties.domain.enums.PartyType;
+import com.erp.modules.parties.repository.CustomerRepository;
 import com.erp.modules.products.domain.dto.ResolveUnitPricesRequest;
 import com.erp.modules.products.domain.dto.ResolvedUnitPriceDto;
 import com.erp.modules.products.domain.entity.PriceList;
@@ -18,6 +22,7 @@ import com.erp.modules.products.domain.entity.Product;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.UnitOfMeasure;
+import com.erp.modules.products.domain.enums.PriceSource;
 import com.erp.modules.products.domain.enums.ProductType;
 import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.repository.CustomerPriceRepository;
@@ -33,6 +38,7 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.Money;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -85,6 +91,7 @@ class UnitPriceLookupServiceImplTest {
     private ProductPriceRepository productPrices;
     private ProductBulkPackRepository bulkPacks;
     private PriceResolutionService priceResolution;
+    private CustomerRepository customers;
 
     private UnitPriceLookupServiceImpl service;
 
@@ -94,6 +101,10 @@ class UnitPriceLookupServiceImplTest {
     private Product productB;
 
     private final Map<String, Product> catalogue = new HashMap<>();
+    /** Price rows per product id, oldest first — what findPricingRowsOfProduct returns. */
+    private final Map<Long, List<ProductPrice>> priceRows = new HashMap<>();
+    private final PriceList retail = priceList(500L, "RETAIL");
+    private long nextRowId = 1;
 
     @BeforeEach
     void setUp() {
@@ -114,7 +125,8 @@ class UnitPriceLookupServiceImplTest {
                 products,
                 mock(PriceListRepository.class)));
 
-        service = new UnitPriceLookupServiceImpl(products, units, priceResolution);
+        customers = mock(CustomerRepository.class);
+        service = new UnitPriceLookupServiceImpl(products, units, priceResolution, customers);
 
         pcs = unitWithId(1L, "PCSUID00000000000000040", "PCS");
         box = unitWithId(2L, BOX_UID, "BOX");
@@ -137,6 +149,8 @@ class UnitPriceLookupServiceImplTest {
             return catalogue.values().stream().filter(p -> p.getId().equals(id)).findFirst();
         });
         when(units.findByCompanyIdAndUid(COMPANY_ID, BOX_UID)).thenReturn(Optional.of(box));
+        when(productPrices.findPricingRowsOfProduct(eq(COMPANY_ID), anyLong())).thenAnswer(
+                invocation -> priceRows.getOrDefault((Long) invocation.getArgument(1), List.of()));
 
         RequestContext.set(new RequestContext.Principal(
                 7L, "cashier", false, COMPANY_ID, 3L, "127.0.0.1"));
@@ -156,8 +170,7 @@ class UnitPriceLookupServiceImplTest {
     void explicitPerUnitPrice_returnedVerbatim_notBaseTimesFactor() {
         basePrice(productA, "100.0000");
         // An explicit BOX row of 1150 — deliberately NOT 12 x 100; a non-linear pack discount.
-        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productA.getId(), box.getId()))
-                .thenReturn(Optional.of(priceRow(productA, box, "1150.0000", false)));
+        addRow(productA, retail, box, "1150.0000");
 
         List<ResolvedUnitPriceDto> rows = service.resolve(
                 new ResolveUnitPricesRequest(List.of(PROD_A_UID), BOX_UID));
@@ -175,8 +188,6 @@ class UnitPriceLookupServiceImplTest {
     @Test
     void noExplicitPerUnitRow_priceIsDerivedFromBaseTimesFactor() {
         basePrice(productA, "100.0000");
-        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productA.getId(), box.getId()))
-                .thenReturn(Optional.empty());
 
         List<ResolvedUnitPriceDto> rows = service.resolve(
                 new ResolveUnitPricesRequest(List.of(PROD_A_UID), BOX_UID));
@@ -204,8 +215,9 @@ class UnitPriceLookupServiceImplTest {
 
     @Test
     void vatInclusivePriceList_carriesTheGrossStanceToTheClient() {
-        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(productA.getId()))
-                .thenReturn(Optional.of(priceRow(productA, null, "1180.0000", true)));
+        PriceList inclusive = priceList(501L, "GROSS");
+        inclusive.setPriceIncludesVat(true);
+        addRow(productA, inclusive, null, "1180.0000");
 
         List<ResolvedUnitPriceDto> rows = service.resolve(
                 new ResolveUnitPricesRequest(List.of(PROD_A_UID), null));
@@ -266,8 +278,6 @@ class UnitPriceLookupServiceImplTest {
         // BOX is configured for A but not for B — a mixed batch under one requested unit.
         basePrice(productA, "100.0000");
         basePrice(productB, "2500.0000");
-        when(productPrices.findFirstByProductIdAndUnitIdOrderByIdAsc(productA.getId(), box.getId()))
-                .thenReturn(Optional.empty());
 
         List<ResolvedUnitPriceDto> rows = service.resolve(new ResolveUnitPricesRequest(
                 List.of(PROD_A_UID, PROD_B_UID), BOX_UID));
@@ -298,6 +308,58 @@ class UnitPriceLookupServiceImplTest {
 
         verify(priceResolution, never()).resolveUnitListPriceQuote(anyLong(), anyLong(), anyLong());
         verify(priceResolution, never()).resolveUnitListPrice(anyLong(), anyLong(), anyLong());
+        verify(priceResolution, never()).resolveSellingPrice(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // PRD-01 — the price for a named customer, and the walk-in default
+    // -------------------------------------------------------------------------
+
+    @Test
+    void walkIn_companyDefaultList_beatsAnOlderRowOnAnotherList() {
+        PriceList wholesale = priceList(300L, "WHOLESALE");
+        addRow(productA, wholesale, null, "2200.0000");        // the first row ever created
+        retail.setDefault(true);
+        addRow(productA, retail, null, "2500.0000");
+
+        ResolvedUnitPriceDto row = service.resolve(
+                new ResolveUnitPricesRequest(List.of(PROD_A_UID), null)).get(0);
+
+        assertThat(row.amount()).isEqualByComparingTo("2500.0000");
+        assertThat(row.priceSource()).isEqualTo(PriceSource.LIST_PRICE);
+        assertThat(row.priceListUid()).isEqualTo(retail.getUid());
+        assertThat(row.priceListName()).isEqualTo("Retail");
+    }
+
+    @Test
+    void namedCustomer_getsTheirDefaultListPrice() {
+        retail.setDefault(true);
+        addRow(productA, retail, null, "55000.0000");
+        PriceList wholesale = priceList(300L, "WHOLESALE");
+        addRow(productA, wholesale, null, "52500.0000");
+        Customer bar = customer(77L, "CUSTUID00000000000000077");
+        bar.setDefaultPriceListId(300L);
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, bar.getUid())).thenReturn(Optional.of(bar));
+
+        ResolvedUnitPriceDto forBar = service.resolve(new ResolveUnitPricesRequest(
+                List.of(PROD_A_UID), null, bar.getUid(), "tzs")).get(0);
+        ResolvedUnitPriceDto walkIn = service.resolve(
+                new ResolveUnitPricesRequest(List.of(PROD_A_UID), null)).get(0);
+
+        assertThat(forBar.amount()).isEqualByComparingTo("52500.0000");
+        assertThat(forBar.priceListName()).isEqualTo("Wholesale");
+        assertThat(walkIn.amount()).isEqualByComparingTo("55000.0000");
+    }
+
+    @Test
+    void customerUidOutsideTheActiveCompany_isNotFound() {
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "FOREIGNCUST00000000000040"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resolve(new ResolveUnitPricesRequest(
+                List.of(PROD_A_UID), null, "FOREIGNCUST00000000000040", null)))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("Customer not found.");
     }
 
     // -------------------------------------------------------------------------
@@ -354,18 +416,30 @@ class UnitPriceLookupServiceImplTest {
     // -------------------------------------------------------------------------
 
     private void basePrice(Product product, String amount) {
-        when(productPrices.findFirstByProductIdAndUnitIdIsNullOrderByIdAsc(product.getId()))
-                .thenReturn(Optional.of(priceRow(product, null, amount, false)));
+        addRow(product, retail, null, amount);
     }
 
-    private ProductPrice priceRow(Product product, UnitOfMeasure unit, String amount,
-                                  boolean vatInclusive) {
-        PriceList priceList = new PriceList(COMPANY_ID, "RETAIL", "Retail", 1L);
-        ReflectionTestUtils.setField(priceList, "id", 500L);
-        ReflectionTestUtils.setField(priceList, "uid", "PLUID000000000000000040");
-        priceList.setPriceIncludesVat(vatInclusive);
-        return new ProductPrice(product, priceList, unit,
+    private void addRow(Product product, PriceList priceList, UnitOfMeasure unit, String amount) {
+        ProductPrice row = new ProductPrice(product, priceList, unit,
                 new Money(new BigDecimal(amount), "TZS"), 1L);
+        ReflectionTestUtils.setField(row, "id", nextRowId++);
+        priceRows.computeIfAbsent(product.getId(), id -> new ArrayList<>()).add(row);
+    }
+
+    private static PriceList priceList(Long id, String code) {
+        PriceList priceList = new PriceList(COMPANY_ID, code, code.charAt(0) + code.substring(1)
+                .toLowerCase(java.util.Locale.ROOT), 1L);
+        ReflectionTestUtils.setField(priceList, "id", id);
+        ReflectionTestUtils.setField(priceList, "uid", String.format("PLUID%021d", id));
+        return priceList;
+    }
+
+    private static Customer customer(Long id, String uid) {
+        Customer customer = new Customer(COMPANY_ID, "CUST-" + id, PartyType.BUSINESS, "Bar " + id,
+                CustomerKind.CASH_WALK_IN, 1L);
+        ReflectionTestUtils.setField(customer, "id", id);
+        ReflectionTestUtils.setField(customer, "uid", uid);
+        return customer;
     }
 
     private static UnitOfMeasure unitWithId(Long id, String uid, String code) {
