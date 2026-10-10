@@ -59,6 +59,7 @@ import com.erp.modules.tax.domain.dto.AddVatAdjustmentRequest;
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
 import com.erp.modules.tax.domain.dto.VatReturnDto;
+import com.erp.modules.tax.domain.dto.VatScheduleDto;
 import com.erp.modules.tax.domain.enums.VatAdjustmentReason;
 import com.erp.modules.tax.domain.enums.VatAdjustmentSign;
 import com.erp.platform.common.money.MoneyDto;
@@ -137,6 +138,7 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
     @Autowired private ArGlSeeder             arGlSeeder;
     @Autowired private VatReturnService       vatReturnService;
     @Autowired private VatAdjustmentService   vatAdjustmentService;
+    @Autowired private VatReturnScheduleQuery schedules;
     @Autowired private JdbcTemplate           jdbc;
     @Autowired private org.springframework.transaction.PlatformTransactionManager txManager;
     @Autowired private OrganisationRepository organisations;
@@ -302,6 +304,18 @@ class VatReturnCreditsVoidsIT extends PostgresIntegrationTest {
         assertThat(m1Again.outputVat()).isEqualByComparingTo("270");
         assertThat(m1Again.netVat()).isEqualByComparingTo("90");
         assertThat(invB).isNotBlank();
+
+        // ---- RPT-14 / PAR-06: the schedules list the documents and sum to the filed figures ------
+        VatScheduleDto s1 = schedules.sales(filed1.uid());
+        assertThat(s1.rows()).extracting(VatScheduleDto.Row::documentType)
+                .as("the late credit note created after filing is not on the filed M1 schedule")
+                .containsExactly("INVOICE", "INVOICE", "CREDIT_NOTE");
+        assertThat(s1.totalVat()).isEqualByComparingTo(filed1.outputVat());
+        assertThat(schedules.purchases(filed1.uid()).totalVat()).isEqualByComparingTo(filed1.inputVat());
+        VatScheduleDto s2 = schedules.sales(filed2.uid());
+        assertThat(s2.rows()).extracting(VatScheduleDto.Row::documentType).containsExactly("VOID");
+        assertThat(s2.totalVat()).isEqualByComparingTo(filed2.outputVat());
+        assertThat(schedules.purchases(filed2.uid()).totalVat()).isEqualByComparingTo(filed2.inputVat());
     }
 
     // -------------------------------------------------------------------------
