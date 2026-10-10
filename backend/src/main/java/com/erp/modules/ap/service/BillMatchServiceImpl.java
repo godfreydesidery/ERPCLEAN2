@@ -49,7 +49,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Per each bill line with po_line_uid/gr_line_uid:
  * <ul>
  *   <li>Price: |bill unit_cost − PO unit_cost| within tolerance (2% or abs, whichever greater).
- *   <li>Qty: billed_qty ≤ gr received_qty (exact by default — over-billing held).
+ *   <li>Qty: billed_qty ≤ gr received_qty − qty already billed on other bills for the same
+ *       receipt line, both in the receipt line's unit (exact by default — over-billing held).
  * </ul>
  * All lines within tolerance → bill MATCHED, posts DR Purchases / CR AP-control (D-6).
  * Any over-tolerance → bill HELD, nothing posts.
@@ -355,7 +356,17 @@ public class BillMatchServiceImpl implements BillMatchService {
                 findGrLineByUid(bill.getCompanyId(), line.getGrLineUid());
 
         BigDecimal poUnitCost    = poLineOpt.map(PurchaseOrderLineDto::unitCostAmount).orElse(null);
-        BigDecimal grReceivedQty = grLineOpt.map(GoodsReceiptLineDto::qtyInBase).orElse(null);
+        // AP-06: compare like with like. The bill line's quantity is in the order/receipt unit — the
+        // unit its price is checked in (PO unit cost) and the unit the receipt picker shows the clerk
+        // ("received 10 Carton"). The receipt line's receivedQty is in that same unit (a receipt line
+        // always takes its order line's unit); qtyInBase is in pieces/bottles. Comparing billed
+        // cartons against received bottles let a bill for 200 cartons pass against 240 bottles.
+        BigDecimal grReceivedQty = grLineOpt.map(BillMatchServiceImpl::receivedInLineUnit).orElse(null);
+        // AP-05: what other bills already claim against the same receipt line. Without this the same
+        // GRN line could be billed twice under two invoice numbers and both bills would post.
+        BigDecimal alreadyBilled = grReceivedQty != null
+                ? billedElsewhere(bill, line.getGrLineUid())
+                : BigDecimal.ZERO;
 
         // Price leg — computable whenever the ORDER line resolved, even if the receipt did not.
         // Worth computing in that case: it puts the real numbers in front of the reviewer.
@@ -379,11 +390,14 @@ public class BillMatchServiceImpl implements BillMatchService {
         }
 
         // Qty leg — only the goods receipt can say how much actually arrived.
+        // The quantity still open on the receipt is what was received less what other bills claim.
         BigDecimal qtyVar = null;
         boolean overBilled = false;
+        boolean billedElsewhere = alreadyBilled.signum() > 0;
         if (grReceivedQty != null) {
-            qtyVar = line.getBilledQty().subtract(grReceivedQty);
-            overBilled = line.getBilledQty().compareTo(grReceivedQty) > 0;
+            BigDecimal stillUnbilled = grReceivedQty.subtract(alreadyBilled);
+            qtyVar = line.getBilledQty().subtract(stillUnbilled);
+            overBilled = qtyVar.signum() > 0;
         }
 
         if (poUnitCost == null || grReceivedQty == null) {
@@ -416,6 +430,12 @@ public class BillMatchServiceImpl implements BillMatchService {
                     true, PRICE_VARIANCE_NOTE, "Price above the agreed tolerance.");
         }
         if (overBilled) {
+            if (billedElsewhere) {
+                return new LineVerdict(BillMatchStatus.HELD_QTY_VARIANCE,
+                        priceVar, priceVarPct, qtyVar, poUnitCost, grReceivedQty,
+                        true, alreadyBilledNote(grReceivedQty, alreadyBilled),
+                        "Receipt already billed on another bill.");
+            }
             return new LineVerdict(BillMatchStatus.HELD_QTY_VARIANCE,
                     priceVar, priceVarPct, qtyVar, poUnitCost, grReceivedQty,
                     true, QTY_VARIANCE_NOTE, "Billed more than was received.");
@@ -427,6 +447,38 @@ public class BillMatchServiceImpl implements BillMatchService {
 
     private static BigDecimal zeroIfNull(BigDecimal v) {
         return v != null ? v : BigDecimal.ZERO;
+    }
+
+    /**
+     * The receipt line's quantity in the receipt line's own unit — the unit the bill line is in.
+     * {@code receivedQty} is always populated on a receipt line; should it ever be missing, the base
+     * quantity is the only fact left and is used rather than reporting nothing was received.
+     */
+    static BigDecimal receivedInLineUnit(GoodsReceiptLineDto gr) {
+        return gr.receivedQty() != null ? gr.receivedQty() : gr.qtyInBase();
+    }
+
+    /** Quantity of this receipt line already claimed by other (non-draft) bills; 0 when none. */
+    private BigDecimal billedElsewhere(SupplierBill bill, String grLineUid) {
+        if (grLineUid == null) {
+            return BigDecimal.ZERO;
+        }
+        // A bill not yet saved has no id; -1 never matches a real row, so nothing is excluded.
+        Long excludeId = bill.getId() != null ? bill.getId() : -1L;
+        BigDecimal sum = lines.sumBilledQtyOnOtherBills(bill.getCompanyId(), grLineUid, excludeId);
+        return sum != null ? sum : BigDecimal.ZERO;
+    }
+
+    private static String alreadyBilledNote(BigDecimal received, BigDecimal alreadyBilled) {
+        BigDecimal open = received.subtract(alreadyBilled).max(BigDecimal.ZERO);
+        return "Other bills already claim " + plain(alreadyBilled) + " of the " + plain(received)
+                + " received on this goods receipt line, so only " + plain(open)
+                + " is left to bill. Check whether this invoice was already entered, then either "
+                + "correct the bill or accept the variance.";
+    }
+
+    private static String plain(BigDecimal v) {
+        return v.stripTrailingZeros().toPlainString();
     }
 
     // -------------------------------------------------------------------------
