@@ -85,6 +85,24 @@ class AuditServiceImpl implements AuditService {
         persist(event, actorUserId, companyId, branchId, ip, organisationId);
     }
 
+    /**
+     * Record with an explicit company/branch scope, joining the caller's transaction (MANDATORY —
+     * the caller owns the boundary, e.g. a REQUIRES_NEW failure recorder). The organisation is
+     * taken from the request context only when that context is in the SAME company — a system
+     * principal carries none, and guessing one would write a fabricated attribution into an
+     * append-only table (the read side is NULL-tolerant for exactly this case).
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordInScope(AuditEvent event, Long companyId, Long branchId) {
+        Principal ctx = RequestContext.get();
+        Long actorUserId = ctx != null ? ctx.userId() : null;
+        String ip        = ctx != null ? ctx.ip() : null;
+        Long organisationId = ctx != null && companyId != null && companyId.equals(ctx.companyId())
+                ? ctx.organisationId() : null;
+        persist(event, actorUserId, companyId, branchId, ip, organisationId);
+    }
+
     // -------------------------------------------------------------------------
     // Internal
     // -------------------------------------------------------------------------

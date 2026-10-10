@@ -2,16 +2,19 @@ package com.erp.modules.gl.service;
 
 import com.erp.modules.cashbank.domain.dto.CashAccountGlResolutionDto;
 import com.erp.modules.cashbank.service.CashBankAccountResolver;
+import com.erp.modules.gl.domain.dto.GlPostingFailure;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.domain.enums.GlPostingFailureKind;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.modules.sales.domain.dto.InvoicePostingTenderDto;
 import com.erp.platform.common.money.FxDocumentConverter;
+import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -54,26 +57,42 @@ public class GLPostingSafeInvoker {
     private final CompanyRepository    companies;
     /** ACC-05: resolves a tender's cash/bank account to its own GL link. Null in legacy unit tests. */
     private final CashBankAccountResolver cashBankAccounts;
+    /** ACC-02: makes each swallowed failure durable and re-postable. Null only in unit fixtures. */
+    private final GlPostingFailureRecorder failures;
 
     @Autowired
     public GLPostingSafeInvoker(GLPostingService    postingService,
                                 GLConfigResolver    configResolver,
                                 FxDocumentConverter fxConverter,
                                 CompanyRepository   companies,
-                                CashBankAccountResolver cashBankAccounts) {
+                                CashBankAccountResolver cashBankAccounts,
+                                GlPostingFailureRecorder failures) {
         this.postingService   = postingService;
         this.configResolver   = configResolver;
         this.fxConverter      = fxConverter;
         this.companies        = companies;
         this.cashBankAccounts = cashBankAccounts;
+        this.failures         = failures;
     }
 
-    /** Constructor for callers that post no tender legs (every tender then uses CASH). */
+    /** Unit-fixture form with tender resolution but no failure recording. */
+    public GLPostingSafeInvoker(GLPostingService    postingService,
+                                GLConfigResolver    configResolver,
+                                FxDocumentConverter fxConverter,
+                                CompanyRepository   companies,
+                                CashBankAccountResolver cashBankAccounts) {
+        this(postingService, configResolver, fxConverter, companies, cashBankAccounts, null);
+    }
+
+    /**
+     * Constructor for callers that post no tender legs (every tender then uses CASH) and record
+     * no failures — unit fixtures.
+     */
     public GLPostingSafeInvoker(GLPostingService    postingService,
                                 GLConfigResolver    configResolver,
                                 FxDocumentConverter fxConverter,
                                 CompanyRepository   companies) {
-        this(postingService, configResolver, fxConverter, companies, null);
+        this(postingService, configResolver, fxConverter, companies, null, null);
     }
 
     /**
@@ -116,8 +135,40 @@ public class GLPostingSafeInvoker {
             log.warn("GLPostingSafeInvoker: sale GL post failed for company={} invoice={} — "
                             + "GL not configured or period closed. error={}",
                     companyId, invoiceUid, ex.getMessage());
+            recordSaleFailure(companyId, branchId, invoiceUid, currency, gross, net, vat,
+                    cashSale, List.of(), postingDate, costCentreValueId, departmentValueId,
+                    projectId, projectTaskId, ex);
             return null;
         }
+    }
+
+    /**
+     * ACC-02: records a swallowed sale posting with every argument of the tender-split poster, so
+     * a re-post goes through {@link #postSaleWithTendersInNewTx} and produces exactly the journal
+     * a live sale would have (one debit per tender account, residual to AR/CASH).
+     */
+    private void recordSaleFailure(Long companyId, Long branchId, String invoiceUid,
+                                   String currency, BigDecimal gross, BigDecimal net,
+                                   BigDecimal vat, boolean cashSale,
+                                   List<InvoicePostingTenderDto> tenders, LocalDate postingDate,
+                                   Long costCentreValueId, Long departmentValueId,
+                                   Long projectId, Long projectTaskId, Exception ex) {
+        if (failures == null) {
+            return;
+        }
+        failures.record(GlPostingFailure.of(GlPostingFailureKind.SALE, companyId, branchId,
+                        JournalSourceType.SALES, invoiceUid, null, postingDate)
+                .amount(gross)
+                .arg("currency", currency)
+                .arg("gross", gross)
+                .arg("net", net)
+                .arg("vat", vat)
+                .arg("cashSale", cashSale)
+                .arg("tenders", tenders == null ? List.of() : tenders)
+                .arg("costCentreValueId", costCentreValueId)
+                .arg("departmentValueId", departmentValueId)
+                .arg("projectId", projectId)
+                .arg("projectTaskId", projectTaskId), ex);
     }
 
     /**
@@ -157,6 +208,9 @@ public class GLPostingSafeInvoker {
             log.warn("GLPostingSafeInvoker: sale GL post failed for company={} invoice={} — "
                             + "GL not configured or period closed. error={}",
                     companyId, invoiceUid, ex.getMessage());
+            recordSaleFailure(companyId, branchId, invoiceUid, currency, gross, net, vat,
+                    cashSale, tenders, postingDate, costCentreValueId, departmentValueId,
+                    projectId, projectTaskId, ex);
             return null;
         }
     }
@@ -354,6 +408,16 @@ public class GLPostingSafeInvoker {
             log.warn("GLPostingSafeInvoker: GL post failed for company={} sourceRef={} — "
                             + "GL not configured or period closed. error={}",
                     draft.companyId(), draft.sourceRef(), ex.getMessage());
+            if (failures != null) {
+                BigDecimal total = draft.lines() == null ? null : draft.lines().stream()
+                        .map(l -> l.debitAmount() != null ? l.debitAmount() : BigDecimal.ZERO)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                failures.record(GlPostingFailure.of(GlPostingFailureKind.JOURNAL_DRAFT,
+                                draft.companyId(), draft.branchId(), draft.sourceType(),
+                                draft.sourceRef(), draft.description(), draft.postingDate())
+                        .amount(total)
+                        .arg("draft", draft), ex);
+            }
             return null;
         }
     }
@@ -372,7 +436,28 @@ public class GLPostingSafeInvoker {
         } catch (Exception ex) {
             log.warn("GLPostingSafeInvoker: GL reversal failed for originalUid={} sourceRef={} — "
                             + "error={}", originalEntryUid, sourceRef, ex.getMessage());
+            recordReversalFailure(originalEntryUid, reversalDate, sourceType, sourceRef, postedBy, ex);
             return null;
         }
+    }
+
+    /**
+     * ACC-02: the reversal signature carries no company; the recorder reads it from the original
+     * entry in its own transaction (this one may be aborted). The branch is the request context's
+     * — the outbox handlers install a system principal for the source document's branch.
+     */
+    private void recordReversalFailure(String originalEntryUid, LocalDate reversalDate,
+                                       JournalSourceType sourceType, String sourceRef,
+                                       Long postedBy, Exception ex) {
+        if (failures == null) {
+            return;
+        }
+        RequestContext.Principal ctx = RequestContext.get();
+        failures.recordReversal(originalEntryUid, ctx != null ? ctx.companyId() : null,
+                ctx != null ? ctx.branchId() : null,
+                GlPostingFailure.of(GlPostingFailureKind.REVERSAL, null, null,
+                                sourceType, sourceRef, null, reversalDate)
+                        .arg("originalEntryUid", originalEntryUid)
+                        .arg("postedBy", postedBy), ex);
     }
 }

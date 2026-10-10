@@ -44,6 +44,52 @@
   }
 
   @if (selectedCompanyId()) {
+    <!-- Filters (ACC-19) -->
+    <form class="d-flex flex-wrap align-items-end gap-3 mb-3" (ngSubmit)="applyFilters()">
+      <div>
+        <label class="form-label small text-muted mb-1" for="jlSearch">Search</label>
+        <input id="jlSearch" name="jlSearch" type="search" class="form-control"
+               placeholder="INV-0453, JB-0012, memo…"
+               [ngModel]="searchText()" (ngModelChange)="searchText.set($event)" />
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="jlFrom">From</label>
+        <input id="jlFrom" name="jlFrom" type="date" class="form-control"
+               [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="jlTo">To</label>
+        <input id="jlTo" name="jlTo" type="date" class="form-control"
+               [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="jlSource">Source</label>
+        <select id="jlSource" name="jlSource" class="form-select"
+                [ngModel]="sourceType()" (ngModelChange)="sourceType.set($event)">
+          <option value="">All sources</option>
+          @for (s of sourceTypes; track s.value) {
+            <option [value]="s.value">{{ s.label }}</option>
+          }
+        </select>
+      </div>
+      <div style="max-width:280px">
+        <label class="form-label small text-muted mb-1" for="jlAccount">Account</label>
+        <select id="jlAccount" name="jlAccount" class="form-select"
+                [ngModel]="accountUid()" (ngModelChange)="accountUid.set($event)">
+          <option value="">All accounts</option>
+          @for (a of accounts(); track a.uid) {
+            <option [value]="a.uid">{{ a.accountCode }} — {{ a.name }}</option>
+          }
+        </select>
+      </div>
+      <button type="submit" class="btn btn-outline-primary">
+        <i class="bi bi-search me-1" aria-hidden="true"></i>Search
+      </button>
+      @if (hasFilter()) {
+        <button type="button" class="btn btn-link" (click)="clearFilters()">Clear</button>
+      }
+    </form>
+
     <!-- List states -->
     @switch (state()) {
       @case ('loading') {
@@ -66,8 +112,8 @@
       @default {
         @if (isEmpty()) {
           <div class="erp-empty">
-            <i class="bi bi-journal-text"></i>
-            No journal entries yet.
+            <i class="bi bi-journal-text" aria-hidden="true"></i>
+            {{ hasFilter() ? 'No journal entries match these filters.' : 'No journal entries yet.' }}
           </div>
         } @else {
           <div class="erp-table-wrap">
@@ -79,7 +125,7 @@
                   <th scope="col">Posting Date</th>
                   <th scope="col">Description</th>
                   <th scope="col">Source</th>
-                  <th scope="col">Ref</th>
+                  <th scope="col">Document</th>
                   <th scope="col" class="num">Total Debits</th>
                   <th scope="col"><span class="visually-hidden">View</span></th>
                 </tr>
@@ -99,7 +145,7 @@
                         {{ e.sourceType }}
                       </span>
                     </td>
-                    <td class="small text-muted mono">{{ e.sourceRef ? (e.sourceRef.length > 12 ? (e.sourceRef.slice(0, 12) + '…') : e.sourceRef) : '—' }}</td>
+                    <td class="small mono" [class.text-muted]="!e.documentRef" [attr.title]="e.sourceRef">{{ documentLabel(e) }}</td>
                     <td class="num mono small">{{ entryTotal(e) }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"

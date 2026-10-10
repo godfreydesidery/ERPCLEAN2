@@ -1,9 +1,12 @@
 package com.erp.modules.gl.events;
 
+import com.erp.modules.gl.domain.dto.GlPostingFailure;
 import com.erp.modules.gl.domain.entity.JournalEntry;
+import com.erp.modules.gl.domain.enums.GlPostingFailureKind;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.repository.JournalEntryRepository;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
+import com.erp.modules.gl.service.GlPostingFailureRecorder;
 import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
 import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
@@ -44,16 +47,20 @@ public class SaleVoidingHandler implements DomainEventHandler {
     private final ObjectMapper objectMapper;
     private final CompanyCalendar calendar;
 
+    private final GlPostingFailureRecorder failures;
+
     public SaleVoidingHandler(IdempotencyGuard guard,
                                JournalEntryRepository journalEntries,
                                GLPostingSafeInvoker safeInvoker,
                                ObjectMapper objectMapper,
-                               CompanyCalendar calendar) {
+                               CompanyCalendar calendar,
+                               GlPostingFailureRecorder failures) {
         this.guard          = guard;
         this.journalEntries = journalEntries;
         this.safeInvoker    = safeInvoker;
         this.objectMapper   = objectMapper;
         this.calendar       = calendar;
+        this.failures       = failures;
     }
 
     @Override
@@ -83,6 +90,14 @@ public class SaleVoidingHandler implements DomainEventHandler {
             log.warn("SaleVoidingHandler: SALE.VOIDED for invoice uid={} but no SALES journal entry "
                             + "found in company {} — anomaly recorded (OQ-GL-03). void event uid={}",
                     payload.invoiceUid(), companyId, event.getUid());
+            // ACC-02: list it as a posting exception. Typically the sale's own posting failed
+            // (also listed); once that is re-posted, re-posting this one reverses it.
+            failures.record(GlPostingFailure.of(GlPostingFailureKind.SALE_VOID, companyId,
+                            event.getBranchId(), JournalSourceType.SALES_REVERSAL,
+                            payload.invoiceUid(), payload.invoiceNumber(),
+                            calendar.today(companyId)),
+                    new IllegalStateException("The sale was voided, but the sale itself had not "
+                            + "been posted to the ledger, so there was nothing to reverse."));
             // Still mark processed — do not retry (mirrors SaleReversalStockHandler)
             guard.markProcessed(CONSUMER, event.getUid());
             return;

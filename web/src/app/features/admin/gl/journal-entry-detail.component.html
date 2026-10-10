@@ -71,31 +71,50 @@
             <!-- Reverse action -->
             @if (canReverse()) {
               <div class="mt-3 pt-3 border-top">
-                <button type="button" class="btn btn-outline-warning"
-                        [disabled]="reversing()"
-                        (click)="reverse()"
-                        aria-describedby="reverseHelp">
-                  @if (reversing()) {
-                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
-                    Reversing…
-                  } @else {
+                @if (!reverseFormOpen()) {
+                  <button type="button" class="btn btn-outline-warning"
+                          (click)="openReverseForm()"
+                          aria-describedby="reverseHelp">
                     <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
                     Reverse Entry
-                  }
-                </button>
-                <span id="reverseHelp" class="form-text ms-2 small text-muted">
-                  Creates an equal and opposite journal entry.
-                </span>
+                  </button>
+                  <span id="reverseHelp" class="form-text ms-2 small text-muted">
+                    Creates an equal and opposite journal entry.
+                  </span>
+                } @else {
+                  <form class="d-flex flex-wrap align-items-end gap-3" (ngSubmit)="reverse()">
+                    <div>
+                      <label class="form-label small text-muted mb-1" for="reversalDate">Reversal date</label>
+                      <input id="reversalDate" name="reversalDate" type="date" class="form-control"
+                             [ngModel]="reversalDate()" (ngModelChange)="reversalDate.set($event)" required />
+                    </div>
+                    <div style="min-width:280px">
+                      <label class="form-label small text-muted mb-1" for="reversalReason">Reason</label>
+                      <input id="reversalReason" name="reversalReason" type="text" class="form-control"
+                             maxlength="120" placeholder="e.g. posted to the wrong account"
+                             [ngModel]="reversalReason()" (ngModelChange)="reversalReason.set($event)" required />
+                    </div>
+                    <button type="submit" class="btn btn-warning" [disabled]="reversing()">
+                      @if (reversing()) {
+                        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                        Reversing…
+                      } @else {
+                        Post reversal
+                      }
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" (click)="cancelReverse()">Cancel</button>
+                  </form>
+                }
                 @if (reverseError(); as msg) {
                   <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
                 }
               </div>
             }
 
-            @if (e.sourceType === 'SALES' || e.sourceType === 'PURCHASE') {
+            @if (e.sourceType !== 'MANUAL') {
               <p class="text-muted small mt-3 mb-0">
                 <i class="bi bi-info-circle me-1" aria-hidden="true"></i>
-                This entry was auto-posted by the system and is read-only.
+                This entry was posted automatically from a document and is read-only. To correct it, correct that document (for example void the invoice) — it cannot be reversed on its own.
               </p>
             }
           </div>

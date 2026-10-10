@@ -22,6 +22,7 @@ import {
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { isBlockingControl } from '../gl/manual-posting.util';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { todayLocal } from '../../../shared/date.util';
@@ -270,6 +271,9 @@ export class EnterBillComponent {
         this.accountOptions.set(
           list
             .filter((a) => a.accountType === 'EXPENSE' || a.accountType === 'ASSET')
+            // ACC-23: never offer AR, Inventory, VAT or other sub-ledger control accounts on a
+            // bill line — the server refuses them, as it does for manual journals.
+            .filter((a) => !isBlockingControl(a))
             .map((a) => ({
               uid: a.uid,
               label: `${a.accountCode} — ${a.name}`,

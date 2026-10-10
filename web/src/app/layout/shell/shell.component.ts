@@ -288,6 +288,7 @@ export class ShellComponent {
         { label: 'Chart of Accounts', route: '/admin/gl/accounts', icon: 'bi-diagram-3', available: true, permission: 'GL.VIEW' },
         { label: 'Journal Entries', route: '/admin/gl/journals', icon: 'bi-journal-text', available: true, permission: 'GL.VIEW' },
         { label: 'Trial Balance', route: '/admin/gl/trial-balance', icon: 'bi-calculator', available: true, permission: 'GL.VIEW' },
+        { label: 'Posting Exceptions', route: '/admin/gl/posting-exceptions', icon: 'bi-exclamation-triangle', available: true, permission: 'GL.VIEW', keywords: ['failed posting', 'missing journal', 're-post', 'repost', 'sales not in ledger', 'gl errors', 'tie-out'] },
         { label: 'Fiscal Periods', route: '/admin/gl/periods', icon: 'bi-calendar3', available: true, permission: 'GL.VIEW' },
         { label: 'Posting Accounts', route: '/admin/gl/config', icon: 'bi-gear', available: true, permission: 'GL.MANAGE' },
         { label: 'Year-End Close', route: '/admin/gl/year-end', icon: 'bi-calendar-check', available: true, permission: 'GL.YEAR.CLOSE' },

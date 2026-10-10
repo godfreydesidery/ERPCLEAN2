@@ -85,4 +85,26 @@ public interface JournalLineRepository extends JpaRepository<JournalLine, Long> 
     List<Object[]> periodMovementByAccount(@Param("companyId") Long companyId,
                                             @Param("fromDate")  LocalDate fromDate,
                                             @Param("toDate")    LocalDate toDate);
+
+    /**
+     * {@link #periodMovementByAccount} restricted to entries of the given source types — the GL side
+     * of the sales-vs-GL revenue/VAT tie-out (ACC-02). Returns [accountId, sumDebit, sumCredit].
+     */
+    @Query("""
+            SELECT l.accountId,
+                   SUM(l.debitAmount)  AS sumDebit,
+                   SUM(l.creditAmount) AS sumCredit
+            FROM   JournalLine l
+            JOIN   JournalEntry e ON e.id = l.entryId
+            WHERE  l.companyId  = :companyId
+              AND  e.postingDate BETWEEN :fromDate AND :toDate
+              AND  e.sourceType IN :sourceTypes
+            GROUP  BY l.accountId
+            """)
+    List<Object[]> periodMovementByAccountForSources(
+            @Param("companyId") Long companyId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("sourceTypes") java.util.Collection<
+                    com.erp.modules.gl.domain.enums.JournalSourceType> sourceTypes);
 }

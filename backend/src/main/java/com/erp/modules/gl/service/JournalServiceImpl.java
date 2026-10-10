@@ -3,6 +3,7 @@ package com.erp.modules.gl.service;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.dto.JournalLineDto;
+import com.erp.modules.gl.domain.dto.JournalSearchCriteria;
 import com.erp.modules.gl.domain.dto.PostJournalRequest;
 import com.erp.platform.common.money.CurrencyCode;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
@@ -26,6 +27,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -123,11 +125,83 @@ public class JournalServiceImpl implements JournalService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<JournalEntryDto> search(Long companyId, JournalSearchCriteria criteria,
+                                        Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Page<JournalEntry> page;
+        if (criteria == null || criteria.isEmpty()) {
+            page = entries.findByCompanyId(companyId, pageable);
+        } else {
+            Long accountId = null;
+            if (criteria.accountUid() != null && !criteria.accountUid().isBlank()) {
+                accountId = accounts.findByCompanyIdAndUid(companyId, criteria.accountUid().trim())
+                        .map(ChartOfAccount::getId)
+                        .orElseThrow(() -> NotFoundException.of("ChartOfAccount",
+                                criteria.accountUid()));
+            }
+            page = entries.findAll(JournalSearchSpecs.matching(companyId, criteria, accountId),
+                    pageable);
+        }
+        List<JournalEntryDto> rows = page.getContent().stream().map(this::toDto).toList();
+        List<JournalEntryDto> withRefs = withDocumentRefs(companyId, rows);
+        return new PageImpl<>(withRefs, pageable, page.getTotalElements());
+    }
+
+    /**
+     * Fills {@link JournalEntryDto#documentRef()} (ACC-19): from the entry's own description, else
+     * from another journal of the same source document — a SALES journal says "Sale &lt;uid&gt;",
+     * but the sale's COGS journal says "COGS — sale INV-0453".
+     */
+    private List<JournalEntryDto> withDocumentRefs(Long companyId, List<JournalEntryDto> rows) {
+        java.util.Map<String, String> bySource = new java.util.HashMap<>();
+        java.util.Set<String> unresolved = new java.util.HashSet<>();
+        for (JournalEntryDto r : rows) {
+            String own = JournalDocumentRefs.fromDescription(r.description(), r.sourceType());
+            if (r.sourceRef() == null) {
+                continue;
+            }
+            if (own != null) {
+                bySource.putIfAbsent(r.sourceRef(), own);
+            } else {
+                unresolved.add(r.sourceRef());
+            }
+        }
+        unresolved.removeAll(bySource.keySet());
+        if (!unresolved.isEmpty()) {
+            for (JournalEntry sibling : entries.findByCompanyIdAndSourceRefIn(companyId, unresolved)) {
+                String ref = JournalDocumentRefs.fromDescription(
+                        sibling.getDescription(), sibling.getSourceType());
+                if (ref != null) {
+                    bySource.putIfAbsent(sibling.getSourceRef(), ref);
+                }
+            }
+        }
+        return rows.stream()
+                .map(r -> {
+                    String own = JournalDocumentRefs.fromDescription(r.description(), r.sourceType());
+                    String ref = own != null ? own
+                            : r.sourceRef() != null ? bySource.get(r.sourceRef()) : null;
+                    return ref != null ? r.withDocumentRef(ref) : r;
+                })
+                .toList();
+    }
+
+    @Override
     public JournalEntryDto postManualReversal(String originalEntryUid, LocalDate reversalDate,
                                               String reason) {
         JournalEntry original = entries.findByUid(originalEntryUid)
                 .orElseThrow(() -> NotFoundException.of("JournalEntry", originalEntryUid));
         scopeGuard.assertCanActIn(RequestContext.get(), original.getCompanyId());
+
+        // ACC-26: only a manual journal is corrected by reversing it here. A system journal (sale,
+        // COGS, receipt, payment…) mirrors a document; reversing it alone would leave that document
+        // standing with no ledger entry — the sub-ledger and the GL would silently disagree.
+        if (original.getSourceType() != JournalSourceType.MANUAL) {
+            throw new ConflictException("Only manual journals can be reversed here. This journal was"
+                    + " posted automatically from a document; correct it from that document instead"
+                    + " (for example void the invoice or reverse the receipt).");
+        }
 
         LocalDate date = reversalDate != null ? reversalDate
                 : calendar.today(original.getCompanyId());

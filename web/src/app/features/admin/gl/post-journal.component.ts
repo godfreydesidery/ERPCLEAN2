@@ -13,6 +13,7 @@ import { ReportFilterOptionsService } from '../reporting/report-filter-options.s
 import { AccountDto, PostJournalLineRequest, PostJournalRequest } from './models/gl.model';
 import { GlService } from './gl.service';
 import { todayLocal } from '../../../shared/date.util';
+import { manualPostingBlock } from './manual-posting.util';
 
 interface DraftLine {
   /** Local UI key for @for track. */
@@ -61,6 +62,8 @@ export class PostJournalComponent {
   // ── Account picker ─────────────────────────────────────────────────────────
   readonly accounts = signal<AccountDto[]>([]);
   readonly accountsState = signal<'idle' | 'loading' | 'error'>('idle');
+  /** ACC-18: why an account cannot take a manual journal (null = it can) — marks and disables it. */
+  readonly blockReason = manualPostingBlock;
 
   // ── Header fields ──────────────────────────────────────────────────────────
   readonly postingDate = signal('');

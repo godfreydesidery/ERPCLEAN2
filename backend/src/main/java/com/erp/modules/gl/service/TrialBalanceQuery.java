@@ -1,7 +1,10 @@
 package com.erp.modules.gl.service;
 
 import com.erp.modules.gl.domain.dto.TrialBalanceDto;
+import com.erp.modules.gl.domain.dto.TrialBalanceRangeDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRowDto;
+import com.erp.platform.common.api.NotFoundException;
+import java.time.LocalDate;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.repository.JournalLineRepository;
@@ -67,6 +70,139 @@ public class TrialBalanceQuery {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         List<Object[]> sums = lineRepo.trialBalanceSumsByPeriod(companyId, periodId);
         return buildDto(companyId, sums, periodLabel(companyId, periodId));
+    }
+
+    /**
+     * Trial balance as at {@code asAt}, with opening / movement / closing per account (ACC-14).
+     *
+     * @param from      first day of the movement window; null = no opening (all history is movement)
+     * @param asAt      last day included; null = today
+     * @param branchUid limit to one branch of the company (resolved company-scoped); null = all.
+     *                  Company-level journals (no branch) are then excluded.
+     */
+    @Transactional(readOnly = true)
+    public TrialBalanceRangeDto computeRange(Long companyId, LocalDate from, LocalDate asAt,
+                                             String branchUid) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        LocalDate end = asAt != null ? asAt : LocalDate.now();
+        if (from != null && from.isAfter(end)) {
+            throw new IllegalArgumentException("The start date must not be after the as-at date.");
+        }
+
+        Long branchId = null;
+        String branchName = null;
+        if (branchUid != null && !branchUid.isBlank()) {
+            List<Object[]> found = jdbc.query(
+                    "SELECT id, name FROM branches WHERE uid = ? AND company_id = ?",
+                    (rs, n) -> new Object[]{rs.getLong("id"), rs.getString("name")},
+                    branchUid.trim(), companyId);
+            if (found.isEmpty()) {
+                throw new NotFoundException("Branch not found.");
+            }
+            branchId = (Long) found.get(0)[0];
+            branchName = (String) found.get(0)[1];
+        }
+
+        // Opening = before `from`; movement = from..asAt. With no `from`, everything is movement.
+        LocalDate movementStart = from != null ? from : LocalDate.of(1, 1, 1);
+        StringBuilder sql = new StringBuilder("""
+                SELECT l.account_id,
+                       SUM(CASE WHEN e.posting_date <  ? THEN l.debit_amount  ELSE 0 END) AS open_dr,
+                       SUM(CASE WHEN e.posting_date <  ? THEN l.credit_amount ELSE 0 END) AS open_cr,
+                       SUM(CASE WHEN e.posting_date >= ? THEN l.debit_amount  ELSE 0 END) AS mov_dr,
+                       SUM(CASE WHEN e.posting_date >= ? THEN l.credit_amount ELSE 0 END) AS mov_cr
+                FROM journal_lines l
+                JOIN journal_entries e ON e.id = l.entry_id
+                WHERE l.company_id = ?
+                  AND e.posting_date <= ?
+                """);
+        List<Object> args = new ArrayList<>(List.of(java.sql.Date.valueOf(movementStart),
+                java.sql.Date.valueOf(movementStart), java.sql.Date.valueOf(movementStart),
+                java.sql.Date.valueOf(movementStart), companyId, java.sql.Date.valueOf(end)));
+        if (branchId != null) {
+            sql.append("  AND l.branch_id = ?\n");
+            args.add(branchId);
+        }
+        sql.append("GROUP BY l.account_id");
+        List<Object[]> sums = jdbc.query(sql.toString(),
+                (rs, n) -> new Object[]{rs.getLong("account_id"), rs.getBigDecimal("open_dr"),
+                        rs.getBigDecimal("open_cr"), rs.getBigDecimal("mov_dr"),
+                        rs.getBigDecimal("mov_cr")},
+                args.toArray());
+
+        Map<Long, ChartOfAccount> accountMap = new HashMap<>();
+        accountRepo.findByCompanyId(companyId,
+                org.springframework.data.domain.Pageable.unpaged()).forEach(
+                a -> accountMap.put(a.getId(), a));
+
+        List<TrialBalanceRangeDto.Row> rows = new ArrayList<>();
+        BigDecimal[] t = {BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO};
+        for (Object[] s : sums) {
+            ChartOfAccount acct = accountMap.get((Long) s[0]);
+            if (acct == null) {
+                continue;
+            }
+            BigDecimal openNet = toBD(s[1]).subtract(toBD(s[2]));
+            BigDecimal movDr = toBD(s[3]);
+            BigDecimal movCr = toBD(s[4]);
+            BigDecimal closeNet = openNet.add(movDr).subtract(movCr);
+            if (openNet.signum() == 0 && movDr.signum() == 0 && movCr.signum() == 0) {
+                continue;
+            }
+            TrialBalanceRangeDto.Row row = new TrialBalanceRangeDto.Row(
+                    acct.getId(), acct.getUid(), acct.getAccountCode(), acct.getName(),
+                    acct.getAccountType(), acct.getNormalBalance(),
+                    debitSide(openNet), creditSide(openNet), movDr, movCr,
+                    debitSide(closeNet), creditSide(closeNet));
+            rows.add(row);
+            t[0] = t[0].add(row.openingDebit());
+            t[1] = t[1].add(row.openingCredit());
+            t[2] = t[2].add(movDr);
+            t[3] = t[3].add(movCr);
+            t[4] = t[4].add(row.closingDebit());
+            t[5] = t[5].add(row.closingCredit());
+        }
+        rows.sort((a, b) -> a.accountCode().compareTo(b.accountCode()));
+
+        CompanyHeader header = loadCompanyHeader(companyId);
+        ReportCompanyHeaderDto company = header == null ? null : new ReportCompanyHeaderDto(
+                header.name(), header.legalName(),
+                header.addressLine1(), header.addressLine2(),
+                header.city(), header.region(), header.country(),
+                header.contactPhone(), header.contactEmail(),
+                header.taxId(), header.vrn());
+        String currency = header != null && header.baseCurrency() != null
+                ? header.baseCurrency() : CURRENCY_FALLBACK;
+        String label = (from != null ? from + " to " + end : "As at " + end)
+                + (branchName != null ? " - branch " + branchName : "");
+
+        return new TrialBalanceRangeDto(companyId, company, currency, from, end,
+                branchId != null ? branchUid.trim() : null, branchName, label, rows,
+                t[0], t[1], t[2], t[3], t[4], t[5], Instant.now().toString());
+    }
+
+    /**
+     * The closing balances of a range trial balance in the classic two-column shape, so the
+     * existing PDF/Excel/CSV export prints an "as at" trial balance unchanged.
+     */
+    public static TrialBalanceDto closingAsTotals(TrialBalanceRangeDto r) {
+        List<TrialBalanceRowDto> rows = r.rows().stream()
+                .map(x -> new TrialBalanceRowDto(x.accountId(), x.accountUid(), x.accountCode(),
+                        x.accountName(), x.accountType(), x.normalBalance(),
+                        x.closingDebit(), x.closingCredit(),
+                        x.closingDebit().subtract(x.closingCredit())))
+                .toList();
+        return new TrialBalanceDto(r.companyId(), r.company(), r.baseCurrency(), r.periodLabel(),
+                rows, r.closingDebit(), r.closingCredit(), r.generatedAt());
+    }
+
+    private static BigDecimal debitSide(BigDecimal net) {
+        return net.signum() > 0 ? net : BigDecimal.ZERO;
+    }
+
+    private static BigDecimal creditSide(BigDecimal net) {
+        return net.signum() < 0 ? net.negate() : BigDecimal.ZERO;
     }
 
     // -------------------------------------------------------------------------
