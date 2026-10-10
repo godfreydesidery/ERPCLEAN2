@@ -290,6 +290,29 @@ export interface ProductPriceDto {
   unitName: string | null;
 }
 
+/** `POST /product-prices/resolve` (SAL-28): what the server will charge, in a given unit. */
+export interface ResolveUnitPricesRequest {
+  productUids: string[];
+  /** Absent = each product's own base unit. */
+  unitUid?: string;
+  /** Absent = walk-in pricing. */
+  customerUid?: string;
+  currency?: string;
+}
+
+export interface ResolvedUnitPriceDto {
+  productUid: string;
+  unitUid: string | null;
+  /** BigDecimal on the wire — a JSON number (null when unpriced). */
+  amount: number | string | null;
+  currency: string | null;
+  vatInclusive: boolean;
+  status: string;
+  priceSource?: string | null;
+  priceListUid?: string | null;
+  priceListName?: string | null;
+}
+
 export interface SetProductPriceRequest {
   priceListUid: string;
   price: Money;

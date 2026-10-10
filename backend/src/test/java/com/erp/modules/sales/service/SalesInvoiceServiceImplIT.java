@@ -41,6 +41,7 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
 import com.erp.modules.sales.domain.dto.TaxRateDto;
+import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.domain.enums.TenderType;
@@ -64,6 +65,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -987,6 +989,88 @@ class SalesInvoiceServiceImplIT extends PostgresIntegrationTest {
         assertThat(lines).hasSize(1);
         // 2 cartons × 12 = 24 in base.
         assertThat(lines.get(0).qtyInBase()).isEqualByComparingTo(new BigDecimal("24"));
+    }
+
+    // -----------------------------------------------------------------------
+    // SAL-13 / LSF-17: cancel an abandoned draft
+    // -----------------------------------------------------------------------
+
+    @Test
+    void cancelDraft_removesTheDraftWithItsLinesAndTenders() {
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        addStandardLine(draft.uid(), "2");
+        addExactPayment(draft.uid(), "500", TenderType.CASH);
+
+        salesInvoiceService.cancelDraft(draft.uid(), "customer walked away");
+
+        assertThatThrownBy(() -> salesInvoiceService.getByUid(draft.uid()))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+    }
+
+    @Test
+    void cancelDraft_onAFinalisedInvoice_isRefused() {
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        addStandardLine(draft.uid(), "1");
+        addExactPayment(draft.uid(), "1180", TenderType.CASH);
+        salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
+
+        assertThatThrownBy(() -> salesInvoiceService.cancelDraft(draft.uid(), null))
+                .isInstanceOf(ConflictException.class);
+        assertThat(salesInvoiceService.getByUid(draft.uid()).status())
+                .isEqualTo(InvoiceStatus.FINALISED);
+    }
+
+    // -----------------------------------------------------------------------
+    // SAL-12: change a draft line's quantity / discount
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateLine_changesQuantityAndDiscount_andRecomputesTotals() {
+        SalesInvoiceDto draft = salesInvoiceService.create(invoiceRequest());
+        addStandardLine(draft.uid(), "2");
+        String lineUid = salesInvoiceService.listLines(draft.uid()).get(0).uid();
+
+        salesInvoiceService.updateLine(draft.uid(), lineUid, new UpdateInvoiceLineRequest(
+                new BigDecimal("3"), null, new BigDecimal("10")));
+
+        SalesInvoiceLineDto line = salesInvoiceService.listLines(draft.uid()).get(0);
+        assertThat(line.quantity()).isEqualByComparingTo("3");
+        // 3 × 1000 less 10% = 2700 net.
+        assertThat(salesInvoiceService.getByUid(draft.uid()).netTotalAmount())
+                .isEqualByComparingTo("2700");
+    }
+
+    // -----------------------------------------------------------------------
+    // SAL-10: invoice list filters
+    // -----------------------------------------------------------------------
+
+    @Test
+    void list_filtersByStatus_searchesCustomerName_newestFirst() {
+        SalesInvoiceDto older = salesInvoiceService.create(invoiceRequest());
+        SalesInvoiceDto credit = salesInvoiceService.create(creditInvoiceRequest());
+        addStandardLine(credit.uid(), "1");
+        salesInvoiceService.finalise(credit.uid(), new FinaliseInvoiceRequest());
+
+        Pageable page = PageRequest.of(0, 50);
+        Long companyId = companyA.getId();
+
+        List<SalesInvoiceDto> drafts = salesInvoiceService
+                .list(companyId, null, "DRAFT", null, null, page).getContent();
+        assertThat(drafts).extracting(SalesInvoiceDto::uid).contains(older.uid())
+                .doesNotContain(credit.uid());
+
+        List<SalesInvoiceDto> byName = salesInvoiceService
+                .list(companyId, "credit customer", null, null, null, page).getContent();
+        assertThat(byName).extracting(SalesInvoiceDto::uid).contains(credit.uid())
+                .doesNotContain(older.uid());
+
+        List<SalesInvoiceDto> all = salesInvoiceService
+                .list(companyId, null, null, null, null, page).getContent();
+        assertThat(all.get(0).uid()).as("newest first").isEqualTo(credit.uid());
+
+        List<SalesInvoiceDto> future = salesInvoiceService.list(companyId, null, null,
+                java.time.LocalDate.now().plusDays(2), null, page).getContent();
+        assertThat(future).isEmpty();
     }
 
     // -----------------------------------------------------------------------

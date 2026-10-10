@@ -276,6 +276,46 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         return invoices.findByCompanyId(companyId, pageable).map(this::toDto);
     }
 
+    /** Calendar days on the list's date filter are the house time zone's days. */
+    private static final java.time.ZoneId LIST_ZONE = java.time.ZoneId.of("Africa/Dar_es_Salaam");
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SalesInvoiceDto> list(Long companyId, String q, String status, LocalDate fromDate,
+                                      LocalDate toDate, Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        java.util.List<InvoiceStatus> statuses = java.util.List.of(InvoiceStatus.values());
+        boolean anyStatus = status == null || status.isBlank();
+        if (!anyStatus) {
+            try {
+                statuses = java.util.List.of(InvoiceStatus.valueOf(status.strip().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Choose a valid invoice status to filter by.");
+            }
+        }
+        if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
+            throw new IllegalArgumentException("The end date cannot be before the start date.");
+        }
+        Instant from = fromDate != null
+                ? fromDate.atStartOfDay(LIST_ZONE).toInstant() : Instant.EPOCH;
+        Instant to = toDate != null
+                ? toDate.plusDays(1).atStartOfDay(LIST_ZONE).toInstant()
+                : Instant.parse("9999-12-31T00:00:00Z");
+        boolean anyText = q == null || q.isBlank();
+        String pattern = anyText ? "%" : "%" + q.strip().toLowerCase()
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        // SAL-10: newest first unless the caller asked for an order (the list used to be unsorted,
+        // which on Postgres reads as oldest first).
+        Pageable paged = pageable.getSort().isSorted()
+                ? pageable
+                : org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(),
+                        pageable.getPageSize(),
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        return invoices.searchFiltered(companyId, anyStatus, statuses, from, to, anyText, pattern,
+                paged).map(this::toDto);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public Page<SalesInvoiceDto> listPosSalesSince(Long companyId, Long branchId, Instant from,
@@ -638,6 +678,49 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 .detail(detail));
     }
 
+    @Override
+    public void cancelDraft(String uid, String reason) {
+        SalesInvoice inv = requireInvoice(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), inv.getCompanyId());
+        if (inv.getStatus() != InvoiceStatus.DRAFT) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Only a draft invoice can be cancelled. Void a finalised invoice instead.");
+        }
+        if (inv.getOrigin() == DocumentOrigin.POS && posSessionStillOpen(inv)) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "This sale is still open on a till. Cancel it at the till instead.");
+        }
+
+        List<SalesInvoiceLine> draftLines = lines.findByInvoiceIdOrderByLineNo(inv.getId());
+        // SAL-07: a draft raised from a delivery reserved those quantities on the delivery and its
+        // order when it was created; give them back so the goods can be invoiced again.
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER && inv.getSourceDeliveryUid() != null) {
+            Map<Long, BigDecimal> billedBase = new java.util.HashMap<>();
+            for (SalesInvoiceLine l : draftLines) {
+                billedBase.merge(l.getProductId(), l.getQtyInBase(), BigDecimal::add);
+            }
+            deliveryService.releaseInvoicedQuantities(inv.getSourceDeliveryUid(), billedBase);
+        }
+
+        // A draft has no number and posted nothing (GL, stock and AR all post at finalise), and the
+        // status CHECK admits VOID only with an invoice number, so the draft is removed outright.
+        // Its tenders were never posted either (removePayment deletes them the same way).
+        BigDecimal gross = inv.getGrossTotalAmount();
+        payments.deleteAll(payments.findByInvoiceId(inv.getId()));
+        lines.deleteAll(draftLines);
+        invoices.delete(inv);
+
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("lineCount", draftLines.size());
+        detail.put("grossTotal", gross != null ? gross.toPlainString() : "0");
+        if (reason != null && !reason.isBlank()) {
+            detail.put("reason", reason.strip());
+        }
+        audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_DRAFT_CANCEL, "sales_invoices",
+                        inv.getId(), inv.getUid())
+                .detail(detail));
+    }
+
     /** Whether the POS session this sale was rung on is still OPEN (SAL-02). */
     private boolean posSessionStillOpen(SalesInvoice inv) {
         if (inv.getPosSessionId() == null) {
@@ -818,6 +901,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         if (req.quantity() == null || req.quantity().signum() <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero.");
+        }
+        // A delivery-billed draft reserved exactly its quantities on the delivery when it was
+        // raised (SAL-07); changing one here would leave the delivery's invoiced count wrong.
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER
+                && req.quantity().compareTo(line.getQuantity()) != 0) {
+            throw new IllegalArgumentException(
+                    "Quantities on an invoice raised from a delivery follow the delivery. "
+                            + "Change the delivery instead.");
         }
 
         // Recompute qty_in_base for new quantity

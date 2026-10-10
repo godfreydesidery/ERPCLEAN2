@@ -8,12 +8,14 @@ import com.erp.modules.sales.domain.dto.OverrideLinePriceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
+import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
 import jakarta.validation.Valid;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -76,6 +78,9 @@ public class SalesInvoiceController {
                                                     // till's own local midnight), newest first.
                                                     @RequestParam(required = false) Instant finalisedFrom,
                                                     @RequestParam(required = false) Long branchId,
+                                                    // SAL-10: optional creation-date window.
+                                                    @RequestParam(required = false) LocalDate dateFrom,
+                                                    @RequestParam(required = false) LocalDate dateTo,
                                                     Pageable pageable) {
         Page<SalesInvoiceDto> page;
         if (finalisedFrom != null) {
@@ -84,7 +89,8 @@ public class SalesInvoiceController {
             }
             page = salesInvoiceService.listPosSalesSince(companyId, branchId, finalisedFrom, pageable);
         } else {
-            page = salesInvoiceService.list(companyId, q, pageable);
+            // SAL-10: status used to be accepted and ignored; q now also matches customer names.
+            page = salesInvoiceService.list(companyId, q, status, dateFrom, dateTo, pageable);
         }
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
@@ -105,6 +111,19 @@ public class SalesInvoiceController {
         salesInvoiceService.voidInvoice(uid, request);
     }
 
+    /**
+     * SAL-13 / LSF-17: cancel (discard) an abandoned DRAFT invoice. Drafts carry no number and no
+     * postings, so this is a plain removal — gated like every other draft edit. A finalised
+     * invoice is refused (409); it is voided instead.
+     */
+    @DeleteMapping("/uid/{uid}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.CREATE')")
+    public void cancelDraft(@PathVariable String uid,
+                            @RequestParam(required = false) String reason) {
+        salesInvoiceService.cancelDraft(uid, reason);
+    }
+
     // -------------------------------------------------------------------------
     // Lines
     // -------------------------------------------------------------------------
@@ -121,6 +140,18 @@ public class SalesInvoiceController {
     public SalesInvoiceLineDto addLine(@PathVariable String uid,
                                        @Valid @RequestBody AddInvoiceLineRequest request) {
         return salesInvoiceService.addLine(uid, request);
+    }
+
+    /**
+     * SAL-12: change a DRAFT line's quantity and/or discount ("make it 3, not 2") without removing
+     * and re-adding it. Product and unit stay fixed; the discount ceiling is enforced exactly as on
+     * add. Gated like every other draft edit.
+     */
+    @PutMapping("/uid/{uid}/lines/{lineUid}")
+    @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.CREATE')")
+    public SalesInvoiceLineDto updateLine(@PathVariable String uid, @PathVariable String lineUid,
+                                          @Valid @RequestBody UpdateInvoiceLineRequest request) {
+        return salesInvoiceService.updateLine(uid, lineUid, request);
     }
 
     @DeleteMapping("/uid/{uid}/lines/{lineUid}")

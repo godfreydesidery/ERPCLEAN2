@@ -32,6 +32,15 @@ public interface SalesInvoiceService {
     Page<SalesInvoiceDto> list(Long companyId, String q, Pageable pageable);
 
     /**
+     * SAL-10: the invoice list with its filters applied — {@code q} matches the invoice number OR
+     * the customer's name, {@code status} (DRAFT/FINALISED/VOID) and the creation-date window are
+     * optional, and the result is newest first unless {@code pageable} carries a sort.
+     */
+    Page<SalesInvoiceDto> list(Long companyId, String q, String status,
+                               java.time.LocalDate fromDate, java.time.LocalDate toDate,
+                               Pageable pageable);
+
+    /**
      * POS sales of one branch finalised at or after {@code from}, newest first — the till's
      * "Today's sales". Reversed (VOID) sales are included: a refund is part of the day, and the
      * till reprints it as REVERSED rather than letting it vanish from the list.
@@ -42,6 +51,18 @@ public interface SalesInvoiceService {
     void finalise(String uid, FinaliseInvoiceRequest req);
 
     void voidInvoice(String uid, VoidInvoiceRequest req);
+
+    /**
+     * SAL-13 / LSF-17: discards an abandoned DRAFT invoice. A draft has no number and no postings
+     * (no GL, stock or AR effect), and the schema only admits VOID with an invoice number, so the
+     * draft — its lines and any not-yet-finalised tenders — is deleted outright rather than voided.
+     * Quantities a delivery-billed draft reserved are released back to that delivery (SAL-07).
+     * Refused for anything that is not a DRAFT, and for a till draft whose session is still open
+     * (the till owns it).
+     *
+     * @param reason optional free text kept in the audit trail
+     */
+    void cancelDraft(String uid, String reason);
 
     /**
      * POS-specific reversal path (busy-day-simulation fix). Unlike {@link #voidInvoice}, this does

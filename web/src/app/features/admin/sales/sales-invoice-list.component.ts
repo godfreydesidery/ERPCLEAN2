@@ -66,6 +66,9 @@ export class SalesInvoiceListComponent {
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly searchQ = signal('');
   readonly statusFilter = signal('');
+  /** SAL-10: creation-date window, yyyy-MM-dd ('' = open). */
+  readonly dateFrom = signal('');
+  readonly dateTo = signal('');
 
   // ── Create form ────────────────────────────────────────────────────────────
   readonly showCreateForm = signal(false);
@@ -113,7 +116,8 @@ export class SalesInvoiceListComponent {
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
-          return this.salesService.list(companyId, q || undefined, status || undefined, page, DEFAULT_SIZE);
+          return this.salesService.list(companyId, q || undefined, status || undefined, page, DEFAULT_SIZE,
+            this.dateFrom() || undefined, this.dateTo() || undefined);
         }),
         takeUntilDestroyed(),
       )
@@ -221,6 +225,11 @@ export class SalesInvoiceListComponent {
 
   onStatusChange(status: string): void {
     this.statusFilter.set(status);
+    this.load(0);
+  }
+
+  onDateChange(which: 'from' | 'to', value: string): void {
+    (which === 'from' ? this.dateFrom : this.dateTo).set(value ?? '');
     this.load(0);
   }
 
