@@ -166,8 +166,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                         "One or more delivery lines do not belong to the specified sales order.");
             }
 
-            BigDecimal qtyDeliveredBase = lineReq.qtyDelivered();  // UI sends base qty; unit=base in v1
-            if (qtyDeliveredBase.compareTo(BigDecimal.ZERO) <= 0) {
+            // SAL-01 / LSF-01: the delivery quantity is in the SO LINE's unit (the unit the order
+            // was taken and priced in — e.g. 1 Crate), converted to base with the line's own factor
+            // for stock. It used to be read as a base quantity and stored against the pack unit, so
+            // 1 crate of 25 went out as 1 bottle (or, keyed as 25, was later billed as 25 crates).
+            BigDecimal qtyDelivered = lineReq.qtyDelivered();
+            if (qtyDelivered.compareTo(BigDecimal.ZERO) <= 0) {
                 // sol.getUid() intentionally not surfaced (error-hygiene rule)
                 throw new IllegalArgumentException(
                         "Delivery quantity must be greater than zero.");
@@ -175,11 +179,19 @@ public class DeliveryServiceImpl implements DeliveryService {
 
             // BR-SO-11: cannot deliver more than the open (unfulfilled) qty on the SO line
             BigDecimal openQty = sol.getQtyOrderedBase().subtract(sol.getQtyFulfilledBase());
+            BigDecimal openQtyInUnit = SalesLineUnits.toLineUnit(sol, openQty);
+            // Delivering exactly what is open takes exactly the open base quantity, so a pack factor
+            // that does not divide evenly can never leave a rounding sliver on the backorder.
+            BigDecimal qtyDeliveredBase = qtyDelivered.compareTo(openQtyInUnit) == 0
+                    ? openQty
+                    : SalesLineUnits.toBase(sol, qtyDelivered);
             if (qtyDeliveredBase.compareTo(openQty) > 0) {
                 // BR-SO-11: cannot deliver more than the outstanding (unfulfilled) qty
                 throw new IllegalStateException(
-                        "The delivery quantity (" + qtyDeliveredBase + ") exceeds the remaining "
-                                + "quantity available to deliver (" + openQty + ") for this order line.");
+                        "The delivery quantity (" + SalesLineUnits.plain(qtyDelivered) + " "
+                                + sol.getUnitName() + ") exceeds the remaining quantity available "
+                                + "to deliver (" + SalesLineUnits.plain(openQtyInUnit) + " "
+                                + sol.getUnitName() + ") for this order line.");
             }
 
             // Release the corresponding reservation (delta = negative) BEFORE the negative-stock
@@ -219,7 +231,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     saved.getCompanyId(), saved.getBranchId(), lineNo++,
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
-                    qtyDeliveredBase, qtyDeliveredBase,   // qty + qty_base (same in v1)
+                    qtyDelivered, qtyDeliveredBase,       // qty in the SO line's unit + qty_base
                     sol.getCurrency().value(), actorId());
             savedLines.add(deliveryLines.save(dl));
 
@@ -336,8 +348,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                     salesOrderLines.findBySalesOrderIdOrderByLineNo(order.getId());
             BigDecimal soRawNetSum = allSoLines.stream()
                     .map(sol -> {
+                        // Unit price is per SO-line unit, so it multiplies the SO-unit qty
+                        // (a pack line's base qty would overweight it by its pack factor).
                         BigDecimal gross = sol.getUnitPriceAmount()
-                                .multiply(sol.getQtyOrderedBase());
+                                .multiply(sol.getQtyOrdered());
                         BigDecimal dis = sol.getLineDiscountAmount() != null
                                 && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
                                 ? sol.getLineDiscountAmount()
@@ -357,7 +371,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 SalesOrderLine sol = salesOrderLines.findById(dl.getSalesOrderLineId())
                         .orElseThrow(() -> new NotFoundException(
                                 "Sales order line not found."));
-                BigDecimal qty = dl.openInvoiceQtyBase();
+                BigDecimal qty = SalesLineUnits.toLineUnit(sol, dl.openInvoiceQtyBase());
                 BigDecimal gross = sol.getUnitPriceAmount().multiply(qty);
                 BigDecimal dis = sol.getLineDiscountAmount() != null
                         && sol.getLineDiscountAmount().compareTo(BigDecimal.ZERO) > 0
@@ -405,12 +419,17 @@ public class DeliveryServiceImpl implements DeliveryService {
                             "Sales order line not found."));
 
             BigDecimal qtyToInvoice = dl.openInvoiceQtyBase();
+            // SAL-01 / LSF-01: bill in the SO line's unit at its per-unit price. The base quantity
+            // is converted with the SO line's own factor — never read from the delivery line's
+            // stored qty — so deliveries recorded before this fix (qty_delivered = base count
+            // against a pack unit) bill correctly too: 25 bottles of a 25-crate line is 1 crate.
+            BigDecimal qtyToInvoiceInUnit = SalesLineUnits.toLineUnit(sol, qtyToInvoice);
 
             SalesInvoiceLine invLine = new SalesInvoiceLine(
                     savedInv, lineNo++,
                     sol.getProductId(), sol.getProductCode(), sol.getProductName(),
                     sol.getUnitId(), sol.getUnitName(),
-                    qtyToInvoice, qtyToInvoice,       // quantity + qty_in_base
+                    qtyToInvoiceInUnit, qtyToInvoice, // quantity (SO line unit) + qty_in_base
                     sol.getListPriceAmount(), sol.getUnitPriceAmount(),
                     sol.getVatStatus(), sol.getVatRate(),
                     actorId());
@@ -458,8 +477,25 @@ public class DeliveryServiceImpl implements DeliveryService {
         return Lookups.orNotFound(salesOrders.findByUid(uid), "SalesOrder", uid);
     }
 
+    /**
+     * Delivery lines are shown in their sales-order line's unit: the quantity and the factor come
+     * from that line (SAL-01), so a delivery recorded under the old base-count contract reads
+     * correctly too.
+     */
     private DeliveryDto toDto(Delivery d, List<DeliveryLine> lines) {
-        return DeliveryDto.from(d, lines.stream().map(DeliveryLineDto::from).toList());
+        Map<Long, SalesOrderLine> solById = new java.util.HashMap<>();
+        for (SalesOrderLine sol : salesOrderLines.findBySalesOrderIdOrderByLineNo(d.getSalesOrderId())) {
+            solById.put(sol.getId(), sol);
+        }
+        return DeliveryDto.from(d, lines.stream().map(l -> {
+            SalesOrderLine sol = solById.get(l.getSalesOrderLineId());
+            if (sol == null) {
+                return DeliveryLineDto.from(l);
+            }
+            return DeliveryLineDto.from(l,
+                    SalesLineUnits.toLineUnit(sol, l.getQtyDeliveredBase()),
+                    SalesLineUnits.factorToBase(sol));
+        }).toList());
     }
 
     private Long actorId() {

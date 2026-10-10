@@ -25,6 +25,7 @@ import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.enums.PartyType;
 import com.erp.modules.parties.service.AgentService;
 import com.erp.modules.parties.service.CustomerService;
+import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreatePriceListRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.CreateUnitOfMeasureRequest;
@@ -74,6 +75,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -125,6 +127,7 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     @Autowired private DomainEventDispatcher   dispatcher;
     @Autowired private OutboxPublisher         outboxPublisher;
     @Autowired private TransactionTemplate     txTemplate;
+    @Autowired private JdbcTemplate            jdbc;
 
     private Company  company;
     private Branch   branch;
@@ -681,6 +684,101 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // SAL-01 / LSF-01 — a sales-order line in a PACK unit. Order 2 Crates of 24 at 30,000 a
+    // crate (60,000). Delivering "1" means one crate: 24 bottles leave stock, and the invoice
+    // bills 1 Crate × 30,000 — not 24 crates (720,000), which is what the base-qty contract did.
+    // =========================================================================
+
+    @Test
+    void packLine_deliveredInCrates_issuesBaseStock_invoicesCratesAtCratePrice() {
+        ProductDto product = stockableProduct("CrateBeer", "1250");
+        String crateUid = crateUnitFor(product, "24");
+        publishAndDispatchReceipt(product, new BigDecimal("100"), new BigDecimal("1000"));
+
+        SalesOrderDto so = createAndConfirmPackOrder(product, crateUid,
+                new BigDecimal("2"), new BigDecimal("30000"), null);
+        SalesOrderLineDto sol = salesOrderService.listLines(so.uid()).get(0);
+        assertThat(sol.qtyOrderedBase()).isEqualByComparingTo("48");
+
+        setCtx();
+        DeliveryDto delivery = deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(sol.uid(), BigDecimal.ONE))));
+        assertThat(delivery.lines().get(0).unitName()).isEqualTo("Crate");
+        assertThat(delivery.lines().get(0).qtyDelivered()).isEqualByComparingTo("1");
+        assertThat(delivery.lines().get(0).qtyDeliveredBase()).isEqualByComparingTo("24");
+        assertThat(delivery.lines().get(0).factorToBase()).isEqualByComparingTo("24");
+
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+        assertThat(requireSoh(product.id()).getQuantity())
+                .as("one crate = 24 bottles out of stock")
+                .isEqualByComparingTo("76");
+
+        setCtx();
+        SalesInvoiceDto draft = deliveryService.createInvoiceFromDelivery(delivery.uid());
+        setCtx();
+        SalesInvoiceLineDto line = salesInvoiceService.listLines(draft.uid()).get(0);
+        assertThat(line.unitName()).isEqualTo("Crate");
+        assertThat(line.quantity()).isEqualByComparingTo("1");
+        assertThat(line.qtyInBase()).isEqualByComparingTo("24");
+        assertThat(line.unitPriceAmount()).isEqualByComparingTo("30000");
+        setCtx();
+        SalesInvoiceDto inv = salesInvoiceService.getByUid(draft.uid());
+        assertThat(inv.netTotalAmount())
+                .as("1 crate × 30,000 — not 24 crates")
+                .isEqualByComparingTo("30000");
+
+        // The second crate is still open, in crates; asking for 2 more is refused in crates.
+        setCtx();
+        assertThatThrownBy(() -> deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(sol.uid(), new BigDecimal("2"))))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("(2 Crate) exceeds")
+                .hasMessageContaining("(1 Crate)");
+    }
+
+    /**
+     * A delivery recorded BEFORE the fix stored the base count as its quantity against the pack
+     * unit (qty_delivered = qty_delivered_base = 48 for 2 crates). It still bills 2 crates: the
+     * invoice derives its quantity from the base count and the order line's factor, never from the
+     * stored qty — and the delivery reads back as 2 Crate, not 48.
+     */
+    @Test
+    void legacyBaseCountDelivery_ofAPackLine_invoicesWithoutOvercharging() {
+        ProductDto product = stockableProduct("LegacyCrate", "1250");
+        String crateUid = crateUnitFor(product, "24");
+        publishAndDispatchReceipt(product, new BigDecimal("100"), new BigDecimal("1000"));
+
+        SalesOrderDto so = createAndConfirmPackOrder(product, crateUid,
+                new BigDecimal("2"), new BigDecimal("30000"), null);
+        SalesOrderLineDto sol = salesOrderService.listLines(so.uid()).get(0);
+
+        setCtx();
+        DeliveryDto delivery = deliveryService.create(new CreateDeliveryRequest(
+                so.uid(), LocalDate.now(), null,
+                List.of(new CreateDeliveryRequest.DeliveryLineRequest(sol.uid(), new BigDecimal("2")))));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.DELIVERY_CONFIRMED));
+        // Rewrite the row the way the old contract stored it.
+        jdbc.update("UPDATE delivery_lines SET qty_delivered = qty_delivered_base WHERE uid = ?",
+                delivery.lines().get(0).uid());
+
+        setCtx();
+        DeliveryDto reread = deliveryService.getByUid(delivery.uid());
+        assertThat(reread.lines().get(0).qtyDelivered()).isEqualByComparingTo("2");
+
+        setCtx();
+        SalesInvoiceDto draft = deliveryService.createInvoiceFromDelivery(delivery.uid());
+        setCtx();
+        SalesInvoiceLineDto line = salesInvoiceService.listLines(draft.uid()).get(0);
+        assertThat(line.quantity()).isEqualByComparingTo("2");
+        assertThat(line.qtyInBase()).isEqualByComparingTo("48");
+        setCtx();
+        assertThat(salesInvoiceService.getByUid(draft.uid()).netTotalAmount())
+                .isEqualByComparingTo("60000");
+    }
+
+    // =========================================================================
     // Bar 8 (owner decision 2026-07-05, V87) — configurable "block negative stock on sale":
     // an over-reserved SO (BR-SO-05/OQ-SO-02 explicitly allows reserving beyond on-hand) is
     // deliverable up to the reserved qty structurally (BR-SO-11), but the delivery-create
@@ -795,6 +893,33 @@ class DeliveryServiceIT extends PostgresIntegrationTest {
         setCtx();
         salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
                 product.uid(), pcsUid, qty, null, null, null));
+        setCtx();
+        salesOrderService.confirm(so.uid());
+        return so;
+    }
+
+    /** Adds a "Crate" pack of {@code factor} base units to the product; returns the unit uid. */
+    private String crateUnitFor(ProductDto product, String factor) {
+        setCtx();
+        String crateUid = unitService.create(
+                new CreateUnitOfMeasureRequest(company.getUid(), "CRT-" + product.id(), "Crate")).uid();
+        setCtx();
+        productService.addBulkPack(product.uid(),
+                new CreateBulkPackRequest(crateUid, new BigDecimal(factor)));
+        return crateUid;
+    }
+
+    /** An order of {@code qty} of the product in {@code unitUid}, at a stated per-unit price. */
+    private SalesOrderDto createAndConfirmPackOrder(ProductDto product, String unitUid,
+                                                    BigDecimal qty, BigDecimal unitPrice,
+                                                    BigDecimal lineDiscountAmount) {
+        setCtx();
+        SalesOrderDto so = salesOrderService.create(new CreateSalesOrderRequest(
+                company.getUid(), customerUid, agentUid, "TZS",
+                LocalDate.now(), null, null, null, null));
+        setCtx();
+        salesOrderService.addLine(so.uid(), new AddSalesOrderLineRequest(
+                product.uid(), unitUid, qty, unitPrice, lineDiscountAmount, null));
         setCtx();
         salesOrderService.confirm(so.uid());
         return so;

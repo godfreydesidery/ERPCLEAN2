@@ -15,6 +15,10 @@ public record CreateDeliveryRequest(
 ) {
     public record DeliveryLineRequest(
             @NotBlank String salesOrderLineUid,
+            /**
+             * Quantity in the sales-order line's OWN unit (the unit it was ordered and priced in,
+             * e.g. 1 Crate) — converted to base with that line's factor for stock (SAL-01).
+             */
             @NotNull BigDecimal qtyDelivered
     ) {}
 }

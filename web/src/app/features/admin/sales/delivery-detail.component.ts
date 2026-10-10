@@ -6,10 +6,11 @@ import { Router, RouterLink } from '@angular/router';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { blobErrorMessage } from '../../../core/api/blob-error';
-import { DeliveryDto, SalesReturnDto } from '../models/sales-orders.model';
+import { DeliveryDto, DeliveryLineDto, SalesReturnDto } from '../models/sales-orders.model';
 import { SalesInvoiceDto } from '../models/sales.model';
 import { DocumentsService } from '../documents/documents.service';
 import { SalesOrdersService } from './sales-orders.service';
+import { baseToUnit } from './line-units';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -98,6 +99,11 @@ export class DeliveryDetailComponent {
   }
 
   // ── Confirm ────────────────────────────────────────────────────────────────────
+
+  /** A base-unit counter on a delivery line, in the line's own unit (SAL-01). */
+  inLineUnit(line: DeliveryLineDto, baseQty: string | number | null | undefined): number {
+    return baseToUnit(baseQty, line.factorToBase);
+  }
 
   toggleConfirmDialog(): void {
     this.showConfirmDialog.update((v) => !v);

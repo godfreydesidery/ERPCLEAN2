@@ -189,8 +189,8 @@
                     </td>
                     <td class="small">{{ line.unitName }}</td>
                     <td class="num">{{ +line.qtyDelivered | number:'1.3-3' }}</td>
-                    <td class="num">{{ +line.qtyInvoicedBase | number:'1.3-3' }}</td>
-                    <td class="num">{{ +line.returnedQtyBase | number:'1.3-3' }}</td>
+                    <td class="num">{{ inLineUnit(line, line.qtyInvoicedBase) | number:'1.3-3' }}</td>
+                    <td class="num">{{ inLineUnit(line, line.returnedQtyBase) | number:'1.3-3' }}</td>
                     <td class="num">
                       {{ line.issueValueAmount ? (+line.issueValueAmount | number:'1.2-2') : '—' }}
                     </td>
