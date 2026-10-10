@@ -30,8 +30,25 @@ public record GoodsReceiptLineDto(
         String       lotNumber,
         LocalDate    manufactureDate,
         LocalDate    expiryDate,
-        List<String> serialNumbers
+        List<String> serialNumbers,
+        // PUR-02 (additive): base quantity already sent back to the supplier on confirmed returns,
+        // so a return screen can show what is still returnable in the line's own unit.
+        BigDecimal   returnedQtyInBase
 ) {
+    /** Pre-PUR-02 shape (no returned qty) — kept so existing callers compile unchanged. */
+    public GoodsReceiptLineDto(Long id, String uid, Long goodsReceiptId, Long purchaseOrderLineId,
+                               short lineNo, Long productId, String productCode, String productName,
+                               Long unitId, String unitName, BigDecimal receivedQty,
+                               BigDecimal qtyInBase, BigDecimal unitCostAmount,
+                               BigDecimal lineCostAmount, String currency, String lotNumber,
+                               LocalDate manufactureDate, LocalDate expiryDate,
+                               List<String> serialNumbers) {
+        this(id, uid, goodsReceiptId, purchaseOrderLineId, lineNo, productId, productCode,
+                productName, unitId, unitName, receivedQty, qtyInBase, unitCostAmount,
+                lineCostAmount, currency, lotNumber, manufactureDate, expiryDate, serialNumbers,
+                BigDecimal.ZERO);
+    }
+
     /** Construct from entity + pre-fetched serial numbers list. */
     public static GoodsReceiptLineDto from(GoodsReceiptLine l, List<String> serials) {
         return new GoodsReceiptLineDto(
@@ -45,7 +62,8 @@ public record GoodsReceiptLineDto(
                 l.getUnitCostAmount(), l.getLineCostAmount(),
                 CurrencyCode.value(l.getCurrency()),
                 l.getLotNumber(), l.getManufactureDate(), l.getExpiryDate(),
-                serials != null ? serials : List.of());
+                serials != null ? serials : List.of(),
+                l.getReturnedQtyInBase() != null ? l.getReturnedQtyInBase() : BigDecimal.ZERO);
     }
 
     /**

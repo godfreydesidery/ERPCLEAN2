@@ -15,10 +15,14 @@ import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.domain.entity.Supplier;
 import com.erp.modules.parties.repository.SupplierRepository;
+import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnedPayload;
+import com.erp.modules.purchases.domain.entity.GoodsReceipt;
 import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
+import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseReturn;
 import com.erp.modules.purchases.domain.entity.PurchaseReturnLine;
+import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseReturnStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
@@ -213,6 +217,7 @@ class PurchaseReturnServiceImplTest {
                 new BigDecimal("5.00"), new BigDecimal("50.00"));
         // returned_qty_in_base = 10 on this line
         when(line.getReturnedQtyInBase()).thenReturn(new BigDecimal("10.00"));
+        when(line.getReturnedQty()).thenReturn(new BigDecimal("10.00"));
 
         when(returnLines.findByPurchaseReturnIdOrderByLineNo(any())).thenReturn(List.of(line));
 
@@ -237,6 +242,7 @@ class PurchaseReturnServiceImplTest {
         PurchaseReturnLine line = stubReturnLine(1L, "GRL-UID-EXACT", 1L,
                 new BigDecimal("5.00"), new BigDecimal("50.00"));
         when(line.getReturnedQtyInBase()).thenReturn(new BigDecimal("2.00"));
+        when(line.getReturnedQty()).thenReturn(new BigDecimal("2.00"));
 
         when(returnLines.findByPurchaseReturnIdOrderByLineNo(any())).thenReturn(List.of(line));
 
@@ -263,8 +269,199 @@ class PurchaseReturnServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+    // PUR-02 / LBO-01 / LBO-02: returned qty is in the receipt LINE's unit
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_onACrateLine_convertsTheReturnToBaseAndValuesItAtTheReceiptCost() {
+        // GRN line: 8 crates of 25 bottles = 200 bottles, 360,000 spent (45,000 per crate).
+        stubCreatableReceipt();
+        stubPackGrLine(new BigDecimal("8"), new BigDecimal("200"),
+                new BigDecimal("45000"), new BigDecimal("360000"));
+        when(returnLines.sumReturnedQtyInBaseForGrLine(7L)).thenReturn(BigDecimal.ZERO);
+
+        service.create(createRequest("1"));
+
+        ArgumentCaptor<PurchaseReturnLine> saved = forClass(PurchaseReturnLine.class);
+        verify(returnLines).save(saved.capture());
+        PurchaseReturnLine line = saved.getValue();
+        assertThat(line.getReturnedQty()).as("entered in crates").isEqualByComparingTo("1");
+        assertThat(line.getReturnedQtyInBase())
+                .as("LBO-01: 1 crate is 25 bottles leaving stock, not 1")
+                .isEqualByComparingTo("25");
+        assertThat(line.getLineValueAmount())
+                .as("valued at the receipt's cost of those 25 bottles")
+                .isEqualByComparingTo("45000");
+        assertThat(line.getUnitName()).isEqualTo("Crate");
+    }
+
+    @Test
+    void create_overReturnInCrates_isRejectedAgainstTheBaseRemainder() {
+        stubCreatableReceipt();
+        stubPackGrLine(new BigDecimal("8"), new BigDecimal("200"),
+                new BigDecimal("45000"), new BigDecimal("360000"));
+        when(returnLines.sumReturnedQtyInBaseForGrLine(7L)).thenReturn(BigDecimal.ZERO);
+
+        // LBO-02: 150 crates used to pass because 150 < 200 (bottles).
+        assertThatThrownBy(() -> service.create(createRequest("150")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("You can return at most 8 Crate of Safari Lager on this receipt.");
+        verify(returnLines, org.mockito.Mockito.never()).save(any(PurchaseReturnLine.class));
+    }
+
+    @Test
+    void create_remainderIsReportedInTheLineUnitAfterEarlierReturns() {
+        stubCreatableReceipt();
+        stubPackGrLine(new BigDecimal("8"), new BigDecimal("200"),
+                new BigDecimal("45000"), new BigDecimal("360000"));
+        // 3 crates (75 bottles) already returned and confirmed.
+        when(returnLines.sumReturnedQtyInBaseForGrLine(7L)).thenReturn(new BigDecimal("75"));
+
+        assertThatThrownBy(() -> service.create(createRequest("6")))
+                .hasMessage("You can return at most 5 Crate of Safari Lager on this receipt.");
+    }
+
+    @Test
+    void confirm_sendsThePerBaseUnitCostToTheStockLedger() {
+        stubConfirmableReturn("PRET-UID-PACK", 10L, 20L, 50L);
+        PurchaseReturnLine line = stubReturnLine(7L, "GRL-PACK", 1L,
+                new BigDecimal("45000"), new BigDecimal("45000"));
+        when(line.getReturnedQty()).thenReturn(new BigDecimal("1"));
+        when(line.getReturnedQtyInBase()).thenReturn(new BigDecimal("25"));
+        when(returnLines.findByPurchaseReturnIdOrderByLineNo(any())).thenReturn(List.of(line));
+
+        GoodsReceiptLine grLine = mock(GoodsReceiptLine.class);
+        when(grLine.getId()).thenReturn(7L);
+        when(grLine.getReceivedQty()).thenReturn(new BigDecimal("8"));
+        when(grLine.getQtyInBase()).thenReturn(new BigDecimal("200"));
+        when(grLine.getReturnedQtyInBase()).thenReturn(BigDecimal.ZERO);
+        when(grLineRepo.findById(7L)).thenReturn(Optional.of(grLine));
+        stubDebitNoteParties();
+
+        service.confirm("PRET-UID-PACK");
+
+        verify(grLine).setReturnedQtyInBase(new BigDecimal("25"));
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(any(), any(), any(), any(), any(), any(), payloadCaptor.capture());
+        PurchaseReturnedPayload.ReturnLine sent =
+                ((PurchaseReturnedPayload) payloadCaptor.getValue()).lines().get(0);
+        assertThat(sent.returnedQtyInBase()).isEqualByComparingTo("25");
+        assertThat(sent.unitCostAmount()).as("45,000 / 25 bottles").isEqualByComparingTo("1800");
+        assertThat(sent.lineValue()).isEqualByComparingTo("45000");
+    }
+
+    @Test
+    void confirm_aDraftSavedWithTheOldOneToOneConversion_isRefused() {
+        stubConfirmableReturn("PRET-UID-STALE", 10L, 20L, 50L);
+        PurchaseReturnLine line = stubReturnLine(7L, "GRL-STALE", 1L,
+                new BigDecimal("45000"), new BigDecimal("45000"));
+        // Pre-fix draft on a crate line: 1 entered, 1 stored as base.
+        when(line.getReturnedQty()).thenReturn(new BigDecimal("1"));
+        when(line.getReturnedQtyInBase()).thenReturn(new BigDecimal("1"));
+        when(returnLines.findByPurchaseReturnIdOrderByLineNo(any())).thenReturn(List.of(line));
+
+        GoodsReceiptLine grLine = mock(GoodsReceiptLine.class);
+        when(grLine.getId()).thenReturn(7L);
+        when(grLine.getReceivedQty()).thenReturn(new BigDecimal("8"));
+        when(grLine.getQtyInBase()).thenReturn(new BigDecimal("200"));
+        when(grLineRepo.findById(7L)).thenReturn(Optional.of(grLine));
+
+        assertThatThrownBy(() -> service.confirm("PRET-UID-STALE"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Create a new return");
+        verify(grLineRepo, org.mockito.Mockito.never()).save(any());
+        verify(outbox, org.mockito.Mockito.never())
+                .publish(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void conversionHelpers_roundOnceAndSnapTheLastUlp() {
+        GoodsReceiptLine thirds = mock(GoodsReceiptLine.class);
+        // 3 packs of a non-integral factor: 10 base units over 3 packs.
+        when(thirds.getReceivedQty()).thenReturn(new BigDecimal("3"));
+        when(thirds.getQtyInBase()).thenReturn(new BigDecimal("10"));
+        assertThat(PurchaseReturnServiceImpl.toBaseQty(BigDecimal.ONE, thirds))
+                .isEqualByComparingTo("3.333333");
+        // Returning all 3 packs converts to exactly the received base qty.
+        assertThat(PurchaseReturnServiceImpl.toBaseQty(new BigDecimal("3"), thirds))
+                .isEqualByComparingTo("10");
+        // A conversion one ULP over the remainder is a rounding artefact, not an over-return.
+        assertThat(PurchaseReturnServiceImpl.snapToRemaining(
+                new BigDecimal("6.666667"), new BigDecimal("6.666666")))
+                .isEqualByComparingTo("6.666666");
+        assertThat(PurchaseReturnServiceImpl.displayQty(new BigDecimal("8.000000"))).isEqualTo("8");
+        assertThat(PurchaseReturnServiceImpl.displayQty(new BigDecimal("2.500000"))).isEqualTo("2.5");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private GoodsReceipt createGr;
+
+    /** A RECEIVED goods receipt on PO 30, branch 20, supplier 50 in company 10. */
+    private void stubCreatableReceipt() {
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(10L);
+        when(companies.findByUid("COMP-UID")).thenReturn(Optional.of(company));
+
+        createGr = mock(GoodsReceipt.class);
+        when(createGr.getId()).thenReturn(40L);
+        when(createGr.getUid()).thenReturn("GR-UID");
+        when(createGr.getPurchaseOrderId()).thenReturn(30L);
+        when(createGr.getSupplierId()).thenReturn(50L);
+        when(createGr.getBranchId()).thenReturn(20L);
+        when(createGr.getCompanyId()).thenReturn(10L);
+        when(createGr.getStatus()).thenReturn(GoodsReceiptStatus.RECEIVED);
+        when(grRepo.findByCompanyIdAndUid(10L, "GR-UID")).thenReturn(Optional.of(createGr));
+
+        PurchaseOrder po = mock(PurchaseOrder.class);
+        when(po.getSupplierCode()).thenReturn("SUP-1");
+        when(po.getSupplierName()).thenReturn("Brewer");
+        when(poRepo.findById(30L)).thenReturn(Optional.of(po));
+        when(numberGen.nextPurchaseReturn(10L)).thenReturn("PRET-0001");
+
+        PurchaseReturn saved = mock(PurchaseReturn.class);
+        when(saved.getId()).thenReturn(99L);
+        when(saved.getUid()).thenReturn("PRET-UID");
+        when(returns.save(any(PurchaseReturn.class))).thenReturn(saved);
+        when(returnLines.findMaxLineNo(99L)).thenReturn(0);
+    }
+
+    private GoodsReceiptLine stubPackGrLine(BigDecimal receivedQty, BigDecimal qtyInBase,
+                                            BigDecimal unitCost, BigDecimal lineCost) {
+        GoodsReceiptLine g = mock(GoodsReceiptLine.class);
+        when(g.getId()).thenReturn(7L);
+        when(g.getUid()).thenReturn("GRL-UID");
+        when(g.getGoodsReceipt()).thenReturn(createGr);
+        when(g.getProductId()).thenReturn(1L);
+        when(g.getProductCode()).thenReturn("SAF");
+        when(g.getProductName()).thenReturn("Safari Lager");
+        when(g.getUnitId()).thenReturn(3L);
+        when(g.getUnitName()).thenReturn("Crate");
+        when(g.getReceivedQty()).thenReturn(receivedQty);
+        when(g.getQtyInBase()).thenReturn(qtyInBase);
+        when(g.getUnitCostAmount()).thenReturn(unitCost);
+        when(g.getLineCostAmount()).thenReturn(lineCost);
+        when(grLineRepo.findByUid("GRL-UID")).thenReturn(Optional.of(g));
+        return g;
+    }
+
+    private CreatePurchaseReturnRequest createRequest(String qty) {
+        return new CreatePurchaseReturnRequest("COMP-UID", "GR-UID", "Damaged",
+                List.of(new CreatePurchaseReturnRequest.ReturnLineRequest(
+                        "GRL-UID", new BigDecimal(qty))));
+    }
+
+    private void stubDebitNoteParties() {
+        Company company = mock(Company.class);
+        when(company.getUid()).thenReturn("COMP-UID");
+        when(companies.findById(10L)).thenReturn(Optional.of(company));
+        Supplier supplier = mock(Supplier.class);
+        when(supplier.getUid()).thenReturn("SUPP-UID");
+        when(suppliers.findById(50L)).thenReturn(Optional.of(supplier));
+        when(apDebitNoteService.raise(any())).thenReturn(stubDebitNoteDto("DN-UID", "DN-0009"));
+    }
 
     private PurchaseReturn stubConfirmableReturn(String uid, Long companyId, Long branchId,
                                                   Long supplierId) {
@@ -290,6 +487,7 @@ class PurchaseReturnServiceImplTest {
         when(l.getGoodsReceiptLineUid()).thenReturn(grLineUid);
         when(l.getProductId()).thenReturn(productId);
         when(l.getReturnedQtyInBase()).thenReturn(new BigDecimal("10.00"));
+        when(l.getReturnedQty()).thenReturn(new BigDecimal("10.00"));
         when(l.getUnitCostAmount()).thenReturn(unitCost);
         when(l.getLineValueAmount()).thenReturn(lineValue);
         return l;
@@ -299,6 +497,7 @@ class PurchaseReturnServiceImplTest {
         GoodsReceiptLine g = mock(GoodsReceiptLine.class);
         when(g.getId()).thenReturn(id);
         when(g.getQtyInBase()).thenReturn(qtyInBase);
+        when(g.getReceivedQty()).thenReturn(qtyInBase);   // base-unit line: factor 1
         when(g.getReturnedQtyInBase()).thenReturn(alreadyReturned);
         return g;
     }
