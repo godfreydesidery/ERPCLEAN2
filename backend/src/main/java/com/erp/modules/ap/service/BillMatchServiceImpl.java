@@ -1,5 +1,6 @@
 package com.erp.modules.ap.service;
 
+import com.erp.modules.ap.domain.dto.BillCostVariancePayload;
 import com.erp.modules.ap.domain.dto.BillMatchResultDto;
 import com.erp.modules.ap.domain.dto.BillMatchResultDto.LineMatchDto;
 import com.erp.modules.ap.domain.entity.BillMatch;
@@ -30,6 +31,8 @@ import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.events.DomainEventType;
+import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -83,6 +86,8 @@ public class BillMatchServiceImpl implements BillMatchService {
     private final JdbcTemplate               jdbc;
     /** ADR-0036 D-3: converts face amounts to base before LineDraft construction. */
     private final FxDocumentConverter        fxConverter;
+    /** ACC-17: carries the on-hand share of a bill-vs-receipt cost difference to the stock module. */
+    private final OutboxPublisher            outbox;
 
     public BillMatchServiceImpl(SupplierBillRepository bills,
                                  SupplierBillLineRepository lines,
@@ -95,7 +100,8 @@ public class BillMatchServiceImpl implements BillMatchService {
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
                                  JdbcTemplate jdbc,
-                                 FxDocumentConverter fxConverter) {
+                                 FxDocumentConverter fxConverter,
+                                 OutboxPublisher outbox) {
         this.bills          = bills;
         this.lines          = lines;
         this.matches        = matches;
@@ -108,6 +114,7 @@ public class BillMatchServiceImpl implements BillMatchService {
         this.audit          = audit;
         this.jdbc           = jdbc;
         this.fxConverter    = fxConverter;
+        this.outbox         = outbox;
     }
 
     @Override
@@ -553,8 +560,11 @@ public class BillMatchServiceImpl implements BillMatchService {
 
         // Build debit legs: DR GRNI (goods) + DR Purchases (service) in BASE currency.
         // Accumulate converted base amounts; AP plug = sum of all debit base amounts.
-        BigDecimal baseGoodsNet     = BigDecimal.ZERO;
+        BigDecimal baseGoodsNet     = BigDecimal.ZERO;   // GRNI cleared, at the receipts' value
         BigDecimal baseServiceTotal = BigDecimal.ZERO;
+        BigDecimal baseInventoryVariance = BigDecimal.ZERO;   // bill − receipt, goods on hand
+        BigDecimal baseCogsVariance      = BigDecimal.ZERO;   // bill − receipt, goods gone
+        List<BillCostVariancePayload.Line> revaluations = new ArrayList<>();
 
         for (SupplierBillLine l : billLines) {
             BigDecimal lineNet = l.getLineNetAmount() != null ? l.getLineNetAmount() : BigDecimal.ZERO;
@@ -565,8 +575,30 @@ public class BillMatchServiceImpl implements BillMatchService {
                     lineNet, docCurrency, companyId, bill.getBillDate()).baseAmount();
 
             if (l.getGrLineUid() != null) {
-                // Goods line: accumulate into single GRNI DR leg
-                baseGoodsNet = baseGoodsNet.add(baseLineNet);
+                // Goods line. ACC-17 / LBO-13 / PUR-21: GRNI was credited at the RECEIPT's value
+                // (GR cost, converted at the receipt date), so it must be cleared at that same value
+                // — clearing it at the bill amount stranded every price or rate difference in GRNI
+                // for good. The difference between what the supplier billed and what the receipt
+                // booked is a cost correction: the share of the goods still on hand goes to
+                // Inventory (and into the moving average, via the outbox), the share already sold
+                // or used goes to COGS.
+                ReceiptValue rv = receiptValueForBilledQty(companyId, l);
+                if (rv == null) {
+                    // Receipt line unreadable (never expected on a matched line) — keep the old
+                    // behaviour rather than guess a value: clear GRNI at the bill amount.
+                    baseGoodsNet = baseGoodsNet.add(baseLineNet);
+                    continue;
+                }
+                baseGoodsNet = baseGoodsNet.add(rv.baseValue());
+                BigDecimal variance = baseLineNet.subtract(rv.baseValue());
+                if (variance.signum() != 0) {
+                    BigDecimal invShare = onHandShare(companyId, rv, variance);
+                    baseInventoryVariance = baseInventoryVariance.add(invShare);
+                    baseCogsVariance = baseCogsVariance.add(variance.subtract(invShare));
+                    if (invShare.signum() != 0) {
+                        revaluations.add(new BillCostVariancePayload.Line(rv.productId(), invShare));
+                    }
+                }
             } else {
                 // Service line: one LineDraft per line with project tag (ADR-0033 D-4b).
                 // ADR-0040 D-8: debit the line's gl_account_id override when set, else the PURCHASES default.
@@ -594,6 +626,10 @@ public class BillMatchServiceImpl implements BillMatchService {
                     baseGoodsNet, BigDecimal.ZERO,
                     postCurrency, "GRNI clear — " + bill.getSupplierInvoiceNo()));
         }
+        addVarianceLeg(glLines, companyId, GlConfigKey.INVENTORY, baseInventoryVariance,
+                postCurrency, "Purchase cost difference (stock on hand) — " + bill.getSupplierInvoiceNo());
+        addVarianceLeg(glLines, companyId, GlConfigKey.COGS, baseCogsVariance,
+                postCurrency, "Purchase cost difference (stock sold) — " + bill.getSupplierInvoiceNo());
 
         // Input VAT (ADR-0017 D-7): DR VAT_INPUT in base — convert face VAT independently
         BigDecimal baseVat = BigDecimal.ZERO;
@@ -610,6 +646,8 @@ public class BillMatchServiceImpl implements BillMatchService {
         // Absorbs any HALF_UP rounding residual; the unchanged GL Σ-check passes by construction.
         List<BigDecimal> drLegs = new ArrayList<>();
         drLegs.add(baseGoodsNet);
+        drLegs.add(baseInventoryVariance);
+        drLegs.add(baseCogsVariance);
         drLegs.add(baseServiceTotal);
         drLegs.add(baseVat);
         int plugScale = grossConv.baseAmount().scale();
@@ -633,16 +671,26 @@ public class BillMatchServiceImpl implements BillMatchService {
 
         JournalEntryDto posted = glPosting.post(draft);
 
+        // The Inventory share of the cost difference must also reach the stock sub-ledger, or
+        // Σ on_hand_value drifts from GL 1300. Same TX as the journal (outbox, ADR-0009 D-3); the
+        // stock module re-averages the product cost and posts no GL of its own.
+        if (!revaluations.isEmpty()) {
+            outbox.publish(DomainEventType.BILL_COST_VARIANCE,
+                    DomainEventType.AGG_SUPPLIER_BILL,
+                    bill.getId(), bill.getUid(), companyId, bill.getBranchId(),
+                    new BillCostVariancePayload(bill.getUid(), companyId, bill.getBranchId(),
+                            bill.getBillNumber(), revaluations));
+        }
+
         bill.setPostedGlEntryUid(posted.uid());
         bill.setMatchedAt(Instant.now());
         bill.setMatchedBy(actorId());
         bill.setOutstandingAmount(bill.getGrossAmount());
 
-        // Stamp FX triple on the bill (D-4): base_gross_amount + fx_rate + rate_at
-        bill.setBaseGrossAmount(grossConv.baseAmount());
-        bill.setBaseOutstandingAmount(grossConv.baseAmount());
-        bill.setFxRate(grossConv.rate());
-        bill.setRateAt(grossConv.rateAt());
+        // Stamp FX triple on the bill (D-4): base_gross_amount + fx_rate + rate_at.
+        // The base gross is the AP credit actually posted (the balancing plug), so the bill's base
+        // outstanding and GL AP-control agree to the minor unit.
+        stampFx(bill, grossConv, baseAp);
 
         audit.record(AuditEvent.of(AuditActions.AP_BILL_POST, "supplier_bills",
                         bill.getId(), bill.getUid())
@@ -650,6 +698,125 @@ public class BillMatchServiceImpl implements BillMatchService {
                         "grossAmount",  bill.getGrossAmount().toPlainString(),
                         "baseGrossAmount", grossConv.baseAmount().toPlainString(),
                         "fxRate",       grossConv.rate().toPlainString())));
+    }
+
+    /**
+     * What a bill line's goods were booked at on receipt: the base value GRNI was credited with for
+     * the quantity billed, the base quantity, and the product.
+     */
+    private record ReceiptValue(Long productId, BigDecimal billedBaseQty, BigDecimal baseValue) {}
+
+    /**
+     * The receipt value of the quantity on this bill line, in base currency — exactly what the
+     * receipt credited to GRNI for it. Mirrors {@code GoodsReceiptServiceImpl.baseUnitCost}: the
+     * receipt line total converted at the receipt date, spread over its base quantity (4 dp), then
+     * {@code round4(baseQty × unitCost)} as the stock handler values it. Billing the whole line
+     * therefore clears GRNI to the minor unit. An over-billed quantity is capped at what was
+     * received; the excess is part of the cost difference. Null when the receipt line cannot be read.
+     */
+    private ReceiptValue receiptValueForBilledQty(Long companyId, SupplierBillLine l) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT grl.product_id, grl.received_qty, grl.qty_in_base, grl.line_cost_amount, "
+                        + "grl.currency, gr.received_at "
+                        + "FROM goods_receipt_lines grl "
+                        + "JOIN goods_receipts gr ON gr.id = grl.goods_receipt_id "
+                        + "WHERE grl.uid = ? AND grl.company_id = ? AND gr.status <> 'VOID'",
+                l.getGrLineUid(), companyId);
+        if (rows.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> r = rows.get(0);
+        BigDecimal receivedQty = (BigDecimal) r.get("received_qty");
+        BigDecimal qtyInBase   = (BigDecimal) r.get("qty_in_base");
+        BigDecimal lineCost    = (BigDecimal) r.get("line_cost_amount");
+        Object receivedAt      = r.get("received_at");
+        if (receivedQty == null || receivedQty.signum() <= 0 || qtyInBase == null
+                || qtyInBase.signum() <= 0 || lineCost == null || receivedAt == null
+                || l.getBilledQty() == null) {
+            return null;
+        }
+        String currency = (String) r.get("currency");
+        BigDecimal baseLineCost = currency == null
+                ? lineCost
+                : fxConverter.toBase(lineCost, currency, companyId,
+                        receiptFxDate(((java.sql.Timestamp) receivedAt).toInstant())).baseAmount();
+        BigDecimal baseUnitCost = baseLineCost.divide(qtyInBase, 4, RoundingMode.HALF_UP);
+        BigDecimal billedBaseQty = l.getBilledQty().compareTo(receivedQty) >= 0
+                ? qtyInBase
+                : l.getBilledQty().multiply(qtyInBase).divide(receivedQty, 6, RoundingMode.HALF_UP);
+        BigDecimal baseValue = billedBaseQty.multiply(baseUnitCost).setScale(4, RoundingMode.HALF_UP);
+        return new ReceiptValue(((Number) r.get("product_id")).longValue(), billedBaseQty, baseValue);
+    }
+
+    /**
+     * The part of {@code variance} that belongs to goods still on hand: pro rata to the company's
+     * on-hand quantity of the product (the moving average is company-wide, ADR-0028 D-2) against the
+     * base quantity billed, capped at the whole variance. The rest was sold or used and is COGS.
+     */
+    private BigDecimal onHandShare(Long companyId, ReceiptValue rv, BigDecimal variance) {
+        BigDecimal onHand = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(quantity), 0) FROM stock_on_hand "
+                        + "WHERE company_id = ? AND product_id = ?",
+                BigDecimal.class, companyId, rv.productId());
+        if (onHand == null || onHand.signum() <= 0 || rv.billedBaseQty().signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        if (onHand.compareTo(rv.billedBaseQty()) >= 0) {
+            return variance;
+        }
+        return variance.multiply(onHand)
+                .divide(rv.billedBaseQty(), 4, RoundingMode.HALF_UP);
+    }
+
+    /** A signed cost-difference leg: positive debits {@code key}, negative credits it; zero adds nothing. */
+    private void addVarianceLeg(List<LineDraft> glLines, Long companyId, GlConfigKey key,
+                                BigDecimal amount, String currency, String memo) {
+        if (amount.signum() == 0) {
+            return;
+        }
+        Long accountId = glConfig.resolve(companyId, key).getId();
+        glLines.add(amount.signum() > 0
+                ? new LineDraft(accountId, amount, BigDecimal.ZERO, currency, memo)
+                : new LineDraft(accountId, BigDecimal.ZERO, amount.negate(), currency, memo));
+    }
+
+    /**
+     * The receipt's conversion date, derived from its received instant exactly as the receipt
+     * itself derived it ({@code GoodsReceiptServiceImpl.receiptFxDate}) so both use the same rate.
+     */
+    private static java.time.LocalDate receiptFxDate(Instant receivedAt) {
+        return receivedAt.atZone(java.time.ZoneOffset.UTC).toLocalDate();
+    }
+
+    /**
+     * Writes the bill's FX stamp (rate, rate time, base gross) and its base outstanding.
+     *
+     * <p><b>Why a direct, write-once UPDATE and not the entity setters alone.</b> {@code fx_rate},
+     * {@code base_gross_amount} and {@code rate_at} are mapped {@code updatable = false} — they are
+     * immutable once stamped (BR-CUR-05). But a supplier bill is INSERTED at entry, long before it is
+     * matched, so by the time this method runs those columns can never be written through JPA again:
+     * Hibernate silently left every matched USD bill at the column defaults ({@code fx_rate = 1},
+     * {@code base_gross_amount NULL}), and payments, debit notes and the AP balance then valued it at
+     * par while the GL had it at the real rate.
+     *
+     * <p>Stamping at entry instead was rejected: a draft bill's amount, date and currency can still
+     * change before it is matched, and an insert-only stamp taken at entry would then be wrong for
+     * good; it would also make entering a USD bill fail whenever the day's rate is not yet loaded.
+     * The match/post is the business moment the rate is fixed, so the stamp is written here, once,
+     * by a single company-scoped UPDATE. The JPA mapping is untouched — ordinary saves still can
+     * never overwrite the stamp, which keeps the immutability the mapping was protecting.
+     * {@code base_outstanding_amount} is updatable and goes through the entity as before.
+     */
+    private void stampFx(SupplierBill bill, ConvertedAmount grossConv, BigDecimal baseGross) {
+        bill.setBaseGrossAmount(baseGross);
+        bill.setBaseOutstandingAmount(baseGross);
+        bill.setFxRate(grossConv.rate());
+        bill.setRateAt(grossConv.rateAt());
+        jdbc.update("UPDATE supplier_bills SET fx_rate = ?, base_gross_amount = ?, rate_at = ? "
+                        + "WHERE id = ? AND company_id = ?",
+                grossConv.rate(), baseGross,
+                grossConv.rateAt() != null ? java.sql.Timestamp.from(grossConv.rateAt()) : null,
+                bill.getId(), bill.getCompanyId());
     }
 
     // -------------------------------------------------------------------------

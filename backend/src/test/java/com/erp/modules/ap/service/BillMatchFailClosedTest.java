@@ -126,7 +126,8 @@ class BillMatchFailClosedTest {
                 billRepo, lineRepo, matchRepo, purchaseReader,
                 glPosting, glConfig, journalEntries,
                 mock(ApBillNumberGenerator.class),
-                mock(ScopeGuard.class), mock(AuditService.class), jdbc, fxConverter);
+                mock(ScopeGuard.class), mock(AuditService.class), jdbc, fxConverter,
+                mock(com.erp.platform.events.OutboxPublisher.class));
 
         // A clerk, not root: root short-circuits authorisation and hides real-world behaviour.
         RequestContext.set(new RequestContext.Principal(

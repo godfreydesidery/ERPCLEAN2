@@ -82,7 +82,8 @@ class BillMatchProjectTagTest {
                 mock(PurchaseMatchReader.class),
                 glPosting, glConfig, journalEntries,
                 mock(ApBillNumberGenerator.class),
-                scopeGuard, audit, jdbc, fxConverter);
+                scopeGuard, audit, jdbc, fxConverter,
+                mock(com.erp.platform.events.OutboxPublisher.class));
     }
 
     /**

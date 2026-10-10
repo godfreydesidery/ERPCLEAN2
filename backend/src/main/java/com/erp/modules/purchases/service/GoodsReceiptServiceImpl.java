@@ -29,6 +29,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
@@ -36,6 +37,8 @@ import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -93,6 +96,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final GoodsReceiptPrintQuery           printQuery;
     private final ReceiptVoidStockGuard            voidStockGuard;
     private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
+    /** PUR-07 / ACC-08: converts a foreign-currency receipt's cost to base before it is valued. */
+    private final FxDocumentConverter              fxConverter;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -110,7 +115,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    GoodsReceiptPrintQuery printQuery,
                                    ReceiptVoidStockGuard voidStockGuard,
                                    com.erp.modules.purchases.domain.dto.ReceiptBillingReader
-                                           billingReader) {
+                                           billingReader,
+                                   FxDocumentConverter fxConverter) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -127,6 +133,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.printQuery    = printQuery;
         this.voidStockGuard = voidStockGuard;
         this.billingReader  = billingReader;
+        this.fxConverter    = fxConverter;
     }
 
     // -------------------------------------------------------------------------
@@ -186,7 +193,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         poService.recomputePoStatus(po);
 
         // 8. Emit STOCK.RECEIVED inside the same TX (ADR-0011 D-7; NEVER REQUIRES_NEW)
-        List<StockReceivedPayload.LineItem> payloadLines = buildPayloadLines(savedLines);
+        // PUR-07 / ACC-08: the payload's unit cost is valued straight into stock and the GL, which
+        // are kept in BASE currency — so a USD order's cost is converted at the receipt date first.
+        List<StockReceivedPayload.LineItem> payloadLines = buildPayloadLines(savedLines,
+                CurrencyCode.value(po.getCurrency()), po.getCompanyId(), receiptFxDate(receivedAt));
         outbox.publish(
                 DomainEventType.STOCK_RECEIVED,
                 DomainEventType.AGG_GOODS_RECEIPT,
@@ -497,7 +507,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         }
     }
 
-    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> savedLines) {
+    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> savedLines,
+                                                                  String docCurrency,
+                                                                  Long companyId,
+                                                                  LocalDate fxDate) {
         return savedLines.stream()
                 .map(l -> {
                     List<String> serials = grLineSerials.findByGoodsReceiptLineId(l.getId())
@@ -507,7 +520,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                             resolveProductUid(l.getProductId()),
                             l.getUnitId(),
                             l.getQtyInBase(),
-                            baseUnitCost(l),         // ADR-0020 D-3 (K4: per BASE unit, not per order unit)
+                            // ADR-0020 D-3 (K4: per BASE unit, not per order unit), in BASE currency
+                            baseUnitCost(l, docCurrency, companyId, fxDate),
                             l.getLotNumber(),
                             l.getManufactureDate(),
                             l.getExpiryDate(),
@@ -537,13 +551,33 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
      * <p>Returns ZERO for a defensive non-positive base quantity; {@link #buildGrLine} already
      * rejects that case, so this is unreachable in practice and never divides by zero.
      */
-    private BigDecimal baseUnitCost(GoodsReceiptLine line) {
+    private BigDecimal baseUnitCost(GoodsReceiptLine line, String docCurrency, Long companyId,
+                                    LocalDate fxDate) {
         BigDecimal qtyInBase = line.getQtyInBase();
         BigDecimal lineCost  = line.getLineCostAmount();
         if (qtyInBase == null || qtyInBase.signum() <= 0 || lineCost == null) {
             return BigDecimal.ZERO;
         }
-        return lineCost.divide(qtyInBase, MONEY_SCALE, java.math.RoundingMode.HALF_UP);
+        // PUR-07 / ACC-08: line_cost_amount is in the ORDER's currency. Stock value, the moving
+        // average and GL 1300/2150 are all base, so a USD 1,000 receipt used to land as TZS 1,000.
+        // Convert the line total first (one rounding step, to base minor units), then spread it over
+        // the base quantity. A base-currency order short-circuits to the face amount unchanged. A
+        // missing rate refuses the receipt with the friendly "enter the rate" message rather than
+        // valuing the goods at face.
+        BigDecimal baseLineCost = docCurrency == null
+                ? lineCost
+                : fxConverter.toBase(lineCost, docCurrency, companyId, fxDate).baseAmount();
+        return baseLineCost.divide(qtyInBase, MONEY_SCALE, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * The date a receipt's cost is converted at — the day the goods were received, derived exactly
+     * as {@code GoodsReceiptStockHandler} derives the GL posting date from the same instant, so the
+     * rate and the journal date always agree. Kept in one place so a change to how business dates
+     * are derived only has to touch this line.
+     */
+    private static LocalDate receiptFxDate(Instant receivedAt) {
+        return receivedAt.atZone(ZoneOffset.UTC).toLocalDate();
     }
 
     /** Resolve product uid from id — needed to populate the outbox payload (ADR-0011 D-8). */

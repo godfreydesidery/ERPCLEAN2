@@ -67,7 +67,8 @@ class GoodsReceiptVoidGuardTest {
                 mock(PurchaseOrderLineRepository.class), mock(ProductRepository.class),
                 mock(PurchaseSettingsRepository.class), mock(PurchaseNumberGenerator.class),
                 tracker, poService, mock(ScopeGuard.class), mock(AuditService.class), outbox,
-                mock(GoodsReceiptPrintQuery.class), stockGuard, billingReader);
+                mock(GoodsReceiptPrintQuery.class), stockGuard, billingReader,
+                mock(com.erp.platform.common.money.FxDocumentConverter.class));
 
         RequestContext.set(new RequestContext.Principal(1L, "u@test", false, 10L, 20L, null));
 

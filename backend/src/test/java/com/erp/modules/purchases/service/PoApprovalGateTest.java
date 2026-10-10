@@ -34,11 +34,55 @@ class PoApprovalGateTest {
 
     private PurchaseSettingsRepository settings;
     private PoApprovalGate gate;
+    private com.erp.platform.common.money.CurrencyConversionService fx;
 
     @BeforeEach
     void setUp() {
         settings = mock(PurchaseSettingsRepository.class);
-        gate = new PoApprovalGate(settings, mock(ApprovalEngine.class));
+        fx = mock(com.erp.platform.common.money.CurrencyConversionService.class);
+        gate = new PoApprovalGate(settings, mock(ApprovalEngine.class), fx);
+    }
+
+    /** PUR-22: a USD order is measured in the threshold's currency, not by its bare number. */
+    @Test
+    void foreignCurrencyOrder_isConvertedBeforeTheThresholdCompare() {
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(cfg(true, new BigDecimal("5000000.0000"))));
+        PurchaseOrder usd = po(new BigDecimal("9000.00"));
+        when(usd.getCurrency()).thenReturn(CurrencyCode.of("USD"));
+        when(fx.convert(org.mockito.ArgumentMatchers.eq(new BigDecimal("9000.00")),
+                org.mockito.ArgumentMatchers.eq("USD"), org.mockito.ArgumentMatchers.eq("TZS"),
+                org.mockito.ArgumentMatchers.eq(COMPANY_ID), any()))
+                .thenReturn(new com.erp.platform.common.money.ConvertedAmount(
+                        new BigDecimal("22500000"), new BigDecimal("2500"), java.time.Instant.now()));
+
+        assertThat(gate.evaluate(usd).requirement())
+                .as("USD 9,000 is about TZS 22.5M — above a TZS 5M ceiling")
+                .isEqualTo(ApprovalRequirement.REQUIRED);
+    }
+
+    @Test
+    void foreignCurrencyOrder_withNoRate_failsClosedToApprovalRequired() {
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(cfg(true, new BigDecimal("5000000.0000"))));
+        PurchaseOrder usd = po(new BigDecimal("100.00"));
+        when(usd.getCurrency()).thenReturn(CurrencyCode.of("USD"));
+        when(fx.convert(any(), any(), any(), any(), any()))
+                .thenThrow(new com.erp.platform.common.money.FxRateNotFoundException(
+                        COMPANY_ID, "USD", "TZS", java.time.LocalDate.now()));
+
+        assertThat(gate.evaluate(usd).requirement()).isEqualTo(ApprovalRequirement.REQUIRED);
+    }
+
+    @Test
+    void sameCurrencyOrder_isComparedWithoutAnyConversion() {
+        when(settings.findByCompanyId(COMPANY_ID))
+                .thenReturn(Optional.of(cfg(true, new BigDecimal("5000000.0000"))));
+        PurchaseOrder tzs = po(new BigDecimal("100000.00"));
+        when(tzs.getCurrency()).thenReturn(CurrencyCode.of("TZS"));
+
+        assertThat(gate.evaluate(tzs).requirement()).isEqualTo(ApprovalRequirement.BELOW_THRESHOLD);
+        verify(fx, never()).convert(any(), any(), any(), any(), any());
     }
 
     @Test
