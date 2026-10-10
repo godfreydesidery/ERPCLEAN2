@@ -12,6 +12,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierModel } from '../models/party.model';
 import { SupplierService } from '../parties/supplier.service';
 import { PurchasesService } from '../purchases/purchases.service';
+import { GlService } from '../gl/gl.service';
 import {
   BillLineRequest,
   BillMatchResultDto,
@@ -37,6 +38,8 @@ interface LineRow {
   unitCostAmount: string;
   poLineUid: string;
   grLineUid: string;
+  /** AP-16: expense / asset account for a line that is not bought stock (rent, power, services). */
+  glAccountUid: string;
 }
 
 /**
@@ -69,6 +72,7 @@ export class EnterBillComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly purchasesService = inject(PurchasesService);
+  private readonly glService = inject(GlService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -76,6 +80,11 @@ export class EnterBillComponent {
   readonly poOptions = signal<UidOption[]>([]);
   /** PO line options, loaded when a PO is selected. */
   readonly poLineOptions = signal<UidOption[]>([]);
+  /**
+   * AP-16: expense and asset accounts for lines that are not purchased stock. Empty when the list
+   * could not be read — the line then posts to Purchases exactly as before.
+   */
+  readonly accountOptions = signal<UidOption[]>([]);
   /** True when the PO list could not be loaded (non-fatal; PO matching is optional). */
   readonly poListUnavailable = signal(false);
 
@@ -176,6 +185,7 @@ export class EnterBillComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadPoOptions(list[0].id);
+              this.loadAccountOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -232,6 +242,31 @@ export class EnterBillComponent {
     this.resetSupplier();
     this.poListUnavailable.set(false);
     this.loadPoOptions(id);
+    this.loadAccountOptions(id);
+    this.lines.update((rows) => rows.map((r) => ({ ...r, glAccountUid: '' })));
+  }
+
+  private loadAccountOptions(companyId: string): void {
+    this.accountOptions.set([]);
+    if (!companyId) return;
+    this.glService.listAllActiveAccounts(companyId).subscribe({
+      next: (list) =>
+        this.accountOptions.set(
+          list
+            .filter((a) => a.accountType === 'EXPENSE' || a.accountType === 'ASSET')
+            .map((a) => ({
+              uid: a.uid,
+              label: `${a.accountCode} — ${a.name}`,
+              hint: a.accountType === 'EXPENSE' ? 'Expense' : 'Asset',
+            })),
+        ),
+      error: () => this.accountOptions.set([]),
+    });
+  }
+
+  /** A line tied to an order or a receipt is stock: it posts through GRNI, not to an account. */
+  isStockLine(line: LineRow): boolean {
+    return !!String(line.poLineUid ?? '').trim() || !!String(line.grLineUid ?? '').trim();
   }
 
   // ── Goods receipt line picker ──────────────────────────────────────────────
@@ -332,7 +367,14 @@ export class EnterBillComponent {
   // ── Line editor ────────────────────────────────────────────────────────────
 
   private emptyLine(): LineRow {
-    return { description: '', billedQty: '', unitCostAmount: '', poLineUid: '', grLineUid: '' };
+    return {
+      description: '',
+      billedQty: '',
+      unitCostAmount: '',
+      poLineUid: '',
+      grLineUid: '',
+      glAccountUid: '',
+    };
   }
 
   addLine(): void {
@@ -411,6 +453,7 @@ export class EnterBillComponent {
         unitCostAmount: String(+(String(l.unitCostAmount ?? '').trim() || '0')),
         poLineUid: String(l.poLineUid ?? '').trim() || null,
         grLineUid: String(l.grLineUid ?? '').trim() || null,
+        glAccountUid: this.isStockLine(l) ? null : String(l.glAccountUid ?? '').trim() || null,
       }));
 
     if (lineRequests.length === 0) { this.formError.set('At least one bill line is required.'); return; }

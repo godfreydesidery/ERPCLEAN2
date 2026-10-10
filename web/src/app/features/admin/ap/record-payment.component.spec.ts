@@ -175,6 +175,59 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
     );
   });
 
+  it('AP-07: a part-payment amount is sent per bill; a full one is not', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordPaymentComponent).componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+    apService.paymentRun.mockReturnValue(of({ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'CASH', bankReference: null, allocations: [] }));
+
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500), makePayableBill('B2', 300)]);
+    comp.toggleBill('B1', true);
+    comp.toggleBill('B2', true);
+    comp.setPayAmount('B1', '200');
+    expect(comp.selectedTotal()).toBeCloseTo(500, 5);
+    comp.submit();
+
+    const req = apService.paymentRun.mock.calls[0][0];
+    expect(req.billAmounts).toEqual({ B1: '200' });
+  });
+
+  it('AP-07: an amount above what is owed is refused before sending', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordPaymentComponent).componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500)]);
+    comp.toggleBill('B1', true);
+    comp.setPayAmount('B1', '501');
+    comp.submit();
+
+    expect(apService.paymentRun).not.toHaveBeenCalled();
+    expect(comp.formError()).toContain('more than is still owed');
+  });
+
+  it('AP-07: allocate oldest-first fills the oldest bills and part-pays the last one', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordPaymentComponent).componentInstance as any;
+
+    primeSupplierSelected(comp);
+    const newer = { ...makePayableBill('NEW', 300), dueDate: '2026-09-30', billDate: '2026-09-01' };
+    const older = { ...makePayableBill('OLD', 500), dueDate: '2026-08-31', billDate: '2026-08-01' };
+    comp.bills.set([newer, older]);
+    comp.allocateTotal.set('600');
+    comp.allocateOldestFirst();
+
+    expect([...comp.selectedBillUids()].sort()).toEqual(['NEW', 'OLD']);
+    expect(comp.payAmountOf('OLD')).toBe('');
+    expect(comp.payAmountOf('NEW')).toBe('100.00');
+    expect(comp.selectedTotal()).toBeCloseTo(600, 5);
+  });
+
   it('AP-08: the company default account is preselected and the chosen account is sent', () => {
     vi.useFakeTimers();
     makeBed();

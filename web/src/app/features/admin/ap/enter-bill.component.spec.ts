@@ -524,6 +524,28 @@ describe('EnterBillComponent', () => {
     expect(request.lines[0].poLineUid).toBe('POL-1');
   });
 
+  it('AP-16: a non-stock line carries its expense account; a stock line never does', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(EnterBillComponent).componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+
+    comp.selectedCompanyId.set('10');
+    comp.selectedSupplier.set({ id: 'SUP-ID-1', uid: 'SUP1', label: 'Supplier A' });
+    comp.supplierInvoiceNo.set('INV-RENT');
+    comp.billDate.set('2026-08-12');
+    comp.lines.set([
+      { description: 'Shop rent', billedQty: '1', unitCostAmount: '900', poLineUid: '', grLineUid: '', glAccountUid: 'ACC-RENT' },
+      { description: 'Widget', billedQty: '1', unitCostAmount: '10', poLineUid: 'POL-1', grLineUid: '', glAccountUid: 'ACC-RENT' },
+    ]);
+
+    comp.submit();
+
+    const lines = apService.enterBill.mock.calls[0][0].lines;
+    expect(lines[0].glAccountUid).toBe('ACC-RENT');
+    expect(lines[1].glAccountUid).toBeNull();
+  });
+
   it('sends null (not an empty string) when no goods receipt line was attached', () => {
     vi.useFakeTimers();
     makeBed();

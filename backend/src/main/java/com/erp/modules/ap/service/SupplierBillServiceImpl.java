@@ -214,9 +214,17 @@ public class SupplierBillServiceImpl implements SupplierBillService {
             line.setLineVatAmount(computeLineVat(lineNet, lr.vatStatus(), lr.vatRate()));
 
             // D-8: resolve optional GL account override by uid
+            // AP-16: resolved INSIDE the bill's company (a uid from another company, or a typo, is
+            // refused instead of being silently dropped and posting to Purchases).
             if (lr.glAccountUid() != null && !lr.glAccountUid().isBlank()) {
-                chartOfAccounts.findByUid(lr.glAccountUid()).ifPresent(
-                        acct -> line.setGlAccountId(acct.getId()));
+                final short shownLineNo = (short) (lineNo - 1);
+                Long accountId = chartOfAccounts
+                        .findByCompanyIdAndUid(companyId, lr.glAccountUid().trim())
+                        .map(acct -> acct.getId())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "The account chosen on line " + shownLineNo
+                                        + " was not found. Pick the account again."));
+                line.setGlAccountId(accountId);
             }
 
             // ADR-0041 D4: stamp per-line dimension tags (flow onto the GL P&L leg at match-time).

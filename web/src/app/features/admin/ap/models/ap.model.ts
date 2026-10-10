@@ -138,6 +138,8 @@ export interface BillLineRequest {
   productId?: number | null;
   poLineUid?: string | null;
   grLineUid?: string | null;
+  /** AP-16: expense / asset account (uid) for a non-stock line; omitted = Purchases. */
+  glAccountUid?: string | null;
   /** Required. */
   description: string;
   /** Send as string; backend parses BigDecimal. */
@@ -281,6 +283,11 @@ export interface PaymentRunRequest {
   whtTypeUid?: string | null;
   /** Send as string. */
   whtAmount?: string | null;
+  /**
+   * AP-07: part-payment per bill uid (send as string). A bill in billUids without an entry is
+   * paid in full. Each amount must be > 0 and <= the bill's outstanding.
+   */
+  billAmounts?: Record<string, string>;
 }
 
 // ── Debit note ────────────────────────────────────────────────────────────────
@@ -336,6 +343,24 @@ export interface ApAgeingRowDto {
   bucket: AgeingBucket;
   /** Wire: number — coerce with +v */
   amount: number | string;
+  currency: string;
+}
+
+/**
+ * One creditors-ageing row per supplier and currency (AP-11), net of unapplied debit notes.
+ * Backed by GET /api/v1/ap/statement/ageing/by-supplier. Amounts are wire numbers.
+ */
+export interface ApSupplierAgeingRowDto {
+  supplierId: string;
+  supplierUid: string | null;
+  supplierCode: string | null;
+  supplierName: string | null;
+  current: number | string;
+  days1to30: number | string;
+  days31to60: number | string;
+  days61to90: number | string;
+  days91Plus: number | string;
+  total: number | string;
   currency: string;
 }
 

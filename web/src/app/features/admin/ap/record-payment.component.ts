@@ -68,6 +68,10 @@ export class RecordPaymentComponent {
   readonly billsState = signal<'idle' | 'loading' | 'error'>('idle');
   /** Set of billUids the user has checked for payment. */
   readonly selectedBillUids = signal<Set<string>>(new Set());
+  /** AP-07: amount to pay per selected bill uid; missing / blank = its full outstanding. */
+  readonly payAmounts = signal<Record<string, string>>({});
+  /** AP-07: "allocate X oldest-first" helper input. */
+  readonly allocateTotal = signal('');
 
   // ── Payment header ─────────────────────────────────────────────────────────
   readonly paymentDate = signal('');
@@ -101,10 +105,17 @@ export class RecordPaymentComponent {
 
   readonly selectedTotal = computed(() => {
     const uids = this.selectedBillUids();
+    const amounts = this.payAmounts();
     return this.bills()
       .filter((b) => uids.has(b.uid))
-      .reduce((sum, b) => sum + +(b.outstandingAmount ?? 0), 0);
+      .reduce((sum, b) => sum + this.amountOf(b, amounts), 0);
   });
+
+  /** What a selected bill will receive: the typed amount, else its full outstanding. */
+  private amountOf(b: SupplierBillDto, amounts: Record<string, string>): number {
+    const typed = String(amounts[b.uid] ?? '').trim();
+    return typed ? +typed : +(b.outstandingAmount ?? 0);
+  }
 
   readonly selectedCount = computed(() => this.selectedBillUids().size);
 
@@ -242,6 +253,7 @@ export class RecordPaymentComponent {
       this.supplierResults.set([]);
       this.bills.set([]);
       this.selectedBillUids.set(new Set());
+      this.payAmounts.set({});
       return;
     }
     this.selectedSupplier.set(null);
@@ -261,6 +273,7 @@ export class RecordPaymentComponent {
     this.supplierResults.set([]);
     this.bills.set([]);
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
   }
 
   // ── Load payable bills (MATCHED, APPROVED, PARTIALLY_PAID) ────────────────
@@ -271,6 +284,7 @@ export class RecordPaymentComponent {
     this.billsState.set('loading');
     this.bills.set([]);
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
 
     // Load up to 200 payable bills — enough for a payment run.
     this.apService.listBills(companyId, supplierUid, undefined, 0, 200).subscribe({
@@ -296,6 +310,54 @@ export class RecordPaymentComponent {
       if (checked) next.add(uid); else next.delete(uid);
       return next;
     });
+    if (!checked) this.setPayAmount(uid, '');
+  }
+
+  /** AP-07: the amount typed for one bill ('' = pay it in full). */
+  payAmountOf(uid: string): string {
+    return this.payAmounts()[uid] ?? '';
+  }
+
+  setPayAmount(uid: string, value: string): void {
+    this.payAmounts.update((m) => {
+      const next = { ...m };
+      const v = String(value ?? '').trim();
+      if (v) next[uid] = v; else delete next[uid];
+      return next;
+    });
+  }
+
+  /**
+   * AP-07: spread a lump sum over the supplier's bills, oldest due first; the last bill reached
+   * takes the remainder as a part-payment. Never puts more on a bill than it still owes.
+   */
+  allocateOldestFirst(): void {
+    let remaining = +String(this.allocateTotal() ?? '').trim();
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      this.formError.set('Enter the amount you are paying to spread it over the bills.');
+      return;
+    }
+    this.formError.set(null);
+    const ordered = [...this.bills()].sort((a, b) =>
+      String(a.dueDate ?? a.billDate ?? '9999').localeCompare(String(b.dueDate ?? b.billDate ?? '9999'))
+      || String(a.billDate ?? '').localeCompare(String(b.billDate ?? '')));
+    const picked = new Set<string>();
+    const amounts: Record<string, string> = {};
+    for (const b of ordered) {
+      if (remaining <= 0.000001) break;
+      const owed = +(b.outstandingAmount ?? 0);
+      if (owed <= 0) continue;
+      const pay = Math.min(owed, remaining);
+      picked.add(b.uid);
+      if (pay < owed) amounts[b.uid] = (Math.round(pay * 100) / 100).toFixed(2);
+      remaining = Math.round((remaining - pay) * 100) / 100;
+    }
+    this.selectedBillUids.set(picked);
+    this.payAmounts.set(amounts);
+    if (remaining > 0) {
+      this.formError.set(
+        `That is ${this.fmtMoney(remaining)} more than these bills owe; only what is owed was allocated.`);
+    }
   }
 
   isBillSelected(uid: string): boolean {
@@ -308,6 +370,7 @@ export class RecordPaymentComponent {
 
   clearSelection(): void {
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -336,6 +399,28 @@ export class RecordPaymentComponent {
       bankReference: bankRef || null,
       billUids: [...this.selectedBillUids()],
     };
+
+    // AP-07: part-payments. Only amounts below the outstanding are sent; the rest pay in full.
+    const amounts = this.payAmounts();
+    const partial: Record<string, string> = {};
+    for (const b of this.bills()) {
+      if (!this.selectedBillUids().has(b.uid)) continue;
+      const typed = String(amounts[b.uid] ?? '').trim();
+      if (!typed) continue;
+      const n = +typed;
+      const owed = +(b.outstandingAmount ?? 0);
+      const label = b.supplierInvoiceNo || b.billNumber;
+      if (!Number.isFinite(n) || n <= 0) {
+        this.formError.set(`The amount to pay on bill ${label} must be more than zero.`);
+        return;
+      }
+      if (n > owed + 0.000001) {
+        this.formError.set(`The amount to pay on bill ${label} is more than is still owed (${this.fmtMoney(owed)}).`);
+        return;
+      }
+      if (n < owed) partial[b.uid] = typed;
+    }
+    if (Object.keys(partial).length > 0) request.billAmounts = partial;
 
     // AP-08: send the chosen account; omitted = the company default (server-side fallback).
     const accountUid = String(this.cashAccountUid() ?? '').trim();

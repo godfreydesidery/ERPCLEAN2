@@ -51,6 +51,7 @@ class ApPaymentRunGroupingIT extends PostgresIntegrationTest {
     @Autowired private SupplierService         supplierService;
     @Autowired private PaymentRunRepository    paymentRunRepo;
     @Autowired private ApPaymentRepository     paymentRepo;
+    @Autowired private com.erp.modules.ap.repository.SupplierBillRepository billRepo;
     @Autowired private ChartOfAccountService   chartOfAccountService;
     @Autowired private FiscalCalendarService   fiscalCalendarService;
     @Autowired private GlConfigService         glConfigService;
@@ -139,6 +140,33 @@ class ApPaymentRunGroupingIT extends PostgresIntegrationTest {
         // bill1 + bill2 are unaffected by the suppressed grouping reference; both fully paid via the run.
         assertThat(bill1.uid()).isNotBlank();
         assertThat(bill2.uid()).isNotBlank();
+    }
+
+    @Test
+    void paymentRun_partPaymentPerBill_paysOnlyThatAmount_andRefusesOverpaying() {
+        SupplierBillDto bill1 = openingBalance("OB-RUNPART-001", OB_1000);
+        SupplierBillDto bill2 = openingBalance("OB-RUNPART-002", OB_2000);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> paymentService.paymentRun(
+                        new PaymentRunRequest(companyUid, supplierUid,
+                                LocalDate.now(), LocalDate.now(), "CASH", null,
+                                java.util.List.of(bill1.uid()), null, null, null,
+                                java.util.Map.of(bill1.uid(), new BigDecimal("1000.01")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("more than is still owed");
+
+        ApPaymentDto run = paymentService.paymentRun(new PaymentRunRequest(
+                companyUid, supplierUid, LocalDate.now(), LocalDate.now(), "CASH", null,
+                java.util.List.of(bill1.uid(), bill2.uid()), null, null, null,
+                java.util.Map.of(bill1.uid(), new BigDecimal("400.00"))));
+
+        assertThat(run.amount()).isEqualByComparingTo("2400.00");
+        var b1 = billRepo.findByUid(bill1.uid()).orElseThrow();
+        assertThat(b1.getOutstandingAmount()).isEqualByComparingTo("600.00");
+        assertThat(b1.getStatus().name()).isEqualTo("PARTIALLY_PAID");
+        var b2 = billRepo.findByUid(bill2.uid()).orElseThrow();
+        assertThat(b2.getOutstandingAmount()).isEqualByComparingTo("0");
+        assertThat(b2.getStatus().name()).isEqualTo("PAID");
     }
 
     @Test

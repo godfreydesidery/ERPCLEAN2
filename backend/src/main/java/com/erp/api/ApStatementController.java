@@ -9,6 +9,7 @@ import com.erp.modules.ap.domain.dto.ApBalanceDto;
 import com.erp.modules.ap.domain.dto.ApReconciliationDto;
 import com.erp.modules.ap.domain.dto.ApSupplierLedgerDto;
 import com.erp.modules.ap.domain.dto.ApSupplierLedgerRowDto;
+import com.erp.modules.ap.domain.dto.ApSupplierAgeingRowDto;
 import com.erp.modules.ap.domain.dto.ApSupplierRefDto;
 import com.erp.modules.ap.domain.enums.ApLedgerEntryType;
 import com.erp.modules.ap.service.ApAgeingQuery;
@@ -80,7 +81,10 @@ public class ApStatementController {
                 supplierIdOf(companyId, supplierId, supplierUid));
     }
 
-    /** Ageing breakdown as at a given date (today when omitted). */
+    /**
+     * Ageing breakdown as at a given date (today when omitted). With no supplier named it covers
+     * EVERY supplier in the company - the creditors summary (AP-11, mirror of AR's {@code /ageing}).
+     */
     @GetMapping("/ageing")
     @PreAuthorize("@perm.has('AP.VIEW')")
     public List<ApAgeingRowDto> ageing(
@@ -89,8 +93,39 @@ public class ApStatementController {
             @RequestParam(required = false) String supplierUid,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
-        return ageingQuery.ageing(companyId, supplierIdOf(companyId, supplierId, supplierUid),
+        boolean named = supplierId != null || (supplierUid != null && !supplierUid.isBlank());
+        return ageingQuery.ageing(companyId,
+                named ? supplierIdOf(companyId, supplierId, supplierUid) : null,
                 asAt != null ? asAt : LocalDate.now());
+    }
+
+    /**
+     * Creditors ageing: one row per supplier (and currency) with an open balance, each with its five
+     * buckets and total, net of unapplied debit notes (AP-11 / RPT-03 / LBO-14).
+     */
+    @GetMapping("/ageing/by-supplier")
+    @PreAuthorize("@perm.has('AP.VIEW')")
+    public List<ApSupplierAgeingRowDto> ageingBySupplier(
+            @RequestParam Long companyId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
+        return ageingQuery.supplierAgeing(companyId, asAt != null ? asAt : LocalDate.now());
+    }
+
+    /** The creditors ageing as a document. Same gate as the screen plus {@code REPORT.EXPORT}. */
+    @GetMapping("/ageing/by-supplier/export")
+    @PreAuthorize("@perm.has('AP.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> exportAgeingBySupplier(
+            @RequestParam Long companyId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
+            @RequestParam(defaultValue = "PDF") ExportFormat format) {
+        LocalDate at = asAt != null ? asAt : LocalDate.now();
+        // The read runs (and passes its tenant check) BEFORE the letterhead is loaded.
+        List<ApSupplierAgeingRowDto> rows = ageingQuery.supplierAgeing(companyId, at);
+        ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
+        return ExportLetterhead.download(exporter.export(
+                flattenSupplierAgeing(rows, at, head, ZonedDateTime.now()), format));
     }
 
     /**
@@ -252,12 +287,109 @@ public class ApStatementController {
         }
 
         List<String> footer = new ArrayList<>();
-        footer.add("Open bills only; payments not yet allocated to a bill are not in these buckets.");
+        footer.add("Open bills net of unapplied debit notes; payments not yet allocated to a bill"
+                + " are not in these buckets.");
         footer.add(ExportLetterhead.printFootprint(company, now));
 
         return new TabularRenderModel("Supplier Ageing", headerLines,
                 ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
                 head != null ? head.logoDataUri() : null);
+    }
+
+    /** The creditors ageing document: one row per supplier (and currency), totals per currency. */
+    static TabularRenderModel flattenSupplierAgeing(List<ApSupplierAgeingRowDto> ageing,
+                                                    LocalDate asAt,
+                                                    ExportLetterhead.Letterhead head,
+                                                    ZonedDateTime now) {
+        ReportCompanyHeaderDto company = head != null ? head.company() : null;
+        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
+        headerLines.add("Ageing as at " + asAt);
+        List<String> currencies = ageing.stream()
+                .map(ApSupplierAgeingRowDto::currency).distinct().toList();
+        boolean multiCurrency = currencies.size() > 1;
+        if (!multiCurrency && !currencies.isEmpty() && currencies.get(0) != null) {
+            headerLines.add("Currency: " + currencies.get(0));
+        }
+        if (multiCurrency) {
+            headerLines.add("Amounts are in each bill's own currency; totals are per currency.");
+        }
+
+        List<Column> columns = new ArrayList<>(List.of(
+                new Column("Code", Align.LEFT),
+                new Column("Supplier", Align.LEFT)));
+        if (multiCurrency) {
+            columns.add(new Column("Currency", Align.LEFT));
+        }
+        columns.addAll(List.of(
+                new Column("Current", Align.RIGHT),
+                new Column("1-30 days", Align.RIGHT),
+                new Column("31-60 days", Align.RIGHT),
+                new Column("61-90 days", Align.RIGHT),
+                new Column("Over 90 days", Align.RIGHT),
+                new Column("Total", Align.RIGHT)));
+
+        Map<String, BigDecimal[]> sums = new LinkedHashMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        List<List<String>> rows = new ArrayList<>(ageing.size() + currencies.size());
+        for (ApSupplierAgeingRowDto r : ageing) {
+            BigDecimal[] cells = {r.current(), r.days1to30(), r.days31to60(),
+                    r.days61to90(), r.days91Plus(), r.total()};
+            String ccy = nullToEmpty(r.currency());
+            BigDecimal[] acc = sums.computeIfAbsent(ccy, c -> zeros());
+            counts.merge(ccy, 1, Integer::sum);
+            List<String> row = new ArrayList<>(columns.size());
+            row.add(nullToEmpty(r.supplierCode()));
+            row.add(nullToEmpty(r.supplierName()));
+            if (multiCurrency) {
+                row.add(ccy);
+            }
+            for (int i = 0; i < cells.length; i++) {
+                BigDecimal v = cells[i] != null ? cells[i] : BigDecimal.ZERO;
+                acc[i] = acc[i].add(v);
+                row.add(fmtAmt(v));
+            }
+            rows.add(row);
+        }
+
+        List<String> totalsRow = null;
+        if (!multiCurrency) {
+            BigDecimal[] acc = sums.isEmpty() ? zeros() : sums.values().iterator().next();
+            totalsRow = new ArrayList<>(8);
+            totalsRow.add("");
+            totalsRow.add("TOTAL (" + ageing.size() + " supplier" + (ageing.size() == 1 ? ")" : "s)"));
+            for (BigDecimal v : acc) {
+                totalsRow.add(fmtAmt(v));
+            }
+        } else {
+            for (Map.Entry<String, BigDecimal[]> e : sums.entrySet()) {
+                int n = counts.getOrDefault(e.getKey(), 0);
+                List<String> line = new ArrayList<>(columns.size());
+                line.add("");
+                line.add("TOTAL " + e.getKey() + " (" + n + " supplier" + (n == 1 ? ")" : "s)"));
+                line.add(e.getKey());
+                for (BigDecimal v : e.getValue()) {
+                    line.add(fmtAmt(v));
+                }
+                rows.add(line);
+            }
+        }
+
+        List<String> footer = new ArrayList<>();
+        if (ageing.isEmpty()) {
+            footer.add("No supplier has an open balance.");
+        }
+        footer.add("Buckets count days past each bill's due date; unapplied debit notes are netted"
+                + " by their note date. Payments not yet allocated to a bill are not in these buckets.");
+        footer.add(ExportLetterhead.printFootprint(company, now));
+
+        return new TabularRenderModel("Creditors Ageing by Supplier", headerLines,
+                ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
+                head != null ? head.logoDataUri() : null);
+    }
+
+    private static BigDecimal[] zeros() {
+        return new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO};
     }
 
     static String bucketLabel(AgeingBucket bucket) {

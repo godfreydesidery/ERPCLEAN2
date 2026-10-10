@@ -2,6 +2,7 @@ package com.erp.modules.ap.repository;
 
 import com.erp.modules.ap.domain.entity.ApDebitNote;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,4 +52,27 @@ public interface ApDebitNoteRepository extends JpaRepository<ApDebitNote, Long> 
             """)
     BigDecimal sumUnappliedByCompanyAndSupplier(@Param("companyId") Long companyId,
                                                 @Param("supplierId") Long supplierId);
+
+    /**
+     * One supplier's debit notes with an unapplied remainder — the credit the ageing nets so it
+     * agrees with the supplier balance (LBO-15).
+     */
+    @Query("""
+            SELECT d FROM ApDebitNote d
+            WHERE d.companyId = :companyId
+              AND d.supplierId = :supplierId
+              AND d.unappliedAmount > 0
+            ORDER BY d.noteDate ASC
+            """)
+    List<ApDebitNote> findUnappliedBySupplier(@Param("companyId") Long companyId,
+                                              @Param("supplierId") Long supplierId);
+
+    /** Company-wide sibling of {@link #findUnappliedBySupplier} (creditors ageing, AP-11). */
+    @Query("""
+            SELECT d FROM ApDebitNote d
+            WHERE d.companyId = :companyId
+              AND d.unappliedAmount > 0
+            ORDER BY d.supplierId ASC, d.noteDate ASC
+            """)
+    List<ApDebitNote> findUnappliedByCompany(@Param("companyId") Long companyId);
 }

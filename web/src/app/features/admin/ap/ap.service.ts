@@ -10,6 +10,7 @@ import {
   ApDebitNoteDto,
   ApPaymentDto,
   ApAgeingRowDto,
+  ApSupplierAgeingRowDto,
   ApReconciliationDto,
   BillMatchResultDto,
   EnterBillRequest,
@@ -206,6 +207,13 @@ export class ApService {
     return this.http.get<ApAgeingRowDto[]>(`${this.base}/statement/ageing`, { params });
   }
 
+  /** Creditors ageing: one row per supplier (and currency) with an open balance (AP-11). */
+  getSupplierAgeing(companyId: string, asAt?: string): Observable<ApSupplierAgeingRowDto[]> {
+    let params = new HttpParams().set('companyId', companyId);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get<ApSupplierAgeingRowDto[]>(`${this.base}/statement/ageing/by-supplier`, { params });
+  }
+
   getReconciliation(companyId: string): Observable<ApReconciliationDto> {
     return this.http.get<ApReconciliationDto>(`${this.base}/statement/reconciliation`, {
       params: { companyId },
@@ -242,5 +250,15 @@ export class ApService {
       .set('format', format);
     if (asAt) params = params.set('asAt', asAt);
     return this.http.get(`${this.base}/statement/ageing/export`, { params, responseType: 'blob' });
+  }
+
+  /** The creditors ageing (all suppliers) as a document. */
+  exportSupplierAgeing(companyId: string, format: ExportFormat, asAt?: string): Observable<Blob> {
+    let params = new HttpParams().set('companyId', companyId).set('format', format);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get(`${this.base}/statement/ageing/by-supplier/export`, {
+      params,
+      responseType: 'blob',
+    });
   }
 }

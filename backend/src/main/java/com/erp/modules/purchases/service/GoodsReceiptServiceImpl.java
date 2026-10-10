@@ -92,6 +92,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final OutboxPublisher                  outbox;
     private final GoodsReceiptPrintQuery           printQuery;
     private final ReceiptVoidStockGuard            voidStockGuard;
+    private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -107,7 +108,9 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    AuditService audit,
                                    OutboxPublisher outbox,
                                    GoodsReceiptPrintQuery printQuery,
-                                   ReceiptVoidStockGuard voidStockGuard) {
+                                   ReceiptVoidStockGuard voidStockGuard,
+                                   com.erp.modules.purchases.domain.dto.ReceiptBillingReader
+                                           billingReader) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -123,6 +126,7 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.outbox        = outbox;
         this.printQuery    = printQuery;
         this.voidStockGuard = voidStockGuard;
+        this.billingReader  = billingReader;
     }
 
     // -------------------------------------------------------------------------
@@ -279,6 +283,19 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
             throw new IllegalStateException(
                     "Some of these goods have already been returned to the supplier, so this "
                             + "receipt can't be voided. Raise a purchase return for the rest instead.");
+        }
+
+        // PUR-04 / LBO-04: a supplier bill already claims these goods. Voiding would take the stock
+        // out and reverse GRNI while AP still owes the supplier for it. The goods go back on a
+        // purchase return (which raises the debit note) instead.
+        List<String> billedBy = billingReader.billsClaimingReceiptLines(gr.getCompanyId(),
+                lineList.stream().map(GoodsReceiptLine::getUid)
+                        .filter(java.util.Objects::nonNull).toList());
+        if (!billedBy.isEmpty()) {
+            throw new IllegalStateException(
+                    "This receipt has already been billed by the supplier (bill "
+                            + String.join(", ", billedBy) + "), so it can't be voided. "
+                            + "Raise a purchase return for the goods, or a debit note on the bill.");
         }
 
         // OPN-13 (owner ruling 2026-10-10): refuse once the receipt's stock has partly been sold or

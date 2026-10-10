@@ -262,6 +262,16 @@
           <span class="spacer"></span>
           @if (bills().length > 0) {
             <div class="d-flex gap-2">
+              <label for="allocateTotal" class="visually-hidden">Amount to allocate oldest first</label>
+              <input id="allocateTotal" type="text" inputmode="decimal" style="max-width:140px"
+                     class="form-control form-control-sm text-end font-monospace" placeholder="Amount paid"
+                     [ngModel]="allocateTotal()" (ngModelChange)="allocateTotal.set($event)"
+                     [ngModelOptions]="{ standalone: true }"
+                     [disabled]="submitting()" autocomplete="off" />
+              <button type="button" class="btn btn-sm btn-outline-primary"
+                      (click)="allocateOldestFirst()" [disabled]="submitting()">
+                <i class="bi bi-sort-down me-1" aria-hidden="true"></i>Allocate oldest first
+              </button>
               <button type="button" class="btn btn-sm btn-outline-primary"
                       (click)="selectAll()" [disabled]="submitting()">
                 <i class="bi bi-check-all me-1" aria-hidden="true"></i>Select All
@@ -312,6 +322,7 @@
                         <th scope="col">Due Date</th>
                         <th scope="col" class="num">Gross</th>
                         <th scope="col" class="num">Outstanding</th>
+                        <th scope="col" class="num" style="min-width:140px">Pay now</th>
                         <th scope="col">Status</th>
                       </tr>
                     </thead>
@@ -338,6 +349,19 @@
                           <td class="num fw-semibold text-danger">
                             {{ fmtMoney(bill.outstandingAmount) }}
                           </td>
+                          <td class="num">
+                            <label [for]="'pay_' + bill.uid" class="visually-hidden">
+                              Amount to pay on bill {{ bill.billNumber }}
+                            </label>
+                            <input [id]="'pay_' + bill.uid" type="text" inputmode="decimal"
+                                   class="form-control form-control-sm text-end font-monospace"
+                                   [placeholder]="isBillSelected(bill.uid) ? fmtMoney(bill.outstandingAmount) : ''"
+                                   [ngModel]="payAmountOf(bill.uid)"
+                                   (ngModelChange)="setPayAmount(bill.uid, $event)"
+                                   [ngModelOptions]="{ standalone: true }"
+                                   [disabled]="submitting() || !isBillSelected(bill.uid)"
+                                   autocomplete="off" />
+                          </td>
                           <td>
                             <span class="status-tag"
                                   [class.status-tag--info]="bill.status === 'MATCHED'"
@@ -363,7 +387,7 @@
                     <span class="fw-semibold">{{ selectedCount() }}</span>
                   </div>
                   <div class="d-flex gap-1 align-items-baseline">
-                    <span class="small text-muted me-1">Total Outstanding:</span>
+                    <span class="small text-muted me-1">Total to pay:</span>
                     <span class="fw-semibold mono"
                           [class.text-success]="selectedCount() > 0">
                       {{ fmtMoney(selectedTotal()) }}
