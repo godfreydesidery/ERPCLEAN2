@@ -13,6 +13,7 @@ import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { CashbankService } from '../cashbank/cashbank.service';
 
 // Record Payment guard: submit must be disabled when zero bills are selected,
 // and enabled as soon as at least one bill is checked.
@@ -47,6 +48,15 @@ function makeBed(canPay = true) {
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
       { provide: AlertService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore, useValue: makeSession(canPay) },
+      {
+        provide: CashbankService,
+        useValue: {
+          listAllAccounts: vi.fn(() => of([
+            { uid: 'ACC-BANK', name: 'CRDB Main', bankAccountNo: '0150', currency: 'TZS', isDefault: true, active: true },
+            { uid: 'ACC-MPESA', name: 'M-Pesa Till', bankAccountNo: null, currency: 'TZS', isDefault: false, active: true },
+          ])),
+        },
+      },
     ],
   });
 }
@@ -160,6 +170,26 @@ describe('RecordPaymentComponent — bill-selection guard', () => {
         billUids: ['B1'],
         bankReference: 'REF1',
       }),
+    );
+  });
+
+  it('AP-08: the company default account is preselected and the chosen account is sent', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(RecordPaymentComponent);
+    const comp = fixture.componentInstance as any;
+    const apService = TestBed.inject(ApService) as any;
+    apService.paymentRun.mockReturnValue(of({ uid: 'PAY1', paymentNumber: 'PMT-001', amount: 500, currency: 'TZS', tenderType: 'MOBILE_MONEY', bankReference: null, allocations: [] }));
+
+    expect(comp.cashAccountUid()).toBe('ACC-BANK');
+    primeSupplierSelected(comp);
+    comp.bills.set([makePayableBill('B1', 500)]);
+    comp.toggleBill('B1', true);
+    comp.cashAccountUid.set('ACC-MPESA');
+    comp.submit();
+
+    expect(apService.paymentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ cashBankAccountUid: 'ACC-MPESA' }),
     );
   });
 

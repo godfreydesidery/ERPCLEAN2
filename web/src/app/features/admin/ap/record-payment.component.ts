@@ -21,6 +21,8 @@ import { ApService } from './ap.service';
 import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
 
 /**
  * Record Payment screen — AP.PAYMENT.RUN.
@@ -46,6 +48,7 @@ export class RecordPaymentComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly taxService = inject(TaxService);
+  private readonly cashbank = inject(CashbankService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -69,6 +72,14 @@ export class RecordPaymentComponent {
   readonly paymentDate = signal('');
   readonly tenderType = signal<TenderType>('BANK_TRANSFER');
   readonly bankReference = signal('');
+
+  // ── AP-08: pay-from account ───────────────────────────────────────────────
+  /** Active cash / bank / mobile-money accounts of the company. */
+  readonly cashAccounts = signal<CashBankAccountDto[]>([]);
+  /** Chosen account uid; '' = let the server use the company default account. */
+  readonly cashAccountUid = signal('');
+  /** The list needs CASH.VIEW; without it the payment still goes through on the default account. */
+  readonly cashAccountsUnavailable = signal(false);
 
   // ── WHT section (optional, WHT_ON_PAYMENT) ────────────────────────────────
   readonly whtTypes = signal<WhtTypeDto[]>([]);
@@ -143,6 +154,7 @@ export class RecordPaymentComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
+              this.loadCashAccounts(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -164,7 +176,30 @@ export class RecordPaymentComponent {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
     this.whtUnavailable.set(false);
-    if (id) this.loadWhtTypes(id);
+    if (id) {
+      this.loadWhtTypes(id);
+      this.loadCashAccounts(id);
+    }
+  }
+
+  private loadCashAccounts(companyId: string): void {
+    this.cashAccountUid.set('');
+    this.cashAccountsUnavailable.set(false);
+    this.cashbank.listAllAccounts(companyId).subscribe({
+      next: (list) => {
+        this.cashAccounts.set(list);
+        // Start on the company default so the clerk sees which account that actually is.
+        const def = list.find((a) => a.isDefault);
+        if (def) this.cashAccountUid.set(def.uid);
+      },
+      error: () => { this.cashAccounts.set([]); this.cashAccountsUnavailable.set(true); },
+    });
+  }
+
+  /** "CRDB Main · 0150… (TZS)" — what is printed on the cheque book / statement. */
+  cashAccountLabel(a: CashBankAccountDto): string {
+    const no = a.bankAccountNo ? ` · ${a.bankAccountNo}` : '';
+    return `${a.name}${no} (${a.currency})${a.isDefault ? ' — default' : ''}`;
   }
 
   // ── Supplier picker ────────────────────────────────────────────────────────
@@ -267,6 +302,10 @@ export class RecordPaymentComponent {
       bankReference: bankRef || null,
       billUids: [...this.selectedBillUids()],
     };
+
+    // AP-08: send the chosen account; omitted = the company default (server-side fallback).
+    const accountUid = String(this.cashAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
 
     // Optional WHT (WHT_ON_PAYMENT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();

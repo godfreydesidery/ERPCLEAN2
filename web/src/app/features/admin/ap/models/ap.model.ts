@@ -255,6 +255,8 @@ export interface PaySingleBillRequest {
   paymentDate: string;
   tenderType: string;
   bankReference?: string | null;
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
 }
 
 export interface PaymentRunRequest {
@@ -265,6 +267,8 @@ export interface PaymentRunRequest {
   tenderType: string;
   bankReference?: string | null;
   billUids?: string[];
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
   /**
    * Optional WHT_ON_PAYMENT capture (ADR-0017 D-9).
    * When set, the cash CR is reduced by whtAmount and a WHT payable leg is posted.

@@ -174,6 +174,28 @@
                      [disabled]="submitting()" autocomplete="off" />
             </div>
 
+            <!-- AP-08: which cash / bank / mobile-money account the money leaves -->
+            <div class="col-sm-6">
+              <label class="form-label" for="payFromAccount">Pay from</label>
+              <select id="payFromAccount" name="payFromAccount" class="form-select"
+                      aria-describedby="payFromAccountHelp"
+                      [ngModel]="cashAccountUid()"
+                      (ngModelChange)="cashAccountUid.set($event)"
+                      [disabled]="submitting()">
+                <option value="">Company default account</option>
+                @for (a of cashAccounts(); track a.uid) {
+                  <option [value]="a.uid">{{ cashAccountLabel(a) }}</option>
+                }
+              </select>
+              <div id="payFromAccountHelp" class="form-text">
+                @if (cashAccountsUnavailable()) {
+                  The account list could not be loaded, so the payment will use the company default account.
+                } @else {
+                  The till, M-Pesa or bank account the money actually left.
+                }
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
