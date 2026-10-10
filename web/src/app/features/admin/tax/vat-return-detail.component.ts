@@ -7,12 +7,16 @@ import { SessionStore } from '../../../core/auth/session.store';
 import {
   AddVatAdjustmentRequest,
   FileVatReturnRequest,
+  RecordTaxPaymentRequest,
   VatAdjustmentDto,
   VatAdjustmentReason,
   VatAdjustmentSign,
   VatReturnDto,
+  VatScheduleKind,
 } from './models/tax.model';
 import { TaxService } from './tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { formatMoney } from '../../../shared/money.util';
 import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
@@ -49,6 +53,7 @@ export class VatReturnDetailComponent implements OnInit {
   readonly uid = input.required<string>();
 
   private readonly taxService = inject(TaxService);
+  private readonly cashbankService = inject(CashbankService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -107,7 +112,100 @@ export class VatReturnDetailComponent implements OnInit {
     });
   }
 
+  /** RPT-14 / PAR-06: download the sales or purchases schedule (same gates as the return export). */
+  exportSchedule(kind: VatScheduleKind, format: ExportFormat): void {
+    const ret = this.vatReturn();
+    if (!ret || this.exporting()) return;
+    this.exporting.set(true);
+    this.taxService.exportSchedule(this.uid(), kind, format).subscribe({
+      next: (blob) => {
+        downloadBlob(blob, `vat-${kind}-schedule_${ret.returnNumber}.${format.toLowerCase()}`);
+        this.exporting.set(false);
+      },
+      error: (err) => {
+        this.alerts.error('Export failed', exportErrorMessage(err));
+        this.exporting.set(false);
+      },
+    });
+  }
+
   readonly isDraft = computed(() => this.vatReturn()?.status === 'DRAFT');
+
+  // ── Record payment (ACC-07) ───────────────────────────────────────────────
+  /** Cumulative amount already paid to TRA. */
+  readonly paidAmount = computed(() => +(this.vatReturn()?.paidAmount ?? 0));
+  /** Net payable still owed on a FILED return (never negative). */
+  readonly outstanding = computed(() => {
+    const ret = this.vatReturn();
+    if (!ret || ret.status !== 'FILED') return 0;
+    return Math.max(0, +(ret.netVat ?? 0) - this.paidAmount());
+  });
+  /** Paying uses the filing gate, VAT.RETURN.FILE — the act that created the liability. */
+  readonly canRecordPayment = computed(() => this.canFile() && this.outstanding() > 0.001);
+  readonly showPayForm = signal(false);
+  readonly paying = signal(false);
+  readonly payError = signal<string | null>(null);
+  readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
+  readonly payAccountUid = signal('');
+  readonly payDate = signal(new Date().toISOString().slice(0, 10));
+  readonly payAmount = signal<string | number>('');
+  readonly payRef = signal('');
+
+  openPayForm(): void {
+    const ret = this.vatReturn();
+    if (!ret) return;
+    this.showPayForm.set(true);
+    this.payError.set(null);
+    this.payAmount.set(this.outstanding());
+    this.payRef.set('');
+    this.payDate.set(new Date().toISOString().slice(0, 10));
+    if (this.cashAccounts().length === 0) {
+      this.cashbankService.listAccountOptions(String(ret.companyId)).subscribe({
+        next: (list) => {
+          this.cashAccounts.set(list ?? []);
+          const preferred = list.find((a) => a.accountType === 'BANK' && a.isDefault)
+            ?? list.find((a) => a.isDefault);
+          if (preferred && !this.payAccountUid()) this.payAccountUid.set(preferred.uid);
+        },
+        error: () => this.payError.set('Could not load the cash and bank accounts.'),
+      });
+    }
+  }
+
+  cancelPayForm(): void {
+    this.showPayForm.set(false);
+    this.payError.set(null);
+  }
+
+  submitPayment(): void {
+    const account = this.payAccountUid();
+    const date = String(this.payDate() ?? '').trim();
+    const amt = String(this.payAmount() ?? '').trim();
+    if (!account) { this.payError.set('Choose the account the payment was made from.'); return; }
+    if (!date) { this.payError.set('Payment date is required.'); return; }
+    if (amt && !(+amt > 0)) { this.payError.set('Enter a positive amount, or leave it blank to pay in full.'); return; }
+
+    const request: RecordTaxPaymentRequest = {
+      cashBankAccountUid: account,
+      paymentDate: date,
+      amount: amt || undefined,
+      reference: String(this.payRef() ?? '').trim() || undefined,
+    };
+    this.paying.set(true);
+    this.payError.set(null);
+    this.taxService.recordReturnPayment(this.uid(), request).subscribe({
+      next: (ret) => {
+        this.vatReturn.set(ret);
+        this.paying.set(false);
+        this.showPayForm.set(false);
+        this.alerts.success('VAT payment recorded', ret.returnNumber);
+      },
+      error: (err) => {
+        this.payError.set(this.messageFrom(err, 'Could not record the payment.'));
+        this.paying.set(false);
+      },
+    });
+  }
 
   readonly adjReasons: Array<{ value: VatAdjustmentReason; label: string }> = [
     { value: 'BAD_DEBT_RELIEF',        label: 'Bad Debt Relief' },

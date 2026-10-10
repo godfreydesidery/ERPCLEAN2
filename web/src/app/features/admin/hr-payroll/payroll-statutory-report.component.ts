@@ -10,8 +10,11 @@ import { HrPayrollService } from './hr-payroll.service';
 import {
   PayrollStatutoryPeriodReportDto,
   StatutoryExportFormat,
+  StatutoryLiabilityBalanceDto,
 } from './models/payroll-statutory.model';
 import { todayLocal } from '../../../shared/date.util';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden' | 'invalid';
 
@@ -31,6 +34,7 @@ type LoadState = 'idle' | 'loading' | 'error' | 'forbidden' | 'invalid';
 })
 export class PayrollStatutoryReportComponent {
   private readonly hrService = inject(HrPayrollService);
+  private readonly cashbankService = inject(CashbankService);
   protected readonly session = inject(SessionStore);
 
   readonly fromDate = signal(this.firstDayOfYear());
@@ -102,6 +106,99 @@ export class PayrollStatutoryReportComponent {
             ? "You don't have permission to export this report."
             : 'Could not export the report. Please try again.',
         );
+      },
+    });
+  }
+
+  // ── ACC-07: pay statutory liabilities ─────────────────────────────────────────
+  /** Paying is HR.PAYROLL.DISBURSE ("disburse net wages and statutory payables via Cash & Bank"). */
+  readonly canPay = computed(() => this.session.hasPermission('HR.PAYROLL.DISBURSE'));
+  readonly outstanding = signal<StatutoryLiabilityBalanceDto[]>([]);
+  readonly outstandingState = signal<'idle' | 'loading' | 'error'>('idle');
+  readonly payFor = signal<StatutoryLiabilityBalanceDto | null>(null);
+  readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
+  readonly payAccountUid = signal('');
+  readonly payDate = signal(this.today());
+  readonly payAmount = signal<string | number>('');
+  readonly payRef = signal('');
+  readonly paying = signal(false);
+  readonly payError = signal<string | null>(null);
+
+  constructor() {
+    if (this.canPay()) this.loadOutstanding();
+  }
+
+  loadOutstanding(): void {
+    this.outstandingState.set('loading');
+    this.hrService.getStatutoryOutstanding().subscribe({
+      next: (list) => {
+        this.outstanding.set(list ?? []);
+        this.outstandingState.set('idle');
+      },
+      error: () => this.outstandingState.set('error'),
+    });
+  }
+
+  openPay(row: StatutoryLiabilityBalanceDto): void {
+    this.payFor.set(row);
+    this.payError.set(null);
+    this.payAmount.set(+row.outstanding);
+    this.payRef.set('');
+    this.payDate.set(this.today());
+    if (this.cashAccounts().length === 0) {
+      this.cashbankService.listAccountOptions(String(row.companyId)).subscribe({
+        next: (list) => {
+          this.cashAccounts.set(list ?? []);
+          const preferred = list.find((a) => a.accountType === 'BANK' && a.isDefault)
+            ?? list.find((a) => a.isDefault);
+          if (preferred && !this.payAccountUid()) this.payAccountUid.set(preferred.uid);
+        },
+        error: () => this.payError.set('Could not load the cash and bank accounts.'),
+      });
+    }
+  }
+
+  /** Something is still owed on this liability (BigDecimal on the wire — coerce). */
+  owes(row: StatutoryLiabilityBalanceDto): boolean {
+    return +row.outstanding > 0.005;
+  }
+
+  cancelPay(): void {
+    this.payFor.set(null);
+    this.payError.set(null);
+  }
+
+  submitPay(): void {
+    const row = this.payFor();
+    if (!row) return;
+    const amount = String(this.payAmount() ?? '').trim();
+    if (!this.payAccountUid()) { this.payError.set('Choose the account the payment was made from.'); return; }
+    if (!this.payDate()) { this.payError.set('Payment date is required.'); return; }
+    if (!(+amount > 0)) { this.payError.set('Enter a positive amount.'); return; }
+    if (+amount > +row.outstanding + 0.005) {
+      this.payError.set(`That is more than the ${row.liability} still owed.`);
+      return;
+    }
+    this.paying.set(true);
+    this.payError.set(null);
+    this.hrService.payStatutory({
+      liability: row.liability,
+      cashBankAccountUid: this.payAccountUid(),
+      paymentDate: this.payDate(),
+      amount,
+      reference: String(this.payRef() ?? '').trim() || undefined,
+    }).subscribe({
+      next: () => {
+        this.paying.set(false);
+        this.payFor.set(null);
+        this.loadOutstanding();
+      },
+      error: (err: unknown) => {
+        this.paying.set(false);
+        const errors = err instanceof HttpErrorResponse
+          ? (err.error as { errors?: unknown[] } | null)?.errors : undefined;
+        const first = errors?.length ? errors[0] : null;
+        this.payError.set(typeof first === 'string' ? first : 'Could not record the payment.');
       },
     });
   }

@@ -46,6 +46,31 @@
                   (click)="exportReturn('CSV')" [disabled]="exporting()">
             <i class="bi bi-filetype-csv" aria-hidden="true"></i> Export CSV
           </button>
+          <!-- RPT-14 / PAR-06: the per-invoice listings behind the totals -->
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportSchedule('sales', 'XLSX')" [disabled]="exporting()">
+            <i class="bi bi-list-columns" aria-hidden="true"></i> Sales schedule
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportSchedule('purchases', 'XLSX')" [disabled]="exporting()">
+            <i class="bi bi-list-columns" aria-hidden="true"></i> Purchases schedule
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportSchedule('sales', 'CSV')" [disabled]="exporting()"
+                  aria-label="Sales schedule as CSV">
+            Sales CSV
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  (click)="exportSchedule('purchases', 'CSV')" [disabled]="exporting()"
+                  aria-label="Purchases schedule as CSV">
+            Purchases CSV
+          </button>
+        }
+        <!-- ACC-07: FILED + payable — record the payment to TRA -->
+        @if (canRecordPayment() && !showPayForm()) {
+          <button type="button" class="btn btn-primary btn-sm" (click)="openPayForm()">
+            <i class="bi bi-bank" aria-hidden="true"></i> Record payment
+          </button>
         }
         <!-- DRAFT actions -->
         @if (isDraft()) {
@@ -88,8 +113,73 @@
             </a>
           </dd>
         }
+        @if (paidAmount() > 0) {
+          <dt class="col-sm-2">Paid to TRA</dt>
+          <dd class="col-sm-4">
+            {{ fmtMoney(paidAmount()) }}
+            @if (vatReturn()!.paymentReference) { (ref: {{ vatReturn()!.paymentReference }}) }
+            @if (outstanding() > 0) { — {{ fmtMoney(outstanding()) }} still owed }
+          </dd>
+        }
       }
     </dl>
+
+    <!-- ACC-07: record payment form (DR VAT Due / CR the chosen cash or bank account) -->
+    @if (showPayForm()) {
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Record VAT payment to TRA</h2>
+        </div>
+        <div class="erp-card__body">
+          <form aria-label="Record VAT payment" (ngSubmit)="submitPayment()">
+            @if (payError()) {
+              <div class="alert alert-danger py-2" role="alert">{{ payError() }}</div>
+            }
+            <p class="text-muted small mb-3">
+              Books the payment out of the chosen account and clears VAT Due by the same amount.
+              Still owed: <strong>{{ fmtMoney(outstanding()) }}</strong>.
+            </p>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" for="payAccount">Paid from <span aria-hidden="true">*</span></label>
+                <select id="payAccount" class="form-select form-select-sm" name="payAccount"
+                        [ngModel]="payAccountUid()" (ngModelChange)="payAccountUid.set($event)" required>
+                  <option value="">— select cash / bank account —</option>
+                  @for (acc of cashAccounts(); track acc.uid) {
+                    <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }}</option>
+                  }
+                </select>
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="payDate">Payment date <span aria-hidden="true">*</span></label>
+                <input id="payDate" type="date" class="form-control form-control-sm" name="payDate"
+                       [ngModel]="payDate()" (ngModelChange)="payDate.set($event)" required />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="payAmount">Amount</label>
+                <input id="payAmount" type="number" min="0" step="0.01" class="form-control form-control-sm"
+                       name="payAmount" [ngModel]="payAmount()" (ngModelChange)="payAmount.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="payRef">TRA payment reference</label>
+                <input id="payRef" type="text" maxlength="80" class="form-control form-control-sm"
+                       name="payRef" [ngModel]="payRef()" (ngModelChange)="payRef.set($event)" />
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm" [disabled]="paying()">
+                @if (paying()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Record payment
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                      (click)="cancelPayForm()">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    }
 
     <!-- File form -->
     @if (showFileForm()) {

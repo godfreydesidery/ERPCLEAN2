@@ -98,6 +98,44 @@ describe('RecordEntryComponent — expense entry (ARC-12 / LBO-17)', () => {
   });
 });
 
+describe('RecordEntryComponent — input VAT on an expense (ACC-13 / PAR-08)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function filled() {
+    const cash = makeBed();
+    const comp = TestBed.createComponent(RecordEntryComponent).componentInstance as RecordEntryComponent;
+    comp.amount.set('1180');
+    comp.txnDate.set('2026-10-05');
+    comp.counterGlAccountUid.set('GL-EXP');
+    return { cash, comp };
+  }
+
+  it('sends the VAT part with a money-OUT entry; "18% incl." computes it from the amount', () => {
+    const { cash, comp } = filled();
+    comp.vatFromAmount();
+    expect(comp.vatAmount()).toBe('180.00');
+    comp.submit();
+    expect(cash.recordEntry).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'OUT', amount: '1180', vatAmount: '180.00',
+    }));
+  });
+
+  it('never sends VAT on money IN, and refuses VAT not below the amount', () => {
+    const { cash, comp } = filled();
+    comp.vatAmount.set('1180');
+    comp.submit();
+    expect(cash.recordEntry).not.toHaveBeenCalled();
+    expect(comp.formError()).toContain('VAT');
+
+    comp.direction.set('IN');
+    comp.counterGlAccountUid.set('GL-INC');
+    comp.submit();
+    expect(cash.recordEntry).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'IN', vatAmount: undefined,
+    }));
+  });
+});
+
 describe('CashbankService.listEntries (ARC-12)', () => {
   afterEach(() => TestBed.resetTestingModule());
 

@@ -17,6 +17,13 @@ public interface VatReturnService {
     /** File (lock) a DRAFT return: freeze figures, post GL settlement, status → FILED (FR-VAT-08). */
     VatReturnDto file(String uid, FileVatReturnRequest req);
 
+    /**
+     * ACC-07: record paying a FILED return's net VAT to TRA — DR VAT Due / CR the chosen cash/bank
+     * account (a cash transaction). Part payments accumulate on {@code paidAmount}; the total can
+     * never exceed the filed net payable.
+     */
+    VatReturnDto recordPayment(String uid, com.erp.modules.tax.domain.dto.RecordTaxPaymentRequest req);
+
     VatReturnDto getByUid(String uid);
 
     Page<VatReturnDto> listByCompany(Long companyId, Pageable pageable);

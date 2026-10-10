@@ -12,7 +12,9 @@ import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft.LineDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.repository.ChartOfAccountRepository;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
@@ -48,6 +50,7 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
     private final GLPostingService           glPosting;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
+    private final GLConfigResolver           glConfig;
 
     public CashDirectEntryServiceImpl(CashBankAccountRepository accounts,
                                        CashTransactionRepository txns,
@@ -56,7 +59,8 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
                                        CashBankNumberGenerator numbers,
                                        GLPostingService glPosting,
                                        ScopeGuard scopeGuard,
-                                       AuditService audit) {
+                                       AuditService audit,
+                                       GLConfigResolver glConfig) {
         this.accounts   = accounts;
         this.txns       = txns;
         this.glAccounts = glAccounts;
@@ -65,6 +69,7 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
         this.glPosting  = glPosting;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
+        this.glConfig   = glConfig;
     }
 
     @Override
@@ -110,7 +115,20 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
                             + "for a direct cash entry. Please choose a regular income or expense account.");
         }
 
-        return persistAndPost(companyId, currency, account, counterGlAcct, req, branchId());
+        // ACC-13 / PAR-08: optional input VAT inside a payment.
+        BigDecimal vat = req.vatAmount() != null ? req.vatAmount() : BigDecimal.ZERO;
+        if (vat.signum() > 0) {
+            if (req.direction() != CashTxnDirection.OUT) {
+                throw new IllegalArgumentException(
+                        "Input VAT can only be claimed on money paid out.");
+            }
+            if (vat.compareTo(req.amount()) >= 0) {
+                throw new IllegalArgumentException(
+                        "The VAT must be less than the amount paid.");
+            }
+        }
+
+        return persistAndPost(companyId, currency, account, counterGlAcct, req, branchId(), vat);
     }
 
     /**
@@ -144,12 +162,12 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
             throw new IllegalStateException("Counter GL account " + counterGlAcct.getAccountCode() + " is inactive.");
 
         return persistAndPost(companyId, currency, account, counterGlAcct, req,
-                branchId != null ? branchId : branchId());
+                branchId != null ? branchId : branchId(), BigDecimal.ZERO);
     }
 
     private CashTransactionDto persistAndPost(Long companyId, String currency, CashBankAccount account,
                                               ChartOfAccount counterGlAcct, RecordDirectEntryRequest req,
-                                              Long branchId) {
+                                              Long branchId, BigDecimal vat) {
         Long actor    = actorId();
         String txnNumber = numbers.nextTransaction(companyId);
 
@@ -164,18 +182,22 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
         // 2. Post the balanced GL entry (D-4):
         //    OUT (e.g. bank charge): DR counter / CR cash-GL
         //    IN  (e.g. interest):    DR cash-GL / CR counter
-        LineDraft debitLine;
-        LineDraft creditLine;
+        //    OUT with input VAT (ACC-13): DR counter (amount − VAT) + DR VAT Input (VAT) / CR cash-GL
+        List<LineDraft> lines = new java.util.ArrayList<>();
         if (req.direction() == CashTxnDirection.OUT) {
-            debitLine  = new LineDraft(counterGlAcct.getId(), req.amount(), BigDecimal.ZERO,
-                    currency, "Direct entry out — " + txnNumber);
-            creditLine = new LineDraft(account.getGlAccountId(), BigDecimal.ZERO, req.amount(),
-                    currency, "Cash out — " + txnNumber);
+            lines.add(new LineDraft(counterGlAcct.getId(), req.amount().subtract(vat), BigDecimal.ZERO,
+                    currency, "Direct entry out — " + txnNumber));
+            if (vat.signum() > 0) {
+                lines.add(new LineDraft(glConfig.resolve(companyId, GlConfigKey.VAT_INPUT).getId(),
+                        vat, BigDecimal.ZERO, currency, "Input VAT — " + txnNumber));
+            }
+            lines.add(new LineDraft(account.getGlAccountId(), BigDecimal.ZERO, req.amount(),
+                    currency, "Cash out — " + txnNumber));
         } else {
-            debitLine  = new LineDraft(account.getGlAccountId(), req.amount(), BigDecimal.ZERO,
-                    currency, "Cash in — " + txnNumber);
-            creditLine = new LineDraft(counterGlAcct.getId(), BigDecimal.ZERO, req.amount(),
-                    currency, "Direct entry in — " + txnNumber);
+            lines.add(new LineDraft(account.getGlAccountId(), req.amount(), BigDecimal.ZERO,
+                    currency, "Cash in — " + txnNumber));
+            lines.add(new LineDraft(counterGlAcct.getId(), BigDecimal.ZERO, req.amount(),
+                    currency, "Direct entry in — " + txnNumber));
         }
 
         JournalEntryDraft draft = new JournalEntryDraft(
@@ -183,7 +205,7 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
                 "Cash Direct Entry " + txnNumber,
                 JournalSourceType.CASH_DIRECT,
                 txn.getUid(), null, actor,
-                List.of(debitLine, creditLine));
+                lines);
         JournalEntryDto posted = glPosting.post(draft);
 
         txn.setJournalEntryRef(posted.uid());
@@ -197,6 +219,7 @@ public class CashDirectEntryServiceImpl implements CashDirectEntryService {
                         "txnNumber", txnNumber,
                         "direction", req.direction().name(),
                         "amount",    req.amount().toPlainString(),
+                        "vatAmount", vat.toPlainString(),
                         "glEntryUid", posted.uid())));
 
         return toDto(txn);

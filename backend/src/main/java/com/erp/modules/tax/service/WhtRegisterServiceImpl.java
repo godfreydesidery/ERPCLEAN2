@@ -1,6 +1,16 @@
 package com.erp.modules.tax.service;
 
+import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.tax.domain.dto.WhtPaymentResultDto;
+import com.erp.modules.tax.domain.dto.WhtPeriodPaymentRequest;
 import com.erp.modules.tax.domain.dto.WhtRegisterDto;
+import com.erp.modules.tax.domain.dto.WhtRemitRequest;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.money.CurrencyMinorUnits;
+import java.math.RoundingMode;
+import java.time.YearMonth;
 import com.erp.modules.tax.domain.dto.WhtRegisterRowDto;
 import com.erp.modules.tax.domain.entity.WhtTransaction;
 import com.erp.modules.tax.domain.enums.WhtKind;
@@ -40,12 +50,22 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
      */
     static final String PLACEHOLDER_SUPPLIER_NAME = "Supplier";
 
+    private final TaxPaymentPoster        paymentPoster;
+    private final CurrencyMinorUnits      minorUnits;
+    private final AuditService            audit;
+
     public WhtRegisterServiceImpl(WhtTransactionRepository whtTransactions,
                                    ScopeGuard scopeGuard,
-                                   JdbcTemplate jdbc) {
+                                   JdbcTemplate jdbc,
+                                   TaxPaymentPoster paymentPoster,
+                                   CurrencyMinorUnits minorUnits,
+                                   AuditService audit) {
         this.whtTransactions = whtTransactions;
         this.scopeGuard      = scopeGuard;
         this.jdbc            = new NamedParameterJdbcTemplate(jdbc);
+        this.paymentPoster   = paymentPoster;
+        this.minorUnits      = minorUnits;
+        this.audit           = audit;
     }
 
     @Override
@@ -83,6 +103,12 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
     @Override
     @Transactional
     public void markRemitted(String whtTransactionUid, String remittancePeriod, String remittanceRef) {
+        remit(whtTransactionUid, new WhtRemitRequest(remittancePeriod, remittanceRef));
+    }
+
+    @Override
+    @Transactional
+    public WhtPaymentResultDto remit(String whtTransactionUid, WhtRemitRequest req) {
         WhtTransaction txn = whtTransactions.findByUid(whtTransactionUid)
                 .orElseThrow(() -> new NotFoundException("WHT transaction not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), txn.getCompanyId());
@@ -91,12 +117,100 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
             throw new ConflictException(
                     "This WHT transaction has already been marked as remitted.");
         }
+        boolean book = req.cashBankAccountUid() != null && !req.cashBankAccountUid().isBlank();
+        BigDecimal paid = BigDecimal.ZERO;
+        String cashTxnUid = null;
+        if (book) {
+            // ACC-07: book the remittance - DR WHT Payable / CR the cash/bank account.
+            if (txn.getKind() != WhtKind.WHT_ON_PAYMENT) {
+                throw new ConflictException(
+                        "WHT deducted by a customer is not paid to TRA. Only WHT deducted from"
+                        + " supplier payments can be paid from a bank account.");
+            }
+            paid = baseAmount(txn, baseScale(txn.getCompanyId()));
+            LocalDate date = req.paymentDate() != null ? req.paymentDate() : LocalDate.now();
+            cashTxnUid = paymentPoster.pay(txn.getCompanyId(), GlConfigKey.WHT_PAYABLE,
+                    req.cashBankAccountUid(), paid, date,
+                    "WHT payment " + txn.getWhtNumber() + " - " + req.remittanceRef()).uid();
+        }
+        stampRemitted(txn, req.remittancePeriod(), req.remittanceRef());
+        audit.record(AuditEvent.of(AuditActions.WHT_REMIT, "wht_transactions",
+                        txn.getId(), txn.getUid())
+                .detail(Map.of("certificates", "1",
+                        "amountPaid", paid.toPlainString(),
+                        "booked", String.valueOf(book))));
+        return new WhtPaymentResultDto(1, paid, cashTxnUid);
+    }
+
+    @Override
+    @Transactional
+    public WhtPaymentResultDto payPeriod(WhtPeriodPaymentRequest req) {
+        Long companyId = req.companyId();
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        if (req.periodEnd().isBefore(req.periodStart())) {
+            throw new IllegalArgumentException("The period end must be on or after its start.");
+        }
+        List<WhtTransaction> open = whtTransactions
+                .findByCompanyIdAndKindAndCertificateDateBetween(
+                        companyId, WhtKind.WHT_ON_PAYMENT, req.periodStart(), req.periodEnd())
+                .stream()
+                .filter(t -> !t.isRemitted())
+                .toList();
+        if (open.isEmpty()) {
+            throw new ConflictException(
+                    "There is no unpaid WHT deducted from suppliers in this period.");
+        }
+        int scale = baseScale(companyId);
+        BigDecimal total = open.stream()
+                .map(t -> baseAmount(t, scale))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        String period = YearMonth.from(req.periodStart()).toString();
+        String cashTxnUid = paymentPoster.pay(companyId, GlConfigKey.WHT_PAYABLE,
+                req.cashBankAccountUid(), total, req.paymentDate(),
+                "WHT payment " + req.periodStart() + " to " + req.periodEnd()
+                        + " - " + req.remittanceRef()).uid();
+        for (WhtTransaction t : open) {
+            stampRemitted(t, period, req.remittanceRef());
+        }
+        audit.record(AuditEvent.of(AuditActions.WHT_REMIT, "wht_transactions", null, null)
+                .detail(Map.of("certificates", String.valueOf(open.size()),
+                        "amountPaid", total.toPlainString(),
+                        "period", req.periodStart() + ".." + req.periodEnd(),
+                        "cashTransactionUid", cashTxnUid)));
+        return new WhtPaymentResultDto(open.size(), total, cashTxnUid);
+    }
+
+    private void stampRemitted(WhtTransaction txn, String remittancePeriod, String remittanceRef) {
         txn.setRemitted(true);
         txn.setRemittancePeriod(remittancePeriod);
         txn.setRemittanceRef(remittanceRef);
         txn.setRemittedAt(Instant.now());
         txn.setRemittedBy(actorId());
         whtTransactions.save(txn);
+    }
+
+    /**
+     * The certificate's WHT in base currency - exactly what the AP payment credited to WHT Payable:
+     * {@code wht_amount x ap_payments.fx_rate}, HALF_UP to the base minor units
+     * (ApPaymentServiceImpl). Scalar SQL, company-scoped: the tax module never imports an AP entity.
+     */
+    private BigDecimal baseAmount(WhtTransaction t, int baseScale) {
+        BigDecimal rate = jdbc.query("""
+                SELECT fx_rate FROM ap_payments WHERE uid = :uid AND company_id = :companyId
+                """,
+                new MapSqlParameterSource("uid", t.getSourceRef())
+                        .addValue("companyId", t.getCompanyId()),
+                rs -> rs.next() ? rs.getBigDecimal(1) : null);
+        BigDecimal r = rate != null ? rate : BigDecimal.ONE;
+        return t.getWhtAmount().multiply(r).setScale(baseScale, RoundingMode.HALF_UP);
+    }
+
+    /** Minor units of the company's base currency (0 for TZS), from the currencies master. */
+    private int baseScale(Long companyId) {
+        String base = jdbc.query("SELECT base_currency FROM companies WHERE id = :id",
+                new MapSqlParameterSource("id", companyId),
+                rs -> rs.next() ? rs.getString(1) : null);
+        return minorUnits.of(base);
     }
 
     private Long actorId() {
@@ -154,6 +268,8 @@ public class WhtRegisterServiceImpl implements WhtRegisterService {
                 t.getSourceRef(),
                 t.getTaxableBase(),
                 t.getWhtAmount(),
-                t.getCertificateDate());
+                t.getCertificateDate(),
+                t.getUid(),
+                t.isRemitted());
     }
 }

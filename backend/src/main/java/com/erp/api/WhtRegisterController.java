@@ -9,6 +9,8 @@ import com.erp.modules.reporting.export.TabularExporter;
 import com.erp.modules.reporting.export.TabularRenderModel;
 import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
+import com.erp.modules.tax.domain.dto.WhtPaymentResultDto;
+import com.erp.modules.tax.domain.dto.WhtPeriodPaymentRequest;
 import com.erp.modules.tax.domain.dto.WhtRegisterDto;
 import com.erp.modules.tax.domain.dto.WhtRegisterRowDto;
 import com.erp.modules.tax.domain.dto.WhtRemitRequest;
@@ -94,8 +96,19 @@ public class WhtRegisterController {
      */
     @PostMapping("/transactions/{uid}/remit")
     @PreAuthorize("@perm.has('WHT.REMIT')")
-    public void remit(@PathVariable String uid, @RequestBody @Valid WhtRemitRequest req) {
-        service.markRemitted(uid, req.remittancePeriod(), req.remittanceRef());
+    public WhtPaymentResultDto remit(@PathVariable String uid, @RequestBody @Valid WhtRemitRequest req) {
+        // ACC-07: with a cashBankAccountUid the remittance is also booked (DR WHT Payable / CR bank).
+        return service.remit(uid, req);
+    }
+
+    /**
+     * ACC-07: pay all WHT deducted from suppliers in the period (not yet remitted) to TRA in one
+     * cash/bank payment — DR WHT Payable / CR the account — and mark every certificate remitted.
+     */
+    @PostMapping("/payments")
+    @PreAuthorize("@perm.has('WHT.REMIT')")
+    public WhtPaymentResultDto payPeriod(@RequestBody @Valid WhtPeriodPaymentRequest req) {
+        return service.payPeriod(req);
     }
 
     // -------------------------------------------------------------------------

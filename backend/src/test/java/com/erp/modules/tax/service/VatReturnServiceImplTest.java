@@ -56,6 +56,7 @@ class VatReturnServiceImplTest {
     @Mock VatReturnNumberGenerator numberGen;
     @Mock VatReturnComputationReader computationReader;
     @Mock VatReturnFilingPoster filingPoster;
+    @Mock TaxPaymentPoster paymentPoster;
     @Mock ScopeGuard scopeGuard;
     @Mock AuditService audit;
 
@@ -71,7 +72,7 @@ class VatReturnServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new VatReturnServiceImpl(returns, bands, adjustments, companies, numberGen,
-                computationReader, filingPoster, scopeGuard, audit,
+                computationReader, filingPoster, paymentPoster, scopeGuard, audit,
                 com.erp.platform.common.time.CompanyCalendar.fixed(
                         com.erp.platform.common.time.BusinessZone.DEFAULT, FIXED_CLOCK));
     }

@@ -11,9 +11,12 @@ import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
+import com.erp.modules.tax.domain.dto.RecordTaxPaymentRequest;
 import com.erp.modules.tax.domain.dto.VatReturnBandDto;
 import com.erp.modules.tax.domain.dto.VatReturnDto;
+import com.erp.modules.tax.domain.dto.VatScheduleDto;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
+import com.erp.modules.tax.service.VatReturnScheduleQuery;
 import com.erp.modules.tax.service.VatReturnService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -44,13 +47,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/vat/returns")
 public class VatReturnController {
 
-    private final VatReturnService service;
-    private final TabularExporter  exporter;
-    private final ExportLetterhead letterhead;
+    private final VatReturnService       service;
+    private final VatReturnScheduleQuery schedules;
+    private final TabularExporter        exporter;
+    private final ExportLetterhead       letterhead;
 
-    public VatReturnController(VatReturnService service, TabularExporter exporter,
-                               ExportLetterhead letterhead) {
+    public VatReturnController(VatReturnService service, VatReturnScheduleQuery schedules,
+                               TabularExporter exporter, ExportLetterhead letterhead) {
         this.service    = service;
+        this.schedules  = schedules;
         this.exporter   = exporter;
         this.letterhead = letterhead;
     }
@@ -78,6 +83,17 @@ public class VatReturnController {
         return service.file(uid, req);
     }
 
+    /**
+     * ACC-07: record paying a FILED return's net VAT to TRA from a cash/bank account
+     * (DR VAT Due / CR the account). Same gate as filing — the act that created the liability.
+     */
+    @PostMapping("/uid/{uid}/payments")
+    @PreAuthorize("@perm.scoped(#uid,'vatreturn','VAT.RETURN.FILE')")
+    public VatReturnDto recordPayment(@PathVariable String uid,
+                                      @Valid @RequestBody RecordTaxPaymentRequest req) {
+        return service.recordPayment(uid, req);
+    }
+
     /** Single return by uid. */
     @GetMapping("/uid/{uid}")
     @PreAuthorize("@perm.scoped(#uid,'vatreturn','VAT.VIEW')")
@@ -98,6 +114,33 @@ public class VatReturnController {
         ExportLetterhead.Letterhead head = letterhead.forCompany(dto.companyId());
         return ExportLetterhead.download(exporter.export(
                 flatten(dto, head, letterhead.now(dto.companyId())), format));
+    }
+
+    /**
+     * RPT-14 / PAR-06: the per-invoice SALES schedule behind the return's output VAT (invoices,
+     * voids and credit notes of the period; customer TIN/VRN; EFD number). Same gate as the return
+     * export. XLSX by default; CSV for an upload; PDF to print.
+     */
+    @GetMapping("/uid/{uid}/schedules/sales/export")
+    @PreAuthorize("@perm.scoped(#uid,'vatreturn','VAT.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> exportSalesSchedule(
+            @PathVariable String uid, @RequestParam(defaultValue = "XLSX") ExportFormat format) {
+        VatScheduleDto dto = schedules.sales(uid);
+        return ExportLetterhead.download(exporter.export(flattenSchedule(dto, true,
+                letterhead.forCompany(dto.companyId()), ZonedDateTime.now()), format));
+    }
+
+    /**
+     * RPT-14 / PAR-06: the per-bill PURCHASES schedule behind the return's input VAT (bills and debit
+     * notes of the period; supplier TIN/VRN and tax invoice number). Same gate as the return export.
+     */
+    @GetMapping("/uid/{uid}/schedules/purchases/export")
+    @PreAuthorize("@perm.scoped(#uid,'vatreturn','VAT.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> exportPurchasesSchedule(
+            @PathVariable String uid, @RequestParam(defaultValue = "XLSX") ExportFormat format) {
+        VatScheduleDto dto = schedules.purchases(uid);
+        return ExportLetterhead.download(exporter.export(flattenSchedule(dto, false,
+                letterhead.forCompany(dto.companyId()), ZonedDateTime.now()), format));
     }
 
     /** Paged list by company. */
@@ -172,6 +215,93 @@ public class VatReturnController {
         return new TabularRenderModel("VAT Return " + nullToEmpty(r.returnNumber()), headerLines,
                 ExportLetterhead.generatedAt(now), columns, rows, totalsRow, footer,
                 head != null ? head.logoDataUri() : null);
+    }
+
+    /**
+     * A schedule as a flat table: one row per document, amounts as plain numbers (no thousands
+     * separators) so a CSV loads straight into a spreadsheet or an upload template.
+     */
+    static TabularRenderModel flattenSchedule(VatScheduleDto s, boolean sales,
+                                              ExportLetterhead.Letterhead head, ZonedDateTime now) {
+        ReportCompanyHeaderDto company = head != null ? head.company() : null;
+        List<String> headerLines = new ArrayList<>(ExportLetterhead.companyLines(company));
+        headerLines.add("VAT Return No: " + nullToEmpty(s.returnNumber())
+                + "    Period: " + s.periodStart() + " to " + s.periodEnd());
+        headerLines.add(s.status() == VatReturnStatus.FILED
+                ? "Status: FILED" : "Status: DRAFT — not yet filed; figures may still change");
+
+        List<Column> columns = new ArrayList<>(List.of(
+                new Column("Date", Align.LEFT),
+                new Column("Type", Align.LEFT),
+                new Column(sales ? "Invoice / Note No" : "Supplier Invoice No", Align.LEFT)));
+        if (!sales) {
+            columns.add(new Column("Our Ref", Align.LEFT));
+        }
+        columns.addAll(List.of(
+                new Column(sales ? "Customer" : "Supplier", Align.LEFT),
+                new Column("TIN", Align.LEFT),
+                new Column("VRN", Align.LEFT),
+                new Column("Net Amount", Align.RIGHT),
+                new Column("VAT", Align.RIGHT)));
+        if (sales) {
+            columns.add(new Column("EFD / Fiscal No", Align.LEFT));
+        }
+
+        List<List<String>> rows = new ArrayList<>();
+        for (VatScheduleDto.Row r : s.rows()) {
+            List<String> cells = new ArrayList<>(List.of(
+                    r.date() != null ? r.date().toString() : "",
+                    scheduleType(r.documentType()),
+                    nullToEmpty(r.documentNumber())));
+            if (!sales) {
+                cells.add(nullToEmpty(r.ourReference()));
+            }
+            cells.addAll(List.of(nullToEmpty(r.partyName()), nullToEmpty(r.tin()),
+                    nullToEmpty(r.vrn()), plain(r.net()), plain(r.vat())));
+            if (sales) {
+                cells.add(nullToEmpty(r.fiscalNumber()));
+            }
+            rows.add(cells);
+        }
+
+        List<String> totals = new ArrayList<>();
+        for (int i = 0; i < columns.size(); i++) {
+            totals.add("");
+        }
+        int netCol = columns.size() - (sales ? 3 : 2);
+        totals.set(0, "Total (" + s.rows().size() + ")");
+        totals.set(netCol, plain(s.totalNet()));
+        totals.set(netCol + 1, plain(s.totalVat()));
+
+        List<String> footer = new ArrayList<>();
+        footer.add(sales
+                ? "Credit notes and voids are negative rows; the VAT total equals the return's output VAT."
+                : "Debit notes are negative rows; the VAT total equals the return's input VAT.");
+        footer.add(ExportLetterhead.printFootprint(company, now));
+
+        return new TabularRenderModel(
+                (sales ? "VAT Sales Schedule " : "VAT Purchases Schedule ") + nullToEmpty(s.returnNumber()),
+                headerLines, ExportLetterhead.generatedAt(now), columns, rows, totals, footer,
+                head != null ? head.logoDataUri() : null);
+    }
+
+    private static String scheduleType(String t) {
+        if (t == null) {
+            return "";
+        }
+        return switch (t) {
+            case "INVOICE"     -> "Invoice";
+            case "VOID"        -> "Void";
+            case "CREDIT_NOTE" -> "Credit note";
+            case "BILL"        -> "Bill";
+            case "DEBIT_NOTE"  -> "Debit note";
+            case "CASH_EXPENSE" -> "Cash expense";
+            default            -> t;
+        };
+    }
+
+    private static String plain(BigDecimal v) {
+        return v == null ? "" : v.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     static String netLabel(BigDecimal net) {

@@ -115,6 +115,14 @@ public interface SalesInvoiceService {
      */
     VatOutputSummaryDto findVatSummaryForPeriod(Long companyId, LocalDate start, LocalDate end);
 
+    /**
+     * ACC-24: output VAT of previously-finalised invoices VOIDED in [start, end] (by voided_at),
+     * grouped by tax band, in base currency at each invoice's stamped rate — the amounts the GL
+     * void reversal debits back off VAT Payable. Returned as POSITIVE figures; the tax module
+     * subtracts them in the void month. Company-scoped.
+     */
+    VatOutputSummaryDto findVatVoidSummaryForPeriod(Long companyId, LocalDate start, LocalDate end);
+
     // --- Tax rates ---
     TaxRateDto getTaxRateByUid(String uid);
 

@@ -8,7 +8,10 @@ import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
+import com.erp.modules.tax.domain.entity.VatAdjustment;
 import com.erp.modules.tax.domain.entity.VatReturn;
+import com.erp.modules.tax.domain.enums.VatAdjustmentSign;
+import com.erp.modules.tax.repository.VatAdjustmentRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,26 +20,41 @@ import org.springframework.stereotype.Service;
 /**
  * Posts the synchronous VAT settlement journal on filing (ADR-0017 D-8).
  *
- * <p>Settlement legs (D-8 exact shape):
+ * <p>Settlement legs (signed amounts; a negative figure flips the leg's side):
  * <pre>
- *   DR  VAT_PAYABLE (2200)       output_vat         — clear period output
- *   CR  VAT_INPUT   (1400)       input_vat           — clear period input
- *   CR/DR VAT_DUE   (2300)       |output - input|    — net payable (CR) or credit (DR)
+ *   DR  VAT_PAYABLE (2200)   O            — clear period output (CR when O &lt; 0)
+ *   CR  VAT_INPUT   (1400)   I            — clear period input  (DR when I &lt; 0)
+ *   DR/CR  adjustment counter  a          — one leg per adjustment (ACC-06, below)
+ *   CR/DR VAT_DUE   (2300)   O − I + Σa   — the filed net before brought-forward credit
  * </pre>
- * Zero-valued legs are omitted (chk_journal_line_one_side constraint).
- * Adjustments and opening_credit affect the return's net figure (the operator reconciles/pays),
- * but the settlement entry clears the two control accounts O and I to VAT_DUE (v1 default — D-8 note).
+ * O and I come from the computation reader and already net credit notes, debit notes and voids
+ * (ACC-06/24), so legs 1–2 leave 2200 and 1400 at zero for the period. Each adjustment moves VAT
+ * Due by its signed amount and posts its counter leg where the underlying VAT sits:
+ * <ul>
+ *   <li>CREDIT_NOTE_VAT → VAT_PAYABLE (an output-side correction, e.g. a back-dated credit note
+ *       that debited 2200 in an already-filed month);</li>
+ *   <li>DEBIT_NOTE_VAT → VAT_INPUT (an input-side correction);</li>
+ *   <li>BAD_DEBT_RELIEF → BAD_DEBT_EXPENSE (the relief recovers the VAT part of a written-off
+ *       debt);</li>
+ *   <li>PRIOR_PERIOD_CORRECTION / OTHER → VAT_PAYABLE when it INCREASES the net (under-declared
+ *       output), VAT_INPUT when it DECREASES it (under-claimed input).</li>
+ * </ul>
+ * So 2300 after filing carries exactly net VAT (the opening credit is already the debit balance
+ * the prior filing left on 2300). Zero-valued legs are omitted (chk_journal_line_one_side).
  * The entry is balanced: Σdebit == Σcredit enforced by GLPostingService.
  */
 @Service
 public class VatReturnFilingPoster {
 
-    private final GLPostingService  glPosting;
-    private final GLConfigResolver  glConfig;
+    private final GLPostingService        glPosting;
+    private final GLConfigResolver        glConfig;
+    private final VatAdjustmentRepository adjustments;
 
-    public VatReturnFilingPoster(GLPostingService glPosting, GLConfigResolver glConfig) {
-        this.glPosting = glPosting;
-        this.glConfig  = glConfig;
+    public VatReturnFilingPoster(GLPostingService glPosting, GLConfigResolver glConfig,
+                                 VatAdjustmentRepository adjustments) {
+        this.glPosting   = glPosting;
+        this.glConfig    = glConfig;
+        this.adjustments = adjustments;
     }
 
     /**
@@ -45,11 +63,12 @@ public class VatReturnFilingPoster {
      *
      * @param vatReturn the return being filed (totals already frozen by the caller)
      * @param actorId   the filing user's id
-     * @return the posted journal entry UID
+     * @return the posted journal entry UID, or null for a nil return (nothing to settle)
      */
     public String post(VatReturn vatReturn, Long actorId) {
         Long   companyId = vatReturn.getCompanyId();
         String currency  = "TZS"; // BR-VAT-13: base currency only
+        String ref       = vatReturn.getReturnNumber();
 
         ChartOfAccount vatPayableAcct = glConfig.resolve(companyId, GlConfigKey.VAT_PAYABLE);
         ChartOfAccount vatInputAcct   = glConfig.resolve(companyId, GlConfigKey.VAT_INPUT);
@@ -60,36 +79,31 @@ public class VatReturnFilingPoster {
 
         List<LineDraft> lines = new ArrayList<>();
 
-        // Leg 1: DR VAT_PAYABLE output (clear output off 2200)
-        if (O.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(new LineDraft(vatPayableAcct.getId(),
-                    O, BigDecimal.ZERO, currency,
-                    "VAT settlement — clear output " + vatReturn.getReturnNumber()));
+        // Leg 1: clear output off 2200 — DR when positive, CR when credits exceeded sales.
+        signedLeg(lines, vatPayableAcct.getId(), O, currency, "VAT settlement — clear output " + ref);
+        // Leg 2: clear input off 1400 — CR when positive, DR when debit notes exceeded bills.
+        signedLeg(lines, vatInputAcct.getId(), I.negate(), currency,
+                "VAT settlement — clear input " + ref);
+
+        // Leg(s) 3: adjustments (ACC-06) — each to the account its VAT actually sits on.
+        BigDecimal adjTotal = BigDecimal.ZERO;
+        for (VatAdjustment a : adjustments.findByVatReturnId(vatReturn.getId())) {
+            BigDecimal signed = a.signedAmount();
+            if (signed.signum() == 0) {
+                continue;
+            }
+            adjTotal = adjTotal.add(signed);
+            Long counter = glConfig.resolve(companyId, counterKey(a)).getId();
+            signedLeg(lines, counter, signed, currency,
+                    "VAT adjustment " + a.getReason().name().replace('_', ' ').toLowerCase()
+                            + " — " + ref);
         }
 
-        // Leg 2: CR VAT_INPUT input (clear input off 1400)
-        if (I.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(new LineDraft(vatInputAcct.getId(),
-                    BigDecimal.ZERO, I, currency,
-                    "VAT settlement — clear input " + vatReturn.getReturnNumber()));
-        }
-
-        // Leg 3: VAT_DUE — the balancing leg = O - I
-        // If O > I: CR VAT_DUE (net payable to TRA)
-        // If I > O: DR VAT_DUE (net credit, a debit balance on 2300)
-        // If O == I: no leg needed (zero)
-        BigDecimal netOI = O.subtract(I);
-        if (netOI.compareTo(BigDecimal.ZERO) > 0) {
-            // net payable: CR VAT_DUE
-            lines.add(new LineDraft(vatDueAcct.getId(),
-                    BigDecimal.ZERO, netOI, currency,
-                    "VAT due — net payable " + vatReturn.getReturnNumber()));
-        } else if (netOI.compareTo(BigDecimal.ZERO) < 0) {
-            // net credit: DR VAT_DUE
-            lines.add(new LineDraft(vatDueAcct.getId(),
-                    netOI.negate(), BigDecimal.ZERO, currency,
-                    "VAT due — net credit " + vatReturn.getReturnNumber()));
-        }
+        // Leg 4: VAT_DUE — the balancing leg = O − I + Σadjustments.
+        // Positive: CR VAT_DUE (net payable to TRA); negative: DR VAT_DUE (a credit with TRA).
+        BigDecimal due = O.subtract(I).add(adjTotal);
+        signedLeg(lines, vatDueAcct.getId(), due.negate(), currency,
+                (due.signum() >= 0 ? "VAT due — net payable " : "VAT due — net credit ") + ref);
 
         // Nil-activity period: no output and no input → nothing to settle, so post NO journal.
         // A GL entry needs >=2 non-zero legs (BR-GL-08 / chk_journal_line_one_side); a nil return
@@ -104,7 +118,7 @@ public class VatReturnFilingPoster {
                 companyId,
                 null,           // company-level posting; no branch tag
                 vatReturn.getFilingDate(),
-                "VAT Return Filing " + vatReturn.getReturnNumber(),
+                "VAT Return Filing " + ref,
                 JournalSourceType.VAT_RETURN,
                 vatReturn.getUid(),
                 null,
@@ -113,5 +127,27 @@ public class VatReturnFilingPoster {
 
         JournalEntryDto posted = glPosting.post(draft);
         return posted.uid();
+    }
+
+    /** Where an adjustment's counter leg posts (see the class comment). */
+    static GlConfigKey counterKey(VatAdjustment a) {
+        return switch (a.getReason()) {
+            case CREDIT_NOTE_VAT -> GlConfigKey.VAT_PAYABLE;
+            case DEBIT_NOTE_VAT  -> GlConfigKey.VAT_INPUT;
+            case BAD_DEBT_RELIEF -> GlConfigKey.BAD_DEBT_EXPENSE;
+            case PRIOR_PERIOD_CORRECTION, OTHER -> a.getSign() == VatAdjustmentSign.INCREASE
+                    ? GlConfigKey.VAT_PAYABLE : GlConfigKey.VAT_INPUT;
+        };
+    }
+
+    /** A positive amount debits the account, a negative one credits it; zero adds no leg. */
+    private static void signedLeg(List<LineDraft> lines, Long accountId, BigDecimal debitPositive,
+                                  String currency, String memo) {
+        int sign = debitPositive.signum();
+        if (sign > 0) {
+            lines.add(new LineDraft(accountId, debitPositive, BigDecimal.ZERO, currency, memo));
+        } else if (sign < 0) {
+            lines.add(new LineDraft(accountId, BigDecimal.ZERO, debitPositive.negate(), currency, memo));
+        }
     }
 }

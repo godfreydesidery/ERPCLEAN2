@@ -20,4 +20,19 @@ public interface WhtRegisterService {
      * Rejects if the transaction is already remitted.
      */
     void markRemitted(String whtTransactionUid, String remittancePeriod, String remittanceRef);
+
+    /**
+     * {@link #markRemitted} that can also BOOK the payment (ACC-07): with a cash/bank account on
+     * the request it posts DR WHT Payable / CR that account for the certificate's base amount.
+     * Only WHT deducted from suppliers (WHT_ON_PAYMENT) can be booked as a payment.
+     */
+    com.erp.modules.tax.domain.dto.WhtPaymentResultDto remit(
+            String whtTransactionUid, com.erp.modules.tax.domain.dto.WhtRemitRequest req);
+
+    /**
+     * ACC-07: pay every not-yet-remitted WHT_ON_PAYMENT certificate dated in the period to TRA in one
+     * cash/bank payment (DR WHT Payable / CR the account for their base total) and mark each remitted.
+     */
+    com.erp.modules.tax.domain.dto.WhtPaymentResultDto payPeriod(
+            com.erp.modules.tax.domain.dto.WhtPeriodPaymentRequest req);
 }

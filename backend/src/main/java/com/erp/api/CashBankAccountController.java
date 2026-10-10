@@ -84,11 +84,17 @@ public class CashBankAccountController {
      * ACTIVE accounts of every type, as a narrow row with no balances or bank detail. Admits the
      * receipt-recording and cash-entry codes so the Record Receipt screen can offer it to a cashier
      * without granting CASH.VIEW. The service asserts the company is the caller's own.
+     *
+     * <p>ACC-07: also the codes that pay a tax liability from a bank account — paying a filed VAT
+     * return (VAT.RETURN.FILE), remitting WHT (WHT.REMIT), paying payroll statutory liabilities
+     * (HR.PAYROLL.DISBURSE) — so those screens can offer the same picker.
      */
     @GetMapping("/options")
     // ARC-10: the petty-cash top-up "paid in from" picker fires it for a PETTY_CASH.MANAGE holder.
     @PreAuthorize("@perm.has('CASH.VIEW') or @perm.has('AR.RECEIPT.RECORD') "
-            + "or @perm.has('CASH.ENTRY.RECORD') or @perm.has('PETTY_CASH.MANAGE')")
+            + "or @perm.has('CASH.ENTRY.RECORD') or @perm.has('PETTY_CASH.MANAGE') "
+            + "or @perm.has('VAT.RETURN.FILE') or @perm.has('WHT.REMIT') "
+            + "or @perm.has('HR.PAYROLL.DISBURSE')")
     public List<CashAccountOptionDto> listAccountOptions(@RequestParam Long companyId) {
         return service.listAccountOptions(companyId);
     }
