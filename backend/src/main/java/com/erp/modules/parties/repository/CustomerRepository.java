@@ -50,4 +50,16 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
      */
     @Query("SELECT c.companyId FROM Customer c WHERE c.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /** PRD-12 bulk re-upload: parties in the company carrying this TIN (case/space-insensitive). */
+    @Query("SELECT c FROM Customer c WHERE c.companyId = :companyId "
+            + "AND UPPER(TRIM(c.tin)) = UPPER(TRIM(:tin))")
+    java.util.List<Customer> findByCompanyIdAndNormalizedTin(@Param("companyId") Long companyId,
+                                                       @Param("tin") String tin);
+
+    /** PRD-12 bulk re-upload: parties in the company with this display name (case-insensitive, trimmed). */
+    @Query("SELECT c FROM Customer c WHERE c.companyId = :companyId "
+            + "AND LOWER(TRIM(c.displayName)) = LOWER(TRIM(:name))")
+    java.util.List<Customer> findByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                                        @Param("name") String name);
 }

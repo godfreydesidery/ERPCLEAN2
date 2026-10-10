@@ -154,6 +154,22 @@ public class ProductImportHandler implements BulkImportHandler {
                 ? null
                 : products.findByCompanyIdAndCode(companyId, code.trim().toUpperCase()).orElse(null);
 
+        // PRD-17: names are unique per company, so two rows naming the same product must fail at
+        // Validate (each validate row runs in its own rolled-back transaction and could not see
+        // the other) rather than at Commit.
+        String name = row.get(COL_NAME);
+        if (!name.isBlank()
+                && !ctx.claimSet("name").add(name.trim().replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT))) {
+            throw new IllegalArgumentException(
+                    "'" + COL_NAME + "' '" + name.trim() + "' is used more than once in this file.");
+        }
+        // PRD-17: a blank-code row naming an existing product updates it (re-upload of a fixed
+        // sheet) instead of failing with "already exists".
+        if (existing == null && code.isEmpty() && !name.isBlank()) {
+            existing = products.findByCompanyIdAndNormalizedName(companyId, name).stream()
+                    .findFirst().orElse(null);
+        }
+
         String barcode = ImportParsers.text(row, COL_BARCODE);
         validateBarcode(companyId, barcode, existing, ctx);
 
