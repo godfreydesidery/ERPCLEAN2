@@ -105,7 +105,8 @@ class SalesSummaryReportQueryIT extends ReportQueryTestBase {
                 .as("void, draft and out-of-window invoices excluded").isEqualTo(3);
         assertThat(r.totals().netAmount()).isEqualByComparingTo("7500");
         assertThat(r.totals().grossAmount()).isEqualByComparingTo("8850");
-        assertThat(r.totals().discount()).isEqualByComparingTo("100");
+        // RPT-16: VAT-inclusive — the 100 taken off a 2,100 net line is 118 off the charged gross.
+        assertThat(r.totals().discount()).isEqualByComparingTo("118");
         assertThat(r.totals().costOfSales()).isEqualByComparingTo("3900");
         assertThat(r.totals().margin()).isEqualByComparingTo("3100");
         assertThat(r.totals().marginPercent())

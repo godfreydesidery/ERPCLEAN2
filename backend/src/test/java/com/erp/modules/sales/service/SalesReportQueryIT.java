@@ -526,6 +526,59 @@ class SalesReportQueryIT extends PostgresIntegrationTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * RPT-01 / RPT-02 / RPT-16: a product renamed mid-window stays ONE row under its current name
+     * (cost counted once), quantity is labelled with its base unit, and a percentage discount
+     * shows in the discount column at its VAT-inclusive value.
+     */
+    @Test
+    void renamedProduct_isOneRow_andPercentDiscountIsReported() {
+        ProductDto product = stockableProduct("SalesRpt-Rename");
+        dispatcher.dispatchOne(publishReceiptEvent(
+                "RCPT-SR-RN-001", product, new BigDecimal("10"), new BigDecimal("600.00"), 1L));
+
+        SalesInvoiceDto first = makeSaleInvoice(product.uid(), new BigDecimal("2"));
+        salesInvoiceService.finalise(first.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        jdbc.update("UPDATE products SET name = 'SalesRpt-Renamed' WHERE id = ?", product.id());
+
+        setCtx();
+        SalesInvoiceDto second = salesInvoiceService.create(new CreateSalesInvoiceRequest(
+                company.getUid(), customerUid, agentUid, "TZS", null, null));
+        salesInvoiceService.addLine(second.uid(), new AddInvoiceLineRequest(
+                product.uid(), pcsUid, new BigDecimal("2"), null, new BigDecimal("10")));
+        salesInvoiceService.finalise(second.uid(), new FinaliseInvoiceRequest());
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED));
+
+        setCtx();
+        SalesReportDto report = salesReportQuery.report(company.getId(),
+                LocalDate.now().minusDays(1), LocalDate.now().plusDays(1),
+                null, null, null, null);
+        List<SalesReportRowDto> rows = report.rows().stream()
+                .filter(r -> product.code().equals(r.productCode())).toList();
+        assertThat(rows).as("one row per product, however it was named at sale").hasSize(1);
+        SalesReportRowDto row = rows.get(0);
+        assertThat(row.productName()).isEqualTo("SalesRpt-Renamed");
+        assertThat(row.qtySold()).isEqualByComparingTo("4");
+        assertThat(row.baseUnit()).isEqualTo("PCS");
+        // Cost of 4 units at 600, counted once.
+        BigDecimal net = netSalesFor(product.id());
+        assertThat(row.margin()).isEqualByComparingTo(net.subtract(new BigDecimal("2400")));
+
+        // Discount = VAT-inclusive list value − charged, over both lines (only the second is
+        // discounted). Derived from the stored lines, not from the row.
+        BigDecimal expected = jdbc.queryForObject("""
+                SELECT SUM(CASE WHEN price_inclusive THEN ROUND(unit_price_amount * quantity, 0)
+                                ELSE ROUND(unit_price_amount * quantity, 0)
+                                   + ROUND(ROUND(unit_price_amount * quantity, 0) * vat_rate, 0) END
+                           - (net_amount + vat_amount))
+                FROM sales_invoice_lines WHERE product_id = ?
+                """, BigDecimal.class, product.id());
+        assertThat(expected).as("the 10%% line really was discounted").isPositive();
+        assertThat(row.discount()).isEqualByComparingTo(expected);
+    }
+
     // =========================================================================
     // Private helpers
     // =========================================================================

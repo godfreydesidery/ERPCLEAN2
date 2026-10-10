@@ -69,6 +69,18 @@
         </select>
       </div>
 
+      <!-- SAL-10: creation-date window -->
+      <div class="erp-field">
+        <label for="invoiceDateFrom">From</label>
+        <input id="invoiceDateFrom" name="invoiceDateFrom" type="date" class="form-control"
+               [ngModel]="dateFrom()" (ngModelChange)="onDateChange('from', $event)" />
+      </div>
+      <div class="erp-field">
+        <label for="invoiceDateTo">To</label>
+        <input id="invoiceDateTo" name="invoiceDateTo" type="date" class="form-control"
+               [ngModel]="dateTo()" (ngModelChange)="onDateChange('to', $event)" />
+      </div>
+
       <span class="erp-toolbar__spacer"></span>
       @if (canCreate()) {
         <button type="button" class="btn btn-primary"

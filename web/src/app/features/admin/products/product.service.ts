@@ -19,6 +19,8 @@ import {
   ProductComponentDto,
   ProductModel,
   ProductPriceDto,
+  ResolvedUnitPriceDto,
+  ResolveUnitPricesRequest,
   SetProductPriceRequest,
   SetProductWeighingRequest,
   UnitOfMeasureDto,
@@ -146,6 +148,16 @@ export class ProductService {
   }
 
   // ── Prices ────────────────────────────────────────────────────────────────
+
+  /**
+   * SAL-28: what the server would charge for these products in this unit, for this customer and
+   * currency (`POST /product-prices/resolve` — the same resolution the invoice line uses: customer
+   * price → customer list → company default). An indicator only; the server re-prices the line.
+   */
+  resolveUnitPrices(request: ResolveUnitPricesRequest): Observable<ResolvedUnitPriceDto[]> {
+    return this.http.post<ResolvedUnitPriceDto[]>(
+      `${environment.apiBaseUrl}/product-prices/resolve`, request);
+  }
 
   listPrices(uid: string): Observable<ProductPriceDto[]> {
     return this.http.get<ProductPriceDto[]>(`${this.base}/uid/${uid}/prices`);

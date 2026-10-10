@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -16,6 +16,7 @@ import {
   SalesInvoiceLineDto,
   SalesInvoicePaymentDto,
   TenderType,
+  UpdateInvoiceLineRequest,
   VoidInvoiceRequest,
 } from '../models/sales.model';
 import { UnitOfMeasureDto } from '../models/product.model';
@@ -58,6 +59,7 @@ export class SalesInvoiceDetailComponent {
   private readonly documentsService = inject(DocumentsService);
   private readonly discountPolicy = inject(DiscountPolicyService);
   private readonly alerts = inject(AlertService);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
@@ -176,6 +178,30 @@ export class SalesInvoiceDetailComponent {
   readonly voidReason = signal('');
   readonly voiding = signal(false);
   readonly voidError = signal<string | null>(null);
+
+  // ── Cancel draft (SAL-13 / LSF-17) ─────────────────────────────────────────
+
+  readonly cancellingDraft = signal(false);
+
+  /** Discards this DRAFT (it has no number and posted nothing), then returns to the list. */
+  cancelDraft(): void {
+    if (this.cancellingDraft() || !this.isDraft()) return;
+    if (!window.confirm('Cancel this draft invoice? Its lines and any tenders on it are discarded.')) {
+      return;
+    }
+    this.cancellingDraft.set(true);
+    this.salesService.cancelDraft(this.uid()).subscribe({
+      next: () => {
+        this.cancellingDraft.set(false);
+        this.alerts.success('Draft cancelled');
+        void this.router.navigate(['/admin/sales-invoices']);
+      },
+      error: (err) => {
+        this.cancellingDraft.set(false);
+        this.alerts.error(this.messageFrom(err, 'Could not cancel the draft.'));
+      },
+    });
+  }
 
   // ── Print PDF ────────────────────────────────────────────────────────────
   readonly printing = signal(false);
@@ -306,6 +332,13 @@ export class SalesInvoiceDetailComponent {
     });
   }
 
+  /** SAL-28: the price hint follows the chosen unit (a carton is not priced per bottle). */
+  onLineUnitChange(unitUid: string): void {
+    this.newLineUnitUid.set(unitUid);
+    const product = this.selectedProduct();
+    if (product) this.fetchLinePrice(product.uid);
+  }
+
   private loadUnitsForProduct(productUid: string): void {
     this.lineUnits.set([]);
     this.newLineUnitUid.set('');
@@ -348,16 +381,27 @@ export class SalesInvoiceDetailComponent {
    * authoritative. Gated PRODUCT.VIEW, the same permission the picker above already needs.
    */
   private fetchLinePrice(productUid: string): void {
-    const companyId = this.invoice()?.companyId;
+    const inv = this.invoice();
     this.priceState.set('loading');
     this.resolvedPrice.set(null);
-    this.productService.listPrices(productUid).subscribe({
+    // SAL-28: ask the server what THIS line will be charged — in the selected unit, for this
+    // invoice's customer and currency (the same resolution addLine applies). The first price row
+    // used to be shown, which quoted the per-bottle price against a carton or another list's price.
+    const unitUid = this.newLineUnitUid() || undefined;
+    this.productService.resolveUnitPrices({
+      productUids: [productUid],
+      unitUid,
+      customerUid: inv?.customerUid || undefined,
+      currency: inv?.currency || undefined,
+    }).subscribe({
       next: (rows) => {
-        const forCompany = rows.filter((p) => p.companyId === companyId);
-        // Prefer this company's base-unit row (unitUid === null) — a pack row would quote a crate
-        // price against an "Each" line and read as wrong.
-        const row = forCompany.find((p) => p.unitUid === null) ?? forCompany[0] ?? rows[0];
-        const amount = row?.price?.amount ?? null;
+        // Ignore a late answer for a product or unit the user has since moved away from.
+        if (this.selectedProduct()?.uid !== productUid
+            || (this.newLineUnitUid() || undefined) !== unitUid) {
+          return;
+        }
+        const row = rows.find((r) => r.productUid === productUid);
+        const amount = row?.amount != null ? String(row.amount) : null;
         this.resolvedPrice.set(amount);
         this.priceState.set(amount != null ? 'ok' : 'missing');
       },
@@ -489,6 +533,68 @@ export class SalesInvoiceDetailComponent {
     this.approvalPromptOpen.set(false);
     this.lineFormError.set(null);
     this.addLine();
+  }
+
+  // ── Edit a draft line (SAL-12) ──────────────────────────────────────────────
+
+  readonly editingLineUid = signal<string | null>(null);
+  readonly editQty = signal('');
+  /** A plain number is an amount off the line; a trailing % makes it a percentage. */
+  readonly editDiscount = signal('');
+  readonly editLineSaving = signal(false);
+  readonly editLineError = signal<string | null>(null);
+
+  startEditLine(line: SalesInvoiceLineDto): void {
+    this.editingLineUid.set(line.uid);
+    this.editQty.set(String(line.requestedQuantity ?? line.quantity ?? ''));
+    this.editDiscount.set(
+      line.lineDiscountAmount ? String(line.lineDiscountAmount)
+        : line.lineDiscountPercent ? `${line.lineDiscountPercent}%` : '',
+    );
+    this.editLineError.set(null);
+  }
+
+  cancelEditLine(): void {
+    this.editingLineUid.set(null);
+    this.editLineError.set(null);
+  }
+
+  saveEditLine(line: SalesInvoiceLineDto): void {
+    if (this.editLineSaving()) return;
+    const qty = this.editQty().trim().replace(/,/g, '');
+    if (!qty || !(Number(qty) > 0)) {
+      this.editLineError.set('Enter a quantity greater than zero.');
+      return;
+    }
+    const request: UpdateInvoiceLineRequest = { quantity: qty };
+    const disc = this.editDiscount().trim().replace(/,/g, '');
+    if (disc) {
+      const isPercent = disc.endsWith('%');
+      const value = isPercent ? disc.slice(0, -1).trim() : disc;
+      if (!(Number(value) >= 0) || value === '') {
+        this.editLineError.set('Enter the discount as an amount, or a percentage such as 10%.');
+        return;
+      }
+      if (Number(value) > 0) {
+        if (isPercent) request.lineDiscountPercent = value;
+        else request.lineDiscountAmount = value;
+      }
+    }
+    this.editLineSaving.set(true);
+    this.editLineError.set(null);
+    this.salesService.updateLine(this.uid(), line.uid, request).subscribe({
+      next: () => {
+        this.editLineSaving.set(false);
+        this.editingLineUid.set(null);
+        this.alerts.success('Line updated');
+        this.loadLines();
+        this.refetchInvoice();
+      },
+      error: (err) => {
+        this.editLineSaving.set(false);
+        this.editLineError.set(this.messageFrom(err, 'Could not update the line.'));
+      },
+    });
   }
 
   removeLine(line: SalesInvoiceLineDto): void {

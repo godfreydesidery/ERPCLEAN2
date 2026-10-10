@@ -114,7 +114,16 @@
                 Finalise
               </button>
             }
-            @if (!isVoid() && canVoid()) {
+            @if (isDraft() && canCreate()) {
+              <button type="button" class="btn btn-outline-danger"
+                      [disabled]="cancellingDraft()"
+                      (click)="cancelDraft()">
+                <i class="bi bi-trash me-1" aria-hidden="true"></i>
+                Cancel draft
+              </button>
+            }
+            <!-- SAL-13: only a FINALISED invoice can be voided; a draft is cancelled instead. -->
+            @if (!isVoid() && !isDraft() && canVoid()) {
               <button type="button" class="btn btn-outline-danger"
                       (click)="toggleVoidForm()"
                       [attr.aria-expanded]="showVoidForm()">
@@ -248,8 +257,16 @@
                         </td>
                         <td class="small text-muted">{{ line.unitName }}</td>
                         <td class="num">
+                          @if (editingLineUid() === line.uid) {
+                            <label class="sr-only" [for]="'editQty-' + line.uid">Quantity for {{ line.productName }}</label>
+                            <input [id]="'editQty-' + line.uid" name="editQty" type="text" inputmode="decimal"
+                                   class="form-control form-control-sm ms-auto" style="max-width:90px"
+                                   [ngModel]="editQty()" (ngModelChange)="editQty.set($event)"
+                                   [disabled]="editLineSaving()" autocomplete="off" />
+                          } @else {
                           {{ line.quantity }}
-                          @if (quantityWasRounded(line)) {
+                          }
+                          @if (editingLineUid() !== line.uid && quantityWasRounded(line)) {
                             <span class="d-block text-muted small">
                               entered {{ line.requestedQuantity }} → billed {{ line.quantity }}
                             </span>
@@ -311,7 +328,19 @@
                           }
                         </td>
                         <td class="num small">
-                          @if (line.lineDiscountAmount) {
+                          @if (editingLineUid() === line.uid) {
+                            <label class="sr-only" [for]="'editDisc-' + line.uid">
+                              Discount for {{ line.productName }} (amount, or a percentage such as 10%)
+                            </label>
+                            <input [id]="'editDisc-' + line.uid" name="editDisc" type="text"
+                                   class="form-control form-control-sm ms-auto" style="max-width:90px"
+                                   placeholder="0 or 10%"
+                                   [ngModel]="editDiscount()" (ngModelChange)="editDiscount.set($event)"
+                                   [disabled]="editLineSaving()" autocomplete="off" />
+                            @if (editLineError(); as msg) {
+                              <p class="text-danger small mt-1 mb-0 text-end" role="alert">{{ msg }}</p>
+                            }
+                          } @else if (line.lineDiscountAmount) {
                             {{ line.lineDiscountAmount }}
                           } @else if (line.lineDiscountPercent) {
                             {{ line.lineDiscountPercent }}%
@@ -327,7 +356,26 @@
                         <td class="num">{{ line.vatAmount }}</td>
                         <td class="num fw-semibold">{{ line.grossAmount }}</td>
                         @if (isDraft() && canCreate()) {
-                          <td>
+                          <td class="text-nowrap">
+                            @if (editingLineUid() === line.uid) {
+                              <button type="button" class="btn btn-sm btn-primary me-1"
+                                      [disabled]="editLineSaving()" (click)="saveEditLine(line)"
+                                      [attr.aria-label]="'Save changes to ' + line.productName">
+                                <i class="bi bi-check-lg" aria-hidden="true"></i>
+                              </button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                      [disabled]="editLineSaving()" (click)="cancelEditLine()"
+                                      [attr.aria-label]="'Cancel editing ' + line.productName">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i>
+                              </button>
+                            } @else {
+                              <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                      [disabled]="rowBusyLineUid() !== null || editingLineUid() !== null"
+                                      (click)="startEditLine(line)"
+                                      [attr.aria-label]="'Change quantity or discount for ' + line.productName">
+                                <i class="bi bi-pencil" aria-hidden="true"></i>
+                              </button>
+                            }
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                     [disabled]="rowBusyLineUid() !== null || overridingLineUid() !== null"
                                     (click)="removeLine(line)"
@@ -407,7 +455,7 @@
                   <p class="small text-danger mb-0" role="alert">Could not load units.</p>
                 } @else {
                   <select id="lineUnit" name="lineUnit" class="form-select form-select-sm"
-                          [ngModel]="newLineUnitUid()" (ngModelChange)="newLineUnitUid.set($event)"
+                          [ngModel]="newLineUnitUid()" (ngModelChange)="onLineUnitChange($event)"
                           [disabled]="addingLine() || !selectedProduct()">
                     @if (!selectedProduct()) {
                       <option value="">Select a product first</option>

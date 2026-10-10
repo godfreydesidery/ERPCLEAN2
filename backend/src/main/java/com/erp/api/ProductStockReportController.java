@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
@@ -51,6 +52,14 @@ public class ProductStockReportController {
 
     // ── Product List ────────────────────────────────────────────────────────
 
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping("/product-list")
     @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW')")
     public ProductStockReportDto productList(
@@ -66,7 +75,8 @@ public class ProductStockReportController {
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String supplierUid) {
         ProductStockReportDto dto = query.report(companyId(), branchUid, supplierUid, false);
-        return download(exporter.export(flattenProductList(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenProductList(dto), branchGuard, branchUid), format));
     }
 
     // ── Stock Value ─────────────────────────────────────────────────────────
@@ -86,7 +96,8 @@ public class ProductStockReportController {
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String supplierUid) {
         ProductStockReportDto dto = query.report(companyId(), branchUid, supplierUid, true);
-        return download(exporter.export(flattenStockValue(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenStockValue(dto), branchGuard, branchUid), format));
     }
 
     // -------------------------------------------------------------------------

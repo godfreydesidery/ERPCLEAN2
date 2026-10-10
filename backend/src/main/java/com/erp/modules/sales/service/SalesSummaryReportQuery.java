@@ -178,8 +178,9 @@ public class SalesSummaryReportQuery {
                 """
                 + "       COALESCE(SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount",
                         rate, baseScale) + "), 0) AS gross,\n"
-                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)",
-                        rate, baseScale) + "), 0) AS discount,\n"
+                // RPT-16 / LSF-12: every discount, VAT-inclusive (see BaseCurrencySql).
+                + "       COALESCE(SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
+                + "), 0) AS discount,\n"
                 + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
                 + "), 0) AS vat,\n"
                 + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)

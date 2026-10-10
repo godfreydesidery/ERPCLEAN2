@@ -44,7 +44,7 @@ public record SalesReportDto(
     public SalesReportDto withoutCost() {
         List<SalesReportRowDto> masked = rows.stream()
                 .map(r -> new SalesReportRowDto(r.productCode(), r.productName(), r.currentStock(),
-                        r.qtySold(), r.discount(), r.vat(), null, r.amount()))
+                        r.qtySold(), r.discount(), r.vat(), null, r.amount(), r.baseUnit()))
                 .toList();
         SalesReportTotalsDto t = totals == null ? null : new SalesReportTotalsDto(
                 totals.qtySold(), totals.discount(), totals.vat(), null, totals.amount(),

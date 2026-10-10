@@ -152,18 +152,20 @@ public class ProfitabilityReportQuery {
         String net = BaseCurrencySql.toBase("l.net_amount", rate, baseScale);
         String sql = """
                 SELECT l.product_id                AS product_id,
-                       l.product_code              AS product_code,
-                       l.product_name              AS product_name,
+                       COALESCE(p.code, MAX(l.product_code)) AS product_code,
+                       COALESCE(p.name, MAX(l.product_name)) AS product_name,
                        COALESCE(NULLIF(TRIM(p.category), ''), '(no department)') AS department,
-                       SUM(l.quantity)             AS qty_sold,
+                       COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS base_unit,
+                       SUM(l.qty_in_base)          AS qty_sold,
                 """
                 + "       SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate,
                         baseScale) + ") AS gross_sales,\n"
                 + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
                 + ") AS vat_amount,\n"
                 + "       SUM(" + net + ") AS net_amount,\n"
-                + "       SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)", rate,
-                        baseScale) + ") AS discount,\n"
+                // RPT-16: every discount (line amount, line %, document share), VAT-inclusive.
+                + "       SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
+                + ") AS discount,\n"
                 // The sale, split by how it is taxed. Summed over the same converted net amounts so
                 // the three add back to net_amount exactly, which is the identity the client's own
                 // report reconciles on.
@@ -177,14 +179,15 @@ public class ProfitabilityReportQuery {
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id
                 LEFT JOIN products p ON p.id = l.product_id AND p.company_id = i.company_id
+                LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 WHERE i.company_id = ?
                   AND i.status = 'FINALISED'
                   AND i.finalised_at >= ?
                   AND i.finalised_at <  ?
                 """ + filterSql + """
 
-                GROUP BY l.product_id, l.product_code, l.product_name, p.category
-                ORDER BY l.product_code NULLS LAST
+                GROUP BY l.product_id, p.code, p.name, p.category, u.symbol, u.code
+                ORDER BY 2 NULLS LAST
                 """;
 
         List<Object[]> raw = jdbc.query(sql,
@@ -200,7 +203,8 @@ public class ProfitabilityReportQuery {
                         rs.getBigDecimal("discount"),
                         rs.getBigDecimal("vat_portion"),
                         rs.getBigDecimal("exempt_portion"),
-                        rs.getBigDecimal("zero_rated_portion")
+                        rs.getBigDecimal("zero_rated_portion"),
+                        rs.getString("base_unit")
                 },
                 params.toArray());
 
@@ -231,7 +235,8 @@ public class ProfitabilityReportQuery {
                     zeroIfNull((BigDecimal) r[5]),
                     netAmount,
                     costOfSales,
-                    profit));
+                    profit,
+                    (String) r[12]));
 
             dept.computeIfAbsent((String) r[7], DeptAcc::new).add(r, costOfSales);
         }
@@ -290,8 +295,11 @@ public class ProfitabilityReportQuery {
             BigDecimal markup = contribution != null && costOut != null && costOut.signum() != 0
                     ? contribution.multiply(HUNDRED).divide(costOut, PCT_SCALE, RoundingMode.HALF_UP)
                     : null;
+            // RPT-16: gross accumulates what was CHARGED (net + VAT). The client's layout reads
+            // Gross Sales - Discount = Net Sales, so Gross Sales is the pre-discount value and Net
+            // Sales the charged figure, which also keeps Net Sales = Net Amount + VAT.
             return new ProfitabilityDepartmentRowDto(
-                    name, gross, discount, gross.subtract(discount), net, vat,
+                    name, gross.add(discount), discount, gross, net, vat,
                     vatPortion, exemptPortion, zeroPortion,
                     costOut, contribution, margin, markup, unknownCost);
         }

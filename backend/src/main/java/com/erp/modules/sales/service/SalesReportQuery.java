@@ -178,14 +178,21 @@ public class SalesReportQuery {
         // a TZS cost.
         int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
         String rate = "i.fx_rate";
+        // RPT-02: grouped by product id ONLY and labelled with the product's CURRENT code and name.
+        // Grouping by the code/name snapshotted on each line split a product renamed within the
+        // window into two rows, and the per-product cost of sale was attached to BOTH, so cost of
+        // sales was counted twice. A deleted product falls back to the latest line snapshot.
+        // RPT-01 / LSF-11: quantity is summed in the BASE unit (qty_in_base) and the base unit is
+        // named, so 7 bottles + 5 crates of 24 reads 127 bottles, not "12".
         String mainSql = """
                 SELECT l.product_id                              AS product_id,
-                       l.product_code                             AS product_code,
-                       l.product_name                             AS product_name,
-                       SUM(l.quantity)                            AS qty_sold,
+                       COALESCE(p.code, MAX(l.product_code))      AS product_code,
+                       COALESCE(p.name, MAX(l.product_name))      AS product_name,
+                       COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS base_unit,
+                       SUM(l.qty_in_base)                         AS qty_sold,
                 """
-                + "       SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)", rate,
-                        baseScale) + ") AS discount,\n"
+                + "       SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
+                + ") AS discount,\n"
                 + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
                 + ") AS vat,\n"
                 + "       SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
@@ -197,6 +204,7 @@ public class SalesReportQuery {
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id
                 LEFT JOIN products p ON p.id = l.product_id
+                LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 LEFT JOIN (
                     SELECT product_id, SUM(quantity) AS qty
                     FROM stock_on_hand
@@ -211,11 +219,9 @@ public class SalesReportQuery {
                   AND i.finalised_at <  ?
                 """ + filterSql + """
 
-                GROUP BY l.product_id, l.product_code, l.product_name, soh.qty
-                ORDER BY l.product_code NULLS LAST
+                GROUP BY l.product_id, p.code, p.name, u.symbol, u.code, soh.qty
+                ORDER BY 2 NULLS LAST
                 """;
-        // The on-hand column follows the caller's branch scope too ("All branches" for a
-        // branch-limited caller is their branches' stock, not the company's).
         mainSql = mainSql.replace("/*branch-scope*/", stockScopeSql);
 
         List<Object[]> mainRows = jdbc.query(mainSql,
@@ -228,7 +234,8 @@ public class SalesReportQuery {
                         rs.getBigDecimal("vat"),
                         rs.getBigDecimal("net_sales"),
                         rs.getBigDecimal("amount"),
-                        rs.getBigDecimal("current_stock")
+                        rs.getBigDecimal("current_stock"),
+                        rs.getString("base_unit")
                 },
                 mainParams.toArray());
 
@@ -264,7 +271,8 @@ public class SalesReportQuery {
                     (BigDecimal) r[4],
                     (BigDecimal) r[5],
                     margin,
-                    (BigDecimal) r[7]));
+                    (BigDecimal) r[7],
+                    (String) r[9]));
         }
         return rows;
     }

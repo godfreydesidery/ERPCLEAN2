@@ -155,6 +155,8 @@ public final class AuditActions {
     public static final String SALES_INVOICE_PAYMENT_ADD     = "SALES.INVOICE.PAYMENT.ADD";
     public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
     public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
+    /** SAL-13 / LSF-17: an abandoned DRAFT (no number, no postings) removed. */
+    public static final String SALES_INVOICE_DRAFT_CANCEL    = "SALES.INVOICE.DRAFT.CANCEL";
     public static final String TAXRATE_CREATE                = "TAXRATE.CREATE";
     public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
 
