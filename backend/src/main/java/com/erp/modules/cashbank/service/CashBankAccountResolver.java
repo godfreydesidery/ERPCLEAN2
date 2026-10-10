@@ -31,6 +31,29 @@ public class CashBankAccountResolver {
     }
 
     /**
+     * ACC-05 / LSF-06: the GL account a sale tender that landed in {@code cashBankAccountId} posts
+     * to — the cash/bank account's own GL link. Lenient by design (unlike {@link #resolve}): the
+     * money was already taken, so posting must not fail over the account's settings. Empty when
+     * the id is null, the account is not in {@code companyId}, or its linked GL account is missing,
+     * in another company, or inactive — the caller then falls back to the company's CASH mapping.
+     * The account's own active flag is not consulted: a tender already taken into an account that
+     * is later deactivated still belongs on that account's GL.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public java.util.Optional<CashAccountGlResolutionDto> findSaleTenderGlAccount(
+            Long companyId, Long cashBankAccountId) {
+        if (companyId == null || cashBankAccountId == null) {
+            return java.util.Optional.empty();
+        }
+        return cashAccounts.findByCompanyIdAndId(companyId, cashBankAccountId)
+                .flatMap(account -> glAccounts.findScopedById(account.getGlAccountId())
+                        .filter(gl -> companyId.equals(gl.getCompanyId()) && gl.isActive())
+                        .map(gl -> new CashAccountGlResolutionDto(
+                                account.getId(), account.getUid(),
+                                gl.getId(), gl.getAccountCode())));
+    }
+
+    /**
      * Resolves companyId + optional cashBankAccountUid to the linked GL account.
      * If uid is null → use the company default (BR-CASH-09).
      * If no account and no default → throws (never silent null post).

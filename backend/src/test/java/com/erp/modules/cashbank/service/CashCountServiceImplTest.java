@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.service;
 
+import com.erp.modules.sales.service.SaleTenderAccountQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,6 +70,7 @@ class CashCountServiceImplTest {
     private GLPostingService glPosting;
     private ScopeGuard scopeGuard;
     private AuditService audit;
+    private SaleTenderAccountQuery saleTenderAccounts;
     private CashCountServiceImpl service;
 
     @BeforeEach
@@ -84,6 +86,7 @@ class CashCountServiceImplTest {
         glPosting     = mock(GLPostingService.class);
         scopeGuard    = mock(ScopeGuard.class);
         audit         = mock(AuditService.class);
+        saleTenderAccounts = mock(SaleTenderAccountQuery.class);
 
         when(numbers.nextCashCount(anyLong())).thenReturn("CC-0001");
         when(numbers.nextTransaction(anyLong())).thenReturn("CBTX-0001");
@@ -91,7 +94,7 @@ class CashCountServiceImplTest {
         when(denominations.findByCashCountIdOrderByDenominationDesc(any())).thenReturn(List.of());
 
         service = new CashCountServiceImpl(counts, denominations, accounts, txns, companies,
-                glConfigs, numbers, glConfig, glPosting, scopeGuard, audit);
+                glConfigs, numbers, glConfig, glPosting, scopeGuard, audit, saleTenderAccounts);
 
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 5L, null));
     }
@@ -391,6 +394,24 @@ class CashCountServiceImplTest {
                 new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 7, 4)));
 
         assertThat(dto.status()).isEqualTo(CashCountStatus.OPEN);
+    }
+
+    @Test
+    void open_onATillThatTakesSaleTenders_refused() {
+        // ACC-05: a tender that names this account posts to its own GL, which the cash book
+        // cannot see — the same double-booking as on the GL CASH account.
+        Company company = mockCompany(1L, "TZS");
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L); // GL 100
+        when(companies.findByUid("CO1")).thenReturn(Optional.of(company));
+        when(accounts.findByCompanyIdAndUid(1L, "TILL1")).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 200L);
+        when(saleTenderAccounts.takesSaleTenders(1L, 10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.open(
+                new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 7, 4))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("POS till session");
+        verify(counts, never()).save(any());
     }
 
     @Test

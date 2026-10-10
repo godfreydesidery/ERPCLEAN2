@@ -99,6 +99,14 @@ public interface SalesInvoiceService {
      */
     Optional<InvoicePostingTotalsDto> findPostingTotalsByUidAndCompany(String invoiceUid, Long companyId);
 
+    /**
+     * SAL-06 / ACC-05: the counter tenders on an invoice (amount net of change, and the cash/bank
+     * account each landed in), so the GL sale posting can debit each tender's own account and AR
+     * only for the outstanding. Company-scoped; empty when the invoice is not found.
+     */
+    List<com.erp.modules.sales.domain.dto.InvoicePostingTenderDto> findPostingTendersByUidAndCompany(
+            String invoiceUid, Long companyId);
+
     // --- VAT computation read (ADR-0017 D-6) ---
     /**
      * Sums output VAT from FINALISED invoices whose finalised_at date falls in [start, end],

@@ -1235,6 +1235,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 });
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.erp.modules.sales.domain.dto.InvoicePostingTenderDto>
+            findPostingTendersByUidAndCompany(String invoiceUid, Long companyId) {
+        return invoices.findByUidAndCompanyId(invoiceUid, companyId)
+                .map(inv -> payments.findByInvoiceId(inv.getId()).stream()
+                        .map(p -> new com.erp.modules.sales.domain.dto.InvoicePostingTenderDto(
+                                p.getTenderType().name(),
+                                p.getCashBankAccountId(),
+                                p.getChangeAmount() != null
+                                        ? p.getAmount().subtract(p.getChangeAmount())
+                                        : p.getAmount()))
+                        .toList())
+                .orElse(List.of());
+    }
+
     // -------------------------------------------------------------------------
     // VAT computation read (ADR-0017 D-6) — additive, no Sales schema change
     // -------------------------------------------------------------------------
