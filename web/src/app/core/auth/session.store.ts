@@ -27,6 +27,8 @@ export class SessionStore {
   readonly user = this.userSig.asReadonly();
   readonly permissions = this.permissionsSig.asReadonly();
   readonly isAuthenticated = computed(() => this.accessTokenSig() !== null);
+  /** ADM-02: the signed-in user must replace an administrator-set password before working. */
+  readonly mustChangePassword = computed(() => this.userSig()?.mustChangePassword === true);
 
   /**
    * True when the session user is root (root bypasses all permission checks) OR the user holds the

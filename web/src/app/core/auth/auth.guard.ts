@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateChildFn, CanActivateFn, Router } from '@angular/router';
 import { SessionStore } from './session.store';
 
 /**
@@ -11,6 +11,22 @@ import { SessionStore } from './session.store';
  * session was lost) instead of dumping them on the dashboard. The 401 interceptor carries the same
  * param for the mid-session timeout case — both bounce points must, since only one fires per scenario.
  */
+/** The self-service password screen — the one place a must-change user may go. */
+export const CHANGE_PASSWORD_URL = '/account/password';
+
+/**
+ * ADM-02: a user signed in with an administrator-set (temporary) password is held on the change
+ * screen until they choose their own. Applied as canActivateChild on the shell.
+ */
+export const mustChangePasswordGuard: CanActivateChildFn = (_route, state) => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+  if (!session.mustChangePassword() || state.url.startsWith(CHANGE_PASSWORD_URL)) {
+    return true;
+  }
+  return router.createUrlTree([CHANGE_PASSWORD_URL]);
+};
+
 export const authGuard: CanActivateFn = (_route, state) => {
   const session = inject(SessionStore);
   const router = inject(Router);

@@ -123,6 +123,10 @@
               }
             </div>
             <hr class="my-1" />
+            <a class="user-menu__item" routerLink="/account/password"
+               (click)="userMenuOpen.set(false)">
+              <i class="bi bi-key me-2" aria-hidden="true"></i>Change password
+            </a>
             <button class="user-menu__item user-menu__item--danger" type="button"
                     (click)="userMenuOpen.set(false); logout()">
               <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>Sign out
