@@ -263,6 +263,9 @@ public final class AuditActions {
     public static final String VAT_ADJUST          = "VAT.ADJUST";
     public static final String WHT_TYPE_MANAGE     = "WHT.TYPE.MANAGE";
     public static final String WHT_CAPTURE         = "WHT.CAPTURE";
+    /** ACC-07: a tax liability paid to TRA from a cash/bank account. */
+    public static final String VAT_RETURN_PAY      = "VAT.RETURN.PAY";
+    public static final String WHT_REMIT           = "WHT.REMIT";
 
     // ---- Reporting module (ADR-0018 D-11) ----
     public static final String REPORT_EXPORT = "REPORT.EXPORT";
@@ -389,6 +392,8 @@ public final class AuditActions {
     public static final String HR_PAYROLL_RUN_POST     = "HR.PAYROLL.RUN.POST";
     public static final String HR_PAYROLL_RUN_DISBURSE = "HR.PAYROLL.RUN.DISBURSE";
     public static final String HR_PAYROLL_RUN_REVERSE  = "HR.PAYROLL.RUN.REVERSE";
+    /** ACC-07: PAYE / NSSF / WCF / SDL / HESLB paid to the authority from a cash/bank account. */
+    public static final String HR_STATUTORY_PAY        = "HR.PAYROLL.STATUTORY.PAY";
 
     // --- crm (ADR-0031) ---
     public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";

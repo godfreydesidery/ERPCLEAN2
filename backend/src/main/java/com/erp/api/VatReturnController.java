@@ -11,6 +11,7 @@ import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
+import com.erp.modules.tax.domain.dto.RecordTaxPaymentRequest;
 import com.erp.modules.tax.domain.dto.VatReturnBandDto;
 import com.erp.modules.tax.domain.dto.VatReturnDto;
 import com.erp.modules.tax.domain.enums.VatReturnStatus;
@@ -76,6 +77,17 @@ public class VatReturnController {
     public VatReturnDto file(@PathVariable String uid,
                               @Valid @RequestBody FileVatReturnRequest req) {
         return service.file(uid, req);
+    }
+
+    /**
+     * ACC-07: record paying a FILED return's net VAT to TRA from a cash/bank account
+     * (DR VAT Due / CR the account). Same gate as filing — the act that created the liability.
+     */
+    @PostMapping("/uid/{uid}/payments")
+    @PreAuthorize("@perm.scoped(#uid,'vatreturn','VAT.RETURN.FILE')")
+    public VatReturnDto recordPayment(@PathVariable String uid,
+                                      @Valid @RequestBody RecordTaxPaymentRequest req) {
+        return service.recordPayment(uid, req);
     }
 
     /** Single return by uid. */
