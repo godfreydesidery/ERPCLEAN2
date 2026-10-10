@@ -190,9 +190,46 @@ export class GoodsReceiptCreateComponent {
   lineMaxQty(entry: ReceiveLineEntry): string | null {
     const pct = this.receiptTolerancePct();
     if (!pct || pct <= 0) return null;
-    const outstanding = Number(entry.line.outstandingQtyInBase);
+    const outstanding = this.outstandingInLineUnit(entry.line);
     if (!Number.isFinite(outstanding)) return null;
     return Number((outstanding * (1 + pct / 100)).toFixed(3)).toString();
+  }
+
+  // ── Unit helpers (PUR-01 / LBO-05 / LUI-02) ────────────────────────────────
+  // The server reads receivedQty in the PO LINE's unit (a crate on a crate line) and converts it
+  // with the line's own factor. The PO line DTO carries received/outstanding in BASE units, so they
+  // must be converted before they are shown under the line-unit header or prefilled.
+
+  /** Base units per one of the line's unit (orderedQtyInBase ÷ orderedQty); 1 when unknown. */
+  lineFactor(line: PurchaseOrderLineDto): number {
+    const ordered = Number(line.orderedQty);
+    const base = Number(line.orderedQtyInBase);
+    return ordered > 0 && base > 0 ? base / ordered : 1;
+  }
+
+  isPackLine(line: PurchaseOrderLineDto): boolean {
+    return Math.abs(this.lineFactor(line) - 1) > 1e-9;
+  }
+
+  /** Outstanding in the line's unit. */
+  outstandingInLineUnit(line: PurchaseOrderLineDto): number {
+    return this.round(Number(line.outstandingQtyInBase) / this.lineFactor(line));
+  }
+
+  /** Previously received, in the line's unit. */
+  receivedInLineUnit(line: PurchaseOrderLineDto): number {
+    return this.round(Number(line.receivedQtyInBase) / this.lineFactor(line));
+  }
+
+  /** The entered receive qty in base units — the "= N base units" preview; null when empty. */
+  baseQtyPreview(entry: ReceiveLineEntry): number | null {
+    const qty = Number(entry.receivedQty);
+    if (!entry.receivedQty.trim() || !Number.isFinite(qty) || qty <= 0) return null;
+    return this.round(qty * this.lineFactor(entry.line));
+  }
+
+  private round(n: number): number {
+    return Number(n.toFixed(6));
   }
 
   private loadLines(poUid: string): void {
@@ -204,10 +241,13 @@ export class GoodsReceiptCreateComponent {
           .filter((l) => !l.fullyReceived)
           .map((l) => ({
             line: l,
-            // outstandingQtyInBase is a BigDecimal that arrives as a number on the wire; coerce to
-            // string so the prefilled "receive remaining" value still passes the downstream
-            // receivedQty.trim() (a numeric value crashes submit — TypeError: trim is not a function).
-            receivedQty: String(l.outstandingQtyInBase ?? ''),
+            // PUR-01: prefill the outstanding in the LINE's unit (crates on a crate line) — the server
+            // reads receivedQty in that unit, so prefilling base units was rejected as over-receipt.
+            // Kept a string: the downstream receivedQty.trim() crashes on a number.
+            receivedQty:
+              l.outstandingQtyInBase === null || l.outstandingQtyInBase === undefined
+                ? ''
+                : String(this.outstandingInLineUnit(l)),
             include: true,
             batchExpanded: false,
             lotNumber: '',

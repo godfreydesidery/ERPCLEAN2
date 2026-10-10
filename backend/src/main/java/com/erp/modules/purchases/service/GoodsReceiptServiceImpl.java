@@ -423,10 +423,20 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
             log.warn("Over-receipt rejected (BR-PURCH-10, ADR-0011 D-3) on PO line id={} uid={}: "
                             + "outstanding={}, tolerancePct={}, ceiling={}, requestedQtyInBase={}",
                     poLine.getId(), poLine.getUid(), outstanding, tolerancePct, ceiling, qtyInBase);
+            // PUR-01 / LBO-05: say what IS still outstanding, in the line's own unit (the unit the
+            // storekeeper types in), so "reduce it" comes with the number to reduce it to.
+            BigDecimal outstandingInUnit = outstanding.max(BigDecimal.ZERO)
+                    .multiply(poLine.getOrderedQty())
+                    .divide(poLine.getOrderedQtyInBase(), BASE_QTY_SCALE, java.math.RoundingMode.HALF_UP)
+                    .stripTrailingZeros();
+            if (outstandingInUnit.scale() < 0) {
+                outstandingInUnit = outstandingInUnit.setScale(0);
+            }
             throw new IllegalStateException(
                     "Over-receipt rejected for " + poLine.getProductName()
-                            + ": the quantity received exceeds the outstanding amount on this line. "
-                            + "Reduce it and try again.");
+                            + ": the quantity received exceeds the outstanding amount on this line"
+                            + " (outstanding: " + outstandingInUnit.toPlainString() + " "
+                            + poLine.getUnitName() + "). Reduce it and try again.");
         }
 
         short nextLineNo = (short) (grLines.findMaxLineNo(gr.getId()) + 1);

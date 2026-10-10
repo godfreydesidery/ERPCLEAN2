@@ -264,9 +264,25 @@ export class PurchaseOrderDetailComponent {
    * than a bare minus sign that looks like a broken subtraction. Formatting only — no computation.
    */
   outstandingLabel(line: PurchaseOrderLineDto): string {
-    const o = Number(line.outstandingQtyInBase);
+    if (line.outstandingQtyInBase === null || line.outstandingQtyInBase === undefined) return '';
+    // PUR-01 / LUI-02: shown under the line's unit, so convert from base (crates, not bottles).
+    const o = this.inLineUnit(line, line.outstandingQtyInBase);
     if (Number.isFinite(o) && o < 0) return `0 (${-o} over)`;
-    return String(line.outstandingQtyInBase ?? '');
+    return String(o);
+  }
+
+  /** Received so far, in the line's unit (the DTO carries it in base units). */
+  receivedLabel(line: PurchaseOrderLineDto): string {
+    if (line.receivedQtyInBase === null || line.receivedQtyInBase === undefined) return '';
+    return String(this.inLineUnit(line, line.receivedQtyInBase));
+  }
+
+  /** A base quantity in the line's unit: base × orderedQty ÷ orderedQtyInBase. */
+  private inLineUnit(line: PurchaseOrderLineDto, baseQty: string | number): number {
+    const ordered = Number(line.orderedQty);
+    const orderedBase = Number(line.orderedQtyInBase);
+    const factor = ordered > 0 && orderedBase > 0 ? orderedBase / ordered : 1;
+    return Number((Number(baseQty) / factor).toFixed(6));
   }
 
   constructor() {

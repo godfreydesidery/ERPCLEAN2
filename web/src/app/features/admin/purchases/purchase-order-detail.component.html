@@ -464,7 +464,7 @@
                     </td>
                     <td class="small">{{ line.unitName }}</td>
                     <td class="num">{{ line.orderedQty }}</td>
-                    <td class="num">{{ line.receivedQtyInBase }}</td>
+                    <td class="num">{{ receivedLabel(line) }}</td>
                     <td class="num"
                         [class.text-danger]="!line.fullyReceived && !isDraft()">
                       {{ outstandingLabel(line) }}
