@@ -12,6 +12,7 @@ import {
   CashBankAccountDto,
   CashCountDto,
   CashTillOptionDto,
+  CashAccountOptionDto,
   CashGlReconciliationDto,
   CashTransferDto,
   CashTransactionDto,
@@ -112,6 +113,16 @@ export class CashbankService {
    */
   listCashTills(companyId: string): Observable<CashTillOptionDto[]> {
     return this.http.get<CashTillOptionDto[]>(`${this.base}/accounts/tills`, {
+      params: { companyId },
+    });
+  }
+
+  /**
+   * Cash / bank / M-Pesa account picker (ARC-05): ACTIVE accounts of every type as narrow rows.
+   * Open to AR.RECEIPT.RECORD and CASH.ENTRY.RECORD, so a cashier needs no CASH.VIEW.
+   */
+  listAccountOptions(companyId: string): Observable<CashAccountOptionDto[]> {
+    return this.http.get<CashAccountOptionDto[]>(`${this.base}/accounts/options`, {
       params: { companyId },
     });
   }

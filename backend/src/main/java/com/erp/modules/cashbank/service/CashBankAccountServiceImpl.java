@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.service;
 
+import com.erp.modules.cashbank.domain.dto.CashAccountOptionDto;
 import com.erp.modules.cashbank.domain.dto.CashBankAccountDto;
 import com.erp.modules.cashbank.domain.dto.CashTillOptionDto;
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
@@ -217,6 +218,21 @@ public class CashBankAccountServiceImpl implements CashBankAccountService {
                 .filter(a -> a.getAccountType() == CashBankAccountType.CASH && a.isActive())
                 .map(a -> new CashTillOptionDto(a.getId(), a.getUid(), a.getCode(), a.getName(),
                         a.getBranchId(), a.getCurrency() != null ? a.getCurrency().value() : null))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CashAccountOptionDto> listAccountOptions(Long companyId) {
+        RequestContext.Principal p = RequestContext.get();
+        scopeGuard.assertCanActIn(p, companyId);
+        Long currentBranchId = p != null ? p.branchId() : null;
+        return accounts.findByCompanyId(companyId).stream()
+                .filter(CashBankAccount::isActive)
+                .map(a -> new CashAccountOptionDto(a.getId(), a.getUid(), a.getCode(), a.getName(),
+                        a.getAccountType(), a.getBranchId(),
+                        a.getCurrency() != null ? a.getCurrency().value() : null, a.isDefault(),
+                        currentBranchId != null && currentBranchId.equals(a.getBranchId())))
                 .toList();
     }
 

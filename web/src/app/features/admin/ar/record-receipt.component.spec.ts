@@ -6,7 +6,8 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { signal } from '@angular/core';
 
-import { RecordReceiptComponent } from './record-receipt.component';
+import { RecordReceiptComponent, suggestAccountForTender } from './record-receipt.component';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { ArService } from './ar.service';
 import { CustomerService } from '../parties/customer.service';
 import { CompanyService } from '../company/company.service';
@@ -186,5 +187,49 @@ describe('RecordReceiptComponent — the chosen customer\'s invoices only (ARC-0
 
     expect(ar.listOpenInvoices).toHaveBeenCalledWith('10', 'KIBO');
     expect(comp.allocationRows().map((r: any) => r.invoice.uid)).toEqual(['ARI9']);
+  });
+});
+
+describe('suggestAccountForTender — receipt lands in the right account (ARC-05)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  const acct = (uid: string, accountType: 'CASH' | 'BANK', name: string, extra: Partial<CashAccountOptionDto> = {}) =>
+    ({ id: uid, uid, code: uid, name, accountType, branchId: null, currency: 'TZS',
+       isDefault: false, inCurrentBranch: false, ...extra }) as CashAccountOptionDto;
+  const options = [
+    acct('CB1', 'CASH', 'Head office cash', { isDefault: true }),
+    acct('CB2', 'CASH', 'Arusha till', { inCurrentBranch: true }),
+    acct('BK1', 'BANK', 'CRDB current account'),
+    acct('MP1', 'BANK', 'M-Pesa Lipa till'),
+  ];
+
+  it('cash goes to this branch\'s cash account', () => {
+    expect(suggestAccountForTender('CASH', options)).toBe('CB2');
+  });
+  it('M-Pesa goes to the mobile-money account', () => {
+    expect(suggestAccountForTender('MOBILE_MONEY', options)).toBe('MP1');
+  });
+  it('bank transfer and cheque go to the bank, not the wallet', () => {
+    expect(suggestAccountForTender('BANK_TRANSFER', options)).toBe('BK1');
+    expect(suggestAccountForTender('CHEQUE', options)).toBe('BK1');
+  });
+  it('falls back to the company default when no account of the kind exists', () => {
+    expect(suggestAccountForTender('BANK_TRANSFER', [options[0]])).toBe('CB1');
+    expect(suggestAccountForTender('CASH', [])).toBe('');
+  });
+
+  it('the chosen account is sent with the receipt; a hand-picked account survives a tender change', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.accountOptions.set(options);
+    comp.onTenderChange('MOBILE_MONEY');
+    expect(comp.cashBankAccountUid()).toBe('MP1');
+    comp.onAccountChange('BK1');
+    comp.onTenderChange('CASH');
+    expect(comp.cashBankAccountUid()).toBe('BK1');
+    comp.submit();
+    expect(ar.recordReceipt.mock.calls[0][0].cashBankAccountUid).toBe('BK1');
   });
 });

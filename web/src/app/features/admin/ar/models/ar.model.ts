@@ -92,6 +92,11 @@ export interface RecordReceiptRequest {
   bankReference?: string;
   allocations: AllocationLineRequest[];
   /**
+   * Optional: the cash / bank / M-Pesa account the money landed in (ARC-05). Omitted = the
+   * company's default cash/bank account (ADR-0016 D-10).
+   */
+  cashBankAccountUid?: string;
+  /**
    * Optional WHT_ON_RECEIPT capture (ADR-0017 D-9).
    * When set, the cash DR is reduced by whtAmount and a WHT receivable leg is posted.
    */

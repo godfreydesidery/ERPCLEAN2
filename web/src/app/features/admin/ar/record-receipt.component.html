@@ -169,7 +169,7 @@
               <label class="form-label" for="tenderType">Tender Type</label>
               <select id="tenderType" name="tenderType" class="form-select"
                       [ngModel]="tenderType()"
-                      (ngModelChange)="tenderType.set($event)"
+                      (ngModelChange)="onTenderChange($event)"
                       [disabled]="submitting()">
                 <option value="CASH">Cash</option>
                 <option value="CHEQUE">Cheque</option>
@@ -179,8 +179,26 @@
               </select>
             </div>
 
+            <!-- Deposit-to account (ARC-05) — defaults from the tender, can be changed -->
+            @if (accountOptions().length > 0) {
+              <div class="col-sm-4">
+                <label class="form-label" for="cashBankAccount">Received Into</label>
+                <select id="cashBankAccount" name="cashBankAccount" class="form-select"
+                        aria-describedby="cashBankAccountHelp"
+                        [ngModel]="cashBankAccountUid()"
+                        (ngModelChange)="onAccountChange($event)"
+                        [disabled]="submitting()">
+                  <option value="">Company default account</option>
+                  @for (a of accountOptions(); track a.uid) {
+                    <option [value]="a.uid">{{ accountLabel(a) }}</option>
+                  }
+                </select>
+                <div id="cashBankAccountHelp" class="form-text">Cash drawer, bank or M-Pesa account the money went into.</div>
+              </div>
+            }
+
             <!-- Payment reference (optional) — kept on the receipt for tracing a disputed payment -->
-            <div class="col-sm-8">
+            <div [class]="accountOptions().length > 0 ? 'col-sm-4' : 'col-sm-8'">
               <label class="form-label" for="bankRef">
                 Payment Reference <span class="text-muted small">(optional)</span>
               </label>
