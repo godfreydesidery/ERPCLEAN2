@@ -3,6 +3,7 @@ package com.erp.modules.gl.service;
 import com.erp.modules.gl.domain.entity.FiscalPeriod;
 import com.erp.modules.gl.domain.enums.PeriodStatus;
 import com.erp.modules.gl.repository.FiscalPeriodRepository;
+import com.erp.platform.common.api.AccountingSetupException;
 import java.time.LocalDate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -28,7 +29,7 @@ public class FiscalPeriodResolver {
     @Transactional(propagation = Propagation.MANDATORY)
     public FiscalPeriod resolveOpen(Long companyId, LocalDate postingDate) {
         return periods.findOpenPeriodForDate(companyId, postingDate, PeriodStatus.OPEN)
-                .orElseThrow(() -> new IllegalStateException(
+                .orElseThrow(() -> new AccountingSetupException(
                         // BR-GL-03: posting date must fall within an open fiscal period
                         "There is no open fiscal period covering " + postingDate
                                 + ". Please ensure the fiscal year and period for this date"
