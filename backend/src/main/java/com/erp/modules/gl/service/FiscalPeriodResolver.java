@@ -90,7 +90,7 @@ public class FiscalPeriodResolver {
         String month = period.getName() != null && !period.getName().isBlank()
                 ? period.getName()
                 : period.getStartDate().format(MONTH);
-        String yearCode = years.findById(period.getFiscalYearId())
+        String yearCode = years.findByCompanyIdAndId(period.getCompanyId(), period.getFiscalYearId())
                 .map(FiscalYear::getYearCode)
                 .orElse(null);
         return yearCode != null

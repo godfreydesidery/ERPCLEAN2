@@ -116,7 +116,7 @@ class FiscalCalendarServiceImplTest {
         fy2026.setStatus(com.erp.modules.gl.domain.enums.PeriodStatus.CLOSED);
         FiscalPeriod december = closedPeriod();
         when(periods.findByUid("P12")).thenReturn(Optional.of(december));
-        when(years.findById(any())).thenReturn(Optional.of(fy2026));
+        when(years.findByCompanyIdAndId(anyLong(), any())).thenReturn(Optional.of(fy2026));
 
         assertThatThrownBy(() -> service.reopenPeriod("P12"))
                 .isInstanceOf(ConflictException.class)
@@ -130,7 +130,7 @@ class FiscalCalendarServiceImplTest {
         FiscalYear fy2026 = year("FY2026", LocalDate.of(2026, 1, 1));
         FiscalPeriod december = closedPeriod();
         when(periods.findByUid("P12")).thenReturn(Optional.of(december));
-        when(years.findById(any())).thenReturn(Optional.of(fy2026));
+        when(years.findByCompanyIdAndId(anyLong(), any())).thenReturn(Optional.of(fy2026));
 
         var dto = service.reopenPeriod("P12");
 

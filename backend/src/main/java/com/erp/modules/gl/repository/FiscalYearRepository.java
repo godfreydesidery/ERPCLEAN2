@@ -14,6 +14,9 @@ public interface FiscalYearRepository extends JpaRepository<FiscalYear, Long> {
 
     Optional<FiscalYear> findByCompanyIdAndYearCode(Long companyId, String yearCode);
 
+    /** Company-scoped by-id lookup (the tenant-scoping rule forbids a bare findById in services). */
+    Optional<FiscalYear> findByCompanyIdAndId(Long companyId, Long id);
+
     List<FiscalYear> findByCompanyIdOrderByStartDateDesc(Long companyId);
 
     /**

@@ -167,7 +167,9 @@ public class FiscalCalendarServiceImpl implements FiscalCalendarService {
         // ACC-15: a period of a CLOSED year stays closed. Reopening it alone would let postings land
         // in a year whose P&L was already rolled into Retained Earnings, while the year still reads
         // CLOSED. Reopening the year reverses the closing journal and reopens its periods properly.
-        FiscalYear year = years.findById(period.getFiscalYearId()).orElse(null);
+        FiscalYear year = years
+                .findByCompanyIdAndId(period.getCompanyId(), period.getFiscalYearId())
+                .orElse(null);
         if (year != null && year.getStatus() == PeriodStatus.CLOSED) {
             throw new ConflictException(
                     "This period belongs to fiscal year " + year.getYearCode() + ", which is"

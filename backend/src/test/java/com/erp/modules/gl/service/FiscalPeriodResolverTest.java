@@ -3,6 +3,7 @@ package com.erp.modules.gl.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -57,7 +58,7 @@ class FiscalPeriodResolverTest {
         when(periods.findAllCoveringDate(COMPANY, DATE)).thenReturn(List.of(october));
         FiscalYear fy = new FiscalYear(COMPANY, "FY2026", 1,
                 LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), null);
-        when(years.findById(any())).thenReturn(Optional.of(fy));
+        when(years.findByCompanyIdAndId(anyLong(), any())).thenReturn(Optional.of(fy));
 
         assertThatThrownBy(() -> resolver.resolveOpen(COMPANY, DATE))
                 .isInstanceOf(AccountingSetupException.class)
