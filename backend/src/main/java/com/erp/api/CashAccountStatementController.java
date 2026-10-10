@@ -97,7 +97,7 @@ public class CashAccountStatementController {
         CashBankAccountDto account = accountService.getByUid(uid);
         ExportLetterhead.Letterhead head = letterhead.forCompany(account.companyId());
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(statement, account, fromDate, toDate, head, ZonedDateTime.now()),
+                flattenStatement(statement, account, fromDate, toDate, head, letterhead.now(account.companyId())),
                 format));
     }
 

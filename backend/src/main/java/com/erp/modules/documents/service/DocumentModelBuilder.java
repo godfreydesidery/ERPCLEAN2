@@ -29,13 +29,15 @@ import com.erp.modules.sales.domain.dto.QuotationDto;
 import com.erp.modules.sales.domain.dto.QuotationLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,10 +55,12 @@ public class DocumentModelBuilder {
 
     private final ObjectMapper objectMapper;
     private final CompanyRepository companies;
+    private final CompanyCalendar calendar;
 
-    public DocumentModelBuilder(ObjectMapper objectMapper, CompanyRepository companies) {
+    public DocumentModelBuilder(ObjectMapper objectMapper, CompanyRepository companies, CompanyCalendar calendar) {
         this.objectMapper = objectMapper;
         this.companies = companies;
+        this.calendar  = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -74,7 +78,7 @@ public class DocumentModelBuilder {
 
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("Invoice No.", inv.invoiceNumber()));
-        if (inv.finalisedAt() != null) meta.add(new MetaPair("Date", inv.finalisedAt()));
+        if (inv.finalisedAt() != null) meta.add(new MetaPair("Date", when(inv.finalisedAt(), zoneFor(branding))));
         if (inv.customerName() != null) meta.add(new MetaPair("Customer", inv.customerName()));
         if (inv.currency() != null) meta.add(new MetaPair("Currency", inv.currency()));
         if (inv.agentName() != null) meta.add(new MetaPair("Agent", inv.agentName()));
@@ -101,7 +105,7 @@ public class DocumentModelBuilder {
         totals.add(new TotalRow("Gross Total", inv.grossTotalAmount(), true));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                taxRows, totals, inv.currency(), Instant.now().toString(),
+                taxRows, totals, inv.currency(), printedNow(branding),
                 isVoid ? "VOID" : null, Layout.plain());
     }
 
@@ -120,8 +124,8 @@ public class DocumentModelBuilder {
 
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("PO No.", po.orderNumber()));
-        if (po.orderedAt() != null) meta.add(new MetaPair("Date", po.orderedAt().toString()));
-        if (po.expectedDate() != null) meta.add(new MetaPair("Expected", po.expectedDate().toString()));
+        if (po.orderedAt() != null) meta.add(new MetaPair("Date", when(po.orderedAt(), zoneFor(branding))));
+        if (po.expectedDate() != null) meta.add(new MetaPair("Expected", when(po.expectedDate(), zoneFor(branding))));
         if (po.supplierName() != null) meta.add(new MetaPair("Supplier", po.supplierName()));
         if (po.currency() != null) meta.add(new MetaPair("Currency", po.currency()));
         if (po.notes() != null) meta.add(new MetaPair("Notes", po.notes()));
@@ -143,7 +147,7 @@ public class DocumentModelBuilder {
         }
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), totals, po.currency(), Instant.now().toString(),
+                List.of(), totals, po.currency(), printedNow(branding),
                 isVoid ? "VOID" : null, Layout.plain());
     }
 
@@ -178,7 +182,7 @@ public class DocumentModelBuilder {
 
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("G.R.N. No.", gr.receiptNumber()));
-        if (gr.receivedAt() != null) meta.add(new MetaPair("GRN Date", gr.receivedAt().toString()));
+        if (gr.receivedAt() != null) meta.add(new MetaPair("GRN Date", when(gr.receivedAt(), zoneFor(branding))));
         if (gr.purchaseOrderNumber() != null) meta.add(new MetaPair("Order No.", gr.purchaseOrderNumber()));
         // The renderer never reads model.currency(), so a priced document must state its currency as
         // a meta pair or the printed amounts are unlabelled figures.
@@ -243,12 +247,12 @@ public class DocumentModelBuilder {
                         : "Prepared By",
                 "Checked By", "Auth. By", "Accounts", "Security");
 
-        Layout layout = new Layout(true, signatories, printFooter(gr, printedByName));
+        Layout layout = new Layout(true, signatories, printFooter(gr, printedByName, branding));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
                 taxRows, totals,
                 gr.currency(),
-                Instant.now().toString(), isVoid ? "VOID" : null, layout);
+                printedNow(branding), isVoid ? "VOID" : null, layout);
     }
 
     /**
@@ -256,8 +260,11 @@ public class DocumentModelBuilder {
      * gets reprinted; without it, two copies showing different figures (because a price list moved
      * between prints) are indistinguishable.
      */
-    private static String printFooter(GoodsReceiptPrintDto gr, String printedByName) {
-        StringBuilder sb = new StringBuilder("Printed On: ").append(Instant.now());
+    private String printFooter(GoodsReceiptPrintDto gr, String printedByName,
+                               DocumentBranding branding) {
+        ZonedDateTime now = ZonedDateTime.now(zoneFor(branding));
+        StringBuilder sb = new StringBuilder("Printed On: ").append(PRINT_DATE.format(now))
+                .append("    Printed At: ").append(PRINT_TIME.format(now));
         if (printedByName != null && !printedByName.isBlank()) {
             sb.append("    Printed By: ").append(printedByName);
         }
@@ -280,7 +287,6 @@ public class DocumentModelBuilder {
     /** Title printed on the purchase return. Fixed: there is no DEBIT_NOTE template row to read. */
     public static final String PURCHASE_RETURN_TITLE = "PURCHASE RETURN / DEBIT NOTE";
 
-    private static final String DEFAULT_ZONE = "Africa/Dar_es_Salaam";
     private static final DateTimeFormatter PRINT_DATE =
             DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter PRINT_TIME =
@@ -353,10 +359,51 @@ public class DocumentModelBuilder {
     }
 
     private static ZoneId zoneOrDefault(String timeZone) {
+        return BusinessZone.parse(timeZone);
+    }
+
+    // -------------------------------------------------------------------------
+    // Printed dates — the company's zone, dd-MMM-yyyy (owner ruling 2026-10-10: store UTC,
+    // display in the time zone; never a raw ISO "2026-10-10T03:21:19Z" on paper).
+    // -------------------------------------------------------------------------
+
+    /** The zone of the company whose branding heads the document; Dar es Salaam when unknown. */
+    private ZoneId zoneFor(DocumentBranding branding) {
+        return calendar.zoneOf(branding != null ? branding.getCompanyId() : null);
+    }
+
+    /** "Generated" stamp: now, in the company's zone. */
+    private String printedNow(DocumentBranding branding) {
+        return BusinessZone.formatDateTime(ZonedDateTime.now(zoneFor(branding)));
+    }
+
+    /**
+     * A document date for print: an instant (or its ISO string, as some DTOs carry it) becomes
+     * {@code dd-MMM-yyyy HH:mm} in {@code zone}; a calendar date becomes {@code dd-MMM-yyyy}.
+     * Anything unparseable prints as given rather than failing the document.
+     */
+    static String when(Object value, ZoneId zone) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof Instant i) {
+            return BusinessZone.formatDateTime(i, zone);
+        }
+        if (value instanceof java.time.OffsetDateTime o) {
+            return BusinessZone.formatDateTime(o.toInstant(), zone);
+        }
+        if (value instanceof java.time.LocalDate d) {
+            return PRINT_DATE.format(d);
+        }
+        String s = value.toString();
         try {
-            return ZoneId.of(timeZone != null && !timeZone.isBlank() ? timeZone : DEFAULT_ZONE);
-        } catch (DateTimeException e) {
-            return ZoneId.of(DEFAULT_ZONE);
+            return BusinessZone.formatDateTime(Instant.parse(s), zone);
+        } catch (java.time.format.DateTimeParseException notAnInstant) {
+            try {
+                return PRINT_DATE.format(java.time.LocalDate.parse(s));
+            } catch (java.time.format.DateTimeParseException notADate) {
+                return s;
+            }
         }
     }
 
@@ -372,7 +419,7 @@ public class DocumentModelBuilder {
 
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("Delivery No.", del.deliveryNumber()));
-        if (del.deliveryDate() != null) meta.add(new MetaPair("Date", del.deliveryDate().toString()));
+        if (del.deliveryDate() != null) meta.add(new MetaPair("Date", when(del.deliveryDate(), zoneFor(branding))));
         if (del.salesOrderUid() != null) meta.add(new MetaPair("Sales Order", del.salesOrderUid()));
         if (del.notes() != null) meta.add(new MetaPair("Notes", del.notes()));
 
@@ -390,7 +437,7 @@ public class DocumentModelBuilder {
         }
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), List.of(), null, Instant.now().toString(), null, Layout.plain());
+                List.of(), List.of(), null, printedNow(branding), null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
@@ -404,7 +451,7 @@ public class DocumentModelBuilder {
 
         List<MetaPair> meta = new ArrayList<>();
         meta.add(new MetaPair("Credit Note No.", cn.creditNoteNumber()));
-        if (cn.noteDate() != null) meta.add(new MetaPair("Date", cn.noteDate().toString()));
+        if (cn.noteDate() != null) meta.add(new MetaPair("Date", when(cn.noteDate(), zoneFor(branding))));
         if (cn.reason() != null) meta.add(new MetaPair("Reason", cn.reason()));
         if (cn.currency() != null) meta.add(new MetaPair("Currency", cn.currency()));
 
@@ -423,7 +470,7 @@ public class DocumentModelBuilder {
         totals.add(new TotalRow("Total Credit", cn.amount(), true));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                List.of(), totals, cn.currency(), Instant.now().toString(), null, Layout.plain());
+                List.of(), totals, cn.currency(), printedNow(branding), null, Layout.plain());
     }
 
     // -------------------------------------------------------------------------
@@ -460,8 +507,8 @@ public class DocumentModelBuilder {
         // A DRAFT quote has no number yet, and the render service refuses to print one — but the
         // builder still must not print the literal "null" if it is ever called with one.
         if (q.quoteNumber() != null) meta.add(new MetaPair("Document No.", q.quoteNumber()));
-        if (q.quoteDate()    != null) meta.add(new MetaPair("Date", q.quoteDate().toString()));
-        if (q.validUntil()   != null) meta.add(new MetaPair("Valid Until", q.validUntil().toString()));
+        if (q.quoteDate()    != null) meta.add(new MetaPair("Date", when(q.quoteDate(), zoneFor(branding))));
+        if (q.validUntil()   != null) meta.add(new MetaPair("Valid Until", when(q.validUntil(), zoneFor(branding))));
         if (q.customerName() != null) meta.add(new MetaPair("Customer", q.customerName()));
         if (q.customerPoNumber() != null) meta.add(new MetaPair("Your Ref.", q.customerPoNumber()));
         if (q.currency()     != null) meta.add(new MetaPair("Currency", q.currency()));
@@ -485,7 +532,7 @@ public class DocumentModelBuilder {
         totals.add(new TotalRow("Gross Total", q.grossTotalAmount(), true));
 
         return new DocumentRenderModel(title, brand, meta, party, docLines,
-                quotationTaxRows(lines), totals, q.currency(), Instant.now().toString(),
+                quotationTaxRows(lines), totals, q.currency(), printedNow(branding),
                 quotationStamp(q.status()), Layout.plain());
     }
 
@@ -542,7 +589,7 @@ public class DocumentModelBuilder {
                 // An invoice in another currency says so — its amount is not in the base total.
                 boolean foreign = inv.currency() != null && !inv.currency().equals(stmt.currency());
                 rows.add(Row.line(
-                        inv.documentNo() + " due " + inv.dueDate()
+                        inv.documentNo() + " due " + when(inv.dueDate(), zoneFor(branding))
                                 + (foreign ? " (" + inv.currency() + ")" : ""),
                         inv.outstandingAmount(),
                         null));
@@ -561,9 +608,9 @@ public class DocumentModelBuilder {
         String companyName = branding != null ? branding.getDisplayName() : "";
         return new StatementRenderModel(
                 title, companyName, stmt.currency(),
-                "As at " + stmt.asAt(),
+                "As at " + when(stmt.asAt(), zoneFor(branding)),
                 null,
-                Instant.now().toString(),
+                printedNow(branding),
                 rows);
     }
 

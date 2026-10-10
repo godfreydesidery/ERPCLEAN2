@@ -23,6 +23,7 @@ import com.erp.modules.reporting.export.TabularExporter;
 import com.erp.modules.reporting.export.TabularRenderModel;
 import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
@@ -56,19 +57,22 @@ public class ApStatementController {
     private final ApSupplierLedgerQuery ledgerQuery;
     private final TabularExporter       exporter;
     private final ExportLetterhead      letterhead;
+    private final CompanyCalendar calendar;
 
     public ApStatementController(ApBalanceService balanceService,
                                   ApAgeingQuery ageingQuery,
                                   ApReconciliationQuery reconciliationQuery,
                                   ApSupplierLedgerQuery ledgerQuery,
                                   TabularExporter exporter,
-                                  ExportLetterhead letterhead) {
+                                  ExportLetterhead letterhead,
+                                  CompanyCalendar calendar) {
         this.balanceService      = balanceService;
         this.ageingQuery         = ageingQuery;
         this.reconciliationQuery = reconciliationQuery;
         this.ledgerQuery         = ledgerQuery;
         this.exporter            = exporter;
         this.letterhead          = letterhead;
+        this.calendar            = calendar;
     }
 
     /** Current outstanding balance for a supplier. */
@@ -96,7 +100,7 @@ public class ApStatementController {
         boolean named = supplierId != null || (supplierUid != null && !supplierUid.isBlank());
         return ageingQuery.ageing(companyId,
                 named ? supplierIdOf(companyId, supplierId, supplierUid) : null,
-                asAt != null ? asAt : LocalDate.now());
+                asAt != null ? asAt : calendar.today(companyId));
     }
 
     /**
@@ -109,7 +113,7 @@ public class ApStatementController {
             @RequestParam Long companyId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
-        return ageingQuery.supplierAgeing(companyId, asAt != null ? asAt : LocalDate.now());
+        return ageingQuery.supplierAgeing(companyId, asAt != null ? asAt : calendar.today(companyId));
     }
 
     /** The creditors ageing as a document. Same gate as the screen plus {@code REPORT.EXPORT}. */
@@ -120,12 +124,12 @@ public class ApStatementController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        LocalDate at = asAt != null ? asAt : LocalDate.now();
+        LocalDate at = asAt != null ? asAt : calendar.today(companyId);
         // The read runs (and passes its tenant check) BEFORE the letterhead is loaded.
         List<ApSupplierAgeingRowDto> rows = ageingQuery.supplierAgeing(companyId, at);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenSupplierAgeing(rows, at, head, ZonedDateTime.now()), format));
+                flattenSupplierAgeing(rows, at, head, letterhead.now(companyId)), format));
     }
 
     /**
@@ -141,12 +145,12 @@ public class ApStatementController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        LocalDate at = asAt != null ? asAt : LocalDate.now();
+        LocalDate at = asAt != null ? asAt : calendar.today(companyId);
         ApSupplierRefDto supplier = ledgerQuery.resolveSupplier(companyId, supplierId, supplierUid);
         List<ApAgeingRowDto> rows = ageingQuery.ageing(companyId, supplier.id(), at);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenAgeing(rows, supplier, at, head, ZonedDateTime.now()), format));
+                flattenAgeing(rows, supplier, at, head, letterhead.now(companyId)), format));
     }
 
     /**
@@ -177,7 +181,7 @@ public class ApStatementController {
                 supplierUid, fromDate, toDate != null ? toDate : asAt, currency);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(sections, head, ZonedDateTime.now()), format));
+                flattenStatement(sections, head, letterhead.now(companyId)), format));
     }
 
     /** Sub-ledger vs GL 2100 reconciliation. */

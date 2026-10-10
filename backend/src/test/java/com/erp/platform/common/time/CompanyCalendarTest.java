@@ -96,4 +96,13 @@ class CompanyCalendarTest {
                 .isEqualTo("01-Nov-2026 00:30");
         assertThat(BusinessZone.formatDate(null, BusinessZone.DEFAULT)).isEmpty();
     }
+
+    @Test
+    void printedStamp_turnsARawIsoInstantIntoLocalTime_andLeavesFormattedTextAlone() {
+        // LSF-15: the invoice PDF said "2026-10-10T03:21:19.624913Z" when the shop clock said 06:21.
+        assertThat(PrintedStamp.of("2026-10-10T03:21:19.624913Z")).isEqualTo("10-Oct-2026 06:21");
+        assertThat(PrintedStamp.of("2026-10-10T06:21:19+03:00")).isEqualTo("10-Oct-2026 06:21");
+        assertThat(PrintedStamp.of("10-Oct-2026 06:21")).isEqualTo("10-Oct-2026 06:21");
+        assertThat(PrintedStamp.of(null)).isEmpty();
+    }
 }

@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class PurchaseReturnNoteLayoutTest {
 
     private final DocumentModelBuilder builder =
-            new DocumentModelBuilder(new ObjectMapper(), org.mockito.Mockito.mock(CompanyRepository.class));
+            new DocumentModelBuilder(new ObjectMapper(), org.mockito.Mockito.mock(CompanyRepository.class), com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     private final DocumentPdfRenderer renderer = new DocumentPdfRenderer();
 
     private static final Instant NOW = Instant.parse("2026-10-10T21:15:00Z");

@@ -1,5 +1,6 @@
 package com.erp.platform.common.time;
 
+import com.erp.platform.security.RequestContext;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,6 +32,13 @@ public class CompanyCalendar {
 
     private static final long CACHE_TTL_MILLIS = 60_000L;
 
+    /**
+     * The application's calendar, for the few display-only call sites that are not Spring beans
+     * (the export renderers' "Generated" line — see {@link PrintedStamp}). Null in plain unit
+     * tests, where the house zone is used.
+     */
+    private static volatile CompanyCalendar shared;
+
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final ZoneId fixedZone;
@@ -41,6 +49,7 @@ public class CompanyCalendar {
         this.jdbc      = jdbc;
         this.clock     = clock;
         this.fixedZone = null;
+        shared         = this;
     }
 
     private CompanyCalendar(ZoneId fixedZone, Clock clock) {
@@ -103,6 +112,23 @@ public class CompanyCalendar {
     /** Exclusive upper bound of {@code date} (start of the next day) in the company's zone. */
     public Instant endOfDayExclusive(Long companyId, LocalDate date) {
         return BusinessZone.endOfDayExclusive(date, zoneOf(companyId));
+    }
+
+    /**
+     * The zone of the company the current request acts in; the house zone when there is no request
+     * principal or no application calendar. Display only — never use it for a posting date.
+     */
+    public static ZoneId zoneOfCurrentRequest() {
+        RequestContext.Principal principal = RequestContext.get();
+        CompanyCalendar calendar = shared;
+        if (principal == null || calendar == null) {
+            return BusinessZone.DEFAULT;
+        }
+        try {
+            return calendar.zoneOf(principal.companyId());
+        } catch (RuntimeException e) {
+            return BusinessZone.DEFAULT;
+        }
     }
 
     private record Cached(ZoneId zone, long expiresAt) {}

@@ -97,7 +97,7 @@ public class VatReturnController {
         VatReturnDto dto = service.getByUid(uid);
         ExportLetterhead.Letterhead head = letterhead.forCompany(dto.companyId());
         return ExportLetterhead.download(exporter.export(
-                flatten(dto, head, ZonedDateTime.now()), format));
+                flatten(dto, head, letterhead.now(dto.companyId())), format));
     }
 
     /** Paged list by company. */

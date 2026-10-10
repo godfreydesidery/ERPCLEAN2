@@ -20,6 +20,7 @@ import com.erp.modules.reporting.export.TabularExporter;
 import com.erp.modules.reporting.export.TabularRenderModel;
 import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
@@ -53,15 +54,18 @@ public class ArStatementController {
     private final ArCustomerLedgerQuery ledgerQuery;
     private final TabularExporter       exporter;
     private final ExportLetterhead      letterhead;
+    private final CompanyCalendar calendar;
 
     public ArStatementController(ArAgeingQuery ageingQuery, ArBalanceService balanceService,
                                  ArCustomerLedgerQuery ledgerQuery, TabularExporter exporter,
-                                 ExportLetterhead letterhead) {
+                                 ExportLetterhead letterhead,
+                                 CompanyCalendar calendar) {
         this.ageingQuery    = ageingQuery;
         this.balanceService = balanceService;
         this.ledgerQuery    = ledgerQuery;
         this.exporter       = exporter;
         this.letterhead     = letterhead;
+        this.calendar       = calendar;
     }
 
     /**
@@ -77,7 +81,7 @@ public class ArStatementController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
         return ageingQuery.statement(companyId, customerIdOf(companyId, customerId, customerUid),
-                asAt != null ? asAt : LocalDate.now());
+                asAt != null ? asAt : calendar.today(companyId));
     }
 
     /**
@@ -108,7 +112,7 @@ public class ArStatementController {
                 customerUid, fromDate, toDate != null ? toDate : asAt, currency);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(sections, head, ZonedDateTime.now()), format));
+                flattenStatement(sections, head, letterhead.now(companyId)), format));
     }
 
     /**
@@ -124,7 +128,7 @@ public class ArStatementController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
         return ageingQuery.ageing(companyId, customerId,
-                asAt != null ? asAt : LocalDate.now());
+                asAt != null ? asAt : calendar.today(companyId));
     }
 
     /**
@@ -138,7 +142,7 @@ public class ArStatementController {
             @RequestParam Long companyId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt) {
-        return ageingQuery.customerAgeing(companyId, asAt != null ? asAt : LocalDate.now());
+        return ageingQuery.customerAgeing(companyId, asAt != null ? asAt : calendar.today(companyId));
     }
 
     /**
@@ -152,12 +156,12 @@ public class ArStatementController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asAt,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        LocalDate at = asAt != null ? asAt : LocalDate.now();
+        LocalDate at = asAt != null ? asAt : calendar.today(companyId);
         // The read runs (and passes its tenant check) BEFORE the letterhead is loaded.
         List<ArCustomerAgeingRowDto> rows = ageingQuery.customerAgeing(companyId, at);
         ExportLetterhead.Letterhead head = letterhead.forCompany(companyId);
         return ExportLetterhead.download(exporter.export(
-                flattenAgeing(rows, at, head, ZonedDateTime.now()), format));
+                flattenAgeing(rows, at, head, letterhead.now(companyId)), format));
     }
 
     /**

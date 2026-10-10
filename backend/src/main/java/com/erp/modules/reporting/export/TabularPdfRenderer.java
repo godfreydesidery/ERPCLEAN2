@@ -1,5 +1,6 @@
 package com.erp.modules.reporting.export;
 
+import com.erp.platform.common.time.PrintedStamp;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -42,7 +43,7 @@ public class TabularPdfRenderer {
                 doc.add(new Paragraph(line != null ? line : "", FONT_HEADER));
             }
         }
-        doc.add(new Paragraph("Generated: " + model.generatedAt(), FONT_HEADER));
+        doc.add(new Paragraph("Generated: " + PrintedStamp.of(model.generatedAt()), FONT_HEADER));
         doc.add(new Paragraph(" "));
 
         int columnCount = model.columns().size();

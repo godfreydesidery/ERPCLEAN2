@@ -1,5 +1,6 @@
 package com.erp.modules.reporting.export;
 
+import com.erp.platform.common.time.PrintedStamp;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -24,7 +25,7 @@ public class TabularCsvRenderer {
                     w.println(text(line));
                 }
             }
-            w.println(join(text("Generated"), text(model.generatedAt())));
+            w.println(join(text("Generated"), text(PrintedStamp.of(model.generatedAt()))));
             w.println();
 
             w.println(joinAll(model.columns().stream().map(TabularRenderModel.Column::header).toList()));

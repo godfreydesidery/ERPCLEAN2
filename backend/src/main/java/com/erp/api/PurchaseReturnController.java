@@ -18,9 +18,9 @@ import com.erp.modules.reporting.export.TabularRenderModel.Align;
 import com.erp.modules.reporting.export.TabularRenderModel.Column;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
+import com.erp.platform.common.time.CompanyCalendar;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,15 +49,18 @@ public class PurchaseReturnController {
     private final DocumentRenderService documents;
     private final TabularExporter       exporter;
     private final ExportLetterhead      letterhead;
+    private final CompanyCalendar calendar;
 
     public PurchaseReturnController(PurchaseReturnService service,
                                     DocumentRenderService documents,
                                     TabularExporter exporter,
-                                    ExportLetterhead letterhead) {
+                                    ExportLetterhead letterhead,
+                                    CompanyCalendar calendar) {
         this.service    = service;
         this.documents  = documents;
         this.exporter   = exporter;
         this.letterhead = letterhead;
+        this.calendar   = calendar;
     }
 
     @PostMapping
@@ -114,7 +117,7 @@ public class PurchaseReturnController {
         }
         ExportLetterhead.Letterhead head = letterhead.forCompany(pr.companyId());
         return ExportLetterhead.download(exporter.export(
-                flatten(pr, head, ZonedDateTime.now(zoneOf(pr))), format));
+                flatten(pr, head, letterhead.now(pr.companyId())), format));
     }
 
     // -------------------------------------------------------------------------
@@ -197,13 +200,5 @@ public class PurchaseReturnController {
     private static String fileStem(PurchaseReturnPrintDto pr) {
         String number = pr.returnNumber() != null ? pr.returnNumber() : pr.uid();
         return "purchase-return-" + number.toLowerCase().replaceAll("[^a-z0-9]+", "-");
-    }
-
-    private static ZoneId zoneOf(PurchaseReturnPrintDto pr) {
-        try {
-            return pr.timeZone() != null ? ZoneId.of(pr.timeZone()) : ZoneId.systemDefault();
-        } catch (RuntimeException e) {
-            return ZoneId.systemDefault();
-        }
     }
 }
