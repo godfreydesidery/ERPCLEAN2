@@ -50,7 +50,7 @@ public class ProfitabilityReportController {
     }
 
     @GetMapping
-    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW')")
+    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('INVENTORY.VALUATION.VIEW')")
     public ProfitabilityReportDto profitability(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
@@ -63,7 +63,7 @@ public class ProfitabilityReportController {
      * as {@code REPORT.EXPORT} — it must never be reachable by a caller the screen itself refuses.
      */
     @GetMapping("/export")
-    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('INVENTORY.VALUATION.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportProfitability(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,

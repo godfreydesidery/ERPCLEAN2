@@ -329,7 +329,8 @@ export class ShellComponent {
           route: '/admin/reports/profitability',
           icon: 'bi-graph-up-arrow',
           available: true,
-          permission: 'SALES.INVOICE.VIEW',
+          // Cost data: also INVENTORY.VALUATION.VIEW (ADM-14), equal to the route guard.
+          allPermissions: ['SALES.INVOICE.VIEW', 'INVENTORY.VALUATION.VIEW'],
           keywords: ['profit', 'gross profit', 'margin', 'cost of sales', 'net sales', 'vat amount'],
         },
       ],
