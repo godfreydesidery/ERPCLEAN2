@@ -308,7 +308,9 @@ export class ArInvoicesListComponent {
 
     const request: RaiseCreditNoteRequest = {
       companyUid: company.uid,
-      customerUid: String(inv.customerId),
+      // The customer's UID (never the numeric id). Blank on an older server: the server then
+      // takes the customer from the invoice itself.
+      customerUid: String(inv.customerUid ?? ''),
       arInvoiceUid: inv.uid,
       noteDate: date,
       netAmount: net,

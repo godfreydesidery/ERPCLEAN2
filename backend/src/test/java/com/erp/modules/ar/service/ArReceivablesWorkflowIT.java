@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.erp.modules.ar.domain.dto.ArInvoiceDto;
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
+import com.erp.modules.ar.domain.dto.RaiseCreditNoteRequest;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest;
 import com.erp.modules.ar.domain.dto.SetOpeningBalanceRequest;
 import com.erp.modules.ar.domain.enums.ArInvoiceStatus;
@@ -48,6 +49,7 @@ class ArReceivablesWorkflowIT extends PostgresIntegrationTest {
     @Autowired private ArReceiptService receiptService;
     @Autowired private ArInvoiceService invoiceService;
     @Autowired private ArOpeningBalanceService openingBalanceService;
+    @Autowired private ArCreditNoteService creditNoteService;
     @Autowired private ArGlSeeder arGlSeeder;
     @Autowired private TaxRateSeeder taxRateSeeder;
     @Autowired private CustomerService customerService;
@@ -190,6 +192,29 @@ class ArReceivablesWorkflowIT extends PostgresIntegrationTest {
 
         assertThat(rows).extracting(ArReceiptDto::uid).containsExactly(kibo.uid());
         assertThat(rows.get(0).customerName()).isEqualTo("Kibo Bar");
+    }
+
+    // ── ARC-03: credit note from the invoice row ──────────────────────────────
+
+    @Test
+    void creditNote_againstAnInvoice_takesTheCustomerFromTheInvoice() {
+        ArInvoiceDto inv = opening(kiboUid, "1000", LocalDate.now().minusDays(2));
+
+        creditNoteService.raise(new RaiseCreditNoteRequest(companyUid, "", inv.uid(),
+                LocalDate.now(), new BigDecimal("200"), BigDecimal.ZERO, TZS, "2 crates returned"));
+
+        assertThat(invoiceService.getByUid(inv.uid()).outstandingAmount())
+                .isEqualByComparingTo("800");
+    }
+
+    @Test
+    void creditNote_namingAnotherCustomer_isStillRefused() {
+        ArInvoiceDto inv = opening(kiboUid, "1000", LocalDate.now().minusDays(2));
+        RaiseCreditNoteRequest wrongCustomer = new RaiseCreditNoteRequest(companyUid, mamboUid,
+                inv.uid(), LocalDate.now(), new BigDecimal("200"), BigDecimal.ZERO, TZS, "wrong");
+
+        assertThatThrownBy(() -> creditNoteService.raise(wrongCustomer))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
