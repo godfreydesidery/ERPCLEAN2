@@ -43,25 +43,25 @@ public class GLConfigResolver {
         GlConfig config = configs.findByCompanyIdAndConfigKey(companyId, key)
                 .orElseThrow(() -> new AccountingSetupException(
                         "No account is mapped for " + describe(key) + " postings. Map an account"
-                                + " to it in the General Ledger account mappings, then try again."));
+                                + " to it under General Ledger, Posting Accounts, then try again."));
 
         ChartOfAccount account = accounts.findById(config.getAccountId())
                 .orElseThrow(() -> new AccountingSetupException(
                         "The account mapped for " + describe(key) + " postings no longer exists."
-                                + " Choose another account in the General Ledger account mappings."));
+                                + " Choose another account under General Ledger, Posting Accounts."));
 
         if (!account.isActive()) {
             throw new AccountingSetupException(
                     "Account " + account.getAccountCode() + " is mapped for " + describe(key)
                             + " postings but is inactive. Activate it, or map an active account"
-                            + " in the General Ledger account mappings.");
+                            + " under General Ledger, Posting Accounts.");
         }
         return account;
     }
 
     /**
      * The posting role as an accountant reads it: "Stock Adjustment (STOCK_ADJUSTMENT)". The key is
-     * kept in brackets because that is what the account-mappings list shows.
+     * kept in brackets because that is what the Posting Accounts screen shows.
      */
     static String describe(GlConfigKey key) {
         StringBuilder label = new StringBuilder();
