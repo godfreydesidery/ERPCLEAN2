@@ -41,6 +41,26 @@ only with the owner's OK.
 | `fix/report-scope-margin` | RPT-06/LRB-06 (staff see their branches), ADM-14 (cost/margin need INVENTORY.VALUATION.VIEW), RPT-08, RPT-05 on sales exports | RPT-05 headers on other exports, OrbixHQ scope label, branch picker list for branch-limited users |
 | Seed grants (owner-approved) | BRANCH_MANAGER +7, ACCOUNTANT +5, SALES_MANAGER REPORT.EXPORT + INVENTORY.VALUATION.VIEW, PRODUCTION_MANAGER STOCK.LOCATION.VIEW | — |
 
+### Wave 2 (2026-10-10, no schema) — on `develop` 53650e48
+
+Green: 1,804 unit + 1,360 integration tests, 229 web spec files, production build, migration gate.
+
+| Package (branch) | Fixed | Not done (carried to wave 3) |
+|---|---|---|
+| `fix/w2-units-and-stock` | STK-08/OPN-01 (packs on adjust, count, opening), PRD-07/LSF-09 (valued opening stock), toolbar adjust location, STK-10/LBO-16, STK-13, STK-19, PUR-08, STK-06 in-transit column, ADM-29 menu entry | Packs on PO receipts, adjustment register |
+| `fix/w2-ap` | AP-07, AP-10, AP-11/RPT-03/LBO-14/LBO-15, AP-12, AP-16, PUR-04/LBO-04 (+ bill line foreign-account security fix) | BillMatch FX stamp dropped on saved USD bills |
+| `fix/w2-ar-cash` | ARC-05, ARC-06, ARC-12/LBO-17, ARC-15, ARC-17, ARC-20, ARC-21, ARC-29 | ARC-04 receipt reversal (owner approved new code `AR.RECEIPT.REVERSE`) |
+| `fix/w2-sales-reports` | RPT-01, RPT-02, RPT-16, SAL-10, SAL-12, SAL-13, SAL-28, RPT-05 (all exports) | — |
+| `fix/w2-products-ux` | PRD-06/LSF-03, PRD-03/04/05/33, PRD-08, PRD-12/17, ADM-02 (self password change + forced change), LUI-04 + ADM-28 sweeps | PRD-09 branch price not yet charged |
+| `fix/w2-pos` | Customer pricing on till + web POS, POS-02/04/05/06/07/14/15/17/18 | POS version bump + release; refuse unapproved payouts once tills upgraded |
+| `fix/w2-purchase-return-print` | Kilimanjaro sheet row 9: purchase return print + Excel/CSV | — |
+| Seed grants | STOREKEEPER INVENTORY.OPENING.SET | — |
+
+**Wave-2 deploy cautions:** deploy the server together with the new POS build — 1.5.4 tills lose the
+Refund payout for non-supervisors and show "Expected cash 0.00" to cashiers until upgraded; admin-
+created/reset users must change password at next web sign-in; reports now show VAT-inclusive
+discounts, base-unit quantities and current product names; more items will show as Low stock.
+
 **Deploy cautions:** the deployed till shows walk-in prices but the server now charges account
 customers their own price; the default till can no longer be cash-counted; stock stranded in
 TRANSIT before the 2026-09-29 fix is no longer sellable; check in-flight transfers; purchase-return
