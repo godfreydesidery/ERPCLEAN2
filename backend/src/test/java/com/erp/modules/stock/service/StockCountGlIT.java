@@ -195,6 +195,42 @@ class StockCountGlIT extends PostgresIntegrationTest {
         }
     }
 
+    // =========================================================================
+    // STK-02
+    // =========================================================================
+
+    @Test
+    void stockThatLeavesAfterCounting_isNotAddedBackWhenTheCountPosts() {
+        ProductDto p = stockableProduct("Count-C");
+        receive("RCPT-SC-C", p, "10", "500", 3L);
+
+        setCtx();
+        StockCountDto count = stockCountService.create(new CreateStockCountRequest(
+                defaultLocationUid(), LocalDate.now(), "FULL", null, null));
+        // 9am: the shelf holds all 10.
+        stockCountService.enterCount(count.uid(), new EnterCountRequest(List.of(
+                new EnterCountRequest.LineEntry(lineFor(count, p).id(), BigDecimal.TEN, null))));
+
+        // During the day 3 leave the shelf (the ledger records them after the count).
+        setCtx();
+        stockService.adjust(new AdjustStockRequest(
+                p.uid(), new BigDecimal("-3"), AdjustmentReason.DAMAGE, "after counting",
+                null, null));
+        BigDecimal inventoryBefore = inventoryBalance();
+
+        // 6pm: post the count.
+        StockCountDto posted = stockCountService.post(count.uid(), LocalDate.now());
+
+        // The count agreed with the system when it was taken: no variance, no adjustment.
+        // Before STK-02 the post compared 10 with the live 7 and put the 3 back.
+        assertThat(lineFor(posted, p).varianceQty()).isEqualByComparingTo("0");
+        BigDecimal onHand = stockOnHandRepo.findByCompanyIdAndProductId(company.getId(), p.id())
+                .stream().map(StockOnHand::getQuantity).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(onHand).isEqualByComparingTo("7");
+        assertThat(posted.varianceGlEntryUid()).isNull();
+        assertThat(inventoryBalance()).isEqualByComparingTo(inventoryBefore);
+    }
+
     private static List<String> repairQueries() {
         try {
             String text = java.nio.file.Files.readString(

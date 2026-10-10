@@ -19,6 +19,7 @@ import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockCountLineRepository;
 import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.domain.MasterStatus;
@@ -60,6 +61,7 @@ class StockCountServiceImplTest {
     private StockCountRepository     counts;
     private StockCountLineRepository countLines;
     private StockOnHandRepository    onHands;
+    private StockMovementRepository  movements;
     private StockPostingService      posting;
     private InventoryValuationService valuation;
     private InventoryGlPoster        glPoster;
@@ -77,6 +79,7 @@ class StockCountServiceImplTest {
         counts          = mock(StockCountRepository.class);
         countLines      = mock(StockCountLineRepository.class);
         onHands         = mock(StockOnHandRepository.class);
+        movements       = mock(StockMovementRepository.class);
         posting         = mock(StockPostingService.class);
         valuation       = mock(InventoryValuationService.class);
         glPoster        = mock(InventoryGlPoster.class);
@@ -87,7 +90,7 @@ class StockCountServiceImplTest {
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
 
-        service = new StockCountServiceImpl(counts, countLines, onHands, posting, valuation,
+        service = new StockCountServiceImpl(counts, countLines, onHands, movements, posting, valuation,
                 glPoster, productService, locationResolver, numberGenerator, outbox,
                 scopeGuard, audit);
 
@@ -333,6 +336,58 @@ class StockCountServiceImplTest {
 
         assertThat(shortLine.getVarianceValue()).isEqualByComparingTo("-1000");
         assertThat(overLine.getVarianceValue()).isEqualByComparingTo("300");
+    }
+
+    // -------------------------------------------------------------------------
+    // STK-02 — variance is measured against the system qty when the line was counted
+    // -------------------------------------------------------------------------
+
+    @Test
+    void post_saleAfterCounting_isNotReversedIntoPhantomStock() {
+        StockCount count = countInCounting(206L, "SC-UID-0008");
+        StockCountLine line = countLine(306L, count.getId());          // snapshot 10
+        line.enterCount(BigDecimal.TEN, null, USER_ID);                // counted 10 at entry
+        when(countLines.findByStockCountIdOrderByLineNoAsc(count.getId())).thenReturn(List.of(line));
+
+        // 3 sold after the line was counted: live is now 7.
+        StockOnHand soh = sohWithCost(PRODUCT_ID, "7", "500");
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID)).thenReturn(Optional.of(soh));
+        when(movements.sumQuantityAtLocationSince(COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID,
+                line.getUpdatedAt())).thenReturn(new BigDecimal("-3"));
+
+        service.post("SC-UID-0008", LocalDate.now());
+
+        // Before: variance = counted 10 − live 7 = +3 phantom units and a phantom GL gain.
+        assertThat(line.getVarianceQty()).isEqualByComparingTo("0");
+        verify(posting, never()).post(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(glPoster, never()).postAdjustmentDirect(any(), any(), any(), any());
+    }
+
+    @Test
+    void post_realShortageWithSalesAfterCounting_adjustsOnlyTheShortage() {
+        StockCount count = countInCounting(207L, "SC-UID-0009");
+        StockCountLine line = countLine(307L, count.getId());          // snapshot 10
+        line.enterCount(new BigDecimal("9"), null, USER_ID);           // one missing on the shelf
+        when(countLines.findByStockCountIdOrderByLineNoAsc(count.getId())).thenReturn(List.of(line));
+
+        StockOnHand soh = sohWithCost(PRODUCT_ID, "7", "500");          // 3 sold since counting
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID)).thenReturn(Optional.of(soh));
+        when(movements.sumQuantityAtLocationSince(COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID,
+                line.getUpdatedAt())).thenReturn(new BigDecimal("-3"));
+        when(posting.post(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn("MOVEUID000000000000000009");
+        when(valuation.revalueAdjustmentWithoutGl(any(), any(), any()))
+                .thenReturn(new BigDecimal("-500.0000"));
+
+        service.post("SC-UID-0009", LocalDate.now());
+
+        assertThat(line.getVarianceQty()).isEqualByComparingTo("-1");
+        verify(posting).post(eq(COMPANY_ID), eq(BRANCH_ID), eq(LOCATION_ID), eq(PRODUCT_ID),
+                qty("-1"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private static BigDecimal qty(String expected) {

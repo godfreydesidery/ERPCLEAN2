@@ -15,6 +15,7 @@ import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.domain.enums.StockCountStatus;
 import com.erp.modules.stock.repository.StockCountLineRepository;
 import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -45,9 +46,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Create: snapshot {@code system_qty} per in-scope product at the location,
  * write lines, and freeze to COUNTING.
  *
- * <p>Post: recompute variance against LIVE on-hand (BR-INVD-09, OQ-INVD-06); post ADJUSTMENT
- * movement per non-zero-variance line; call one {@link InventoryGlPoster#postAdjustmentDirect}
- * with the net accumulated variance for the whole count (D-6 decision).
+ * <p>Post: measure each line's variance against the system quantity AS AT THE MOMENT THE LINE
+ * WAS COUNTED — live on-hand minus the net movements at the location since the count was entered
+ * (STK-02); post ADJUSTMENT movement per non-zero-variance line; call one
+ * {@link InventoryGlPoster#postAdjustmentDirect} with the net accumulated variance for the whole
+ * count (D-6 decision).
  */
 @Service
 @Transactional
@@ -61,6 +64,7 @@ public class StockCountServiceImpl implements StockCountService {
     private final StockCountRepository     counts;
     private final StockCountLineRepository countLines;
     private final StockOnHandRepository    onHands;
+    private final StockMovementRepository  movements;
     private final StockPostingService      posting;
     private final InventoryValuationService valuation;
     private final InventoryGlPoster        glPoster;
@@ -74,6 +78,7 @@ public class StockCountServiceImpl implements StockCountService {
     public StockCountServiceImpl(StockCountRepository counts,
                                   StockCountLineRepository countLines,
                                   StockOnHandRepository onHands,
+                                  StockMovementRepository movements,
                                   StockPostingService posting,
                                   InventoryValuationService valuation,
                                   InventoryGlPoster glPoster,
@@ -86,6 +91,7 @@ public class StockCountServiceImpl implements StockCountService {
         this.counts           = counts;
         this.countLines       = countLines;
         this.onHands          = onHands;
+        this.movements        = movements;
         this.posting          = posting;
         this.valuation        = valuation;
         this.glPoster         = glPoster;
@@ -220,17 +226,23 @@ public class StockCountServiceImpl implements StockCountService {
                 continue; // skip lines without a counted qty
             }
 
-            // Recompute variance against LIVE on-hand at post time (OQ-INVD-06, BR-INVD-09)
             Optional<StockOnHand> sohOpt = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
                     companyId, branchId, locationId, line.getProductId());
+            BigDecimal liveQty = sohOpt.map(StockOnHand::getQuantity).orElse(BigDecimal.ZERO);
 
-            BigDecimal liveQty    = sohOpt.map(StockOnHand::getQuantity).orElse(BigDecimal.ZERO);
-            BigDecimal varianceQty = line.getCountedQty().subtract(liveQty);
+            // STK-02: the counted quantity describes the shelf at the moment the line was
+            // counted, so compare it with what the system held at that same moment — live
+            // on-hand minus whatever moved at this location since (sales, receipts, transfers
+            // between counting and posting). Comparing with live instead turned every sale made
+            // after counting into phantom stock (and a phantom GL gain) when the count posted.
+            // The adjustment still lands on live: live + variance = counted + later movements.
+            BigDecimal systemAtCount = systemQtyWhenCounted(line, companyId, branchId, locationId, liveQty);
+            BigDecimal varianceQty   = line.getCountedQty().subtract(systemAtCount);
 
-            if (liveQty.compareTo(line.getSystemQty()) != 0) {
-                log.warn("StockCount: snapshot qty ({}) differs from live qty ({}) for product {} " +
-                        "in count {} — recomputing variance against live (OQ-INVD-06)",
-                        line.getSystemQty(), liveQty, line.getProductId(), countUid);
+            if (systemAtCount.compareTo(line.getSystemQty()) != 0) {
+                log.info("StockCount: snapshot qty ({}) differs from system qty when counted ({}; live {}) " +
+                        "for product {} in count {} — variance measured as at the count (STK-02)",
+                        line.getSystemQty(), systemAtCount, liveQty, line.getProductId(), countUid);
             }
 
             BigDecimal avgCost    = sohOpt.map(StockOnHand::getAvgCost).orElse(null);
@@ -371,6 +383,24 @@ public class StockCountServiceImpl implements StockCountService {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * The system quantity at this location as at the moment the line's count was entered
+     * (STK-02): live on-hand minus the net movements recorded after it. A line's
+     * {@code updated_at} is stamped by {@link StockCountLine#enterCount} and is not touched again
+     * until this post, so it is the count-entry time; a re-entry (a corrected figure) moves it to
+     * the re-entry. With no timestamp (legacy row) the live quantity is used, as before.
+     */
+    private BigDecimal systemQtyWhenCounted(StockCountLine line, Long companyId, Long branchId,
+                                            Long locationId, BigDecimal liveQty) {
+        Instant countedAt = line.getUpdatedAt();
+        if (countedAt == null) {
+            return liveQty;
+        }
+        BigDecimal movedSince = movements.sumQuantityAtLocationSince(
+                companyId, branchId, locationId, line.getProductId(), countedAt);
+        return movedSince != null ? liveQty.subtract(movedSince) : liveQty;
+    }
 
     private StockCount findAndAssertScope(String uid, RequestContext.Principal principal) {
         StockCount c = counts.findByUid(uid)
