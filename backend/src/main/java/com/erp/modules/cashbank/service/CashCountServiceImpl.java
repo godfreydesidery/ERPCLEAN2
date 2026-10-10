@@ -35,7 +35,13 @@ import com.erp.platform.common.repository.Lookups;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
+import com.erp.modules.gl.repository.JournalLineRepository;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import com.erp.modules.sales.service.SaleTenderAccountQuery;
@@ -50,16 +56,20 @@ import org.springframework.transaction.annotation.Transactional;
  * linked GL account (not the generic {@code gl_configs.CASH}), and additionally writes a linked
  * {@code DIRECT_ENTRY} cash_transaction so the cash-book and GL move together to the counted amount.
  *
- * <p><b>ARC-01 — not on the sales cash account.</b> "Expected" is the till's cash-book balance
- * (ADR-0050 D-7.2), but sales never write the cash book: a cash sale posts its gross straight to
- * the GL {@code CASH} account (whatever the tender), and POS payouts and POS session variances
- * post there too. Counting the account linked to GL {@code CASH} therefore "expected" roughly the
- * debtor receipts and direct entries only, and booked the day's takings a second time as cash-over
- * income (DR till / CR POS_CASH_OVER). Folding sales into "expected" was rejected: cash-tender
- * payments net of change still miss POS payouts, POS session variances already posted, voids and
- * the branch-less default account taking every branch's sales, so the figure could not be made
- * to equal the drawer reliably. A count on that account is refused instead; that drawer is counted
- * at the POS session close (ADR-0029), which ADR-0050's boundary note already required.
+ * <p><b>ARC-01 / ARC-08 — the sales cash account.</b> "Expected" is the till's cash-book balance
+ * (ADR-0050 D-7.2). Sales, voids, POS payouts and POS over/short used to reach only the GL, so a
+ * count on an account that takes sales booked the day's takings a second time as cash-over income
+ * and was refused (wave 3). Since V106 the cash book mirrors all four (CashBookJournalMirror), so
+ * the book balance is the drawer again and such counts are allowed, with two limits:
+ * <ul>
+ *   <li>a business day BEFORE the cash book carried sales ({@link CashBookGoLive}) is refused —
+ *       that day's sales are in the GL only, so its book balance cannot be the drawer;</li>
+ *   <li>everything the GL posted to the till's account before go-live but the cash book never saw
+ *       (historic takings, payouts, POS over/short) is a frozen gap. It is added to the book
+ *       balance — expected = book balance + (GL - cash book, both as at go-live) — so the first
+ *       count after go-live does not book years of takings as cash over. Zero on a new install.</li>
+ * </ul>
+ * Accounts that never took a sale keep the plain ADR-0050 formula.
  */
 @Service
 @Transactional
@@ -77,6 +87,8 @@ public class CashCountServiceImpl implements CashCountService {
     private final ScopeGuard                         scopeGuard;
     private final AuditService                       audit;
     private final SaleTenderAccountQuery             saleTenderAccounts;
+    private final CashBookGoLive                     goLive;
+    private final JournalLineRepository              journalLines;
 
     public CashCountServiceImpl(CashCountRepository counts,
                                  CashCountDenominationRepository denominations,
@@ -89,7 +101,9 @@ public class CashCountServiceImpl implements CashCountService {
                                  GLPostingService glPosting,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
-                                 SaleTenderAccountQuery saleTenderAccounts) {
+                                 SaleTenderAccountQuery saleTenderAccounts,
+                                 CashBookGoLive goLive,
+                                 JournalLineRepository journalLines) {
         this.counts        = counts;
         this.denominations = denominations;
         this.accounts      = accounts;
@@ -102,6 +116,8 @@ public class CashCountServiceImpl implements CashCountService {
         this.scopeGuard    = scopeGuard;
         this.audit         = audit;
         this.saleTenderAccounts = saleTenderAccounts;
+        this.goLive        = goLive;
+        this.journalLines  = journalLines;
     }
 
     @Override
@@ -120,7 +136,6 @@ public class CashCountServiceImpl implements CashCountService {
         if (!till.isActive()) {
             throw new IllegalStateException("The selected till is inactive and cannot be counted.");
         }
-        assertNotTheSalesCashAccount(companyId, till);
         // One live count per till/day: a second non-reconciled count would derive the same expected
         // and reconcile independently, posting the variance to GL + the cash book twice (D-7 review).
         if (counts.existsByCashAccountIdAndBusinessDateAndStatusIn(
@@ -131,10 +146,7 @@ public class CashCountServiceImpl implements CashCountService {
         }
 
         String currency = company.getBaseCurrency();
-        BigDecimal expected = txns.bookBalanceAsOf(till.getId(), req.businessDate());
-        if (expected == null) {
-            expected = BigDecimal.ZERO;
-        }
+        BigDecimal expected = expectedFor(companyId, till, req.businessDate());
 
         Long actor = actorId();
         Long branch = till.getBranchId() != null ? till.getBranchId() : branchId();
@@ -203,12 +215,21 @@ public class CashCountServiceImpl implements CashCountService {
                     "Record the denomination count before reconciling this cash count.");
         }
 
-        // ARC-01: a count opened on the sales cash account before this guard existed must not
-        // post either — its "over" is the day's takings, already in the GL through the sales.
+        // ARC-01: a count on a sales-taking account opened before the cash book carried sales
+        // derived an "expected" without them - its "over" would be the day's takings again.
         CashBankAccount countedTill = accounts
                 .findByCompanyIdAndId(count.getCompanyId(), count.getCashAccountId())
                 .orElseThrow(() -> new NotFoundException("Cash/bank account not found."));
-        assertNotTheSalesCashAccount(count.getCompanyId(), countedTill);
+        if (takesSales(count.getCompanyId(), countedTill)) {
+            Instant since = goLive.since().orElse(null);
+            if (since == null || count.getCreatedAt() == null
+                    || count.getCreatedAt().isBefore(since)) {
+                throw new ConflictException(
+                        "This count was started before the cash book carried your sales, so its "
+                                + "expected amount leaves the takings out. Start a new count for "
+                                + "this till instead.");
+            }
+        }
 
         Long actor = actorId();
         BigDecimal variance = count.getVarianceAmount();
@@ -297,25 +318,53 @@ public class CashCountServiceImpl implements CashCountService {
     // -------------------------------------------------------------------------
 
     /**
-     * ARC-01: refuses a count on the cash account linked to the GL {@code CASH} account that cash
-     * sales post to — its expected figure cannot see the sales, so any count there books the
-     * takings twice. See the class comment.
+     * The derived "expected" for a count (ADR-0050 D-7.2 + ARC-01/ARC-08): the cash-book balance
+     * as at the business date; on an account that takes sales, plus the frozen pre-go-live gap,
+     * and refused for a day before the cash book carried sales. See the class comment.
      */
-    private void assertNotTheSalesCashAccount(Long companyId, CashBankAccount till) {
+    private BigDecimal expectedFor(Long companyId, CashBankAccount till, LocalDate businessDate) {
+        BigDecimal book = nz(txns.bookBalanceAsOf(till.getId(), businessDate));
+        if (!takesSales(companyId, till)) {
+            return book;
+        }
+        Instant since = goLive.since().orElse(null);
+        if (since == null) {
+            throw new ConflictException(
+                    "This cash account receives your sales takings and cannot be counted here "
+                            + "yet. Count this drawer when you close the POS till session.");
+        }
+        LocalDate firstDay = since.atZone(ZoneOffset.UTC).toLocalDate();
+        if (businessDate.isBefore(firstDay)) {
+            throw new ConflictException(
+                    "This cash account receives your sales takings, and the cash book only "
+                            + "carries them from "
+                            + firstDay.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                            + ". A count for an earlier day cannot be checked here; that drawer "
+                            + "was counted at the POS till session close.");
+        }
+        BigDecimal glBefore = nz(journalLines.accountBalancePostedBefore(
+                companyId, till.getGlAccountId(), since));
+        BigDecimal bookBefore = nz(txns.bookBalanceWrittenBefore(till.getId(), since));
+        return book.add(glBefore.subtract(bookBefore));
+    }
+
+    /**
+     * True for the cash account linked to the GL {@code CASH} account that cash sales, POS payouts
+     * and POS over/short post to, and for any account a sale tender has named (ACC-05).
+     */
+    private boolean takesSales(Long companyId, CashBankAccount till) {
         Long salesCashGl = glConfigs.findByCompanyIdAndConfigKey(companyId, GlConfigKey.CASH)
                 .map(c -> c.getAccountId())
                 .orElse(null);
-        // ACC-05: a sale tender that names its cash/bank account posts to that account's own GL
-        // link, so an account that takes sale tenders has the same blind spot as GL CASH.
-        boolean takesSaleTenders = saleTenderAccounts != null
-                && saleTenderAccounts.takesSaleTenders(companyId, till.getId());
-        if ((salesCashGl != null && salesCashGl.equals(till.getGlAccountId())) || takesSaleTenders) {
-            throw new ConflictException(
-                    "This cash account receives your sales takings, so it cannot be counted here: "
-                            + "the count would record the day's sales a second time. Count this "
-                            + "drawer when you close the POS till session, or count a separate "
-                            + "cash till that does not take sales.");
+        if (salesCashGl != null && salesCashGl.equals(till.getGlAccountId())) {
+            return true;
         }
+        return saleTenderAccounts != null
+                && saleTenderAccounts.takesSaleTenders(companyId, till.getId());
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
     private Long actorId() {

@@ -113,6 +113,9 @@ class SalesCashBookIT extends PostgresIntegrationTest {
     @Autowired CashTransactionRepository cashTxns;
     @Autowired CashBankSeeder cashBankSeeder;
     @Autowired CashBookJournalMirror mirror;
+    @Autowired CashCountService cashCountService;
+    @Autowired CashDirectEntryService directEntries;
+    @Autowired com.erp.modules.gl.repository.JournalLineRepository journalLines;
     @Autowired PosTillService tillService;
     @Autowired PosSessionService sessionService;
     @Autowired OrganisationRepository organisations;
@@ -261,7 +264,56 @@ class SalesCashBookIT extends PostgresIntegrationTest {
         });
     }
 
+    // ── ARC-01 lifted: the sales till can be counted again ───────────────────────
+
+    @Test
+    void cashCount_onTheSalesTill_dayWithSalesPayoutAndRefund_expectedIsTheDrawer_noCashOver() {
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneOffset.UTC);
+        directEntries.recordDirectEntry(new com.erp.modules.cashbank.domain.dto.RecordDirectEntryRequest(
+                company.getUid(), cashAccount.getUid(), CashTxnDirection.IN,
+                new BigDecimal("1000"), today, glUid("3000"), "Opening float"));
+        cashSale(new AddPaymentRequest(TenderType.CASH, GROSS, "TZS", null));
+        SalesInvoiceDto refunded = cashSale(new AddPaymentRequest(TenderType.CASH, GROSS, "TZS", null));
+        voidAndDispatch(refunded.uid());
+        PosSessionDto session = openSession(BigDecimal.ZERO);
+        sessionService.recordPayout(session.uid(), new PosPayoutRequest(
+                PosPayoutType.PAID_OUT, new BigDecimal("100"), "Delivery tip"));
+        dispatchPending(DomainEventType.POS_CASH_MOVED);
+
+        // The business day the rows carry (journal posting dates; all the same day here).
+        java.time.LocalDate day = cashTxns.findByCashBankAccountIdOrderByTxnDateAscIdAsc(
+                cashAccount.getId()).stream().map(CashTransaction::getTxnDate)
+                .max(java.time.LocalDate::compareTo).orElseThrow();
+        BigDecimal drawer = new BigDecimal("2080"); // 1000 float + 1180 + 1180 − 1180 − 100
+
+        var count = cashCountService.open(new com.erp.modules.cashbank.domain.dto.OpenCashCountRequest(
+                company.getUid(), cashAccount.getUid(), day));
+        assertThat(count.expectedAmount()).isEqualByComparingTo(drawer);
+
+        cashCountService.recordDenominations(count.uid(),
+                new com.erp.modules.cashbank.domain.dto.RecordDenominationsRequest(List.of(
+                        new com.erp.modules.cashbank.domain.dto.RecordDenominationsRequest.Line(
+                                new BigDecimal("1000"), 2),
+                        new com.erp.modules.cashbank.domain.dto.RecordDenominationsRequest.Line(
+                                new BigDecimal("80"), 1))));
+        var reconciled = cashCountService.reconcile(count.uid());
+
+        assertThat(reconciled.varianceAmount()).isEqualByComparingTo("0");
+        assertThat(reconciled.journalEntryRef()).isNull();
+        assertThat(journalEntries.findByCompanyIdAndSourceTypeAndSourceRef(
+                company.getId(), JournalSourceType.POS_VARIANCE, count.uid()))
+                .as("no cash-over income for counting exactly the drawer").isEmpty();
+        // The cash book and the GL cash account agree.
+        assertThat(journalLines.accountBalance(company.getId(), cashAccount.getGlAccountId()))
+                .isEqualByComparingTo(drawer);
+        assertThat(bookBalance(cashAccount.getId())).isEqualByComparingTo(drawer);
+    }
+
     // -------------------------------------------------------------------------
+
+    String glUid(String code) {
+        return glAccounts.findByCompanyIdAndAccountCode(company.getId(), code).orElseThrow().getUid();
+    }
 
     SalesInvoiceDto cashSale(AddPaymentRequest... payments) {
         SalesInvoiceDto draft = salesInvoiceService.create(new CreateSalesInvoiceRequest(
