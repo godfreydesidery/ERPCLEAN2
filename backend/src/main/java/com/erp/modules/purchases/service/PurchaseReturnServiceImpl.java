@@ -14,6 +14,7 @@ import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseReturn;
 import com.erp.modules.purchases.domain.entity.PurchaseReturnLine;
+import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseReturnStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
@@ -106,6 +107,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
 
         GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, req.goodsReceiptUid())
                 .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+        // PUR-03: a voided receipt already took its goods back out of stock. Returning against it
+        // would take them out a second time and raise a debit note for goods never kept.
+        assertReturnable(gr);
 
         // Resolve supplier snapshot from the linked PO
         PurchaseOrder po = poRepo.findById(gr.getPurchaseOrderId())
@@ -205,6 +209,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         if (ret.getStatus() != PurchaseReturnStatus.DRAFT) {
             throw new IllegalStateException("This purchase return has already been confirmed.");
         }
+
+        // PUR-03: the receipt may have been voided after this draft was raised.
+        GoodsReceipt gr = grRepo.findByCompanyIdAndUid(ret.getCompanyId(), ret.getGoodsReceiptUid())
+                .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+        assertReturnable(gr);
 
         List<PurchaseReturnLine> lines = returnLines.findByPurchaseReturnIdOrderByLineNo(ret.getId());
         if (lines.isEmpty()) {
@@ -318,6 +327,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 .detail(Map.of("returnNumber", ret.getReturnNumber(),
                         "totalReturnValue", totalReturnValue.toPlainString())));
         return toDto(ret);
+    }
+
+    /** PUR-03: goods can only go back to the supplier from a receipt that still stands. */
+    private static void assertReturnable(GoodsReceipt gr) {
+        if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
+            throw new IllegalStateException(
+                    "Goods can only be returned against a received goods receipt. "
+                            + "This receipt has been voided.");
+        }
     }
 
     // -------------------------------------------------------------------------

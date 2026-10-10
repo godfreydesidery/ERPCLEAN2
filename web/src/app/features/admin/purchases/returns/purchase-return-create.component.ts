@@ -93,8 +93,9 @@ export class PurchaseReturnCreateComponent {
     if (!companyId) return;
     this.purchasesService.listReceipts(companyId, undefined, 0, 100).subscribe({
       next: ({ rows }) => {
+        // PUR-03: a voided receipt cannot take a return (the server refuses it too).
         this.grOptions.set(
-          rows.map((gr) => ({
+          rows.filter((gr) => gr.status !== 'VOID').map((gr) => ({
             uid: gr.uid,
             label: gr.receiptNumber,
             hint: gr.status,

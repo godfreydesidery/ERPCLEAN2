@@ -374,6 +374,36 @@ class PurchaseReturnServiceImplTest {
                 .publish(any(), any(), any(), any(), any(), any(), any());
     }
 
+    // -------------------------------------------------------------------------
+    // PUR-03: no return against a voided receipt
+    // -------------------------------------------------------------------------
+
+    @Test
+    void create_againstAVoidedReceipt_isRefused() {
+        stubCreatableReceipt();
+        when(createGr.getStatus()).thenReturn(GoodsReceiptStatus.VOID);
+
+        assertThatThrownBy(() -> service.create(createRequest("1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("This receipt has been voided");
+        verify(returns, org.mockito.Mockito.never()).save(any(PurchaseReturn.class));
+    }
+
+    @Test
+    void confirm_whenTheReceiptWasVoidedAfterTheDraft_isRefused() {
+        stubConfirmableReturn("PRET-UID-V", 10L, 20L, 50L);
+        GoodsReceipt voided = mock(GoodsReceipt.class);
+        when(voided.getStatus()).thenReturn(GoodsReceiptStatus.VOID);
+        when(grRepo.findByCompanyIdAndUid(10L, "GR-OF-PRET-UID-V")).thenReturn(Optional.of(voided));
+
+        assertThatThrownBy(() -> service.confirm("PRET-UID-V"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("This receipt has been voided");
+        verify(outbox, org.mockito.Mockito.never())
+                .publish(any(), any(), any(), any(), any(), any(), any());
+        verify(apDebitNoteService, org.mockito.Mockito.never()).raise(any());
+    }
+
     @Test
     void conversionHelpers_roundOnceAndSnapTheLastUlp() {
         GoodsReceiptLine thirds = mock(GoodsReceiptLine.class);
@@ -474,6 +504,11 @@ class PurchaseReturnServiceImplTest {
         when(ret.getStatus()).thenReturn(PurchaseReturnStatus.DRAFT);
         when(ret.getReturnNumber()).thenReturn("PRET-0001");
         when(ret.getReason()).thenReturn("Defective goods");
+        when(ret.getGoodsReceiptUid()).thenReturn("GR-OF-" + uid);
+        GoodsReceipt receipt = mock(GoodsReceipt.class);
+        when(receipt.getStatus()).thenReturn(GoodsReceiptStatus.RECEIVED);
+        when(receipt.getBranchId()).thenReturn(branchId);
+        when(grRepo.findByCompanyIdAndUid(companyId, "GR-OF-" + uid)).thenReturn(Optional.of(receipt));
         when(returns.findByUid(uid)).thenReturn(Optional.of(ret));
         when(returns.save(ret)).thenReturn(ret);
         return ret;

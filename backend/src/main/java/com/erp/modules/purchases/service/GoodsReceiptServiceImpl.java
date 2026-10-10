@@ -261,8 +261,21 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         GoodsReceipt gr = requireReceipt(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), gr.getCompanyId());
         if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
+            throw new IllegalStateException("This goods receipt has already been voided.");
+        }
+
+        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
+
+        // PUR-03: goods already sent back to the supplier left stock on the return. The void
+        // reverses the WHOLE receipt, so voiding now would take those goods out a second time.
+        // Refuse rather than reverse a partial quantity: the return and its debit note stand, and
+        // what is left on the receipt can go back on a further return.
+        boolean hasReturns = lineList.stream().anyMatch(l ->
+                l.getReturnedQtyInBase() != null && l.getReturnedQtyInBase().signum() > 0);
+        if (hasReturns) {
             throw new IllegalStateException(
-                    "Only RECEIVED receipts can be voided; current status: " + gr.getStatus());
+                    "Some of these goods have already been returned to the supplier, so this "
+                            + "receipt can't be voided. Raise a purchase return for the rest instead.");
         }
 
         // 1. Transition to VOID
@@ -274,7 +287,6 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         gr.setUpdatedBy(actorId());
 
         // 2. Reverse PO line outstanding (OutstandingTracker, same TX, ADR-0011 D-3)
-        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
         tracker.reverseReceipt(lineList);
 
         // 3. Recompute PO status (ADR-0011 D-4)
