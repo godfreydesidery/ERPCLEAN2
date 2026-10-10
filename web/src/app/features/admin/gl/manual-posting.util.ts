@@ -13,6 +13,12 @@ const GUIDANCE: Record<string, string> = {
   FX_CLEARING: 'posted by FX revaluation',
 };
 
+/** True for a sub-ledger control account (AR, AP, inventory, tax, payroll, FX) — not cash/bank. */
+export function isBlockingControl(a: AccountDto): boolean {
+  const control = a.controlType ?? null;
+  return !!control && !!GUIDANCE[control];
+}
+
 /**
  * Why a manual journal may not use this account, as a short phrase for the picker; null when it
  * may. A blocking control type wins over the allowManualPosting flag (the server checks it first).

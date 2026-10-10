@@ -544,6 +544,47 @@ class SupplierBillServiceImplTest {
                 .findByUid(anyString());
     }
 
+    /** ACC-23: a bill line cannot be pointed at a sub-ledger control account (e.g. VAT Due). */
+    @Test
+    void enterBill_controlAccountOnALine_isRefusedWithTheModuleToUse() {
+        com.erp.modules.gl.domain.entity.ChartOfAccount vatDue =
+                org.mockito.Mockito.mock(com.erp.modules.gl.domain.entity.ChartOfAccount.class);
+        when(vatDue.getAccountCode()).thenReturn("2300");
+        when(vatDue.getControlType()).thenReturn(com.erp.modules.gl.domain.enums.ControlType.TAX);
+        when(chartOfAccounts.findByCompanyIdAndUid(COMPANY_ID, "ACC-VAT"))
+                .thenReturn(Optional.of(vatDue));
+        BillLineRequest line = new BillLineRequest(null, null, null, "TRA payment",
+                new BigDecimal("1"), new BigDecimal("900.00"), null, null, "ACC-VAT");
+        EnterBillRequest req = new EnterBillRequest(
+                COMPANY_UID, SUPP_UID, "INV-TRA-1", null,
+                LocalDate.of(2026, 6, 18), null, BigDecimal.ZERO, "TZS", null, List.of(line));
+
+        assertThatThrownBy(() -> service.enterBill(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Line 1")
+                .hasMessageContaining("2300")
+                .hasMessageContaining("control account");
+    }
+
+    @Test
+    void enterBill_inactiveAccountOnALine_isRefused() {
+        com.erp.modules.gl.domain.entity.ChartOfAccount old =
+                org.mockito.Mockito.mock(com.erp.modules.gl.domain.entity.ChartOfAccount.class);
+        when(old.getAccountCode()).thenReturn("5400");
+        when(old.isActive()).thenReturn(false);
+        when(chartOfAccounts.findByCompanyIdAndUid(COMPANY_ID, "ACC-OLD"))
+                .thenReturn(Optional.of(old));
+        BillLineRequest line = new BillLineRequest(null, null, null, "Power",
+                new BigDecimal("1"), new BigDecimal("50.00"), null, null, "ACC-OLD");
+        EnterBillRequest req = new EnterBillRequest(
+                COMPANY_UID, SUPP_UID, "INV-PWR-1", null,
+                LocalDate.of(2026, 6, 18), null, BigDecimal.ZERO, "TZS", null, List.of(line));
+
+        assertThatThrownBy(() -> service.enterBill(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("inactive");
+    }
+
     private EnterBillRequest validBillRequest(LocalDate billDate, LocalDate dueDate) {
         BillLineRequest line = new BillLineRequest(
                 null, null, null, "Test item",

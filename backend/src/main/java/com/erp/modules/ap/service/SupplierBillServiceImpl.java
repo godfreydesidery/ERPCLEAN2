@@ -218,13 +218,25 @@ public class SupplierBillServiceImpl implements SupplierBillService {
             // refused instead of being silently dropped and posting to Purchases).
             if (lr.glAccountUid() != null && !lr.glAccountUid().isBlank()) {
                 final short shownLineNo = (short) (lineNo - 1);
-                Long accountId = chartOfAccounts
+                var account = chartOfAccounts
                         .findByCompanyIdAndUid(companyId, lr.glAccountUid().trim())
-                        .map(acct -> acct.getId())
                         .orElseThrow(() -> new IllegalArgumentException(
                                 "The account chosen on line " + shownLineNo
                                         + " was not found. Pick the account again."));
-                line.setGlAccountId(accountId);
+                // ACC-23: a bill line is an expense/asset line. Pointing it at a sub-ledger control
+                // account (AR, AP, Inventory, VAT/tax, payroll, FX) would bypass the guard manual
+                // journals enforce and post around the sub-ledger. Cash/bank stay allowed, as for
+                // manual journals; an inactive account would only fail later, at match.
+                if (account.getControlType() != null && account.getControlType().blocksManualPosting()) {
+                    throw new IllegalArgumentException("Line " + shownLineNo + ": account "
+                            + account.getAccountCode() + " is a control account and cannot be used"
+                            + " on a bill line. " + account.getControlType().manualPostingGuidance());
+                }
+                if (!account.isActive()) {
+                    throw new IllegalArgumentException("Line " + shownLineNo + ": account "
+                            + account.getAccountCode() + " is inactive. Pick an active account.");
+                }
+                line.setGlAccountId(account.getId());
             }
 
             // ADR-0041 D4: stamp per-line dimension tags (flow onto the GL P&L leg at match-time).
