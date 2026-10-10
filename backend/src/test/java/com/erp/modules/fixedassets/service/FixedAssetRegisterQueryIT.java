@@ -146,6 +146,18 @@ class FixedAssetRegisterQueryIT extends PostgresIntegrationTest {
     @Test
     void atYearEnd_agreesWithTheReconciliation_toTheCent() {
         LocalDate yearEnd = LocalDate.of(jan1.getYear(), 12, 31);
+
+        // The branch-limited clerk's "All branches" is their own branch only (owner ruling
+        // 2026-10-10): the other branch's generator is not in their register.
+        FixedAssetRegisterDto mine = registerQuery.register(company.getId(), yearEnd,
+                null, null, null, null, null);
+        assertThat(mine.rows()).hasSize(2)
+                .noneMatch(r -> "Spare Generator".equals(r.name()));
+
+        // Reconciling against the whole company's GL is a whole-company read.
+        RequestContext.Principal clerk = RequestContext.get();
+        RequestContext.set(new RequestContext.Principal(clerk.userId(), clerk.username(), true,
+                clerk.companyId(), clerk.branchId(), null, clerk.organisationId()));
         FixedAssetRegisterDto dto = registerQuery.register(company.getId(), yearEnd,
                 null, null, null, null, null);
         FixedAssetReconciliationDto recon = reconQuery.reconcile(company.getId());
