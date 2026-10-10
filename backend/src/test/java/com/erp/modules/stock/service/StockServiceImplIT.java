@@ -678,12 +678,31 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         salesInvoiceService.addPayment(draft.uid(), // 500 x 1.18 VAT
                 new AddPaymentRequest(TenderType.CASH, new BigDecimal("590"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
-        long auditAfterFinalise = auditRepository.count(); // SALES.INVOICE.FINALISE row already written
+        long lastIdBeforeDispatch = auditRepository.findAll().stream() // FINALISE row already written
+                .mapToLong(AuditLog::getId).max().orElse(0L);
 
         dispatcher.dispatchOne(pendingEventId(DomainEventType.SALE_FINALISED));
 
-        // Dispatching SALE.FINALISED must not add any new audit_logs rows (ADR-0010 D-12)
-        assertThat(auditRepository.count()).isEqualTo(auditAfterFinalise);
+        List<AuditLog> added = auditRepository.findAll().stream()
+                .filter(a -> a.getId() > lastIdBeforeDispatch)
+                .toList();
+        // ADR-0010 D-12: the event-driven SALE_ISSUE (stock move + COGS) writes no audit_logs row.
+        //
+        // This fixture seeds no chart of accounts / gl_configs / fiscal year, so the GL module's
+        // SalesPostingHandler on the same SALE.FINALISED dispatch cannot post the sale. Since ACC-02
+        // that swallowed failure is no longer only a log line: GlPostingFailureRecorder records ONE
+        // GL.POSTING.FAILED row (target gl_posting_exceptions) so the accountant can re-post it.
+        // That row is the GL module's exception record, not an audit of the stock move — so D-12
+        // is asserted as "nothing but that exception record", never as a bare row count.
+        assertThat(added)
+                .as("only the GL module's posting-exception record may be added: %s",
+                        added.stream().map(AuditLog::getAction).toList())
+                .allSatisfy(a -> {
+                    assertThat(a.getAction()).isEqualTo("GL.POSTING.FAILED");
+                    assertThat(a.getTargetType()).isEqualTo("gl_posting_exceptions");
+                    assertThat(a.getDetail()).contains("\"sourceType\": \"SALES\"");
+                })
+                .hasSize(1);
     }
 
     // =========================================================================
