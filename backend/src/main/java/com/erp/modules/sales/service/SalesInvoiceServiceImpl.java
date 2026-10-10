@@ -402,11 +402,20 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             // limit — all in BASE currency (owner ruling 2026-10-02). Unconverted (V62-filled)
             // foreign AR and a foreign invoice gross count at today's rate; a missing rate fails
             // closed (treated as over the limit).
+            //
+            // LRB-05: the credit this invoice extends is what is left unpaid after the tenders
+            // already applied at the counter (same currency, checked above), not its gross. A sale
+            // the customer pays in full adds no exposure, so it is never a credit-limit question —
+            // it used to be refused as "no permission to override the credit limit" whenever the
+            // customer's existing balance was over the limit.
             com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
+            BigDecimal unpaidOnThisInvoice = unpaidAfterCounterPayments(
+                    inv.getGrossTotalAmount(), paymentList);
             if (creditLimit != null && creditLimit.isPresent()
-                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0
+                    && unpaidOnThisInvoice.signum() > 0) {
                 CreditExposureCalculator.Assessment exposure = creditExposure.assess(
-                        inv.getCompanyId(), inv.getCustomerId(), inv.getGrossTotalAmount(),
+                        inv.getCompanyId(), inv.getCustomerId(), unpaidOnThisInvoice,
                         com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
                         creditLimit, LocalDate.now());
                 if (exposure.breached()) {
@@ -1357,6 +1366,24 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
      * Cash over-tender → set change_amount on the cash row (change accepted).
      * Mobile-money over-tender → reject (no change for mobile).
      */
+    /**
+     * The part of an invoice's gross that the counter tenders leave unpaid, never below zero
+     * (LRB-05). Payments are net of any change given. This is the new credit a finalised credit
+     * sale extends, and so the amount the credit-limit check must assess.
+     */
+    static BigDecimal unpaidAfterCounterPayments(BigDecimal gross,
+                                                 List<SalesInvoicePayment> paymentList) {
+        BigDecimal grossAmount = gross != null ? gross : BigDecimal.ZERO;
+        BigDecimal paid = BigDecimal.ZERO;
+        for (SalesInvoicePayment p : paymentList) {
+            BigDecimal amount = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+            BigDecimal change = p.getChangeAmount() != null ? p.getChangeAmount() : BigDecimal.ZERO;
+            paid = paid.add(amount.subtract(change));
+        }
+        BigDecimal unpaid = grossAmount.subtract(paid);
+        return unpaid.signum() > 0 ? unpaid : BigDecimal.ZERO;
+    }
+
     private void assertPaidInFull(SalesInvoice inv, List<SalesInvoicePayment> paymentList) {
         // FR-SALES-18: at least one tender must be recorded before finalising a cash invoice
         if (paymentList.isEmpty()) {
