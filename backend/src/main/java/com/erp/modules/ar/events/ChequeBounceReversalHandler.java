@@ -4,6 +4,9 @@ import com.erp.modules.ar.domain.entity.ArReceipt;
 import com.erp.modules.ar.repository.ArReceiptRepository;
 import com.erp.modules.ar.service.ArReceiptReversalSupport;
 import com.erp.modules.cashbank.domain.dto.ChequeBouncedPayload;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
 import com.erp.platform.events.DomainEvent;
@@ -45,17 +48,20 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
     private final IdempotencyGuard guard;
     private final ArReceiptRepository receipts;
     private final ArReceiptReversalSupport reversalSupport;
+    private final CashTransactionRecorder cashTxnRecorder;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
 
     public ChequeBounceReversalHandler(IdempotencyGuard guard,
                                        ArReceiptRepository receipts,
                                        ArReceiptReversalSupport reversalSupport,
+                                       CashTransactionRecorder cashTxnRecorder,
                                        GLPostingSafeInvoker safeInvoker,
                                        ObjectMapper objectMapper) {
         this.guard        = guard;
         this.receipts        = receipts;
         this.reversalSupport = reversalSupport;
+        this.cashTxnRecorder = cashTxnRecorder;
         this.safeInvoker  = safeInvoker;
         this.objectMapper = objectMapper;
     }
@@ -140,6 +146,14 @@ public class ChequeBounceReversalHandler implements DomainEventHandler {
                     receipt.getUid(), receipt.getGlEntryUid(), eventUid);
             return;
         }
+
+        // The cash book moves with the GL: the bounced money goes back OUT of the account it was
+        // banked into (the opposite of the receipt's settlement row, linked to it). A receipt
+        // recorded before the cash book existed has no row to mirror and writes nothing.
+        cashTxnRecorder.recordSettlementReversal(
+                companyId, receipt.getUid(), CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
+                reversal.uid(), reversalDate,
+                "Bounced cheque - receipt " + receipt.getReceiptNumber() + " reversed", null);
 
         // Restore the invoice outstanding relieved by this receipt's allocations (face + base),
         // zero the on-account remainder (the GL reversal put the WHOLE receipt back on AR-control)
