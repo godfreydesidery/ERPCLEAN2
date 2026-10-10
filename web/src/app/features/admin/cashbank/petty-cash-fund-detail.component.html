@@ -189,16 +189,30 @@
 
                 @if (txnType() === 'DISBURSEMENT') {
                   <div class="erp-field full">
-                    <label for="pcTxnGl">Expense GL Account</label>
-                    <select id="pcTxnGl" class="form-select form-select-sm"
+                    <label for="pcTxnGl">Expense GL Account <span aria-hidden="true">*</span></label>
+                    <select id="pcTxnGl" class="form-select form-select-sm" required
                             [ngModel]="txnGlAccountUid()" (ngModelChange)="txnGlAccountUid.set($event)">
-                      <option value="">— none —</option>
+                      <option value="">— choose the expense —</option>
                       @for (gl of expenseGlOptions(); track gl.uid) {
                         <option [value]="gl.uid">{{ gl.accountCode }} — {{ gl.name }}</option>
                       }
                     </select>
                     <app-lookup-notice [state]="glAccountsLookup()" what="GL account" />
-                    <div class="form-text">Captured for the disbursement record; not posted to GL this slice.</div>
+                    <div class="form-text">This expense account is debited and petty cash credited.</div>
+                  </div>
+                }
+
+                @if (txnType() === 'REPLENISHMENT') {
+                  <div class="erp-field full">
+                    <label for="pcTxnSource">Paid in from</label>
+                    <select id="pcTxnSource" class="form-select form-select-sm"
+                            [ngModel]="txnSourceAccountUid()" (ngModelChange)="txnSourceAccountUid.set($event)">
+                      <option value="">— company default cash account —</option>
+                      @for (a of cashAccounts(); track a.uid) {
+                        <option [value]="a.uid">{{ a.code }} — {{ a.name }}</option>
+                      }
+                    </select>
+                    <div class="form-text">The money leaves this account's cash book and goes into petty cash.</div>
                   </div>
                 }
 

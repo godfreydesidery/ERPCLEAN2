@@ -21,6 +21,10 @@ interface ApplyRow {
  * later — "Apply to invoices" loads the customer's open items, and the save replaces the receipt's
  * allocation set (existing allocations are kept and the new amounts added). Gated
  * AR.RECEIPT.ALLOCATE / AR.RECEIPT.RECORD, the same codes the server checks.
+ *
+ * ARC-04: a wrong receipt can be reversed here ("Reverse receipt", reason required, confirmed in a
+ * panel). Gated AR.RECEIPT.REVERSE, the code the server checks. A reversed receipt shows a badge
+ * and offers neither Apply nor Reverse.
  */
 @Component({
   selector: 'app-ar-receipt-detail',
@@ -45,8 +49,22 @@ export class ArReceiptDetailComponent {
 
   /** Money on this receipt not yet applied to any invoice. */
   readonly onAccount = computed(() => +(this.entity()?.unallocatedAmount ?? 0) || 0);
+  readonly isReversed = computed(() => !!this.entity()?.reversedAt);
   readonly showApply = computed(() =>
-    this.canApply() && this.onAccount() > 0.000001 && !!this.entity()?.customerUid && !!this.entity()?.companyId,
+    this.canApply() && !this.isReversed() && this.onAccount() > 0.000001 &&
+    !!this.entity()?.customerUid && !!this.entity()?.companyId,
+  );
+
+  // ── Reverse receipt (ARC-04) ──────────────────────────────────────────────
+  /** AR.RECEIPT.REVERSE — the same code the server checks (finance seats only). */
+  readonly canReverse = computed(() => this.session.hasPermission('AR.RECEIPT.REVERSE'));
+  readonly showReverse = computed(() => this.canReverse() && !!this.entity() && !this.isReversed());
+  readonly reverseOpen = signal(false);
+  readonly reverseReason = signal('');
+  readonly reversing = signal(false);
+  readonly reverseError = signal<string | null>(null);
+  readonly reverseDisabled = computed(() =>
+    this.reversing() || !this.reverseReason().trim() || this.reverseReason().trim().length > 200,
   );
 
   // ── Apply-to-invoices editor ──────────────────────────────────────────────
@@ -152,6 +170,38 @@ export class ArReceiptDetailComponent {
       error: (err) => {
         this.applying.set(false);
         this.applyError.set(this.messageFrom(err, 'Could not apply the receipt to these invoices.'));
+      },
+    });
+  }
+
+  openReverse(): void {
+    this.closeApply();
+    this.reverseReason.set('');
+    this.reverseError.set(null);
+    this.reverseOpen.set(true);
+  }
+
+  closeReverse(): void {
+    this.reverseOpen.set(false);
+    this.reverseError.set(null);
+  }
+
+  /** Confirmed in the panel: posts the reversal, then shows the receipt as reversed. */
+  confirmReverse(): void {
+    const r = this.entity();
+    if (!r || this.reverseDisabled()) return;
+    this.reversing.set(true);
+    this.reverseError.set(null);
+    this.arService.reverseReceipt(r.uid, this.reverseReason().trim()).subscribe({
+      next: (updated) => {
+        this.reversing.set(false);
+        this.entity.set({ ...r, ...updated, customerUid: updated.customerUid ?? r.customerUid });
+        this.alerts.success('Receipt reversed', String(r.receiptNumber ?? ''));
+        this.reverseOpen.set(false);
+      },
+      error: (err) => {
+        this.reversing.set(false);
+        this.reverseError.set(this.messageFrom(err, 'Could not reverse this receipt.'));
       },
     });
   }

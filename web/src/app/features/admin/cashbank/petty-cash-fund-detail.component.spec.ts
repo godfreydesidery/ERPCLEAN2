@@ -97,6 +97,7 @@ function makeBed(opts: { canManage?: boolean; cashbankOverrides?: Record<string,
           listPettyCashTransactions: vi.fn(() => of([])),
           createPettyCashFund: vi.fn(() => of(makeFund())),
           recordPettyCashTransaction: vi.fn(() => of(makeTxn())),
+          listAccountOptions: vi.fn(() => of([{ uid: 'CB1', code: 'CASH', name: 'Main Cash' }])),
           ...cashbankOverrides,
         },
       },
@@ -327,6 +328,36 @@ describe('PettyCashFundDetailComponent — recordTransaction()', () => {
     expect(comp.txnAmount()).toBe('');
   });
 
+  // ARC-10: a disbursement is debited to its expense account; a top-up names its source account.
+  it('needs an expense account for a disbursement and sends the top-up source account', async () => {
+    vi.useFakeTimers();
+    makeBed();
+    const fixture = TestBed.createComponent(PettyCashFundDetailComponent);
+    fixture.componentRef.setInput('uid', 'PCF1');
+    const comp = fixture.componentInstance;
+    const svc = TestBed.inject(CashbankService) as any;
+    await vi.runAllTimersAsync();
+    expect(comp.cashAccounts().map((a) => a.uid)).toEqual(['CB1']);
+
+    comp.txnType.set('DISBURSEMENT');
+    comp.txnAmount.set('500');
+    comp.txnDate.set('2026-07-04');
+    expect(comp.recordDisabled()).toBe(true);
+    comp.txnGlAccountUid.set('GL5400');
+    expect(comp.recordDisabled()).toBe(false);
+
+    comp.txnType.set('REPLENISHMENT');
+    comp.txnSourceAccountUid.set('CB1');
+    comp.recordTransaction();
+    await vi.runAllTimersAsync();
+    expect(svc.recordPettyCashTransaction).toHaveBeenCalledWith('PCF1', {
+      type: 'REPLENISHMENT',
+      amount: 500,
+      txnDate: '2026-07-04',
+      sourceCashBankAccountUid: 'CB1',
+    });
+  });
+
   it('surfaces a friendly error when a disbursement would overdraw the fund', async () => {
     vi.useFakeTimers();
     makeBed({
@@ -343,6 +374,7 @@ describe('PettyCashFundDetailComponent — recordTransaction()', () => {
 
     comp.txnAmount.set('999999');
     comp.txnDate.set('2026-07-04');
+    comp.txnGlAccountUid.set('GL5400');
     comp.recordTransaction();
     await vi.runAllTimersAsync();
 

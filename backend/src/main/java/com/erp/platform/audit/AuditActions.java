@@ -191,6 +191,8 @@ public final class AuditActions {
     public static final String AR_OPENITEM_CREATE  = "AR.OPENITEM.CREATE";
     public static final String AR_RECEIPT_RECORD   = "AR.RECEIPT.RECORD";
     public static final String AR_RECEIPT_ALLOCATE = "AR.RECEIPT.ALLOCATE";
+    /** A posted receipt was reversed by hand (ARC-04); detail carries the reason. */
+    public static final String AR_RECEIPT_REVERSE  = "AR.RECEIPT.REVERSE";
     public static final String AR_WRITEOFF         = "AR.WRITEOFF";
     public static final String AR_CREDITNOTE_RAISE = "AR.CREDITNOTE.RAISE";
     public static final String AR_OPENING_SET      = "AR.OPENING.SET";

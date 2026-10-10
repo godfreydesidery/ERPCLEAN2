@@ -23,6 +23,9 @@ public interface ArInvoiceRepository extends JpaRepository<ArInvoice, Long> {
 
     Optional<ArInvoice> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** An invoice by its numeric id, inside the company (receipt reversal restores by id). */
+    Optional<ArInvoice> findByCompanyIdAndId(Long companyId, Long id);
+
     /** ScopeGuard support (ADR-0014 D-12). */
     @Query("SELECT i.companyId FROM ArInvoice i WHERE i.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);

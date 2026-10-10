@@ -14,10 +14,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A single movement against a {@link PettyCashFund} (ADR-0050 D-7 PR-B). RECORD-ONLY: no GL leg is
- * posted this slice. {@link #glAccountId} captures the intended expense/funding account for a
- * future manual journal or the GL fast-follow; {@link #journalEntryRef} is reserved and always
- * {@code null} in this slice.
+ * A single movement against a {@link PettyCashFund} (ADR-0050 D-7 PR-B). Since ARC-10 every new
+ * movement posts to the GL: {@link #glAccountId} is the account on the other side of petty cash
+ * (expense, funding, or over/short) and {@link #journalEntryRef} the posted entry. Rows recorded
+ * before that are record-only ({@code journalEntryRef} null).
  *
  * <p>{@code amount} is the SIGNED transaction amount for a signed {@code ADJUSTMENT} (may be
  * negative to decrease the balance; the caller's signed delta is applied to the fund's balance via
@@ -57,11 +57,11 @@ public class PettyCashTransaction extends UidEntity {
     @Column(name = "balance_after", nullable = false, precision = 19, scale = 4, updatable = false)
     private BigDecimal balanceAfter;
 
-    /** Reserved: the expense/funding GL account captured for a future manual journal / fast-follow. */
+    /** The GL account on the other side of petty cash (expense / funding / over-short). */
     @Column(name = "gl_account_id")
     private Long glAccountId;
 
-    /** Reserved for the GL fast-follow; always {@code null} in this record-only slice. */
+    /** The GL entry this movement posted (ARC-10); null on record-only rows from before. */
     @Column(name = "journal_entry_ref", length = 26)
     @Setter
     private String journalEntryRef;

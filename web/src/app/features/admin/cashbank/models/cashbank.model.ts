@@ -438,9 +438,9 @@ export interface UpdatePettyCashFundRequest {
  * amount/balanceAfter arrive as numbers — coerce with +v. For DISBURSEMENT/REPLENISHMENT `amount`
  * is a positive magnitude (direction implied by txnType). For ADJUSTMENT `amount` is a SIGNED delta
  * (negative decreases the balance) — its direction is NOT implied by the type. Use the component's
- * txnEffect() to render a consistent signed balance impact. journalEntryRef is reserved server-side
- * (record-only this slice — see D-7.1); glAccountUid optionally captures the intended expense account
- * on a disbursement for a later manual/GL fast-follow journal.
+ * txnEffect() to render a consistent signed balance impact. ARC-10: every new movement posts to the
+ * GL — glAccountUid is the account on the other side of petty cash (expense / funding / over-short)
+ * and journalEntryRef the posted entry (null on movements recorded before petty cash posted).
  */
 export interface PettyCashTransactionDto {
   uid: string;
@@ -456,13 +456,18 @@ export interface PettyCashTransactionDto {
   reference: string | null;
   description: string | null;
   createdAt: string;
+  /** ARC-10: the GL entry this movement posted; absent on older rows / servers. */
+  journalEntryRef?: string | null;
 }
 
 export interface RecordPettyCashTransactionRequest {
   type: PettyCashTxnType;
   amount: number;
   txnDate: string;
+  /** DISBURSEMENT: the expense account (required, ARC-10). REPLENISHMENT: a funding GL account. */
   glAccountUid?: string;
   reference?: string;
   description?: string;
+  /** REPLENISHMENT: the cash/bank account the top-up came from (absent = company default). */
+  sourceCashBankAccountUid?: string;
 }

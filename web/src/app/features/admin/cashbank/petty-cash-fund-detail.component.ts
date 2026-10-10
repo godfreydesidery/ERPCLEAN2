@@ -13,6 +13,7 @@ import { UserService } from '../user/user.service';
 import { AccountDto } from '../gl/models/gl.model';
 import { GlService } from '../gl/gl.service';
 import {
+  CashAccountOptionDto,
   CreatePettyCashFundRequest,
   PettyCashFundDto,
   PettyCashTransactionDto,
@@ -30,8 +31,9 @@ import { formatMoney } from '../../../shared/money.util';
  *  - `/admin/petty-cash/funds/uid/:uid` — `uid` bound via withComponentInputBinding: load the
  *    fund, show its balance, record a transaction, and view its ledger.
  *
- * Record-only this slice (D-7.1): recording a transaction never touches GL; the fund's
- * `balanceAmount` moves and the ledger is authoritative until the GL fast-follow.
+ * ARC-10 / ACC-12: every movement posts to the GL. A disbursement needs its expense account
+ * (DR expense / CR Petty Cash); a replenishment names the cash/bank account the money came from
+ * (DR Petty Cash / CR that account, and its cash book moves) — none chosen = the company default.
  *
  * Money coerced as numbers — NEVER call .startsWith/.trim on a money value.
  * Gated PETTY_CASH.MANAGE (create fund / record transaction); viewing is PETTY_CASH.VIEW (route guard).
@@ -85,8 +87,12 @@ export class PettyCashFundDetailComponent {
   readonly txnState = signal<'idle' | 'loading' | 'error'>('idle');
   readonly transactions = signal<PettyCashTransactionDto[]>([]);
 
-  // ── GL accounts (optional expense picker on a disbursement) ────────────────
+  // ── GL accounts (required expense picker on a disbursement) ────────────────
   readonly glAccounts = signal<AccountDto[]>([]);
+
+  // ── Cash / bank accounts (source of a replenishment, ARC-10) ────────────────
+  readonly cashAccounts = signal<CashAccountOptionDto[]>([]);
+  readonly txnSourceAccountUid = signal('');
 
   // ── Record-transaction form ─────────────────────────────────────────────────
   readonly txnType = signal<PettyCashTxnType>('DISBURSEMENT');
@@ -120,7 +126,7 @@ export class PettyCashFundDetailComponent {
     this.creating(),
   );
 
-  /** Expense-type GL accounts, for the optional disbursement expense-account picker. */
+  /** Expense-type GL accounts, for the disbursement expense-account picker (required). */
   readonly expenseGlOptions = computed(() =>
     this.glAccounts().filter((a) => a.accountType === 'EXPENSE'),
   );
@@ -135,9 +141,13 @@ export class PettyCashFundDetailComponent {
     // ADJUSTMENT is a SIGNED delta (may be negative to decrease the balance) — only zero is invalid.
     // DISBURSEMENT/REPLENISHMENT are positive magnitudes (direction implied by the type).
     const amountInvalid = this.txnType() === 'ADJUSTMENT' ? amt === 0 : amt <= 0;
+    // ARC-10: a disbursement is debited to its expense account, so the account is required.
+    const accountMissing =
+      this.txnType() === 'DISBURSEMENT' && !String(this.txnGlAccountUid() ?? '').trim();
     return (
       !String(this.txnAmount() ?? '').trim() ||
       amountInvalid ||
+      accountMissing ||
       !String(this.txnDate() ?? '').trim() ||
       this.recording() ||
       !this.canManage()
@@ -167,6 +177,7 @@ export class PettyCashFundDetailComponent {
         this.state.set('idle');
         this.loadTransactions(dto.uid);
         this.loadGlAccounts(dto.companyId);
+        this.loadCashAccounts(dto.companyId);
       },
       error: (err) =>
         this.state.set(err instanceof HttpErrorResponse && err.status === 403 ? 'forbidden' : 'error'),
@@ -188,6 +199,14 @@ export class PettyCashFundDetailComponent {
     this.glService.listAllActiveAccounts(companyId).subscribe({
       next: (list) => this.glAccounts.set(list),
       error: (err: unknown) => this.glAccountsLookup.set(lookupFailure(err)),
+    });
+  }
+
+  /** Replenishment source picker; on failure the server falls back to the company default. */
+  private loadCashAccounts(companyId: string): void {
+    this.cashbankService.listAccountOptions(companyId).subscribe({
+      next: (list) => this.cashAccounts.set(list ?? []),
+      error: () => this.cashAccounts.set([]),
     });
   }
 
@@ -277,7 +296,9 @@ export class PettyCashFundDetailComponent {
       amount: this.txnAmountNum(),
       txnDate: String(this.txnDate() ?? '').trim(),
     };
-    if (glAccountUid) request.glAccountUid = glAccountUid;
+    if (glAccountUid && this.txnType() === 'DISBURSEMENT') request.glAccountUid = glAccountUid;
+    const sourceUid = String(this.txnSourceAccountUid() ?? '').trim();
+    if (sourceUid && this.txnType() === 'REPLENISHMENT') request.sourceCashBankAccountUid = sourceUid;
     if (reference) request.reference = reference;
     if (description) request.description = description;
 
@@ -303,6 +324,7 @@ export class PettyCashFundDetailComponent {
     this.txnType.set('DISBURSEMENT');
     this.txnAmount.set('');
     this.txnGlAccountUid.set('');
+    this.txnSourceAccountUid.set('');
     this.txnReference.set('');
     this.txnDescription.set('');
     this.txnDate.set(new Date().toISOString().slice(0, 10));

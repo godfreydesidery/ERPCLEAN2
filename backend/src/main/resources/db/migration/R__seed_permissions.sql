@@ -31,6 +31,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('AR.OPENING.SET', 'ar', 'Enter AR opening balances at go-live'),
     ('AR.RECEIPT.ALLOCATE', 'ar', 'Allocate or re-allocate a receipt across open items'),
     ('AR.RECEIPT.RECORD', 'ar', 'Record a customer receipt (RCT-####) and post its cash leg'),
+    -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): undo a wrong receipt.
+    ('AR.RECEIPT.REVERSE', 'ar', 'Reverse a posted customer receipt'),
     ('AR.STATEMENT.VIEW', 'ar', 'View or print a customer statement'),
     ('AR.VIEW', 'ar', 'View the AR sub-ledger, balances, ageing, and the reconciliation read'),
     ('AR.WRITEOFF', 'ar', 'Write off an uncollectable open item (bad debt)'),
@@ -511,6 +513,9 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','AR.INVOICE.VIEW'),
   ('ACCOUNTANT','AR.RECEIPT.RECORD'),
   ('ACCOUNTANT','AR.RECEIPT.ALLOCATE'),
+  -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
+  -- finance seat, not the cashier who recorded it.
+  ('ACCOUNTANT','AR.RECEIPT.REVERSE'),
   ('ACCOUNTANT','AR.CREDITNOTE'),
   ('ACCOUNTANT','AR.WRITEOFF'),
   ('ACCOUNTANT','AR.STATEMENT.VIEW'),
@@ -853,6 +858,9 @@ SELECT r.id, p.id FROM (VALUES
   ('FINANCE_DIRECTOR','AR.INVOICE.VIEW'),
   ('FINANCE_DIRECTOR','AR.RECEIPT.RECORD'),
   ('FINANCE_DIRECTOR','AR.RECEIPT.ALLOCATE'),
+  -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
+  -- finance seat, not the cashier who recorded it.
+  ('FINANCE_DIRECTOR','AR.RECEIPT.REVERSE'),
   ('FINANCE_DIRECTOR','AR.CREDITNOTE'),
   ('FINANCE_DIRECTOR','AR.WRITEOFF'),
   ('FINANCE_DIRECTOR','AR.STATEMENT.VIEW'),

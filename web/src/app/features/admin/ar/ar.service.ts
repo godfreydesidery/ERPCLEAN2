@@ -122,6 +122,14 @@ export class ArService {
     return this.http.put<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/allocations`, { allocations });
   }
 
+  /**
+   * Reverse a posted receipt (ARC-04): POST /ar/receipts/uid/{uid}/reverse. Posts the reversing
+   * journal and cash-book row and restores the invoices it settled. Gated AR.RECEIPT.REVERSE.
+   */
+  reverseReceipt(uid: string, reason: string): Observable<ArReceiptDto> {
+    return this.http.post<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/reverse`, { reason });
+  }
+
   // ── Write-offs ────────────────────────────────────────────────────────────
 
   writeOff(request: WriteOffRequest): Observable<ArWriteOffDto> {
