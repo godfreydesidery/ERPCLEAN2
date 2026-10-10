@@ -1,6 +1,7 @@
 package com.erp.api;
 
 import com.erp.modules.ar.domain.dto.ArReceiptDto;
+import com.erp.modules.ar.domain.dto.ReallocateReceiptRequest;
 import com.erp.modules.ar.domain.dto.RecordReceiptRequest;
 import com.erp.modules.ar.service.ArReceiptService;
 import com.erp.platform.common.api.ApiResponse;
@@ -14,6 +15,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -44,6 +46,20 @@ public class ArReceiptController {
     @PreAuthorize("@perm.scoped(#req.companyUid,'company','AR.RECEIPT.RECORD')")
     public ArReceiptDto record(@Valid @RequestBody RecordReceiptRequest req) {
         return service.recordAndAllocate(req);
+    }
+
+    /**
+     * Replace the receipt's allocation set (ARC-06): apply an advance or over-payment held on
+     * account to invoices raised later. Posts nothing to the GL (BR-AR-12). Gated by the seeded
+     * AR.RECEIPT.ALLOCATE ("allocate or re-allocate a receipt") or AR.RECEIPT.RECORD — every role
+     * that can record a receipt can apply it — and scoped to the receipt's company.
+     */
+    @PutMapping("/uid/{uid}/allocations")
+    @PreAuthorize("@perm.scoped(#uid,'arreceipt','AR.RECEIPT.ALLOCATE') "
+            + "or @perm.scoped(#uid,'arreceipt','AR.RECEIPT.RECORD')")
+    public ArReceiptDto reallocate(@PathVariable String uid,
+                                   @Valid @RequestBody ReallocateReceiptRequest req) {
+        return service.reallocate(uid, req.allocations());
     }
 
     /** Single receipt by uid. */

@@ -55,6 +55,8 @@ export interface AllocationLineDto {
 
 export interface ArReceiptDto {
   uid: string;
+  /** Wire: JSON string (Long). The receipt's company — used to load the customer's open items. */
+  companyId?: string;
   customerId: string;
   receiptNumber: string;
   receiptDate: string;
