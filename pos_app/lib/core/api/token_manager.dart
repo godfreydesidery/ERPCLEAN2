@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../models/auth.dart';
 import '../json.dart';
@@ -6,13 +7,47 @@ import '../storage/secure_store.dart';
 import 'api_response.dart';
 import 'erp_tls.dart';
 
+/// What one `/auth/refresh` attempt established.
+enum RefreshOutcome {
+  /// A new token bundle is in place.
+  refreshed,
+
+  /// The server refused the refresh token (or there was none): the session is
+  /// over and the cashier must sign in again.
+  rejected,
+
+  /// The server could not be asked — no answer, a timeout, a 5xx. This says
+  /// NOTHING about the session, which is kept; it is not a sign-out.
+  unavailable,
+}
+
+/// The result of [TokenManager.refreshNow]. [failure] is set for
+/// [RefreshOutcome.unavailable] so the caller can report the real problem
+/// ("can't reach the ERP") instead of a session expiry.
+class RefreshResult {
+  const RefreshResult._(this.outcome) : failure = null;
+
+  static const refreshed = RefreshResult._(RefreshOutcome.refreshed);
+  static const rejected = RefreshResult._(RefreshOutcome.rejected);
+  const RefreshResult.unavailable(DioException this.failure)
+      : outcome = RefreshOutcome.unavailable;
+
+  final RefreshOutcome outcome;
+  final DioException? failure;
+
+  bool get ok => outcome == RefreshOutcome.refreshed;
+}
+
 /// Owns the live token bundle and the **transparent refresh** discipline (AS-6,
 /// G-4). Uses a bare Dio (no interceptors) for `/auth/refresh` so refreshing
 /// never recurses through the authenticated client. Refresh is single-flight: a
 /// burst of expiring requests triggers at most one network refresh.
 class TokenManager {
-  TokenManager({required String apiBase, required SecureStore store})
-      : _store = store,
+  TokenManager({
+    required String apiBase,
+    required SecureStore store,
+    @visibleForTesting HttpClientAdapter? httpAdapter,
+  })  : _store = store,
         _bare = Dio(BaseOptions(
           baseUrl: apiBase,
           contentType: 'application/json',
@@ -20,13 +55,14 @@ class TokenManager {
           receiveTimeout: const Duration(seconds: 20),
         )) {
     applyErpTls(_bare);
+    if (httpAdapter != null) _bare.httpClientAdapter = httpAdapter;
   }
 
   final SecureStore _store;
   final Dio _bare;
 
   TokenBundle? _bundle;
-  Future<bool>? _inflight;
+  Future<RefreshResult>? _inflight;
 
   /// Refresh this many seconds before the access token actually expires.
   static const _skew = Duration(seconds: 30);
@@ -61,29 +97,40 @@ class TokenManager {
     return _bundle?.accessToken;
   }
 
-  /// Single-flight refresh. Returns true on success; on failure the session is
-  /// cleared (the caller routes to re-login).
-  Future<bool> refreshNow() {
+  /// Single-flight refresh. Only [RefreshOutcome.rejected] ends the session
+  /// (it is cleared here); [RefreshOutcome.unavailable] keeps it.
+  Future<RefreshResult> refreshNow() {
     return _inflight ??= _doRefresh().whenComplete(() => _inflight = null);
   }
 
-  Future<bool> _doRefresh() async {
+  Future<RefreshResult> _doRefresh() async {
     final refresh = _bundle?.refreshToken;
-    if (refresh == null) return false;
+    if (refresh == null || refresh.isEmpty) return RefreshResult.rejected;
     try {
       final res = await _bare.post('/auth/refresh',
           data: {'refreshToken': refresh});
       final data = unwrapData(res.data);
       await setSession(TokenBundle.fromJson(asMap(data)));
-      return true;
+      return RefreshResult.refreshed;
     } on DioException catch (e) {
       // ONLY a genuine server rejection (401/403) invalidates the session. A
       // transient transport failure (timeout / connection drop on flaky till
-      // Wi-Fi) must NOT wipe a still-valid refresh token — keep it so the next
-      // request simply retries, instead of forcing a spurious mid-shift logout.
+      // Wi-Fi, a server mid-restart) must NOT wipe a still-valid refresh token —
+      // keep it so the next request simply retries, instead of forcing a
+      // spurious mid-shift logout.
       final status = e.response?.statusCode;
-      if (status == 401 || status == 403) await clear();
-      return false;
+      if (status == 401 || status == 403) {
+        await clear();
+        return RefreshResult.rejected;
+      }
+      return RefreshResult.unavailable(e);
+    } catch (e) {
+      // An answer we could not read (a proxy's HTML page, a truncated body) is
+      // not a refusal either.
+      return RefreshResult.unavailable(DioException(
+        requestOptions: RequestOptions(path: '/auth/refresh'),
+        error: e,
+      ));
     }
   }
 }
