@@ -79,10 +79,13 @@ dist/orbixhq/*.aab
 # build-hq.ps1 writes a record beside each APK (brand, server, commit, SHA-256)
 dist/orbixhq/*.json
 
-# OrbixPOS Windows zips — built by dist/build-pos.ps1, published as GitHub Releases
-# (tag pos-v<version>), never committed: a zip cannot delta-compress, so each one would sit
-# in history forever and be downloaded by every clone.
-dist/OrbixPOS-*.zip
+# No zip is ever tracked, anywhere. A zip cannot delta-compress, so each one would sit in
+# history forever and be downloaded by every clone. That includes the OrbixPOS Windows zips
+# built by dist/build-pos.ps1, which are handed to the client directly and no longer published
+# as GitHub Releases either (storage). The folder Windows "Extract All" makes next to a POS zip,
+# to try the build, is ignored with it.
+*.zip
+dist/OrbixPOS-*-windows/
 
 # Python bytecode from the docs tooling (docs/tools/*.py) — a build artefact.
 __pycache__/
