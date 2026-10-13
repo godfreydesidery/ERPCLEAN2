@@ -95,7 +95,7 @@ class WorkOrderCostingServiceImplTest {
 
         service = new WorkOrderCostingServiceImpl(workOrders, components, operations,
                 bomExplosion, stockPosting, valuation, locationResolver, glPoster,
-                scopeGuard, audit, outbox, branches);
+                scopeGuard, audit, outbox, branches, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         RequestContext.set(new RequestContext.Principal(
                 USER_ID, "supervisor@test.com", false, COMPANY_ID, BRANCH_ID, null));

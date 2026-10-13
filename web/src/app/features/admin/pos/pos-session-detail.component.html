@@ -62,15 +62,15 @@
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Opened At</span>
-                <span class="erp-kpi__value">{{ s.openedAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.openedAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Closed At</span>
-                <span class="erp-kpi__value">{{ s.closedAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.closedAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Reconciled At</span>
-                <span class="erp-kpi__value">{{ s.reconciledAt ?? '—' }}</span>
+                <span class="erp-kpi__value">{{ (s.reconciledAt | appDate:'datetime') || '—' }}</span>
               </div>
               <div class="erp-kpi">
                 <span class="erp-kpi__label">Opening Float</span>
@@ -197,8 +197,12 @@
                       <dd class="col-sm-8 font-monospace">{{ +x.totalSalesAmount | number:'1.2-2' }}</dd>
                       <dt class="col-sm-4 text-muted">Payouts</dt>
                       <dd class="col-sm-8 font-monospace">{{ +x.totalPayoutsNetAmount | number:'1.2-2' }}</dd>
-                      <dt class="col-sm-4 text-muted">Expected Cash</dt>
-                      <dd class="col-sm-8 font-monospace">{{ +x.expectedCashAmount | number:'1.2-2' }}</dd>
+                      <!-- POS-04 blind cash-up: the server withholds expected cash (null) from a reader
+                           who may not settle the till. -->
+                      @if (x.expectedCashAmount != null) {
+                        <dt class="col-sm-4 text-muted">Expected Cash</dt>
+                        <dd class="col-sm-8 font-monospace">{{ +x.expectedCashAmount | number:'1.2-2' }}</dd>
+                      }
                       <dt class="col-sm-4 text-muted">Invoice Count</dt>
                       <dd class="col-sm-8">{{ x.invoiceCount }}</dd>
                     </dl>

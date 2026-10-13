@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
@@ -24,6 +25,8 @@ import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.TaxRate;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -35,6 +38,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -78,10 +82,16 @@ class SalesInvoiceServiceImplTest {
     // UAT wave 1: create() resolves the acting user's own internal agent through this, provisioning
     // one on first sale. Its own rules are pinned by InternalAgentProvisionerTest.
     @Mock InternalAgentProvisioner internalAgents;
+    // LSF-04: root's sales fall back to the company's Counter agent. Pinned below and in
+    // CounterAgentProvisionerTest.
+    @Mock CounterAgentProvisioner counterAgents;
     // Every DTO names the invoice's creator through this. Mocked (not null) for the same reason
     // as the discount guard: @InjectMocks would pass null and every read would NPE.
     @Mock com.erp.modules.iam.service.UserLookupService userLookup;
 
+    // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
+    @Spy CompanyCalendar calendar =
+            CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
     @InjectMocks SalesInvoiceServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;
@@ -108,7 +118,7 @@ class SalesInvoiceServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000010"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -123,7 +133,76 @@ class SalesInvoiceServiceImplTest {
 
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("100.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(BigDecimal.TEN);
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 900L, 910L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L));
+    }
+
+    @Test
+    void addLine_pricesForTheInvoicesCustomer_withTheirDefaultListCurrencyAndQuantity_PRD01() {
+        // LSF-02: a bar on credit whose default price list is WHOLESALE was charged retail, because
+        // the line was priced with no customer in view. The invoice's customer (and their default
+        // list), the invoice currency and the line quantity must all reach the resolver.
+        SalesInvoice inv = invoiceWithId(560L, "INVUID0000000000000000560");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+        var bar = customer();
+        bar.setDefaultPriceListId(3L);
+        when(customers.findByCompanyIdAndId(COMPANY_ID, CUSTOMER_ID)).thenReturn(Optional.of(bar));
+
+        UnitOfMeasure crate = unitWithId(980L, "BASEUID0000000000000098", "CRT");
+        Product lager = productWithId(970L, "PRODUID00000000000000097", "LAGER", "Lager crate",
+                crate);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, lager.getUid())).thenReturn(Optional.of(lager));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, crate.getUid())).thenReturn(Optional.of(crate));
+        when(priceResolutionService.resolveSellingPrice(any(SellingPriceQuery.class)))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("52500.0000"), true,
+                        com.erp.modules.products.domain.enums.PriceSource.LIST_PRICE));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(560L)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        SalesInvoiceLineDto dto = service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                lager.getUid(), crate.getUid(), new BigDecimal("3"), null, null));
+
+        ArgumentCaptor<SellingPriceQuery> asked = ArgumentCaptor.forClass(SellingPriceQuery.class);
+        verify(priceResolutionService).resolveSellingPrice(asked.capture());
+        SellingPriceQuery query = asked.getValue();
+        assertThat(query.companyId()).isEqualTo(COMPANY_ID);
+        assertThat(query.customerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(query.customerPriceListId()).isEqualTo(3L);
+        assertThat(query.currency()).isEqualTo("TZS");
+        assertThat(query.quantity()).isEqualByComparingTo("3");
+        assertThat(dto.unitPriceAmount()).isEqualByComparingTo("52500.0000");
+        assertThat(dto.listPriceAmount()).isEqualByComparingTo("52500.0000");
+    }
+
+    @Test
+    void addLine_customerPriceSource_isRecordedInTheLineAuditDetail_PRD02() {
+        SalesInvoice inv = invoiceWithId(561L, "INVUID0000000000000000561");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+        UnitOfMeasure pcs = unitWithId(981L, "BASEUID0000000000000981", "PCS");
+        Product soda = productWithId(971L, "PRODUID00000000000000971", "SODA", "Soda 300ml", pcs);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, soda.getUid())).thenReturn(Optional.of(soda));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, pcs.getUid())).thenReturn(Optional.of(pcs));
+        // This customer has a contract price.
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 971L, 981L)))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("650.0000"), false,
+                        com.erp.modules.products.domain.enums.PriceSource.CUSTOMER_PRICE));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(561L)).thenReturn(0);
+        when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000971", "BASEUID0000000000000981", BigDecimal.ONE, null, null));
+
+        var lineAdd = recordedAuditEvents().stream()
+                .filter(e -> "SALES.INVOICE.LINE.ADD".equals(e.action()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no line-add audit event was recorded"));
+        assertThat(lineAdd.detail()).containsEntry("priceSource", "CUSTOMER_PRICE");
+        assertThat(lineAdd.detail()).containsEntry("unitPrice", "650.0000");
     }
 
     @Test
@@ -140,7 +219,7 @@ class SalesInvoiceServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BOXUID00000000000000011"))
                 .thenReturn(Optional.of(boxUnit));
         // Base price 100; BOX pack explicitly priced at 1150 (non-linear) — never 100 (the bug).
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -157,7 +236,7 @@ class SalesInvoiceServiceImplTest {
 
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1150.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(new BigDecimal("12"));
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L));
     }
 
     @Test
@@ -173,7 +252,7 @@ class SalesInvoiceServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000012"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 930L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 902L, 930L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -246,7 +325,7 @@ class SalesInvoiceServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000030"))
                 .thenReturn(Optional.of(baseUnit));
         // No price list exists anywhere in this company — the live UAT condition.
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 910L, 960L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 910L, 960L)))
                 .thenReturn(UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -280,7 +359,7 @@ class SalesInvoiceServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000031"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 911L, 961L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 911L, 961L)))
                 .thenReturn(UnitPriceQuoteResult.resolved(
                         new UnitPriceQuoteDto(new BigDecimal("1000.0000"), "TZS", false)));
         when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.OVERRIDE"), anyLong()))
@@ -307,7 +386,7 @@ class SalesInvoiceServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000032"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 912L, 962L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 912L, 962L)))
                 .thenReturn(UnitPriceQuoteResult.resolved(
                         new UnitPriceQuoteDto(new BigDecimal("1000.0000"), "TZS", false)));
         when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.OVERRIDE"), anyLong()))
@@ -394,6 +473,46 @@ class SalesInvoiceServiceImplTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Select a sales agent");
         verify(invoices, never()).save(any());
+        // A staff member without an agent is a setup gap to name, never silently credited to the
+        // counter.
+        verify(counterAgents, never()).resolveOrProvision(any(), any());
+    }
+
+    @Test
+    void create_byRootWithNoAgentNamed_isCreditedToTheCounterAgent() {
+        // LSF-04: the owner on a fresh install signs in as root, who can hold no internal agent.
+        asRoot();
+        Long counterAgentId = 5151L;
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+        when(counterAgents.resolveOrProvision(eq(COMPANY_ID), eq(1L)))
+                .thenReturn(Optional.of(counterAgentId));
+        when(invoices.save(any())).thenAnswer(a -> a.getArgument(0));
+
+        service.create(new CreateSalesInvoiceRequest("COMPUID00000000000000001",
+                "CUSTUID00000000000000001", null, "TZS", null, null));
+
+        ArgumentCaptor<SalesInvoice> captor = ArgumentCaptor.forClass(SalesInvoice.class);
+        verify(invoices).save(captor.capture());
+        assertThat(captor.getValue().getAgentId()).isEqualTo(counterAgentId);
+    }
+
+    @Test
+    void create_byRootWhenTheCounterAgentWasArchived_stillRefuses() {
+        asRoot();
+        when(companies.findByUid("COMPUID00000000000000001")).thenReturn(Optional.of(company()));
+        when(customers.findByCompanyIdAndUid(COMPANY_ID, "CUSTUID00000000000000001"))
+                .thenReturn(Optional.of(customer()));
+        when(internalAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+        when(counterAgents.resolveOrProvision(eq(COMPANY_ID), any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(new CreateSalesInvoiceRequest(
+                "COMPUID00000000000000001", "CUSTUID00000000000000001", null, "TZS", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Select a sales agent");
+        verify(invoices, never()).save(any());
     }
 
     // -------------------------------------------------------------------------
@@ -404,6 +523,12 @@ class SalesInvoiceServiceImplTest {
     private static void asCashier() {
         RequestContext.set(new RequestContext.Principal(
                 77L, "cashier", false, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
+    }
+
+    /** The system administrator — can never hold an internal sales agent. */
+    private static void asRoot() {
+        RequestContext.set(new RequestContext.Principal(
+                1L, "rootadmin", true, COMPANY_ID, BRANCH_ID, "127.0.0.1"));
     }
 
     private static com.erp.modules.iam.domain.entity.Company company() {
@@ -464,7 +589,7 @@ class SalesInvoiceServiceImplTest {
         Product product = productWithId(productId, productUid, "PROD-K7", "Sugar 1kg", baseUnit);
         when(products.findByCompanyIdAndUid(COMPANY_ID, productUid)).thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, unitUid)).thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, productId, unitId))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, productId, unitId)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1000.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -495,5 +620,16 @@ class SalesInvoiceServiceImplTest {
         ReflectionTestUtils.setField(product, "id", id);
         ReflectionTestUtils.setField(product, "uid", uid);
         return product;
+    }
+
+    /**
+     * Matches the selling-price question for (company, product, unit) whatever the customer side
+     * carries (PRD-01 threads the document's customer through; these tests pin the price, not who).
+     */
+    private static SellingPriceQuery sellingQuery(Long companyId, Long productId, Long unitId) {
+        return org.mockito.ArgumentMatchers.argThat(q -> q != null
+                && companyId.equals(q.companyId())
+                && productId.equals(q.productId())
+                && unitId.equals(q.unitId()));
     }
 }

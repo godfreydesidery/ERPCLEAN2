@@ -25,13 +25,31 @@ package com.erp.modules.reporting.service;
  *                       or {@link #COMPANY_LEVEL}
  * @param unassignedOnly true for the "company-level entries" slice
  */
-public record StatementScope(Long branchId, String branchUid, String label, boolean unassignedOnly) {
+public record StatementScope(Long branchId, String branchUid, String label, boolean unassignedOnly,
+                             java.util.List<Long> branchIds) {
 
     public static final String ALL_BRANCHES  = "All branches";
     public static final String COMPANY_LEVEL = "Company-level entries (no branch)";
 
     private static final StatementScope COMPANY_WIDE =
             new StatementScope(null, null, ALL_BRANCHES, false);
+
+    public StatementScope {
+        branchIds = branchIds == null ? null : java.util.List.copyOf(branchIds);
+    }
+
+    /** The original four-part shape: a scope that is not a set of branches. */
+    public StatementScope(Long branchId, String branchUid, String label, boolean unassignedOnly) {
+        this(branchId, branchUid, label, unassignedOnly, null);
+    }
+
+    /**
+     * A branch-limited caller's "All branches": only the lines of the branches they are assigned
+     * to (owner ruling 2026-10-10). An empty list reads nothing.
+     */
+    public static StatementScope branches(java.util.List<Long> branchIds, String label) {
+        return new StatementScope(null, null, label, false, branchIds);
+    }
 
     public static StatementScope companyWide() {
         return COMPANY_WIDE;
@@ -47,6 +65,6 @@ public record StatementScope(Long branchId, String branchUid, String label, bool
 
     /** True for the whole company — no line filter applies. */
     public boolean isCompanyWide() {
-        return branchId == null && !unassignedOnly;
+        return branchId == null && !unassignedOnly && branchIds == null;
     }
 }

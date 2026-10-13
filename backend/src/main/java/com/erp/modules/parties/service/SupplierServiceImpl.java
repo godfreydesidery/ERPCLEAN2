@@ -123,17 +123,34 @@ public class SupplierServiceImpl implements SupplierService {
         Supplier s = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), s.getCompanyId());
         validateIdentifiers(req.partyType(), req.tin(), req.vrn(), req.vatRegistered());
-        validateFkOwnership(s.getCompanyId(), req.paymentTermsId(), req.defaultWhtTypeId());
+        // AP-10: the terms / currency / WHT defaults are "null = leave as is" on update, so a client
+        // that does not send them (an older screen, a partial form) can no longer wipe them. The two
+        // reference ids are cleared explicitly with 0 ("none").
+        Long paymentTermsId = clearable(req.paymentTermsId());
+        Long whtTypeId      = clearable(req.defaultWhtTypeId());
+        validateFkOwnership(s.getCompanyId(), positive(paymentTermsId), positive(whtTypeId));
 
         applyCommon(s, req.partyType(), req.displayName(), req.legalName(), req.tin(),
                 req.vatRegistered(), req.vrn(), req.businessRegNo(), req.mobileMoneyNo(),
                 req.phone(), req.email(), req.physicalAddress(), req.postalAddress(),
                 req.region(), req.district());
         s.setSupplierKind(req.supplierKind());
-        s.setPaymentTermsDays(req.paymentTermsDays());
-        s.setPaymentTermsId(req.paymentTermsId());
-        applyDefaults(s, req.country(), req.defaultCurrency(), req.leadTimeDays(),
-                req.minOrderValue(), req.defaultWhtTypeId());
+        if (req.paymentTermsDays() != null) {
+            if (req.paymentTermsDays() < 0) {
+                throw new IllegalArgumentException("Payment terms cannot be negative.");
+            }
+            s.setPaymentTermsDays(req.paymentTermsDays());
+        }
+        if (paymentTermsId != null) {
+            s.setPaymentTermsId(positive(paymentTermsId));
+        }
+        applyDefaults(s,
+                req.country() != null ? req.country() : s.getCountry(),
+                req.defaultCurrency() != null ? req.defaultCurrency()
+                        : (s.getDefaultCurrency() != null ? s.getDefaultCurrency().value() : null),
+                req.leadTimeDays() != null ? req.leadTimeDays() : s.getLeadTimeDays(),
+                req.minOrderValue() != null ? req.minOrderValue() : s.getMinOrderValue(),
+                whtTypeId != null ? positive(whtTypeId) : s.getDefaultWhtTypeId());
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
 
@@ -357,6 +374,16 @@ public class SupplierServiceImpl implements SupplierService {
      * Throws {@link NotFoundException} (404) on mismatch — no existence leak across company
      * boundaries (CONFUSED_DEPUTY fix).
      */
+    /** Update-side reference id: null = unchanged, 0 (or less) = clear, otherwise the id. */
+    private static Long clearable(Long id) {
+        return id == null ? null : (id <= 0 ? 0L : id);
+    }
+
+    /** The id to store / validate: the 0 "clear" marker becomes null. */
+    private static Long positive(Long id) {
+        return id != null && id > 0 ? id : null;
+    }
+
     private void validateFkOwnership(Long companyId, Long paymentTermsId, Long defaultWhtTypeId) {
         if (paymentTermsId != null
                 && !paymentTermsRepo.existsByCompanyIdAndId(companyId, paymentTermsId)) {

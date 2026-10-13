@@ -117,6 +117,16 @@ public class CustomerImportHandler implements BulkImportHandler {
     public RowOutcome process(Long companyId, ImportRow row, ImportMode mode, ImportContext ctx) {
         String code = row.get(COL_CODE);
         Customer existing = code.isEmpty() ? null : findByCode(companyId, code);
+        if (code.isEmpty()) {
+            // PRD-12: a re-uploaded row without its code must update the customer it describes,
+            // not create a second copy; and a repeat within the file is caught at Validate.
+            String name = row.get(COL_DISPLAY_NAME);
+            String tin = row.get(COL_TIN);
+            PartyImportMatcher.claimInFile(ctx, "customer", name, tin);
+            existing = PartyImportMatcher.match("customer", name, tin,
+                    t -> customers.findByCompanyIdAndNormalizedTin(companyId, t),
+                    n -> customers.findByCompanyIdAndNormalizedName(companyId, n));
+        }
 
         if (existing != null) {
             customerService.updateByUid(existing.getUid(), buildUpdate(existing, row));

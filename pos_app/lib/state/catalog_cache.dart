@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/api/api_exception.dart';
 import '../models/catalog.dart';
 import '../services/catalog_service.dart';
 import 'providers.dart';
@@ -14,11 +15,15 @@ class Catalogue {
   final CatalogService _svc;
 
   /// Fresh full product by uid — resolves a scanned barcode's product (the
-  /// barcode lookup returns the product's uid). Null on any error, so the caller
-  /// can fall back to a search.
+  /// barcode lookup returns the product's uid). Null on an HTTP error, so the
+  /// caller can fall back to a search; an UNREACHABLE server is rethrown
+  /// (POS-17) so the till says "can't reach the ERP" instead of "No match".
   Future<Product?> productByUid(String uid) async {
     try {
       return await _svc.getProduct(uid);
+    } on ApiException catch (e) {
+      if (e.isUnreachable) rethrow;
+      return null;
     } catch (_) {
       return null;
     }

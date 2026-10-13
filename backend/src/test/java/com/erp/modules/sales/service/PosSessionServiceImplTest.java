@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -48,6 +49,7 @@ import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PosTillRepository;
 import com.erp.modules.sales.repository.SalesInvoicePaymentRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
@@ -133,7 +135,9 @@ class PosSessionServiceImplTest {
         // (PosSessionAuthorisedReadTest) where both are stubbed per case.
         service = new PosSessionServiceImpl(sessions, tills, payouts, expenseIdempotency, invoices,
                 tenderPayments, glInvoker, glConfig, glPosting, companies, branches, userLookup,
-                scopeGuard, audit, numberGen, tillExpenseGl, permissionResolver, stepUpAuth);
+                scopeGuard, audit, numberGen, tillExpenseGl, permissionResolver, stepUpAuth,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         // default: no request context
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 1L, null));
@@ -237,6 +241,7 @@ class PosSessionServiceImplTest {
                         new TenderSubtotalDto(TenderType.CASH, new BigDecimal("500.00")),
                         new TenderSubtotalDto(TenderType.MOBILE_MONEY, new BigDecimal("300.00"))));
 
+        callerMaySettleTill();
         var xRead = service.xRead("S9");
 
         assertThat(xRead.totalSalesAmount())
@@ -268,13 +273,13 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcct = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S3", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
         JournalEntryDraft draft = captor.getValue();
 
         // All lines must carry TZS (company currency), not USD
@@ -289,8 +294,8 @@ class PosSessionServiceImplTest {
 
     @Test
     void reconcileSession_varianceGl_postingDateEqualsSessionCloseDate() {
-        // session closed on 2026-06-12 (UTC)
-        Instant closedAt = Instant.parse("2026-06-12T22:00:00Z");
+        // session closed at 2026-06-12 18:00 UTC = 21:00 EAT on 2026-06-12
+        Instant closedAt = Instant.parse("2026-06-12T18:00:00Z");
         PosSession session = closedSession(1L, new BigDecimal("-100.00"), closedAt);
 
         Company company = mockCompany(1L, "TZS");
@@ -300,16 +305,40 @@ class PosSessionServiceImplTest {
         ChartOfAccount shortAcct = mockCoa(30L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S4", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
 
         // Must post on 2026-06-12, not today
         assertThat(captor.getValue().postingDate()).isEqualTo(LocalDate.of(2026, 6, 12));
+    }
+
+    @Test
+    void reconcileSession_varianceGl_afterMidnightEatClose_postsOnTheEatDate() {
+        // Owner ruling 2026-10-10: business dates are the company's (EAT) dates. A bar till closed
+        // at 00:30 EAT on 1 July is 21:30 UTC on 30 June — the variance belongs to 1 July.
+        Instant closedAt = Instant.parse("2026-06-30T21:30:00Z");
+        PosSession session = closedSession(1L, new BigDecimal("-100.00"), closedAt);
+
+        Company company = mockCompany(1L, "TZS");
+        when(sessions.findByUid("S4")).thenReturn(Optional.of(session));
+        when(companies.findById(1L)).thenReturn(Optional.of(company));
+        ChartOfAccount cashAcct  = mockCoa(10L);
+        ChartOfAccount shortAcct = mockCoa(30L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcct);
+        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(sessions.save(any())).thenReturn(session);
+
+        service.reconcileSession("S4", new ReconcileSessionRequest(null));
+
+        ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
+        verify(glPosting).post(captor.capture());
+        assertThat(captor.getValue().postingDate()).isEqualTo(LocalDate.of(2026, 7, 1));
     }
 
     // -------------------------------------------------------------------------
@@ -317,7 +346,7 @@ class PosSessionServiceImplTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void reconcileSession_missingGlConfig_propagatesException() {
+    void reconcileSession_missingGlConfig_refusesTheReconcile_withAFriendlyMessage() {
         PosSession session = closedSession(1L, new BigDecimal("50.00"),
                 Instant.parse("2026-06-12T22:00:00Z"));
 
@@ -332,10 +361,34 @@ class PosSessionServiceImplTest {
 
         // The exception must propagate out of reconcileSession — no silent swallow
         assertThatThrownBy(() -> service.reconcileSession("S5", new ReconcileSessionRequest(null)))
-                .isInstanceOf(NotFoundException.class)
-                .hasMessageContaining("POS_CASH_OVER");
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("could not be reconciled")
+                .hasMessageNotContaining("POS_CASH_OVER");
 
-        // GL must NOT have been posted (exception fired before postInNewTx)
+        // GL must NOT have been posted (exception fired before the post)
+        verify(glPosting, never()).post(any());
+    }
+
+    @Test
+    void reconcileSession_variancePostFails_sessionIsNotMarkedReconciled() {
+        // ACC-20: a closed period / missing fiscal year used to be swallowed by postInNewTx — the
+        // session read RECONCILED while the shortage never reached the P&L.
+        PosSession session = closedSession(1L, new BigDecimal("-75.00"),
+                Instant.parse("2026-06-12T22:00:00Z"));
+        Company company = mockCompany(1L, "TZS");
+        when(sessions.findByUid("S5b")).thenReturn(Optional.of(session));
+        when(companies.findById(1L)).thenReturn(Optional.of(company));
+        ChartOfAccount cash = mockCoa(10L);
+        ChartOfAccount shortAcct = mockCoa(30L);
+        when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cash);
+        when(glConfig.resolve(1L, GlConfigKey.POS_CASH_SHORT)).thenReturn(shortAcct);
+        when(glPosting.post(any())).thenThrow(new com.erp.platform.common.api.AccountingSetupException(
+                "The fiscal period October 2026 is closed."));
+
+        assertThatThrownBy(() -> service.reconcileSession("S5b", new ReconcileSessionRequest(null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("could not be reconciled");
+        assertThat(session.getStatus()).isNotEqualTo(PosSessionStatus.RECONCILED);
         verify(glInvoker, never()).postInNewTx(any());
     }
 
@@ -356,7 +409,7 @@ class PosSessionServiceImplTest {
 
         service.reconcileSession("S6", new ReconcileSessionRequest(null));
 
-        verify(glInvoker, never()).postInNewTx(any());
+        verify(glPosting, never()).post(any());
         assertThat(session.getVarianceJournalId()).isNull();
     }
 
@@ -377,13 +430,13 @@ class PosSessionServiceImplTest {
         ChartOfAccount overAcctS7 = mockCoa(20L);
         when(glConfig.resolve(1L, GlConfigKey.CASH)).thenReturn(cashAcctS7);
         when(glConfig.resolve(1L, GlConfigKey.POS_CASH_OVER)).thenReturn(overAcctS7);
-        when(glInvoker.postInNewTx(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
+        when(glPosting.post(any())).thenReturn(new JournalEntryDto(99L, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null, null));
         when(sessions.save(any())).thenReturn(session);
 
         service.reconcileSession("S7", new ReconcileSessionRequest(null));
 
         ArgumentCaptor<JournalEntryDraft> captor = ArgumentCaptor.forClass(JournalEntryDraft.class);
-        verify(glInvoker).postInNewTx(captor.capture());
+        verify(glPosting).post(captor.capture());
         JournalEntryDraft draft = captor.getValue();
 
         BigDecimal totalDebit  = draft.lines().stream()
@@ -484,6 +537,7 @@ class PosSessionServiceImplTest {
         when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
         when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
 
+        callerMaySettleTill();
         var xRead = service.xRead("SX1");
 
         assertThat(xRead.totalSalesAmount()).isEqualByComparingTo(new BigDecimal("800.00"));
@@ -664,6 +718,9 @@ class PosSessionServiceImplTest {
      */
     @Test
     void recordPayout_refund_raisesNoJournal_soCashIsNotCreditedTwice() {
+        // A supervisor may still pay a refund out on their own authority (POS-02).
+        when(permissionResolver.hasPermission(any(), eq("SALES.INVOICE.VOID"), anyLong()))
+                .thenReturn(true);
         PosSession session = openSession(1L, new BigDecimal("1000.00"));
         when(sessions.findByUid("K8-3")).thenReturn(Optional.of(session));
         when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -731,7 +788,7 @@ class PosSessionServiceImplTest {
         assertThat(session.getVarianceAmount()).isEqualByComparingTo(BigDecimal.ZERO);
 
         service.reconcileSession("K8-6", new ReconcileSessionRequest(null));
-        verify(glInvoker, never()).postInNewTx(any());
+        verify(glPosting, never()).post(any());
     }
 
     /** The detail behind the merged "Payouts" line — previously only a SUM existed. */
@@ -1366,8 +1423,9 @@ class PosSessionServiceImplTest {
         ArgumentCaptor<Instant> until = ArgumentCaptor.forClass(Instant.class);
         verify(payouts).findExpensesForCompanyBetween(anyLong(), any(),
                 from.capture(), until.capture());
-        assertThat(from.getValue()).isEqualTo(Instant.parse("2026-08-01T00:00:00Z"));
-        assertThat(until.getValue()).isEqualTo(Instant.parse("2026-08-09T00:00:00Z"));
+        // Days are the company's (EAT, UTC+3) days: 1 Aug 00:00 EAT .. 9 Aug 00:00 EAT, exclusive.
+        assertThat(from.getValue()).isEqualTo(Instant.parse("2026-07-31T21:00:00Z"));
+        assertThat(until.getValue()).isEqualTo(Instant.parse("2026-08-08T21:00:00Z"));
     }
 
     /** The report is company-scoped before a single row is read — no cross-tenant read. */
@@ -1802,5 +1860,132 @@ class PosSessionServiceImplTest {
         ChartOfAccount coa = mock(ChartOfAccount.class);
         when(coa.getId()).thenReturn(id);
         return coa;
+    }
+
+    // -------------------------------------------------------------------------
+    // Wave-2 POS drawer controls: POS-02 (refund payout), POS-04 (blind X-read),
+    // POS-05 (paid-out / expense approval)
+    // -------------------------------------------------------------------------
+
+    private static final String MANAGER_UID = "01J0MANAGER0000000000000AA";
+
+    private void callerMaySettleTill() {
+        when(permissionResolver.hasPermission(any(), eq("POS.SESSION.RECONCILE"), anyLong()))
+                .thenReturn(true);
+    }
+
+    private void managerApprovesFor(String permission) {
+        when(stepUpAuth.verifyAuthoriserUid(eq(MANAGER_UID), eq(permission), any()))
+                .thenReturn(com.erp.modules.iam.domain.dto.AuthorityVerificationDto.granted(
+                        permission, MANAGER_UID, "juma.manager", "Juma Mwita"));
+    }
+
+    private void approvalRefused() {
+        when(stepUpAuth.verifyAuthoriserUid(anyString(), anyString(), any()))
+                .thenReturn(com.erp.modules.iam.domain.dto.AuthorityVerificationDto.denied(
+                        "X", "That approval could not be verified."));
+    }
+
+    private java.util.Map<String, Object> payoutAuditDetail() {
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.erp.platform.audit.AuditEvent.class);
+        verify(audit, org.mockito.Mockito.atLeastOnce()).record(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(e -> AuditActions.POS_SESSION_PAYOUT.equals(e.action()))
+                .reduce((a, b) -> b).orElseThrow().detail();
+    }
+
+    @Test
+    void w2_refundPayout_withoutApproval_isRefusedWithAPlainSentence() {
+        when(sessions.findByUid("W2-1")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        var req = new PosPayoutRequest(PosPayoutType.REFUND, new BigDecimal("3000.00"),
+                "Customer returned a faulty kettle");
+
+        assertThatThrownBy(() -> service.recordPayout("W2-1", req))
+                .as("409 with text: an OrbixPOS 1.5.x till shows server text only for non-403s")
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("reverse the sale");
+        verify(payouts, never()).save(any());
+        verify(audit).recordIndependent(any());
+    }
+
+    @Test
+    void w2_refundPayout_withManagerApproval_isRecordedAndNamesTheManager() {
+        when(sessions.findByUid("W2-2")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        managerApprovesFor("SALES.INVOICE.VOID");
+
+        service.recordPayout("W2-2", new PosPayoutRequest(PosPayoutType.REFUND,
+                new BigDecimal("3000.00"), "Faulty kettle", MANAGER_UID));
+
+        assertThat(payoutAuditDetail())
+                .containsEntry("authorisation", "APPROVED")
+                .containsEntry("authorisedBy", "juma.manager")
+                .containsEntry("authorisedByUid", MANAGER_UID);
+    }
+
+    @Test
+    void w2_refundPayout_withAnApprovalThatDoesNotCheckOut_isForbidden() {
+        when(sessions.findByUid("W2-3")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        approvalRefused();
+
+        assertThatThrownBy(() -> service.recordPayout("W2-3", new PosPayoutRequest(
+                PosPayoutType.REFUND, new BigDecimal("3000.00"), "Faulty kettle", MANAGER_UID)))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class);
+        verify(payouts, never()).save(any());
+    }
+
+    @Test
+    void w2_paidOut_fromAnOldTillWithoutApproval_isAcceptedButAuditedAsUnapproved() {
+        when(sessions.findByUid("W2-4")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubPayoutGlAccounts();
+
+        service.recordPayout("W2-4", new PosPayoutRequest(PosPayoutType.PAID_OUT,
+                new BigDecimal("500.00"), "Casual labour"));
+
+        assertThat(payoutAuditDetail()).containsEntry("authorisation", "NONE");
+    }
+
+    @Test
+    void w2_paidOut_withManagerApproval_isAuditedAsApproved() {
+        when(sessions.findByUid("W2-5")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        when(payouts.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubPayoutGlAccounts();
+        managerApprovesFor("POS.SESSION.RECONCILE");
+
+        service.recordPayout("W2-5", new PosPayoutRequest(PosPayoutType.PAID_OUT,
+                new BigDecimal("500.00"), "Casual labour", MANAGER_UID));
+
+        assertThat(payoutAuditDetail())
+                .containsEntry("authorisation", "APPROVED")
+                .containsEntry("authorisedBy", "juma.manager");
+    }
+
+    @Test
+    void w2_expense_withAnApprovalThatDoesNotCheckOut_isForbidden() {
+        when(sessions.findByUid("W2-6")).thenReturn(Optional.of(openSession(1L, BigDecimal.TEN)));
+        approvalRefused();
+
+        assertThatThrownBy(() -> service.recordExpense("W2-6", new PosExpenseRequest(
+                new BigDecimal("500.00"), "Transport", "Bodaboda to the bank", MANAGER_UID)))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class);
+        verify(payouts, never()).save(any());
+    }
+
+    @Test
+    void w2_xRead_forACashierWhoCannotSettleTheTill_withholdsExpectedCash() {
+        PosSession session = openSession(1L, new BigDecimal("1000.00"));
+        when(sessions.findByUid("W2-7")).thenReturn(Optional.of(session));
+        when(invoices.sumGrossByPosSession(any())).thenReturn(new BigDecimal("800.00"));
+        when(tenderPayments.sumCashTenderByPosSession(any())).thenReturn(new BigDecimal("500.00"));
+        when(tenderPayments.sumByPosSessionGroupedByTender(any())).thenReturn(List.of());
+        when(payouts.totalPayoutsForSession(any())).thenReturn(BigDecimal.ZERO);
+        when(payouts.payoutBreakdownForSession(any())).thenReturn(List.of());
+
+        var xRead = service.xRead("W2-7");
+
+        assertThat(xRead.expectedCashAmount()).as("blind cash-up (POS-04)").isNull();
+        assertThat(xRead.totalSalesAmount()).isEqualByComparingTo(new BigDecimal("800.00"));
     }
 }

@@ -11,6 +11,7 @@ import com.erp.modules.purchases.domain.entity.LandedCost;
 import com.erp.modules.purchases.domain.entity.LandedCostAllocation;
 import com.erp.modules.purchases.domain.entity.LandedCostCharge;
 import com.erp.modules.purchases.domain.entity.LandedCostReceipt;
+import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.LandedCostBasis;
 import com.erp.modules.purchases.domain.enums.LandedCostStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
@@ -90,7 +91,24 @@ public class LandedCostServiceImpl implements LandedCostService {
                 .orElseThrow(() -> new NotFoundException("Company not found."));
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
-        Long branchId = branchId(ctx);
+
+        // Resolve every receipt BEFORE writing anything, so a bad one leaves no half-built draft.
+        List<GoodsReceipt> receipts = new ArrayList<>();
+        for (String grUid : req.receiptUids()) {
+            GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, grUid)
+                    .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+            // PUR-28: freight on a cancelled receipt would be capitalised into stock that is gone.
+            if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
+                throw new IllegalStateException(
+                        "Landed costs can only be added to received goods receipts. "
+                                + "Receipt " + gr.getReceiptNumber() + " has been voided.");
+            }
+            receipts.add(gr);
+        }
+        // PUR-09: the cost is capitalised into the stock of the branch that RECEIVED the goods, not
+        // the branch the user happens to be working in (scope from the loaded entity). One landed
+        // cost posts at one branch, so receipts from different branches need separate landed costs.
+        Long branchId = receivingBranch(receipts.stream().map(GoodsReceipt::getBranchId).toList(), ctx);
 
         String lcNumber = numberGen.nextLandedCost(companyId);
         LandedCost lc = new LandedCost(companyId, branchId, lcNumber,
@@ -98,9 +116,7 @@ public class LandedCostServiceImpl implements LandedCostService {
         lc = landedCosts.save(lc);
 
         // Link receipts
-        for (String grUid : req.receiptUids()) {
-            GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, grUid)
-                    .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+        for (GoodsReceipt gr : receipts) {
             if (!lcReceipts.existsByLandedCostIdAndGoodsReceiptId(lc.getId(), gr.getId())) {
                 lcReceipts.save(new LandedCostReceipt(lc.getId(), gr.getId(), gr.getUid(),
                         companyId, branchId, actorId()));
@@ -160,6 +176,20 @@ public class LandedCostServiceImpl implements LandedCostService {
             throw new IllegalStateException(
                     "Cannot confirm landed cost with no linked GR lines.");
         }
+        // PUR-28: a receipt voided after this draft was raised no longer holds the goods.
+        boolean anyVoided = allGrLines.stream().anyMatch(l ->
+                l.getGoodsReceipt() != null
+                        && l.getGoodsReceipt().getStatus() != GoodsReceiptStatus.RECEIVED);
+        if (anyVoided) {
+            throw new IllegalStateException(
+                    "One of the receipts on this landed cost has been voided. "
+                            + "Create a new landed cost without it.");
+        }
+        // PUR-09: capitalise into the RECEIVING branch's stock. A draft raised before this fix
+        // carries the raiser's branch on its header; the receipts are the authority.
+        Long stockBranchId = receivingBranch(
+                allGrLines.stream().map(GoodsReceiptLine::getBranchId).toList(),
+                RequestContext.get());
 
         BigDecimal totalCharge = lc.getTotalChargeAmount();
         if (totalCharge == null || totalCharge.compareTo(BigDecimal.ZERO) == 0) {
@@ -193,7 +223,7 @@ public class LandedCostServiceImpl implements LandedCostService {
             LandedCostAllocation alloc = new LandedCostAllocation(
                     lc.getId(), grLine.getId(), grLine.getUid(),
                     grLine.getProductId(),
-                    lc.getCompanyId(), lc.getBranchId(),
+                    lc.getCompanyId(), stockBranchId,
                     share, DEFAULT_CURRENCY, actorId());
             lcAllocations.save(alloc);
 
@@ -209,13 +239,13 @@ public class LandedCostServiceImpl implements LandedCostService {
 
         // Publish outbox event — stock handler will update avg_cost + post GL
         LandedCostAllocatedPayload payload = new LandedCostAllocatedPayload(
-                lc.getUid(), lc.getCompanyId(), lc.getBranchId(),
+                lc.getUid(), lc.getCompanyId(), stockBranchId,
                 totalCharge, DEFAULT_CURRENCY, payloadLines,
                 lc.getLandedCostNumber());
         outbox.publish(DomainEventType.LANDED_COST_ALLOCATED,
                 DomainEventType.AGG_LANDED_COST,
                 lc.getId(), lc.getUid(),
-                lc.getCompanyId(), lc.getBranchId(), payload);
+                lc.getCompanyId(), stockBranchId, payload);
 
         audit.record(AuditEvent.of(AuditActions.LANDED_COST_CONFIRM, "landed_costs",
                 lc.getId(), lc.getUid())
@@ -256,7 +286,23 @@ public class LandedCostServiceImpl implements LandedCostService {
         return p != null ? p.userId() : null;
     }
 
-    private Long branchId(RequestContext.Principal ctx) {
+    /**
+     * PUR-09: the one branch the linked receipts were received at. A landed cost raises a single
+     * allocation event, and the stock handler capitalises all of it at one branch, so receipts from
+     * two branches cannot share a landed cost. The caller's context branch is only a fallback for
+     * an empty list, which validation already rejects.
+     */
+    static Long receivingBranch(List<Long> receiptBranchIds, RequestContext.Principal ctx) {
+        List<Long> distinct = receiptBranchIds.stream()
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (distinct.size() > 1) {
+            throw new IllegalArgumentException(
+                    "The selected receipts were received at different branches. "
+                            + "Add a separate landed cost for each branch.");
+        }
+        if (distinct.size() == 1) {
+            return distinct.get(0);
+        }
         Long id = ctx != null ? ctx.branchId() : null;
         if (id == null) throw new IllegalStateException("No active branch in context.");
         return id;

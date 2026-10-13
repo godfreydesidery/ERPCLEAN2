@@ -252,7 +252,7 @@ class GLPostingServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> postingService.post(draft))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("no open fiscal period");
+                .hasMessageContaining("is closed");
     }
 
     // =========================================================================

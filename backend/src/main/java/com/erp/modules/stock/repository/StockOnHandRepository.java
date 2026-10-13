@@ -121,26 +121,58 @@ public interface StockOnHandRepository extends JpaRepository<StockOnHand, Long> 
     // --- notifications scanner (ADR-0024 D-7): low-stock scan ---
 
     /**
-     * On-hand rows at or below reorder level (reorder_level is NOT NULL) for a company.
-     * Used by {@code NotificationScanner}. Backed by {@code ix_stock_on_hand_low_stock_scan} (V26).
+     * STK-10 / LBO-16: the reorder level a row is judged against — its own (set on Stock On-Hand),
+     * else the product's level for the branch ({@code product_branch}), else the product's own
+     * level (Product Master / product import). Before this only the first was read, so a level
+     * typed into the Product Master never raised a flag, a report row or an alert.
      */
-    @Query("""
-            SELECT s FROM StockOnHand s
-            WHERE s.companyId = :companyId
-              AND s.reorderLevel IS NOT NULL
-              AND s.quantity <= s.reorderLevel
-            """)
+    String EFFECTIVE_REORDER_LEVEL = "COALESCE(s.reorder_level, pb.reorder_level, p.reorder_level)";
+
+    /**
+     * Joins for {@link #EFFECTIVE_REORDER_LEVEL}, plus the rule for an INHERITED level: it applies
+     * to a row that holds stock or sits at the branch's default location. A zero row elsewhere is a
+     * bookkeeping leftover (a received transfer leaves one at In-Transit) and must not be reported
+     * as "out of stock" against the product's level.
+     */
+    String EFFECTIVE_REORDER_FROM = """
+            FROM stock_on_hand s
+            JOIN products p               ON p.id = s.product_id AND p.company_id = s.company_id
+            LEFT JOIN product_branch pb   ON pb.product_id = s.product_id AND pb.branch_id = s.branch_id
+            LEFT JOIN stock_locations l   ON l.id = s.location_id
+            WHERE s.company_id = :companyId
+              AND (s.reorder_level IS NOT NULL OR s.quantity <> 0 OR COALESCE(l.is_default, true))
+              AND COALESCE(s.reorder_level, pb.reorder_level, p.reorder_level) IS NOT NULL
+            """;
+
+    /**
+     * On-hand rows at or below their effective reorder level for a company.
+     * Used by {@code NotificationScanner}.
+     */
+    @Query(value = "SELECT s.* " + EFFECTIVE_REORDER_FROM
+            + " AND s.quantity <= " + EFFECTIVE_REORDER_LEVEL, nativeQuery = true)
     List<StockOnHand> findAtOrBelowReorderByCompany(@Param("companyId") Long companyId);
 
     /**
-     * On-hand rows ABOVE reorder level that have a reorder_level set — re-arm sweep
+     * On-hand rows ABOVE their effective reorder level — re-arm sweep
      * (low-stock recovery scan, BR-NOTIF-08).
      */
-    @Query("""
-            SELECT s FROM StockOnHand s
-            WHERE s.companyId = :companyId
-              AND s.reorderLevel IS NOT NULL
-              AND s.quantity > s.reorderLevel
-            """)
+    @Query(value = "SELECT s.* " + EFFECTIVE_REORDER_FROM
+            + " AND s.quantity > " + EFFECTIVE_REORDER_LEVEL, nativeQuery = true)
     List<StockOnHand> findAboveReorderByCompany(@Param("companyId") Long companyId);
+
+    /**
+     * {@code [stock_on_hand.id, effective reorder level]} for the given rows of one company
+     * (STK-10) — the level is null when none is set anywhere. Applicability (holds stock or default
+     * location) is left to the caller.
+     */
+    @Query(value = """
+            SELECT s.id, COALESCE(s.reorder_level, pb.reorder_level, p.reorder_level)
+            FROM stock_on_hand s
+            JOIN products p             ON p.id = s.product_id AND p.company_id = s.company_id
+            LEFT JOIN product_branch pb ON pb.product_id = s.product_id AND pb.branch_id = s.branch_id
+            WHERE s.company_id = :companyId
+              AND s.id IN (:ids)
+            """, nativeQuery = true)
+    List<Object[]> findEffectiveReorderLevels(@Param("companyId") Long companyId,
+                                              @Param("ids") java.util.Collection<Long> ids);
 }

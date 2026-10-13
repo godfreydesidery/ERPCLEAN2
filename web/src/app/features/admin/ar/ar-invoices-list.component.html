@@ -136,7 +136,7 @@
                 @for (inv of rows(); track inv.uid) {
                   <tr>
                     <td class="mono fw-semibold">{{ inv.documentNo }}</td>
-                    <td>{{ customerDisplay(inv.customerId) }}</td>
+                    <td>{{ customerDisplay(inv) }}</td>
                     <td>{{ inv.invoiceDate }}</td>
                     <td>{{ inv.dueDate ?? '—' }}</td>
                     <td class="num">{{ fmtMoney(inv.originalAmount) }}</td>

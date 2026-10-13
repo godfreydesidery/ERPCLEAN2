@@ -1,5 +1,4 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
@@ -8,8 +7,9 @@ import { PageMeta } from '../../../../core/api/api-response.model';
 import { SessionStore } from '../../../../core/auth/session.store';
 import { PaginatorComponent } from '../../../../shared/paginator/paginator.component';
 import { StockTransferDto } from './stock-transfer.model';
-import { StockTransferService } from './stock-transfer.service';
+import { StockTransferListFilters, StockTransferService } from './stock-transfer.service';
 import { StockLocationService } from '../locations/stock-location.service';
+import { AppDatePipe } from '../../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -19,7 +19,7 @@ interface LoadTrigger {
 
 @Component({
   selector: 'app-stock-transfer-list',
-  imports: [DatePipe, RouterLink, PaginatorComponent],
+  imports: [AppDatePipe, RouterLink, PaginatorComponent],
   templateUrl: './stock-transfer-list.component.html',
   styleUrl: './stock-transfer-list.component.scss',
 })
@@ -49,6 +49,32 @@ export class StockTransferListComponent {
 
   private readonly immediateTrigger$ = new Subject<LoadTrigger>();
 
+  /**
+   * STK-19: list filters. Defaults to transfers touching the ACTIVE branch so a receiving
+   * storekeeper is not paging through every branch's transfers; "All branches" clears it.
+   */
+  readonly filters = signal<StockTransferListFilters>({ direction: 'BRANCH' });
+  readonly statusOptions = ['DRAFT', 'DISPATCHED', 'RECEIVED', 'COMPLETED', 'CANCELLED'];
+
+  setFilter(key: keyof StockTransferListFilters, value: string): void {
+    this.filters.update((f) => ({ ...f, [key]: value }));
+    this.load(0);
+  }
+
+  clearFilters(): void {
+    this.filters.set({ direction: 'BRANCH' });
+    this.load(0);
+  }
+
+  /** Only the filters actually set — what is sent to the server. */
+  private activeFilters(): StockTransferListFilters {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(this.filters())) {
+      if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+    }
+    return out as StockTransferListFilters;
+  }
+
   constructor() {
     const pageTrigger$ = toObservable(this.currentPage).pipe(
       skip(1),
@@ -61,7 +87,7 @@ export class StockTransferListComponent {
       .pipe(
         switchMap(({ page }) => {
           this.state.set('loading');
-          return this.transferService.list(page, DEFAULT_SIZE);
+          return this.transferService.list(page, DEFAULT_SIZE, this.activeFilters());
         }),
         takeUntilDestroyed(),
       )

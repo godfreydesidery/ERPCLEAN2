@@ -60,7 +60,10 @@ public record SalesInvoiceDto(
         String createdAt,
         Long createdBy,
         String updatedAt,
-        Long updatedBy
+        Long updatedBy,
+        // SAL-28: the customer's uid, so a client can ask the price resolver for THIS customer's
+        // price. Additive; null where the caller did not resolve it.
+        String customerUid
 ) {
 
     /** Build from entity with enriched customer, agent, and optional route fields. */
@@ -85,6 +88,15 @@ public record SalesInvoiceDto(
     public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
                                        String routeUid, String routeCode, String routeName,
                                        String postedGlEntryUid, String createdByName) {
+        return from(inv, customerName, agentName, routeUid, routeCode, routeName,
+                postedGlEntryUid, createdByName, null);
+    }
+
+    /** As above, plus the customer's uid (SAL-28). */
+    public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
+                                       String routeUid, String routeCode, String routeName,
+                                       String postedGlEntryUid, String createdByName,
+                                       String customerUid) {
         return new SalesInvoiceDto(
                 inv.getId(),
                 inv.getUid(),
@@ -125,7 +137,8 @@ public record SalesInvoiceDto(
                 inv.getCreatedAt() != null ? inv.getCreatedAt().toString() : null,
                 inv.getCreatedBy(),
                 inv.getUpdatedAt() != null ? inv.getUpdatedAt().toString() : null,
-                inv.getUpdatedBy()
+                inv.getUpdatedBy(),
+                customerUid
         );
     }
 }

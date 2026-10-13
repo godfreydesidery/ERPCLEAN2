@@ -11,6 +11,7 @@ import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockBatchService;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.modules.stock.service.StockSerialService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -18,7 +19,6 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
@@ -80,6 +80,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
     private final StockSerialService         serialService;
     private final StockLocationRepository    locationRepo;
     private final ObjectMapper               objectMapper;
+    private final CompanyCalendar calendar;
 
     public GoodsReceiptReversalStockHandler(IdempotencyGuard guard,
                                              StockPostingService posting,
@@ -89,7 +90,8 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
                                              StockBatchService batchService,
                                              StockSerialService serialService,
                                              StockLocationRepository locationRepo,
-                                             ObjectMapper objectMapper) {
+                                             ObjectMapper objectMapper,
+                                             CompanyCalendar calendar) {
         this.guard              = guard;
         this.posting            = posting;
         this.movementRepository = movementRepository;
@@ -99,6 +101,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
         this.serialService      = serialService;
         this.locationRepo       = locationRepo;
         this.objectMapper       = objectMapper;
+        this.calendar           = calendar;
     }
 
     @Override
@@ -213,7 +216,7 @@ public class GoodsReceiptReversalStockHandler implements DomainEventHandler {
             // Post one GL journal DR GRNI / CR INVENTORY for the entire receipt reversal (D-5).
             if (totalOriginalValue.compareTo(BigDecimal.ZERO) > 0) {
                 String glEntryUid = glPoster.postReceiptReversalInNewTx(
-                        event.getCompanyId(), event.getBranchId(), LocalDate.now(),
+                        event.getCompanyId(), event.getBranchId(), calendar.today(event.getCompanyId()),
                         payload.receiptUid(), payload.receiptNumber(), "TZS", totalOriginalValue);
                 if (glEntryUid == null) {
                     log.warn("GoodsReceiptReversalStockHandler: receipt reversal GL post returned null " +

@@ -18,6 +18,9 @@ public interface SalesInvoicePaymentRepository extends JpaRepository<SalesInvoic
      */
     Optional<SalesInvoicePayment> findByUidAndInvoiceId(String uid, Long invoiceId);
 
+    /** ACC-05 / ARC-01: whether any sale tender in the company landed in this cash/bank account. */
+    boolean existsByCompanyIdAndCashBankAccountId(Long companyId, Long cashBankAccountId);
+
     /**
      * Net CASH tender retained in the till drawer for a POS session — busy-day-simulation
      * bugfix (PosSessionServiceImpl expected-cash formula). Only CASH payments on FINALISED

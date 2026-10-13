@@ -86,7 +86,8 @@ class GoodsReceiptStockHandlerTest {
         objectMapper   = new ObjectMapper().findAndRegisterModules();
 
         handler = new GoodsReceiptStockHandler(guard, posting, productService, valuation,
-                glPoster, batchService, serialService, locationRepo, objectMapper);
+                glPoster, batchService, serialService, locationRepo, objectMapper, com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
         when(productService.getByUid(PRODUCT_UID)).thenReturn(stockableProduct());

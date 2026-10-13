@@ -69,7 +69,11 @@ public record ProductDto(
         BigDecimal scaleStep,
         BigDecimal maxSaleWeight,
         // Soft advisories from the write that produced this response; empty on reads.
-        List<String> warnings
+        List<String> warnings,
+        // PRD-03: department/category label, image and notes (columns pre-existed; additive)
+        String category,
+        String imageUrl,
+        String notes
 ) {
 
     /**
@@ -92,7 +96,7 @@ public record ProductDto(
                 vatStatus, status, brand, manufacturer, weight, volume, dimensions, hsCode, version,
                 createdAt, createdBy, updatedAt, updatedBy, reorderLevel, reorderQty, safetyStock,
                 minStock, maxStock, leadTimeDays, purchasable, preferredSupplierId, restrictedKind,
-                weighed, tareWeight, scaleStep, maxSaleWeight, List.of());
+                weighed, tareWeight, scaleStep, maxSaleWeight, List.of(), null, null, null);
     }
 
     /** Same product, with soft advisories attached (write paths only). */
@@ -106,7 +110,7 @@ public record ProductDto(
                 dimensions, hsCode, version, createdAt, createdBy, updatedAt, updatedBy,
                 reorderLevel, reorderQty, safetyStock, minStock, maxStock, leadTimeDays,
                 purchasable, preferredSupplierId, restrictedKind, weighed, tareWeight, scaleStep,
-                maxSaleWeight, List.copyOf(warnings));
+                maxSaleWeight, List.copyOf(warnings), category, imageUrl, notes);
     }
 
     public static ProductDto from(Product p) {
@@ -155,7 +159,11 @@ public record ProductDto(
                 p.isWeighed(),
                 p.getTareWeight(),
                 p.getScaleStep(),
-                p.getMaxSaleWeight()
+                p.getMaxSaleWeight(),
+                List.of(),
+                p.getCategory(),
+                p.getImageUrl(),
+                p.getNotes()
         );
     }
 }

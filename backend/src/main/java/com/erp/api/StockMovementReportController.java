@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
@@ -65,6 +66,14 @@ public class StockMovementReportController {
      * <p>Paged: the movement ledger of a busy branch is far too large to return whole. {@code size}
      * is clamped server-side to {@link StockMovementReportQuery#MAX_PAGE_SIZE}.
      */
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping
     @PreAuthorize("@perm.has('INVENTORY.VALUATION.VIEW')")
     public StockMovementReportDto stockMovementReport(
@@ -102,7 +111,8 @@ public class StockMovementReportController {
         StockMovementReportDto dto = reportQuery.reportForExport(
                 companyId,
                 new StockMovementReportFiltersDto(fromDate, toDate, mode, branchUid, productUid));
-        return download(exporter.export(flatten(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flatten(dto), branchGuard, branchUid), format));
     }
 
     // -------------------------------------------------------------------------

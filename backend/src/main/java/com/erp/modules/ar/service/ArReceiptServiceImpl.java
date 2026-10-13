@@ -24,6 +24,7 @@ import com.erp.modules.cashbank.service.CashBankAccountResolver;
 import com.erp.modules.cashbank.service.CashTransactionRecorder;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.gl.domain.enums.JournalSourceType;
+import com.erp.modules.gl.service.FiscalPeriodResolver;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
@@ -35,11 +36,13 @@ import com.erp.modules.tax.service.WhtCaptureService;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.AccountingSetupException;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -48,10 +51,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +96,10 @@ public class ArReceiptServiceImpl implements ArReceiptService {
     private final OutboxPublisher outbox;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final ArCustomerNames customerNames;
+    private final FiscalPeriodResolver fiscalPeriods;
+    private final ArReceiptReversalSupport reversalSupport;
+    private final CompanyCalendar calendar;
 
     private static final String ERR_AR_INVOICE_NOT_FOUND = "AR invoice not found.";
 
@@ -105,7 +117,14 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                                  CurrencyConversionService fxConversion,
                                  OutboxPublisher outbox,
                                  ScopeGuard scopeGuard,
-                                 AuditService audit) {
+                                 AuditService audit,
+                                 ArCustomerNames customerNames,
+                                 FiscalPeriodResolver fiscalPeriods,
+                                 ArReceiptReversalSupport reversalSupport,
+                                 CompanyCalendar calendar) {
+        this.customerNames           = customerNames;
+        this.fiscalPeriods           = fiscalPeriods;
+        this.reversalSupport         = reversalSupport;
         this.receipts                = receipts;
         this.invoices                = invoices;
         this.allocations             = allocations;
@@ -121,6 +140,7 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         this.outbox                  = outbox;
         this.scopeGuard              = scopeGuard;
         this.audit                   = audit;
+        this.calendar                = calendar;
     }
 
     @Override
@@ -149,6 +169,13 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 BigDecimal.ONE, currency, companyId, req.receiptDate());
         BigDecimal settlementRate = settlementConv.rate();
 
+        // 3b. Tender must be one the ar_receipts CHECK admits (V11) — a friendly 400, not a
+        //     constraint error (ARC-18: the screen used to offer "Other").
+        String tenderType = normaliseTender(req.tenderType());
+
+        // 3c. How the money is applied (ARC-20) — refused up front if contradictory.
+        String allocationMode = resolveAllocationMode(req);
+
         // 4. Generate receipt number
         String receiptNumber = numberGen.nextReceipt(companyId);
 
@@ -161,26 +188,38 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 req.receiptDate(),
                 req.amount(),
                 currency,
-                req.tenderType(),
+                tenderType,
                 actorId());
         // Stamp settlement rate (ADR-0036 D-4; immutable after persist)
         receipt.setFxRate(settlementRate);
         receipt.setRateAt(settlementConv.rateAt());
+        // ARC-18 / LSF-18: keep the M-Pesa code / transfer ref / cheque no. the cashier typed —
+        // it is how a disputed payment is traced later. Column is VARCHAR(80).
+        if (req.bankReference() != null && !req.bankReference().isBlank()) {
+            String ref = req.bankReference().trim();
+            if (ref.length() > 80) {
+                throw new IllegalArgumentException(
+                        "The payment reference is too long — use at most 80 characters.");
+            }
+            receipt.setBankReference(ref);
+        }
         // ADR-0041 D3: link the funding INBOUND cheque (lets a later bounce locate + reverse this receipt)
         if (req.chequeUid() != null && !req.chequeUid().isBlank()) {
             receipt.setChequeUid(req.chequeUid());
         }
         receipt = receipts.save(receipt);
 
-        // 6. Build allocation set
-        List<ArReceiptAllocation> allocationList;
-        if (req.allocations() == null || req.allocations().isEmpty()) {
+        // 6. Build allocation set — the mode decides (ARC-20, see RecordReceiptRequest javadoc)
+        List<ArReceiptAllocation> allocationList = switch (allocationMode) {
             // Oldest-first auto-allocation (BR-AR-03)
-            allocationList = autoAllocate(receipt, companyId, customer.getId());
-        } else {
-            // Manual override (BR-AR-03)
-            allocationList = manualAllocate(receipt, companyId, req.allocations());
-        }
+            case RecordReceiptRequest.MODE_AUTO -> autoAllocate(receipt, companyId, customer.getId());
+            // Exactly the lines sent; none = the whole receipt stays on account (BR-AR-05)
+            case RecordReceiptRequest.MODE_MANUAL -> hasLines(req)
+                    ? manualAllocate(receipt, companyId, req.allocations())
+                    : new ArrayList<>();
+            // Held on account in full (BR-AR-05)
+            default -> new ArrayList<>();
+        };
 
         // 7. Apply allocation — reduce open items, capture base amounts for FX
         //    ADR-0036 D-5: accumulate Σ base_relieved (AR booked at invoice rate) and
@@ -390,7 +429,8 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         customer.getDisplayName(), amountFormatted,
                         currency, Instant.now()));
 
-        return toDto(receipt, savedAllocs, invoices);
+        return toDto(receipt, savedAllocs, invoices)
+                .withCustomer(customer.getUid(), customer.getCode(), customer.getDisplayName());
     }
 
     @Override
@@ -478,13 +518,17 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             saved.add(allocations.save(alloc));
             totalAllocated = totalAllocated.add(line.allocatedAmount());
         }
-        if (totalAllocated.compareTo(receipt.getAmount()) > 0) {
+        // ARC-11: money already paid back to the customer is no longer on this receipt.
+        BigDecimal available = receipt.getAmount().subtract(
+                cashTxnRecorder.refundedAmount(receipt.getCompanyId(), receipt.getUid()));
+        if (totalAllocated.compareTo(available) > 0) {
             throw new IllegalStateException(
-                    "The total re-allocated amount exceeds the receipt amount."
-                    + " Please reduce your allocation lines so they do not exceed the receipt total.");
+                    "The total re-allocated amount exceeds what is left on the receipt."
+                    + " Please reduce your allocation lines so they do not exceed the receipt total"
+                    + " less anything already refunded.");
         }
 
-        BigDecimal unallocated = receipt.getAmount().subtract(totalAllocated);
+        BigDecimal unallocated = available.subtract(totalAllocated);
         receipt.setUnallocatedAmount(unallocated);
         receipt.setStatus(deriveReceiptStatus(unallocated, receipt.getAmount(), totalAllocated));
         receipt.setUpdatedAt(Instant.now());
@@ -495,7 +539,94 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                         receipt.getId(), receipt.getUid())
                 .detail(Map.of("action", "reallocate")));
 
-        return toDto(receipt, saved, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, saved, invoices));
+    }
+
+    @Override
+    public ArReceiptDto reverse(String receiptUid, String reason) {
+        ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(receiptUid), "ArReceipt", receiptUid);
+        Long companyId = receipt.getCompanyId();
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        String why = reason == null ? "" : reason.trim();
+        if (why.isEmpty()) {
+            throw new IllegalArgumentException("Give a reason for reversing this receipt.");
+        }
+        if (why.length() > 200) {
+            throw new IllegalArgumentException("Keep the reason to 200 characters or fewer.");
+        }
+        if (receipt.getReversedAt() != null) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " has already been reversed.");
+        }
+        if (receipt.getGlEntryUid() == null) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " has no ledger entry, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // ARC-11: part of this receipt was paid back to the customer. Reversing it would put the
+        // whole receipt back on the customer's account, refund included.
+        if (cashTxnRecorder.refundedAmount(companyId, receipt.getUid()).signum() > 0) {
+            throw new ConflictException("Part of receipt " + receipt.getReceiptNumber()
+                    + " was refunded to the customer, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // The receipt's own period must still be open: undoing money in a period that has been
+        // closed (and possibly reported) is an accountant's decision, not a cashier correction.
+        try {
+            fiscalPeriods.resolveOpen(companyId, receipt.getReceiptDate());
+        } catch (AccountingSetupException closed) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber() + " is dated "
+                    + receipt.getReceiptDate().format(
+                            DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH))
+                    + ", in an accounting period that is closed, so it cannot be reversed."
+                    + " Ask your accountant to reopen the period or post a correcting journal.");
+        }
+
+        // Withholding tax: the receipt carries a WHT certificate the reversal cannot cancel, so
+        // reversing it here would leave the certificate claiming tax that was never withheld.
+        // The cash book holds the NET cash, so a shortfall against the receipt amount is the WHT.
+        Optional<BigDecimal> cashIn = cashTxnRecorder.settledAmount(
+                companyId, receipt.getUid(), CashTxnType.AR_RECEIPT, CashTxnDirection.IN);
+        if (cashIn.isPresent() && cashIn.get().compareTo(receipt.getAmount()) < 0) {
+            throw new ConflictException("Receipt " + receipt.getReceiptNumber()
+                    + " had withholding tax deducted, so it cannot be reversed here."
+                    + " Ask your accountant to correct it with a journal.");
+        }
+
+        // Dated today (never before the receipt itself), like a bounced-cheque reversal.
+        LocalDate today = calendar.today(companyId);
+        LocalDate reversalDate = today.isBefore(receipt.getReceiptDate())
+                ? receipt.getReceiptDate() : today;
+
+        // APPEND-ONLY reversal of the receipt's journal: every leg swapped (DR AR / CR Cash, and
+        // the FX leg if any), so debits equal credits by construction. Same TX: a GL refusal rolls
+        // back the whole command and leaves the sub-ledger untouched.
+        JournalEntryDto reversal = glPosting.postReversal(
+                receipt.getGlEntryUid(), reversalDate, JournalSourceType.AR_RECEIPT,
+                receipt.getUid(), actorId(),
+                "receipt " + receipt.getReceiptNumber() + " reversed: " + why);
+
+        // The cash book moves with the GL: the opposite row on the same cash/bank account.
+        cashTxnRecorder.recordSettlementReversal(
+                companyId, receipt.getUid(), CashTxnType.AR_RECEIPT, CashTxnDirection.IN,
+                reversal.uid(), reversalDate,
+                "Reversal of receipt " + receipt.getReceiptNumber() + " - " + why, actorId());
+
+        receipt = reversalSupport.restoreAndMarkReversed(receipt, actorId());
+
+        audit.record(AuditEvent.of(AuditActions.AR_RECEIPT_REVERSE, "ar_receipts",
+                        receipt.getId(), receipt.getUid())
+                .detail(Map.of(
+                        "receiptNumber", receipt.getReceiptNumber(),
+                        "amount", receipt.getAmount().toPlainString(),
+                        "reversalEntryUid", reversal.uid(),
+                        "reason", why)));
+
+        List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
+        return named(companyId, toDto(receipt, allocs, invoices));
     }
 
     @Override
@@ -504,23 +635,47 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         ArReceipt receipt = Lookups.orNotFound(receipts.findByUid(uid), "ArReceipt", uid);
         scopeGuard.assertCanActIn(RequestContext.get(), receipt.getCompanyId());
         List<ArReceiptAllocation> allocs = allocations.findByReceiptId(receipt.getId());
-        return toDto(receipt, allocs, invoices);
+        return named(receipt.getCompanyId(), toDto(receipt, allocs, invoices));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCompany(Long companyId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyId(companyId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyId(companyId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ArReceiptDto> listByCustomer(Long companyId, Long customerId, Pageable pageable) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        return receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
-                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices));
+        return named(companyId, receipts.findByCompanyIdAndCustomerId(companyId, customerId, pageable)
+                .map(r -> toDto(r, allocations.findByReceiptId(r.getId()), invoices)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ArReceiptDto> list(Long companyId, Long customerId, String customerUid,
+                                   Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Long custId = (customerUid != null && !customerUid.isBlank())
+                ? customerNames.idOf(companyId, customerUid)
+                : customerId;
+        return custId != null
+                ? listByCustomer(companyId, custId, pageable)
+                : listByCompany(companyId, pageable);
+    }
+
+    /** One receipt carrying its customer's uid, code and name. */
+    private ArReceiptDto named(Long companyId, ArReceiptDto dto) {
+        return customerNames.fillReceipts(companyId, List.of(dto)).get(0);
+    }
+
+    /** The page with each receipt's customer named. */
+    private Page<ArReceiptDto> named(Long companyId, Page<ArReceiptDto> page) {
+        return new PageImpl<>(customerNames.fillReceipts(companyId, page.getContent()),
+                page.getPageable(), page.getTotalElements());
     }
 
     // -------------------------------------------------------------------------
@@ -544,6 +699,39 @@ public class ArReceiptServiceImpl implements ArReceiptService {
             }
         }
         return result;
+    }
+
+    private static boolean hasLines(RecordReceiptRequest req) {
+        return req.allocations() != null && !req.allocations().isEmpty();
+    }
+
+    /**
+     * ARC-20: the allocation mode the receipt is recorded under. Absent keeps the historical rule
+     * (lines = MANUAL, no lines = AUTO) so callers that send nothing behave exactly as before; an
+     * explicit AUTO or ON_ACCOUNT with lines is contradictory and refused rather than guessed.
+     */
+    static String resolveAllocationMode(RecordReceiptRequest req) {
+        String raw = req.allocationMode();
+        if (raw == null || raw.isBlank()) {
+            return hasLines(req) ? RecordReceiptRequest.MODE_MANUAL : RecordReceiptRequest.MODE_AUTO;
+        }
+        String mode = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        switch (mode) {
+            case RecordReceiptRequest.MODE_MANUAL:
+                return mode;
+            case RecordReceiptRequest.MODE_AUTO:
+            case RecordReceiptRequest.MODE_ON_ACCOUNT:
+                if (hasLines(req)) {
+                    throw new IllegalArgumentException(
+                            "Allocation lines can only be sent when the allocation is chosen by hand."
+                            + " Remove the lines, or choose to allocate manually.");
+                }
+                return mode;
+            default:
+                throw new IllegalArgumentException(
+                        "Choose how to apply the receipt: automatically to the oldest invoices,"
+                        + " to the invoices you pick, or keep it all on account.");
+        }
     }
 
     private List<ArReceiptAllocation> manualAllocate(ArReceipt receipt,
@@ -595,6 +783,20 @@ public class ArReceiptServiceImpl implements ArReceiptService {
         return ArReceiptStatus.ALLOCATED;
     }
 
+    /** The tender values the ar_receipts CHECK admits (V11 chk_ar_receipt_tender). */
+    static final java.util.Set<String> ALLOWED_TENDERS =
+            java.util.Set.of("CASH", "BANK_TRANSFER", "MOBILE_MONEY", "CHEQUE", "CARD");
+
+    /** Upper-cased, trimmed tender; anything the CHECK would reject is a friendly 400. */
+    static String normaliseTender(String tender) {
+        String t = tender == null ? "" : tender.trim().toUpperCase(java.util.Locale.ROOT);
+        if (!ALLOWED_TENDERS.contains(t)) {
+            throw new IllegalArgumentException(
+                    "Choose how the customer paid: Cash, Bank transfer, Mobile money, Cheque or Card.");
+        }
+        return t;
+    }
+
     /**
      * Minor-unit scale for rounding. TZS=0, USD/EUR/KES/GBP=2.
      * Defaults to 2 when the currency is unrecognised (safe fallback).
@@ -629,6 +831,6 @@ public class ArReceiptServiceImpl implements ArReceiptService {
                 r.getId(), r.getUid(), r.getCompanyId(), r.getBranchId(), r.getCustomerId(),
                 r.getReceiptNumber(), r.getReceiptDate(), r.getAmount(), r.getUnallocatedAmount(),
                 r.getCurrency().value(), r.getTenderType(), r.getBankReference(), r.getGlEntryUid(),
-                r.getStatus(), allocDtos);
+                r.getStatus(), allocDtos).withReversedAt(r.getReversedAt());
     }
 }

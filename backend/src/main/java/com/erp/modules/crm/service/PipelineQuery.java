@@ -6,13 +6,13 @@ import com.erp.modules.crm.domain.dto.PipelineSummaryDto;
 import com.erp.modules.crm.domain.dto.PipelineStageSummaryRowDto;
 import com.erp.modules.crm.repository.OpportunityRepository;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -28,10 +28,12 @@ public class PipelineQuery {
 
     private final OpportunityRepository opportunities;
     private final ScopeGuard scopeGuard;
+    private final CompanyCalendar calendar;
 
-    public PipelineQuery(OpportunityRepository opportunities, ScopeGuard scopeGuard) {
+    public PipelineQuery(OpportunityRepository opportunities, ScopeGuard scopeGuard, CompanyCalendar calendar) {
         this.opportunities = opportunities;
         this.scopeGuard = scopeGuard;
+        this.calendar   = calendar;
     }
 
     /**
@@ -78,8 +80,9 @@ public class PipelineQuery {
      */
     public CrmKpiDto kpis(Long companyId, Long branchId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        Instant fromInst = from.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant toInst   = to.atTime(23, 59, 59).toInstant(ZoneOffset.UTC);
+        // The company's days (owner ruling 2026-10-10); the upper bound stays inclusive at 23:59:59.
+        Instant fromInst = calendar.startOfDay(companyId, from);
+        Instant toInst   = calendar.endOfDayExclusive(companyId, to).minusSeconds(1);
         List<Object[]> rows = opportunities.kpiRaw(companyId, branchId, fromInst, toInst);
 
         long wonCount  = 0L;

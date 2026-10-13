@@ -10,7 +10,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long> {
+public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long>,
+        org.springframework.data.jpa.repository.JpaSpecificationExecutor<JournalEntry> {
+
+    /** Entries of the given source documents (company-scoped) — document-ref lookup (ACC-19). */
+    List<JournalEntry> findByCompanyIdAndSourceRefIn(Long companyId,
+                                                     java.util.Collection<String> sourceRefs);
 
     Optional<JournalEntry> findByUid(String uid);
 
@@ -54,4 +59,16 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, Long
      * guard (ADR-0039 D-9 / OQ-CCY-08): once any GL posting exists, the base is immutable.
      */
     boolean existsByCompanyId(Long companyId);
+
+    /**
+     * Number of entries a source document has under one source type — the GL posting-exception
+     * idempotency probe (ACC-02): a re-post is refused once this count has grown past the count
+     * recorded when the automatic posting failed.
+     */
+    long countByCompanyIdAndSourceTypeAndSourceRef(Long companyId, JournalSourceType sourceType,
+                                                   String sourceRef);
+
+    /** Newest entry of a source document under one source type (company-scoped). */
+    Optional<JournalEntry> findFirstByCompanyIdAndSourceTypeAndSourceRefOrderByIdDesc(
+            Long companyId, JournalSourceType sourceType, String sourceRef);
 }

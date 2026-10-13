@@ -5,6 +5,7 @@ import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
 import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
+  AllocationLineRequest,
   ArBalanceDto,
   ArInvoiceDto,
   ArAgeingRowDto,
@@ -15,8 +16,7 @@ import {
   RaiseCreditNoteRequest,
   RecordReceiptRequest,
   SetOpeningBalanceRequest,
-  WriteOffRequest,
-} from './models/ar.model';
+  WriteOffRequest, ArRefundDto, RefundCustomerRequest } from './models/ar.model';
 import { ExportFormat } from '../reporting/models/reporting.model';
 
 export interface ArInvoicePage {
@@ -66,6 +66,15 @@ export class ArService {
       );
   }
 
+  /**
+   * Every open / part-paid item of ONE customer, oldest due date first (not paged). Feeds the
+   * allocation grid on Record Receipt and Apply-to-invoices.
+   */
+  listOpenInvoices(companyId: string, customerUid: string): Observable<ArInvoiceDto[]> {
+    const params = new HttpParams().set('companyId', companyId).set('customerUid', customerUid);
+    return this.http.get<ArInvoiceDto[]>(`${this.base}/invoices/open`, { params });
+  }
+
   getInvoice(uid: string): Observable<ArInvoiceDto> {
     return this.http.get<ArInvoiceDto>(`${this.base}/invoices/uid/${uid}`);
   }
@@ -101,6 +110,32 @@ export class ArService {
 
   getReceipt(uid: string): Observable<ArReceiptDto> {
     return this.http.get<ArReceiptDto>(`${this.base}/receipts/uid/${uid}`);
+  }
+
+  /**
+   * Replace a receipt's allocation set (ARC-06): PUT /ar/receipts/uid/{uid}/allocations. The lines
+   * sent become the WHOLE set — include the existing allocations to keep them. Whatever the lines
+   * do not cover stays on account. Posts nothing to the GL.
+   */
+  reallocateReceipt(uid: string, allocations: AllocationLineRequest[]): Observable<ArReceiptDto> {
+    return this.http.put<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/allocations`, { allocations });
+  }
+
+  /**
+   * Reverse a posted receipt (ARC-04): POST /ar/receipts/uid/{uid}/reverse. Posts the reversing
+   * journal and cash-book row and restores the invoices it settled. Gated AR.RECEIPT.REVERSE.
+   */
+  /**
+   * Pay a customer's unused credit back (ARC-11): POST /ar/refunds. Posts DR AR / CR cash-bank,
+   * writes the OUT cash-book row and reduces the receipt's on-account (or the note's unapplied)
+   * amount. Gated AR.REFUND.
+   */
+  refundCustomer(request: RefundCustomerRequest): Observable<ArRefundDto> {
+    return this.http.post<ArRefundDto>(`${this.base}/refunds`, request);
+  }
+
+  reverseReceipt(uid: string, reason: string): Observable<ArReceiptDto> {
+    return this.http.post<ArReceiptDto>(`${this.base}/receipts/uid/${uid}/reverse`, { reason });
   }
 
   // ── Write-offs ────────────────────────────────────────────────────────────

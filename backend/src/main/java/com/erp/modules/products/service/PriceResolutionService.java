@@ -2,6 +2,7 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.products.domain.dto.ResolvePriceRequest;
 import com.erp.modules.products.domain.dto.ResolvedPriceDto;
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
@@ -9,10 +10,15 @@ import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
 /**
  * Deterministic single-price resolver (ADR-0029 D-6, FR-SD-12).
  *
- * <p>Priority: customer-specific price &gt; promotion &gt; quantity-break tier &gt; list price &gt; NONE.
- * No stacking: the first matching rule wins. NOT currently wired into any caller (ADR-0048 D-1
- * keeps it dead pending a separate activation decision) — {@link #resolveUnitListPrice} is the
- * narrow, unit-aware method sales actually calls.
+ * <p><b>What sales actually charges</b> is {@link #findSellingPriceQuote} (PRD-01): a customer's
+ * contract price, else the list price chosen customer list &gt; company default list &gt; legacy
+ * lowest-id row, unit-aware (ADR-0048) and skipping archived / out-of-date lists. The narrow
+ * three-argument methods ask the same question for a walk-in.
+ *
+ * <p>{@link #resolve} (customer price &gt; promotion &gt; quantity-break tier &gt; list price, ADR-0029)
+ * is still NOT wired into any caller: promotions and quantity tiers are saved but not applied to
+ * sales (PRD-02 — the Pricing Rules screen says so). Activating them changes walk-in prices the
+ * deployed till cannot preview and has to pass the discount ceiling, so it needs its own decision.
  *
  * <p>All inputs are database IDs (Long); the caller resolves UIDs before invoking.
  */
@@ -41,8 +47,9 @@ public interface PriceResolutionService {
      *       rejected, mirroring {@code computeQtyInBase}'s guard.</li>
      * </ol>
      *
-     * <p>Ignores price list and customer/promo/tier — same blast radius as the live path it
-     * replaces (a separate follow-up may make list selection price-list-aware).
+     * <p>Asks the WALK-IN question of {@link #findSellingPriceQuote}: no customer, any currency,
+     * today — so the company's default price list applies (PRD-01), and archived or out-of-date
+     * lists are skipped. Customer prices, promotions and tiers do not apply here.
      *
      * <p>ADR-0056: also carries whether the resolved amount came from a VAT-inclusive price list
      * ({@code price_lists.price_includes_vat}) — a pack override inherits its OWN list's flag,
@@ -100,4 +107,46 @@ public interface PriceResolutionService {
      *         no quote; never null
      */
     UnitPriceQuoteResult findUnitListPriceQuote(Long companyId, Long productId, Long unitId);
+
+    /**
+     * The selling price for one line — the single resolution every sales document, the POS sale
+     * and the batch price read go through (PRD-01 / SAL-04 / POS-12 / LSF-02). Non-throwing, for the
+     * same transaction reason as {@link #findUnitListPriceQuote}.
+     *
+     * <p>Resolution, first hit wins:
+     * <ol>
+     *   <li><b>Customer contract price</b> — an ACTIVE {@code customer_prices} row for
+     *       ({@code customerId}, product) valid on the business date, in the document currency, whose
+     *       minimum quantity (base units) the line meets. Stored per base unit, so a pack line is
+     *       charged {@code amount × factor_to_base}. Its VAT stance is its own list's when it names
+     *       one, else the stance of the list price below (it is entered on the same basis as the
+     *       prices that customer otherwise sees).</li>
+     *   <li><b>List price</b>, choosing the list in this order:
+     *     <ol>
+     *       <li>the customer's default price list ({@code customerPriceListId});</li>
+     *       <li>the company's default list ({@code is_default}; lowest id if several are flagged);</li>
+     *       <li>fallback: the lowest-id price row of any usable list — exactly the pre-PRD-01
+     *           behaviour, so a company that never set a default sees no change.</li>
+     *     </ol>
+     *     Only rows on an ACTIVE list whose validity window (and the row's own window) covers the
+     *     business date count. On the chosen list an explicit per-unit (pack) row wins, else the base
+     *     row × {@code factor_to_base} (ADR-0048). A list with no row for the product falls through to
+     *     the next one. Rows in the document currency are tried first across all three tiers; only
+     *     when NO usable row is in that currency are rows in other currencies considered (the
+     *     pre-existing tolerance for single-currency shops whose rows carry another code).</li>
+     * </ol>
+     *
+     * @return {@code RESOLVED} with amount/currency/VAT stance/source/list, else {@code NO_PRICE}
+     *         or {@code UNIT_NOT_APPLICABLE}; never null
+     * @throws com.erp.platform.common.api.NotFoundException if the product is not in the company
+     */
+    UnitPriceQuoteResult findSellingPriceQuote(SellingPriceQuery query);
+
+    /**
+     * Throwing twin of {@link #findSellingPriceQuote}, in the shape the sales documents snapshot.
+     *
+     * @throws IllegalArgumentException if nothing can price the line
+     * @throws IllegalStateException    if the unit is neither the base unit nor a configured pack
+     */
+    UnitListPriceDto resolveSellingPrice(SellingPriceQuery query);
 }

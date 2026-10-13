@@ -29,6 +29,9 @@
         <li>Unallocated (on-account): <span class="mono">{{ fmtMoney(receipt.unallocatedAmount) }}</span></li>
         <li>Date: {{ receipt.receiptDate }}</li>
         <li>Tender: {{ receipt.tenderType }}</li>
+        @if (receipt.bankReference) {
+          <li>Reference: <span class="mono">{{ receipt.bankReference }}</span></li>
+        }
       </ul>
     </div>
     <div class="d-flex gap-2 mt-3">
@@ -126,7 +129,15 @@
                      class="form-control font-monospace" placeholder="0.00"
                      [ngModel]="receiptAmount()"
                      (ngModelChange)="receiptAmount.set($event)"
+                     [class.is-invalid]="receiptAmountInvalid()"
+                     [attr.aria-invalid]="receiptAmountInvalid() ? 'true' : null"
+                     aria-describedby="receiptAmountError"
                      [disabled]="submitting()" autocomplete="off" required />
+              @if (receiptAmountInvalid()) {
+                <div id="receiptAmountError" class="invalid-feedback d-block" role="alert">
+                  {{ invalidAmountMessage }}
+                </div>
+              }
             </div>
 
             <!-- Currency -->
@@ -158,23 +169,41 @@
               <label class="form-label" for="tenderType">Tender Type</label>
               <select id="tenderType" name="tenderType" class="form-select"
                       [ngModel]="tenderType()"
-                      (ngModelChange)="tenderType.set($event)"
+                      (ngModelChange)="onTenderChange($event)"
                       [disabled]="submitting()">
                 <option value="CASH">Cash</option>
                 <option value="CHEQUE">Cheque</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
-                <option value="OTHER">Other</option>
+                <option value="MOBILE_MONEY">Mobile Money (M-Pesa, Tigo Pesa, Airtel Money)</option>
+                <option value="CARD">Card</option>
               </select>
             </div>
 
-            <!-- Bank reference (optional) -->
-            <div class="col-sm-8">
+            <!-- Deposit-to account (ARC-05) — defaults from the tender, can be changed -->
+            @if (accountOptions().length > 0) {
+              <div class="col-sm-4">
+                <label class="form-label" for="cashBankAccount">Received Into</label>
+                <select id="cashBankAccount" name="cashBankAccount" class="form-select"
+                        aria-describedby="cashBankAccountHelp"
+                        [ngModel]="cashBankAccountUid()"
+                        (ngModelChange)="onAccountChange($event)"
+                        [disabled]="submitting()">
+                  <option value="">Company default account</option>
+                  @for (a of accountOptions(); track a.uid) {
+                    <option [value]="a.uid">{{ accountLabel(a) }}</option>
+                  }
+                </select>
+                <div id="cashBankAccountHelp" class="form-text">Cash drawer, bank or M-Pesa account the money went into.</div>
+              </div>
+            }
+
+            <!-- Payment reference (optional) — kept on the receipt for tracing a disputed payment -->
+            <div [class]="accountOptions().length > 0 ? 'col-sm-4' : 'col-sm-8'">
               <label class="form-label" for="bankRef">
-                Bank Reference <span class="text-muted small">(optional)</span>
+                Payment Reference <span class="text-muted small">(optional)</span>
               </label>
-              <input id="bankRef" name="bankRef" type="text"
-                     class="form-control" placeholder="Cheque no., transfer ref…"
+              <input id="bankRef" name="bankRef" type="text" maxlength="80"
+                     class="form-control" placeholder="M-Pesa code, cheque no., transfer ref…"
                      [ngModel]="bankReference()"
                      (ngModelChange)="bankReference.set($event)"
                      [disabled]="submitting()" autocomplete="off" />
@@ -350,6 +379,12 @@
                       {{ fmtMoney(unallocated()) }}
                     </span>
                   </div>
+                  @if (allocatedTotal() <= 0 && receiptAmountNum() > 0) {
+                    <span class="small text-muted w-100">
+                      Nothing allocated — the whole receipt will be kept on account. Use
+                      "Auto Oldest-first" to settle the oldest invoices instead.
+                    </span>
+                  }
                   @if (overAllocated()) {
                     <span class="status-tag status-tag--danger ms-auto" role="alert" aria-live="polite">
                       <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>

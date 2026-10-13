@@ -48,7 +48,8 @@ class LandedCostStockHandlerTest {
         glPoster     = mock(InventoryGlPoster.class);
         objectMapper = new ObjectMapper();
 
-        handler = new LandedCostStockHandler(guard, valuation, glPoster, objectMapper);
+        handler = new LandedCostStockHandler(guard, valuation, glPoster, objectMapper, com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
         // postLandedCostInNewTx signature (FOLLOW-001): companyId, branchId, date, uid, number, currency, amount

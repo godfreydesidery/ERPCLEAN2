@@ -72,4 +72,40 @@ final class BaseCurrencySql {
         }
         return found.get(0)[0];
     }
+
+    /**
+     * Minor units of the INVOICE's own currency ({@code i.currency}), as SQL: the currencies master
+     * first, then the same static table as {@link CurrencyMinorUnits#fallback(String)}. Requires the
+     * invoice header aliased {@code i}.
+     */
+    static final String INVOICE_SCALE_SQL =
+            "CAST(COALESCE((SELECT cur.minor_units FROM currencies cur WHERE cur.code = i.currency),"
+            + " CASE WHEN i.currency IS NULL OR UPPER(i.currency) IN"
+            + " ('TZS','UGX','RWF','BIF','JPY','KRW') THEN 0"
+            + " WHEN UPPER(i.currency) IN ('BHD','KWD','OMR','JOD','TND') THEN 3 ELSE 2 END) AS INT)";
+
+    /**
+     * RPT-16 / LSF-12: everything taken off a line, in the invoice's FACE currency and VAT-inclusive
+     * terms — the line-amount discount, the line-percentage discount AND the line's share of the
+     * document discount. It is the VAT-inclusive value the line would have had at its unit price
+     * less what was actually charged ({@code net + vat}), re-using {@link InvoiceTotalsCalculator}'s
+     * rounding so an undiscounted line yields exactly zero:
+     * <ul>
+     *   <li>inclusive line: {@code U − (net + vat)}, {@code U = round(unitPrice × qty)} (a gross);</li>
+     *   <li>exclusive line: {@code U + round(U × vatRate) − (net + vat)}.</li>
+     * </ul>
+     * The stored {@code line_discount_amount} alone missed percentage and document discounts.
+     * Requires {@code l} (line) and {@code i} (header). Never negative.
+     */
+    static String lineDiscountFace() {
+        String u = "ROUND(l.unit_price_amount * l.quantity, " + INVOICE_SCALE_SQL + ")";
+        return "GREATEST(CASE WHEN l.price_inclusive THEN " + u
+                + " ELSE " + u + " + ROUND(" + u + " * l.vat_rate, " + INVOICE_SCALE_SQL + ") END"
+                + " - (COALESCE(l.net_amount, 0) + COALESCE(l.vat_amount, 0)), 0)";
+    }
+
+    /** {@link #lineDiscountFace()} converted to base (see {@link #toBase}). */
+    static String lineDiscountToBase(String rateExpr, int baseScale) {
+        return toBase(lineDiscountFace(), rateExpr, baseScale);
+    }
 }

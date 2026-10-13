@@ -1,5 +1,6 @@
 package com.erp.modules.documents.render;
 
+import com.erp.platform.common.time.PrintedStamp;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -120,7 +121,7 @@ public class DocumentPdfRenderer {
         if (model.layout().printFooter() != null) {
             doc.add(new Paragraph(model.layout().printFooter(), FONT_SMALL));
         } else {
-            doc.add(new Paragraph("Generated: " + model.generatedAt(), FONT_SMALL));
+            doc.add(new Paragraph("Generated: " + PrintedStamp.of(model.generatedAt()), FONT_SMALL));
         }
 
         doc.close();

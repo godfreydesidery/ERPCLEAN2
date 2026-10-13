@@ -13,6 +13,7 @@ import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
 import com.erp.modules.reporting.export.ReportExporter;
 import com.erp.platform.common.api.ApiResponse;
+import com.erp.platform.common.time.CompanyCalendar;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.format.annotation.DateTimeFormat.ISO;
@@ -49,13 +50,16 @@ public class BiDashboardController {
     private final DashboardService    dashboardService;
     private final BiExportFlattener   flattener;
     private final ReportExporter      exporter;
+    private final CompanyCalendar calendar;
 
     public BiDashboardController(DashboardService dashboardService,
                                   BiExportFlattener flattener,
-                                  ReportExporter exporter) {
+                                  ReportExporter exporter,
+                                  CompanyCalendar calendar) {
         this.dashboardService = dashboardService;
         this.flattener        = flattener;
         this.exporter         = exporter;
+        this.calendar         = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -82,8 +86,9 @@ public class BiDashboardController {
             @RequestParam Long companyId,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
-        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        LocalDate today         = calendar.today(companyId);
+        LocalDate effectiveFrom = from != null ? from : today.withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : today;
         return ApiResponse.ok(dashboardService.financeSummary(companyId, effectiveFrom, effectiveTo));
     }
 
@@ -106,8 +111,9 @@ public class BiDashboardController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
-        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        LocalDate today         = calendar.today(companyId);
+        LocalDate effectiveFrom = from != null ? from : today.withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : today;
         return ApiResponse.ok(dashboardService.crmSnapshot(companyId, branchId, effectiveFrom, effectiveTo));
     }
 
@@ -130,8 +136,9 @@ public class BiDashboardController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
-        LocalDate effectiveFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate effectiveTo   = to   != null ? to   : LocalDate.now();
+        LocalDate today         = calendar.today(companyId);
+        LocalDate effectiveFrom = from != null ? from : today.withDayOfMonth(1);
+        LocalDate effectiveTo   = to   != null ? to   : today;
         return ApiResponse.ok(dashboardService.salesByBranch(companyId, branchId, effectiveFrom, effectiveTo));
     }
 

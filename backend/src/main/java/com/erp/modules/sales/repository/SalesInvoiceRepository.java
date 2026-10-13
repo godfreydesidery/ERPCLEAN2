@@ -29,6 +29,35 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
                               Pageable pageable);
 
     /**
+     * SAL-10: the invoice list's filters. Every parameter is bound non-null (no null-typed binds
+     * reach Postgres): {@code anyText}/{@code anyStatus} switch a filter off, and the date window
+     * defaults to the whole of time. {@code pattern} is a lower-cased LIKE pattern matched against
+     * the invoice number OR the customer's name (the "Customer" search used to match numbers
+     * only). The window applies to the creation time.
+     */
+    @Query("""
+            SELECT i FROM SalesInvoice i
+            WHERE i.companyId = :companyId
+              AND (:anyStatus = true OR i.status IN :statuses)
+              AND i.createdAt >= :from
+              AND i.createdAt <  :to
+              AND (:anyText = true
+                   OR LOWER(i.invoiceNumber) LIKE :pattern
+                   OR i.customerId IN (SELECT c.id FROM Customer c
+                                       WHERE c.companyId = :companyId
+                                         AND LOWER(c.displayName) LIKE :pattern))
+            """)
+    Page<SalesInvoice> searchFiltered(@Param("companyId") Long companyId,
+                                      @Param("anyStatus") boolean anyStatus,
+                                      @Param("statuses") java.util.Collection<
+                                              com.erp.modules.sales.domain.enums.InvoiceStatus> statuses,
+                                      @Param("from") Instant from,
+                                      @Param("to") Instant to,
+                                      @Param("anyText") boolean anyText,
+                                      @Param("pattern") String pattern,
+                                      Pageable pageable);
+
+    /**
      * The till's "Today's sales": POS invoices of one branch finalised at or after {@code from},
      * newest first. VOID is kept on purpose — a reversed sale still happened today and the till
      * shows it as reversed. All parameters are required, so no null-typed bind can reach Postgres.
@@ -87,19 +116,43 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
     long countByPosSession(@Param("sessionId") Long sessionId);
 
     /**
-     * FINALISED invoices whose finalised_at falls in [periodStart, periodEnd) —
-     * used by VatReturnComputationReader (ADR-0017 D-6). Company-scoped.
+     * Invoices FINALISED in [periodStart, periodEnd) — by finalised_at — used by
+     * VatReturnComputationReader (ADR-0017 D-6). Company-scoped.
+     *
+     * <p>ACC-24: an invoice voided LATER is still counted here. It was a supply of the month it was
+     * finalised in — its SALES journal credited VAT Payable in that month and stays there — so the
+     * month it was finalised keeps its output VAT, and the void is a negative in the month it
+     * happened ({@link #findVoidedInPeriod}). Before this, a recompute of a still-DRAFT return
+     * silently dropped a later-voided invoice from its original month while the GL kept it.
      */
     @Query("""
             SELECT i FROM SalesInvoice i
             WHERE i.companyId = :companyId
-              AND i.status = 'FINALISED'
+              AND i.status IN ('FINALISED', 'VOID')
               AND i.finalisedAt >= :periodStart
               AND i.finalisedAt < :periodEnd
             """)
     List<SalesInvoice> findFinalisedInPeriod(@Param("companyId") Long companyId,
                                              @Param("periodStart") Instant periodStart,
                                              @Param("periodEnd") Instant periodEnd);
+
+    /**
+     * ACC-24: previously-finalised invoices VOIDED in [periodStart, periodEnd) — by voided_at. Their
+     * output VAT is a negative on the return of the month the void happened (the month the GL
+     * reversal debits VAT Payable). Company-scoped.
+     */
+    @Query("""
+            SELECT i FROM SalesInvoice i
+            WHERE i.companyId = :companyId
+              AND i.status = 'VOID'
+              AND i.finalisedAt IS NOT NULL
+              AND i.voidedAt >= :periodStart
+              AND i.voidedAt < :periodEnd
+            ORDER BY i.voidedAt, i.id
+            """)
+    List<SalesInvoice> findVoidedInPeriod(@Param("companyId") Long companyId,
+                                          @Param("periodStart") Instant periodStart,
+                                          @Param("periodEnd") Instant periodEnd);
 
     /**
      * Per-branch FINALISED invoice aggregate for a company within a finalisedAt window.

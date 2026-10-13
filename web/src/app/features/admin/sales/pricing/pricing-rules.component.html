@@ -61,6 +61,16 @@
     @if (activeTab() === 'tiers') {
       <div role="tabpanel" aria-label="Price Tiers">
 
+        <!-- PRD-02: tiers are stored but the selling-price resolver does not apply them yet. -->
+        <div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="note">
+          <i class="bi bi-exclamation-triangle mt-1" aria-hidden="true"></i>
+          <div>
+            <strong>Not applied to sales yet.</strong>
+            Quantity-break tiers are saved here, but invoices, orders, quotations and the till do not
+            use them yet. Customer prices (next tab) and each customer's default price list are applied.
+          </div>
+        </div>
+
         <!-- Tier filter -->
         <div class="erp-toolbar mb-3">
           <div class="erp-field" style="min-width:200px">

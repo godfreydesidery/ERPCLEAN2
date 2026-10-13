@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.fixedassets.domain.dto.DepreciationScheduleLineDto;
 import com.erp.modules.fixedassets.domain.dto.FixedAssetDto;
 import com.erp.modules.fixedassets.domain.dto.FixedAssetRegisterDto;
@@ -63,6 +64,14 @@ public class FixedAssetReportController {
         this.companyHeaderQuery = companyHeaderQuery;
     }
 
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping("/register")
     @PreAuthorize("@perm.has('FA.VIEW')")
     public FixedAssetRegisterDto register(
@@ -89,7 +98,8 @@ public class FixedAssetReportController {
         Long companyId = RequestContext.get().companyId();
         FixedAssetRegisterDto dto = registerQuery.register(companyId, asOf, categoryUid, status,
                 branchUid, location, costCentreUid);
-        return download(exporter.export(flattenRegister(dto, companyId), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flattenRegister(dto, companyId), branchGuard, branchUid), format));
     }
 
     /** FR-FA-18: the asset's depreciation schedule (planned + posted, every version) as a file. */

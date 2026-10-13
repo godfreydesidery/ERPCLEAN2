@@ -21,7 +21,16 @@ import {
 import { ArService } from './ar.service';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import {
+  INVALID_AMOUNT_MESSAGE,
+  isInvalidAmount,
+  normaliseAmount,
+  parseAmount,
+} from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * A UI-only allocation row — wraps an ArInvoiceDto with the user's input.
@@ -30,6 +39,32 @@ interface AllocationRow {
   invoice: ArInvoiceDto;
   /** User-entered allocation amount (string so the input stays reactive). */
   allocInput: string;
+}
+
+const MOBILE_MONEY_NAME = /m-?pesa|mobile|tigo|airtel|halo ?pesa|t-?pesa|wallet|lipa/i;
+
+/** Mobile-money wallets are BANK-type accounts; the code or name tells them apart (ARC-05). */
+export function isMobileMoneyAccount(a: CashAccountOptionDto): boolean {
+  return a.accountType === 'BANK' && MOBILE_MONEY_NAME.test(`${a.code} ${a.name}`);
+}
+
+/**
+ * The account a receipt most likely landed in, from its tender (ARC-05): cash → a cash account of
+ * this branch, M-Pesa → a mobile-money account, cheque / transfer / card → a bank account. Within a
+ * kind, the current branch's account wins, then the company default, then the first listed.
+ * Returns '' when nothing fits, which lets the server fall back to the company default account.
+ */
+export function suggestAccountForTender(tender: TenderType, options: CashAccountOptionDto[]): string {
+  const pick = (cands: CashAccountOptionDto[]): string =>
+    (cands.find((a) => a.inCurrentBranch) ?? cands.find((a) => a.isDefault) ?? cands[0])?.uid ?? '';
+  const cash = options.filter((a) => a.accountType === 'CASH');
+  const mobile = options.filter(isMobileMoneyAccount);
+  const bank = options.filter((a) => a.accountType === 'BANK' && !isMobileMoneyAccount(a));
+  let chosen = '';
+  if (tender === 'CASH') chosen = pick(cash);
+  else if (tender === 'MOBILE_MONEY') chosen = pick(mobile) || pick(bank);
+  else chosen = pick(bank) || pick(mobile);
+  return chosen || (options.find((a) => a.isDefault)?.uid ?? '');
 }
 
 /**
@@ -59,6 +94,7 @@ export class RecordReceiptComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly customerService = inject(CustomerService);
   private readonly taxService = inject(TaxService);
+  private readonly cashbankService = inject(CashbankService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -80,6 +116,14 @@ export class RecordReceiptComponent {
   readonly receiptDate = signal('');
   readonly tenderType = signal<TenderType>('CASH');
   readonly bankReference = signal('');
+
+  // ── Deposit-to account (ARC-05) ───────────────────────────────────────────
+  /** Active cash / bank / M-Pesa accounts the money can land in. Empty = server default only. */
+  readonly accountOptions = signal<CashAccountOptionDto[]>([]);
+  /** Chosen account uid; '' = let the server use the company default account. */
+  readonly cashBankAccountUid = signal('');
+  /** Once the user picks an account by hand, changing the tender no longer overrides it. */
+  private accountChosenByUser = false;
 
   // ── Allocation editor ──────────────────────────────────────────────────────
   readonly allocationRows = signal<AllocationRow[]>([]);
@@ -106,16 +150,26 @@ export class RecordReceiptComponent {
 
   /** Sum of all filled allocation inputs. Coerces with +v. */
   readonly allocatedTotal = computed(() =>
-    this.allocationRows().reduce((sum, r) => {
-      const v = +(String(r.allocInput ?? '').trim() || '0');
-      return sum + (Number.isFinite(v) ? v : 0);
-    }, 0),
+    this.allocationRows().reduce((sum, r) => sum + (parseAmount(r.allocInput) ?? 0), 0),
   );
 
-  readonly receiptAmountNum = computed(() => {
-    const v = +(String(this.receiptAmount() ?? '').trim() || '0');
-    return Number.isFinite(v) ? v : 0;
-  });
+  /**
+   * LUI-04: "68,300" used to read as 0 (`+"68,300"` is NaN), which disabled Record and claimed the
+   * allocations exceeded a zero receipt. Separators are now stripped by the shared parser.
+   */
+  readonly receiptAmountNum = computed(() => parseAmount(this.receiptAmount()) ?? 0);
+
+  /** True when something is typed in Amount but it is not a readable number. */
+  readonly receiptAmountInvalid = computed(() => isInvalidAmount(this.receiptAmount()));
+
+  /** True when any amount field (receipt, WHT, an allocation) cannot be read. */
+  readonly anyAmountInvalid = computed(() =>
+    this.receiptAmountInvalid() ||
+    isInvalidAmount(this.whtAmount()) ||
+    this.allocationRows().some((r) => isInvalidAmount(r.allocInput)),
+  );
+
+  readonly invalidAmountMessage = INVALID_AMOUNT_MESSAGE;
 
   /** Unallocated remainder (on-account). May be positive; never negative if guard holds. */
   readonly unallocated = computed(() => {
@@ -131,7 +185,7 @@ export class RecordReceiptComponent {
   /** True if any single allocation exceeds the invoice's outstanding (client guard). */
   readonly anyAllocationExceedsOutstanding = computed(() =>
     this.allocationRows().some((r) => {
-      const allocated = +(String(r.allocInput ?? '').trim() || '0');
+      const allocated = parseAmount(r.allocInput) ?? 0;
       const outstanding = +(r.invoice.outstandingAmount ?? 0);
       return allocated > outstanding + 0.000001;
     }),
@@ -142,6 +196,7 @@ export class RecordReceiptComponent {
     !this.selectedCustomer() ||
     !String(this.receiptAmount() ?? '').trim() ||
     this.receiptAmountNum() <= 0 ||
+    this.anyAmountInvalid() ||
     !String(this.receiptDate() ?? '').trim() ||
     !this.selectedCompanyId() ||
     this.overAllocated() ||
@@ -152,7 +207,7 @@ export class RecordReceiptComponent {
   private readonly customerSearch$ = new Subject<string>();
 
   constructor() {
-    this.receiptDate.set(new Date().toISOString().slice(0, 10));
+    this.receiptDate.set(todayLocal());
 
     // Debounced customer search
     this.customerSearch$
@@ -188,6 +243,7 @@ export class RecordReceiptComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
+              this.loadAccountOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -209,7 +265,45 @@ export class RecordReceiptComponent {
     this.selectedCompanyId.set(id);
     this.resetCustomer();
     this.whtUnavailable.set(false);
-    if (id) this.loadWhtTypes(id);
+    this.accountChosenByUser = false;
+    this.accountOptions.set([]);
+    this.cashBankAccountUid.set('');
+    if (id) {
+      this.loadWhtTypes(id);
+      this.loadAccountOptions(id);
+    }
+  }
+
+  // ── Deposit-to account (ARC-05) ───────────────────────────────────────────
+
+  private loadAccountOptions(companyId: string): void {
+    this.cashbankService.listAccountOptions(companyId).subscribe({
+      next: (list) => {
+        this.accountOptions.set(list ?? []);
+        this.applySuggestedAccount();
+      },
+      // Non-fatal: without the list the receipt still posts to the company default account.
+      error: () => { this.accountOptions.set([]); this.cashBankAccountUid.set(''); },
+    });
+  }
+
+  onTenderChange(t: TenderType): void {
+    this.tenderType.set(t);
+    if (!this.accountChosenByUser) this.applySuggestedAccount();
+  }
+
+  onAccountChange(uid: string): void {
+    this.cashBankAccountUid.set(uid ?? '');
+    this.accountChosenByUser = true;
+  }
+
+  private applySuggestedAccount(): void {
+    this.cashBankAccountUid.set(suggestAccountForTender(this.tenderType(), this.accountOptions()));
+  }
+
+  accountLabel(a: CashAccountOptionDto): string {
+    const kind = a.accountType === 'CASH' ? 'Cash' : isMobileMoneyAccount(a) ? 'Mobile money' : 'Bank';
+    return `${a.code} — ${a.name} (${kind}${a.isDefault ? ', default' : ''})`;
   }
 
   // ── Customer picker ────────────────────────────────────────────────────────
@@ -249,13 +343,10 @@ export class RecordReceiptComponent {
     this.openInvoicesState.set('loading');
     this.allocationRows.set([]);
 
-    // Load up to 200 open/partial invoices for the allocation editor.
-    this.arService.listInvoices(companyId, customerUid, undefined, 0, 200).subscribe({
-      next: ({ rows }) => {
-        const open = rows.filter((inv) =>
-          inv.status === 'OPEN' || inv.status === 'PARTIAL',
-        );
-        this.allocationRows.set(open.map((inv) => ({ invoice: inv, allocInput: '' })));
+    // Every open / part-paid item of THIS customer, oldest due date first (server-side filter).
+    this.arService.listOpenInvoices(companyId, customerUid).subscribe({
+      next: (rows) => {
+        this.allocationRows.set(rows.map((inv) => ({ invoice: inv, allocInput: '' })));
         this.openInvoicesState.set('idle');
       },
       error: () => this.openInvoicesState.set('error'),
@@ -323,7 +414,8 @@ export class RecordReceiptComponent {
     const customer = this.selectedCustomer();
     if (!customer) { this.formError.set('Customer is required.'); return; }
 
-    const amount = String(this.receiptAmount() ?? '').trim();
+    // Normalised: "68,300" goes on the wire as "68300" (LUI-04).
+    const amount = normaliseAmount(this.receiptAmount()) ?? '';
     const currency = String(this.receiptCurrency() ?? '').trim();
     const date = String(this.receiptDate() ?? '').trim();
     const bankRef = String(this.bankReference() ?? '').trim();
@@ -333,13 +425,10 @@ export class RecordReceiptComponent {
     if (!date) { this.formError.set('Receipt date is required.'); return; }
 
     const allocations: AllocationLineRequest[] = this.allocationRows()
-      .filter((r) => {
-        const v = +(String(r.allocInput ?? '').trim() || '0');
-        return v > 0;
-      })
+      .filter((r) => (parseAmount(r.allocInput) ?? 0) > 0)
       .map((r) => ({
         arInvoiceUid: r.invoice.uid,
-        allocatedAmount: String(+(String(r.allocInput ?? '').trim())).valueOf(),
+        allocatedAmount: normaliseAmount(r.allocInput) ?? '',
       }));
 
     const request: RecordReceiptRequest = {
@@ -351,11 +440,19 @@ export class RecordReceiptComponent {
       tenderType: this.tenderType(),
       bankReference: bankRef || undefined,
       allocations,
+      // ARC-20: what the screen shows is what is saved — the lines typed (or auto-filled) here, and
+      // whatever they leave over stays on account. Without this the server would apply blank
+      // allocations oldest-first while the screen said "On-account".
+      allocationMode: 'MANUAL',
     };
+
+    // ARC-05: the account the money landed in; omitted = company default account.
+    const accountUid = String(this.cashBankAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
 
     // Optional WHT (WHT_ON_RECEIPT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
-    const whtAmt = String(this.whtAmount() ?? '').trim();
+    const whtAmt = normaliseAmount(this.whtAmount()) ?? '';
     if (whtUid && whtAmt && +whtAmt > 0) {
       request.whtTypeUid = whtUid;
       request.whtAmount = whtAmt;
@@ -387,7 +484,7 @@ export class RecordReceiptComponent {
 
   /** Returns CSS class for an allocation row: danger when over outstanding, warning when partial. */
   allocationRowClass(row: AllocationRow): string {
-    const allocated = +(String(row.allocInput ?? '').trim() || '0');
+    const allocated = parseAmount(row.allocInput) ?? 0;
     const outstanding = +(row.invoice.outstandingAmount ?? 0);
     if (allocated > outstanding + 0.000001) return 'table-danger';
     if (allocated > 0 && allocated < outstanding) return 'table-warning';

@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map, merge, skip, Subject, switchMap } from 'rxjs';
 import { PageMeta } from '../../../core/api/api-response.model';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -25,6 +26,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from '../products/product.service';
 import { StockService, StockMovementPage, LocationOnHandPage } from './stock.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { StockUnitOption, StockUnitOptionsService, packBreakdown, toBaseQty, unitFactor } from './stock-units';
 
 /** Display label for an on-hand row — always built from the denormalised fields. */
 function rowProductLabel(row: StockOnHandDto): string {
@@ -55,6 +57,8 @@ export class StockListComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly productService = inject(ProductService);
   private readonly alerts = inject(AlertService);
+  private readonly unitOptions = inject(StockUnitOptionsService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
   protected readonly session = inject(SessionStore);
 
   // ── Company / Branch context ──────────────────────────────────────────────────
@@ -81,6 +85,8 @@ export class StockListComponent {
   // which adds its own product search so a product can be adjusted without scrolling to its row.
   // Only one of the two is ever open at a time (each open* method closes the other).
   readonly adjustingUid = signal<string | null>(null);
+  /** Location of the row being adjusted (per-row entry point only) — sent so the right row is corrected. */
+  readonly adjustLocationUid = signal<string | null>(null);
   readonly showAdjustForm = signal(false);
   readonly adjustProductQ = signal('');
   readonly adjustProductResults = signal<ProductModel[]>([]);
@@ -96,6 +102,27 @@ export class StockListComponent {
   readonly adjustNote = signal('');
   readonly adjusting = signal(false);
   readonly adjustError = signal<string | null>(null);
+  /** STK-08: the units the adjust quantity may be typed in (base first, then pack sizes). */
+  readonly adjustUnits = signal<StockUnitOption[]>([]);
+  /** '' = base unit. */
+  readonly adjustUnitUid = signal('');
+  /**
+   * Toolbar entry point only: the locations that actually hold the picked product. With two or
+   * more the user must say which shelf is being corrected (the server refuses to guess).
+   */
+  readonly adjustLocations = signal<{ uid: string; name: string; quantity: string }[]>([]);
+  /** "= 48 Pieces" under the quantity when a pack size is chosen. */
+  readonly adjustBasePreview = computed(() => {
+    const units = this.adjustUnits();
+    const factor = unitFactor(units, this.adjustUnitUid());
+    if (factor === 1) return '';
+    const raw = this.adjustMode() === 'absolute' ? this.adjustNewQty() : this.adjustQty();
+    const n = Number(this.asStr(raw));
+    if (!this.asStr(raw) || !Number.isFinite(n)) return '';
+    return `= ${toBaseQty(n, factor)} ${units[0]?.name ?? ''}`.trim();
+  });
+  /** Current on-hand shown as "4 CTN + 7 PCS" when the product has a pack size. */
+  readonly adjustCurrentBreakdown = computed(() => packBreakdown(this.adjustCurrentQty(), this.adjustUnits()));
 
   // ── Opening balance form ──────────────────────────────────────────────────────
   readonly showOpeningForm = signal(false);
@@ -106,6 +133,17 @@ export class StockListComponent {
   readonly openingNote = signal('');
   readonly openingBusy = signal(false);
   readonly openingError = signal<string | null>(null);
+  readonly openingUnits = signal<StockUnitOption[]>([]);
+  readonly openingUnitUid = signal('');
+  /** PRD-07 / LSF-09: cost of one {@link openingUnitUid}; blank = the product's own cost. */
+  readonly openingUnitCost = signal('');
+  readonly openingBasePreview = computed(() => {
+    const units = this.openingUnits();
+    const factor = unitFactor(units, this.openingUnitUid());
+    const n = Number(this.asStr(this.openingQty()));
+    if (factor === 1 || !this.asStr(this.openingQty()) || !Number.isFinite(n)) return '';
+    return `= ${toBaseQty(n, factor)} ${units[0]?.name ?? ''}`.trim();
+  });
 
   // ── Reorder level inline edit ─────────────────────────────────────────────────
   readonly reorderEditUid = signal<string | null>(null);
@@ -127,6 +165,8 @@ export class StockListComponent {
 
   readonly canAdjust = computed(() => this.session.hasPermission('STOCK.ADJUST'));
   readonly canOpening = computed(() => this.session.hasPermission('STOCK.OPENING'));
+  /** The opening cost posts DR Inventory / CR Opening Balance Equity, so it has its own permission. */
+  readonly canOpeningCost = computed(() => this.session.hasPermission('INVENTORY.OPENING.SET'));
   readonly canView = computed(() => this.session.hasPermission('STOCK.VIEW'));
   readonly isEmpty = computed(() => this.state() === 'idle' && this.rows().length === 0);
 
@@ -203,6 +243,10 @@ export class StockListComponent {
 
     this.wireByProductSearch();
     this.loadCompanies();
+    // ADM-29: the "Adjust Stock" menu entry lands here with the form already open.
+    if (this.route?.snapshot.data?.['openAdjust'] && this.canAdjust()) {
+      this.openAdjustFormStandalone();
+    }
   }
 
   // ── Company / Branch loading ──────────────────────────────────────────────────
@@ -272,6 +316,7 @@ export class StockListComponent {
     const label = rowProductLabel(row);
     this.showAdjustForm.set(false); // mutual exclusion with the toolbar-triggered form
     this.adjustingUid.set(row.uid);
+    this.adjustLocationUid.set(row.locationUid ?? null);
     this.adjustMode.set('delta');
     this.adjustCurrentQty.set(row.quantity);
     this.adjustNewQty.set('');
@@ -282,6 +327,9 @@ export class StockListComponent {
     // Pre-populate the search box with the product label; uid resolved via targeted search.
     this.adjustProductQ.set(label);
     this.adjustSelectedProduct.set({ uid: '', label });
+    this.adjustUnits.set([]);
+    this.adjustUnitUid.set('');
+    this.adjustLocations.set([]);
     // Resolve the product uid via a targeted code search (not a 200-cap full-fetch).
     this.resolveProductUidForRow(row.productCode, label);
   }
@@ -297,6 +345,7 @@ export class StockListComponent {
 
   private openAdjustFormStandalone(): void {
     this.adjustingUid.set(null); // mutual exclusion with any per-row form
+    this.adjustLocationUid.set(null);
     this.showAdjustForm.set(true);
     this.adjustMode.set('delta');
     this.adjustCurrentQty.set('0');
@@ -308,6 +357,9 @@ export class StockListComponent {
     this.adjustProductQ.set('');
     this.adjustSelectedProduct.set(null);
     this.adjustProductResults.set([]);
+    this.adjustUnits.set([]);
+    this.adjustUnitUid.set('');
+    this.adjustLocations.set([]);
   }
 
   private closeAdjustFormStandalone(): void {
@@ -328,6 +380,7 @@ export class StockListComponent {
         const found = rows.find((p) => p.code === productCode);
         if (found) {
           this.adjustSelectedProduct.set({ uid: found.uid, label });
+          this.loadAdjustUnits(found.uid);
         }
       },
       error: () => undefined,
@@ -342,7 +395,28 @@ export class StockListComponent {
   onAdjustProductSearchChange(q: string): void {
     this.adjustProductQ.set(q);
     this.adjustSelectedProduct.set(null);
+    this.adjustUnits.set([]);
+    this.adjustUnitUid.set('');
+    this.adjustLocations.set([]);
+    if (!this.adjustingUid()) this.adjustLocationUid.set(null);
     this.adjustProductSearch$.next(q);
+  }
+
+  /** Units for the picked product; the quantity stays in the base unit until the user picks a pack. */
+  private loadAdjustUnits(productUid: string): void {
+    this.unitOptions.load(productUid).subscribe({
+      next: (units) => {
+        if (this.adjustSelectedProduct()?.uid === productUid) this.adjustUnits.set(units);
+      },
+      error: () => this.adjustUnits.set([]),
+    });
+  }
+
+  /** Toolbar location picker: correct THIS location, and compare against its own quantity. */
+  onAdjustLocationChange(uid: string): void {
+    this.adjustLocationUid.set(uid || null);
+    const loc = this.adjustLocations().find((l) => l.uid === uid);
+    if (loc) this.adjustCurrentQty.set(loc.quantity);
   }
 
   selectAdjustProduct(p: ProductModel): void {
@@ -352,14 +426,33 @@ export class StockListComponent {
     // Absolute mode needs the CURRENT on-hand qty to compute the delta — refresh it for whichever
     // product was just picked (the per-row entry point already knows it from the row; the toolbar
     // entry point does not, so this covers both).
+    this.loadAdjustUnits(p.uid);
     this.refreshAdjustCurrentQty(p.code);
   }
 
   private refreshAdjustCurrentQty(productCode: string): void {
     this.stockService.listOnHand(productCode, 0, 10).subscribe({
       next: ({ rows }) => {
-        const found = rows.find((r) => r.productCode === productCode);
+        // The server corrects the one location that holds the product, ignoring empty rows (a
+        // received transfer leaves a zero row at In-Transit) — show that row's quantity.
+        const mine = rows.filter((r) => r.productCode === productCode);
+        const holding = mine.filter((r) => Number(r.quantity) !== 0);
+        const found = holding.length === 1 ? holding[0] : mine[0];
         this.adjustCurrentQty.set(found?.quantity ?? '0');
+        // Wave-1 carry-over: two real locations → the user chooses which one is being corrected.
+        // In-transit rows are goods on the road (corrected by receiving them), never offered.
+        const shelves = holding.filter((r) => !!r.locationUid && !/transit/i.test(r.locationName ?? ''));
+        if (!this.adjustingUid() && shelves.length > 1) {
+          this.adjustLocations.set(shelves.map((r) => ({
+            uid: r.locationUid as string,
+            name: r.locationName ?? r.locationUid as string,
+            quantity: r.quantity,
+          })));
+          this.adjustLocationUid.set(null);
+          this.adjustCurrentQty.set('0');
+        } else {
+          this.adjustLocations.set([]);
+        }
       },
       error: () => this.adjustCurrentQty.set('0'),
     });
@@ -377,7 +470,9 @@ export class StockListComponent {
         return;
       }
       const current = Number(this.adjustCurrentQty()) || 0;
-      const delta = Number(newQty) - current;
+      // The counted figure may be in a pack size; the current on-hand is always in base units.
+      const factor = unitFactor(this.adjustUnits(), this.adjustUnitUid());
+      const delta = Math.round((toBaseQty(Number(newQty), factor) - current) * 1e6) / 1e6;
       if (delta === 0) {
         this.adjustError.set('No change — the counted quantity matches the current on-hand quantity.');
         return;
@@ -391,6 +486,10 @@ export class StockListComponent {
       }
       deltaStr = qty;
     }
+    if (!this.adjustingUid() && this.adjustLocations().length > 1 && !this.adjustLocationUid()) {
+      this.adjustError.set('This product is held at more than one location — choose the location to correct.');
+      return;
+    }
 
     this.adjusting.set(true);
     this.adjustError.set(null);
@@ -400,6 +499,11 @@ export class StockListComponent {
       reasonCode: this.adjustReason(),
       note: this.adjustNote().trim() || undefined,
     };
+    const locationUid = this.adjustLocationUid();
+    if (locationUid) request.locationUid = locationUid;
+    // Delta mode states the quantity in the chosen unit and the server converts it; absolute mode
+    // has already worked out the base-unit difference above, so it is sent as base.
+    if (this.adjustMode() === 'delta' && this.adjustUnitUid()) request.unitUid = this.adjustUnitUid();
     this.stockService.adjust(request).subscribe({
       next: () => {
         this.adjusting.set(false);
@@ -429,11 +533,16 @@ export class StockListComponent {
     this.openingSelectedProduct.set(null);
     this.openingQty.set('');
     this.openingNote.set('');
+    this.openingUnits.set([]);
+    this.openingUnitUid.set('');
+    this.openingUnitCost.set('');
   }
 
   onOpeningProductSearchChange(q: string): void {
     this.openingProductQ.set(q);
     this.openingSelectedProduct.set(null);
+    this.openingUnits.set([]);
+    this.openingUnitUid.set('');
     this.openingProductSearch$.next(q);
   }
 
@@ -441,6 +550,12 @@ export class StockListComponent {
     this.openingSelectedProduct.set({ uid: p.uid, label: `${p.code} — ${p.name}` });
     this.openingProductResults.set([]);
     this.openingProductQ.set(`${p.code} — ${p.name}`);
+    this.unitOptions.load(p.uid).subscribe({
+      next: (units) => {
+        if (this.openingSelectedProduct()?.uid === p.uid) this.openingUnits.set(units);
+      },
+      error: () => this.openingUnits.set([]),
+    });
   }
 
   /**
@@ -460,6 +575,11 @@ export class StockListComponent {
       this.openingError.set('Quantity must be greater than zero.');
       return;
     }
+    const cost = this.canOpeningCost() ? this.asStr(this.openingUnitCost()) : '';
+    if (cost && (isNaN(Number(cost)) || Number(cost) < 0)) {
+      this.openingError.set('Unit cost must be zero or more (leave blank to use the product cost).');
+      return;
+    }
     this.openingBusy.set(true);
     this.openingError.set(null);
     const request: OpeningBalanceRequest = {
@@ -467,6 +587,8 @@ export class StockListComponent {
       quantity: qty,
       note: this.openingNote().trim() || undefined,
     };
+    if (this.openingUnitUid()) request.unitUid = this.openingUnitUid();
+    if (cost) request.unitCost = cost;
     this.stockService.openingBalance(request).subscribe({
       next: () => {
         this.openingBusy.set(false);
@@ -477,11 +599,7 @@ export class StockListComponent {
       },
       error: (err) => {
         this.openingError.set(
-          this.messageFrom(
-            err,
-            'Could not record opening balance.',
-            'An opening balance already exists for this product.',
-          ),
+          this.messageFrom(err, 'Could not record opening balance.'),
         );
         this.openingBusy.set(false);
       },

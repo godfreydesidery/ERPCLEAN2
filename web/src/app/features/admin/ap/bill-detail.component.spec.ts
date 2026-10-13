@@ -77,7 +77,7 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(host.textContent).not.toContain('Ratified');
     expect(host.querySelector('.alert')).toBeNull();
     // and the Record Payment link stays live
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).not.toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).not.toBeNull();
   });
 
   it('shows no ratification notice when the field is absent', () => {
@@ -94,7 +94,7 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(alert!.textContent).toContain('manager');
     expect(host.textContent).toContain('Awaiting ratification');
 
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).toBeNull();
     const payButton = host.querySelector('button[disabled]');
     expect(payButton).not.toBeNull();
     expect(payButton!.textContent).toContain('Record Payment');
@@ -110,9 +110,16 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     const alert = host.querySelector('.alert');
     expect(alert!.classList.contains('alert-danger')).toBe(true);
     expect(host.textContent).toContain('Ratification refused');
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).toBeNull();
     expect(host.querySelector('button[disabled]')).not.toBeNull();
     expect(host.textContent).toContain('a manager refused this delivery');
+  });
+
+  it('AP-28: the Pay link carries the bill and its supplier', () => {
+    const host = mount({ ...makeBill('NOT_APPLICABLE'), supplierUid: 'SUP9' });
+    const link = host.querySelector('a[href^="/admin/ap/payments/record"]') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toContain('billUid=bill-uid-1');
+    expect(link.getAttribute('href')).toContain('supplierUid=SUP9');
   });
 
   it('RATIFIED reassures quietly and leaves payment available', () => {
@@ -120,6 +127,120 @@ describe('BillDetailComponent — direct-receipt ratification', () => {
     expect(host.querySelector('.alert')).toBeNull();
     expect(host.textContent).toContain('Ratified');
     expect(host.textContent).toContain('pays as normal');
-    expect(host.querySelector('a[href="/admin/ap/payments/record"]')).not.toBeNull();
+    expect(host.querySelector('a[href^="/admin/ap/payments/record"]')).not.toBeNull();
+  });
+});
+
+describe('BillDetailComponent — AP-01 held / unposted bill is not a dead end', () => {
+  let api: {
+    getBill: ReturnType<typeof vi.fn>;
+    runMatch: ReturnType<typeof vi.fn>;
+    acceptVariance: ReturnType<typeof vi.fn>;
+    deleteBill: ReturnType<typeof vi.fn>;
+  };
+
+  function heldBill(): SupplierBillDto {
+    return {
+      ...makeBill('NOT_APPLICABLE'),
+      status: 'HELD',
+      lines: [
+        {
+          id: '11', uid: 'line-1', supplierBillId: '1', lineNo: 1, productId: null,
+          poLineUid: 'pol-1', grLineUid: 'grl-1', description: 'Soda crates',
+          billedQty: 10, unitCostAmount: 100, lineNetAmount: 1000, currency: 'TZS',
+        } as unknown as SupplierBillDto['lines'][number],
+      ],
+    };
+  }
+
+  const heldResult = {
+    billUid: 'bill-uid-1',
+    billStatus: 'HELD' as const,
+    lineResults: [
+      {
+        billLineId: '11', billLineUid: 'line-1', matchStatus: 'HELD_QTY_VARIANCE' as const,
+        priceVarianceAmount: 0, priceVariancePct: 0, qtyVariance: 5,
+        poUnitCostAmount: 100, grReceivedQty: 5, billedQty: 10, matchedAt: null,
+        comparisonPerformed: true, matchNote: 'More is billed than was received.',
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    api = {
+      getBill: vi.fn(() => of(heldBill())),
+      runMatch: vi.fn(() => of(heldResult)),
+      acceptVariance: vi.fn(() => of({ ...heldResult, billStatus: 'MATCHED' })),
+      deleteBill: vi.fn(() => of(undefined)),
+    };
+    TestBed.configureTestingModule({
+      imports: [BillDetailComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        // The delete navigates back to the list; give it somewhere to land.
+        provideRouter([{ path: 'admin/ap/supplier-bills', children: [] }]),
+        { provide: SessionStore, useValue: makeSession() },
+        { provide: ApService, useValue: api },
+      ],
+    });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  function mountHeld() {
+    const fixture = TestBed.createComponent(BillDetailComponent);
+    fixture.componentRef.setInput('uid', 'bill-uid-1');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function button(host: HTMLElement, text: string): HTMLButtonElement | undefined {
+    return Array.from(host.querySelectorAll('button')).find((b) =>
+      (b.textContent ?? '').includes(text),
+    ) as HTMLButtonElement | undefined;
+  }
+
+  it('offers Run match and Delete bill on a HELD bill', () => {
+    const host = mountHeld().nativeElement as HTMLElement;
+    expect(host.textContent).toContain('This bill is on hold');
+    expect(button(host, 'Run match')).toBeDefined();
+    expect(button(host, 'Delete bill')).toBeDefined();
+  });
+
+  it('does not offer the corrections on a posted (MATCHED) bill', () => {
+    api.getBill.mockReturnValue(of(makeBill('NOT_APPLICABLE')));
+    const host = mountHeld().nativeElement as HTMLElement;
+    expect(button(host, 'Run match')).toBeUndefined();
+    expect(button(host, 'Delete bill')).toBeUndefined();
+  });
+
+  it('Run match shows each line result with an Accept variance action', () => {
+    const fixture = mountHeld();
+    const host = fixture.nativeElement as HTMLElement;
+    button(host, 'Run match')!.click();
+    fixture.detectChanges();
+    expect(api.runMatch).toHaveBeenCalledWith('bill-uid-1');
+    expect(host.textContent).toContain('On hold — quantity differs');
+    expect(host.textContent).toContain('More is billed than was received.');
+
+    button(host, 'Accept variance')!.click();
+    fixture.detectChanges();
+    expect(api.acceptVariance).toHaveBeenCalledWith('bill-uid-1', { billLineUid: 'line-1' });
+  });
+
+  it('Delete bill asks first, then deletes', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const fixture = mountHeld();
+    button(fixture.nativeElement as HTMLElement, 'Delete bill')!.click();
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(api.deleteBill).toHaveBeenCalledWith('bill-uid-1');
+  });
+
+  it('Delete bill does nothing when the clerk cancels', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const fixture = mountHeld();
+    button(fixture.nativeElement as HTMLElement, 'Delete bill')!.click();
+    expect(api.deleteBill).not.toHaveBeenCalled();
   });
 });

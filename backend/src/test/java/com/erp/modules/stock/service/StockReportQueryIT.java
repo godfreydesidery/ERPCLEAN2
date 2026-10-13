@@ -168,6 +168,7 @@ class StockReportQueryIT extends PostgresIntegrationTest {
         StockReportRowDto row = matches.get(0);
 
         assertThat(row.quantityOnHand()).isEqualByComparingTo(qty);
+        assertThat(row.inTransitQty()).as("STK-06: nothing on the road").isEqualByComparingTo("0");
         assertThat(row.buyingPrice())
                 .as("buyingPrice must equal the weighted-average cost (avg_cost)")
                 .isEqualByComparingTo(cost);

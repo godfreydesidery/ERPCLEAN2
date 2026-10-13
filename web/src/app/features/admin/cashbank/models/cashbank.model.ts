@@ -10,9 +10,15 @@
 export type CashBankAccountType = 'CASH' | 'BANK';
 export type CashTxnDirection = 'IN' | 'OUT';
 export type CashTxnType =
+  | 'AR_RECEIPT'
+  | 'AP_PAYMENT'
   | 'TRANSFER_IN'
   | 'TRANSFER_OUT'
   | 'DIRECT_ENTRY'
+  | 'SALE_TENDER'
+  | 'SALE_REFUND'
+  | 'POS_PAYOUT'
+  | 'POS_VARIANCE'
   | 'RECEIPT'
   | 'PAYMENT'
   | 'CHEQUE';
@@ -20,6 +26,39 @@ export type ChequeStatus = 'PENDING' | 'CLEARED' | 'CANCELLED';
 export type ReconciliationStatus = 'DRAFT' | 'COMPLETED';
 
 // ── Cash / Bank Account ──────────────────────────────────────────────────────
+
+/**
+ * CashTillOptionDto — narrow till picker row from GET /cash/accounts/tills (LRB-03): ACTIVE
+ * CASH-type accounts only, no balances or bank detail. Reachable with the cash-count codes.
+ */
+export interface CashTillOptionDto {
+  /** Wire: JSON string (Long). */
+  id: string;
+  uid: string;
+  code: string;
+  name: string;
+  branchId: string | null;
+  currency: string | null;
+}
+
+/**
+ * CashAccountOptionDto — narrow account picker row from GET /cash/accounts/options (ARC-05): ACTIVE
+ * cash, bank and mobile-money accounts, no balances or bank detail. Reachable with
+ * AR.RECEIPT.RECORD / CASH.ENTRY.RECORD as well as CASH.VIEW. Mobile-money wallets are BANK-type.
+ */
+export interface CashAccountOptionDto {
+  /** Wire: JSON string (Long). */
+  id: string;
+  uid: string;
+  code: string;
+  name: string;
+  accountType: CashBankAccountType;
+  branchId: string | null;
+  currency: string | null;
+  isDefault: boolean;
+  /** True when the account belongs to the branch the caller is working in. */
+  inCurrentBranch: boolean;
+}
 
 /**
  * CashBankAccountDto — mirrors the backend record.
@@ -151,6 +190,11 @@ export interface RecordDirectEntryRequest {
   /** uid of the counter GL account */
   counterGlAccountUid: string;
   memo?: string;
+  /**
+   * ACC-13 / PAR-08: input VAT included in `amount` (money OUT only). Posts DR VAT Input for it and
+   * DR the counter account for the rest; the VAT return claims it. Decimal string.
+   */
+  vatAmount?: string;
 }
 
 // ── Cheque ───────────────────────────────────────────────────────────────────
@@ -210,6 +254,8 @@ export interface BankReconciliationDto {
   cashBankAccountId: string;
   reconciliationNumber: string;
   statementDate: string;
+  /** Wire: number | null — the bank statement's opening balance (carried from the last completed reconciliation). */
+  statementOpeningBalance?: number | string | null;
   /** Wire: number — coerce with +v */
   statementClosingBalance: number | string;
   /** Wire: number — coerce with +v */
@@ -224,6 +270,8 @@ export interface OpenReconciliationRequest {
   companyUid: string;
   cashBankAccountUid: string;
   statementDate: string;
+  /** Send as string. Omit to carry forward the last completed reconciliation's closing balance. */
+  statementOpeningBalance?: string;
   /** Send as string */
   statementClosingBalance: string;
 }
@@ -399,9 +447,9 @@ export interface UpdatePettyCashFundRequest {
  * amount/balanceAfter arrive as numbers — coerce with +v. For DISBURSEMENT/REPLENISHMENT `amount`
  * is a positive magnitude (direction implied by txnType). For ADJUSTMENT `amount` is a SIGNED delta
  * (negative decreases the balance) — its direction is NOT implied by the type. Use the component's
- * txnEffect() to render a consistent signed balance impact. journalEntryRef is reserved server-side
- * (record-only this slice — see D-7.1); glAccountUid optionally captures the intended expense account
- * on a disbursement for a later manual/GL fast-follow journal.
+ * txnEffect() to render a consistent signed balance impact. ARC-10: every new movement posts to the
+ * GL — glAccountUid is the account on the other side of petty cash (expense / funding / over-short)
+ * and journalEntryRef the posted entry (null on movements recorded before petty cash posted).
  */
 export interface PettyCashTransactionDto {
   uid: string;
@@ -417,13 +465,18 @@ export interface PettyCashTransactionDto {
   reference: string | null;
   description: string | null;
   createdAt: string;
+  /** ARC-10: the GL entry this movement posted; absent on older rows / servers. */
+  journalEntryRef?: string | null;
 }
 
 export interface RecordPettyCashTransactionRequest {
   type: PettyCashTxnType;
   amount: number;
   txnDate: string;
+  /** DISBURSEMENT: the expense account (required, ARC-10). REPLENISHMENT: a funding GL account. */
   glAccountUid?: string;
   reference?: string;
   description?: string;
+  /** REPLENISHMENT: the cash/bank account the top-up came from (absent = company default). */
+  sourceCashBankAccountUid?: string;
 }

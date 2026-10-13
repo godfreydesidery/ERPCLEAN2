@@ -22,6 +22,8 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.ConvertedAmount;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -98,6 +100,7 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
     private final GLConfigResolver           glConfig;
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
+    private final FxDocumentConverter        fxConverter;
 
     public ApOpeningBalanceServiceImpl(SupplierBillRepository bills,
                                         SupplierBillLineRepository lines,
@@ -107,7 +110,8 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
                                         GLPostingService glPosting,
                                         GLConfigResolver glConfig,
                                         ScopeGuard scopeGuard,
-                                        AuditService audit) {
+                                        AuditService audit,
+                                        FxDocumentConverter fxConverter) {
         this.bills      = bills;
         this.lines      = lines;
         this.companies  = companies;
@@ -117,6 +121,7 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
         this.glConfig   = glConfig;
         this.scopeGuard = scopeGuard;
         this.audit      = audit;
+        this.fxConverter = fxConverter;
     }
 
     @Override
@@ -125,14 +130,22 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
                 .map(c -> c.getId())
                 .orElseThrow(() -> new NotFoundException("Company not found."));
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String baseCurrency = companies.findById(companyId)
+                .map(c -> c.getBaseCurrency()).orElse("TZS");
 
         Long supplierId = suppliers.findByCompanyIdAndUid(companyId, req.supplierUid())
                 .map(s -> s.getId())
                 .orElseThrow(() -> new NotFoundException("Supplier not found."));
 
         String currency = req.currency() != null && !req.currency().isBlank()
-                ? req.currency()
-                : companies.findById(companyId).map(c -> c.getBaseCurrency()).orElse("TZS");
+                ? req.currency().trim().toUpperCase()
+                : baseCurrency;
+
+        // AP-12: the GL takes base-currency lines only (BR-GL-06). A foreign-currency opening
+        // balance is converted at the bill date's rate, as the bill match does; no rate on file is
+        // a friendly refusal (FxRateNotFoundException), never a silent post at par.
+        ConvertedAmount grossConv = fxConverter.toBase(
+                req.grossAmount(), currency, companyId, req.billDate());
 
         String invoiceNo = req.supplierInvoiceNo() != null && !req.supplierInvoiceNo().isBlank()
                 ? req.supplierInvoiceNo()
@@ -166,6 +179,12 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
         // MATCHED is required by the D-7 balance definition and the D-8 reconciliation invariant —
         // see the class javadoc. It says "this payable is on the books", NOT "it was compared".
         bill.setStatus(SupplierBillStatus.MATCHED);
+        // AP-12: FX triple (ADR-0036 D-4). fx_rate / base_gross_amount / rate_at are insert-only
+        // columns, so they are stamped BEFORE the first save or they would never reach the row.
+        bill.setBaseGrossAmount(grossConv.baseAmount());
+        bill.setBaseOutstandingAmount(grossConv.baseAmount());
+        bill.setFxRate(grossConv.rate());
+        bill.setRateAt(grossConv.rateAt());
         bill = bills.save(bill);
 
         // Create a single synthetic line (OB bills have no PO/GR refs)
@@ -184,11 +203,11 @@ public class ApOpeningBalanceServiceImpl implements ApOpeningBalanceService {
 
         List<LineDraft> glLines = List.of(
                 new LineDraft(obeAcct.getId(),
-                        req.grossAmount(), BigDecimal.ZERO,
-                        currency, "AP opening balance — " + invoiceNo),
+                        grossConv.baseAmount(), BigDecimal.ZERO,
+                        baseCurrency, "AP opening balance — " + invoiceNo),
                 new LineDraft(apAcct.getId(),
-                        BigDecimal.ZERO, req.grossAmount(),
-                        currency, "AP opening balance — " + invoiceNo));
+                        BigDecimal.ZERO, grossConv.baseAmount(),
+                        baseCurrency, "AP opening balance — " + invoiceNo));
 
         JournalEntryDraft draft = new JournalEntryDraft(
                 companyId,

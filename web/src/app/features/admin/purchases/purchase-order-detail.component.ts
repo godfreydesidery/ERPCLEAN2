@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -27,6 +27,7 @@ import {
   PurchasesService,
 } from './purchases.service';
 import { PurchaseSettingsService } from './settings/purchase-settings.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -53,7 +54,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-purchase-order-detail',
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe],
+  imports: [AppDatePipe, FormsModule, RouterLink, DecimalPipe],
   templateUrl: './purchase-order-detail.component.html',
   styleUrl: './purchase-order-detail.component.scss',
 })
@@ -264,9 +265,25 @@ export class PurchaseOrderDetailComponent {
    * than a bare minus sign that looks like a broken subtraction. Formatting only — no computation.
    */
   outstandingLabel(line: PurchaseOrderLineDto): string {
-    const o = Number(line.outstandingQtyInBase);
+    if (line.outstandingQtyInBase === null || line.outstandingQtyInBase === undefined) return '';
+    // PUR-01 / LUI-02: shown under the line's unit, so convert from base (crates, not bottles).
+    const o = this.inLineUnit(line, line.outstandingQtyInBase);
     if (Number.isFinite(o) && o < 0) return `0 (${-o} over)`;
-    return String(line.outstandingQtyInBase ?? '');
+    return String(o);
+  }
+
+  /** Received so far, in the line's unit (the DTO carries it in base units). */
+  receivedLabel(line: PurchaseOrderLineDto): string {
+    if (line.receivedQtyInBase === null || line.receivedQtyInBase === undefined) return '';
+    return String(this.inLineUnit(line, line.receivedQtyInBase));
+  }
+
+  /** A base quantity in the line's unit: base × orderedQty ÷ orderedQtyInBase. */
+  private inLineUnit(line: PurchaseOrderLineDto, baseQty: string | number): number {
+    const ordered = Number(line.orderedQty);
+    const orderedBase = Number(line.orderedQtyInBase);
+    const factor = ordered > 0 && orderedBase > 0 ? orderedBase / ordered : 1;
+    return Number((Number(baseQty) / factor).toFixed(6));
   }
 
   constructor() {
@@ -610,6 +627,14 @@ export class PurchaseOrderDetailComponent {
 
   // ── Close ──────────────────────────────────────────────────────────────────
 
+  /** PUR-25: the button only opens the confirmation; {@link close} runs on "Yes, close order". */
+  readonly showCloseConfirm = signal(false);
+
+  askClose(): void {
+    this.closeError.set(null);
+    this.showCloseConfirm.set(true);
+  }
+
   close(): void {
     if (this.closing()) return;
     this.closing.set(true);
@@ -617,6 +642,7 @@ export class PurchaseOrderDetailComponent {
     this.purchasesService.closeOrder(this.uid()).subscribe({
       next: () => {
         this.closing.set(false);
+        this.showCloseConfirm.set(false);
         this.alerts.success('Order closed');
         this.loadPo();
       },

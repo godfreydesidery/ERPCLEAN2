@@ -3,6 +3,7 @@ package com.erp.api;
 import com.erp.modules.parties.domain.dto.AssignPartyBranchRequest;
 import com.erp.modules.parties.domain.dto.CreateCustomerRequest;
 import com.erp.modules.parties.domain.dto.CustomerDto;
+import com.erp.modules.parties.domain.enums.CustomerKind;
 import com.erp.modules.parties.domain.dto.PartyBranchDto;
 import com.erp.modules.parties.domain.dto.UpdateCustomerRequest;
 import com.erp.modules.parties.service.CustomerService;
@@ -43,8 +44,11 @@ public class CustomerController {
     @PreAuthorize("@perm.has('CUSTOMER.VIEW')")
     public ApiResponse<List<CustomerDto>> list(@RequestParam Long companyId,
                                                @RequestParam(required = false) String q,
+                                               @RequestParam(required = false) String customerKind,
                                                Pageable pageable) {
-        Page<CustomerDto> page = customers.list(companyId, q, pageable);
+        // Optional and additive (POS-14): the till asks for CASH_WALK_IN to find its default
+        // customer instead of scanning page 0 of every customer. Absent = the old behaviour.
+        Page<CustomerDto> page = customers.list(companyId, q, parseKind(customerKind), pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
@@ -101,5 +105,16 @@ public class CustomerController {
     @PreAuthorize("@perm.scoped(#uid,'customer','PARTY.BRANCH.ASSIGN')")
     public void removeBranch(@PathVariable String uid, @PathVariable String branchUid) {
         customers.removeBranch(uid, branchUid);
+    }
+
+    private static CustomerKind parseKind(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return CustomerKind.valueOf(raw.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown customer kind.");
+        }
     }
 }

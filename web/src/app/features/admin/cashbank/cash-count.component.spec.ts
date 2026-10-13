@@ -80,7 +80,8 @@ function makeBed(opts: { canManage?: boolean; cashbankOverrides?: Record<string,
       {
         provide: CashbankService,
         useValue: {
-          listAllAccounts: vi.fn(() => of(MOCK_TILLS)),
+          // The server's till lookup returns CASH accounts only (LRB-03).
+          listCashTills: vi.fn(() => of(MOCK_TILLS.filter((t) => t.accountType === 'CASH'))),
           openCashCount: vi.fn(() => of(makeCount())),
           recordDenominations: vi.fn(() => of(makeCount({ status: 'COUNTED' }))),
           reconcileCashCount: vi.fn(() => of(makeCount({ status: 'RECONCILED', journalEntryRef: 'JE1' }))),
@@ -120,6 +121,24 @@ describe('CashCountComponent — new mode (open form)', () => {
     await vi.runAllTimersAsync();
 
     expect(comp.tills().map((t) => t.uid)).toEqual(['TILL1']);
+  });
+
+  it('a refused till lookup says "no access" instead of "no CASH accounts" (ADM-28)', async () => {
+    vi.useFakeTimers();
+    makeBed({
+      cashbankOverrides: {
+        listCashTills: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
+      },
+    });
+    const fixture = TestBed.createComponent(CashCountComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.tillsState()).toBe('forbidden');
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain("You don't have access to the till list");
+    expect(text).not.toContain('No CASH-type accounts found');
   });
 
   it('openCount() posts the correct request and loads the returned entity', async () => {

@@ -26,6 +26,8 @@ export interface StockCountLineDto {
   reasonCode: string | null;
   movementUid: string | null;
   currency: string;
+  /** Additive (STK-08) — lets the screen offer the product's pack sizes. Absent on older servers. */
+  productUid?: string | null;
 }
 
 // ── StockCountDto ─────────────────────────────────────────────────────────────
@@ -66,6 +68,8 @@ export interface EnterCountLineEntry {
   lineId: string;
   countedQty: string;
   reasonCode?: string;
+  /** STK-08: unit `countedQty` is typed in (a pack size). Omitted = base unit. */
+  unitUid?: string;
 }
 
 export interface EnterCountRequest {

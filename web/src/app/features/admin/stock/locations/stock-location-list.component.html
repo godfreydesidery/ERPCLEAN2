@@ -170,6 +170,7 @@
                     @if (editingUid() === row.uid) {
                       <select class="form-select form-select-sm"
                               [ngModel]="eLocationType()" (ngModelChange)="onEditLocationTypeChange($event)"
+                              [disabled]="isTransit(row)"
                               [attr.aria-label]="'Edit type for ' + row.code">
                         @for (t of locationTypes; track t) {
                           <option [value]="t">{{ t }}</option>
@@ -203,6 +204,12 @@
                     @if (row.isDefault) {
                       <span class="status-tag status-tag--info">Default</span>
                     }
+                    @if (isTransit(row)) {
+                      <span class="status-tag status-tag--neutral"
+                            title="Holds goods dispatched to this branch until they are received. Managed by the system.">
+                        In transit (system)
+                      </span>
+                    }
                   </td>
                   <td class="text-end text-nowrap">
                     @if (editingUid() === row.uid) {
@@ -223,7 +230,7 @@
                               [attr.aria-label]="'Edit ' + row.code">
                         <i class="bi bi-pencil" aria-hidden="true"></i>
                       </button>
-                      @if (!row.isDefault && row.status === 'ACTIVE') {
+                      @if (!row.isDefault && row.status === 'ACTIVE' && !isTransit(row)) {
                         <button type="button" class="btn btn-sm btn-outline-primary me-1"
                                 (click)="setDefault(row)"
                                 [disabled]="actionBusyUid() === row.uid"
@@ -231,7 +238,7 @@
                           <i class="bi bi-star" aria-hidden="true"></i>
                         </button>
                       }
-                      @if (row.status === 'ACTIVE') {
+                      @if (row.status === 'ACTIVE' && !isTransit(row)) {
                         <button type="button" class="btn btn-sm btn-outline-danger"
                                 (click)="deactivate(row)"
                                 [disabled]="actionBusyUid() === row.uid"

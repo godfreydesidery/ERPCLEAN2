@@ -101,6 +101,54 @@ class SupplierServiceImplTest {
     }
 
     // -----------------------------------------------------------------------
+    // AP-10: saving from a form that does not send the terms / currency / WHT must not wipe them
+    // -----------------------------------------------------------------------
+
+    private Supplier existingWithDefaults() {
+        Supplier existing = new Supplier(COMPANY_ID, "SUPPLIER-0001", PartyType.INDIVIDUAL,
+                "Kilimanjaro Traders", SupplierKind.GOODS, 99L);
+        existing.setPaymentTermsDays(30);
+        existing.setPaymentTermsId(5L);
+        existing.setDefaultCurrency(com.erp.platform.common.money.CurrencyCode.of("USD"));
+        existing.setCountry("KE");
+        existing.setLeadTimeDays(7);
+        existing.setDefaultWhtTypeId(8L);
+        when(suppliers.findByUid("sup-uid-1")).thenReturn(Optional.of(existing));
+        return existing;
+    }
+
+    @Test
+    void update_withoutTermsCurrencyOrWht_keepsTheExistingValues() {
+        existingWithDefaults();
+
+        SupplierDto dto = service.updateByUid("sup-uid-1", updateWith(null));
+
+        assertThat(dto.paymentTermsDays()).isEqualTo(30);
+        assertThat(dto.paymentTermsId()).isEqualTo(5L);
+        assertThat(dto.defaultCurrency()).isEqualTo("USD");
+        assertThat(dto.country()).isEqualTo("KE");
+        assertThat(dto.leadTimeDays()).isEqualTo(7);
+        assertThat(dto.defaultWhtTypeId()).isEqualTo(8L);
+    }
+
+    @Test
+    void update_withNewTermsAndZeroWht_changesTermsAndClearsTheWhtDefault() {
+        existingWithDefaults();
+        UpdateSupplierRequest req = new UpdateSupplierRequest(
+                PartyType.INDIVIDUAL, "Kilimanjaro Traders",
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                SupplierKind.GOODS, 45, null,
+                null, "tzs", null, null, 0L);
+
+        SupplierDto dto = service.updateByUid("sup-uid-1", req);
+
+        assertThat(dto.paymentTermsDays()).isEqualTo(45);
+        assertThat(dto.defaultCurrency()).isEqualTo("TZS");
+        assertThat(dto.defaultWhtTypeId()).isNull();
+        assertThat(dto.paymentTermsId()).isEqualTo(5L);
+    }
+
+    // -----------------------------------------------------------------------
     // Defect 1: the country dead-end
     // -----------------------------------------------------------------------
 

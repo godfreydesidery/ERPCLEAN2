@@ -13,5 +13,10 @@ public record StockReportRowDto(
         BigDecimal quantityOnHand,
         BigDecimal buyingPrice,
         BigDecimal sellingPrice,
-        BigDecimal value) {
+        BigDecimal value,
+        /**
+         * Additive (STK-06): the part of {@code quantityOnHand} that is still in transit to the
+         * branch (dispatched, not yet received) — on the truck, not on the shelf.
+         */
+        BigDecimal inTransitQty) {
 }

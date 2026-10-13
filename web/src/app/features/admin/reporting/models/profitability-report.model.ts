@@ -14,6 +14,8 @@ export interface ProfitabilityRowDto {
   productCode: string | null;
   productName: string | null;
   qtySold: number | string | null;
+  /** Unit qtySold is counted in (the product's base unit); absent from older servers. */
+  baseUnit?: string | null;
   /** VAT-INCLUSIVE turnover — what the customer was charged. */
   grossSales: number | string | null;
   vatAmount: number | string | null;

@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../../shared/lookup-access';
 import { SlicePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -35,11 +36,15 @@ interface LoadTrigger { page: number; mode: ViewMode }
  */
 @Component({
   selector: 'app-stock-serial-list',
-  imports: [FormsModule, SlicePipe, PaginatorComponent, UidPickerComponent],
+  imports: [FormsModule, SlicePipe, PaginatorComponent, UidPickerComponent, LookupNoticeComponent],
   templateUrl: './stock-serial-list.component.html',
   styleUrl: './stock-serial-list.component.scss',
 })
 export class StockSerialListComponent {
+  /** ADM-28: why a picker is empty — no access (403) vs. failed to load. */
+  readonly locationsLookup = signal<LookupFailure | null>(null);
+  readonly productsLookup = signal<LookupFailure | null>(null);
+
   private readonly serialService = inject(StockSerialService);
   private readonly locationService = inject(StockLocationService);
   private readonly companyService = inject(CompanyService);
@@ -163,7 +168,10 @@ export class StockSerialListComponent {
   private loadLocations(companyId: string): void {
     this.locationService.list(0, 200).subscribe({
       next: ({ rows }) => this.locations.set(rows.filter((l) => l.companyId === companyId)),
-      error: () => this.locations.set([]),
+      error: (err: unknown) => {
+        this.locations.set([]);
+        this.locationsLookup.set(lookupFailure(err));
+      },
     });
   }
 
@@ -174,7 +182,10 @@ export class StockSerialListComponent {
   private loadProducts(companyId: string): void {
     this.productService.list(companyId, '', 0, 200).subscribe({
       next: ({ rows }) => this.products.set(rows.filter((p) => p.status !== 'ARCHIVED')),
-      error: () => this.products.set([]),
+      error: (err: unknown) => {
+        this.products.set([]);
+        this.productsLookup.set(lookupFailure(err));
+      },
     });
   }
 

@@ -96,14 +96,20 @@ public final class ReportSeed {
 
     public void line(Invoice inv, int lineNo, long productId, long unitId, BigDecimal qty,
                      BigDecimal qtyInBase, BigDecimal net, BigDecimal vat, BigDecimal discount) {
+        // An EXCLUSIVE line consistent with InvoiceTotalsCalculator: unit price × qty less the
+        // (exclusive) line discount is the net, VAT is 18% of it. The reports derive the discount
+        // from these columns (RPT-16), so they must agree with net/vat as a real line's would.
+        BigDecimal unitPrice = net.add(discount).divide(qty, 4, java.math.RoundingMode.HALF_UP);
+        BigDecimal vatRate = vat.signum() > 0 ? new BigDecimal("0.18") : BigDecimal.ZERO;
         jdbc.update("INSERT INTO sales_invoice_lines (uid, invoice_id, company_id, branch_id, "
                 + "line_no, product_id, product_code, product_name, unit_id, unit_name, quantity, "
                 + "qty_in_base, list_price_amount, unit_price_amount, vat_status, vat_rate, "
                 + "net_amount, vat_amount, gross_amount, line_discount_amount, currency) "
-                + "VALUES (?, ?, ?, ?, ?, ?, 'P', 'P', ?, 'PCS', ?, ?, 0, 0, 'STANDARD', 18, "
+                + "VALUES (?, ?, ?, ?, ?, ?, 'P', 'P', ?, 'PCS', ?, ?, ?, ?, 'STANDARD', ?, "
                 + "?, ?, ?, ?, ?)",
                 Ulid.next(), inv.id(), inv.companyId(), inv.branchId(), lineNo, productId,
-                unitId, qty, qtyInBase, net, vat, net.add(vat), discount, inv.currency());
+                unitId, qty, qtyInBase, unitPrice, unitPrice, vatRate, net, vat, net.add(vat),
+                discount, inv.currency());
     }
 
     public void payment(Invoice inv, String tender, BigDecimal amount, BigDecimal change,

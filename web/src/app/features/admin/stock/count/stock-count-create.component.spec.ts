@@ -325,6 +325,30 @@ describe('StockCountCreateComponent', () => {
     expect(navSpy).toHaveBeenCalledWith(['/admin/stock-counts/uid', STUB_CREATED_COUNT.uid]);
   });
 
+  // ── STK-13: CYCLE counts need products and send them ──────────────────────
+
+  it('CYCLE with no products is refused; with products sends their uids', async () => {
+    const { createSpy } = makeBed();
+    const fixture = TestBed.createComponent(StockCountCreateComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fLocationUid.set(STUB_LOCATION.uid);
+    comp.fCountType.set('CYCLE');
+    comp.submit();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(comp.formError()).toContain('Choose the products');
+
+    comp.addCycleProduct({ uid: 'P1', code: 'BEER', name: 'Beer' } as never);
+    comp.addCycleProduct({ uid: 'P2', code: 'SODA', name: 'Soda' } as never);
+    comp.addCycleProduct({ uid: 'P1', code: 'BEER', name: 'Beer' } as never); // no duplicate
+    comp.removeCycleProduct('P2');
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ countType: 'CYCLE', productUids: ['P1'] }));
+  });
+
   // ── 10. Submit failure surfaces error ─────────────────────────────────────
 
   it('submit failure sets formError from the API error message', async () => {

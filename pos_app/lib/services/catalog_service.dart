@@ -83,12 +83,19 @@ class CatalogService {
   ///
   /// [unitUid] null prices each product in its OWN base unit — the normal POS
   /// search case, where every row has a different base unit.
+  ///
+  /// [customerUid] / [currency] (PRD-01) ask for the price THAT customer pays
+  /// in that currency — their contract price, else their default price list,
+  /// else the company default list — exactly what the posted sale will charge.
+  /// A server that predates the fields ignores them (walk-in price).
   Future<List<ResolvedUnitPrice>> resolvePrices(List<String> productUids,
-      {String? unitUid}) async {
+      {String? unitUid, String? customerUid, String? currency}) async {
     if (productUids.isEmpty) return const [];
     final data = await _api.post('/product-prices/resolve', body: {
       'productUids': productUids,
       'unitUid': ?unitUid,
+      'customerUid': ?customerUid,
+      'currency': ?currency,
     });
     return asList(data, ResolvedUnitPrice.fromJson);
   }

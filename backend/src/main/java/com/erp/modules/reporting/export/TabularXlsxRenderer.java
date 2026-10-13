@@ -1,5 +1,6 @@
 package com.erp.modules.reporting.export;
 
+import com.erp.platform.common.time.PrintedStamp;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
@@ -41,7 +42,7 @@ public class TabularXlsxRenderer {
                     rowIdx = writeTextRow(sheet, rowIdx, line, normalStyle);
                 }
             }
-            rowIdx = writeTextRow(sheet, rowIdx, "Generated: " + model.generatedAt(), normalStyle);
+            rowIdx = writeTextRow(sheet, rowIdx, "Generated: " + PrintedStamp.of(model.generatedAt()), normalStyle);
             rowIdx = writeTextRow(sheet, rowIdx, "", normalStyle);
 
             // Column headings

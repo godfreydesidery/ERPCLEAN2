@@ -84,7 +84,8 @@ class SaleIssueStockHandlerTest {
         objectMapper   = new ObjectMapper().findAndRegisterModules();
 
         handler = new SaleIssueStockHandler(guard, posting, productService, explosion,
-                valuation, glPoster, reservations, objectMapper);
+                valuation, glPoster, reservations, objectMapper, com.erp.platform.common.time.CompanyCalendar.fixed(
+                com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         when(guard.alreadyProcessed(anyString(), anyString())).thenReturn(false);
         when(productService.getByUid(PRODUCT_UID)).thenReturn(stockableProduct());

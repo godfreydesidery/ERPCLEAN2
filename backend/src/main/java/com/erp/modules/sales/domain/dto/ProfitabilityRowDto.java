@@ -33,6 +33,16 @@ public record ProfitabilityRowDto(
         BigDecimal vatAmount,
         BigDecimal netAmount,
         BigDecimal costOfSales,
-        BigDecimal profit
+        BigDecimal profit,
+        /** The unit {@code qtySold} is counted in (RPT-01 / LSF-11). Additive. */
+        String     baseUnit
 ) {
+
+    /** The original shape, without the base-unit label. */
+    public ProfitabilityRowDto(String productCode, String productName, BigDecimal qtySold,
+                               BigDecimal grossSales, BigDecimal vatAmount, BigDecimal netAmount,
+                               BigDecimal costOfSales, BigDecimal profit) {
+        this(productCode, productName, qtySold, grossSales, vatAmount, netAmount, costOfSales,
+                profit, null);
+    }
 }

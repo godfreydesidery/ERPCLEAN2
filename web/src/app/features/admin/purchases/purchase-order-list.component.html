@@ -255,7 +255,7 @@
                       </span>
                     </td>
                     <td class="num">{{ po.currency }} {{ +po.orderTotalAmount | number:'1.2-2' }}</td>
-                    <td class="small text-muted">{{ po.createdAt | date:'dd/MM/yyyy' }}</td>
+                    <td class="small text-muted">{{ po.createdAt | appDate }}</td>
                     <td>
                       <a class="btn btn-sm btn-outline-primary"
                          [routerLink]="['/admin/purchase-orders/uid', po.uid]"

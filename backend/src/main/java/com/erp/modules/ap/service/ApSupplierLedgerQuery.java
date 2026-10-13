@@ -7,6 +7,7 @@ import com.erp.modules.ap.domain.enums.ApLedgerEntryType;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.StatementCurrencies;
+import com.erp.platform.common.time.BusinessZone;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -193,7 +194,7 @@ public class ApSupplierLedgerQuery {
         ApSupplierRefDto supplier = resolveSupplier(companyId, supplierId, supplierUid);
         CompanyRow co = loadCompany(companyId);
 
-        LocalDate to = toDate != null ? toDate : LocalDate.now();
+        LocalDate to = toDate != null ? toDate : LocalDate.now(BusinessZone.parse(co.timeZone()));
         if (fromDate != null && fromDate.isAfter(to)) {
             throw new IllegalArgumentException("The start date must be on or before the end date.");
         }

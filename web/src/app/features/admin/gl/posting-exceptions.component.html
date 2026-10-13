@@ -1,0 +1,239 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-exclamation-triangle me-2" aria-hidden="true"></i>Posting Exceptions</h1>
+      <p class="subtitle">
+        Automatic postings (sales, cost of sales, goods receipts, reversals) that the ledger refused.
+        The document itself stands — only its journal is missing until it is re-posted.
+      </p>
+    </div>
+  </header>
+
+  @switch (companyState()) {
+    @case ('loading') {
+      <p class="text-muted d-flex align-items-center gap-2 mb-3" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+      </p>
+    }
+    @case ('error') {
+      <p class="text-danger mb-3" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load companies. Is the API running?
+      </p>
+    }
+    @default {
+      @if (companies().length > 1) {
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="peCompany">Company</label>
+          <select id="peCompany" name="peCompany" class="form-select"
+                  [ngModel]="selectedCompanyId()"
+                  (ngModelChange)="onCompanyChange($event)">
+            @for (c of companies(); track c.uid) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+          </select>
+        </div>
+      }
+    }
+  }
+
+  @if (selectedCompanyId()) {
+    <form class="d-flex flex-wrap align-items-end gap-3 mb-3" (ngSubmit)="refresh()">
+      <div>
+        <label class="form-label small text-muted mb-1" for="peSource">Source</label>
+        <select id="peSource" name="peSource" class="form-select"
+                [ngModel]="sourceType()" (ngModelChange)="sourceType.set($event)">
+          <option value="">All sources</option>
+          @for (s of sourceTypes; track s.value) {
+            <option [value]="s.value">{{ s.label }}</option>
+          }
+        </select>
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="peFrom">Posting date from</label>
+        <input id="peFrom" name="peFrom" type="date" class="form-control"
+               [ngModel]="from()" (ngModelChange)="from.set($event)" />
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1" for="peTo">to</label>
+        <input id="peTo" name="peTo" type="date" class="form-control"
+               [ngModel]="to()" (ngModelChange)="to.set($event)" />
+      </div>
+      <div class="form-check mb-2">
+        <input id="peResolved" name="peResolved" type="checkbox" class="form-check-input"
+               [ngModel]="includeResolved()" (ngModelChange)="includeResolved.set($event)" />
+        <label class="form-check-label small" for="peResolved">Include resolved</label>
+      </div>
+      <button type="submit" class="btn btn-outline-primary">
+        <i class="bi bi-funnel me-1" aria-hidden="true"></i>Apply
+      </button>
+    </form>
+
+    <!-- Sales vs GL tie-out -->
+    <div class="card mb-3" aria-labelledby="peTieOutTitle">
+      <div class="card-body">
+        <h2 id="peTieOutTitle" class="h6 mb-2">Sales vs ledger ({{ from() || '…' }} to {{ to() || '…' }})</h2>
+        @switch (tieOutState()) {
+          @case ('loading') {
+            <p class="text-muted small mb-0" aria-live="polite">Checking sales against the ledger…</p>
+          }
+          @case ('error') {
+            <p class="text-danger small mb-0" role="alert">Could not compute the tie-out for these dates.</p>
+          }
+          @default {
+            @if (tieOut(); as t) {
+              <table class="erp-table">
+                <caption class="visually-hidden">Sales invoices compared with the ledger</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Measure</th>
+                    <th scope="col" class="num">Sales invoices</th>
+                    <th scope="col" class="num">Ledger</th>
+                    <th scope="col" class="num">Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">Sales (net of VAT)</th>
+                    <td class="num mono">{{ money(t.salesNet) }}</td>
+                    <td class="num mono">{{ money(t.glRevenue) }}</td>
+                    <td class="num mono" [class.text-danger]="nonZero(t.revenueDifference)">{{ money(t.revenueDifference) }}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Output VAT</th>
+                    <td class="num mono">{{ money(t.salesVat) }}</td>
+                    <td class="num mono">{{ money(t.glVat) }}</td>
+                    <td class="num mono" [class.text-danger]="nonZero(t.vatDifference)">{{ money(t.vatDifference) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="small mb-0 mt-2" [class.text-success]="tieOutBalanced()" [class.text-muted]="!tieOutBalanced()">
+                @if (tieOutBalanced()) {
+                  Sales and the ledger agree for these dates.
+                } @else {
+                  A difference usually means sales listed below are not in the ledger yet, or a void was
+                  reversed in a different period.
+                }
+              </p>
+            }
+          }
+        }
+      </div>
+    </div>
+
+    @if (notice()) {
+      <div class="alert alert-success" role="status">{{ notice() }}</div>
+    }
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading posting exceptions…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load posting exceptions. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view the ledger.
+        </div>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i>
+            No posting exceptions for these filters — every automatic posting reached the ledger.
+          </div>
+        } @else {
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Automatic postings the ledger refused</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Posting date</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Document</th>
+                  <th scope="col" class="num">Amount</th>
+                  <th scope="col">Why it failed</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (e of rows(); track e.uid) {
+                  <tr>
+                    <td class="small">{{ e.postingDate ?? '—' }}</td>
+                    <td class="small">{{ sourceLabel(e.sourceType) }}</td>
+                    <td class="small mono">{{ documentLabel(e) }}</td>
+                    <td class="num mono small">{{ e.amount != null ? money(e.amount) : '—' }}</td>
+                    <td class="small">{{ e.reason }}</td>
+                    <td>
+                      @if (e.status === 'OPEN') {
+                        <span class="status-tag status-tag--warn">Open</span>
+                      } @else {
+                        <span class="status-tag status-tag--ok">
+                          {{ e.outcome === 'ALREADY_POSTED' ? 'Already posted' : 'Re-posted' }}
+                        </span>
+                        @if (e.journalEntryUid) {
+                          <a class="small ms-1" [routerLink]="['/admin/gl/journals/uid', e.journalEntryUid]">
+                            {{ e.batchNumber ?? 'Journal' }}
+                          </a>
+                        }
+                      }
+                    </td>
+                    <td>
+                      @if (e.status === 'OPEN' && canRepost()) {
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                [attr.aria-label]="'Re-post ' + documentLabel(e)"
+                                (click)="openRepost(e)">
+                          <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Re-post
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <app-paginator [meta]="meta()" [label]="'Posting exceptions'" (pageChange)="goToPage($event)" />
+        }
+      }
+    }
+
+    @if (repostTarget(); as target) {
+      <div class="card mt-3" role="region" aria-labelledby="peRepostTitle">
+        <div class="card-body">
+          <h2 id="peRepostTitle" class="h6">Re-post {{ documentLabel(target) }}</h2>
+          <p class="small text-muted mb-2">
+            Fix the cause first (for example reopen the period, or map an active account under Posting
+            Accounts). The posting is made once — a second attempt is refused.
+          </p>
+          <div class="mb-2" style="max-width:240px">
+            <label class="form-label small text-muted mb-1" for="peRepostDate">
+              Post on date (leave empty for {{ target.postingDate }})
+            </label>
+            <input id="peRepostDate" name="peRepostDate" type="date" class="form-control"
+                   [ngModel]="repostDate()" (ngModelChange)="repostDate.set($event)" />
+          </div>
+          @if (repostError()) {
+            <p class="text-danger small" role="alert">{{ repostError() }}</p>
+          }
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" [disabled]="reposting()" (click)="confirmRepost()">
+              @if (reposting()) {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+              }
+              Re-post
+            </button>
+            <button type="button" class="btn btn-outline-secondary" (click)="cancelRepost()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    }
+  }
+</section>

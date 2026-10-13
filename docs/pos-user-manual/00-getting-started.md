@@ -40,7 +40,7 @@ OrbixPOS is one app that can run on three kinds of device. The screens, buttons,
 
 *This section is for the person who sets up the till.*
 
-**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.5.4+12-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
+**What it is.** OrbixPOS for Windows is delivered as a single zip file named like `OrbixPOS-1.6.0+13-windows.zip`. There is no installer: you unzip the folder and run the program inside it.
 
 **Before you start.** Install the receipt printer in Windows first, using the driver that came with it (or the one your supplier recommends), and print a Windows test page so you know the printer itself works. Make sure the till PC is connected to the same network as the ERP server.
 
@@ -59,7 +59,7 @@ To upgrade to a new version:
 
 > **Keep your certificate files when you upgrade.** If you created a `certs` folder or an `erp-ca.pem` file in the OrbixPOS folder (see the next section), they are not part of the zip. Copy the new files *over* the old folder rather than deleting the folder first, or put the certificate files back afterwards.
 
-> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — on the sign-in screen just under the **Server setup** link, and at the bottom of the **Session** menu — for example **OrbixPOS 1.5.4+12**. When reporting a problem, always say which version the till runs.
+> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — on the sign-in screen just under the **Server setup** link, and at the bottom of the **Session** menu — for example **OrbixPOS 1.6.0+13**. When reporting a problem, always say which version the till runs.
 
 > **One setup per Windows user.** OrbixPOS remembers its settings for the Windows user account that ran it. If the till PC has more than one Windows login, do the First-Run Setup under each login that will run the till.
 

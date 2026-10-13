@@ -31,6 +31,7 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -73,6 +74,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
     private final AuditService                 audit;
     private final OutboxPublisher              outbox;
     private final BranchRepository             branches;
+    private final CompanyCalendar calendar;
 
     public WorkOrderCostingServiceImpl(WorkOrderRepository workOrders,
                                         WorkOrderComponentRepository components,
@@ -85,7 +87,8 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                                         ScopeGuard scopeGuard,
                                         AuditService audit,
                                         OutboxPublisher outbox,
-                                        BranchRepository branches) {
+                                        BranchRepository branches,
+                                        CompanyCalendar calendar) {
         this.workOrders      = workOrders;
         this.components      = components;
         this.operations      = operations;
@@ -98,6 +101,7 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
         this.audit           = audit;
         this.outbox          = outbox;
         this.branches        = branches;
+        this.calendar        = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -426,7 +430,8 @@ public class WorkOrderCostingServiceImpl implements WorkOrderCostingService {
                     "Cannot cancel a COMPLETED work order — close it first or contact a manager.");
         }
 
-        LocalDate effectiveDate = postingDate != null ? postingDate : LocalDate.now();
+        LocalDate effectiveDate = postingDate != null ? postingDate
+                : calendar.today(wo.getCompanyId());
         Long locationId = locationResolver.defaultLocationId(wo.getCompanyId(), wo.getBranchId());
 
         // --- 1. Reverse all issued components (stock + GL) ---

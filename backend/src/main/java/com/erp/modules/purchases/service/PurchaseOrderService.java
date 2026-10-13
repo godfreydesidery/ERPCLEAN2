@@ -72,6 +72,14 @@ public interface PurchaseOrderService {
     Page<PurchaseOrderDto> list(Long companyId, String q, boolean includeDirectReceipts,
                                 Pageable pageable);
 
+    /**
+     * PUR-11: as {@link #list(Long, String, boolean, Pageable)}, restricted to the given statuses.
+     * A null or empty collection means every status (the unfiltered list).
+     */
+    Page<PurchaseOrderDto> list(Long companyId, String q, boolean includeDirectReceipts,
+                                Collection<com.erp.modules.purchases.domain.enums.PurchaseOrderStatus> statuses,
+                                Pageable pageable);
+
     /** Update header fields (supplier, notes, expected date) while DRAFT. */
     PurchaseOrderDto update(String uid, UpdatePurchaseOrderRequest req);
 

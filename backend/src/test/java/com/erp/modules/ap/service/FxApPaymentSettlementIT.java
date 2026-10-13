@@ -240,6 +240,14 @@ class FxApPaymentSettlementIT extends PostgresIntegrationTest {
         assertThat(allocs.get(0).getBaseAllocatedAmount())
                 .isEqualByComparingTo(new BigDecimal("2400000"));
         assertThat(allocs.get(0).getSettlementRate()).isEqualByComparingTo(RATE_2400);
+
+        // AP-23: the TZS cash book records what the GL credited the bank — TZS 2,400,000 — not
+        // "1,000" in the bill's currency.
+        var cashRow = jdbc.queryForMap(
+                "SELECT amount, currency FROM cash_transactions WHERE source_ref = ?",
+                payment.uid());
+        assertThat((BigDecimal) cashRow.get("amount")).isEqualByComparingTo("2400000");
+        assertThat(cashRow.get("currency")).isEqualTo(TZS);
     }
 
     // =========================================================================

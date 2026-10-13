@@ -15,6 +15,7 @@ import {
   ZReadDto,
 } from './models/pos.model';
 import { PosService } from './pos.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 /**
  * POS Session detail: header, shift-report panel, payout form, close form, reconcile.
@@ -23,7 +24,7 @@ import { PosService } from './pos.service';
  */
 @Component({
   selector: 'app-pos-session-detail',
-  imports: [FormsModule, DecimalPipe],
+  imports: [AppDatePipe, FormsModule, DecimalPipe],
   templateUrl: './pos-session-detail.component.html',
   styleUrl: './pos-session-detail.component.scss',
 })

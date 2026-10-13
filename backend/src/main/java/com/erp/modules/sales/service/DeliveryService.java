@@ -1,5 +1,7 @@
 package com.erp.modules.sales.service;
 
+import java.math.BigDecimal;
+import java.util.Map;
 import com.erp.modules.sales.domain.dto.CreateDeliveryRequest;
 import com.erp.modules.sales.domain.dto.DeliveryDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
@@ -27,4 +29,17 @@ public interface DeliveryService {
      * The caller finalises via the standard invoice finalise endpoint.
      */
     SalesInvoiceDto createInvoiceFromDelivery(String deliveryUid);
+
+    /**
+     * SAL-07: hands back the quantities an order-billed invoice took off a delivery, when that
+     * invoice is voided — the delivery-line and sales-order-line {@code qty_invoiced_base} are
+     * decremented and the order status recomputed, so the goods can be invoiced again.
+     *
+     * <p>Called inside the void's transaction by the invoice service only; it performs no scope
+     * check of its own (the void already did).
+     *
+     * @param deliveryUid           the invoice's {@code source_delivery_uid}
+     * @param invoicedBaseByProduct base quantity the voided invoice billed, per product id
+     */
+    void releaseInvoicedQuantities(String deliveryUid, Map<Long, BigDecimal> invoicedBaseByProduct);
 }

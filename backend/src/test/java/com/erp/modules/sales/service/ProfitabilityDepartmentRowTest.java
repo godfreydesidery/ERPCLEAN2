@@ -91,6 +91,25 @@ class ProfitabilityDepartmentRowTest {
         assertThat(d.netAmount()).isEqualByComparingTo("1500.00");
     }
 
+    /**
+     * RPT-16: the row carries what was CHARGED (net + VAT) and the discount taken off it, so Gross
+     * Sales is charged + discount and Net Sales is the charged value. Subtracting the discount from
+     * the charged figure again under-stated Net Sales and broke Net Sales = Net Amount + VAT.
+     */
+    @Test
+    void aDiscountedDepartmentShowsTheListValueAsGrossAndTheChargeAsNet() {
+        ProfitabilityReportQuery.DeptAcc acc = new ProfitabilityReportQuery.DeptAcc("SPIRITS");
+        acc.add(row("1180.00", "118.00", "1000.00", "180.00", "1000.00", "0.00", "0.00"),
+                bd("700.00"));
+        ProfitabilityDepartmentRowDto d = acc.toRow();
+
+        assertThat(d.grossSales()).isEqualByComparingTo("1298.00");
+        assertThat(d.discount()).isEqualByComparingTo("118.00");
+        assertThat(d.netSales()).isEqualByComparingTo("1180.00");
+        assertThat(d.grossSales().subtract(d.discount())).isEqualByComparingTo(d.netSales());
+        assertThat(d.netAmount().add(d.vatAmount())).isEqualByComparingTo(d.netSales());
+    }
+
     /** Markup on a zero cost is unanswerable, not infinite. */
     @Test
     void markupIsUnknownWhenNothingWasCosted() {

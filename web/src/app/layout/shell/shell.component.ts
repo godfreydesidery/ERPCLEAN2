@@ -165,8 +165,15 @@ export class ShellComponent {
           icon: 'bi-file-earmark-spreadsheet',
           available: true,
           // Includes PRICE.MASS_UPDATE so a price-only role sees the link to the "Product prices &
-          // cost" import that lives in this wizard — matching the route guard (admin.routes.ts).
-          anyPermission: ['PRODUCT.IMPORT', 'CUSTOMER.IMPORT', 'SUPPLIER.IMPORT', 'PRICE.MASS_UPDATE'],
+          // cost" import that lives in this wizard, and STOCK.IMPORT for the "Stock on-hand levels"
+          // import (LRB-07) — matching the route guard (admin.routes.ts).
+          anyPermission: [
+            'PRODUCT.IMPORT',
+            'CUSTOMER.IMPORT',
+            'SUPPLIER.IMPORT',
+            'PRICE.MASS_UPDATE',
+            'STOCK.IMPORT',
+          ],
         },
         {
           label: 'Mass Price Change',
@@ -211,6 +218,16 @@ export class ShellComponent {
           keywords: ['price check', 'item lookup', 'how many left', 'available quantity', 'barcode', 'cost'],
         },
         { label: 'Stock On-Hand', route: '/admin/stock', icon: 'bi-boxes', available: true, permission: 'STOCK.VIEW' },
+        // ADM-29: "where do I adjust stock?" was a daily question — the only way in was a per-row
+        // action on Stock On-Hand. This opens the same screen with the Adjust Stock form open.
+        {
+          label: 'Adjust Stock',
+          route: '/admin/stock/adjust',
+          icon: 'bi-plus-slash-minus',
+          available: true,
+          allPermissions: ['STOCK.VIEW', 'STOCK.ADJUST'],
+          keywords: ['adjust', 'adjustment', 'stock adjustment', 'damage', 'damaged', 'write-off', 'write off', 'breakage', 'expired', 'shrinkage', 'correct stock', 'marekebisho', 'rekebisha stock', 'kuharibika'],
+        },
         { label: 'Stock Transfers', route: '/admin/stock-transfers', icon: 'bi-arrow-left-right', available: true, permission: 'STOCK.TRANSFER.VIEW' },
         { label: 'Stock Locations', route: '/admin/stock/locations', icon: 'bi-geo-alt', available: true, permission: 'STOCK.LOCATION.VIEW' },
         { label: 'Stock Batches', route: '/admin/stock/batches', icon: 'bi-layers', available: true, permission: 'STOCK.VIEW' },
@@ -271,6 +288,7 @@ export class ShellComponent {
         { label: 'Chart of Accounts', route: '/admin/gl/accounts', icon: 'bi-diagram-3', available: true, permission: 'GL.VIEW' },
         { label: 'Journal Entries', route: '/admin/gl/journals', icon: 'bi-journal-text', available: true, permission: 'GL.VIEW' },
         { label: 'Trial Balance', route: '/admin/gl/trial-balance', icon: 'bi-calculator', available: true, permission: 'GL.VIEW' },
+        { label: 'Posting Exceptions', route: '/admin/gl/posting-exceptions', icon: 'bi-exclamation-triangle', available: true, permission: 'GL.VIEW', keywords: ['failed posting', 'missing journal', 're-post', 'repost', 'sales not in ledger', 'gl errors', 'tie-out'] },
         { label: 'Fiscal Periods', route: '/admin/gl/periods', icon: 'bi-calendar3', available: true, permission: 'GL.VIEW' },
         { label: 'Posting Accounts', route: '/admin/gl/config', icon: 'bi-gear', available: true, permission: 'GL.MANAGE' },
         { label: 'Year-End Close', route: '/admin/gl/year-end', icon: 'bi-calendar-check', available: true, permission: 'GL.YEAR.CLOSE' },
@@ -284,12 +302,15 @@ export class ShellComponent {
         { label: 'Enter Bill', route: '/admin/ap/supplier-bills/enter', icon: 'bi-file-earmark-plus', available: true, permission: 'AP.BILL.ENTER' },
         { label: 'Record Payment', route: '/admin/ap/payments/record', icon: 'bi-cash-stack', available: true, permission: 'AP.PAYMENT.RUN' },
         { label: 'Payments', route: '/admin/ap/payments', icon: 'bi-cash-stack', available: true, permission: 'AP.VIEW' },
+        { label: 'AP Ageing', route: '/admin/ap/ageing', icon: 'bi-bar-chart-steps', available: true, permission: 'AP.VIEW' },
         { label: 'Supplier Statement', route: '/admin/ap/statement', icon: 'bi-file-earmark-text', available: true, permission: 'AP.VIEW' },
         { label: 'AP Opening Balance', route: '/admin/ap/opening-balance', icon: 'bi-pencil-square', available: true, permission: 'AP.OPENING.SET' },
         { label: 'Cash & Bank Accounts', route: '/admin/cash/accounts', icon: 'bi-wallet2', available: true, permission: 'CASH.VIEW' },
         { label: 'Cash Transfer', route: '/admin/cash/transfers/record', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.TRANSFER' },
         { label: 'Transfers', route: '/admin/cash/transfers', icon: 'bi-arrow-left-right', available: true, permission: 'CASH.VIEW' },
-        { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD' },
+        // ARC-12 / LBO-17: this is where a day-to-day expense is paid out of cash, so the palette
+        // must find it by what the owner calls it.
+        { label: 'Cash / Bank Entry', route: '/admin/cash/entries/record', icon: 'bi-cash', available: true, permission: 'CASH.ENTRY.RECORD', keywords: ['expense', 'expenses', 'record expense', 'pay expense', 'matumizi', 'gharama', 'rent', 'kodi', 'electricity', 'umeme', 'water', 'maji', 'transport', 'usafiri', 'fuel', 'mafuta', 'cash out', 'money paid', 'money received'] },
         { label: 'Cheques', route: '/admin/cash/cheques', icon: 'bi-card-checklist', available: true, permission: 'CHEQUE.MANAGE' },
         { label: 'Bank Reconciliation', route: '/admin/cash/reconciliations', icon: 'bi-bank', available: true, permission: 'CASH.RECONCILE' },
         { label: 'Cash Statement', route: '/admin/cash/statement', icon: 'bi-file-earmark-bar-graph', available: true, permission: 'CASH.VIEW' },
@@ -329,7 +350,8 @@ export class ShellComponent {
           route: '/admin/reports/profitability',
           icon: 'bi-graph-up-arrow',
           available: true,
-          permission: 'SALES.INVOICE.VIEW',
+          // Cost data: also INVENTORY.VALUATION.VIEW (ADM-14), equal to the route guard.
+          allPermissions: ['SALES.INVOICE.VIEW', 'INVENTORY.VALUATION.VIEW'],
           keywords: ['profit', 'gross profit', 'margin', 'cost of sales', 'net sales', 'vat amount'],
         },
       ],

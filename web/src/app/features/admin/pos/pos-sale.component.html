@@ -137,7 +137,7 @@
                            (input)="onCustomerSearch($any($event.target).value)" />
                     <app-uid-picker id="saleCustomer"
                                     [ngModel]="selectedCustomerUid()"
-                                    (ngModelChange)="selectedCustomerUid.set($event)"
+                                    (ngModelChange)="onCustomerChange($event)"
                                     [options]="customerOptions()"
                                     placeholder="Select customer"
                                     [required]="true"
@@ -174,7 +174,8 @@
                       Currency <span class="text-danger" aria-hidden="true">*</span>
                     </label>
                     <app-currency-select id="saleCurrency" name="saleCurrency"
-                                         [(ngModel)]="currency"
+                                         [ngModel]="currency()"
+                                         (ngModelChange)="onCurrencyChange($event)"
                                          [companyUid]="selectedCompanyUid()"
                                          [required]="true"
                                          [disabled]="submitting()" />
@@ -356,8 +357,9 @@
                     <label class="form-label" for="tenderedAmount">
                       Tendered Amount <span class="text-danger" aria-hidden="true">*</span>
                     </label>
-                    <input id="tenderedAmount" name="tenderedAmount" type="number"
-                           class="form-control" min="0" step="0.01"
+                    <input id="tenderedAmount" name="tenderedAmount" type="text"
+                           inputmode="decimal" autocomplete="off" placeholder="e.g. 10,000"
+                           class="form-control"
                            [ngModel]="tenderedAmount()" (ngModelChange)="tenderedAmount.set($event)"
                            [disabled]="submitting()" />
                   </div>

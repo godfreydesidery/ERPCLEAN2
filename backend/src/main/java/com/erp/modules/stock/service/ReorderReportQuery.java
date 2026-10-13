@@ -5,6 +5,7 @@ import com.erp.modules.stock.domain.dto.ReorderReportDto;
 import com.erp.modules.stock.domain.dto.ReorderRowDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -73,10 +74,10 @@ public class ReorderReportQuery {
 
         Company company = loadCompany(companyId);
         NamedRef branch = resolve("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         NamedRef supplier = resolve("suppliers", "display_name", supplierUid, companyId, "Supplier");
 
-        List<ReorderRowDto> rows = queryRows(companyId, branch, supplier, includeCost);
+        List<ReorderRowDto> rows = queryRows(companyId, branch, supplier, includeCost, scope);
 
         BigDecimal orderValue = BigDecimal.ZERO;
         int withoutCost = 0;
@@ -104,10 +105,10 @@ public class ReorderReportQuery {
     // -------------------------------------------------------------------------
 
     private List<ReorderRowDto> queryRows(Long companyId, NamedRef branch, NamedRef supplier,
-                                          boolean includeCost) {
+                                          boolean includeCost, BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
-        StringBuilder filter = new StringBuilder();
+        StringBuilder filter = new StringBuilder(scope.sql("soh.branch_id"));
         if (branch != null) {
             filter.append(" AND soh.branch_id = ?");
             params.add(branch.id());
@@ -143,7 +144,7 @@ public class ReorderReportQuery {
                        loc.code           AS location_code,
                        loc.name           AS location_name,
                        soh.quantity       AS on_hand,
-                       soh.reorder_level  AS reorder_level,
+                       COALESCE(soh.reorder_level, pb.reorder_level, p.reorder_level) AS reorder_level,
                        soh.max_qty        AS max_qty,
                        p.reorder_qty      AS reorder_qty,
                        sup.uid            AS supplier_uid,
@@ -153,13 +154,20 @@ public class ReorderReportQuery {
                 JOIN products p          ON p.id = soh.product_id AND p.company_id = soh.company_id
                 JOIN branches b          ON b.id = soh.branch_id
                 JOIN stock_locations loc ON loc.id = soh.location_id
+                LEFT JOIN product_branch pb ON pb.product_id = soh.product_id
+                                           AND pb.branch_id = soh.branch_id
                 LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 LEFT JOIN suppliers sup  ON sup.id = p.preferred_supplier_id
                                         AND sup.company_id = p.company_id
                 """ + costJoin + """
                 WHERE soh.company_id = ?
-                  AND soh.reorder_level IS NOT NULL
-                  AND soh.quantity <= soh.reorder_level
+                  -- STK-10 / LBO-16: the row's own level, else the product's level for the branch,
+                  -- else the Product Master level. An INHERITED level applies only where stock
+                  -- sits or at the default location (a zero leftover row at In-Transit is not
+                  -- "out of stock"). Same rule as the on-hand Low flag and the LOW_STOCK alert.
+                  AND COALESCE(soh.reorder_level, pb.reorder_level, p.reorder_level) IS NOT NULL
+                  AND soh.quantity <= COALESCE(soh.reorder_level, pb.reorder_level, p.reorder_level)
+                  AND (soh.reorder_level IS NOT NULL OR soh.quantity <> 0 OR loc.is_default)
                   AND p.status = 'ACTIVE'
                 """ + filter + """
 

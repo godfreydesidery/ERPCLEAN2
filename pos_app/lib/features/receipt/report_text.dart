@@ -64,7 +64,10 @@ String buildXReadText({
   _payouts(lines, x.totalPayoutsNetAmount, x.payoutSubtotals, width);
   lines.add(rule(width));
   lines.add(leftRight(
-      'EXPECTED CASH ${ctx.currency}', formatAmount(x.expectedCashAmount), width));
+      'EXPECTED CASH ${ctx.currency}',
+      // POS-04: withheld for a reader who may not settle the till.
+      x.expectedCashAmount == null ? '-' : formatAmount(x.expectedCashAmount!),
+      width));
   lines.add(rule(width));
   lines.add(leftRight('Invoices', '${x.invoiceCount}', width));
 

@@ -16,6 +16,10 @@ import { AuthService } from '../../../core/auth/auth.service';
   styleUrl: './login.component.scss',
 })
 export class LoginComponent {
+  /** Shown after a failed sign-in with a name typed without its "@organisation" part. */
+  static readonly FULL_NAME_HINT =
+    'If your sign-in name has a part after "@" (for example name@your-company), type it in full.';
+
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -37,7 +41,15 @@ export class LoginComponent {
     this.auth.login({ username: this.username().trim(), password: this.password() }).subscribe({
       next: () => this.router.navigateByUrl(this.returnTarget()),
       error: (err) => {
-        this.error.set(this.messageFrom(err));
+        // LUI-16: on a shared installation a bare name is not resolved server-side, so a clerk
+        // who typed "asha" instead of "asha@duka" needs to be told the name has two parts.
+        const bareName = !this.username().includes('@');
+        const status = (err as { status?: number })?.status;
+        this.error.set(
+          bareName && status === 401
+            ? `${this.messageFrom(err)} ${LoginComponent.FULL_NAME_HINT}`
+            : this.messageFrom(err),
+        );
         this.submitting.set(false);
       },
     });

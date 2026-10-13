@@ -66,6 +66,23 @@ public interface JournalLineRepository extends JpaRepository<JournalLine, Long> 
     BigDecimal accountBalance(@Param("companyId") Long companyId, @Param("accountId") Long accountId);
 
     /**
+     * Debit-normal balance of one account over the entries POSTED before {@code before}
+     * (ARC-01 / ARC-08): the part of a till's GL balance the cash book could not carry, because
+     * it was posted before the cash book started mirroring sales. Null when no such line exists.
+     */
+    @Query("""
+            SELECT SUM(l.debitAmount) - SUM(l.creditAmount)
+            FROM JournalLine l, com.erp.modules.gl.domain.entity.JournalEntry e
+            WHERE l.entryId = e.id
+              AND l.companyId = :companyId
+              AND l.accountId = :accountId
+              AND e.postedAt < :before
+            """)
+    BigDecimal accountBalancePostedBefore(@Param("companyId") Long companyId,
+                                          @Param("accountId") Long accountId,
+                                          @Param("before") java.time.Instant before);
+
+    /**
      * Period-windowed aggregate for Year-End Close (ADR-0019 D-3):
      * returns [accountId, sumDebit, sumCredit] for every account that has movement in
      * [fromDate, toDate] for the given company.  Used by YearEndCloseServiceImpl to compute
@@ -85,4 +102,26 @@ public interface JournalLineRepository extends JpaRepository<JournalLine, Long> 
     List<Object[]> periodMovementByAccount(@Param("companyId") Long companyId,
                                             @Param("fromDate")  LocalDate fromDate,
                                             @Param("toDate")    LocalDate toDate);
+
+    /**
+     * {@link #periodMovementByAccount} restricted to entries of the given source types — the GL side
+     * of the sales-vs-GL revenue/VAT tie-out (ACC-02). Returns [accountId, sumDebit, sumCredit].
+     */
+    @Query("""
+            SELECT l.accountId,
+                   SUM(l.debitAmount)  AS sumDebit,
+                   SUM(l.creditAmount) AS sumCredit
+            FROM   JournalLine l
+            JOIN   JournalEntry e ON e.id = l.entryId
+            WHERE  l.companyId  = :companyId
+              AND  e.postingDate BETWEEN :fromDate AND :toDate
+              AND  e.sourceType IN :sourceTypes
+            GROUP  BY l.accountId
+            """)
+    List<Object[]> periodMovementByAccountForSources(
+            @Param("companyId") Long companyId,
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("sourceTypes") java.util.Collection<
+                    com.erp.modules.gl.domain.enums.JournalSourceType> sourceTypes);
 }

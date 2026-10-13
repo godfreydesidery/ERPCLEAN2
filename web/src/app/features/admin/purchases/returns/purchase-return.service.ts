@@ -51,4 +51,16 @@ export class PurchaseReturnService {
   confirm(uid: string): Observable<PurchaseReturnDto> {
     return this.http.post<PurchaseReturnDto>(`${this.base}/uid/${uid}/confirm`, {});
   }
+
+  /**
+   * The printable purchase return / debit note, streamed (nothing is stored server-side).
+   * PDF is the branded print; XLSX / CSV the same content as a sheet.
+   * Gated server-side on PURCHASE.RETURN.VIEW + DOCUMENT.RENDER.
+   */
+  exportBlob(uid: string, format: PurchaseReturnExportFormat): Observable<Blob> {
+    const params = new HttpParams().set('format', format);
+    return this.http.get(`${this.base}/uid/${uid}/export`, { params, responseType: 'blob' });
+  }
 }
+
+export type PurchaseReturnExportFormat = 'PDF' | 'XLSX' | 'CSV';

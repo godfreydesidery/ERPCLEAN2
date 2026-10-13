@@ -126,6 +126,10 @@ export interface SupplierBillDto {
    */
   comparisonState?: BillComparisonState | null;
   lines: SupplierBillLineDto[];
+  /** The supplier's uid (AP-28) — lets "Pay" open Record Payment on this supplier. */
+  supplierUid?: string | null;
+  /** The supplier's display name (AP-28). */
+  supplierName?: string | null;
 }
 
 // ── Enter Bill request ────────────────────────────────────────────────────────
@@ -134,6 +138,8 @@ export interface BillLineRequest {
   productId?: number | null;
   poLineUid?: string | null;
   grLineUid?: string | null;
+  /** AP-16: expense / asset account (uid) for a non-stock line; omitted = Purchases. */
+  glAccountUid?: string | null;
   /** Required. */
   description: string;
   /** Send as string; backend parses BigDecimal. */
@@ -148,7 +154,8 @@ export interface EnterBillRequest {
   supplierInvoiceNo: string;
   purchaseOrderUid?: string | null;
   billDate: string;
-  dueDate: string;
+  /** AP-09: null/omitted = derived by the server from the supplier's payment terms. */
+  dueDate?: string | null;
   /** Send as string; 0 if no VAT. */
   vatAmount: string;
   currency: string;
@@ -245,6 +252,8 @@ export interface ApPaymentDto {
   /** Bank account number; null for a pure cash account, which has none. */
   cashBankAccountNumber: string | null;
   allocations: PaymentAllocationDto[];
+  /** AP-03: when the payment was reversed (bounced cheque or "reverse payment"); null while live. */
+  reversedAt?: string | null;
 }
 
 export interface PaySingleBillRequest {
@@ -255,6 +264,8 @@ export interface PaySingleBillRequest {
   paymentDate: string;
   tenderType: string;
   bankReference?: string | null;
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
 }
 
 export interface PaymentRunRequest {
@@ -265,6 +276,8 @@ export interface PaymentRunRequest {
   tenderType: string;
   bankReference?: string | null;
   billUids?: string[];
+  /** AP-08: account the money leaves; omitted = company default. */
+  cashBankAccountUid?: string | null;
   /**
    * Optional WHT_ON_PAYMENT capture (ADR-0017 D-9).
    * When set, the cash CR is reduced by whtAmount and a WHT payable leg is posted.
@@ -272,6 +285,11 @@ export interface PaymentRunRequest {
   whtTypeUid?: string | null;
   /** Send as string. */
   whtAmount?: string | null;
+  /**
+   * AP-07: part-payment per bill uid (send as string). A bill in billUids without an entry is
+   * paid in full. Each amount must be > 0 and <= the bill's outstanding.
+   */
+  billAmounts?: Record<string, string>;
 }
 
 // ── Debit note ────────────────────────────────────────────────────────────────
@@ -327,6 +345,24 @@ export interface ApAgeingRowDto {
   bucket: AgeingBucket;
   /** Wire: number — coerce with +v */
   amount: number | string;
+  currency: string;
+}
+
+/**
+ * One creditors-ageing row per supplier and currency (AP-11), net of unapplied debit notes.
+ * Backed by GET /api/v1/ap/statement/ageing/by-supplier. Amounts are wire numbers.
+ */
+export interface ApSupplierAgeingRowDto {
+  supplierId: string;
+  supplierUid: string | null;
+  supplierCode: string | null;
+  supplierName: string | null;
+  current: number | string;
+  days1to30: number | string;
+  days31to60: number | string;
+  days61to90: number | string;
+  days91Plus: number | string;
+  total: number | string;
   currency: string;
 }
 

@@ -4,6 +4,7 @@ import com.erp.modules.stock.domain.dto.ItemInquiryDto;
 import com.erp.modules.stock.domain.dto.ItemInquiryRowDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -83,7 +84,7 @@ public class ItemInquiryQuery {
 
         CompanyRef company = loadCompany(companyId);
         NamedRef branch = resolveBranch(branchUid, companyId);
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         PriceList priceList = resolveDefaultPriceList(companyId);
 
         String currency = company.baseCurrency() != null ? company.baseCurrency() : CURRENCY_FALLBACK;
@@ -94,7 +95,8 @@ public class ItemInquiryQuery {
         List<ItemInquiryRowDto> rows = term.isEmpty()
                 ? List.of()
                 : queryRows(companyId, priceList != null ? priceList.id() : null, currency,
-                            branch != null ? branch.id() : null, term, includeCost);
+                            branch != null ? branch.id() : null, term, includeCost,
+                            scope.sql("branch_id"));
 
         boolean truncated = rows.size() > MAX_ROWS;
         if (truncated) {
@@ -114,7 +116,8 @@ public class ItemInquiryQuery {
     // -------------------------------------------------------------------------
 
     private List<ItemInquiryRowDto> queryRows(Long companyId, Long priceListId, String currency,
-                                               Long branchId, String term, boolean includeCost) {
+                                               Long branchId, String term, boolean includeCost,
+                                               String scopeSql) {
         String like = "%" + term.toLowerCase() + "%";
 
         List<Object> params = new ArrayList<>();
@@ -153,6 +156,7 @@ public class ItemInquiryQuery {
                     FROM stock_on_hand
                     WHERE company_id = ?
                       AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                      /*branch-scope*/
                     GROUP BY product_id
                 )
                 SELECT p.uid                        AS product_uid,
@@ -183,7 +187,7 @@ public class ItemInquiryQuery {
                 LIMIT ?
                 """;
 
-        return jdbc.query(sql, (rs, rowNum) -> {
+        return jdbc.query(sql.replace("/*branch-scope*/", scopeSql), (rs, rowNum) -> {
             BigDecimal qty       = rs.getBigDecimal("qty");
             BigDecimal costValue = rs.getBigDecimal("cost_value");
             boolean    valued    = rs.getInt("valued_rows") > 0;

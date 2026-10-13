@@ -165,16 +165,16 @@ Below the facts is the list of actions. **You only see the actions your account 
 
 | Action | What it does | Who sees it |
 |---|---|---|
-| **X-read** | A mid-shift drawer report. Resets nothing. | Anyone working the till. A cashier without permission to view sessions needs a manager's approval each time. |
-| **Cash payout** | Records cash leaving the drawer — a refund or a paid-out. Reason required. | Cashiers allowed to open shifts. Only while the session is OPEN. |
-| **Till expense** | Records cash paid out of the drawer for a business expense, under a category (transport, cleaning, …). | Anyone allowed to record till expenses (the standard Cashier role is). Only while the session is OPEN. |
+| **X-read** | A mid-shift drawer report. Resets nothing. A cashier's X-read leaves out the expected cash. | Anyone working the till. A cashier without permission to view sessions needs a manager's approval each time. |
+| **Cash payout** | Records cash leaving the drawer (a paid-out, for example a drop to the safe). Reason required; a manager approves it at the till. | Cashiers allowed to open shifts. Only while the session is OPEN. |
+| **Till expense** | Records cash paid out of the drawer for a business expense, under a category (transport, cleaning, …). A manager approves it at the till. | Anyone allowed to record till expenses (the standard Cashier role is). Only while the session is OPEN. |
 | **Today's sales** | Lists today's sales at this branch and reprints a receipt. | Anyone allowed to view sales invoices. |
 | **Recent receipts** | Reprints a receipt saved on **this device** (works offline). | Everyone. |
 | **Close session** | Count the drawer; the server computes the variance. | Anyone allowed to close sessions. Only while OPEN. |
 | **Reconcile (Z-read)** | Posts the variance to the accounts and finalises the session. | **Supervisors only.** Only after the session is CLOSED. |
 | **Z-read (reprint)** | Shows and reprints the final figures again. | Anyone working the till (a manager's approval may be needed). Only after the session is RECONCILED. |
 
-At the very bottom of the panel is **Sign out**. Signing out does **not** close your session — your shift stays OPEN on the server until you actually close it. Under **Sign out**, in small grey text, is the version of OrbixPOS on this till (for example **OrbixPOS 1.5.4+12**) — quote it when you call for support.
+At the very bottom of the panel is **Sign out**. Signing out does **not** close your session — your shift stays OPEN on the server until you actually close it. Under **Sign out**, in small grey text, is the version of OrbixPOS on this till (for example **OrbixPOS 1.6.0+13**) — quote it when you call for support.
 
 ---
 
@@ -194,7 +194,9 @@ The till stays signed in as you throughout — the dialog says "You stay signed 
 | **That user is not allowed to approve this action.** | The password was right, but that person may not approve this — or the person signed in at the till tried to approve their own action. The approver must be a **different person** who holds the supervisor right for this action. |
 | **Too many failed approval attempts. Please wait a moment and try again.** | Several wrong attempts in a row. Wait, then try again. |
 
-For drawer reports, the approver must be someone allowed to reconcile tills (a supervisor or branch manager). If a report is still refused after approval, the till shows **That approval was not accepted. Ask a supervisor who can reconcile the till.**
+For drawer reports, cash payouts and till expenses, the approver must be someone allowed to reconcile tills (a supervisor or branch manager). If a report is still refused after approval, the till shows **That approval was not accepted. Ask a supervisor who can reconcile the till.**
+
+> **Cash leaving the drawer always has a second name on it.** Every **Cash payout** and **Till expense** asks for a manager's approval before it is recorded, and the manager who approved it is named on the record. If you are yourself allowed to reconcile tills (a supervisor or branch manager working a till), you are not asked — the payout is recorded in your own name.
 
 ---
 
@@ -222,8 +224,8 @@ For drawer reports, the approver must be someone allowed to reconcile tills (a s
    | **Sales (all tenders)** | Everything taken on this session so far, whatever the payment type. Under it, **By tender** splits it — for example `Cash 32,020.00 · Mobile 14,000.00`. |
    | **Opening float** | The cash you declared at open. |
    | **Cash sales** | The cash part of your sales — the only part that ends up in the drawer. |
-   | **Payouts** | Cash that has left the drawer, shown as a negative, with a line for each type (for example **Refund (1)**, **Paid out (2)**, **Expense (1)**). |
-   | **Expected cash** | What the server says should be in the drawer right now: float + cash sales − payouts. |
+   | **Payouts** | Cash that has left the drawer, shown as a negative, with a line for each type (for example **Paid out (2)**, **Expense (1)**). |
+   | **Expected cash** | What the server says should be in the drawer right now: float + cash sales − payouts. **Shown only to a supervisor** (someone allowed to reconcile the till) or when a manager approved this X-read at the till. A cashier counts the drawer *blind* — without knowing the figure — so the count is honest. |
 
    The footer shows how many invoices have been rung (for example `23 invoices`) and the reminder "An X-read does not close the shift and resets nothing."
 4. To print it, click **Print** (Windows till with a receipt printer only). You see **Printed.** — or **No receipt printer set — configure one in Setup.** if no printer is set up.
@@ -235,40 +237,33 @@ For drawer reports, the approver must be someone allowed to reconcile tills (a s
 
 ## Recording a cash payout
 
-**What it is.** A *cash payout* records money physically leaving the drawer during the shift, so the expected-cash figure stays honest. There are two kinds.
+**What it is.** A *cash payout* (a **Paid out**) records money physically leaving the drawer during the shift that is not change on a sale and not a business expense — for example a drop to the safe. It reduces the cash the server expects in the drawer, and it is booked to the ledger as an expense against the drawer, filed under the reason you type — so the reason matters.
 
-| Type | Button | Use it for |
-|---|---|---|
-| **Refund** | **Refund** | Cash handed back to a customer outside a full sale reversal. |
-| **Paid out** | **Paid out** (selected by default) | Any other cash that leaves the drawer and is not a business expense — for example a drop to the safe. |
-
-Both kinds **reduce** the cash the server expects in the drawer. A **Paid out** is booked to the ledger as an expense against the drawer, filed under the reason you type — so the reason matters.
+> **A cash payout is never a refund.** To give a customer their money back, open the sale in **Today's sales** (or its receipt) and use **Refund / reverse** — see Chapter 6. That puts the stock back and corrects the sales and VAT figures; a payout does none of that. The till no longer offers a "Refund" payout.
 
 > Paying for something the business needs out of the till — transport, cleaning, a small repair — is a **till expense**, not a cash payout. Use **Till expense** (see **Recording a till expense** below) so the cost is filed under the right category.
 
 **Why it exists.** If you take cash out of the drawer without telling the system, your end-of-shift count will look short by that amount. Recording the payout keeps the expected figure matched to reality, so a genuine over/short is not masked.
 
-**When it happens.** Whenever cash leaves the drawer for a reason that is not change on a sale. The session must be **OPEN**.
+**When it happens.** Whenever cash leaves the drawer for a reason that is not change on a sale. The session must be **OPEN**. A manager approves every payout at the till (unless you are yourself allowed to reconcile the till).
 
 ### Step by step
 
-1. Count out and remove the cash from the drawer first.
-2. Open the **Session menu** and click **Cash payout** ("Refund or drawer drop — reason required").
-3. At the top of the **Cash payout** dialog, choose the type: **Refund** or **Paid out**.
-4. In **Amount (TZS)**, type how much cash is leaving, digits only. It must be greater than zero.
-5. In **Reason (required)**, type what the cash is for — for example `drawer-to-safe drop` or `cash refund, receipt lost`. A few words at least.
-6. Click **Record**.
+1. Open the **Session menu** and click **Cash payout** ("Cash paid out of the drawer — manager approves").
+2. In **Amount (TZS)**, type how much cash is leaving, digits only. It must be greater than zero.
+3. In **Reason (required)**, type what the cash is for — for example `drawer-to-safe drop`. A few words at least.
+4. Click **Record**. The **Manager approval — cash payout** prompt opens: the manager types their own username and password and clicks **Approve**.
+5. Count out and remove the cash from the drawer.
 
-You will see **Payout recorded.** (or **Payout recorded and posted to the ledger.**), and the dialog closes. The amount is now subtracted from your expected cash. To cancel without recording anything, click **Cancel**.
+You will see **Payout recorded.** (or **Payout recorded and posted to the ledger.**), and the dialog closes. The amount is now subtracted from your expected cash, and the manager who approved it is named on the record. To cancel without recording anything, click **Cancel**.
 
 | What you see | What to do |
 |---|---|
 | **Enter an amount.** | The amount was blank or zero. Type a positive amount and click **Record** again. |
 | **Say what the cash is for (at least a few words).** | The reason is missing or too short. Type a clear reason. |
+| **That manager is not authorised to approve cash out of the till.** | The person who approved may not settle the till. Ask a manager who can reconcile the till. |
 | **Cash payout** is faded with "Only while the session is open" | The shift has already been closed or reconciled — payouts are only allowed while OPEN. |
 | A message saying the session is not OPEN | Same cause: the shift was closed. |
-
-> A cash payout is **not** the way to reverse a whole sale. To reverse a sale, open its receipt and use **Refund / reverse** (a cashier needs a manager's approval — see the *Receipts and Refunds* chapter, Chapter 6). Use a payout only for cash that leaves the drawer outside the normal sale flow.
 
 ---
 
@@ -287,7 +282,7 @@ You will see **Payout recorded.** (or **Payout recorded and posted to the ledger
 3. In the **Till expense** dialog, type the amount into **Amount (TZS)**, digits only. It must be greater than zero.
 4. Under **Category (required)**, tap one of the quick choices — **Transport**, **Cleaning**, **Repairs**, **Meals**, **Utilities**, **Stationery** — or type your own category (2 to 40 letters), for example `Security`.
 5. In **What was it for? (required)**, say in a few words what you paid for — for example `boda to collect sugar from depot`.
-6. Click **Record**.
+6. Click **Record**. The **Manager approval — till expense** prompt opens: the manager types their own username and password and clicks **Approve** (you are not asked if you are yourself allowed to reconcile the till).
 
 You will see **Expense recorded and posted to the ledger.** and the dialog closes. The amount is now subtracted from your expected cash. To back out without recording anything, click **Cancel**.
 
@@ -301,7 +296,7 @@ The expense appears on the **X-read** and **Z-read** as its own **Expense** line
 | **Till expense** is faded with "Only while the session is open" | The shift has already been closed — expenses can only be recorded while it is OPEN. |
 | **Till expense** is not in the menu | Your account is not allowed to record till expenses. Ask your supervisor. |
 
-> **Cash payout** offers only **Refund** and **Paid out** — there is no expense choice there. Business expenses always go through **Till expense**.
+> **Cash payout** records only a **Paid out** — there is no expense or refund choice there. Business expenses always go through **Till expense**; refunds always go through **Refund / reverse**.
 
 ---
 
@@ -334,6 +329,8 @@ The dialog now reads **Session closed** and shows the result:
 | **Expected** | What the server expected to be in the drawer. A note explains: "Expected = float + cash sales − payouts (cash tenders only; card & mobile money settle separately)." |
 | **Counted** | The figure you entered. |
 | **Variance** | Counted − expected. Shown in **green** when the drawer balances or is over, and in **red** when it is short. |
+
+**Expected** and **Variance** are shown only to someone allowed to reconcile the till. A cashier sees just the **Counted** figure and the note "Session closed. A supervisor will check the count and settle the drawer." — the supervisor sees the result when they reconcile.
 
 Under the variance, a note reminds you: *"Reconcile (Z-read) posts this variance — supervisor."*
 
@@ -428,10 +425,10 @@ The X-read and Z-read print on the same receipt printer as your receipts, at the
 Work through this every time you finish a shift:
 
 1. **Finish open work.** Complete or clear any sale in progress, and answer any **Unfinished sale** prompt.
-2. **Record any last payouts and expenses.** If you removed cash for a safe drop or a cash refund, record it via **Cash payout**; if you paid a business cost from the till, record it via **Till expense** — so the expected figure is right.
-3. **(Optional) Run an X-read.** **Session menu → X-read** to preview the expected cash before you count.
+2. **Record any last payouts and expenses.** If you removed cash for a safe drop, record it via **Cash payout** (refunds go through **Refund / reverse**, never a payout); if you paid a business cost from the till, record it via **Till expense** — so the expected figure is right.
+3. **(Optional) Run an X-read.** **Session menu → X-read** to check the sales and payouts so far. A cashier's X-read does not show the expected cash: count the drawer *blind* and let the supervisor compare.
 4. **Count the drawer.** Count all cash, including the opening float. Count twice.
-5. **Close the session.** **Session menu → Close session**, enter **Counted cash**, click **Close session**. Note the **Variance** (green = balanced/over, red = short), then **Done**.
+5. **Close the session.** **Session menu → Close session**, enter **Counted cash**, click **Close session**, then **Done**. A supervisor also sees the **Variance** here (green = balanced/over, red = short); a cashier sees only the counted figure.
 6. **Reconcile (supervisor).** A supervisor runs **Reconcile (Z-read) → Reconcile**, prints the Z-read (no approval needed — the supervisor is the manager), and clicks **Finish shift** — or reconciles the session later in the ERP.
 7. **Hand over the cash** per your branch's procedure, then **Sign out** (from the **Session menu** or the **Open shift** screen).
 

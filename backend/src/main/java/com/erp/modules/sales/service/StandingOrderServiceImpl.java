@@ -22,6 +22,8 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -57,6 +59,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
     private final OutboxPublisher             outbox;
     private final ScopeGuard                  scopeGuard;
     private final AuditService                audit;
+    private final CompanyCalendar calendar;
 
     public StandingOrderServiceImpl(StandingOrderRepository standings,
                                      StandingOrderLineRepository standingLines,
@@ -69,7 +72,8 @@ public class StandingOrderServiceImpl implements StandingOrderService {
                                      UnitOfMeasureRepository units,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
+                                     AuditService audit,
+                                     CompanyCalendar calendar) {
         this.standings         = standings;
         this.standingLines     = standingLines;
         this.salesOrders       = salesOrders;
@@ -82,6 +86,7 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         this.outbox            = outbox;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.calendar          = calendar;
     }
 
     @Override
@@ -185,14 +190,16 @@ public class StandingOrderServiceImpl implements StandingOrderService {
         if (standing.getStatus() != StandingStatus.ACTIVE) {
             throw new ConflictException("This standing order is not ACTIVE.");
         }
-        generateSo(standing, LocalDate.now());
+        generateSo(standing, calendar.today(standing.getCompanyId()));
         return toDto(standing, standingLines.findByStandingOrderId(standing.getId()));
     }
 
     @Override
-    @Scheduled(cron = "0 0 0 * * *")  // midnight daily
+    @Scheduled(cron = "0 0 0 * * *", zone = BusinessZone.DEFAULT_ID)  // midnight daily, house time
     public void generateDue() {
-        LocalDate today = LocalDate.now();
+        // A cross-company sweep has no single company zone; it runs on the house zone's calendar
+        // (owner ruling 2026-10-10 — never the JVM default, which is UTC in the Docker images).
+        LocalDate today = LocalDate.now(BusinessZone.DEFAULT);
         var due = standings.findDueForGeneration(today);
         log.info("StandingOrder scheduler: {} due order(s) for {}", due.size(), today);
         for (var standing : due) {

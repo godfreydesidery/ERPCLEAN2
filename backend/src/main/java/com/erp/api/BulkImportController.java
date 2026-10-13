@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.bulk.BulkImportAccess;
 import com.erp.platform.bulk.BulkImportService;
 import com.erp.platform.bulk.BulkImportService.EntityDescriptor;
 import com.erp.platform.bulk.ImportMode;
@@ -33,16 +34,21 @@ public class BulkImportController {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     private final BulkImportService bulk;
+    private final BulkImportAccess access;
 
-    public BulkImportController(BulkImportService bulk) {
+    public BulkImportController(BulkImportService bulk, BulkImportAccess access) {
         this.bulk = bulk;
+        this.access = access;
     }
 
-    /** The entity types the caller can import (for the picker). */
+    /**
+     * The entity types the caller can import (for the picker) — only those whose import permission
+     * the caller holds (LRB-07), so the wizard never offers a type that 403s on the next step.
+     */
     @GetMapping("/entities")
     @PreAuthorize("@bulkAccess.canImportAny()")
     public List<EntityDescriptor> entities() {
-        return bulk.entities();
+        return access.importableEntities();
     }
 
     /** Download the fill-in Excel template for an entity, scoped to the active company. */

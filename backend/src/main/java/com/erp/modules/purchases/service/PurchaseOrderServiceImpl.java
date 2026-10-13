@@ -278,6 +278,27 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return orders.findByCompanyIdAndOriginIn(companyId, origins, pageable).map(this::toDto);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>PUR-11: the PO list's Status filter and the receive screen's PO picker (ORDERED +
+     * PARTIALLY_RECEIVED in ONE call) both land here. No statuses = the unfiltered list above.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrderDto> list(Long companyId, String q, boolean includeDirectReceipts,
+                                        Collection<PurchaseOrderStatus> statuses, Pageable pageable) {
+        if (statuses == null || statuses.isEmpty()) {
+            return list(companyId, q, includeDirectReceipts, pageable);
+        }
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Collection<PurchaseOrderOrigin> origins = includeDirectReceipts
+                ? EnumSet.allOf(PurchaseOrderOrigin.class)
+                : EnumSet.of(PurchaseOrderOrigin.MANUAL);
+        String term = q != null && !q.isBlank() ? q.trim() : null;
+        return orders.searchByStatus(companyId, term, origins, statuses, pageable).map(this::toDto);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<PurchaseOrderLineDto> listLines(String purchaseOrderUid) {

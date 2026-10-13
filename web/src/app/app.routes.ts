@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { ShellComponent } from './layout/shell/shell.component';
-import { authGuard } from './core/auth/auth.guard';
+import { authGuard, mustChangePasswordGuard } from './core/auth/auth.guard';
 
 /**
  * Top-level routes. The login page stands alone (no shell). Everything under the shell is gated by
@@ -16,7 +16,16 @@ export const routes: Routes = [
     path: '',
     component: ShellComponent,
     canActivate: [authGuard],
+    canActivateChild: [mustChangePasswordGuard],
     children: [
+      {
+        path: 'account/password',
+        title: 'Change password',
+        loadComponent: () =>
+          import('./features/auth/change-password/change-password.component').then(
+            (m) => m.ChangePasswordComponent,
+          ),
+      },
       {
         path: 'admin',
         loadChildren: () =>

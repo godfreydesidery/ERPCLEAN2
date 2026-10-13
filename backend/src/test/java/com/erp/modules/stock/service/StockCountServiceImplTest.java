@@ -19,6 +19,7 @@ import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockOnHand;
 import com.erp.modules.stock.repository.StockCountLineRepository;
 import com.erp.modules.stock.repository.StockCountRepository;
+import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.domain.MasterStatus;
@@ -60,6 +61,7 @@ class StockCountServiceImplTest {
     private StockCountRepository     counts;
     private StockCountLineRepository countLines;
     private StockOnHandRepository    onHands;
+    private StockMovementRepository  movements;
     private StockPostingService      posting;
     private InventoryValuationService valuation;
     private InventoryGlPoster        glPoster;
@@ -77,6 +79,7 @@ class StockCountServiceImplTest {
         counts          = mock(StockCountRepository.class);
         countLines      = mock(StockCountLineRepository.class);
         onHands         = mock(StockOnHandRepository.class);
+        movements       = mock(StockMovementRepository.class);
         posting         = mock(StockPostingService.class);
         valuation       = mock(InventoryValuationService.class);
         glPoster        = mock(InventoryGlPoster.class);
@@ -87,7 +90,7 @@ class StockCountServiceImplTest {
         scopeGuard      = mock(ScopeGuard.class);
         audit           = mock(AuditService.class);
 
-        service = new StockCountServiceImpl(counts, countLines, onHands, posting, valuation,
+        service = new StockCountServiceImpl(counts, countLines, onHands, movements, posting, valuation,
                 glPoster, productService, locationResolver, numberGenerator, outbox,
                 scopeGuard, audit);
 
@@ -200,6 +203,66 @@ class StockCountServiceImplTest {
     }
 
     @Test
+    void create_cycleWithNoProducts_isRefusedInsteadOfCountingTheWholeLocation_stk13() {
+        StockLocation loc = mock(StockLocation.class);
+        when(locationResolver.resolveLocation("LOC-UID-001", COMPANY_ID)).thenReturn(loc);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create(
+                        new CreateStockCountRequest("LOC-UID-001", LocalDate.now(), "CYCLE", List.of(), null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Choose the products to count");
+        verify(counts, never()).save(any(StockCount.class));
+    }
+
+    @Test
+    void enterCount_inAPackUnit_storesTheBaseQuantity() {
+        // STK-08 / OPN-01: "4 cartons" of a 12-piece carton is counted as 48 pieces.
+        StockCount count = countInCounting(202L, "SC-UID-0004");
+        StockCountLine line = countLine(302L, count.getId());
+        when(countLines.findById(302L)).thenReturn(Optional.of(line));
+        ProductDto product = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
+                "P001", "Widget A", null, null,
+                true, true, false, false, false, "BASE-UID", "PC", "Pieces",
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);
+        when(productService.getById(PRODUCT_ID)).thenReturn(product);
+        when(productService.listBulkPacks("PROD-UID-001")).thenReturn(List.of(
+                new com.erp.modules.products.domain.dto.ProductBulkPackDto(1L, "BP-1", PRODUCT_ID,
+                        "CTN-UID", "CTN", "Carton", new BigDecimal("12"), null, false, false,
+                        List.of())));
+
+        service.enterCount("SC-UID-0004", new EnterCountRequest(List.of(
+                new EnterCountRequest.LineEntry(302L, new BigDecimal("4"), null, "CTN-UID"))));
+
+        assertThat(line.getCountedQty()).isEqualByComparingTo("48");
+    }
+
+    @Test
+    void enterCount_unitNotOnTheProduct_isRefused() {
+        StockCount count = countInCounting(203L, "SC-UID-0005");
+        StockCountLine line = countLine(303L, count.getId());
+        when(countLines.findById(303L)).thenReturn(Optional.of(line));
+        ProductDto product = new ProductDto(PRODUCT_ID, "PROD-UID-001", COMPANY_ID,
+                "P001", "Widget A", null, null,
+                true, true, false, false, false, "BASE-UID", "PC", "Pieces",
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, false, null, null,
+                false, null, null, null);
+        when(productService.getById(PRODUCT_ID)).thenReturn(product);
+        when(productService.listBulkPacks("PROD-UID-001")).thenReturn(List.of());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.enterCount("SC-UID-0005",
+                        new EnterCountRequest(List.of(
+                                new EnterCountRequest.LineEntry(303L, BigDecimal.ONE, null, "CTN-UID")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("cannot be used for Widget A");
+        verify(countLines, never()).save(line);
+    }
+
+    @Test
     void enterCount_blankReasonCode_doesNotClobberAnAlreadyRecordedReason() {
         // A re-enter (e.g. correcting a typo'd quantity) with no reason supplied must not erase a
         // reason already recorded on an earlier enter for the same line.
@@ -277,6 +340,127 @@ class StockCountServiceImplTest {
         assertThat(sohBeforePosting.getLastCountedAt())
                 .as("the stale pre-posting row must NOT be the one stamped")
                 .isNull();
+    }
+
+    // -------------------------------------------------------------------------
+    // LBO-03 — one GL effect per count: value-only per line + ONE net journal
+    // -------------------------------------------------------------------------
+
+    @Test
+    void post_variances_revalueWithoutGlPerLine_andPostExactlyOneNetJournal() {
+        StockCount count = countInCounting(204L, "SC-UID-0006");
+        // Line 1: product 99, live 10, counted 8 → −2 @ 500 = −1,000
+        StockCountLine shortLine = countLine(304L, count.getId());
+        shortLine.enterCount(new BigDecimal("8"), null, USER_ID);
+        // Line 2: product 98, live 20, counted 23 → +3 @ 100 = +300
+        Long otherProduct = 98L;
+        StockCountLine overLine = new StockCountLine(count.getId(), COMPANY_ID, BRANCH_ID,
+                (short) 2, otherProduct, "P002", "Widget B", null, null,
+                new BigDecimal("20"), "TZS", USER_ID);
+        setId(overLine, 305L);
+        overLine.enterCount(new BigDecimal("23"), null, USER_ID);
+        when(countLines.findByStockCountIdOrderByLineNoAsc(count.getId()))
+                .thenReturn(List.of(shortLine, overLine));
+
+        StockOnHand soh1 = sohWithCost(PRODUCT_ID, "10", "500");
+        StockOnHand soh2 = sohWithCost(otherProduct, "20", "100");
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID)).thenReturn(Optional.of(soh1));
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, otherProduct)).thenReturn(Optional.of(soh2));
+        when(posting.post(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn("MOVEUID000000000000000001", "MOVEUID000000000000000002");
+        when(valuation.revalueAdjustmentWithoutGl(any(), eq(soh1), any()))
+                .thenReturn(new BigDecimal("-1000.0000"));
+        when(valuation.revalueAdjustmentWithoutGl(any(), eq(soh2), any()))
+                .thenReturn(new BigDecimal("300.0000"));
+
+        service.post("SC-UID-0006", LocalDate.now());
+
+        // The GL-posting revalue form must never run for a count: it posted a journal per line
+        // on top of the count's net journal — every variance hit the GL twice (LBO-03).
+        verify(valuation, never()).revalueAdjustment(any(), any(), any(), any(),
+                any(), any(), any(), any());
+        verify(valuation).revalueAdjustmentWithoutGl(any(), eq(soh1), qty("-2"));
+        verify(valuation).revalueAdjustmentWithoutGl(any(), eq(soh2), qty("3"));
+
+        // Exactly one journal: net −700 → a DECREASE of 700, sourced on the count uid.
+        org.mockito.ArgumentCaptor<InventoryGlPoster.AdjustmentPostCmd> cmd =
+                org.mockito.ArgumentCaptor.forClass(InventoryGlPoster.AdjustmentPostCmd.class);
+        verify(glPoster, org.mockito.Mockito.times(1))
+                .postAdjustmentDirect(eq(COMPANY_ID), eq(BRANCH_ID), any(), cmd.capture());
+        assertThat(cmd.getValue().value()).isEqualByComparingTo("700");
+        assertThat(cmd.getValue().decrease()).isTrue();
+        assertThat(cmd.getValue().sourceRef()).isEqualTo("SC-UID-0006");
+
+        assertThat(shortLine.getVarianceValue()).isEqualByComparingTo("-1000");
+        assertThat(overLine.getVarianceValue()).isEqualByComparingTo("300");
+    }
+
+    // -------------------------------------------------------------------------
+    // STK-02 — variance is measured against the system qty when the line was counted
+    // -------------------------------------------------------------------------
+
+    @Test
+    void post_saleAfterCounting_isNotReversedIntoPhantomStock() {
+        StockCount count = countInCounting(206L, "SC-UID-0008");
+        StockCountLine line = countLine(306L, count.getId());          // snapshot 10
+        line.enterCount(BigDecimal.TEN, null, USER_ID);                // counted 10 at entry
+        when(countLines.findByStockCountIdOrderByLineNoAsc(count.getId())).thenReturn(List.of(line));
+
+        // 3 sold after the line was counted: live is now 7.
+        StockOnHand soh = sohWithCost(PRODUCT_ID, "7", "500");
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID)).thenReturn(Optional.of(soh));
+        when(movements.sumQuantityAtLocationSince(COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID,
+                line.getUpdatedAt())).thenReturn(new BigDecimal("-3"));
+
+        service.post("SC-UID-0008", LocalDate.now());
+
+        // Before: variance = counted 10 − live 7 = +3 phantom units and a phantom GL gain.
+        assertThat(line.getVarianceQty()).isEqualByComparingTo("0");
+        verify(posting, never()).post(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(glPoster, never()).postAdjustmentDirect(any(), any(), any(), any());
+    }
+
+    @Test
+    void post_realShortageWithSalesAfterCounting_adjustsOnlyTheShortage() {
+        StockCount count = countInCounting(207L, "SC-UID-0009");
+        StockCountLine line = countLine(307L, count.getId());          // snapshot 10
+        line.enterCount(new BigDecimal("9"), null, USER_ID);           // one missing on the shelf
+        when(countLines.findByStockCountIdOrderByLineNoAsc(count.getId())).thenReturn(List.of(line));
+
+        StockOnHand soh = sohWithCost(PRODUCT_ID, "7", "500");          // 3 sold since counting
+        when(onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID)).thenReturn(Optional.of(soh));
+        when(movements.sumQuantityAtLocationSince(COMPANY_ID, BRANCH_ID, LOCATION_ID, PRODUCT_ID,
+                line.getUpdatedAt())).thenReturn(new BigDecimal("-3"));
+        when(posting.post(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn("MOVEUID000000000000000009");
+        when(valuation.revalueAdjustmentWithoutGl(any(), any(), any()))
+                .thenReturn(new BigDecimal("-500.0000"));
+
+        service.post("SC-UID-0009", LocalDate.now());
+
+        assertThat(line.getVarianceQty()).isEqualByComparingTo("-1");
+        verify(posting).post(eq(COMPANY_ID), eq(BRANCH_ID), eq(LOCATION_ID), eq(PRODUCT_ID),
+                qty("-1"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    private static BigDecimal qty(String expected) {
+        return org.mockito.ArgumentMatchers.argThat(
+                q -> q != null && q.compareTo(new BigDecimal(expected)) == 0);
+    }
+
+    private static StockOnHand sohWithCost(Long productId, String qty, String avgCost) {
+        StockOnHand soh = new StockOnHand(COMPANY_ID, BRANCH_ID, LOCATION_ID, productId);
+        soh.applyDelta(new BigDecimal(qty), USER_ID);
+        BigDecimal avg = new BigDecimal(avgCost);
+        soh.applyCostRecompute(avg, avg.multiply(new BigDecimal(qty)), USER_ID);
+        return soh;
     }
 
     // -------------------------------------------------------------------------

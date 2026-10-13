@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.SalesReportRowDto;
 import com.erp.modules.sales.domain.dto.SalesReportTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -65,6 +66,15 @@ public class SalesReportQuery {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
 
+        // RPT-29: same guard as the Profitability and Sales Summary reports — an inverted range
+        // used to return an empty register that read as "no sales".
+        if (fromDate == null || toDate == null) {
+            throw new IllegalArgumentException("Choose the dates this report should cover.");
+        }
+        if (toDate.isBefore(fromDate)) {
+            throw new IllegalArgumentException("The end date cannot be before the start date.");
+        }
+
         CompanyHeader header = loadCompanyHeader(companyId);
         ZoneId zone = ZoneId.of(header.timeZone() != null ? header.timeZone() : DEFAULT_TIME_ZONE);
 
@@ -78,9 +88,10 @@ public class SalesReportQuery {
         NamedRef route    = resolveNamedRef("routes",    "name",         routeUid,    companyId, "Route");
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId,
+                branch != null ? branch.id() : null);
 
-        StringBuilder filterSql = new StringBuilder();
+        StringBuilder filterSql = new StringBuilder(scope.sql("i.branch_id"));
         List<Object> filterParams = new ArrayList<>();
         if (branch != null) {
             filterSql.append(" AND i.branch_id = ?");
@@ -104,7 +115,7 @@ public class SalesReportQuery {
         // read at a counter as a stock discrepancy. Only the branch narrows it: agent/route/supplier
         // filter the sales, not where the goods physically are.
         List<SalesReportRowDto> rows = queryRows(companyId, from, to, filterSql.toString(),
-                filterParams, branch != null ? branch.id() : null);
+                filterParams, branch != null ? branch.id() : null, scope.sql("branch_id"));
 
         BigDecimal totalQty = BigDecimal.ZERO;
         BigDecimal totalDiscount = BigDecimal.ZERO;
@@ -149,7 +160,7 @@ public class SalesReportQuery {
 
     private List<SalesReportRowDto> queryRows(Long companyId, OffsetDateTime from, OffsetDateTime to,
                                                String filterSql, List<Object> filterParams,
-                                               Long stockBranchId) {
+                                               Long stockBranchId, String stockScopeSql) {
         List<Object> mainParams = new ArrayList<>();
         mainParams.add(companyId); // stock_on_hand subquery
         // Bound twice by design: the predicate is "this branch, or every branch when none was
@@ -167,14 +178,21 @@ public class SalesReportQuery {
         // a TZS cost.
         int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
         String rate = "i.fx_rate";
+        // RPT-02: grouped by product id ONLY and labelled with the product's CURRENT code and name.
+        // Grouping by the code/name snapshotted on each line split a product renamed within the
+        // window into two rows, and the per-product cost of sale was attached to BOTH, so cost of
+        // sales was counted twice. A deleted product falls back to the latest line snapshot.
+        // RPT-01 / LSF-11: quantity is summed in the BASE unit (qty_in_base) and the base unit is
+        // named, so 7 bottles + 5 crates of 24 reads 127 bottles, not "12".
         String mainSql = """
                 SELECT l.product_id                              AS product_id,
-                       l.product_code                             AS product_code,
-                       l.product_name                             AS product_name,
-                       SUM(l.quantity)                            AS qty_sold,
+                       COALESCE(p.code, MAX(l.product_code))      AS product_code,
+                       COALESCE(p.name, MAX(l.product_name))      AS product_name,
+                       COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS base_unit,
+                       SUM(l.qty_in_base)                         AS qty_sold,
                 """
-                + "       SUM(" + BaseCurrencySql.toBase("COALESCE(l.line_discount_amount, 0)", rate,
-                        baseScale) + ") AS discount,\n"
+                + "       SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
+                + ") AS discount,\n"
                 + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
                 + ") AS vat,\n"
                 + "       SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
@@ -186,11 +204,13 @@ public class SalesReportQuery {
                 FROM sales_invoice_lines l
                 JOIN sales_invoices i ON i.id = l.invoice_id
                 LEFT JOIN products p ON p.id = l.product_id
+                LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 LEFT JOIN (
                     SELECT product_id, SUM(quantity) AS qty
                     FROM stock_on_hand
                     WHERE company_id = ?
                       AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                      /*branch-scope*/
                     GROUP BY product_id
                 ) soh ON soh.product_id = l.product_id
                 WHERE i.company_id = ?
@@ -199,9 +219,10 @@ public class SalesReportQuery {
                   AND i.finalised_at <  ?
                 """ + filterSql + """
 
-                GROUP BY l.product_id, l.product_code, l.product_name, soh.qty
-                ORDER BY l.product_code NULLS LAST
+                GROUP BY l.product_id, p.code, p.name, u.symbol, u.code, soh.qty
+                ORDER BY 2 NULLS LAST
                 """;
+        mainSql = mainSql.replace("/*branch-scope*/", stockScopeSql);
 
         List<Object[]> mainRows = jdbc.query(mainSql,
                 (rs, rowNum) -> new Object[]{
@@ -213,7 +234,8 @@ public class SalesReportQuery {
                         rs.getBigDecimal("vat"),
                         rs.getBigDecimal("net_sales"),
                         rs.getBigDecimal("amount"),
-                        rs.getBigDecimal("current_stock")
+                        rs.getBigDecimal("current_stock"),
+                        rs.getString("base_unit")
                 },
                 mainParams.toArray());
 
@@ -249,7 +271,8 @@ public class SalesReportQuery {
                     (BigDecimal) r[4],
                     (BigDecimal) r[5],
                     margin,
-                    (BigDecimal) r[7]));
+                    (BigDecimal) r[7],
+                    (String) r[9]));
         }
         return rows;
     }

@@ -1,7 +1,10 @@
 package com.erp.api;
 
 import com.erp.modules.gl.domain.dto.TrialBalanceDto;
+import com.erp.modules.gl.domain.dto.TrialBalanceRangeDto;
 import com.erp.modules.gl.domain.dto.TrialBalanceRowDto;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import com.erp.modules.gl.service.TrialBalanceQuery;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
@@ -73,11 +76,46 @@ public class TrialBalanceController {
     public ResponseEntity<byte[]> export(
             @RequestParam Long companyId,
             @RequestParam(required = false) Long periodId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate asAt,
+            @RequestParam(required = false) String branchUid,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
-        TrialBalanceDto dto = periodId != null
-                ? query.computeForPeriod(companyId, periodId)
-                : query.compute(companyId);
+        TrialBalanceDto dto;
+        if (asAt != null || from != null || (branchUid != null && !branchUid.isBlank())) {
+            // ACC-14: an "as at" (optionally branch) trial balance prints its CLOSING balances.
+            dto = TrialBalanceQuery.closingAsTotals(query.computeRange(companyId, from, asAt, branchUid));
+        } else {
+            dto = periodId != null
+                    ? query.computeForPeriod(companyId, periodId)
+                    : query.compute(companyId);
+        }
         return download(exporter.export(flatten(dto), format));
+    }
+
+    /** Pre-ACC-14 shape (whole company or one period) — kept for direct callers. Not a handler. */
+    @PreAuthorize("@perm.has('GL.VIEW') and @perm.has('REPORT.EXPORT')")
+    public ResponseEntity<byte[]> export(Long companyId, Long periodId, ExportFormat format) {
+        return export(companyId, periodId, null, null, null, format);
+    }
+
+    /**
+     * Trial balance as at a date with opening, movement and closing per account (ACC-14).
+     * {@code from} (optional) starts the movement window — everything before it is the opening
+     * balance; {@code asAt} (default today) is the last day included; {@code branchUid} (optional)
+     * limits the figures to one branch of the company.
+     */
+    @GetMapping("/range")
+    @PreAuthorize("@perm.has('GL.VIEW')")
+    public TrialBalanceRangeDto getRange(
+            @RequestParam Long companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate asAt,
+            @RequestParam(required = false) String branchUid) {
+        return query.computeRange(companyId, from, asAt, branchUid);
     }
 
     // -------------------------------------------------------------------------

@@ -161,7 +161,8 @@ class ControlAccountPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(buildDraft(JournalSourceType.MANUAL, ACCT_DR, ACCT_CR)))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("control account and cannot take a manual journal")
+                .hasMessageContaining("Receivables");
     }
 
     @Test
@@ -171,7 +172,8 @@ class ControlAccountPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(buildDraft(JournalSourceType.MANUAL, ACCT_DR, ACCT_CR)))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("control account and cannot take a manual journal")
+                .hasMessageContaining("Payables");
     }
 
     @Test
@@ -181,7 +183,8 @@ class ControlAccountPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(buildDraft(JournalSourceType.MANUAL, ACCT_DR, ACCT_CR)))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("control account and cannot take a manual journal")
+                .hasMessageContaining("Stock module");
     }
 
     @Test
@@ -191,7 +194,8 @@ class ControlAccountPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(buildDraft(JournalSourceType.MANUAL, ACCT_DR, ACCT_CR)))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("control account and cannot take a manual journal")
+                .hasMessageContaining("VAT Return");
     }
 
     /**

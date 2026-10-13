@@ -72,7 +72,8 @@ export interface XReadDto {
   openingFloatAmount: string;
   totalSalesAmount: string;
   totalPayoutsNetAmount: string;
-  expectedCashAmount: string;
+  /** Null when withheld from a reader who may not settle the till (POS-04). */
+  expectedCashAmount: string | null;
   invoiceCount: number;
 }
 

@@ -8,6 +8,7 @@ import { ExportFormat } from '../reporting/models/reporting.model';
 import { downloadBlob } from '../reporting/reporting.utils';
 import { StockReportDto } from './models/stock-report.model';
 import { StockReportService } from './stock-report.service';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -102,6 +103,6 @@ export class StockReportComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 }

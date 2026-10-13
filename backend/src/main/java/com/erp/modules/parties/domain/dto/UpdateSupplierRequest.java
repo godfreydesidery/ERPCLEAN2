@@ -6,7 +6,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
-/** Request DTO to update a Supplier. */
+/**
+ * Request DTO to update a Supplier.
+ *
+ * <p>AP-10: {@code paymentTermsDays}, {@code paymentTermsId}, {@code country},
+ * {@code defaultCurrency}, {@code leadTimeDays}, {@code minOrderValue} and {@code defaultWhtTypeId}
+ * are "null = unchanged". {@code paymentTermsId} / {@code defaultWhtTypeId} = 0 clears the link.
+ */
 public record UpdateSupplierRequest(
         @NotNull PartyType partyType,
         @NotBlank String displayName,

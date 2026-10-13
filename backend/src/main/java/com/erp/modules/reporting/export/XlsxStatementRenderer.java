@@ -1,6 +1,7 @@
 package com.erp.modules.reporting.export;
 
 import com.erp.modules.reporting.export.StatementRenderModel.Row;
+import com.erp.platform.common.time.PrintedStamp;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -43,7 +44,7 @@ public class XlsxStatementRenderer {
             writeHeaderRow(sheet, rowIdx++, model.title(), boldStyle);
             writeHeaderRow(sheet, rowIdx++, model.companyName() != null ? model.companyName() : "", normalStyle);
             writeHeaderRow(sheet, rowIdx++, model.periodLabel() != null ? model.periodLabel() : "", normalStyle);
-            writeHeaderRow(sheet, rowIdx++, "Generated: " + model.generatedAt(), normalStyle);
+            writeHeaderRow(sheet, rowIdx++, "Generated: " + PrintedStamp.of(model.generatedAt()), normalStyle);
 
             // Column headings
             org.apache.poi.ss.usermodel.Row colHead = sheet.createRow(rowIdx++);

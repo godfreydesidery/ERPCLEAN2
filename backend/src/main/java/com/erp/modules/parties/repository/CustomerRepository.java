@@ -1,6 +1,7 @@
 package com.erp.modules.parties.repository;
 
 import com.erp.modules.parties.domain.entity.Customer;
+import com.erp.modules.parties.domain.enums.CustomerKind;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,26 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Page<Customer> findByCompanyId(Long companyId, Pageable pageable);
 
     /**
+     * Customers of one kind within a company, optionally narrowed by the same name/TIN/phone/code
+     * match as {@link #search} — lets the till find the walk-in customer directly (POS-14) instead
+     * of scanning the first page of every customer.
+     */
+    @Query("""
+            SELECT c FROM Customer c
+            WHERE c.companyId = :companyId
+              AND c.customerKind = :kind
+              AND (:q IS NULL OR
+                   LOWER(c.displayName) LIKE LOWER(CONCAT('%', :q, '%'))
+                   OR c.tin = :q
+                   OR c.phone = :q
+                   OR c.code = :q)
+            """)
+    Page<Customer> searchByKind(@Param("companyId") Long companyId,
+                                @Param("kind") CustomerKind kind,
+                                @Param("q") String q,
+                                Pageable pageable);
+
+    /**
      * Search by name (case-insensitive prefix), TIN, phone, or code within a company.
      */
     @Query("""
@@ -50,4 +71,16 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
      */
     @Query("SELECT c.companyId FROM Customer c WHERE c.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /** PRD-12 bulk re-upload: parties in the company carrying this TIN (case/space-insensitive). */
+    @Query("SELECT c FROM Customer c WHERE c.companyId = :companyId "
+            + "AND UPPER(TRIM(c.tin)) = UPPER(TRIM(:tin))")
+    java.util.List<Customer> findByCompanyIdAndNormalizedTin(@Param("companyId") Long companyId,
+                                                       @Param("tin") String tin);
+
+    /** PRD-12 bulk re-upload: parties in the company with this display name (case-insensitive, trimmed). */
+    @Query("SELECT c FROM Customer c WHERE c.companyId = :companyId "
+            + "AND LOWER(TRIM(c.displayName)) = LOWER(TRIM(:name))")
+    java.util.List<Customer> findByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                                        @Param("name") String name);
 }

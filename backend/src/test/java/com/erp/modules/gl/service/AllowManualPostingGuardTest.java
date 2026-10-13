@@ -147,7 +147,7 @@ class AllowManualPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(draft))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("is closed to manual journals");
     }
 
     @Test
@@ -160,7 +160,7 @@ class AllowManualPostingGuardTest {
 
         assertThatThrownBy(() -> service.post(draft))
                 .isInstanceOf(ConflictException.class)
-                .hasMessageContaining("does not allow manual posting");
+                .hasMessageContaining("is closed to manual journals");
     }
 
     @Test

@@ -39,12 +39,14 @@ import com.erp.modules.sales.domain.dto.TaxRateDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateTaxRateRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.entity.SalesInvoiceLine;
 import com.erp.modules.sales.domain.entity.SalesInvoicePayment;
 import com.erp.modules.sales.domain.entity.TaxRate;
+import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.repository.SalesInvoiceLineRepository;
@@ -66,7 +68,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -128,10 +129,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     private final DiscountAuthorisationGuard discountGuard;
     /** Makes the mandatory-agent rule satisfiable on a company whose agent master is empty. */
     private final InternalAgentProvisioner internalAgents;
+    /** LSF-04: the company's "Counter" agent, for sales rung by root (who can hold no agent). */
+    private final CounterAgentProvisioner counterAgents;
     /** Names the user who created each invoice (the cashier, for a POS sale). Batch-only by design. */
     private final UserLookupService userLookup;
     /** Base-currency minor units for the VAT-return output summary (converted per document). */
     private final com.erp.platform.common.money.CurrencyMinorUnits minorUnits;
+    /** SAL-07: a voided order-billed invoice hands its quantities back to the delivery. */
+    private final DeliveryService deliveryService;
+    /** SAL-02: a POS sale whose till session is still OPEN is reversed at the till, not here. */
+    private final com.erp.modules.sales.repository.PosSessionRepository posSessions;
+    private final CompanyCalendar calendar;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -162,7 +170,12 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    InternalAgentProvisioner internalAgents,
                                    UserLookupService userLookup,
                                    com.erp.platform.common.money.CurrencyMinorUnits minorUnits,
-                                   CreditExposureCalculator creditExposure) {
+                                   CreditExposureCalculator creditExposure,
+                                   CounterAgentProvisioner counterAgents,
+                                   DeliveryService deliveryService,
+                                   com.erp.modules.sales.repository.PosSessionRepository posSessions,
+                                   CompanyCalendar calendar) {
+        this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
         this.payments = payments;
@@ -193,6 +206,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         this.userLookup = userLookup;
         this.minorUnits = minorUnits;
         this.creditExposure = creditExposure;
+        this.deliveryService = deliveryService;
+        this.posSessions = posSessions;
+        this.calendar    = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -261,6 +277,43 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             return invoices.search(companyId, q, pageable).map(this::toDto);
         }
         return invoices.findByCompanyId(companyId, pageable).map(this::toDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SalesInvoiceDto> list(Long companyId, String q, String status, LocalDate fromDate,
+                                      LocalDate toDate, Pageable pageable) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        java.util.List<InvoiceStatus> statuses = java.util.List.of(InvoiceStatus.values());
+        boolean anyStatus = status == null || status.isBlank();
+        if (!anyStatus) {
+            try {
+                statuses = java.util.List.of(InvoiceStatus.valueOf(status.strip().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Choose a valid invoice status to filter by.");
+            }
+        }
+        if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
+            throw new IllegalArgumentException("The end date cannot be before the start date.");
+        }
+        Instant from = fromDate != null
+                ? calendar.startOfDay(companyId, fromDate) : Instant.EPOCH;
+        Instant to = toDate != null
+                ? calendar.endOfDayExclusive(companyId, toDate)
+                : Instant.parse("9999-12-31T00:00:00Z");
+        boolean anyText = q == null || q.isBlank();
+        String pattern = anyText ? "%" : "%" + q.strip().toLowerCase()
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        // SAL-10: newest first unless the caller asked for an order (the list used to be unsorted,
+        // which on Postgres reads as oldest first).
+        Pageable paged = pageable.getSort().isSorted()
+                ? pageable
+                : org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(),
+                        pageable.getPageSize(),
+                        org.springframework.data.domain.Sort.by(
+                                org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        return invoices.searchFiltered(companyId, anyStatus, statuses, from, to, anyText, pattern,
+                paged).map(this::toDto);
     }
 
     @Override
@@ -352,7 +405,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // without a rate — OQ-FX-06). The poster (GLPostingSafeInvoker) re-applies the same effective
         // rate on the same posting date, so the stamped base equals the posted-journal base.
         ConvertedAmount fxConv = fxConverter.toBase(
-                inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(), LocalDate.now());
+                inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(),
+                calendar.today(inv.getCompanyId()));
         inv.setFxRate(fxConv.rate());
         inv.setBaseGrossTotalAmount(fxConv.baseAmount());
         inv.setRateAt(fxConv.rateAt());
@@ -402,13 +456,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             // limit — all in BASE currency (owner ruling 2026-10-02). Unconverted (V62-filled)
             // foreign AR and a foreign invoice gross count at today's rate; a missing rate fails
             // closed (treated as over the limit).
+            //
+            // LRB-05: the credit this invoice extends is what is left unpaid after the tenders
+            // already applied at the counter (same currency, checked above), not its gross. A sale
+            // the customer pays in full adds no exposure, so it is never a credit-limit question —
+            // it used to be refused as "no permission to override the credit limit" whenever the
+            // customer's existing balance was over the limit.
             com.erp.platform.common.money.Money creditLimit = customer.getCreditLimit();
+            BigDecimal unpaidOnThisInvoice = unpaidAfterCounterPayments(
+                    inv.getGrossTotalAmount(), paymentList);
             if (creditLimit != null && creditLimit.isPresent()
-                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    && creditLimit.getAmount().compareTo(BigDecimal.ZERO) > 0
+                    && unpaidOnThisInvoice.signum() > 0) {
                 CreditExposureCalculator.Assessment exposure = creditExposure.assess(
-                        inv.getCompanyId(), inv.getCustomerId(), inv.getGrossTotalAmount(),
+                        inv.getCompanyId(), inv.getCustomerId(), unpaidOnThisInvoice,
                         com.erp.platform.common.money.CurrencyCode.value(inv.getCurrency()),
-                        creditLimit, LocalDate.now());
+                        creditLimit, calendar.today(inv.getCompanyId()));
                 if (exposure.breached()) {
                     boolean hasOverride = permissionResolver.hasPermission(
                             RequestContext.get(), "SALES.CREDIT.OVERRIDE", System.currentTimeMillis());
@@ -420,11 +483,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                             exposure.missingRateCurrencies())
                                             + " You do not have permission to override the credit limit.");
                         }
+                        // ARC-21: name the limit, the exposure and the shortfall so the counter can
+                        // tell the customer exactly how much to pay to continue.
                         throw new IllegalStateException(
-                                "This customer's credit limit has been reached. "
-                                        + "The outstanding balance would exceed the allowed limit "
-                                        + "if this invoice is finalised. "
-                                        + "You do not have permission to override the credit limit.");
+                                CreditExposureCalculator.breachSentence(exposure)
+                                        + " You do not have permission to override the credit limit.");
                     }
                     Map<String, Object> detail = new java.util.LinkedHashMap<>();
                     detail.put("customerUid", customer.getUid());
@@ -540,22 +603,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                     "This invoice cannot be voided because payments have already been received and "
                             + "allocated against it. Please raise a credit note to reverse it.");
         }
+        // SAL-02 (owner ruling 2026-10-10): a FINALISED counter (DIRECT) or POS sale that was paid
+        // at the counter may be voided IN FULL with a refund of those payments, by a holder of
+        // SALES.INVOICE.VOID (the endpoint gate) and with a reason (@NotBlank on the request). It
+        // used to be refused outright once any tender existed, and the till reversal only works
+        // while the sale's own session is still open — so a paid counter sale could not be undone
+        // at all. The refund follows the till reversal's pattern exactly: the payment rows stay
+        // as the record of what was taken, and VOID takes the invoice — and with it its tenders —
+        // out of every finalised-only cash-up and payment read; SALE.VOIDED reverses the GL sale
+        // (its Cash leg included) and the stock issue. No partial refunds: that is a return.
+        BigDecimal refunded = BigDecimal.ZERO;
         if (!posReversal) {
-            // FLOW-ORDER-TO-CASH-027 (direct-payment path): block void when any direct tender has
-            // been applied via sales_invoice_payments. Effective amount = amount − change_amount;
-            // a non-zero settled total means cash has changed hands and the invoice must be reversed
-            // via a credit note, not silently voided. Skipped for a POS reversal (see method
-            // Javadoc) — every POS sale is paid at the till by design.
+            // FLOW-ORDER-TO-CASH-027 (direct-payment path): effective amount = amount − change.
             BigDecimal settled = payments.findByInvoiceId(inv.getId()).stream()
                     .map(p -> p.getChangeAmount() != null
                             ? p.getAmount().subtract(p.getChangeAmount())
                             : p.getAmount())
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (settled.compareTo(BigDecimal.ZERO) > 0) {
-                // FLOW-ORDER-TO-CASH-027: block void when direct tenders have been applied
-                throw new com.erp.platform.common.api.ConflictException(
-                        "This invoice cannot be voided because direct payments have been applied to it. "
-                                + "Please raise a credit note to reverse it.");
+                if (inv.getOrigin() == DocumentOrigin.SALES_ORDER) {
+                    // An order-billed invoice is not a counter sale; its payments are reversed by
+                    // a credit note, as before.
+                    throw new com.erp.platform.common.api.ConflictException(
+                            "This invoice cannot be voided because direct payments have been "
+                                    + "applied to it. Please raise a credit note to reverse it.");
+                }
+                if (inv.getOrigin() == DocumentOrigin.POS && posSessionStillOpen(inv)) {
+                    // The till reversal owns this case: it puts the refund through the drawer that
+                    // took the money and enforces the own-drawer / supervisor rules.
+                    throw new com.erp.platform.common.api.ConflictException(
+                            "This sale's till session is still open. Reverse it at the till instead.");
+                }
+                refunded = settled;
             }
         }
         inv.setStatus(InvoiceStatus.VOID);
@@ -578,11 +657,79 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 new SaleVoidedPayload(inv.getUid(), inv.getCompanyId(), inv.getBranchId(),
                         inv.getInvoiceNumber()));
 
+        // SAL-07: an order-billed invoice gives its quantities back to the delivery it billed, so
+        // the delivered goods can be invoiced again (previously the void stranded them).
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER && inv.getSourceDeliveryUid() != null) {
+            Map<Long, BigDecimal> billedBase = new java.util.HashMap<>();
+            for (SalesInvoiceLine l : lines.findByInvoiceIdOrderByLineNo(inv.getId())) {
+                billedBase.merge(l.getProductId(), l.getQtyInBase(), BigDecimal::add);
+            }
+            deliveryService.releaseInvoicedQuantities(inv.getSourceDeliveryUid(), billedBase);
+        }
+
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("invoiceNumber", inv.getInvoiceNumber());
+        detail.put("voidReason", req.reason());
+        if (refunded.signum() > 0) {
+            detail.put("refundedAmount", refunded.toPlainString());
+            detail.put("refundCurrency", inv.getCurrency().value());
+        }
         audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_VOID, "sales_invoices",
                         inv.getId(), inv.getUid())
-                .detail(Map.of(
-                        "invoiceNumber", inv.getInvoiceNumber(),
-                        "voidReason", req.reason())));
+                .detail(detail));
+    }
+
+    @Override
+    public void cancelDraft(String uid, String reason) {
+        SalesInvoice inv = requireInvoice(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), inv.getCompanyId());
+        if (inv.getStatus() != InvoiceStatus.DRAFT) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Only a draft invoice can be cancelled. Void a finalised invoice instead.");
+        }
+        if (inv.getOrigin() == DocumentOrigin.POS && posSessionStillOpen(inv)) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "This sale is still open on a till. Cancel it at the till instead.");
+        }
+
+        List<SalesInvoiceLine> draftLines = lines.findByInvoiceIdOrderByLineNo(inv.getId());
+        // SAL-07: a draft raised from a delivery reserved those quantities on the delivery and its
+        // order when it was created; give them back so the goods can be invoiced again.
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER && inv.getSourceDeliveryUid() != null) {
+            Map<Long, BigDecimal> billedBase = new java.util.HashMap<>();
+            for (SalesInvoiceLine l : draftLines) {
+                billedBase.merge(l.getProductId(), l.getQtyInBase(), BigDecimal::add);
+            }
+            deliveryService.releaseInvoicedQuantities(inv.getSourceDeliveryUid(), billedBase);
+        }
+
+        // A draft has no number and posted nothing (GL, stock and AR all post at finalise), and the
+        // status CHECK admits VOID only with an invoice number, so the draft is removed outright.
+        // Its tenders were never posted either (removePayment deletes them the same way).
+        BigDecimal gross = inv.getGrossTotalAmount();
+        payments.deleteAll(payments.findByInvoiceId(inv.getId()));
+        lines.deleteAll(draftLines);
+        invoices.delete(inv);
+
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("lineCount", draftLines.size());
+        detail.put("grossTotal", gross != null ? gross.toPlainString() : "0");
+        if (reason != null && !reason.isBlank()) {
+            detail.put("reason", reason.strip());
+        }
+        audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_DRAFT_CANCEL, "sales_invoices",
+                        inv.getId(), inv.getUid())
+                .detail(detail));
+    }
+
+    /** Whether the POS session this sale was rung on is still OPEN (SAL-02). */
+    private boolean posSessionStillOpen(SalesInvoice inv) {
+        if (inv.getPosSessionId() == null) {
+            return false;
+        }
+        return posSessions.findByCompanyIdAndStatus(inv.getCompanyId(),
+                        com.erp.modules.sales.domain.enums.PosSessionStatus.OPEN).stream()
+                .anyMatch(s -> inv.getPosSessionId().equals(s.getId()));
     }
 
     // -------------------------------------------------------------------------
@@ -617,9 +764,18 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // originating list (ADR-0056), threaded onto the line below. When the catalogue cannot price
         // the line, a price stated on the request stands in for the list price (see
         // LinePriceResolver) — otherwise a company with no price list can invoice nothing at all.
+        //
+        // Priced for THIS invoice's customer (PRD-01 / LSF-02): their contract price, else their
+        // default price list, else the company default list. A POS sale reaches here too, through
+        // PosSaleServiceImpl, so the till's posted price follows the same rule.
         BigDecimal statedPrice = req.unitPriceOverride();
         UnitListPriceDto resolvedPrice = LinePriceResolver.resolve(
-                priceResolutionService, inv.getCompanyId(), product.getId(), unit.getId(),
+                priceResolutionService,
+                LinePriceResolver.query(inv.getCompanyId(), product.getId(), unit.getId(),
+                        LinePriceResolver.pricingCustomer(customers, inv.getCompanyId(),
+                                inv.getCustomerId()),
+                        inv.getCurrency() == null ? null : inv.getCurrency().value(), quantity,
+                        calendar.today(inv.getCompanyId())),
                 statedPrice);
         BigDecimal listPrice = resolvedPrice.amount();
 
@@ -698,6 +854,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         lineDetail.put("unitPrice", appliedPrice.toPlainString());
         lineDetail.put("listPrice", listPrice.toPlainString());
         lineDetail.put("priceOverridden", String.valueOf(overridesListPrice));
+        // Which rule priced the line (LIST_PRICE / CUSTOMER_PRICE) — answers "why did this customer
+        // pay this?" from the trail; audit detail is JSONB, so no schema.
+        lineDetail.put("priceSource", String.valueOf(resolvedPrice.source()));
         lineDetail.put("lineDiscountAmount", plainOrEmpty(req.lineDiscountAmount()));
         lineDetail.put("lineDiscountPercent", plainOrEmpty(req.lineDiscountPercent()));
         lineDetail.put("discountAuthorisedBy",
@@ -744,6 +903,14 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
         if (req.quantity() == null || req.quantity().signum() <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero.");
+        }
+        // A delivery-billed draft reserved exactly its quantities on the delivery when it was
+        // raised (SAL-07); changing one here would leave the delivery's invoiced count wrong.
+        if (inv.getOrigin() == DocumentOrigin.SALES_ORDER
+                && req.quantity().compareTo(line.getQuantity()) != 0) {
+            throw new IllegalArgumentException(
+                    "Quantities on an invoice raised from a delivery follow the delivery. "
+                            + "Change the delivery instead.");
         }
 
         // Recompute qty_in_base for new quantity
@@ -1070,6 +1237,22 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 });
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<com.erp.modules.sales.domain.dto.InvoicePostingTenderDto>
+            findPostingTendersByUidAndCompany(String invoiceUid, Long companyId) {
+        return invoices.findByUidAndCompanyId(invoiceUid, companyId)
+                .map(inv -> payments.findByInvoiceId(inv.getId()).stream()
+                        .map(p -> new com.erp.modules.sales.domain.dto.InvoicePostingTenderDto(
+                                p.getTenderType().name(),
+                                p.getCashBankAccountId(),
+                                p.getChangeAmount() != null
+                                        ? p.getAmount().subtract(p.getChangeAmount())
+                                        : p.getAmount()))
+                        .toList())
+                .orElse(List.of());
+    }
+
     // -------------------------------------------------------------------------
     // VAT computation read (ADR-0017 D-6) — additive, no Sales schema change
     // -------------------------------------------------------------------------
@@ -1080,7 +1263,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             Long companyId, java.time.LocalDate start, java.time.LocalDate end) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        // Direct JPQL projection — finalised invoices with finalised_at::date in [start, end].
+        // Direct JPQL projection — finalised invoices whose finalised_at falls on [start, end] in
+        // the COMPANY's zone (owner ruling 2026-10-10): a 00:30 EAT sale on 1 November is
+        // 21:30 UTC on 31 October and belongs to November's return.
         // Sum vat_total_amount and parse tax_summary JSONB band breakdown per invoice.
         //
         // BASE CURRENCY (live defect: USD VAT was added to a TZS return as if it were TZS). Every
@@ -1094,8 +1279,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // single-currency company's figures are unchanged.
         List<SalesInvoice> finalisedInPeriod = invoices.findFinalisedInPeriod(
                 companyId,
-                start.atStartOfDay(java.time.ZoneOffset.UTC).toInstant(),
-                end.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
+                calendar.startOfDay(companyId, start),
+                calendar.endOfDayExclusive(companyId, end));
 
         // findScopedById: companyId was scope-asserted above (assertCanActIn) — self-scope lookup.
         final int baseScale = minorUnits.of(companies.findScopedById(companyId)
@@ -1144,6 +1329,64 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         bandTaxableBase.getOrDefault(band, BigDecimal.ZERO), vat)));
 
         return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, totalOutput);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.erp.modules.sales.domain.dto.VatOutputSummaryDto findVatVoidSummaryForPeriod(
+            Long companyId, java.time.LocalDate start, java.time.LocalDate end) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+
+        // Window: the SAME derivation as findVatSummaryForPeriod (keep the two in step).
+        List<SalesInvoice> voidedInPeriod = invoices.findVoidedInPeriod(
+                companyId,
+                calendar.startOfDay(companyId, start),
+                calendar.endOfDayExclusive(companyId, end));
+
+        final int baseScale = minorUnits.of(companies.findScopedById(companyId)
+                .map(c -> c.getBaseCurrency())
+                .orElse(null));
+        return summariseOutputVat(voidedInPeriod, baseScale);
+    }
+
+    /**
+     * Base-currency output VAT of the given invoices, by band — the arithmetic of
+     * {@link #findVatSummaryForPeriod} (per-document conversion at the stamped rate, band split from
+     * the tax_summary JSON array).
+     */
+    private static com.erp.modules.sales.domain.dto.VatOutputSummaryDto summariseOutputVat(
+            List<SalesInvoice> docs, int baseScale) {
+        java.util.Map<String, BigDecimal> bandBase = new java.util.LinkedHashMap<>();
+        java.util.Map<String, BigDecimal> bandVat  = new java.util.LinkedHashMap<>();
+        BigDecimal total = BigDecimal.ZERO;
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (SalesInvoice inv : docs) {
+            final BigDecimal rate = inv.getFxRate() != null ? inv.getFxRate() : BigDecimal.ONE;
+            total = total.add(toBaseAtRate(inv.getVatTotalAmount(), rate, baseScale));
+            if (inv.getTaxSummary() == null || inv.getTaxSummary().isBlank()) {
+                continue;
+            }
+            try {
+                for (com.fasterxml.jackson.databind.JsonNode node : mapper.readTree(inv.getTaxSummary())) {
+                    String band = node.path("status").asText(null);
+                    if (band == null) {
+                        continue;
+                    }
+                    bandBase.merge(band, toBaseAtRate(
+                            new BigDecimal(node.path("net").asText("0")), rate, baseScale), BigDecimal::add);
+                    bandVat.merge(band, toBaseAtRate(
+                            new BigDecimal(node.path("vat").asText("0")), rate, baseScale), BigDecimal::add);
+                }
+            } catch (Exception ignored) {
+                // malformed tax_summary — zero-band; vat_total_amount already counted
+            }
+        }
+        java.util.Map<String, com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto> byBand
+                = new java.util.LinkedHashMap<>();
+        bandVat.forEach((band, vat) -> byBand.put(band,
+                new com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto(
+                        bandBase.getOrDefault(band, BigDecimal.ZERO), vat)));
+        return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, total);
     }
 
     // -------------------------------------------------------------------------
@@ -1225,6 +1468,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         Optional<Long> auto = internalAgents.resolveOrProvision(companyId, ctx);
         if (auto.isPresent()) {
             return auto.get();
+        }
+        // LSF-04: the system administrator (root) can never hold an internal agent, so on a fresh
+        // install the owner could not ring the first sale. Their sales go to the company's
+        // "Counter" agent instead (created on first use). Staff are NOT routed here: a non-root
+        // user without an agent is a setup gap the refusal below names, and silently crediting
+        // their sales to the counter would hide it.
+        if (ctx != null && ctx.root()) {
+            Optional<Long> counter = counterAgents.resolveOrProvision(companyId, ctx.userId());
+            if (counter.isPresent()) {
+                return counter.get();
+            }
         }
         // Technical context goes to the log only; the user-facing message stays friendly and
         // carries no internal codes/identifiers (error-message hygiene standing rule).
@@ -1357,6 +1611,24 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
      * Cash over-tender → set change_amount on the cash row (change accepted).
      * Mobile-money over-tender → reject (no change for mobile).
      */
+    /**
+     * The part of an invoice's gross that the counter tenders leave unpaid, never below zero
+     * (LRB-05). Payments are net of any change given. This is the new credit a finalised credit
+     * sale extends, and so the amount the credit-limit check must assess.
+     */
+    static BigDecimal unpaidAfterCounterPayments(BigDecimal gross,
+                                                 List<SalesInvoicePayment> paymentList) {
+        BigDecimal grossAmount = gross != null ? gross : BigDecimal.ZERO;
+        BigDecimal paid = BigDecimal.ZERO;
+        for (SalesInvoicePayment p : paymentList) {
+            BigDecimal amount = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+            BigDecimal change = p.getChangeAmount() != null ? p.getChangeAmount() : BigDecimal.ZERO;
+            paid = paid.add(amount.subtract(change));
+        }
+        BigDecimal unpaid = grossAmount.subtract(paid);
+        return unpaid.signum() > 0 ? unpaid : BigDecimal.ZERO;
+    }
+
     private void assertPaidInFull(SalesInvoice inv, List<SalesInvoicePayment> paymentList) {
         // FR-SALES-18: at least one tender must be recorded before finalising a cash invoice
         if (paymentList.isEmpty()) {
@@ -1432,9 +1704,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     /** Build response DTO with enriched customer, agent, route and creator fields. */
     private SalesInvoiceDto toDto(SalesInvoice inv) {
         String createdByName = creatorNameOf(inv);
-        String customerName = customers.findById(inv.getCustomerId())
-                .map(c -> c.getDisplayName())
-                .orElse(null);
+        var customer = customers.findById(inv.getCustomerId());
+        String customerName = customer.map(c -> c.getDisplayName()).orElse(null);
+        String customerUid = customer.map(c -> c.getUid()).orElse(null);
         String agentName = agents.findById(inv.getAgentId())
                 .map(a -> a.getDisplayName())
                 .orElse(null);
@@ -1453,7 +1725,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         }
         String postedGlEntryUid = resolvePostedGlEntryUid(inv);
         return SalesInvoiceDto.from(inv, customerName, agentName, routeUid, routeCode, routeName,
-                postedGlEntryUid, createdByName);
+                postedGlEntryUid, createdByName, customerUid);
     }
 
     /**

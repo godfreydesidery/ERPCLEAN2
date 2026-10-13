@@ -270,7 +270,10 @@ class XRead {
   final double totalSalesAmount;
   final double cashTenderAmount;
   final double totalPayoutsNetAmount;
-  final double expectedCashAmount;
+
+  /// Null when the server withheld it (POS-04 blind cash-up): the reader may
+  /// not settle the till, so they are not told what the drawer should hold.
+  final double? expectedCashAmount;
   final int invoiceCount;
   final List<TenderSubtotal> tenderSubtotals;
 
@@ -285,7 +288,7 @@ class XRead {
         totalSalesAmount: asNumOr(j['totalSalesAmount']),
         cashTenderAmount: asNumOr(j['cashTenderAmount']),
         totalPayoutsNetAmount: asNumOr(j['totalPayoutsNetAmount']),
-        expectedCashAmount: asNumOr(j['expectedCashAmount']),
+        expectedCashAmount: asNum(j['expectedCashAmount']),
         invoiceCount: asIntOr(j['invoiceCount']),
         tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
         payoutSubtotals: asList(j['payoutSubtotals'], PayoutSubtotal.fromJson),

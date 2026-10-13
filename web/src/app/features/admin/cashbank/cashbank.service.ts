@@ -11,6 +11,8 @@ import {
   CashAccountStatementDto,
   CashBankAccountDto,
   CashCountDto,
+  CashTillOptionDto,
+  CashAccountOptionDto,
   CashGlReconciliationDto,
   CashTransferDto,
   CashTransactionDto,
@@ -104,6 +106,27 @@ export class CashbankService {
   }
 
   /** Convenience: load ALL active accounts for a company (for pickers). */
+  /**
+   * Countable tills (ACTIVE CASH accounts) for the cash-count screens (LRB-03). Unlike
+   * {@link listAllAccounts} (CASH.VIEW) this is open to the cash-count codes, so a cashier's till
+   * dropdown is no longer empty.
+   */
+  listCashTills(companyId: string): Observable<CashTillOptionDto[]> {
+    return this.http.get<CashTillOptionDto[]>(`${this.base}/accounts/tills`, {
+      params: { companyId },
+    });
+  }
+
+  /**
+   * Cash / bank / M-Pesa account picker (ARC-05): ACTIVE accounts of every type as narrow rows.
+   * Open to AR.RECEIPT.RECORD and CASH.ENTRY.RECORD, so a cashier needs no CASH.VIEW.
+   */
+  listAccountOptions(companyId: string): Observable<CashAccountOptionDto[]> {
+    return this.http.get<CashAccountOptionDto[]>(`${this.base}/accounts/options`, {
+      params: { companyId },
+    });
+  }
+
   listAllAccounts(companyId: string): Observable<CashBankAccountDto[]> {
     const params = new HttpParams()
       .set('companyId', companyId)
@@ -147,20 +170,15 @@ export class CashbankService {
     return this.http.post<CashTransactionDto>(`${this.base}/entries`, request);
   }
 
-  listEntries(companyId: string, page = 0, size = 20): Observable<CashTransactionPage> {
-    const params = new HttpParams()
-      .set('companyId', companyId)
-      .set('page', String(page))
-      .set('size', String(size));
-    const context = new HttpContext().set(SKIP_UNWRAP, true);
-    return this.http
-      .get<ApiResponse<CashTransactionDto[]>>(`${this.base}/entries`, { params, context })
-      .pipe(
-        map((env) => ({
-          rows: env.data ?? [],
-          meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
-        })),
-      );
+  /**
+   * One account's cash book: GET /cash/entries?companyId=&accountId= (CASH.VIEW). The server
+   * requires {@code accountId} (the numeric account id) and returns every movement on the
+   * account, oldest first, unpaged — receipts, payments and transfers as well as direct entries.
+   * ARC-12: this used to send no accountId, so every call was refused.
+   */
+  listEntries(companyId: string, accountId: string): Observable<CashTransactionDto[]> {
+    const params = new HttpParams().set('companyId', companyId).set('accountId', accountId);
+    return this.http.get<CashTransactionDto[]>(`${this.base}/entries`, { params });
   }
 
   getEntry(uid: string): Observable<CashTransactionDto> {

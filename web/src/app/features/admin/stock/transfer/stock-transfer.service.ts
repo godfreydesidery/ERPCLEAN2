@@ -21,6 +21,17 @@ export interface StockTransferPage {
  * All other methods use the auto-unwrap path (interceptor strips envelope).
  * Base: /api/v1/stock-transfers.
  */
+/** STK-19: optional filters for the transfer list. */
+export interface StockTransferListFilters {
+  status?: string;
+  direction?: '' | 'INCOMING' | 'OUTGOING' | 'BRANCH';
+  /** ISO yyyy-MM-dd */
+  fromDate?: string;
+  /** ISO yyyy-MM-dd */
+  toDate?: string;
+  /** Transfer-number fragment. */
+  q?: string;
+}
 @Injectable({ providedIn: 'root' })
 export class StockTransferService {
   private readonly http = inject(HttpClient);
@@ -42,11 +53,19 @@ export class StockTransferService {
 
   // ── List ─────────────────────────────────────────────────────────────────────
 
-  list(page = 0, size = 20): Observable<StockTransferPage> {
+  /**
+   * GET /stock/transfers — newest transfer date first (server default). STK-19 filters are all
+   * optional; `direction` is relative to the ACTIVE branch (INCOMING / OUTGOING / BRANCH).
+   */
+  list(page = 0, size = 20, filters: StockTransferListFilters = {}): Observable<StockTransferPage> {
     const context = new HttpContext().set(SKIP_UNWRAP, true);
+    const params: Record<string, string> = { page: String(page), size: String(size) };
+    for (const [k, v] of Object.entries(filters)) {
+      if (typeof v === 'string' && v.trim()) params[k] = v.trim();
+    }
     return this.http
       .get<ApiResponse<StockTransferDto[]>>(this.base, {
-        params: { page: String(page), size: String(size) },
+        params,
         context,
       })
       .pipe(

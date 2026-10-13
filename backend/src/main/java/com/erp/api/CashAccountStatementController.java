@@ -97,7 +97,7 @@ public class CashAccountStatementController {
         CashBankAccountDto account = accountService.getByUid(uid);
         ExportLetterhead.Letterhead head = letterhead.forCompany(account.companyId());
         return ExportLetterhead.download(exporter.export(
-                flattenStatement(statement, account, fromDate, toDate, head, ZonedDateTime.now()),
+                flattenStatement(statement, account, fromDate, toDate, head, letterhead.now(account.companyId())),
                 format));
     }
 
@@ -235,6 +235,10 @@ public class CashAccountStatementController {
             case "TRANSFER_IN"  -> "Transfer in";
             case "TRANSFER_OUT" -> "Transfer out";
             case "DIRECT_ENTRY" -> "Direct entry";
+            case "SALE_TENDER"  -> "Sale takings";
+            case "SALE_REFUND"  -> "Sale voided";
+            case "POS_PAYOUT"   -> "Till payout";
+            case "POS_VARIANCE" -> "Till over/short";
             default             -> type;
         };
     }

@@ -34,7 +34,7 @@ class GoodsReceiptNoteLayoutTest {
     // The repository is only consulted when the branding row's TIN is blank, and this fixture's is
     // not — a mock that is never called keeps the layout assertions about the layout.
     private final DocumentModelBuilder builder =
-            new DocumentModelBuilder(new ObjectMapper(), org.mockito.Mockito.mock(CompanyRepository.class));
+            new DocumentModelBuilder(new ObjectMapper(), org.mockito.Mockito.mock(CompanyRepository.class), com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     private final DocumentPdfRenderer  renderer = new DocumentPdfRenderer();
 
     // -------------------------------------------------------------------------

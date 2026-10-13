@@ -101,7 +101,8 @@ describe('GoodsReceiptListComponent — supplier and amount', () => {
   it('renders the date received alongside them', async () => {
     const fixture = await render([receipt()]);
 
-    expect(cells(fixture).some((c) => c.includes('10/09/2026'))).toBe(true);
+    // 08:30 UTC printed in the business zone (EAT, +3), dd-MMM-yyyy HH:mm (owner ruling 2026-10-10).
+    expect(cells(fixture).some((c) => c.includes('10-Sep-2026 11:30'))).toBe(true);
   });
 
   it('reads an unresolvable supplier as a dash, not an empty cell', async () => {

@@ -227,6 +227,7 @@
                       }
                       @if (canPay() && canPayBill(bill)) {
                         <a routerLink="/admin/ap/payments/record"
+                           [queryParams]="payQueryParams(bill)"
                            class="btn btn-sm btn-outline-secondary"
                            [attr.aria-label]="'Pay bill ' + bill.billNumber">
                           <i class="bi bi-cash-stack me-1" aria-hidden="true"></i>Pay

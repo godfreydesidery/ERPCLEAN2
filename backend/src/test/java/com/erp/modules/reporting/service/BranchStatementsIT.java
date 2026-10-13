@@ -258,8 +258,11 @@ class BranchStatementsIT extends PostgresIntegrationTest {
                     .isInstanceOf(NotFoundException.class)
                     .hasMessage("Branch not found.");
         }
-        // The company-level slice is part of the company-wide read the clerk already holds
-        assertThatCode(() -> reporting.balanceSheet(cid, TO, null, null, true)).doesNotThrowAnyException();
+        // Company-level lines belong to no branch, so they are not "my branches" for a
+        // branch-limited clerk (owner ruling 2026-10-10) — refused, with a friendly reason.
+        assertThatThrownBy(() -> reporting.balanceSheet(cid, TO, null, null, true))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("Choose one of your branches");
     }
 
     @Test

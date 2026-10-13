@@ -92,7 +92,7 @@ describe('StockTransferListComponent — init', () => {
     await vi.runAllTimersAsync();
 
     expect(listSpy).toHaveBeenCalledOnce();
-    expect(listSpy).toHaveBeenCalledWith(0, 20);
+    expect(listSpy).toHaveBeenCalledWith(0, 20, { direction: 'BRANCH' });
     expect(comp.state()).toBe('idle');
     expect(comp.rows()).toHaveLength(1);
   });
@@ -202,6 +202,31 @@ describe('StockTransferListComponent — goToPage', () => {
     comp.goToPage(2);
     await vi.runAllTimersAsync();
 
-    expect(listSpy).toHaveBeenCalledWith(2, 20);
+    expect(listSpy).toHaveBeenCalledWith(2, 20, { direction: 'BRANCH' });
+  });
+});
+
+// ── filters (STK-19) ──────────────────────────────────────────────────────────
+
+describe('StockTransferListComponent — filters', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('reloads page 0 with only the filters that are set', async () => {
+    const { listSpy } = makeBed();
+    const comp = TestBed.createComponent(StockTransferListComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    listSpy.mockReturnValue(of(emptyPage()));
+    comp.setFilter('direction', 'INCOMING');
+    comp.setFilter('status', 'DISPATCHED');
+    comp.setFilter('q', '  ');
+    await vi.runAllTimersAsync();
+
+    expect(listSpy).toHaveBeenLastCalledWith(0, 20, { direction: 'INCOMING', status: 'DISPATCHED' });
+
+    comp.setFilter('direction', '');
+    await vi.runAllTimersAsync();
+    expect(listSpy).toHaveBeenLastCalledWith(0, 20, { status: 'DISPATCHED' });
   });
 });

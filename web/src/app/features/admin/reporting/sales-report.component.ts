@@ -14,8 +14,10 @@ import { RouteDto } from '../routes/models/route.model';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { ExportFormat } from './models/reporting.model';
 import { SalesReportDto } from './models/sales-report.model';
+import { ReportFilterOptionsService } from './report-filter-options.service';
 import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -41,6 +43,7 @@ export class SalesReportComponent implements OnInit {
   private readonly agentService = inject(AgentService);
   private readonly routesService = inject(RoutesService);
   private readonly supplierService = inject(SupplierService);
+  private readonly filterOptions = inject(ReportFilterOptionsService);
   protected readonly session = inject(SessionStore);
 
   // ── Filter option lists (loaded once against the caller's first company) ────
@@ -70,6 +73,12 @@ export class SalesReportComponent implements OnInit {
   readonly agentUid = signal('');
   readonly routeUid = signal('');
   readonly supplierUid = signal('');
+  /**
+   * RPT-08. Blank = "All branches", which the server answers with every branch for a whole-company
+   * user and with the caller's own branches for branch-limited staff (owner ruling 2026-10-10).
+   */
+  readonly branchUid = signal('');
+  readonly branchOptions = signal<UidOption[]>([]);
 
   // ── Report data ────────────────────────────────────────────────────────────
   readonly report = signal<SalesReportDto | null>(null);
@@ -93,6 +102,10 @@ export class SalesReportComponent implements OnInit {
   }
 
   private loadFilterOptions(): void {
+    this.filterOptions.branchOptions().subscribe({
+      next: (opts) => this.branchOptions.set(opts),
+      error: () => undefined,
+    });
     this.organisationService.current().subscribe({
       next: (org) => {
         this.companyService.list(org.uid).subscribe({
@@ -139,6 +152,7 @@ export class SalesReportComponent implements OnInit {
         agentUid: this.agentUid() || null,
         routeUid: this.routeUid() || null,
         supplierUid: this.supplierUid() || null,
+        branchUid: this.branchUid() || null,
       })
       .subscribe({
         next: (dto) => {
@@ -166,6 +180,7 @@ export class SalesReportComponent implements OnInit {
           agentUid: this.agentUid() || null,
           routeUid: this.routeUid() || null,
           supplierUid: this.supplierUid() || null,
+        branchUid: this.branchUid() || null,
         },
         format,
       )
@@ -201,7 +216,7 @@ export class SalesReportComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfCurrentMonth(): string {

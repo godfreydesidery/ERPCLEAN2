@@ -11,6 +11,11 @@ export interface StockReportRowDto {
   productCode: string;
   productName: string;
   quantityOnHand: number | string | null;
+  /**
+   * STK-06: the part of quantityOnHand still in transit to the branch (dispatched, not received) —
+   * on the truck, not on the shelf. Absent on older servers.
+   */
+  inTransitQty?: number | string | null;
   buyingPrice: number | string | null;
   sellingPrice: number | string | null;
   value: number | string | null;

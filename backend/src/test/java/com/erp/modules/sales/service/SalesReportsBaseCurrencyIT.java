@@ -32,10 +32,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * <p>Expected base figures (TZS, 0 dp, HALF_UP per line):
  * <pre>
  *   inv1 TZS  rate 1        P1 net 20,000 vat 3,600                         cost 12,000
- *   inv2 USD  rate 2512.37  P1 net 12.00 → 30,148  vat 2.16 → 5,427  disc 0.50 → 1,256  cost 15,000
+ *   inv2 USD  rate 2512.37  P1 net 12.00 → 30,148  vat 2.16 → 5,427  disc 0.59 → 1,482  cost 15,000
  *                           P2 net  7.35 → 18,466  vat 1.32 → 3,316                    cost  9,000
  *   inv3 USD  rate 2500     P2 net 20.00 → 50,000  vat 3.60 → 9,000  (other branch)    cost 18,000
- *   net 118,614 · vat 21,343 · gross 139,957 · discount 1,256 · cost 54,000 · margin 64,614
+ *   net 118,614 · vat 21,343 · gross 139,957 · discount 1,482 (VAT-inclusive: 0.50 off a 12.50 net line is 0.59 off its gross, RPT-16) · cost 54,000 · margin 64,614
  * </pre>
  */
 class SalesReportsBaseCurrencyIT extends ReportQueryTestBase {
@@ -103,7 +103,7 @@ class SalesReportsBaseCurrencyIT extends ReportQueryTestBase {
         assertThat(usd.netAmount()).isEqualByComparingTo("98614");
         assertThat(usd.vatAmount()).isEqualByComparingTo("17743");
         assertThat(usd.grossAmount()).isEqualByComparingTo("116357");
-        assertThat(usd.discount()).isEqualByComparingTo("1256");
+        assertThat(usd.discount()).isEqualByComparingTo("1482");
         assertThat(usd.costOfSales()).isEqualByComparingTo("42000");
         assertThat(usd.margin()).isEqualByComparingTo("56614");
         assertThat(usd.foreignCurrencyInvoices()).isEqualTo(2);
@@ -134,7 +134,7 @@ class SalesReportsBaseCurrencyIT extends ReportQueryTestBase {
         assertThat(register.currency()).isEqualTo("TZS");
         assertThat(register.totals().amount()).isEqualByComparingTo("139957");
         assertThat(register.totals().vat()).isEqualByComparingTo("21343");
-        assertThat(register.totals().discount()).isEqualByComparingTo("1256");
+        assertThat(register.totals().discount()).isEqualByComparingTo("1482");
         assertThat(register.totals().margin()).isEqualByComparingTo("64614");
         assertThat(profit.totals().netAmount()).isEqualByComparingTo("118614");
         assertThat(profit.totals().grossSales()).isEqualByComparingTo("139957");
@@ -176,9 +176,14 @@ class SalesReportsBaseCurrencyIT extends ReportQueryTestBase {
         assertThat(dept.netAmount()).isEqualByComparingTo("118614");
         assertThat(dept.vatPortion().add(dept.exemptPortion()).add(dept.zeroRatedPortion()))
                 .isEqualByComparingTo(dept.netAmount());
-        assertThat(dept.grossSales().subtract(dept.vatAmount()))
-                .as("gross − VAT = net holds in base, as on the documents")
+        // RPT-16: Net Sales is what was charged; Gross Sales is that plus the discount.
+        assertThat(dept.netSales().subtract(dept.vatAmount()))
+                .as("charged − VAT = net holds in base, as on the documents")
                 .isEqualByComparingTo(dept.netAmount());
+        assertThat(dept.grossSales().subtract(dept.discount()))
+                .as("gross − discount = net sales")
+                .isEqualByComparingTo(dept.netSales());
+        assertThat(dept.discount()).isEqualByComparingTo("1482");
     }
 
     @Test

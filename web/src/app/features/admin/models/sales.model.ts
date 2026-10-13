@@ -26,6 +26,8 @@ export interface SalesInvoiceDto {
   postedGlEntryUid: string | null;
   customerId: string;
   customerName: string;
+  /** SAL-28: the customer's uid (for customer-aware price hints); absent from older servers. */
+  customerUid?: string | null;
   agentId: string | null;
   agentName: string | null;
   /** Route defaulted from the agent's primary route; may be null. */
@@ -174,6 +176,18 @@ export interface AddInvoiceLineRequest {
    * that user to be active and to genuinely hold the permission in the invoice's company, so sending
    * a uid is not by itself an approval. Omitted on every ordinary line.
    */
+  discountAuthorisedByUid?: string;
+}
+
+/**
+ * SAL-12: change a DRAFT line's quantity and/or discount (`PUT .../lines/{lineUid}`). Product and
+ * unit are fixed at add time; the discount ceiling applies exactly as on add. Omitted discounts are
+ * cleared (the request REPLACES the line's discount).
+ */
+export interface UpdateInvoiceLineRequest {
+  quantity: string;
+  lineDiscountAmount?: string;
+  lineDiscountPercent?: string;
   discountAuthorisedByUid?: string;
 }
 

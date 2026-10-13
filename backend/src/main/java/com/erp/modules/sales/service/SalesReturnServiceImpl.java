@@ -200,7 +200,11 @@ public class SalesReturnServiceImpl implements SalesReturnService {
                     delivery.getCompanyId(), delivery.getBranchId(), lineNo++,
                     dl.getProductId(), dl.getProductCode(), dl.getProductName(),
                     dl.getUnitId(), dl.getUnitName(),
-                    qtyReturnedBase, qtyReturnedBase,          // qty + qty_base (same in v1)
+                    // SAL-01: the return request is in BASE units (a single broken bottle can come
+                    // back out of a crate); the line is labelled with the delivery's unit, so its
+                    // qty is that base quantity expressed in that unit — not the base count
+                    // printed against the pack unit ("25 Crate" for one crate).
+                    SalesLineUnits.toLineUnit(sol, qtyReturnedBase), qtyReturnedBase,
                     sol.getUnitPriceAmount(),
                     proRateDiscountAmount(sol, qtyReturnedBase),
                     sol.getLineDiscountPercent(),

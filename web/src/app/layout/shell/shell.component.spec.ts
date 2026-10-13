@@ -178,6 +178,20 @@ describe('ShellComponent — sidebar navigation', () => {
     expect(item?.permission).toBe('PURCHASE.RECEIVE.DIRECT');
   });
 
+  it('shows Bulk Import to a STOCK.IMPORT-only storekeeper (LRB-07)', () => {
+    const fixture = shellWithPermissions(['STOCK.IMPORT']);
+    expect(routes(fixture)).toContain('/admin/bulk-import');
+  });
+
+  it('points the logo and an always-present Home link at the launchpad (ADM-18)', () => {
+    const fixture = shellWithPermissions([]);
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.topbar-brand')?.getAttribute('href')).toBe('/admin/home');
+    const home = Array.from(el.querySelectorAll('.sidebar-nav a'))
+      .find((a) => a.getAttribute('href') === '/admin/home');
+    expect(home?.textContent).toContain('Home');
+  });
+
   // ── General nav invariants ────────────────────────────────────────────────
 
   it('shows nothing permission-gated to a user with no permissions', () => {

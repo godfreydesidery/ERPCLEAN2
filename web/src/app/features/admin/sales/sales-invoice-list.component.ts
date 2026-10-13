@@ -1,5 +1,4 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -25,6 +24,7 @@ import { SalesService } from './sales.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { formatMoney } from '../../../shared/money.util';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 const DEFAULT_SIZE = 20;
 
@@ -37,7 +37,7 @@ interface LoadTrigger { q: string; status: string; page: number }
  */
 @Component({
   selector: 'app-sales-invoice-list',
-  imports: [FormsModule, RouterLink, DatePipe, PaginatorComponent, CurrencySelectComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, PaginatorComponent, CurrencySelectComponent],
   templateUrl: './sales-invoice-list.component.html',
   styleUrl: './sales-invoice-list.component.scss',
 })
@@ -66,6 +66,9 @@ export class SalesInvoiceListComponent {
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly searchQ = signal('');
   readonly statusFilter = signal('');
+  /** SAL-10: creation-date window, yyyy-MM-dd ('' = open). */
+  readonly dateFrom = signal('');
+  readonly dateTo = signal('');
 
   // ── Create form ────────────────────────────────────────────────────────────
   readonly showCreateForm = signal(false);
@@ -113,7 +116,8 @@ export class SalesInvoiceListComponent {
           if (!companyId) return [];
           this.state.set('loading');
           this.currentPage.set(page);
-          return this.salesService.list(companyId, q || undefined, status || undefined, page, DEFAULT_SIZE);
+          return this.salesService.list(companyId, q || undefined, status || undefined, page, DEFAULT_SIZE,
+            this.dateFrom() || undefined, this.dateTo() || undefined);
         }),
         takeUntilDestroyed(),
       )
@@ -221,6 +225,11 @@ export class SalesInvoiceListComponent {
 
   onStatusChange(status: string): void {
     this.statusFilter.set(status);
+    this.load(0);
+  }
+
+  onDateChange(which: 'from' | 'to', value: string): void {
+    (which === 'from' ? this.dateFrom : this.dateTo).set(value ?? '');
     this.load(0);
   }
 

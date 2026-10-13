@@ -100,6 +100,9 @@ public class UserServiceImpl implements UserService {
                 username, passwordEncoder.encode(request.password()), request.displayName());
         user.setEmail(request.email());
         user.setPhone(request.phone());
+        // ADM-02: the administrator chose this password, so it is temporary — the user must
+        // replace it at first sign-in (enforced by the client from TokenResponse/MeResponse).
+        user.setMustChangePassword(true);
         // is_root stays false by default — never settable via the API.
 
         // The new user belongs to the CREATOR's tenant (ADR-0062 P2-1). Taken from the
@@ -301,6 +304,8 @@ public class UserServiceImpl implements UserService {
 
         passwordPolicy.validate(request.password());
         user.changePassword(passwordEncoder.encode(request.password()), Instant.now());
+        // ADM-02: an administrator-set password is temporary; the user must change it at sign-in.
+        user.setMustChangePassword(true);
 
         // D-6: NEVER log the password or its hash — empty detail.
         audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_users", user.getId(), user.getUid()));

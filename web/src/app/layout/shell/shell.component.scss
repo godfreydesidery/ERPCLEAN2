@@ -133,6 +133,7 @@
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
+  text-decoration: none;
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -417,6 +418,7 @@
   font-size: 0.9rem;
   color: #1f2933;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .user-menu__item:hover {

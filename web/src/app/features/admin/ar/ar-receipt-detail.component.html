@@ -8,6 +8,21 @@
       </h1>
     </div>
     <div class="erp-page-head__actions">
+      @if (showApply() && !applyOpen()) {
+        <button type="button" class="btn btn-primary btn-sm" (click)="openApply()">
+          <i class="bi bi-list-check me-1" aria-hidden="true"></i>Apply to Invoices
+        </button>
+      }
+      @if (showRefund() && !refundOpen()) {
+        <button type="button" class="btn btn-outline-primary btn-sm" (click)="openRefund()">
+          <i class="bi bi-cash-coin me-1" aria-hidden="true"></i>Refund
+        </button>
+      }
+      @if (showReverse() && !reverseOpen()) {
+        <button type="button" class="btn btn-outline-danger btn-sm" (click)="openReverse()">
+          <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reverse receipt
+        </button>
+      }
       <a routerLink="/admin/ar/receipts" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Receipts
       </a>
@@ -36,8 +51,17 @@
         <div class="erp-card mt-3" style="max-width:560px">
           <div class="erp-card__head">
             <h2>Receipt Details</h2>
+            @if (isReversed()) {
+              <span class="badge text-bg-danger ms-2">Reversed</span>
+            }
           </div>
           <div class="erp-card__body">
+            @if (isReversed()) {
+              <p class="small text-muted mb-2">
+                This receipt was reversed on {{ r.reversedAt?.slice(0, 10) }}. Its invoices are owed
+                again and the money has been taken back out of the cash book.
+              </p>
+            }
             <dl class="row mb-0">
               <dt class="col-sm-4">Receipt Number</dt>
               <dd class="col-sm-8 mono fw-semibold">{{ r.receiptNumber }}</dd>
@@ -45,13 +69,187 @@
               <dd class="col-sm-8">{{ r.receiptDate }}</dd>
               <dt class="col-sm-4">Amount</dt>
               <dd class="col-sm-8 mono">{{ r.currency }} {{ fmtMoney(r.amount) }}</dd>
-              <dt class="col-sm-4">Unallocated</dt>
+              <dt class="col-sm-4">On account (unallocated)</dt>
               <dd class="col-sm-8 mono">{{ fmtMoney(r.unallocatedAmount) }}</dd>
+              @if (r.customerName) {
+                <dt class="col-sm-4">Customer</dt>
+                <dd class="col-sm-8">{{ r.customerCode }} — {{ r.customerName }}</dd>
+              }
               <dt class="col-sm-4">Tender Type</dt>
               <dd class="col-sm-8">{{ r.tenderType }}</dd>
+              <dt class="col-sm-4">Reference</dt>
+              <dd class="col-sm-8 mono">{{ r.bankReference || '—' }}</dd>
             </dl>
           </div>
         </div>
+
+        <!-- ARC-11: pay money held on account back to the customer -->
+        @if (refundOpen()) {
+          <div class="erp-card mt-3" style="max-width:560px" role="region" aria-labelledby="refund_title">
+            <div class="erp-card__head">
+              <h2 id="refund_title">Refund from receipt {{ r.receiptNumber }}</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small mb-2">
+                {{ r.currency }} {{ fmtMoney(onAccount()) }} of this receipt is held on account. The refund is
+                paid out of the default cash account and recorded in the cash book and the ledger.
+              </p>
+              <label for="refund_amount" class="form-label small fw-semibold">Amount to refund</label>
+              <input id="refund_amount" name="refund_amount" type="text" inputmode="decimal"
+                     class="form-control form-control-sm mono" autocomplete="off"
+                     [class.is-invalid]="refundAmountInvalid()"
+                     [ngModel]="refundAmount()" (ngModelChange)="refundAmount.set($event)"
+                     [disabled]="refunding()" />
+              @if (refundAmountInvalid()) {
+                <div class="invalid-feedback">Enter an amount above zero and no more than {{ fmtMoney(onAccount()) }}.</div>
+              }
+              <label for="refund_reason" class="form-label small fw-semibold mt-2">Reason (required)</label>
+              <textarea id="refund_reason" name="refund_reason" class="form-control form-control-sm"
+                        rows="2" maxlength="200" autocomplete="off"
+                        [ngModel]="refundReason()" (ngModelChange)="refundReason.set($event)"
+                        [disabled]="refunding()"></textarea>
+              @if (refundError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeRefund()"
+                        [disabled]="refunding()">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" (click)="confirmRefund()"
+                        [disabled]="refundDisabled()">
+                  @if (refunding()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Pay refund
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- ARC-04: reverse a wrong receipt — confirmed here, with a required reason -->
+        @if (reverseOpen()) {
+          <div class="erp-card mt-3" style="max-width:560px" role="region" aria-labelledby="reverse_title">
+            <div class="erp-card__head">
+              <h2 id="reverse_title">Reverse receipt {{ r.receiptNumber }}?</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small mb-2">
+                This takes {{ r.currency }} {{ fmtMoney(r.amount) }} back out of the cash book, posts the
+                reversing journal and makes the invoices it paid owed again. It cannot be undone; record a
+                new receipt if the customer did pay.
+              </p>
+              <label for="reverse_reason" class="form-label small fw-semibold">Reason (required)</label>
+              <textarea id="reverse_reason" name="reverse_reason" class="form-control form-control-sm"
+                        rows="2" maxlength="200" autocomplete="off"
+                        [ngModel]="reverseReason()" (ngModelChange)="reverseReason.set($event)"
+                        [disabled]="reversing()"></textarea>
+              @if (reverseError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeReverse()"
+                        [disabled]="reversing()">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger" (click)="confirmReverse()"
+                        [disabled]="reverseDisabled()">
+                  @if (reversing()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Reverse receipt
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- ARC-06: apply money held on account to the customer's open invoices -->
+        @if (applyOpen()) {
+          <div class="erp-card mt-3">
+            <div class="erp-card__head">
+              <h2>Apply {{ fmtMoney(onAccount()) }} on account to invoices</h2>
+              <span class="spacer"></span>
+              @if (applyRows().length > 0) {
+                <button type="button" class="btn btn-sm btn-outline-primary" (click)="fillOldestFirst()"
+                        [disabled]="applying()">
+                  <i class="bi bi-sort-numeric-down me-1" aria-hidden="true"></i>Oldest first
+                </button>
+              }
+            </div>
+            <div class="erp-card__body p-0">
+              @switch (applyState()) {
+                @case ('loading') {
+                  <p class="text-muted small p-3 mb-0" aria-live="polite">Loading open invoices…</p>
+                }
+                @case ('error') {
+                  <p class="text-danger small p-3 mb-0" role="alert">Could not load this customer's open invoices.</p>
+                }
+                @default {
+                  @if (applyRows().length === 0) {
+                    <div class="erp-empty">This customer has no open invoices. The money stays on account.</div>
+                  } @else {
+                    <div class="erp-table-wrap">
+                      <table class="erp-table" aria-label="Open invoices to apply the receipt to">
+                        <thead>
+                          <tr>
+                            <th scope="col">Document No.</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Due</th>
+                            <th scope="col" class="num">Outstanding</th>
+                            <th scope="col" class="num" style="min-width:140px">Apply</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (row of applyRows(); track row.invoice.uid) {
+                            <tr>
+                              <td class="mono fw-semibold">{{ row.invoice.documentNo }}</td>
+                              <td>{{ row.invoice.invoiceDate }}</td>
+                              <td>{{ row.invoice.dueDate ?? '—' }}</td>
+                              <td class="num">{{ fmtMoney(row.invoice.outstandingAmount) }}</td>
+                              <td>
+                                <label [for]="'apply_' + row.invoice.uid" class="visually-hidden">
+                                  Amount to apply to invoice {{ row.invoice.documentNo }}
+                                </label>
+                                <input [id]="'apply_' + row.invoice.uid" [name]="'apply_' + row.invoice.uid"
+                                       type="text" inputmode="decimal" autocomplete="off"
+                                       class="form-control form-control-sm text-end font-monospace" placeholder="0.00"
+                                       [ngModel]="row.applyInput"
+                                       (ngModelChange)="updateApply(row.invoice.uid, $event)"
+                                       [disabled]="applying()" />
+                              </td>
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  }
+                }
+              }
+              <div class="border-top p-3 d-flex flex-wrap gap-3 align-items-center">
+                <span class="small">Applying <strong class="mono">{{ fmtMoney(applyTotal()) }}</strong>
+                  of <span class="mono">{{ fmtMoney(onAccount()) }}</span> on account</span>
+                @if (applyInvalid()) {
+                  <span class="text-danger small" role="alert">
+                    Check the amounts: each must be a number, no more than the invoice outstanding, and
+                    together no more than the money on account.
+                  </span>
+                }
+                @if (applyError(); as msg) {
+                  <span class="text-danger small" role="alert">{{ msg }}</span>
+                }
+                <span class="ms-auto d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeApply()"
+                          [disabled]="applying()">Cancel</button>
+                  <button type="button" class="btn btn-sm btn-primary" (click)="saveApply()"
+                          [disabled]="applyDisabled()">
+                    @if (applying()) {
+                      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    }
+                    Apply
+                  </button>
+                </span>
+              </div>
+            </div>
+          </div>
+        }
 
         @if (r.allocations.length > 0) {
           <h2 class="erp-section-title mt-4">Allocations</h2>

@@ -76,14 +76,18 @@ public class StockLocationSeeder {
     }
 
     private void seedInTransit(Long companyId, Long branchId, String branchCode) {
-        String transitCode = "TRANSIT-" + branchCode;
-        // Check for any existing OTHER/in-transit location for this branch
+        String transitCode = LocationResolver.TRANSIT_CODE_PREFIX + branchCode;
+        // STK-07: "already has one" means a location following the TRANSIT- convention, which is how
+        // LocationResolver now finds it. This used to skip whenever ANY non-default OTHER location
+        // existed — so a branch whose admin had made a "BOND" or "DAMAGED" location of type Other
+        // got no in-transit location at all, and that user location silently took its place.
         boolean exists = locations
                 .findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
                         companyId, branchId, com.erp.platform.common.domain.MasterStatus.ACTIVE)
                 .stream()
-                .anyMatch(l -> !l.isDefault()
-                        && l.getLocationType() == LocationType.OTHER);
+                .anyMatch(l -> !l.isDefault() && LocationResolver.hasTransitCode(l.getCode()))
+                // Codes are unique company-wide (uq_stock_location_company_code): never collide.
+                || locations.existsByCompanyIdAndCode(companyId, transitCode);
         if (exists) {
             log.debug("StockLocationSeeder: in-transit location already exists for company={} branch={} — skipping.",
                     companyId, branchId);
@@ -96,6 +100,10 @@ public class StockLocationSeeder {
                 LocationType.OTHER,
                 false,
                 null);
+        // LBO-29: goods on the road can be neither sold nor picked. (Existing rows seeded before this
+        // keep their flags; availability and pickers exclude the transit location by identity too.)
+        loc.setSellable(false);
+        loc.setPickable(false);
         locations.save(loc);
         log.info("StockLocationSeeder: seeded in-transit location '{}' for company={} branch={}.",
                 transitCode, companyId, branchId);

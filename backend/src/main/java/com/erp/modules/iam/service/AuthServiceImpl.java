@@ -14,7 +14,11 @@ import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.modules.iam.repository.RefreshTokenRepository;
 import com.erp.modules.iam.repository.UserBranchRepository;
+import com.erp.platform.audit.AuditActions;
+import com.erp.platform.audit.AuditEvent;
+import com.erp.platform.audit.AuditService;
 import com.erp.platform.security.PermissionResolver;
+import com.erp.platform.security.password.PasswordPolicy;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.auth.AuthenticationException;
 import com.erp.platform.security.auth.Tokens;
@@ -50,6 +54,9 @@ public class AuthServiceImpl implements AuthService {
     private final PermissionResolver permissionResolver;
     private final OrganisationRepository organisations;
 
+    private final PasswordPolicy passwordPolicy;
+    private final AuditService audit;
+
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path (G3). */
     private final String dummyHash;
 
@@ -63,8 +70,12 @@ public class AuthServiceImpl implements AuthService {
                            JwtProperties jwtProps,
                            LoginAttemptService loginAttempts,
                            PermissionResolver permissionResolver,
-                           OrganisationRepository organisations) {
+                           OrganisationRepository organisations,
+                           PasswordPolicy passwordPolicy,
+                           AuditService audit) {
         this.organisations = organisations;
+        this.passwordPolicy = passwordPolicy;
+        this.audit = audit;
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.branches = branches;
@@ -81,8 +92,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenResponse login(String username, String rawPassword, String ip) {
         Instant now = Instant.now();
-        AppUser user = users.findByUsername(username == null ? null : username.toLowerCase())
-                .orElse(null);
+        AppUser user = findLoginUser(username).orElse(null);
 
         if (user == null) {
             // Equalise timing for unknown usernames so an attacker can't distinguish "no such user"
@@ -113,6 +123,45 @@ public class AuthServiceImpl implements AuthService {
 
         loginAttempts.recordSuccess(user.getId(), ip, now);
         return issueSession(user);
+    }
+
+    /**
+     * The account a sign-in name refers to (LUI-16).
+     *
+     * <p>An exact match always wins — that is every full {@code name@organisation} and every bare
+     * name issued before usernames were suffixed (platform operators, pre-1.8.0 accounts), so no
+     * existing sign-in changes meaning.
+     *
+     * <p>Otherwise, a name typed WITHOUT an {@code @} is read as {@code name@alias} only when the
+     * installation hosts exactly one customer organisation. Then the suffix carries no information
+     * — it is the same for every member of staff — and asking a clerk to type it on every login
+     * only produces lock-outs. On a shared (multi-customer) instance the bare name is NOT resolved,
+     * even when it happens to be unique across organisations: resolving it there would make one
+     * tenant's sign-ins depend on another tenant's user list (a second {@code john} created
+     * elsewhere would silently break this {@code john}'s login), and would let a bare-name guess
+     * reach into whichever tenant holds the name. The resolved account then goes through exactly
+     * the same password, lockout, active and tenant-open checks, and an unresolved name takes the
+     * same constant-time "invalid credentials" path as any unknown user, so nothing about which
+     * names exist is revealed.
+     */
+    private java.util.Optional<AppUser> findLoginUser(String username) {
+        if (username == null) {
+            return java.util.Optional.empty();
+        }
+        String normalised = username.toLowerCase();
+        java.util.Optional<AppUser> exact = users.findByUsername(normalised);
+        if (exact.isPresent()) {
+            return exact;
+        }
+        String local = normalised.trim();
+        if (local.isEmpty() || local.indexOf('@') >= 0) {
+            return java.util.Optional.empty();
+        }
+        java.util.List<String> aliases = organisations.findCustomerAliases();
+        if (aliases.size() != 1) {
+            return java.util.Optional.empty();
+        }
+        return users.findByUsername(local + "@" + aliases.get(0));
     }
 
     @Override
@@ -182,7 +231,59 @@ public class AuthServiceImpl implements AuthService {
                 user.isRoot(),
                 companyUid,
                 branchUid,
-                permissions);
+                permissions,
+                user.isMustChangePassword());
+    }
+
+    /**
+     * Self-service password change (ADM-02 / PAR-14).
+     *
+     * <p>Same controls as every other password write: the current password must match (a wrong
+     * one counts towards the login lockout exactly like a failed sign-in, so this endpoint cannot
+     * be used to guess it), the new one goes through {@link PasswordPolicy} and bcrypt, and the
+     * change is audited without the password or its hash. Every refresh token the user holds is
+     * revoked in this transaction, so a session on another device ends at its next refresh; the
+     * caller gets a fresh session back. Clears {@code must_change_password}.
+     */
+    @Override
+    public TokenResponse changeOwnPassword(String currentPassword, String newPassword, String ip) {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.userId() == null) {
+            throw new AuthenticationException("Authentication is required.");
+        }
+        AppUser user = users.findScopedById(principal.userId()) // id from the verified JWT
+                .orElseThrow(AuthenticationException::invalidCredentials);
+        Instant now = Instant.now();
+        if (!user.isActive()) {
+            throw AuthenticationException.invalidCredentials();
+        }
+        if (user.isLocked(now)) {
+            throw new AuthenticationException(
+                    "Account is locked. Try again later or contact an administrator.");
+        }
+        if (currentPassword == null
+                || !passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            // Separate REQUIRES_NEW tx so the lockout bookkeeping survives this request's rollback.
+            loginAttempts.recordFailure(user.getId(), ip, now);
+            throw new IllegalArgumentException("Your current password is not correct.");
+        }
+        if (currentPassword.equals(newPassword)) {
+            throw new IllegalArgumentException(
+                    "Choose a new password that is different from your current one.");
+        }
+        passwordPolicy.validate(newPassword);
+
+        user.changePassword(passwordEncoder.encode(newPassword), now);
+        user.setMustChangePassword(false);
+        users.save(user);
+        // End every other session (bulk update runs before the new token below is inserted).
+        refreshTokens.revokeAllForUser(user.getId(), now);
+
+        // D-6: NEVER log the password or its hash.
+        audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_users",
+                        user.getId(), user.getUid())
+                .detail(java.util.Map.of("self", "true")));
+        return issueSession(user);
     }
 
     @Override
@@ -227,7 +328,8 @@ public class AuthServiceImpl implements AuthService {
                 user.isRoot(),
                 activeBranch.map(b -> b.getCompany().getUid()).orElse(null),
                 activeBranch.map(Branch::getUid).orElse(null),
-                activeBranch.isPresent());
+                activeBranch.isPresent(),
+                user.isMustChangePassword());
 
         return new TokenResponse(
                 access.value(),

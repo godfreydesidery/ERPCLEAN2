@@ -2,6 +2,7 @@ package com.erp.platform.bulk;
 
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,6 +33,19 @@ public class BulkImportAccess {
         }
         return permissionResolver.hasPermission(
                 RequestContext.get(), h.permissionCode(), System.currentTimeMillis());
+    }
+
+    /**
+     * The entity types the caller may actually import (LRB-07). The picker used to offer every type
+     * and let the user discover the 403 on "Download template"; a storekeeper holding only
+     * STOCK.IMPORT now sees only the stock import.
+     */
+    public List<BulkImportService.EntityDescriptor> importableEntities() {
+        long now = System.currentTimeMillis();
+        RequestContext.Principal principal = RequestContext.get();
+        return bulkImportService.entities().stream()
+                .filter(e -> permissionResolver.hasPermission(principal, e.permissionCode(), now))
+                .toList();
     }
 
     /** True if the caller may import at least one entity type — gates the entity-listing endpoint. */

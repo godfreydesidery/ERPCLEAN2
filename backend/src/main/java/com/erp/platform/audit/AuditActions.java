@@ -155,6 +155,8 @@ public final class AuditActions {
     public static final String SALES_INVOICE_PAYMENT_ADD     = "SALES.INVOICE.PAYMENT.ADD";
     public static final String SALES_INVOICE_PAYMENT_REMOVE  = "SALES.INVOICE.PAYMENT.REMOVE";
     public static final String SALES_INVOICE_VOID            = "SALES.INVOICE.VOID";
+    /** SAL-13 / LSF-17: an abandoned DRAFT (no number, no postings) removed. */
+    public static final String SALES_INVOICE_DRAFT_CANCEL    = "SALES.INVOICE.DRAFT.CANCEL";
     public static final String TAXRATE_CREATE                = "TAXRATE.CREATE";
     public static final String TAXRATE_UPDATE                = "TAXRATE.UPDATE";
 
@@ -184,11 +186,26 @@ public final class AuditActions {
     public static final String GL_PERIOD_OPEN        = "GL.PERIOD.OPEN";
     public static final String GL_PERIOD_CLOSE       = "GL.PERIOD.CLOSE";
     public static final String GL_CONFIG_SET         = "GL.CONFIG.SET";
+    /**
+     * An automatic (system) GL posting failed and was swallowed so the business document could
+     * stand (ACC-02). The row IS the posting exception: target_type {@code gl_posting_exceptions},
+     * target_uid a fresh ULID naming the exception, detail carrying what is needed to re-post.
+     */
+    public static final String GL_POSTING_FAILED     = "GL.POSTING.FAILED";
+    /**
+     * Closes a {@link #GL_POSTING_FAILED} exception (same target_uid). Appended, never an edit of
+     * the FAILED row — audit_logs stays append-only.
+     */
+    public static final String GL_POSTING_RESOLVED   = "GL.POSTING.RESOLVED";
 
     // -- AR module (ADR-0014 D-13; target_type = plural table names) ---------
     public static final String AR_OPENITEM_CREATE  = "AR.OPENITEM.CREATE";
     public static final String AR_RECEIPT_RECORD   = "AR.RECEIPT.RECORD";
     public static final String AR_RECEIPT_ALLOCATE = "AR.RECEIPT.ALLOCATE";
+    /** A posted receipt was reversed by hand (ARC-04); detail carries the reason. */
+    public static final String AR_RECEIPT_REVERSE  = "AR.RECEIPT.REVERSE";
+    /** Customer credit (on-account receipt money or an unused credit note) paid back (ARC-11). */
+    public static final String AR_REFUND           = "AR.REFUND";
     public static final String AR_WRITEOFF         = "AR.WRITEOFF";
     public static final String AR_CREDITNOTE_RAISE = "AR.CREDITNOTE.RAISE";
     public static final String AR_OPENING_SET      = "AR.OPENING.SET";
@@ -224,7 +241,11 @@ public final class AuditActions {
     public static final String AP_BILL_ENTER       = "AP.BILL.ENTER";
     public static final String AP_BILL_MATCH       = "AP.BILL.MATCH";
     public static final String AP_BILL_POST        = "AP.BILL.POST";
+    /** AP-01: an unposted (DRAFT / HELD) bill removed so it can be entered again correctly. */
+    public static final String AP_BILL_DELETE      = "AP.BILL.DELETE";
     public static final String AP_PAYMENT_MAKE     = "AP.PAYMENT.MAKE";
+    /** A posted supplier payment was reversed by hand (AP-03); detail carries the reason. */
+    public static final String AP_PAYMENT_REVERSE  = "AP.PAYMENT.REVERSE";
     public static final String AP_DEBITNOTE_RAISE  = "AP.DEBITNOTE.RAISE";
     public static final String AP_OPENING_SET      = "AP.OPENING.SET";
 
@@ -259,6 +280,9 @@ public final class AuditActions {
     public static final String VAT_ADJUST          = "VAT.ADJUST";
     public static final String WHT_TYPE_MANAGE     = "WHT.TYPE.MANAGE";
     public static final String WHT_CAPTURE         = "WHT.CAPTURE";
+    /** ACC-07: a tax liability paid to TRA from a cash/bank account. */
+    public static final String VAT_RETURN_PAY      = "VAT.RETURN.PAY";
+    public static final String WHT_REMIT           = "WHT.REMIT";
 
     // ---- Reporting module (ADR-0018 D-11) ----
     public static final String REPORT_EXPORT = "REPORT.EXPORT";
@@ -385,6 +409,8 @@ public final class AuditActions {
     public static final String HR_PAYROLL_RUN_POST     = "HR.PAYROLL.RUN.POST";
     public static final String HR_PAYROLL_RUN_DISBURSE = "HR.PAYROLL.RUN.DISBURSE";
     public static final String HR_PAYROLL_RUN_REVERSE  = "HR.PAYROLL.RUN.REVERSE";
+    /** ACC-07: PAYE / NSSF / WCF / SDL / HESLB paid to the authority from a cash/bank account. */
+    public static final String HR_STATUTORY_PAY        = "HR.PAYROLL.STATUTORY.PAY";
 
     // --- crm (ADR-0031) ---
     public static final String CRM_LEAD_CREATE       = "CRM.LEAD.CREATE";

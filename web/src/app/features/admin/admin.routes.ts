@@ -279,6 +279,14 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./stock/stock-list.component').then((m) => m.StockListComponent),
   },
+  // ADM-29: menu entry "Adjust Stock" — the On-Hand screen with its Adjust Stock form open.
+  {
+    path: 'stock/adjust',
+    canActivate: [requirePermission('STOCK.VIEW')],
+    data: { openAdjust: true },
+    loadComponent: () =>
+      import('./stock/stock-list.component').then((m) => m.StockListComponent),
+  },
   // ── Stock Locations / Batches / Serials ──────────────────────────────────
   {
     path: 'stock/locations',
@@ -436,6 +444,12 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('GL.VIEW')],
     loadComponent: () =>
       import('./gl/trial-balance.component').then((m) => m.TrialBalanceComponent),
+  },
+  {
+    path: 'gl/posting-exceptions',
+    canActivate: [requirePermission('GL.VIEW')],
+    loadComponent: () =>
+      import('./gl/posting-exceptions.component').then((m) => m.PostingExceptionsComponent),
   },
   {
     path: 'gl/periods',
@@ -665,12 +679,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./reporting/sales-report.component').then((m) => m.SalesReportComponent),
   },
-  // K-2026-08-30 #2. Same guard as the Sales Report and the same @PreAuthorize on the endpoint:
-  // that report already discloses margin at this gate, so cost of sales here is no wider a
-  // disclosure to a narrower audience.
+  // K-2026-08-30 #2. Cost of sales and gross profit are cost data, so (owner ruling 2026-10-10,
+  // ADM-14) the report also needs INVENTORY.VALUATION.VIEW — counter staff hold only
+  // SALES.INVOICE.VIEW. Equal to the endpoint's @PreAuthorize and the menu's allPermissions.
   {
     path: 'reports/profitability',
-    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    canActivate: [requireAllPermissions('SALES.INVOICE.VIEW', 'INVENTORY.VALUATION.VIEW')],
     loadComponent: () =>
       import('./reporting/profitability-report.component').then(
         (m) => m.ProfitabilityReportComponent,
@@ -1463,6 +1477,12 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('AR.STATEMENT.VIEW')],
     loadComponent: () =>
       import('./ar/ar-ageing.component').then((m) => m.ArAgeingComponent),
+  },
+  {
+    path: 'ap/ageing',
+    canActivate: [requirePermission('AP.VIEW')],
+    loadComponent: () =>
+      import('./ap/ap-ageing.component').then((m) => m.ApAgeingComponent),
   },
   // ── AP Payments list + detail ─────────────────────────────────────────────
   {

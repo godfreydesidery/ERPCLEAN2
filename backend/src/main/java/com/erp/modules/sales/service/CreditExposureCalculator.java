@@ -114,6 +114,31 @@ public class CreditExposureCalculator {
         return v != null ? v : BigDecimal.ZERO;
     }
 
+    /**
+     * ARC-21: the figures a cashier needs to tell the customer how much to pay before the sale can
+     * go through — the limit, what they would owe with this document, and the shortfall. All in
+     * the company base currency. Falls back to a figure-free sentence when the limit could not be
+     * converted (a missing rate is reported by {@link #missingRateSentence} instead).
+     */
+    public static String breachSentence(Assessment a) {
+        if (a == null || a.creditLimitBase() == null || a.exposure() == null) {
+            return "This customer's credit limit has been reached. The outstanding balance would"
+                    + " exceed the allowed limit if this invoice is finalised.";
+        }
+        String ccy = a.baseCurrency() != null ? a.baseCurrency() + " " : "";
+        BigDecimal shortfall = a.exposure().subtract(a.creditLimitBase()).max(BigDecimal.ZERO);
+        return "This customer's credit limit is " + ccy + money(a.creditLimitBase())
+                + ". With this invoice they would owe " + ccy + money(a.exposure())
+                + ", which is " + ccy + money(shortfall) + " over the limit. Take a payment of at"
+                + " least " + ccy + money(shortfall) + " first, or ask someone allowed to override"
+                + " the credit limit.";
+    }
+
+    private static String money(BigDecimal v) {
+        // DecimalFormat is not thread-safe; a fresh instance per call.
+        return new java.text.DecimalFormat("#,##0.00").format(v);
+    }
+
     /** Friendly sentence naming the currencies that need a rate (no internal detail). */
     public static String missingRateSentence(List<String> currencies) {
         String list = String.join(", ", currencies);

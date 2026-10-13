@@ -6,6 +6,7 @@ import com.erp.modules.stock.domain.dto.ProductStockRowDto;
 import com.erp.modules.stock.domain.dto.ProductStockTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -118,7 +119,7 @@ public class ProductStockReportQuery {
 
         CompanyHeader header = loadCompanyHeader(companyId);
         NamedRef branch   = resolveNamedRef("branches",  "name",         branchUid,   companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         NamedRef supplier = resolveNamedRef("suppliers", "display_name", supplierUid, companyId, "Supplier");
         PriceList priceList = resolveDefaultPriceList(companyId);
 
@@ -130,7 +131,7 @@ public class ProductStockReportQuery {
                 currency,
                 branch != null ? branch.id() : null,
                 supplier != null ? supplier.id() : null,
-                withTotals);
+                withTotals, scope.sql("branch_id"));
 
         ReportCompanyHeaderDto companyDto = new ReportCompanyHeaderDto(
                 header.name(), header.legalName(),
@@ -159,7 +160,7 @@ public class ProductStockReportQuery {
      */
     private List<ProductStockRowDto> queryRows(Long companyId, Long priceListId, String currency,
                                                 Long branchId, Long supplierId,
-                                                boolean valuationRowSet) {
+                                                boolean valuationRowSet, String scopeSql) {
         // Bound in textual order of the '?' placeholders below — sell, soh, last_supplier, products.
         List<Object> params = new ArrayList<>();
         params.add(companyId);          // sell CTE
@@ -210,6 +211,7 @@ public class ProductStockReportQuery {
                     FROM stock_on_hand
                     WHERE company_id = ?
                       AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
+                      /*branch-scope*/
                     GROUP BY product_id
                 ),
                 last_supplier AS (
@@ -243,7 +245,7 @@ public class ProductStockReportQuery {
                 ORDER BY s.display_name NULLS LAST, p.code
                 """;
 
-        return jdbc.query(sql, (rs, rowNum) -> {
+        return jdbc.query(sql.replace("/*branch-scope*/", scopeSql), (rs, rowNum) -> {
             BigDecimal qty       = rs.getBigDecimal("qty");
             BigDecimal costValue = rs.getBigDecimal("cost_value");
             int valuedRows       = rs.getInt("valued_rows");

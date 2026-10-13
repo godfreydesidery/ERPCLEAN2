@@ -197,7 +197,7 @@
                 <label class="form-label small text-muted mb-1" for="drCost">
                   Unit cost <span class="text-danger" aria-hidden="true">*</span>
                 </label>
-                <input id="drCost" name="drCost" type="number" min="0" step="any" class="form-control"
+                <input id="drCost" name="drCost" type="text" inputmode="decimal" autocomplete="off" class="form-control"
                        [ngModel]="newLineCost()" (ngModelChange)="onUnitCostChange($event)"
                        [disabled]="submitting()"
                        [attr.aria-describedby]="costSuggestion() ? 'drCostHelp drCostHint' : 'drCostHelp'" />

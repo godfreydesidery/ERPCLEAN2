@@ -73,7 +73,9 @@
                 <option [value]="t.uid">{{ t.code }} — {{ t.name }}</option>
               }
             </select>
-            @if (tills().length === 0) {
+            @if (tillsState() !== 'idle') {
+              <app-lookup-notice [state]="tillsState()" what="till" />
+            } @else if (tills().length === 0) {
               <div class="form-text">No CASH-type accounts found for this company.</div>
             }
           </div>

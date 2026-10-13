@@ -7,6 +7,7 @@ import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.stock.domain.dto.AdjustStockRequest;
 import com.erp.modules.stock.domain.dto.OpeningBalanceRequest;
+import com.erp.modules.stock.domain.dto.SetOpeningValuationRequest;
 import com.erp.modules.stock.domain.dto.SetReorderLevelRequest;
 import com.erp.modules.stock.domain.dto.StockMovementDto;
 import com.erp.modules.stock.domain.dto.StockOnHandDto;
@@ -20,13 +21,15 @@ import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
+import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -64,6 +67,13 @@ public class StockServiceImpl implements StockService {
     private final StockLocationRepository   locations;
     private final ScopeGuard               scopeGuard;
     private final AuditService             audit;
+    private final AdjustTargetResolver     adjustTargets;
+    private final StockUnitResolver        unitResolver;
+    private final PermissionResolver       permissionResolver;
+    private final CompanyCalendar calendar;
+
+    /** Gates the opening VALUE leg (it posts to the GL) — same rule as the bulk stock sheet. */
+    private static final String PERM_OPENING_SET = "INVENTORY.OPENING.SET";
 
     public StockServiceImpl(StockOnHandRepository onHands,
                             StockMovementRepository movements,
@@ -74,7 +84,11 @@ public class StockServiceImpl implements StockService {
                             LocationResolver locationResolver,
                             StockLocationRepository locations,
                             ScopeGuard scopeGuard,
-                            AuditService audit) {
+                            AuditService audit,
+                            AdjustTargetResolver adjustTargets,
+                            StockUnitResolver unitResolver,
+                            PermissionResolver permissionResolver,
+                            CompanyCalendar calendar) {
         this.onHands           = onHands;
         this.movements         = movements;
         this.posting           = posting;
@@ -85,6 +99,10 @@ public class StockServiceImpl implements StockService {
         this.locations         = locations;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.adjustTargets     = adjustTargets;
+        this.unitResolver      = unitResolver;
+        this.permissionResolver = permissionResolver;
+        this.calendar           = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -99,23 +117,38 @@ public class StockServiceImpl implements StockService {
         if (request.quantity().signum() == 0) {
             throw new IllegalArgumentException("Adjustment quantity must be non-zero.");
         }
+        // STK-08 / OPN-01: the operator may state the quantity in a pack size ("2 cartons"); stock
+        // is always posted in base units. Null unit = base, exactly as before.
+        StockUnitResolver.Uom uom = unitResolver.resolve(product, request.unitUid());
+        final BigDecimal qty = request.quantity().multiply(uom.factorToBase());
 
         // An adjustment corrects the stock WHERE IT ALREADY SITS. On-hand is keyed per location, so
-        // read every on-hand row for the product in this branch rather than assuming a single one:
-        //  - exactly one row  → adjust THAT location (which may not be the branch default).
-        //  - no row yet       → first touch; fall through to the branch default location below.
-        //  - more than one    → ambiguous (which location did the count correct?). Say so plainly.
-        // Resolving the location from the branch default unconditionally (as this did) posted the
-        // correction to the default location while the stock lived in another — splitting the product
-        // across two on-hand rows, and then failing on the single-row re-read below.
-        List<StockOnHand> onHandRows = onHands.findAllByCompanyIdAndBranchIdAndProductId(
-                product.companyId(), principal.branchId(), product.id());
-        if (onHandRows.size() > 1) {
-            throw new IllegalArgumentException(
-                    "This product is held at more than one location in this branch. Adjust it from "
-                  + "the location's stock screen so the correction lands on the right one.");
+        // the target is chosen from the product's on-hand rows in this branch (AdjustTargetResolver):
+        // an explicit locationUid wins; otherwise the one location that actually holds it, or the
+        // branch default on first touch. Resolving from the branch default unconditionally (as this
+        // once did) split a product across two rows; refusing whenever more than one ROW existed
+        // (as it did until STK-01) blocked every product that had ever arrived by transfer, because
+        // receipt leaves a zero-quantity row behind at the in-transit location.
+        AdjustTargetResolver.Target target = adjustTargets.resolve(
+                product.companyId(), principal.branchId(), product.id(), request.locationUid());
+        StockOnHand sohBefore = target.onHand();
+
+        // STK-15: a decrease may not take the location below zero unless the location allows
+        // negative stock — the same location-level rule transfers already enforce. A typo of −120
+        // for −12 used to drive the shelf to −108 silently. Checked against ON-HAND, not available:
+        // reservations are soft (over-reservation is allowed), and goods that are physically broken
+        // must be writable-off even when a sales order has reserved them.
+        if (qty.signum() < 0 && !locationResolver.isAllowNegative(target.locationId())) {
+            BigDecimal current = sohBefore != null && sohBefore.getQuantity() != null
+                    ? sohBefore.getQuantity() : BigDecimal.ZERO;
+            if (current.add(qty).signum() < 0) {
+                throw new ConflictException(
+                        "Not enough stock to remove " + qty.abs().stripTrailingZeros().toPlainString()
+                      + baseUnitSuffix(product)
+                      + " — only " + current.max(BigDecimal.ZERO).stripTrailingZeros().toPlainString()
+                      + " on hand at this location, which does not allow negative stock.");
+            }
         }
-        StockOnHand sohBefore = onHandRows.isEmpty() ? null : onHandRows.get(0);
 
         // FIX C (adversarial review): resolve avg_cost BEFORE posting so the movement row
         // carries unit_cost_amount + value_amount immediately (columns are immutable/updatable=false
@@ -124,11 +157,11 @@ public class StockServiceImpl implements StockService {
         BigDecimal avgCostNow = sohBefore != null ? sohBefore.getAvgCost() : null;
         BigDecimal movementValue = null;
         if (avgCostNow != null) {
-            movementValue = request.quantity().abs()
+            movementValue = qty.abs()
                     .multiply(avgCostNow)
                     .setScale(4, RoundingMode.HALF_UP);
             // sign: decrease → negative, increase → positive (D-2 convention)
-            if (request.quantity().signum() < 0) {
+            if (qty.signum() < 0) {
                 movementValue = movementValue.negate();
             }
         }
@@ -144,16 +177,14 @@ public class StockServiceImpl implements StockService {
 
         // Post where the stock already is; ADR-0028 D-3's branch default only applies on first touch
         // (no on-hand row yet) — which is what a location-unaware caller means by "the branch".
-        Long locationId = sohBefore != null && sohBefore.getLocationId() != null
-                ? sohBefore.getLocationId()
-                : locationResolver.defaultLocationId(product.companyId(), principal.branchId());
+        Long locationId = target.locationId();
 
         String movementUid = posting.post(
                 product.companyId(),
                 principal.branchId(),
                 locationId,
                 product.id(),
-                request.quantity(),
+                qty,
                 MovementType.ADJUSTMENT,
                 null, null, null,
                 request.reasonCode().name(),
@@ -169,7 +200,9 @@ public class StockServiceImpl implements StockService {
                 movement.getId(), movement.getUid())
                 .detail(Map.of(
                         "productUid",  request.productUid(),
-                        "quantity",    request.quantity().toPlainString(),
+                        "quantity",    qty.toPlainString(),
+                        "enteredQty",  request.quantity().toPlainString(),
+                        "enteredUnit", String.valueOf(uom.name()),
                         "reasonCode",  request.reasonCode().name(),
                         "branchId",    String.valueOf(principal.branchId())
                 )));
@@ -182,7 +215,7 @@ public class StockServiceImpl implements StockService {
                 product.companyId(), principal.branchId(), locationId, product.id()).orElse(null);
         if (soh != null) {
             // FOLLOW-001: pass productCode + reasonCode so memo text avoids raw ULID.
-            valuation.revalueAdjustment(movementUid, soh, request.quantity(), LocalDate.now(),
+            valuation.revalueAdjustment(movementUid, soh, qty, calendar.today(product.companyId()),
                     dimTag.costCentreValueId(), dimTag.departmentValueId(),
                     product.code(), request.reasonCode() != null ? request.reasonCode().name() : null);
         }
@@ -195,12 +228,39 @@ public class StockServiceImpl implements StockService {
         RequestContext.Principal principal = RequestContext.get();
         ProductDto product = resolveStockableProduct(request.productUid(), principal);
 
-        // Opening balance is only for a never-tracked (product, active branch).
-        if (onHands.existsByCompanyIdAndBranchIdAndProductId(
+        // Opening balance is only for a never-tracked (product, active branch): no movement of any
+        // kind yet (D-11). STK-17: this used to test for an on-hand ROW, which a sales-order
+        // reservation creates without moving stock, and the screen then claimed "an opening balance
+        // already exists" when none had ever been entered. Say what actually blocks it.
+        if (movements.existsByCompanyIdAndBranchIdAndProductId(
                 product.companyId(), principal.branchId(), product.id())) {
             throw new IllegalStateException(
-                    "An on-hand record already exists for this product at the active branch. " +
-                    "Use an ADJUSTMENT to correct an existing level.");
+                    "This product already has stock activity at this branch (a sale, receipt, "
+                  + "transfer or adjustment), so an opening balance can no longer be entered. "
+                  + "Use Adjust Stock to correct the quantity.");
+        }
+
+        // STK-08 / OPN-01: quantity may be stated in a pack size; posted in base units.
+        StockUnitResolver.Uom uom = unitResolver.resolve(product, request.unitUid());
+        BigDecimal qty = request.quantity().multiply(uom.factorToBase());
+
+        // PRD-07 / LSF-09: the opening cost, per BASE unit. An explicit cost is the operator's
+        // statement and needs the opening-valuation permission: refused up front, before anything
+        // is posted, rather than silently dropped (the bulk sheet's rule). With no cost given, the
+        // product's own cost is used when the caller may value; otherwise the quantity is posted
+        // unvalued, exactly as before.
+        boolean mayValue = permissionResolver.hasPermission(
+                principal, PERM_OPENING_SET, System.currentTimeMillis());
+        BigDecimal baseCost = null;
+        if (request.unitCost() != null) {
+            if (!mayValue) {
+                throw new IllegalArgumentException(
+                        "Setting an opening cost needs the opening-valuation permission. Leave the "
+                      + "cost blank, or ask an administrator to grant it.");
+            }
+            baseCost = request.unitCost().divide(uom.factorToBase(), 4, RoundingMode.HALF_UP);
+        } else if (mayValue) {
+            baseCost = productCost(product);
         }
 
         // ADR-0028 D-3: resolve the branch's default location for location-unaware callers.
@@ -211,22 +271,37 @@ public class StockServiceImpl implements StockService {
                 principal.branchId(),
                 locationId,
                 product.id(),
-                request.quantity(),   // must be positive (validated by @Positive on the DTO)
+                qty,   // positive: @Positive on the DTO, pack factor > 0
                 MovementType.OPENING_BALANCE,
                 null, null, null,
                 null, request.note(),
                 Instant.now(),
                 principal.userId(),
-                null, null);  // cost not set here — use InventoryValuationService.setOpeningValue
+                null, null);  // cost is set below through the one-time opening valuation
 
         StockMovement movement = movements.findByUid(movementUid).orElseThrow();
         audit.record(AuditEvent.of(AuditActions.STOCK_OPENING, "stock_movements",
                 movement.getId(), movement.getUid())
                 .detail(Map.of(
                         "productUid", request.productUid(),
-                        "quantity",   request.quantity().toPlainString(),
+                        "quantity",   qty.toPlainString(),
+                        "enteredQty", request.quantity().toPlainString(),
+                        "enteredUnit", String.valueOf(uom.name()),
                         "branchId",   String.valueOf(principal.branchId())
                 )));
+
+        // Value it in the same transaction (DR Inventory / CR Opening Balance Equity), the way the
+        // bulk stock sheet does. Skipped when the row already carries a cost: the valuation is
+        // one-time per row and is never overwritten.
+        if (baseCost != null) {
+            StockOnHand soh = onHands.findByCompanyIdAndBranchIdAndLocationIdAndProductId(
+                    product.companyId(), principal.branchId(), locationId, product.id()).orElse(null);
+            if (soh != null && soh.getAvgCost() == null
+                    && soh.getOnHandValue().compareTo(BigDecimal.ZERO) == 0) {
+                valuation.setOpeningValue(new SetOpeningValuationRequest(soh.getUid(), baseCost),
+                        calendar.today(product.companyId()));
+            }
+        }
 
         return StockMovementDto.from(movement);
     }
@@ -296,6 +371,8 @@ public class StockServiceImpl implements StockService {
         Page<StockOnHand> page = onHands.findByCompanyIdAndBranchIdAndProductIdIn(
                 principal.companyId(), principal.branchId(), productIds, pageable);
         Map<Long, StockLocation> locationById = locationMap(principal.companyId(), page.getContent());
+        Map<Long, BigDecimal> levels = inheritedReorderLevels(
+                principal.companyId(), page.getContent(), locationById);
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
             StockLocation loc = locationById.get(s.getLocationId());
@@ -303,7 +380,8 @@ public class StockServiceImpl implements StockService {
                     p != null ? p.code() : null,
                     p != null ? p.name() : null,
                     loc != null ? loc.getUid()  : null,
-                    loc != null ? loc.getName() : null);
+                    loc != null ? loc.getName() : null,
+                    levels.get(s.getId()));
         });
     }
 
@@ -348,6 +426,7 @@ public class StockServiceImpl implements StockService {
                         }
                 ));
         Map<Long, StockLocation> locationById = locationMap(companyId, page.getContent());
+        Map<Long, BigDecimal> levels = inheritedReorderLevels(companyId, page.getContent(), locationById);
         return page.map(s -> {
             ProductDto p = productById.get(s.getProductId());
             StockLocation loc = locationById.get(s.getLocationId());
@@ -355,8 +434,41 @@ public class StockServiceImpl implements StockService {
                     p != null ? p.code() : null,
                     p != null ? p.name() : null,
                     loc != null ? loc.getUid()  : null,
-                    loc != null ? loc.getName() : null);
+                    loc != null ? loc.getName() : null,
+                    levels.get(s.getId()));
         });
+    }
+
+    /**
+     * STK-10 / LBO-16: the reorder level each row inherits when it has none of its own — the
+     * product's level for the branch, else the Product Master level — in one query for the page.
+     * An inherited level applies only to a row that holds stock or sits at the branch's default
+     * location (same rule as the reorder report and the LOW_STOCK alert), so the zero row a
+     * received transfer leaves at In-Transit is not flagged Low.
+     */
+    private Map<Long, BigDecimal> inheritedReorderLevels(Long companyId, List<StockOnHand> rows,
+                                                         Map<Long, StockLocation> locationById) {
+        List<Long> ids = rows.stream()
+                .filter(s -> s.getReorderLevel() == null)
+                .filter(s -> {
+                    if (s.getQuantity() != null && s.getQuantity().signum() != 0) {
+                        return true;
+                    }
+                    StockLocation loc = locationById.get(s.getLocationId());
+                    return loc == null || loc.isDefault();
+                })
+                .map(StockOnHand::getId)
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> out = new java.util.HashMap<>();
+        for (Object[] r : onHands.findEffectiveReorderLevels(companyId, ids)) {
+            if (r[0] != null && r[1] != null) {
+                out.put(((Number) r[0]).longValue(), (BigDecimal) r[1]);
+            }
+        }
+        return out;
     }
 
     /**
@@ -393,5 +505,26 @@ public class StockServiceImpl implements StockService {
                     "The selected product is not set up for stock tracking and cannot be used in stock operations.");
         }
         return product;
+    }
+
+    /** " Pieces"-style suffix naming the base unit, or empty when the product has none. */
+    private static String baseUnitSuffix(ProductDto product) {
+        return product.baseUnitName() != null && !product.baseUnitName().isBlank()
+                ? " " + product.baseUnitName() : "";
+    }
+
+    /** The product's own cost per base unit; null when unset, zero or not a number. */
+    private static BigDecimal productCost(ProductDto product) {
+        if (product.cost() == null || product.cost().amount() == null
+                || product.cost().amount().isBlank()) {
+            return null;
+        }
+        try {
+            BigDecimal c = new BigDecimal(product.cost().amount().trim().replace(",", ""));
+            // Zero is "never priced", not "free": valuing at 0 would lock the one-time valuation.
+            return c.signum() > 0 ? c : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

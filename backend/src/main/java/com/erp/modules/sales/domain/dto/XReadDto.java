@@ -43,4 +43,16 @@ public record XReadDto(
         long invoiceCount,
         List<TenderSubtotalDto> tenderSubtotals,
         List<PayoutSubtotalDto> payoutSubtotals
-) {}
+) {
+
+    /**
+     * The same report with {@code expectedCashAmount} withheld (POS-04, blind cash-up). The field
+     * stays in the payload - older clients parse it - but carries null, so a cashier cannot read
+     * what the drawer "should" hold and then count to it.
+     */
+    public XReadDto withoutExpectedCash() {
+        return new XReadDto(sessionUid, posTillId, tillName, cashierId, cashierName, branchId,
+                branchName, openedAt, openingFloatAmount, totalSalesAmount, cashTenderAmount,
+                totalPayoutsNetAmount, null, invoiceCount, tenderSubtotals, payoutSubtotals);
+    }
+}

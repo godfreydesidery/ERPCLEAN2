@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Run a payment run: select all matched/approved/partially-paid bills due on or before
@@ -31,14 +32,29 @@ public record PaymentRunRequest(
         /** Optional: uid of the WhtType to use for WHT_ON_PAYMENT capture (ADR-0017 D-9). */
         String whtTypeUid,
         /** Optional: WHT amount withheld from the supplier for this run (ADR-0017 D-9). */
-        BigDecimal whtAmount
+        BigDecimal whtAmount,
+        /**
+         * AP-07: optional part-payment per named bill, keyed by bill uid. A bill in
+         * {@code billUids} without an entry here is paid in full (the old behaviour). An amount
+         * must be more than zero and no more than the bill's outstanding balance.
+         */
+        Map<String, BigDecimal> billAmounts
 ) {
+    /** Back-compat overload: every named bill paid in full. */
+    public PaymentRunRequest(String companyUid, String supplierUid, LocalDate dueOnOrBefore,
+                             LocalDate paymentDate, String tenderType, String bankReference,
+                             List<String> billUids, String cashBankAccountUid,
+                             String whtTypeUid, BigDecimal whtAmount) {
+        this(companyUid, supplierUid, dueOnOrBefore, paymentDate, tenderType, bankReference,
+                billUids, cashBankAccountUid, whtTypeUid, whtAmount, null);
+    }
+
     /** Back-compat overload: omit cashBankAccountUid → null; no WHT. */
     public PaymentRunRequest(String companyUid, String supplierUid, LocalDate dueOnOrBefore,
                              LocalDate paymentDate, String tenderType, String bankReference,
                              List<String> billUids) {
         this(companyUid, supplierUid, dueOnOrBefore, paymentDate, tenderType, bankReference,
-                billUids, null, null, null);
+                billUids, null, null, null, null);
     }
 
     /** Back-compat overload: include cashBankAccountUid but no WHT. */
@@ -46,6 +62,6 @@ public record PaymentRunRequest(
                              LocalDate paymentDate, String tenderType, String bankReference,
                              List<String> billUids, String cashBankAccountUid) {
         this(companyUid, supplierUid, dueOnOrBefore, paymentDate, tenderType, bankReference,
-                billUids, cashBankAccountUid, null, null);
+                billUids, cashBankAccountUid, null, null, null);
     }
 }

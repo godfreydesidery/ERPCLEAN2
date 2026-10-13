@@ -8,6 +8,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { ChangesInEquityDto, EquityMovementRowDto, ExportFormat } from './models/reporting.model';
 import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -137,7 +138,7 @@ export class ChangesInEquityComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfYear(): string {

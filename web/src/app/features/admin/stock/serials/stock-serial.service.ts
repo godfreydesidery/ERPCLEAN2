@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../../core/api/http-context.tokens';
 import { environment } from '../../../../../environments/environment';
 import { SerialStatus, StockSerialDto } from './stock-serial.model';
 
@@ -34,7 +34,9 @@ export class StockSerialService {
       .set('companyId', companyId)
       .set('productId', productId)
       .set('serialNumber', serialNumber);
-    return this.http.get<StockSerialDto>(`${this.base}/lookup`, { params });
+    // LUI-03: "serial not found" is a 404 the screen renders inline; keep the global modal out.
+    const context = new HttpContext().set(SILENT_ERROR, true);
+    return this.http.get<StockSerialDto>(`${this.base}/lookup`, { params, context });
   }
 
   /** Paged list at a location for a product. All ids are numeric Long ids (strings on wire). */

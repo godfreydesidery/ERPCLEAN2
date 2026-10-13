@@ -7,6 +7,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnLineDto;
 import com.erp.modules.purchases.domain.dto.PurchaseReturnedPayload;
 import com.erp.modules.purchases.domain.entity.GoodsReceipt;
@@ -14,6 +15,7 @@ import com.erp.modules.purchases.domain.entity.GoodsReceiptLine;
 import com.erp.modules.purchases.domain.entity.PurchaseOrder;
 import com.erp.modules.purchases.domain.entity.PurchaseReturn;
 import com.erp.modules.purchases.domain.entity.PurchaseReturnLine;
+import com.erp.modules.purchases.domain.enums.GoodsReceiptStatus;
 import com.erp.modules.purchases.domain.enums.PurchaseReturnStatus;
 import com.erp.modules.purchases.repository.GoodsReceiptLineRepository;
 import com.erp.modules.purchases.repository.GoodsReceiptRepository;
@@ -24,7 +26,10 @@ import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
@@ -40,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +57,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private static final int SCALE = 4;
     private static final RoundingMode RM = RoundingMode.HALF_UP;
     private static final String DEFAULT_CURRENCY = "TZS";
+    /** Scale of every quantity-in-base column ({@code numeric(19,6)}). */
+    private static final int BASE_QTY_SCALE = 6;
+    /** One unit in the last place of a base quantity (see {@link #snapToRemaining}). */
+    private static final BigDecimal BASE_QTY_ULP = new BigDecimal("0.000001");
 
     private final PurchaseReturnRepository     returns;
     private final PurchaseReturnLineRepository returnLines;
@@ -64,6 +74,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final OutboxPublisher              outbox;
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
+    private final PurchaseReturnPrintQuery     printQuery;
+    /** PUR-07 / AP-15: values a foreign-currency return in base at the receipt's own rate. */
+    private final FxDocumentConverter          fxConverter;
+    /** PUR-14: scalar reads of product VAT status and the company VAT rate (no cross-module entity). */
+    private final JdbcTemplate                 jdbc;
+    /** PUR-14: whether the receipt was already billed (AP answers through a purchases-owned port). */
+    private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
+    /** Business dates in the company's zone (owner ruling 2026-10-10). */
+    private final CompanyCalendar              calendar;
 
     public PurchaseReturnServiceImpl(PurchaseReturnRepository returns,
                                      PurchaseReturnLineRepository returnLines,
@@ -76,7 +95,13 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                                      PurchaseNumberGenerator numberGen,
                                      OutboxPublisher outbox,
                                      ScopeGuard scopeGuard,
-                                     AuditService audit) {
+                                     AuditService audit,
+                                     PurchaseReturnPrintQuery printQuery,
+                                     FxDocumentConverter fxConverter,
+                                     JdbcTemplate jdbc,
+                                     com.erp.modules.purchases.domain.dto.ReceiptBillingReader
+                                             billingReader,
+                                     CompanyCalendar calendar) {
         this.returns           = returns;
         this.returnLines       = returnLines;
         this.grRepo            = grRepo;
@@ -89,33 +114,50 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         this.outbox            = outbox;
         this.scopeGuard        = scopeGuard;
         this.audit             = audit;
+        this.printQuery        = printQuery;
+        this.fxConverter       = fxConverter;
+        this.jdbc              = jdbc;
+        this.billingReader     = billingReader;
+        this.calendar          = calendar;
     }
 
     @Override
     public PurchaseReturnDto create(CreatePurchaseReturnRequest req) {
-        Long companyId = companies.findByUid(req.companyUid())
-                .map(c -> c.getId())
+        var company = companies.findByUid(req.companyUid())
                 .orElseThrow(() -> new NotFoundException("Company not found."));
+        Long companyId = company.getId();
         RequestContext.Principal ctx = RequestContext.get();
         scopeGuard.assertCanActIn(ctx, companyId);
-        Long branchId = branchId(ctx);
 
         GoodsReceipt gr = grRepo.findByCompanyIdAndUid(companyId, req.goodsReceiptUid())
                 .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+        // PUR-03: a voided receipt already took its goods back out of stock. Returning against it
+        // would take them out a second time and raise a debit note for goods never kept.
+        assertReturnable(gr);
+        // PUR-09: the goods leave the branch that RECEIVED them, whatever branch the user happens
+        // to be working in — scope from the loaded entity, never from the caller's context.
+        Long branchId = gr.getBranchId();
 
         // Resolve supplier snapshot from the linked PO
         PurchaseOrder po = poRepo.findById(gr.getPurchaseOrderId())
                 .orElseThrow(() -> new NotFoundException("Purchase order not found."));
+
+        // PUR-14: the return is in the ORDER's currency — its values are the receipt's own costs,
+        // which are in that currency. It used to be stamped TZS whatever the order was in.
+        String currency = po.getCurrency() != null
+                ? CurrencyCode.value(po.getCurrency()) : baseCurrencyOf(company);
+        boolean vatRegistered = supplierVatRegistered(companyId, gr.getSupplierId());
 
         String returnNumber = numberGen.nextPurchaseReturn(companyId);
         PurchaseReturn ret = new PurchaseReturn(
                 companyId, branchId, returnNumber,
                 gr.getId(), gr.getUid(),
                 gr.getSupplierId(), po.getSupplierCode(), po.getSupplierName(),
-                req.reason(), DEFAULT_CURRENCY, actorId());
+                req.reason(), currency, actorId());
         ret = returns.save(ret);
 
         BigDecimal netTotal = BigDecimal.ZERO;
+        BigDecimal vatTotal = BigDecimal.ZERO;
         for (var l : req.lines()) {
             GoodsReceiptLine grLine = grLineRepo.findByUid(l.goodsReceiptLineUid())
                     .orElseThrow(() -> new NotFoundException("Goods receipt line not found."));
@@ -124,19 +166,36 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 throw new IllegalArgumentException(
                         "A goods receipt line does not belong to the specified goods receipt.");
             }
-            // Validate return qty doesn't exceed returnable balance
+
+            // PUR-02 / LBO-01: returnedQty is entered in the RECEIPT LINE's unit (a crate when the
+            // line was received in crates), exactly as receivedQty is on the receipt itself. The
+            // stock ledger, the over-return guard and the moving average all work in BASE units,
+            // so convert once, with the line's own factor, before anything else touches it.
             BigDecimal alreadyReturned = returnLines.sumReturnedQtyInBaseForGrLine(grLine.getId());
-            BigDecimal maxReturnable = grLine.getQtyInBase().subtract(
+            BigDecimal remainingBase = grLine.getQtyInBase().subtract(
                     alreadyReturned != null ? alreadyReturned : BigDecimal.ZERO);
-            if (l.returnedQty().compareTo(maxReturnable) > 0) {
+            BigDecimal qtyInBase = snapToRemaining(toBaseQty(l.returnedQty(), grLine), remainingBase);
+            if (qtyInBase.signum() <= 0) {
                 throw new IllegalArgumentException(
-                        "The return quantity exceeds the remaining returnable quantity for one of the lines. "
-                                + "Maximum returnable: " + maxReturnable + ".");
+                        "The return quantity for " + grLine.getProductName()
+                                + " is too small to record. Enter a larger quantity and try again.");
+            }
+            // LBO-02: compare base with base. The old check compared crates against bottles.
+            if (qtyInBase.compareTo(remainingBase) > 0) {
+                log.warn("Over-return rejected on GR line id={}: returnedQty={} -> qtyInBase={}, "
+                                + "remainingBase={}", grLine.getId(), l.returnedQty(), qtyInBase,
+                        remainingBase);
+                throw new IllegalArgumentException(
+                        "You can return at most " + displayQty(fromBaseQty(remainingBase.max(BigDecimal.ZERO), grLine))
+                                + " " + grLine.getUnitName() + " of " + grLine.getProductName()
+                                + " on this receipt.");
             }
 
             short lineNo = (short) (returnLines.findMaxLineNo(ret.getId()) + 1);
-            BigDecimal lineValue = grLine.getUnitCostAmount().multiply(l.returnedQty())
-                    .setScale(SCALE, RM);
+            // Value at the receipt's own cost for exactly the base quantity leaving stock — the same
+            // per-base cost the receipt put INTO the moving average (GoodsReceiptServiceImpl
+            // .baseUnitCost), so a return backs out what the receipt added, no more and no less.
+            BigDecimal lineValue = returnValue(qtyInBase, l.returnedQty(), grLine);
 
             PurchaseReturnLine retLine = new PurchaseReturnLine(
                     ret.getId(),
@@ -144,15 +203,19 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     companyId, branchId, lineNo,
                     grLine.getProductId(), grLine.getProductCode(), grLine.getProductName(),
                     grLine.getUnitId(), grLine.getUnitName(),
-                    l.returnedQty(), l.returnedQty(),   // returned_qty_in_base = returned_qty (base UoM)
+                    l.returnedQty(), qtyInBase,   // returned_qty in the line's unit; in base for stock
                     grLine.getUnitCostAmount(), lineValue,
-                    DEFAULT_CURRENCY, actorId());
+                    currency, actorId());
             returnLines.save(retLine);
             netTotal = netTotal.add(lineValue);
+            if (vatRegistered) {
+                vatTotal = vatTotal.add(lineVat(lineValue, grLine.getId()));
+            }
         }
 
         ret.setNetAmount(netTotal.setScale(SCALE, RM));
-        ret.setGrossAmount(netTotal.setScale(SCALE, RM));
+        ret.setVatAmount(vatTotal.setScale(SCALE, RM));
+        ret.setGrossAmount(netTotal.add(vatTotal).setScale(SCALE, RM));
         ret.setUpdatedAt(Instant.now());
         ret.setUpdatedBy(actorId());
 
@@ -178,49 +241,110 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PurchaseReturnPrintDto printByUid(String uid) {
+        return printQuery.byUid(uid);
+    }
+
+    @Override
     public PurchaseReturnDto confirm(String uid) {
         PurchaseReturn ret = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), ret.getCompanyId());
         if (ret.getStatus() != PurchaseReturnStatus.DRAFT) {
-            throw new IllegalStateException(
-                    "Can only confirm a DRAFT purchase return; current: " + ret.getStatus());
+            throw new IllegalStateException("This purchase return has already been confirmed.");
         }
+
+        // PUR-03: the receipt may have been voided after this draft was raised.
+        GoodsReceipt gr = grRepo.findByCompanyIdAndUid(ret.getCompanyId(), ret.getGoodsReceiptUid())
+                .orElseThrow(() -> new NotFoundException("Goods receipt not found."));
+        assertReturnable(gr);
 
         List<PurchaseReturnLine> lines = returnLines.findByPurchaseReturnIdOrderByLineNo(ret.getId());
         if (lines.isEmpty()) {
             throw new IllegalStateException("Cannot confirm a purchase return with no lines.");
         }
 
+        // PUR-07 / PUR-14: the return's values are the receipt's costs, in the ORDER's currency.
+        // Stock and GL are base, so the stock leg is converted at the RECEIPT's date — backing out
+        // exactly what the receipt put in — while the debit note stays in the supplier's currency.
+        PurchaseOrder po = poRepo.findByCompanyIdAndId(ret.getCompanyId(), gr.getPurchaseOrderId())
+                .orElse(null);
+        var company = companies.findById(ret.getCompanyId()).orElse(null);
+        String baseCurrency = baseCurrencyOf(company);
+        String docCurrency = po != null && po.getCurrency() != null
+                ? CurrencyCode.value(po.getCurrency()) : baseCurrency;
+        LocalDate receiptDate = gr.getReceivedAt() != null
+                ? receiptFxDate(ret.getCompanyId(), gr.getReceivedAt()) : null;
+
         // Build outbox payload and update GR line returned_qty_in_base
         List<PurchaseReturnedPayload.ReturnLine> payloadLines = new ArrayList<>();
-        BigDecimal totalReturnValue = BigDecimal.ZERO;
+        BigDecimal totalReturnValue = BigDecimal.ZERO;   // face, order currency (debit note)
+        BigDecimal totalBaseValue   = BigDecimal.ZERO;   // base, receipt rate (stock + GRNI)
+        List<String> grLineUids     = new ArrayList<>();
 
         for (PurchaseReturnLine line : lines) {
             totalReturnValue = totalReturnValue.add(line.getLineValueAmount());
+            if (line.getGoodsReceiptLineUid() != null) {
+                grLineUids.add(line.getGoodsReceiptLineUid());
+            }
 
             // RE-VALIDATE before update (BR-PROC-10 guard against concurrent confirms).
             // Also performs the increment under the same lock — prevents over-return race.
-            grLineRepo.findById(line.getGoodsReceiptLineId()).ifPresent(grLine -> {
-                BigDecimal current = grLine.getReturnedQtyInBase() != null
-                        ? grLine.getReturnedQtyInBase() : BigDecimal.ZERO;
-                BigDecimal newTotal = current.add(line.getReturnedQtyInBase());
-                if (newTotal.compareTo(grLine.getQtyInBase()) > 0) {
-                    // BR-PROC-10: total returned quantity cannot exceed the original receipted quantity
-                    throw new IllegalArgumentException(
-                            "The return quantity cannot exceed the original receipted quantity for this line. "
-                            + "Already returned: " + current + ", receipted: " + grLine.getQtyInBase()
-                            + ", requested additional: " + line.getReturnedQtyInBase() + ".");
-                }
-                grLine.setReturnedQtyInBase(newTotal);
-                grLineRepo.save(grLine);
-            });
+            GoodsReceiptLine grLine = grLineRepo.findById(line.getGoodsReceiptLineId())
+                    .orElseThrow(() -> new NotFoundException("Goods receipt line not found."));
 
+            // PUR-02: a draft saved before returns were converted from the line's unit carries
+            // returned_qty_in_base = returned_qty even on a crate line. Confirming it would post a
+            // quantity nobody can vouch for (did the clerk mean crates or bottles?), so refuse it
+            // rather than guess. A base-unit line converts to itself and is unaffected.
+            BigDecimal expectedBase = toBaseQty(line.getReturnedQty(), grLine);
+            if (line.getReturnedQtyInBase() == null
+                    || expectedBase.subtract(line.getReturnedQtyInBase()).abs().compareTo(BASE_QTY_ULP) > 0) {
+                log.warn("Purchase return {} line grLineId={} holds a stale base quantity: returnedQty={}, "
+                                + "stored qtyInBase={}, expected={}", ret.getReturnNumber(),
+                        grLine.getId(), line.getReturnedQty(), line.getReturnedQtyInBase(), expectedBase);
+                throw new IllegalStateException(
+                        "This draft return was recorded before pack quantities were converted, so "
+                                + "its quantities can't be trusted. Create a new return for these goods.");
+            }
+
+            BigDecimal current = grLine.getReturnedQtyInBase() != null
+                    ? grLine.getReturnedQtyInBase() : BigDecimal.ZERO;
+            BigDecimal newTotal = current.add(line.getReturnedQtyInBase());
+            if (newTotal.compareTo(grLine.getQtyInBase()) > 0) {
+                // BR-PROC-10: total returned quantity cannot exceed the original receipted quantity.
+                // Internal figures go to the log; the user gets the remainder in the line's unit.
+                log.warn("Over-return rejected at confirm on GR line id={}: alreadyReturnedBase={}, "
+                                + "receivedBase={}, requestedBase={}", grLine.getId(), current,
+                        grLine.getQtyInBase(), line.getReturnedQtyInBase());
+                BigDecimal remaining = grLine.getQtyInBase().subtract(current).max(BigDecimal.ZERO);
+                throw new IllegalArgumentException(
+                        "The return quantity cannot exceed the original receipted quantity for this line. "
+                                + "You can still return at most "
+                                + displayQty(fromBaseQty(remaining, grLine)) + " "
+                                + grLine.getUnitName() + " of " + grLine.getProductName() + ".");
+            }
+            grLine.setReturnedQtyInBase(newTotal);
+            grLineRepo.save(grLine);
+
+            // The stock handler pairs unitCostAmount with the BASE quantity on the movement row, so
+            // send the cost of one base unit, not the receipt line's per-pack cost.
+            BigDecimal baseValue = toBase(line.getLineValueAmount(), docCurrency, baseCurrency,
+                    ret.getCompanyId(), receiptDate);
+            totalBaseValue = totalBaseValue.add(baseValue);
             payloadLines.add(new PurchaseReturnedPayload.ReturnLine(
                     line.getGoodsReceiptLineId(), line.getGoodsReceiptLineUid(),
                     line.getProductId(),
-                    line.getReturnedQtyInBase(), line.getUnitCostAmount(),
-                    line.getLineValueAmount()));
+                    line.getReturnedQtyInBase(),
+                    perBaseUnitCost(baseValue, line.getReturnedQtyInBase()),
+                    baseValue));
         }
+
+        // PUR-14: say whether the receipt had already been billed (it used to be hard-coded false).
+        // The GL no longer depends on it — the debit note credits GRNI either way, see below — but
+        // the event is the record of what was returned against what.
+        boolean billed = !grLineUids.isEmpty()
+                && !billingReader.billsClaimingReceiptLines(ret.getCompanyId(), grLineUids).isEmpty();
 
         ret.setStatus(PurchaseReturnStatus.CONFIRMED);
         ret.setConfirmedAt(Instant.now());
@@ -228,41 +352,58 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         ret.setUpdatedAt(Instant.now());
         ret.setUpdatedBy(actorId());
 
-        // Publish outbox: stock handler reverses qty + posts DR GRNI / CR INVENTORY (ADR-0027 D-7).
-        // billed=false is the conservative default: GRNI path is always correct for not-yet-billed
-        // receipts (the common case).  When the receipt WAS billed before the return, the GRNI
-        // re-open is a known accepted imprecision (ADR-0027 OQ-RETURN-GL); the AP debit note raised
-        // below reduces the payable regardless.
+        // Publish outbox: stock handler reverses qty + posts DR GRNI / CR INVENTORY (ADR-0027 D-7),
+        // in BASE currency. The debit note below credits GRNI with the same base amount, so the pair
+        // nets to DR AP / CR Inventory in both the billed and the unbilled case (AP-15 / LBO-09).
+        // PUR-09: stock and GL post at the RECEIPT's branch. A draft raised before this fix carries
+        // the raiser's branch on its header; the receipt is the authority for where the goods are.
+        Long stockBranchId = gr.getBranchId();
         PurchaseReturnedPayload payload = new PurchaseReturnedPayload(
-                ret.getUid(), ret.getCompanyId(), ret.getBranchId(),
-                totalReturnValue, DEFAULT_CURRENCY, false, payloadLines,
+                ret.getUid(), ret.getCompanyId(), stockBranchId,
+                totalBaseValue, baseCurrency, billed, payloadLines,
                 ret.getReturnNumber());
         outbox.publish(DomainEventType.PURCHASE_RETURNED,
                 DomainEventType.AGG_PURCHASE_RETURN,
                 ret.getId(), ret.getUid(),
-                ret.getCompanyId(), ret.getBranchId(), payload);
+                ret.getCompanyId(), stockBranchId, payload);
 
-        // Raise AP debit note synchronously in this TX (ADR-0027 D-7 step 4).
-        // DR AP / CR Purchases to reduce the supplier payable for the returned goods.
+        // Raise AP debit note synchronously in this TX (ADR-0027 D-7 step 4), in the order's
+        // currency: DR AP / CR GRNI [+ CR input VAT] — see ApDebitNoteService#raiseForPurchaseReturn.
         if (totalReturnValue.signum() > 0) {
-            String companyUid = companies.findById(ret.getCompanyId())
-                    .orElseThrow(() -> new NotFoundException("Company not found."))
-                    .getUid();
-            String supplierUid = suppliers.findById(ret.getSupplierId())
-                    .orElseThrow(() -> new NotFoundException("Supplier not found."))
-                    .getUid();
+            if (company == null) {
+                throw new NotFoundException("Company not found.");
+            }
+            String companyUid = company.getUid();
+            var supplier = suppliers.findById(ret.getSupplierId())
+                    .orElseThrow(() -> new NotFoundException("Supplier not found."));
+            String supplierUid = supplier.getUid();
+
+            // PUR-14 / LBO-10: a VAT-registered supplier charged VAT on these goods, so its credit
+            // note reverses that VAT too — otherwise input VAT stays over-claimed and the supplier's
+            // statement never agrees. Rate from each product's VAT status at the company rate.
+            BigDecimal vatTotal = BigDecimal.ZERO;
+            if (supplier.isVatRegistered()) {
+                for (PurchaseReturnLine line : lines) {
+                    vatTotal = vatTotal.add(lineVat(line.getLineValueAmount(),
+                            line.getGoodsReceiptLineId()));
+                }
+            }
+            vatTotal = vatTotal.setScale(SCALE, RM);
+            ret.setVatAmount(vatTotal);
+            ret.setGrossAmount(totalReturnValue.add(vatTotal).setScale(SCALE, RM));
 
             RaiseDebitNoteRequest debitNoteReq = new RaiseDebitNoteRequest(
                     companyUid,
                     supplierUid,
                     null,                                // no specific bill — general supplier credit
-                    LocalDate.now(),
+                    calendar.today(ret.getCompanyId()),
                     totalReturnValue,
-                    BigDecimal.ZERO,                     // no VAT on the goods cost reversal
+                    vatTotal,
                     "Purchase return " + ret.getReturnNumber() + " [" + ret.getUid() + "]: " + ret.getReason(),
                     "PURCHASE_RETURN");                  // origin matches CHECK constraint in ap_debit_notes
 
-            ApDebitNoteDto debitNote = apDebitNoteService.raise(debitNoteReq);
+            ApDebitNoteDto debitNote = apDebitNoteService.raiseForPurchaseReturn(
+                    debitNoteReq, docCurrency, totalBaseValue);
             ret.setDebitNoteUid(debitNote.uid());
             log.info("Purchase return {} confirmed; AP debit note {} raised (uid={}).",
                     ret.getReturnNumber(), debitNote.debitNoteNumber(), debitNote.uid());
@@ -273,6 +414,146 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 .detail(Map.of("returnNumber", ret.getReturnNumber(),
                         "totalReturnValue", totalReturnValue.toPlainString())));
         return toDto(ret);
+    }
+
+    // -------------------------------------------------------------------------
+    // Currency + VAT (PUR-07 / PUR-14)
+    // -------------------------------------------------------------------------
+
+    private static String baseCurrencyOf(com.erp.modules.iam.domain.entity.Company company) {
+        String base = company != null ? company.getBaseCurrency() : null;
+        return base != null && !base.isBlank() ? base : DEFAULT_CURRENCY;
+    }
+
+    private boolean supplierVatRegistered(Long companyId, Long supplierId) {
+        return supplierId != null && suppliers
+                .findByCompanyIdAndIdIn(companyId, List.of(supplierId)).stream()
+                .findFirst().map(s -> s.isVatRegistered()).orElse(false);
+    }
+
+    /**
+     * {@code value} in base at the receipt's date. A base-currency value is returned unchanged (no
+     * rate lookup, no rounding) — byte-identical to the pre-FX path.
+     */
+    private BigDecimal toBase(BigDecimal value, String docCurrency, String baseCurrency,
+                              Long companyId, LocalDate receiptDate) {
+        if (value == null || docCurrency == null || docCurrency.equals(baseCurrency)
+                || receiptDate == null) {
+            return value;
+        }
+        return fxConverter.toBase(value, docCurrency, companyId, receiptDate).baseAmount();
+    }
+
+    /**
+     * VAT on a returned line: its value x the company rate for the product's VAT status, read as
+     * scalars (the same join the GRN print uses). Zero-rated, exempt, or no configured rate: 0.
+     */
+    private BigDecimal lineVat(BigDecimal lineValue, Long grLineId) {
+        if (lineValue == null || lineValue.signum() <= 0 || grLineId == null) {
+            return BigDecimal.ZERO;
+        }
+        List<BigDecimal> rates = jdbc.queryForList(
+                "SELECT tr.rate FROM goods_receipt_lines grl "
+                        + "JOIN products p ON p.id = grl.product_id "
+                        + "JOIN tax_rates tr ON tr.company_id = grl.company_id "
+                        + "AND tr.vat_status = p.vat_status AND tr.status = 'ACTIVE' "
+                        + "WHERE grl.id = ? AND p.vat_status = 'STANDARD'",
+                BigDecimal.class, grLineId);
+        BigDecimal rate = rates.isEmpty() ? null : rates.get(0);
+        if (rate == null || rate.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return lineValue.multiply(rate).setScale(SCALE, RM);
+    }
+
+    /** Same date derivation as the receipt itself (GoodsReceiptServiceImpl.receiptFxDate). */
+    private LocalDate receiptFxDate(Long companyId, Instant receivedAt) {
+        return calendar.dateOf(companyId, receivedAt);
+    }
+
+    /** PUR-03: goods can only go back to the supplier from a receipt that still stands. */
+    private static void assertReturnable(GoodsReceipt gr) {
+        if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
+            throw new IllegalStateException(
+                    "Goods can only be returned against a received goods receipt. "
+                            + "This receipt has been voided.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit conversion (PUR-02 / LBO-01 / LBO-02)
+    // -------------------------------------------------------------------------
+
+    /**
+     * A quantity in the receipt line's unit, in base units — {@code qty × qtyInBase ÷ receivedQty}.
+     * One multiplication and one rounding step, the same shape {@code GoodsReceiptServiceImpl}
+     * uses to convert the receipt itself, so a full return lands exactly on the received base qty.
+     * A line without a usable received qty (never written by the service) is treated as base.
+     */
+    static BigDecimal toBaseQty(BigDecimal qty, GoodsReceiptLine grLine) {
+        if (qty == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal received = grLine.getReceivedQty();
+        BigDecimal base     = grLine.getQtyInBase();
+        if (received == null || received.signum() <= 0 || base == null) {
+            return qty.setScale(BASE_QTY_SCALE, RM);
+        }
+        return qty.multiply(base).divide(received, BASE_QTY_SCALE, RM);
+    }
+
+    /** The inverse of {@link #toBaseQty}: base units back into the receipt line's unit. */
+    static BigDecimal fromBaseQty(BigDecimal baseQty, GoodsReceiptLine grLine) {
+        BigDecimal received = grLine.getReceivedQty();
+        BigDecimal base     = grLine.getQtyInBase();
+        if (received == null || base == null || base.signum() <= 0) {
+            return baseQty;
+        }
+        return baseQty.multiply(received).divide(base, BASE_QTY_SCALE, RM);
+    }
+
+    /**
+     * Snap a conversion that lands at most one ULP above the remainder onto it — returning the
+     * whole of a line received in a pack whose factor does not divide evenly must not read as an
+     * over-return (K4, the same artefact the receipt path absorbs).
+     */
+    static BigDecimal snapToRemaining(BigDecimal qtyInBase, BigDecimal remainingBase) {
+        if (remainingBase.signum() > 0
+                && qtyInBase.compareTo(remainingBase) > 0
+                && qtyInBase.subtract(remainingBase).compareTo(BASE_QTY_ULP) <= 0) {
+            return remainingBase;
+        }
+        return qtyInBase;
+    }
+
+    /**
+     * Value of {@code qtyInBase} at the receipt line's own cost: {@code lineCost × qtyInBase ÷
+     * receivedBase}. Falls back to the per-line-unit cost × entered qty only for a line with no
+     * stored total (never written by the service, kept defensive).
+     */
+    static BigDecimal returnValue(BigDecimal qtyInBase, BigDecimal returnedQty, GoodsReceiptLine grLine) {
+        BigDecimal lineCost = grLine.getLineCostAmount();
+        BigDecimal base     = grLine.getQtyInBase();
+        if (lineCost != null && base != null && base.signum() > 0) {
+            return lineCost.multiply(qtyInBase).divide(base, SCALE, RM);
+        }
+        BigDecimal unitCost = grLine.getUnitCostAmount() != null
+                ? grLine.getUnitCostAmount() : BigDecimal.ZERO;
+        return unitCost.multiply(returnedQty).setScale(SCALE, RM);
+    }
+
+    /** Cost of one base unit for the stock movement row; zero for a defensive zero quantity. */
+    static BigDecimal perBaseUnitCost(BigDecimal value, BigDecimal qtyInBase) {
+        if (value == null || qtyInBase == null || qtyInBase.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return value.divide(qtyInBase, SCALE, RM);
+    }
+
+    /** A quantity for a user-facing message: no trailing zeros, no exponent. */
+    static String displayQty(BigDecimal qty) {
+        BigDecimal stripped = qty.stripTrailingZeros();
+        return (stripped.scale() < 0 ? stripped.setScale(0) : stripped).toPlainString();
     }
 
     // -------------------------------------------------------------------------
@@ -291,11 +572,5 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private Long actorId() {
         RequestContext.Principal p = RequestContext.get();
         return p != null ? p.userId() : null;
-    }
-
-    private Long branchId(RequestContext.Principal ctx) {
-        Long id = ctx != null ? ctx.branchId() : null;
-        if (id == null) throw new IllegalStateException("No active branch in context.");
-        return id;
     }
 }

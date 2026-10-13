@@ -20,6 +20,7 @@ import com.erp.modules.documents.repository.GeneratedDocumentRepository;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptPrintDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderDto;
 import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
 import com.erp.modules.purchases.service.GoodsReceiptService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.modules.reporting.export.PdfStatementRenderer;
@@ -281,6 +282,21 @@ public class DocumentRenderServiceImpl implements DocumentRenderService {
                 .orElseThrow(() -> new NotFoundException("Generated document not found."));
         scopeGuard.assertCanActIn(principal, gd.getCompanyId());
         return GeneratedDocumentDto.from(gd);
+    }
+
+    // -------------------------------------------------------------------------
+    // renderPurchaseReturn — stream-only (no log row, no event)
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] renderPurchaseReturn(PurchaseReturnPrintDto printModel) {
+        scopeGuard.assertCanActIn(RequestContext.get(), printModel.companyId());
+        // Keyed on the return's own company, never a caller-supplied id.
+        DocumentBranding branding = brandings.findByCompanyId(printModel.companyId()).orElse(null);
+        DocumentRenderModel model = modelBuilder.buildPurchaseReturn(
+                printModel, branding, currentUserDisplayName(), Instant.now());
+        return pdfRenderer.render(model);
     }
 
     // -------------------------------------------------------------------------

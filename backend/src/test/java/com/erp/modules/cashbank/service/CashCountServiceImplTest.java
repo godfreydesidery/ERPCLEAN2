@@ -1,5 +1,6 @@
 package com.erp.modules.cashbank.service;
 
+import com.erp.modules.sales.service.SaleTenderAccountQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -25,7 +26,9 @@ import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.gl.domain.dto.JournalEntryDraft;
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
 import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.entity.GlConfig;
 import com.erp.modules.gl.domain.enums.GlConfigKey;
+import com.erp.modules.gl.repository.GlConfigRepository;
 import com.erp.modules.gl.service.GLConfigResolver;
 import com.erp.modules.gl.service.GLPostingService;
 import com.erp.modules.iam.domain.entity.Company;
@@ -61,11 +64,15 @@ class CashCountServiceImplTest {
     private CashBankAccountRepository accounts;
     private CashTransactionRepository txns;
     private CompanyRepository companies;
+    private GlConfigRepository glConfigs;
     private CashBankNumberGenerator numbers;
     private GLConfigResolver glConfig;
     private GLPostingService glPosting;
     private ScopeGuard scopeGuard;
     private AuditService audit;
+    private SaleTenderAccountQuery saleTenderAccounts;
+    private CashBookGoLive goLive;
+    private com.erp.modules.gl.repository.JournalLineRepository journalLines;
     private CashCountServiceImpl service;
 
     @BeforeEach
@@ -75,11 +82,17 @@ class CashCountServiceImplTest {
         accounts      = mock(CashBankAccountRepository.class);
         txns          = mock(CashTransactionRepository.class);
         companies     = mock(CompanyRepository.class);
+        glConfigs     = mock(GlConfigRepository.class);
         numbers       = mock(CashBankNumberGenerator.class);
         glConfig      = mock(GLConfigResolver.class);
         glPosting     = mock(GLPostingService.class);
         scopeGuard    = mock(ScopeGuard.class);
         audit         = mock(AuditService.class);
+        saleTenderAccounts = mock(SaleTenderAccountQuery.class);
+        goLive        = mock(CashBookGoLive.class);
+        journalLines  = mock(com.erp.modules.gl.repository.JournalLineRepository.class);
+        // The cash book has carried sales since 1 Jul 2026 (V106 applied then).
+        when(goLive.since()).thenReturn(Optional.of(java.time.Instant.parse("2026-07-01T06:00:00Z")));
 
         when(numbers.nextCashCount(anyLong())).thenReturn("CC-0001");
         when(numbers.nextTransaction(anyLong())).thenReturn("CBTX-0001");
@@ -87,7 +100,10 @@ class CashCountServiceImplTest {
         when(denominations.findByCashCountIdOrderByDenominationDesc(any())).thenReturn(List.of());
 
         service = new CashCountServiceImpl(counts, denominations, accounts, txns, companies,
-                numbers, glConfig, glPosting, scopeGuard, audit);
+                glConfigs, numbers, glConfig, glPosting, scopeGuard, audit, saleTenderAccounts,
+                goLive, journalLines,
+                com.erp.platform.common.time.CompanyCalendar.fixed(
+                        java.time.ZoneId.of("Africa/Dar_es_Salaam"), java.time.Clock.systemUTC()));
 
         RequestContext.set(new RequestContext.Principal(99L, "cashier", false, 1L, 5L, null));
     }
@@ -317,6 +333,8 @@ class CashCountServiceImplTest {
         CashCount count = countedCount(1L, 5L, 10L,
                 new BigDecimal("1000"), new BigDecimal("1000"), BigDecimal.ZERO);
         when(counts.findByUid("U6")).thenReturn(Optional.of(count));
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L);
+        when(accounts.findByCompanyIdAndId(1L, 10L)).thenReturn(Optional.of(till));
 
         CashCountDto dto = service.reconcile("U6");
 
@@ -349,6 +367,107 @@ class CashCountServiceImplTest {
         assertThatThrownBy(() -> service.reconcile("U8"))
                 .isInstanceOf(ConflictException.class);
         verify(glPosting, never()).post(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // ARC-01: the cash account that cash sales post to cannot be counted here
+    // -------------------------------------------------------------------------
+
+    @Test
+    void open_onTheSalesCashAccount_forADayBeforeTheCashBookCarriedSales_refused() {
+        Company company = mockCompany(1L, "TZS");
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L); // GL 100
+        when(companies.findByUid("CO1")).thenReturn(Optional.of(company));
+        when(accounts.findByCompanyIdAndUid(1L, "TILL1")).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 100L);
+
+        // That day's sales are in the GL only, so its book balance cannot be the drawer.
+        assertThatThrownBy(() -> service.open(
+                new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 6, 30))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("1 Jul 2026");
+        verify(counts, never()).save(any());
+    }
+
+    @Test
+    void open_onTheSalesCashAccount_afterGoLive_expectedIsBookPlusTheFrozenPreGoLiveGap() {
+        // ARC-01 / ARC-08: sales now reach the cash book, so the count is allowed. The GL carried
+        // 5,000,000 of historic takings the cash book never saw (book 200,000 at go-live): that
+        // gap is added once, so the first count does not book it as cash over.
+        Company company = mockCompany(1L, "TZS");
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L); // GL 100
+        when(companies.findByUid("CO1")).thenReturn(Optional.of(company));
+        when(accounts.findByCompanyIdAndUid(1L, "TILL1")).thenReturn(Optional.of(till));
+        when(accounts.findByCompanyIdAndId(1L, 10L)).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 100L);
+        java.time.Instant since = java.time.Instant.parse("2026-07-01T06:00:00Z");
+        when(txns.bookBalanceAsOf(10L, LocalDate.of(2026, 7, 4))).thenReturn(new BigDecimal("950000"));
+        when(journalLines.accountBalancePostedBefore(1L, 100L, since)).thenReturn(new BigDecimal("5000000"));
+        when(txns.bookBalanceWrittenBefore(10L, since)).thenReturn(new BigDecimal("200000"));
+
+        CashCountDto dto = service.open(
+                new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 7, 4)));
+
+        assertThat(dto.status()).isEqualTo(CashCountStatus.OPEN);
+        assertThat(dto.expectedAmount()).isEqualByComparingTo("5750000");
+    }
+
+    @Test
+    void open_onASeparateTill_stillAllowed_plainBookBalance() {
+        Company company = mockCompany(1L, "TZS");
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L); // GL 100
+        when(companies.findByUid("CO1")).thenReturn(Optional.of(company));
+        when(accounts.findByCompanyIdAndUid(1L, "TILL1")).thenReturn(Optional.of(till));
+        when(accounts.findByCompanyIdAndId(1L, 10L)).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 200L);
+        when(txns.bookBalanceAsOf(10L, LocalDate.of(2026, 6, 4))).thenReturn(new BigDecimal("300"));
+
+        CashCountDto dto = service.open(
+                new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 6, 4)));
+
+        assertThat(dto.status()).isEqualTo(CashCountStatus.OPEN);
+        assertThat(dto.expectedAmount()).isEqualByComparingTo("300");
+        verify(journalLines, never()).accountBalancePostedBefore(any(), any(), any());
+    }
+
+    @Test
+    void open_onATillThatTakesSaleTenders_forADayBeforeGoLive_refused() {
+        Company company = mockCompany(1L, "TZS");
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L); // GL 100
+        when(companies.findByUid("CO1")).thenReturn(Optional.of(company));
+        when(accounts.findByCompanyIdAndUid(1L, "TILL1")).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 200L);
+        when(saleTenderAccounts.takesSaleTenders(1L, 10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.open(
+                new OpenCashCountRequest("CO1", "TILL1", LocalDate.of(2026, 6, 4))))
+                .isInstanceOf(ConflictException.class);
+        verify(counts, never()).save(any());
+    }
+
+    @Test
+    void reconcile_salesAccountCountStartedBeforeGoLive_refused_noGlPost() {
+        // A count opened before the cash book carried sales derived "expected" without them.
+        when(goLive.since()).thenReturn(Optional.of(java.time.Instant.now().plusSeconds(3600)));
+        CashCount count = countedCount(1L, 5L, 10L,
+                BigDecimal.ZERO, new BigDecimal("2000000"), new BigDecimal("2000000"));
+        when(counts.findByUid("U9")).thenReturn(Optional.of(count));
+        CashBankAccount till = mockTill(10L, CashBankAccountType.CASH, true, 5L);
+        when(accounts.findByCompanyIdAndId(1L, 10L)).thenReturn(Optional.of(till));
+        salesCashGlIs(1L, 100L);
+
+        assertThatThrownBy(() -> service.reconcile("U9"))
+                .isInstanceOf(ConflictException.class);
+        verify(glPosting, never()).post(any());
+        verify(txns, never()).save(any());
+        assertThat(count.getStatus()).isEqualTo(CashCountStatus.COUNTED);
+    }
+
+    private void salesCashGlIs(Long companyId, Long glAccountId) {
+        GlConfig cfg = mock(GlConfig.class);
+        when(cfg.getAccountId()).thenReturn(glAccountId);
+        when(glConfigs.findByCompanyIdAndConfigKey(companyId, GlConfigKey.CASH))
+                .thenReturn(Optional.of(cfg));
     }
 
     // -------------------------------------------------------------------------

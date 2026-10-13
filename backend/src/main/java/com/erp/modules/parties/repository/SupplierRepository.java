@@ -16,6 +16,13 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
 
     Optional<Supplier> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /**
+     * Company-scoped batch lookup by internal id — for resolving the suppliers a page of AP
+     * documents points at in one query (AP-28: a bill must carry its supplier's uid so "Pay" can
+     * open the payment screen on the right supplier).
+     */
+    List<Supplier> findByCompanyIdAndIdIn(Long companyId, Collection<Long> ids);
+
     boolean existsByCompanyIdAndCode(Long companyId, String code);
 
     /** Resolve a supplier by its (system-generated) code within a company (bulk import upsert). */
@@ -43,4 +50,16 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
     @Query("SELECT s.uid FROM Supplier s WHERE s.companyId = :companyId AND s.id IN :ids")
     List<String> findUidsByCompanyIdAndIdIn(@Param("companyId") Long companyId,
                                             @Param("ids") Collection<Long> ids);
+
+    /** PRD-12 bulk re-upload: parties in the company carrying this TIN (case/space-insensitive). */
+    @Query("SELECT s FROM Supplier s WHERE s.companyId = :companyId "
+            + "AND UPPER(TRIM(s.tin)) = UPPER(TRIM(:tin))")
+    java.util.List<Supplier> findByCompanyIdAndNormalizedTin(@Param("companyId") Long companyId,
+                                                       @Param("tin") String tin);
+
+    /** PRD-12 bulk re-upload: parties in the company with this display name (case-insensitive, trimmed). */
+    @Query("SELECT s FROM Supplier s WHERE s.companyId = :companyId "
+            + "AND LOWER(TRIM(s.displayName)) = LOWER(TRIM(:name))")
+    java.util.List<Supplier> findByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                                        @Param("name") String name);
 }

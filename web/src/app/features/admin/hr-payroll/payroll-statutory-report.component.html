@@ -48,6 +48,94 @@
       </div>
     </div>
 
+    <!-- ACC-07: pay what is owed to TRA / NSSF / WCF / HESLB (DR liability / CR bank) -->
+    @if (canPay()) {
+      <div class="erp-card mb-3">
+        <div class="erp-card__head">
+          <h2>Statutory payments</h2>
+        </div>
+        <div class="erp-card__body">
+          @if (outstandingState() === 'loading') {
+            <p class="text-muted small mb-0" aria-live="polite">Loading balances…</p>
+          } @else if (outstandingState() === 'error') {
+            <p class="text-danger small mb-0" role="alert">Could not load what is still owed.</p>
+          } @else {
+            <div class="erp-table-wrap">
+              <table class="erp-table" aria-label="Statutory liabilities still owed">
+                <thead>
+                  <tr>
+                    <th scope="col">Liability</th>
+                    <th scope="col">Account</th>
+                    <th scope="col" class="num">Still owed</th>
+                    <th scope="col"><span class="visually-hidden">Action</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of outstanding(); track row.liability) {
+                    <tr>
+                      <td>{{ row.liability }}</td>
+                      <td>{{ row.accountCode }} — {{ row.accountName }}</td>
+                      <td class="num mono">{{ fmtMoney(row.outstanding) }}</td>
+                      <td class="text-end">
+                        @if (owes(row)) {
+                          <button type="button" class="btn btn-sm btn-outline-primary"
+                                  (click)="openPay(row)" [attr.aria-label]="'Record ' + row.liability + ' payment'">
+                            Record payment
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          @if (payFor(); as row) {
+            <form class="mt-3" [attr.aria-label]="'Record ' + row.liability + ' payment'" (ngSubmit)="submitPay()">
+              @if (payError()) {
+                <div class="alert alert-danger py-2" role="alert">{{ payError() }}</div>
+              }
+              <p class="small text-muted mb-2">
+                Pay {{ row.liability }}: books DR {{ row.accountCode }} / CR the chosen account.
+              </p>
+              <div class="row g-3 align-items-end">
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="sp-account">Paid from <span class="text-danger" aria-hidden="true">*</span></label>
+                  <select id="sp-account" name="sp-account" class="form-select"
+                          [ngModel]="payAccountUid()" (ngModelChange)="payAccountUid.set($event)" required>
+                    <option value="">— select cash / bank account —</option>
+                    @for (acc of cashAccounts(); track acc.uid) {
+                      <option [value]="acc.uid">{{ acc.code }} — {{ acc.name }}</option>
+                    }
+                  </select>
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                  <label class="form-label" for="sp-date">Payment date <span class="text-danger" aria-hidden="true">*</span></label>
+                  <input id="sp-date" name="sp-date" type="date" class="form-control"
+                         [ngModel]="payDate()" (ngModelChange)="payDate.set($event)" required />
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                  <label class="form-label" for="sp-amount">Amount <span class="text-danger" aria-hidden="true">*</span></label>
+                  <input id="sp-amount" name="sp-amount" type="number" min="0" step="0.01" class="form-control"
+                         [ngModel]="payAmount()" (ngModelChange)="payAmount.set($event)" required />
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                  <label class="form-label" for="sp-ref">Receipt / control no.</label>
+                  <input id="sp-ref" name="sp-ref" type="text" maxlength="80" class="form-control"
+                         [ngModel]="payRef()" (ngModelChange)="payRef.set($event)" />
+                </div>
+                <div class="col-auto d-flex gap-2">
+                  <button type="submit" class="btn btn-primary" [disabled]="paying()">Record payment</button>
+                  <button type="button" class="btn btn-outline-secondary" (click)="cancelPay()">Cancel</button>
+                </div>
+              </div>
+            </form>
+          }
+        </div>
+      </div>
+    }
+
     @switch (state()) {
       @case ('loading') {
         <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">

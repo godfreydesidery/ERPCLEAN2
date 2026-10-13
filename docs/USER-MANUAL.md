@@ -5943,7 +5943,14 @@ On the fund detail screen, use the **Record Transaction** panel:
 
 **When it is used.** By a user with `VAT.RETURN.PREPARE` permission each month, after all sales invoices and supplier bills for the period have been entered. The return must be filed with `VAT.RETURN.FILE` permission once ready.
 
-**How it works.** Output VAT (on account 2200 VAT Payable) accumulates continuously as sales are finalised; input VAT (on the VAT_INPUT control account) accumulates as supplier bills are matched. The return reads the period's movements on both control accounts and computes the net. Any prior-period credit is carried forward from the last FILED return. Manual adjustments can be added for items like credit note VAT or bad debt relief. Filing locks the return (FILED), posts a settlement journal to clear both control accounts to a dedicated VAT_DUE liability, and records the TRA filing reference.
+**How it works.** Output VAT (on account 2200 VAT Payable) accumulates continuously as sales are finalised; input VAT (on the VAT_INPUT control account) accumulates as supplier bills are matched. The return computes both figures from the period's documents, and it already nets the corrections the system knows about:
+
+- **Output VAT** = VAT on sales invoices finalised in the period (including any voided later) − VAT on sales voided in the period − VAT on customer credit notes raised in the period (including sales returns).
+- **Input VAT** = VAT on supplier bills in the period − VAT on supplier debit notes raised in the period (including purchase returns).
+
+Each figure is converted to TZS exactly as its own ledger posting was, so filing the return clears VAT Payable and VAT Input to zero. Any prior-period credit is carried forward from the last FILED return. Manual adjustments are only for items that are **not** documents in the system, such as bad debt relief or a prior-period correction. Filing locks the return (FILED), posts a settlement journal to clear both control accounts (and each adjustment) to a dedicated VAT_DUE liability, and records the TRA filing reference.
+
+> **Do not key credit-note or debit-note VAT by hand.** Credit notes, supplier debit notes, sales and purchase returns and voided sales recorded in the system are already in the Output VAT and Input VAT figures. Adding a **Credit Note VAT** or **Debit Note VAT** adjustment for them counts them twice. If a DRAFT return already carries such an adjustment for a document in the system, remove it and click **Recompute** before filing.
 
 Navigate to **Accounting > Tax > VAT Returns** (`/admin/tax/vat-returns`). Permission required: `VAT.VIEW`.
 
@@ -5984,13 +5991,13 @@ Click **Recompute** on the detail screen to re-read the current sales and purcha
 
 ### VAT Adjustments
 
-**What they are.** A VAT adjustment is a signed correction line added to a DRAFT VAT return to account for items that do not flow through the standard sales or purchase figures — for example, VAT relief on a bad debt that has been written off, VAT corrections for prior-period errors, or the VAT component of a credit note issued after the relevant period was filed.
+**What they are.** A VAT adjustment is a signed correction line added to a DRAFT VAT return to account for items that do not flow through the standard sales or purchase figures — for example, VAT relief on a bad debt that has been written off, VAT corrections for prior-period errors, or the VAT on a credit or debit note that was issued **outside the system** (on paper, or in another system). Credit notes, supplier debit notes, returns and voids recorded in the system are already in the return (see *VAT Returns* above) and must not be added again as adjustments.
 
 **Why they exist.** Not every VAT correction can be handled by recomputing the sales and purchase figures. TRA rules allow for specific adjustment types (bad debt relief, prior-period corrections, credit/debit note VAT) to be reflected in the return as signed adjustment lines, each with an identifiable reason and narrative.
 
 **When they are used.** By a user with `VAT.ADJUST` permission, on a DRAFT return, when a specific regulatory adjustment is identified before filing.
 
-Adjustments can be added to a DRAFT return to correct prior-period errors or reflect credit/debit note VAT amounts. Permission required: `VAT.ADJUST`.
+Adjustments can be added to a DRAFT return to correct prior-period errors or to reflect the VAT on credit/debit notes issued outside the system. Permission required: `VAT.ADJUST`.
 
 **To add an adjustment:**
 
@@ -5998,12 +6005,12 @@ Adjustments can be added to a DRAFT return to correct prior-period errors or ref
 2. Choose the **Reason**:
    - Bad Debt Relief
    - Prior Period Correction
-   - Credit Note VAT
-   - Debit Note VAT
+   - Credit Note VAT — only for a credit note issued outside the system
+   - Debit Note VAT — only for a debit note issued outside the system
    - Other
 3. Choose the **Effect** (Increase VAT or Decrease VAT).
 4. Enter a positive **Amount** and an optional narrative.
-5. Submit. The net VAT recalculates immediately.
+5. Submit. The net VAT recalculates immediately. When the return is filed, each adjustment is posted to the ledger with the settlement journal: Credit Note VAT to VAT Payable, Debit Note VAT to VAT Input, Bad Debt Relief to Bad Debt Expense, and a Prior Period Correction or Other adjustment to VAT Payable (increase) or VAT Input (decrease).
 
 To remove an adjustment, click the remove icon on the adjustment row. Adjustments cannot be added or removed from a FILED return.
 
@@ -6017,7 +6024,7 @@ To remove an adjustment, click the remove icon on the adjustment row. Adjustment
 
 **When it is used.** By a user with `VAT.RETURN.FILE` permission, after the return has been reviewed, any adjustments added, and the amount payable confirmed. All prior-period returns must be FILED before the current one can be filed.
 
-**How it works.** Filing runs a final recompute, posts the settlement journal (DR VAT_PAYABLE output amount / CR VAT_INPUT input amount / net to VAT_DUE), records the TRA filing reference and date, and sets the return status to FILED.
+**How it works.** Filing runs a final recompute, posts the settlement journal (DR VAT_PAYABLE output amount / CR VAT_INPUT input amount / one line per adjustment / net to VAT_DUE), records the TRA filing reference and date, and sets the return status to FILED. VAT_DUE therefore moves by exactly the filed net amount.
 
 Filing locks the return and posts the settlement journal to the GL. Permission required: `VAT.RETURN.FILE`.
 

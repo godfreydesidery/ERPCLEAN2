@@ -3,6 +3,8 @@ package com.erp.modules.stock.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.erp.modules.iam.domain.entity.Branch;
@@ -16,6 +18,7 @@ import com.erp.modules.stock.domain.entity.StockTransferLine;
 import com.erp.modules.stock.domain.entity.StockLocation;
 import com.erp.modules.stock.domain.entity.StockTransfer;
 import com.erp.modules.stock.domain.enums.LocationType;
+import com.erp.modules.stock.domain.enums.StockTransferStatus;
 import com.erp.modules.stock.repository.StockLocationRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.modules.stock.repository.StockTransferLineRepository;
@@ -286,6 +289,54 @@ class StockTransferServiceImplTest {
      *
      * @param avgCost the running average the source stock carries, or null for never costed
      */
+    // -------------------------------------------------------------------------
+    // STK-26: no service items, no duplicate lines — refused before anything is saved
+    // -------------------------------------------------------------------------
+
+    private void stubLocationsOnly() {
+        StockLocation src = location("Main Store");
+        ReflectionTestUtils.setField(src, "id", SRC_LOC_ID);
+        StockLocation dst = location("Bar Counter");
+        ReflectionTestUtils.setField(dst, "id", DST_LOC_ID);
+        when(locationResolver.resolveLocation("SRCLOCUID0000000000000001", COMPANY_ID)).thenReturn(src);
+        when(locationResolver.resolveLocation("DSTLOCUID0000000000000001", COMPANY_ID)).thenReturn(dst);
+    }
+
+    @Test
+    void create_sameProductOnTwoLines_refused_stk26() {
+        stubLocationsOnly();
+        when(productService.getByUid("PRODUID00000000000000001")).thenReturn(product());
+
+        assertThatThrownBy(() -> service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                                "PRODUID00000000000000001", new BigDecimal("4"), null),
+                        new CreateStockTransferRequest.LineRequest(
+                                "PRODUID00000000000000001", new BigDecimal("2"), null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("more than one line");
+        verify(transfers, never()).save(any());
+    }
+
+    @Test
+    void create_serviceItem_refused_stk26() {
+        stubLocationsOnly();
+        ProductDto service0 = org.mockito.Mockito.mock(ProductDto.class);
+        when(service0.stockable()).thenReturn(false);
+        when(service0.name()).thenReturn("Delivery fee");
+        when(productService.getByUid("PRODUID00000000000000002")).thenReturn(service0);
+
+        assertThatThrownBy(() -> service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000002", new BigDecimal("1"), null)))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Delivery fee is not a stock item");
+        verify(transfers, never()).save(any());
+    }
+
     private List<StockTransferLine> stubCreate(BigDecimal avgCost) {
         stubUpToProductLookup();
 
@@ -342,6 +393,85 @@ class StockTransferServiceImplTest {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------
+    // STK-05 (owner ruling 2026-10-10): dispatch from the source branch, receive at the destination
+    // -------------------------------------------------------------------------
+
+    private static StockTransfer inTransitTransfer(Long id, String uid, boolean dispatched) {
+        StockTransfer t = new StockTransfer(COMPANY_ID, "TRF-0002", "IN_TRANSIT",
+                SRC_BRANCH_ID, SRC_LOC_ID, DST_BRANCH_ID, DST_LOC_ID,
+                LocalDate.now(), null, 1L);
+        ReflectionTestUtils.setField(t, "id", id);
+        ReflectionTestUtils.setField(t, "uid", uid);
+        if (dispatched) {
+            t.dispatch(1L);
+        }
+        return t;
+    }
+
+    private static void actAs(boolean root, Long branchId) {
+        RequestContext.set(new RequestContext.Principal(
+                1L, "tester", root, COMPANY_ID, branchId, "127.0.0.1"));
+    }
+
+    @Test
+    void receive_fromSourceBranch_refusedWithSwitchBranchMessage_stk05() {
+        StockTransfer t = inTransitTransfer(800L, "STUID00000000000000000800", true);
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
+        when(branches.findByIdAndCompany_Id(DST_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("DST-01", "Arusha")));
+        actAs(false, SRC_BRANCH_ID);
+
+        assertThatThrownBy(() -> service.receive(t.getUid()))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class)
+                .hasMessage("Switch to Arusha to receive this transfer.");
+        verify(outbox, never()).publish(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void receive_fromDestinationBranch_allowed_stk05() {
+        StockTransfer t = inTransitTransfer(801L, "STUID00000000000000000801", true);
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
+        actAs(false, DST_BRANCH_ID);
+
+        StockTransferDto dto = service.receive(t.getUid());
+
+        assertThat(dto.status()).isEqualTo(StockTransferStatus.RECEIVED);
+    }
+
+    @Test
+    void receive_byRootFromAnyBranch_allowed_stk05() {
+        StockTransfer t = inTransitTransfer(802L, "STUID00000000000000000802", true);
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
+        actAs(true, SRC_BRANCH_ID);
+
+        assertThat(service.receive(t.getUid()).status()).isEqualTo(StockTransferStatus.RECEIVED);
+    }
+
+    @Test
+    void dispatch_fromDestinationBranch_refused_stk05() {
+        StockTransfer t = inTransitTransfer(803L, "STUID00000000000000000803", false);
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
+        when(branches.findByIdAndCompany_Id(SRC_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
+        actAs(false, DST_BRANCH_ID);
+
+        assertThatThrownBy(() -> service.dispatch(t.getUid()))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class)
+                .hasMessage("Switch to Dar es Salaam to dispatch this transfer.");
+        assertThat(t.getStatus()).isEqualTo(StockTransferStatus.DRAFT);
+    }
+
+    @Test
+    void completeInstant_fromDestinationBranch_refused_stk05() {
+        StockTransfer t = transferWithId(804L, "STUID00000000000000000804"); // INSTANT
+        when(transfers.findByUid(t.getUid())).thenReturn(Optional.of(t));
+        when(branches.findByIdAndCompany_Id(SRC_BRANCH_ID, COMPANY_ID)).thenReturn(Optional.of(branch("SRC-01", "Dar es Salaam")));
+        actAs(false, DST_BRANCH_ID);
+
+        assertThatThrownBy(() -> service.completeInstant(t.getUid()))
+                .isInstanceOf(com.erp.platform.common.api.ForbiddenException.class)
+                .hasMessageContaining("Switch to Dar es Salaam");
+    }
 
     private static StockTransfer transferWithId(Long id, String uid) {
         StockTransfer t = new StockTransfer(COMPANY_ID, "TRF-0001", "INSTANT",

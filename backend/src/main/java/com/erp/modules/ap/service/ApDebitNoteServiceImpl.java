@@ -27,6 +27,7 @@ import com.erp.modules.parties.repository.SupplierRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.ConvertedAmount;
 import com.erp.platform.common.money.CurrencyConversionService;
@@ -112,6 +113,40 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
     @Override
     public ApDebitNoteDto raise(RaiseDebitNoteRequest req) {
+        Raised r = doRaise(req, null, null);
+        ApDebitNote note = r.note();
+        if (r.applied()) {
+            // the auto-apply moved the note's unapplied figures — re-read them for the response
+            note = notes.findById(note.getId()).orElseThrow();
+        }
+        return toDto(note, r.allocations(), bills);
+    }
+
+    @Override
+    public ApDebitNoteDto raiseForPurchaseReturn(RaiseDebitNoteRequest req, String currency,
+                                                 BigDecimal grniBaseAmount) {
+        if (grniBaseAmount == null || grniBaseAmount.signum() <= 0) {
+            throw new IllegalArgumentException("A purchase return debit note needs a positive value.");
+        }
+        if (req.supplierBillUid() != null && !req.supplierBillUid().isBlank()) {
+            throw new IllegalArgumentException(
+                    "A purchase return credit is raised against the supplier, not a single bill.");
+        }
+        Raised r = doRaise(req, currency, grniBaseAmount);
+        return toDto(r.note(), r.allocations(), bills);
+    }
+
+    /** What {@link #doRaise} produced: the saved note, its allocations, and whether it auto-applied. */
+    private record Raised(ApDebitNote note, List<ApDebitNoteAllocation> allocations,
+                          boolean applied) {}
+
+    /**
+     * @param currencyOverride document currency for a note with no target bill (null = base)
+     * @param grniBaseAmount   non-null only for a purchase return: credit GRNI with this base
+     *                         amount instead of crediting Purchases with the note's net
+     */
+    private Raised doRaise(RaiseDebitNoteRequest req, String currencyOverride,
+                           BigDecimal grniBaseAmount) {
         Company company = companies.findByUid(req.companyUid())
                 .orElseThrow(() -> new NotFoundException("Company not found."));
         Long companyId = company.getId();
@@ -129,11 +164,16 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
 
         // Resolve target bill if provided — validation only at raise; relief at apply below.
         SupplierBill targetBill = null;
-        String docCurrency = baseCurrency;
+        String docCurrency = (currencyOverride != null && !currencyOverride.isBlank())
+                ? currencyOverride : baseCurrency;
         Long branchId = branchId();
         if (req.supplierBillUid() != null && !req.supplierBillUid().isBlank()) {
             targetBill = bills.findByCompanyIdAndUid(companyId, req.supplierBillUid())
                     .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
+            // AP-14: the note is raised for req.supplierUid — the bill must be that supplier's.
+            if (!supplierId.equals(targetBill.getSupplierId())) {
+                throw new ConflictException(OTHER_SUPPLIER_BILL);
+            }
             docCurrency = targetBill.getCurrency().value();
             branchId    = targetBill.getBranchId();
 
@@ -181,7 +221,11 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         // DR AP-control (baseTotal) / CR Purchases (baseNet) [+ CR VAT_INPUT (baseVat)].
         // NO bill relief, NO realized-FX at raise.
         JournalEntryDto posted = postRaiseContraToGl(note, companyId, branchId, baseCurrency,
-                baseNet, baseVat, baseTotal);
+                baseNet, baseVat, baseTotal,
+                grniBaseAmount == null ? null
+                        // A base-currency note carries no FX: any sub-unit rounding of the note's
+                        // net stays on the GRNI leg rather than posting a fake FX difference.
+                        : docCurrency.equals(baseCurrency) ? baseNet : grniBaseAmount);
         note.setGlEntryUid(posted.uid());
         note = notes.save(note);
 
@@ -200,10 +244,9 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
             savedAllocs = doApplyAllocations(note, companyId,
                     List.of(new AllocationLineRequest(req.supplierBillUid(), grossAmount)),
                     baseCurrency, baseScale);
-            note = notes.findById(note.getId()).orElseThrow();
         }
 
-        return toDto(note, savedAllocs, bills);
+        return new Raised(note, savedAllocs, targetBill != null);
     }
 
     // =========================================================================
@@ -378,16 +421,37 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
      */
     private JournalEntryDto postRaiseContraToGl(ApDebitNote note, Long companyId, Long branchId,
                                                  String baseCurrency, BigDecimal baseNet,
-                                                 BigDecimal baseVat, BigDecimal baseTotal) {
+                                                 BigDecimal baseVat, BigDecimal baseTotal,
+                                                 BigDecimal grniBase) {
         ChartOfAccount apAcct        = glConfig.resolve(companyId, GlConfigKey.ACCOUNTS_PAYABLE);
-        ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
 
         List<LineDraft> lines = new ArrayList<>();
         // DR AP-control = baseTotal (no FX plug at raise — that moves to apply)
         lines.add(new LineDraft(apAcct.getId(), baseTotal, BigDecimal.ZERO, baseCurrency,
                 "AP control — debit note " + note.getDebitNoteNumber()));
-        // CR Purchases (net portion)
-        if (baseNet.compareTo(BigDecimal.ZERO) > 0) {
+        if (grniBase != null) {
+            // AP-15 / LBO-09: a purchase return. The return's stock movement already took the goods
+            // out of Inventory against GRNI; crediting GRNI here closes that pair, so the net effect
+            // is DR AP / CR Inventory — billed or not — and Purchases (profit) is never touched.
+            ChartOfAccount grniAcct = glConfig.resolve(companyId, GlConfigKey.GRNI);
+            lines.add(new LineDraft(grniAcct.getId(), BigDecimal.ZERO, grniBase, baseCurrency,
+                    "Purchase return GRNI — debit note " + note.getDebitNoteNumber()));
+            // Foreign-currency note: AP is relieved at the note's rate, the goods left at the
+            // receipt's rate — the difference is realised FX.
+            BigDecimal fxDiff = baseNet.subtract(grniBase);
+            if (fxDiff.signum() > 0) {
+                lines.add(new LineDraft(
+                        glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_GAIN).getId(),
+                        BigDecimal.ZERO, fxDiff, baseCurrency,
+                        "Realized FX gain — debit note " + note.getDebitNoteNumber()));
+            } else if (fxDiff.signum() < 0) {
+                lines.add(new LineDraft(
+                        glConfig.resolve(companyId, GlConfigKey.REALIZED_FX_LOSS).getId(),
+                        fxDiff.negate(), BigDecimal.ZERO, baseCurrency,
+                        "Realized FX loss — debit note " + note.getDebitNoteNumber()));
+            }
+        } else if (baseNet.compareTo(BigDecimal.ZERO) > 0) {
+            ChartOfAccount purchasesAcct = glConfig.resolve(companyId, GlConfigKey.PURCHASES);
             lines.add(new LineDraft(purchasesAcct.getId(), BigDecimal.ZERO, baseNet, baseCurrency,
                     "Debit note net — " + note.getDebitNoteNumber()));
         }
@@ -441,6 +505,10 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
         for (AllocationLineRequest line : lines) {
             SupplierBill bill = bills.findByCompanyIdAndUid(companyId, line.supplierBillUid())
                     .orElseThrow(() -> new NotFoundException("Supplier bill not found."));
+
+            // AP-14: a supplier's credit may only reduce THAT supplier's bills, in the same currency
+            // — a TZS note from supplier A used to wipe a USD bill of supplier B figure for figure.
+            assertSameSupplierAndCurrency(note.getSupplierId(), note.getCurrency().value(), bill);
 
             // Guard: slice must not exceed current bill outstanding (bill uid not exposed)
             if (line.allocatedAmount().compareTo(bill.getOutstandingAmount()) > 0) {
@@ -601,6 +669,25 @@ public class ApDebitNoteServiceImpl implements ApDebitNoteService {
     }
 
     // =========================================================================
+
+    static final String OTHER_SUPPLIER_BILL =
+            "This bill belongs to a different supplier. A debit note can only reduce bills of the"
+                    + " supplier it was raised for.";
+    static final String OTHER_CURRENCY_BILL =
+            "This bill is in a different currency from the debit note. Apply the note only to bills"
+                    + " in the same currency.";
+
+    /** AP-14: the note and the bill must share the supplier and the currency. */
+    static void assertSameSupplierAndCurrency(Long noteSupplierId, String noteCurrency,
+                                              SupplierBill bill) {
+        if (noteSupplierId == null || !noteSupplierId.equals(bill.getSupplierId())) {
+            throw new ConflictException(OTHER_SUPPLIER_BILL);
+        }
+        String billCurrency = bill.getCurrency() != null ? bill.getCurrency().value() : null;
+        if (noteCurrency == null || !noteCurrency.equals(billCurrency)) {
+            throw new ConflictException(OTHER_CURRENCY_BILL);
+        }
+    }
 
     private Long branchId() {
         RequestContext.Principal p = RequestContext.get();

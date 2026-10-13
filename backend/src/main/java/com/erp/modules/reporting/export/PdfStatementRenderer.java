@@ -1,5 +1,6 @@
 package com.erp.modules.reporting.export;
 
+import com.erp.platform.common.time.PrintedStamp;
 import com.lowagie.text.Document;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
@@ -42,7 +43,7 @@ public class PdfStatementRenderer {
         doc.add(new Paragraph(model.title(), FONT_HEADER));
         doc.add(new Paragraph(model.companyName() != null ? model.companyName() : "", FONT_TITLE));
         doc.add(new Paragraph(model.periodLabel() != null ? model.periodLabel() : "", FONT_NORMAL));
-        doc.add(new Paragraph("Generated: " + model.generatedAt(), FONT_NORMAL));
+        doc.add(new Paragraph("Generated: " + PrintedStamp.of(model.generatedAt()), FONT_NORMAL));
         doc.add(new Paragraph(" "));
 
         // Statement table

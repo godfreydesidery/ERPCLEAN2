@@ -1,8 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { INVALID_AMOUNT_MESSAGE, normaliseAmount } from '../../../shared/money.util';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -21,6 +22,9 @@ import { ApService } from './ap.service';
 import { DirectReceiptRatificationComponent } from './direct-receipt-ratification.component';
 import { WhtTypeDto } from '../tax/models/tax.model';
 import { TaxService } from '../tax/tax.service';
+import { CashbankService } from '../cashbank/cashbank.service';
+import { CashBankAccountDto } from '../cashbank/models/cashbank.model';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * Record Payment screen — AP.PAYMENT.RUN.
@@ -46,7 +50,9 @@ export class RecordPaymentComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly taxService = inject(TaxService);
+  private readonly cashbank = inject(CashbankService);
   private readonly alerts = inject(AlertService);
+  private readonly route = inject(ActivatedRoute);
   protected readonly session = inject(SessionStore);
 
   // ── Company context ────────────────────────────────────────────────────────
@@ -64,11 +70,23 @@ export class RecordPaymentComponent {
   readonly billsState = signal<'idle' | 'loading' | 'error'>('idle');
   /** Set of billUids the user has checked for payment. */
   readonly selectedBillUids = signal<Set<string>>(new Set());
+  /** AP-07: amount to pay per selected bill uid; missing / blank = its full outstanding. */
+  readonly payAmounts = signal<Record<string, string>>({});
+  /** AP-07: "allocate X oldest-first" helper input. */
+  readonly allocateTotal = signal('');
 
   // ── Payment header ─────────────────────────────────────────────────────────
   readonly paymentDate = signal('');
   readonly tenderType = signal<TenderType>('BANK_TRANSFER');
   readonly bankReference = signal('');
+
+  // ── AP-08: pay-from account ───────────────────────────────────────────────
+  /** Active cash / bank / mobile-money accounts of the company. */
+  readonly cashAccounts = signal<CashBankAccountDto[]>([]);
+  /** Chosen account uid; '' = let the server use the company default account. */
+  readonly cashAccountUid = signal('');
+  /** The list needs CASH.VIEW; without it the payment still goes through on the default account. */
+  readonly cashAccountsUnavailable = signal(false);
 
   // ── WHT section (optional, WHT_ON_PAYMENT) ────────────────────────────────
   readonly whtTypes = signal<WhtTypeDto[]>([]);
@@ -89,10 +107,17 @@ export class RecordPaymentComponent {
 
   readonly selectedTotal = computed(() => {
     const uids = this.selectedBillUids();
+    const amounts = this.payAmounts();
     return this.bills()
       .filter((b) => uids.has(b.uid))
-      .reduce((sum, b) => sum + +(b.outstandingAmount ?? 0), 0);
+      .reduce((sum, b) => sum + this.amountOf(b, amounts), 0);
   });
+
+  /** What a selected bill will receive: the typed amount, else its full outstanding. */
+  private amountOf(b: SupplierBillDto, amounts: Record<string, string>): number {
+    const typed = String(amounts[b.uid] ?? '').trim();
+    return typed ? +typed : +(b.outstandingAmount ?? 0);
+  }
 
   readonly selectedCount = computed(() => this.selectedBillUids().size);
 
@@ -108,7 +133,7 @@ export class RecordPaymentComponent {
   private readonly supplierSearch$ = new Subject<string>();
 
   constructor() {
-    this.paymentDate.set(new Date().toISOString().slice(0, 10));
+    this.paymentDate.set(todayLocal());
 
     this.supplierSearch$
       .pipe(
@@ -143,6 +168,8 @@ export class RecordPaymentComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadWhtTypes(list[0].id);
+              this.loadCashAccounts(list[0].id);
+              this.applyDeepLink();
             }
           },
           error: () => this.companyState.set('error'),
@@ -150,6 +177,35 @@ export class RecordPaymentComponent {
       },
       error: () => this.companyState.set('error'),
     });
+  }
+
+  /**
+   * AP-28: "Pay" on a bill opens this screen with ?billUid= (and ?supplierUid= when known). Select
+   * the bill's supplier and tick the bill, so the clerk does not search and tick it all over again.
+   * Anything that cannot be resolved simply leaves the screen as it was — the manual path still works.
+   */
+  private applyDeepLink(): void {
+    const qp = this.route.snapshot?.queryParamMap;
+    const billUid = qp?.get('billUid') ?? '';
+    const supplierUid = qp?.get('supplierUid') ?? '';
+    if (billUid) {
+      this.apService.getBill(billUid).subscribe({
+        next: (bill) => {
+          const uid = bill.supplierUid || supplierUid;
+          if (!uid) return;
+          const label = bill.supplierName || this.supplierSearchQ() || 'Selected supplier';
+          this.selectedSupplier.set({ uid, label });
+          this.supplierSearchQ.set(label);
+          this.loadPayableBills(uid, bill.uid);
+        },
+        error: () => {},
+      });
+    } else if (supplierUid) {
+      this.supplierService.getByUid(supplierUid).subscribe({
+        next: (s) => this.selectSupplier(s),
+        error: () => {},
+      });
+    }
   }
 
   private loadWhtTypes(companyId: string): void {
@@ -164,7 +220,30 @@ export class RecordPaymentComponent {
     this.selectedCompanyId.set(id);
     this.resetSupplier();
     this.whtUnavailable.set(false);
-    if (id) this.loadWhtTypes(id);
+    if (id) {
+      this.loadWhtTypes(id);
+      this.loadCashAccounts(id);
+    }
+  }
+
+  private loadCashAccounts(companyId: string): void {
+    this.cashAccountUid.set('');
+    this.cashAccountsUnavailable.set(false);
+    this.cashbank.listAllAccounts(companyId).subscribe({
+      next: (list) => {
+        this.cashAccounts.set(list);
+        // Start on the company default so the clerk sees which account that actually is.
+        const def = list.find((a) => a.isDefault);
+        if (def) this.cashAccountUid.set(def.uid);
+      },
+      error: () => { this.cashAccounts.set([]); this.cashAccountsUnavailable.set(true); },
+    });
+  }
+
+  /** "CRDB Main · 0150… (TZS)" — what is printed on the cheque book / statement. */
+  cashAccountLabel(a: CashBankAccountDto): string {
+    const no = a.bankAccountNo ? ` · ${a.bankAccountNo}` : '';
+    return `${a.name}${no} (${a.currency})${a.isDefault ? ' — default' : ''}`;
   }
 
   // ── Supplier picker ────────────────────────────────────────────────────────
@@ -176,6 +255,7 @@ export class RecordPaymentComponent {
       this.supplierResults.set([]);
       this.bills.set([]);
       this.selectedBillUids.set(new Set());
+      this.payAmounts.set({});
       return;
     }
     this.selectedSupplier.set(null);
@@ -195,16 +275,18 @@ export class RecordPaymentComponent {
     this.supplierResults.set([]);
     this.bills.set([]);
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
   }
 
   // ── Load payable bills (MATCHED, APPROVED, PARTIALLY_PAID) ────────────────
 
-  private loadPayableBills(supplierUid: string): void {
+  private loadPayableBills(supplierUid: string, preselectBillUid?: string): void {
     const companyId = this.selectedCompanyId();
     if (!companyId) return;
     this.billsState.set('loading');
     this.bills.set([]);
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
 
     // Load up to 200 payable bills — enough for a payment run.
     this.apService.listBills(companyId, supplierUid, undefined, 0, 200).subscribe({
@@ -214,6 +296,9 @@ export class RecordPaymentComponent {
         );
         this.bills.set(payable);
         this.billsState.set('idle');
+        if (preselectBillUid && payable.some((b) => b.uid === preselectBillUid)) {
+          this.selectedBillUids.set(new Set([preselectBillUid]));
+        }
       },
       error: () => this.billsState.set('error'),
     });
@@ -227,6 +312,54 @@ export class RecordPaymentComponent {
       if (checked) next.add(uid); else next.delete(uid);
       return next;
     });
+    if (!checked) this.setPayAmount(uid, '');
+  }
+
+  /** AP-07: the amount typed for one bill ('' = pay it in full). */
+  payAmountOf(uid: string): string {
+    return this.payAmounts()[uid] ?? '';
+  }
+
+  setPayAmount(uid: string, value: string): void {
+    this.payAmounts.update((m) => {
+      const next = { ...m };
+      const v = String(value ?? '').trim();
+      if (v) next[uid] = v; else delete next[uid];
+      return next;
+    });
+  }
+
+  /**
+   * AP-07: spread a lump sum over the supplier's bills, oldest due first; the last bill reached
+   * takes the remainder as a part-payment. Never puts more on a bill than it still owes.
+   */
+  allocateOldestFirst(): void {
+    let remaining = +String(this.allocateTotal() ?? '').trim();
+    if (!Number.isFinite(remaining) || remaining <= 0) {
+      this.formError.set('Enter the amount you are paying to spread it over the bills.');
+      return;
+    }
+    this.formError.set(null);
+    const ordered = [...this.bills()].sort((a, b) =>
+      String(a.dueDate ?? a.billDate ?? '9999').localeCompare(String(b.dueDate ?? b.billDate ?? '9999'))
+      || String(a.billDate ?? '').localeCompare(String(b.billDate ?? '')));
+    const picked = new Set<string>();
+    const amounts: Record<string, string> = {};
+    for (const b of ordered) {
+      if (remaining <= 0.000001) break;
+      const owed = +(b.outstandingAmount ?? 0);
+      if (owed <= 0) continue;
+      const pay = Math.min(owed, remaining);
+      picked.add(b.uid);
+      if (pay < owed) amounts[b.uid] = (Math.round(pay * 100) / 100).toFixed(2);
+      remaining = Math.round((remaining - pay) * 100) / 100;
+    }
+    this.selectedBillUids.set(picked);
+    this.payAmounts.set(amounts);
+    if (remaining > 0) {
+      this.formError.set(
+        `That is ${this.fmtMoney(remaining)} more than these bills owe; only what is owed was allocated.`);
+    }
   }
 
   isBillSelected(uid: string): boolean {
@@ -239,6 +372,7 @@ export class RecordPaymentComponent {
 
   clearSelection(): void {
     this.selectedBillUids.set(new Set());
+    this.payAmounts.set({});
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -268,9 +402,38 @@ export class RecordPaymentComponent {
       billUids: [...this.selectedBillUids()],
     };
 
+    // AP-07: part-payments. Only amounts below the outstanding are sent; the rest pay in full.
+    const amounts = this.payAmounts();
+    const partial: Record<string, string> = {};
+    for (const b of this.bills()) {
+      if (!this.selectedBillUids().has(b.uid)) continue;
+      const typed = String(amounts[b.uid] ?? '').trim();
+      if (!typed) continue;
+      const n = +typed;
+      const owed = +(b.outstandingAmount ?? 0);
+      const label = b.supplierInvoiceNo || b.billNumber;
+      if (!Number.isFinite(n) || n <= 0) {
+        this.formError.set(`The amount to pay on bill ${label} must be more than zero.`);
+        return;
+      }
+      if (n > owed + 0.000001) {
+        this.formError.set(`The amount to pay on bill ${label} is more than is still owed (${this.fmtMoney(owed)}).`);
+        return;
+      }
+      if (n < owed) partial[b.uid] = typed;
+    }
+    if (Object.keys(partial).length > 0) request.billAmounts = partial;
+
+    // AP-08: send the chosen account; omitted = the company default (server-side fallback).
+    const accountUid = String(this.cashAccountUid() ?? '').trim();
+    if (accountUid) request.cashBankAccountUid = accountUid;
+
     // Optional WHT (WHT_ON_PAYMENT)
     const whtUid = String(this.whtTypeUid() ?? '').trim();
-    const whtAmt = String(this.whtAmount() ?? '').trim();
+    // LUI-04: "1,800" used to read as NaN and the WHT was silently dropped from the payment.
+    const whtNorm = normaliseAmount(this.whtAmount());
+    if (whtNorm === null) { this.formError.set(INVALID_AMOUNT_MESSAGE); return; }
+    const whtAmt = whtNorm;
     if (whtUid && whtAmt && +whtAmt > 0) {
       request.whtTypeUid = whtUid;
       request.whtAmount = whtAmt;
@@ -280,10 +443,14 @@ export class RecordPaymentComponent {
     this.formError.set(null);
 
     this.apService.paymentRun(request).subscribe({
-      next: (payments) => {
+      next: (payment) => {
         this.submitting.set(false);
-        this.savedPayments.set(payments);
-        this.alerts.success('Payment run complete', `${payments.length} payment(s) recorded`);
+        // AP-17: the run returns ONE payment; the success panel lists what was recorded.
+        this.savedPayments.set(payment ? [payment] : []);
+        this.alerts.success(
+          'Payment recorded',
+          payment?.paymentNumber ? `Payment ${payment.paymentNumber} recorded` : 'Payment recorded',
+        );
       },
       error: (err) => {
         this.formError.set(this.messageFrom(err, 'Could not record payment.'));

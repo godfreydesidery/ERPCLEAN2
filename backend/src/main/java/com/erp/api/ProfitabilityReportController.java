@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
@@ -49,8 +50,16 @@ public class ProfitabilityReportController {
         this.exporter = exporter;
     }
 
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping
-    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW')")
+    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('INVENTORY.VALUATION.VIEW')")
     public ProfitabilityReportDto profitability(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
@@ -63,7 +72,7 @@ public class ProfitabilityReportController {
      * as {@code REPORT.EXPORT} — it must never be reachable by a caller the screen itself refuses.
      */
     @GetMapping("/export")
-    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('REPORT.EXPORT')")
+    @PreAuthorize("@perm.has('SALES.INVOICE.VIEW') and @perm.has('INVENTORY.VALUATION.VIEW') and @perm.has('REPORT.EXPORT')")
     public ResponseEntity<byte[]> exportProfitability(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
@@ -71,7 +80,8 @@ public class ProfitabilityReportController {
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         ProfitabilityReportDto dto =
                 query.report(RequestContext.get().companyId(), fromDate, toDate, branchUid);
-        return download(exporter.export(flatten(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flatten(dto), branchGuard, branchUid), format));
     }
 
     // -------------------------------------------------------------------------

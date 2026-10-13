@@ -176,8 +176,8 @@
                       </td>
                       <td class="small">{{ entry.line.unitName }}</td>
                       <td class="num">{{ entry.line.orderedQty }}</td>
-                      <td class="num">{{ entry.line.receivedQtyInBase }}</td>
-                      <td class="num fw-semibold">{{ entry.line.outstandingQtyInBase }}</td>
+                      <td class="num">{{ receivedInLineUnit(entry.line) }}</td>
+                      <td class="num fw-semibold">{{ outstandingInLineUnit(entry.line) }}</td>
                       <td>
                         <div>
                           <label class="visually-hidden"
@@ -199,6 +199,11 @@
                           @if (lineMaxQty(entry); as maxQty) {
                             <p [id]="'qtyHelp-' + entry.line.uid" class="form-text small text-muted mb-0">
                               max {{ maxQty }}
+                            </p>
+                          }
+                          @if (isPackLine(entry.line) && baseQtyPreview(entry); as base) {
+                            <p class="form-text small text-muted mb-0" aria-live="polite">
+                              = {{ base }} base units
                             </p>
                           }
                         </div>

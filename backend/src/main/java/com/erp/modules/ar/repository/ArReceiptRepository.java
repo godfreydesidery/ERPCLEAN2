@@ -16,6 +16,11 @@ public interface ArReceiptRepository extends JpaRepository<ArReceipt, Long> {
 
     Optional<ArReceipt> findByCompanyIdAndUid(Long companyId, String uid);
 
+    /** ARC-11: the receipt locked for a refund, so two refunds cannot both spend its credit. */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM ArReceipt r WHERE r.companyId = :companyId AND r.uid = :uid")
+    Optional<ArReceipt> findForUpdate(@Param("companyId") Long companyId, @Param("uid") String uid);
+
     /** ScopeGuard support. */
     @Query("SELECT r.companyId FROM ArReceipt r WHERE r.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);

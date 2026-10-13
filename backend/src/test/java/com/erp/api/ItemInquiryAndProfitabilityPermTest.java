@@ -108,18 +108,20 @@ class ItemInquiryAndProfitabilityPermTest {
         }
     }
 
+    /** Owner ruling 2026-10-10 (ADM-14): cost of sales and profit are cost data. */
     @Test
-    void profitability_matchesTheSalesReportGate() {
+    void profitability_needsTheValuationCodeAsWellAsSalesView() {
         assertThat(codesIn(gateOf(ProfitabilityReportController.class, "profitability")))
-                .as("same gate as the Sales Report, which already discloses margin")
-                .containsExactly(SALES_VIEW);
+                .containsExactlyInAnyOrder(SALES_VIEW, VALUATION);
     }
 
     @Test
-    void profitability_onScreen_allowedWithTheSalesViewCodeAlone() {
-        assertThat(evaluateGate(gateOf(ProfitabilityReportController.class, "profitability"),
-                Set.of(SALES_VIEW)))
-                .isTrue();
+    void profitability_onScreen_refusedToCounterStaffWithSalesViewAlone() {
+        String gate = gateOf(ProfitabilityReportController.class, "profitability");
+        assertThat(evaluateGate(gate, Set.of(SALES_VIEW)))
+                .as("a cashier/salesperson must not learn cost of sales or gross profit")
+                .isFalse();
+        assertThat(evaluateGate(gate, Set.of(SALES_VIEW, VALUATION))).isTrue();
     }
 
     @Test
@@ -129,11 +131,14 @@ class ItemInquiryAndProfitabilityPermTest {
         assertThat(evaluateGate(gate, Set.of(EXPORT)))
                 .as("a caller refused the on-screen report must not be able to download it")
                 .isFalse();
-        assertThat(evaluateGate(gate, Set.of(SALES_VIEW)))
+        assertThat(evaluateGate(gate, Set.of(SALES_VIEW, VALUATION)))
                 .as("seeing a report is not permission to take it away")
                 .isFalse();
         assertThat(evaluateGate(gate, Set.of(SALES_VIEW, EXPORT)))
-                .as("both together open the download")
+                .as("export without the cost code is still refused")
+                .isFalse();
+        assertThat(evaluateGate(gate, Set.of(SALES_VIEW, VALUATION, EXPORT)))
+                .as("all three together open the download")
                 .isTrue();
     }
 

@@ -228,6 +228,28 @@ describe('StockLocationListComponent', () => {
     expect(comp.rows()[0].status).toBe('INACTIVE');
   });
 
+  // ── STK-07: the in-transit location offers no default / deactivate actions ──
+
+  it('marks the TRANSIT- location as system-managed and hides default/deactivate for it', async () => {
+    const transit = { ...STUB_LOCATION, uid: 'LOC-TR', id: '103', code: 'TRANSIT-B1', name: 'In-Transit', locationType: 'OTHER' as const, isDefault: false };
+    const listSpy = vi.fn(() => of({
+      rows: [transit],
+      meta: { page: 0, size: 20, totalElements: 1, totalPages: 1, hasNext: false },
+    }));
+    makeBed({ listSpy });
+    const fixture = TestBed.createComponent(StockLocationListComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(comp.isTransit(transit)).toBe(true);
+    expect(el.textContent).toContain('In transit (system)');
+    expect(el.querySelector('[aria-label="Deactivate TRANSIT-B1"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Set TRANSIT-B1 as default"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Edit TRANSIT-B1"]')).not.toBeNull(); // rename still allowed
+  });
+
   // ── 7. Branch filter passes branchUid ───────────────────────────────────────
 
   it('defaults the filter to the active branch and passes branchUid on filter change', async () => {

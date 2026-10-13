@@ -114,7 +114,7 @@ describe('SalesInvoiceListComponent — init', () => {
     await vi.runAllTimersAsync();
 
     expect(svc.list).toHaveBeenCalledTimes(1);
-    expect(svc.list).toHaveBeenCalledWith('10', undefined, undefined, 0, 20);
+    expect(svc.list).toHaveBeenCalledWith('10', undefined, undefined, 0, 20, undefined, undefined);
     expect(comp.state()).toBe('idle');
   });
 
@@ -194,7 +194,7 @@ describe('SalesInvoiceListComponent — live search debounce', () => {
 
     expect(comp.searchQ()).toBe('');
     expect(svc.list).toHaveBeenCalledTimes(1);
-    expect(svc.list).toHaveBeenCalledWith('10', undefined, undefined, 0, 20);
+    expect(svc.list).toHaveBeenCalledWith('10', undefined, undefined, 0, 20, undefined, undefined);
   });
 });
 

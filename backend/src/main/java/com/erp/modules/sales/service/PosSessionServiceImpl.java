@@ -43,6 +43,7 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -50,7 +51,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -136,6 +136,27 @@ public class PosSessionServiceImpl implements PosSessionService {
     private static final String READ_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
 
     /**
+     * POS-02: the authority a cash REFUND payout needs - the same one a sale reversal needs
+     * ({@code PosSaleServiceImpl.REVERSAL_AUTHORITY_PERMISSION}). A refund payout hands cash back
+     * with no reversal of revenue, VAT, stock or GL, so it must never rest on a cashier's own say-so.
+     */
+    static final String REFUND_PAYOUT_APPROVAL_PERMISSION = "SALES.INVOICE.VOID";
+
+    /**
+     * POS-05: the authority that approves a paid-out or till expense - the manager who settles the
+     * till ({@code POS.SESSION.RECONCILE}: BRANCH_MANAGER holds it, CASHIER does not).
+     */
+    static final String PAYOUT_APPROVAL_PERMISSION = "POS.SESSION.RECONCILE";
+
+    /** Audit values for how a payout was authorised (POS-05). */
+    private static final String PAYOUT_AUTH_SELF     = "SELF";
+    private static final String PAYOUT_AUTH_APPROVED = "APPROVED";
+    private static final String PAYOUT_AUTH_NONE     = "NONE";
+
+    /** Who authorised a payout: how ({@code SELF}/{@code APPROVED}/{@code NONE}), and by whom. */
+    private record PayoutApproval(String mode, String username, String uid) {}
+
+    /**
      * Stands in for a cashier the IAM lookup can no longer name (account removed).
      *
      * <p>Same rule as {@code PosTillServiceImpl.UNNAMED_CASHIER}: a label is a phrase a person can
@@ -192,6 +213,19 @@ public class PosSessionServiceImpl implements PosSessionService {
      * person, it does not establish a session, so an approval cannot outlive the request it rode in on.
      */
     private final StepUpAuthService          stepUpAuth;
+    private final CompanyCalendar calendar;
+
+    /**
+     * ARC-08: tells the cash book that till cash moved in the GL (payout / expense / over-short),
+     * in the same transaction as the journal. Setter-injected so the existing constructor (and the
+     * unit tests that build this service by hand) keep working; null there means "no cash book".
+     */
+    private com.erp.platform.events.OutboxPublisher outbox;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setOutbox(com.erp.platform.events.OutboxPublisher outbox) {
+        this.outbox = outbox;
+    }
 
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
@@ -210,7 +244,8 @@ public class PosSessionServiceImpl implements PosSessionService {
                                   SalesDepthNumberGenerator numberGen,
                                   TillExpenseGlSeeder tillExpenseGl,
                                   PermissionResolver permissionResolver,
-                                  StepUpAuthService stepUpAuth) {
+                                  StepUpAuthService stepUpAuth,
+                                  CompanyCalendar calendar) {
         this.sessions       = sessions;
         this.tills          = tills;
         this.payouts        = payouts;
@@ -229,6 +264,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.tillExpenseGl  = tillExpenseGl;
         this.permissionResolver = permissionResolver;
         this.stepUpAuth     = stepUpAuth;
+        this.calendar       = calendar;
     }
 
     @Override
@@ -298,10 +334,13 @@ public class PosSessionServiceImpl implements PosSessionService {
                     + " category and charged to the right account.");
         }
 
+        String reason = requireReason(req.reason());
+        PayoutApproval approval = requirePayoutAuthority(session, req.payoutType(),
+                req.authorisedByUid());
         var payout = new PosSessionPayout(session.getCompanyId(), session.getBranchId(),
                 session.getId(), req.payoutType(), req.amount(),
-                requireReason(req.reason()), actorId());
-        return savePostAndAudit(session, payout);
+                reason, actorId());
+        return savePostAndAudit(session, payout, approval);
     }
 
     @Override
@@ -356,10 +395,12 @@ public class PosSessionServiceImpl implements PosSessionService {
         if (!keyed) {
             rejectRepeatedExpense(session, req.amount(), category, reason);
         }
+        PayoutApproval approval = requirePayoutAuthority(session, PosPayoutType.EXPENSE,
+                req.authorisedByUid());
 
         var payout = PosSessionPayout.expense(session.getCompanyId(), session.getBranchId(),
                 session.getId(), req.amount(), category, reason, actorId());
-        PosPayoutDto recorded = savePostAndAudit(session, payout);
+        PosPayoutDto recorded = savePostAndAudit(session, payout, approval);
 
         // Stamp in the SAME transaction as the payout, so the instant this commits a concurrent
         // duplicate sees the finished answer rather than a half-claimed key.
@@ -435,7 +476,7 @@ public class PosSessionServiceImpl implements PosSessionService {
     public TillExpenseReportDto tillExpenseReport(Long companyId, LocalDate from, LocalDate to) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
 
-        LocalDate today    = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today    = calendar.today(companyId);
         LocalDate fromDate = (from != null) ? from : today.minusDays(DEFAULT_EXPENSE_REPORT_DAYS);
         LocalDate toDate   = (to != null) ? to : today;
         if (toDate.isBefore(fromDate)) {
@@ -446,8 +487,8 @@ public class PosSessionServiceImpl implements PosSessionService {
         // on the closing day is inside the report, which a `<= toDate 00:00` bound would drop.
         List<PosPayoutDto> rows = payouts.findExpensesForCompanyBetween(
                         companyId, PosPayoutType.EXPENSE,
-                        fromDate.atStartOfDay(ZoneOffset.UTC).toInstant(),
-                        toDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant())
+                        calendar.startOfDay(companyId, fromDate),
+                        calendar.endOfDayExclusive(companyId, toDate))
                 .stream()
                 .map(PosSessionServiceImpl::toDto)
                 .toList();
@@ -496,7 +537,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         var session = requireSession(sessionUid);
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
 
-        XReadDto report = buildXRead(session);
+        XReadDto report = blindUnlessReconciler(buildXRead(session), false);
         auditReadPrint(session, AuditActions.POS_SESSION_XREAD, null, null);
         return report;
     }
@@ -517,7 +558,7 @@ public class PosSessionServiceImpl implements PosSessionService {
         scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
 
         String approver = requireReadAuthority(session, request, AuditActions.POS_SESSION_XREAD);
-        XReadDto report = buildXRead(session);
+        XReadDto report = blindUnlessReconciler(buildXRead(session), approver != null);
         auditReadPrint(session, AuditActions.POS_SESSION_XREAD, approver, uidOf(request));
         return report;
     }
@@ -536,8 +577,13 @@ public class PosSessionServiceImpl implements PosSessionService {
         BigDecimal variance = session.getVarianceAmount();
         Long journalId = null;
         if (variance != null && variance.compareTo(BigDecimal.ZERO) != 0) {
-            var journalEntry = postVarianceGl(session, variance);
-            journalId = journalEntry != null ? journalEntry.id() : null;
+            var varianceJournal = postVarianceGlOrRefuse(session, variance);
+            journalId = varianceJournal.id();
+            publishCashMoved(session, session.getId(), session.getUid(),
+                    com.erp.modules.sales.domain.dto.PosCashMovedPayload.KIND_VARIANCE,
+                    varianceJournal.uid(),
+                    (variance.signum() > 0 ? "Till over " : "Till short ")
+                            + session.getSessionNumber());
         }
 
         session.setVarianceJournalId(journalId);
@@ -777,7 +823,8 @@ public class PosSessionServiceImpl implements PosSessionService {
      * {@link #recordPayout} and {@link #recordExpense} go through here so a REFUND, a PAID_OUT and an
      * EXPENSE cannot drift apart in how they are stored, posted or logged.
      */
-    private PosPayoutDto savePostAndAudit(PosSession session, PosSessionPayout payout) {
+    private PosPayoutDto savePostAndAudit(PosSession session, PosSessionPayout payout,
+                                          PayoutApproval approval) {
         PosSessionPayout saved = payouts.save(payout);
         postPayoutGl(session, saved);
 
@@ -786,9 +833,90 @@ public class PosSessionServiceImpl implements PosSessionService {
         detail.put("amount", saved.getAmount().toPlainString());
         detail.put("category", saved.getCategory() == null ? "" : saved.getCategory());
         detail.put("glEntryUid", saved.getJournalEntryUid() == null ? "" : saved.getJournalEntryUid());
+        // POS-05: how this cash left the drawer - on the operator's own authority, approved by a
+        // named manager, or (an older till sending no approval) with nobody's approval at all.
+        detail.put("authorisation", approval.mode());
+        detail.put("authorisedBy", approval.username() == null ? "" : approval.username());
+        detail.put("authorisedByUid", approval.uid() == null ? "" : approval.uid());
         audit.record(AuditEvent.of(AuditActions.POS_SESSION_PAYOUT, "pos_session_payouts",
                 saved.getId(), saved.getUid()).detail(detail));
         return toDto(saved);
+    }
+
+    /**
+     * Decides on whose authority cash may leave the drawer (POS-02, POS-05).
+     *
+     * <ul>
+     *   <li>A caller who holds the authority themselves needs nobody - they are the person a cashier
+     *       would have called over.</li>
+     *   <li>Otherwise a manager's step-up uid is re-resolved here, exactly as a sale reversal's is:
+     *       a real, active, different user who holds the authority in THIS session's company. A uid
+     *       that does not check out is refused and the attempt audited.</li>
+     *   <li>No uid at all: a REFUND is refused - it returns cash with no reversal of revenue, VAT,
+     *       stock or GL, so it goes through the sale reversal instead. A PAID_OUT or EXPENSE is still
+     *       accepted so OrbixPOS 1.5.x tills keep working, and is audited {@code NONE}
+     *       (unapproved) so the owner can see every one.</li>
+     * </ul>
+     *
+     * <p>The refusal for a REFUND without approval is a 409 with a plain sentence rather than a 403,
+     * because a 1.5.x till shows the server's text only for non-403 errors - a 403 would read as a
+     * bare "You do not have permission".
+     */
+    private PayoutApproval requirePayoutAuthority(PosSession session, PosPayoutType type,
+                                                  String authorisedByUid) {
+        boolean refund = type == PosPayoutType.REFUND;
+        String needed = refund ? REFUND_PAYOUT_APPROVAL_PERMISSION : PAYOUT_APPROVAL_PERMISSION;
+        if (permissionResolver.hasPermission(RequestContext.get(), needed,
+                System.currentTimeMillis())) {
+            return new PayoutApproval(PAYOUT_AUTH_SELF, null, null);
+        }
+
+        String uid = authorisedByUid == null || authorisedByUid.isBlank()
+                ? null : authorisedByUid.strip();
+        if (uid == null) {
+            if (refund) {
+                auditPayoutRefusal(session, type, OUTCOME_NO_APPROVAL, null);
+                throw new ConflictException(
+                        "A cash refund needs a supervisor. To give a customer their money back, "
+                        + "reverse the sale from Today's sales instead.");
+            }
+            return new PayoutApproval(PAYOUT_AUTH_NONE, null, null);
+        }
+
+        var verdict = stepUpAuth.verifyAuthoriserUid(uid, needed, session.getCompanyId());
+        if (!verdict.authorised()) {
+            auditPayoutRefusal(session, type, OUTCOME_NOT_AUTHORISED, uid);
+            throw new ForbiddenException(refund
+                    ? "That supervisor is not authorised to approve a refund. "
+                      + "Ask a supervisor who can reverse sales to approve it, then try again."
+                    : "That manager is not authorised to approve cash out of the till. "
+                      + "Ask a manager who can settle the till to approve it, then try again.");
+        }
+        return new PayoutApproval(PAYOUT_AUTH_APPROVED, verdict.authoriserUsername(), uid);
+    }
+
+    /** A refused payout, recorded outside the transaction the refusal rolls back. */
+    private void auditPayoutRefusal(PosSession session, PosPayoutType type, String outcome,
+                                    String attemptedApproverUid) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("outcome", outcome);
+        detail.put("type", type.name());
+        detail.put("sessionUid", session.getUid());
+        detail.put("authorisedByUid", attemptedApproverUid == null ? "" : attemptedApproverUid);
+        audit.recordIndependent(AuditEvent.of(AuditActions.POS_SESSION_PAYOUT, "pos_sessions",
+                session.getId(), session.getUid()).detail(detail));
+    }
+
+    /**
+     * POS-04 blind cash-up: only someone who may settle the till sees what the drawer should hold.
+     * A manager-approved read was approved by exactly such a person, so it is served whole.
+     */
+    private XReadDto blindUnlessReconciler(XReadDto report, boolean managerApproved) {
+        if (managerApproved || permissionResolver.hasPermission(RequestContext.get(),
+                READ_APPROVAL_PERMISSION, System.currentTimeMillis())) {
+            return report;
+        }
+        return report.withoutExpectedCash();
     }
 
     /**
@@ -932,7 +1060,7 @@ public class PosSessionServiceImpl implements PosSessionService {
             String  memo      = isExpense ? "Till expense: " + payout.getCategory() : "Till payout";
             var draft = new JournalEntryDraft(
                     companyId, session.getBranchId(),
-                    LocalDate.now(ZoneOffset.UTC),
+                    calendar.today(companyId),
                     (isExpense ? "POS till expense " : "POS till payout ")
                             + session.getSessionNumber(),
                     JournalSourceType.CASH_DIRECT, payout.getUid(),
@@ -945,6 +1073,11 @@ public class PosSessionServiceImpl implements PosSessionService {
             // Persist the account and the journal on the row itself — this is what makes the next
             // attempt a no-op and what the expense report reads back.
             payout.markPostedToGl(expenseAcct.getId(), journalUid);
+            // ARC-08: the cash book mirrors the cash leg (POS-03 semantics unchanged: same entry).
+            publishCashMoved(session, payout.getId(), payout.getUid(),
+                    com.erp.modules.sales.domain.dto.PosCashMovedPayload.KIND_PAYOUT, journalUid,
+                    (isExpense ? "Till expense " : "Till payout ") + session.getSessionNumber()
+                            + (isExpense ? " - " + payout.getCategory() : ""));
             return journalUid;
         } catch (RuntimeException ex) {
             // Fail-fast, and take the payout row down with it: cash that cannot be accounted for
@@ -956,6 +1089,23 @@ public class PosSessionServiceImpl implements PosSessionService {
                     + " Ask your accountant to check the till expense and cash account setup,"
                     + " then try again.");
         }
+    }
+
+    /**
+     * ARC-08: one {@code POS.CASH.MOVED} outbox row, in the caller's transaction, so the cash book
+     * writes the cash leg of the journal just posted. Carries no amounts — the consumer reads the
+     * posted journal back, so the cash row and the ledger cannot disagree.
+     */
+    private void publishCashMoved(PosSession session, Long aggregateId, String sourceUid,
+                                  String kind, String journalUid, String memo) {
+        if (outbox == null || journalUid == null) {
+            return;
+        }
+        outbox.publish(com.erp.platform.events.DomainEventType.POS_CASH_MOVED,
+                com.erp.platform.events.DomainEventType.AGG_POS_SESSION,
+                aggregateId, sourceUid, session.getCompanyId(), session.getBranchId(),
+                new com.erp.modules.sales.domain.dto.PosCashMovedPayload(
+                        kind, sourceUid, journalUid, memo));
     }
 
     /**
@@ -1056,9 +1206,7 @@ public class PosSessionServiceImpl implements PosSessionService {
                 .map(c -> c.getBaseCurrency())
                 .orElse("TZS");
         // Posting date = session close date (not today) so GL period matches the session
-        LocalDate postingDate = session.getClosedAt() != null
-                ? session.getClosedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        LocalDate postingDate = calendar.dateOf(session.getCompanyId(), session.getClosedAt());
         BigDecimal abs = variance.abs();
         LineDraft debitLine;
         LineDraft creditLine;
@@ -1078,7 +1226,29 @@ public class PosSessionServiceImpl implements PosSessionService {
                 "POS session variance " + session.getSessionNumber(),
                 JournalSourceType.POS_VARIANCE, session.getUid(),
                 null, actorId(), List.of(debitLine, creditLine));
-        return glInvoker.postInNewTx(draft);
+        // ACC-20: posted in the reconcile's OWN transaction so the journal and the RECONCILED status
+        // commit together or not at all. The former glInvoker.postInNewTx swallowed every failure
+        // and returned null, so the session read "reconciled" while the shortage never reached the
+        // P&L.
+        return glPosting.post(draft);
+    }
+
+    /**
+     * Posts the variance journal or refuses the reconcile with a sentence a supervisor can act on
+     * (ACC-20). The technical reason goes to the log only.
+     */
+    private com.erp.modules.gl.domain.dto.JournalEntryDto postVarianceGlOrRefuse(
+            PosSession session, BigDecimal variance) {
+        try {
+            return postVarianceGl(session, variance);
+        } catch (RuntimeException ex) {
+            log.warn("POS variance GL posting failed for company={} session={} — reconcile refused: {}",
+                    session.getCompanyId(), session.getSessionNumber(), ex.toString());
+            throw new ConflictException(
+                    "This till could not be reconciled because the cash difference could not be"
+                    + " recorded in the accounts. Ask your accountant to check the accounts setup"
+                    + " for this date, then try again.");
+        }
     }
 
     /**

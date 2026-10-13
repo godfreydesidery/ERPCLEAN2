@@ -12,6 +12,8 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.util.Optional;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -62,6 +65,9 @@ class SalesInvoiceServiceImplPostedGlEntryTest {
     // getByUid names the invoice's creator through this; null here would NPE every read.
     @Mock com.erp.modules.iam.service.UserLookupService userLookup;
 
+    // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
+    @Spy CompanyCalendar calendar =
+            CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
     @InjectMocks SalesInvoiceServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;

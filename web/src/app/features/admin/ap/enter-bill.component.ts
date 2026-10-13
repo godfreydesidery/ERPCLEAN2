@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +13,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierModel } from '../models/party.model';
 import { SupplierService } from '../parties/supplier.service';
 import { PurchasesService } from '../purchases/purchases.service';
+import { GlService } from '../gl/gl.service';
 import {
   BillLineRequest,
   BillMatchResultDto,
@@ -20,8 +22,10 @@ import {
   SupplierBillDto,
 } from './models/ap.model';
 import { ApService } from './ap.service';
+import { isBlockingControl } from '../gl/manual-posting.util';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /**
  * UI-only line row for the bill line editor.
@@ -37,6 +41,8 @@ interface LineRow {
   unitCostAmount: string;
   poLineUid: string;
   grLineUid: string;
+  /** AP-16: expense / asset account for a line that is not bought stock (rent, power, services). */
+  glAccountUid: string;
 }
 
 /**
@@ -59,7 +65,7 @@ interface LineRow {
  */
 @Component({
   selector: 'app-enter-bill',
-  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent],
+  imports: [FormsModule, RouterLink, UidPickerComponent, CurrencySelectComponent, LookupNoticeComponent],
   templateUrl: './enter-bill.component.html',
   styleUrl: './enter-bill.component.scss',
 })
@@ -69,6 +75,7 @@ export class EnterBillComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly purchasesService = inject(PurchasesService);
+  private readonly glService = inject(GlService);
   private readonly alerts = inject(AlertService);
   protected readonly session = inject(SessionStore);
 
@@ -76,8 +83,17 @@ export class EnterBillComponent {
   readonly poOptions = signal<UidOption[]>([]);
   /** PO line options, loaded when a PO is selected. */
   readonly poLineOptions = signal<UidOption[]>([]);
+  /**
+   * AP-16: expense and asset accounts for lines that are not purchased stock. Empty when the list
+   * could not be read — the line then posts to Purchases exactly as before.
+   */
+  readonly accountOptions = signal<UidOption[]>([]);
   /** True when the PO list could not be loaded (non-fatal; PO matching is optional). */
   readonly poListUnavailable = signal(false);
+  /** ADM-28: a 403 on the PO list is "no access", not "could not be loaded". */
+  readonly poListLookup = signal<LookupFailure | null>(null);
+  /** ADM-28: the supplier search failed (403 = no access) — say so instead of showing nothing. */
+  readonly supplierLookup = signal<LookupFailure | null>(null);
 
   // ── Goods receipt line picker ─────────────────────────────────────────────
   /**
@@ -120,6 +136,8 @@ export class EnterBillComponent {
   readonly matchResult = signal<BillMatchResultDto | null>(null);
   readonly matchState = signal<'idle' | 'running' | 'done' | 'error'>('idle');
   readonly acceptingLine = signal<string | null>(null); // billLineUid being accepted
+  /** AP-20: why the match failed, from the server (e.g. the day's exchange rate is missing). */
+  readonly matchError = signal<string | null>(null);
 
   // ── Permissions ────────────────────────────────────────────────────────────
   readonly canEnter = computed(() => this.session.hasPermission('AP.BILL.ENTER'));
@@ -128,7 +146,6 @@ export class EnterBillComponent {
     !this.selectedSupplier() ||
     !String(this.supplierInvoiceNo() ?? '').trim() ||
     !String(this.billDate() ?? '').trim() ||
-    !String(this.dueDate() ?? '').trim() ||
     !this.selectedCompanyId() ||
     this.lines().length === 0 ||
     this.submitting(),
@@ -137,8 +154,10 @@ export class EnterBillComponent {
   private readonly supplierSearch$ = new Subject<string>();
 
   constructor() {
-    this.billDate.set(new Date().toISOString().slice(0, 10));
-    this.dueDate.set(new Date().toISOString().slice(0, 10));
+    this.billDate.set(todayLocal());
+    // AP-09: the due date starts EMPTY. Left empty, the server derives it from the supplier's
+    // payment terms (bill date + terms); defaulting it to today made every bill overdue tomorrow.
+    this.dueDate.set('');
 
     this.supplierSearch$
       .pipe(
@@ -155,8 +174,14 @@ export class EnterBillComponent {
         takeUntilDestroyed(),
       )
       .subscribe({
-        next: ({ rows }) => this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE')),
-        error: () => this.supplierResults.set([]),
+        next: ({ rows }) => {
+          this.supplierLookup.set(null);
+          this.supplierResults.set(rows.filter((s) => s.status === 'ACTIVE'));
+        },
+        error: (err: unknown) => {
+          this.supplierResults.set([]);
+          this.supplierLookup.set(lookupFailure(err));
+        },
       });
 
     this.loadCompanies();
@@ -173,6 +198,7 @@ export class EnterBillComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.loadPoOptions(list[0].id);
+              this.loadAccountOptions(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -184,7 +210,10 @@ export class EnterBillComponent {
 
   private loadPoOptions(companyId: string): void {
     this.poListUnavailable.set(false);
-    this.purchasesService.listOrders(companyId, undefined, 'ORDERED', 0, 200).subscribe({
+    // No status filter: the server used to ignore 'ORDERED' (PUR-11), so this picker has always
+    // listed every PO — and a bill usually arrives AFTER the goods (PO already RECEIVED). Now that the
+    // filter works, sending 'ORDERED' would silently hide every received PO from bill entry.
+    this.purchasesService.listOrders(companyId, undefined, undefined, 0, 200).subscribe({
       next: ({ rows }) => {
         this.poOptions.set(
           rows.map((po) => ({
@@ -194,7 +223,11 @@ export class EnterBillComponent {
           })),
         );
       },
-      error: () => { this.poOptions.set([]); this.poListUnavailable.set(true); },
+      error: (err: unknown) => {
+        this.poOptions.set([]);
+        this.poListUnavailable.set(true);
+        this.poListLookup.set(lookupFailure(err));
+      },
     });
   }
 
@@ -226,6 +259,34 @@ export class EnterBillComponent {
     this.resetSupplier();
     this.poListUnavailable.set(false);
     this.loadPoOptions(id);
+    this.loadAccountOptions(id);
+    this.lines.update((rows) => rows.map((r) => ({ ...r, glAccountUid: '' })));
+  }
+
+  private loadAccountOptions(companyId: string): void {
+    this.accountOptions.set([]);
+    if (!companyId) return;
+    this.glService.listAllActiveAccounts(companyId).subscribe({
+      next: (list) =>
+        this.accountOptions.set(
+          list
+            .filter((a) => a.accountType === 'EXPENSE' || a.accountType === 'ASSET')
+            // ACC-23: never offer AR, Inventory, VAT or other sub-ledger control accounts on a
+            // bill line — the server refuses them, as it does for manual journals.
+            .filter((a) => !isBlockingControl(a))
+            .map((a) => ({
+              uid: a.uid,
+              label: `${a.accountCode} — ${a.name}`,
+              hint: a.accountType === 'EXPENSE' ? 'Expense' : 'Asset',
+            })),
+        ),
+      error: () => this.accountOptions.set([]),
+    });
+  }
+
+  /** A line tied to an order or a receipt is stock: it posts through GRNI, not to an account. */
+  isStockLine(line: LineRow): boolean {
+    return !!String(line.poLineUid ?? '').trim() || !!String(line.grLineUid ?? '').trim();
   }
 
   // ── Goods receipt line picker ──────────────────────────────────────────────
@@ -326,7 +387,14 @@ export class EnterBillComponent {
   // ── Line editor ────────────────────────────────────────────────────────────
 
   private emptyLine(): LineRow {
-    return { description: '', billedQty: '', unitCostAmount: '', poLineUid: '', grLineUid: '' };
+    return {
+      description: '',
+      billedQty: '',
+      unitCostAmount: '',
+      poLineUid: '',
+      grLineUid: '',
+      glAccountUid: '',
+    };
   }
 
   addLine(): void {
@@ -392,7 +460,10 @@ export class EnterBillComponent {
 
     if (!invNo) { this.formError.set('Supplier invoice no. is required.'); return; }
     if (!bDate) { this.formError.set('Bill date is required.'); return; }
-    if (!dDate) { this.formError.set('Due date is required.'); return; }
+    if (dDate && dDate < bDate) {
+      this.formError.set('The due date cannot be before the bill date.');
+      return;
+    }
 
     const lineRequests: BillLineRequest[] = this.lines()
       .filter((l) => String(l.description ?? '').trim())
@@ -402,6 +473,7 @@ export class EnterBillComponent {
         unitCostAmount: String(+(String(l.unitCostAmount ?? '').trim() || '0')),
         poLineUid: String(l.poLineUid ?? '').trim() || null,
         grLineUid: String(l.grLineUid ?? '').trim() || null,
+        glAccountUid: this.isStockLine(l) ? null : String(l.glAccountUid ?? '').trim() || null,
       }));
 
     if (lineRequests.length === 0) { this.formError.set('At least one bill line is required.'); return; }
@@ -412,7 +484,7 @@ export class EnterBillComponent {
       supplierInvoiceNo: invNo,
       purchaseOrderUid: poUid || null,
       billDate: bDate,
-      dueDate: dDate,
+      dueDate: dDate || null,
       vatAmount: vat,
       currency: curr,
       lines: lineRequests,
@@ -441,12 +513,16 @@ export class EnterBillComponent {
 
   private runMatch(billUid: string): void {
     this.matchState.set('running');
+    this.matchError.set(null);
     this.apService.runMatch(billUid).subscribe({
       next: (result) => {
         this.matchResult.set(result);
         this.matchState.set('done');
       },
-      error: () => this.matchState.set('error'),
+      error: (err) => {
+        this.matchError.set(this.messageFrom(err, ''));
+        this.matchState.set('error');
+      },
     });
   }
 

@@ -92,6 +92,26 @@ describe('PurchaseReturnCreateComponent — number-input coercion', () => {
     expect(comp.returnLines()[0].returnedQty).toBe('5');
   });
 
+  // ── PUR-08: newest-50 seed + server search, voided receipts excluded ─────
+
+  it('seeds the newest 50 receipts and searches the server by number', async () => {
+    makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    const purchases = TestBed.inject(PurchasesService) as unknown as { listReceipts: ReturnType<typeof vi.fn> };
+    expect(purchases.listReceipts).toHaveBeenCalledWith(STUB_COMPANY.id, undefined, 0, 50);
+
+    purchases.listReceipts.mockReturnValue(of({ rows: [
+      { uid: 'GR9', receiptNumber: 'GR-0042', status: 'RECEIVED' },
+      { uid: 'GRV', receiptNumber: 'GR-0043', status: 'VOID' },
+    ], meta: {} }));
+    let found: readonly { uid: string }[] = [];
+    comp.searchGr('0042').subscribe((opts) => (found = opts));
+
+    expect(purchases.listReceipts).toHaveBeenLastCalledWith(STUB_COMPANY.id, '0042', 0, 20);
+    expect(found.map((o) => o.uid)).toEqual(['GR9']);
+  });
+
   // ── 2. submit() does not throw when returnedQty set as a number ───────────
 
   it('submit() does not throw when returnedQty was set as a number', async () => {
@@ -126,5 +146,46 @@ describe('PurchaseReturnCreateComponent — number-input coercion', () => {
     expect(createSpy).toHaveBeenCalledOnce();
     const payload = (createSpy.mock.calls as any[][])[0][0];
     expect(payload.lines[0].returnedQty).toBe('15');
+  });
+});
+
+// ── PUR-02: a return is entered in the receipt LINE's unit ──────────────────
+
+const CRATE_LINE = {
+  ...STUB_GR_LINE,
+  uid: 'GL2', unitName: 'Crate',
+  // 8 crates of 25 = 200 bottles; 3 crates (75 bottles) already returned.
+  receivedQty: 8, qtyInBase: 200, returnedQtyInBase: 75,
+};
+
+describe('PurchaseReturnCreateComponent — pack-unit lines (PUR-02)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('shows what is still returnable in the line unit and previews the base quantity', async () => {
+    makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    const line = CRATE_LINE as any;
+    expect(comp.isPackLine(line)).toBe(true);
+    expect(comp.returnableQty(line)).toBe(5);
+    expect(comp.baseQtyPreview({ line, returnedQty: '2', include: true })).toBe(50);
+    expect(comp.baseQtyPreview({ line, returnedQty: '', include: true })).toBeNull();
+  });
+
+  it('blocks a quantity above the returnable crates before calling the server', async () => {
+    const { createSpy } = makeBed();
+    const comp = TestBed.createComponent(PurchaseReturnCreateComponent).componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.selectedGrUid.set('GR1');
+    comp.reason.set('Damaged');
+    comp.returnLines.set([{ line: CRATE_LINE as any, returnedQty: '150', include: true }]);
+    comp.submit();
+    await vi.runAllTimersAsync();
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(comp.lineErrors()['GL2']).toBe('You can return at most 5 Crate.');
   });
 });

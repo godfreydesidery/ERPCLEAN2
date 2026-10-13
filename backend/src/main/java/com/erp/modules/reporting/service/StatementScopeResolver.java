@@ -1,7 +1,9 @@
 package com.erp.modules.reporting.service;
 
+import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -46,11 +48,21 @@ public class StatementScopeResolver {
             throw new IllegalArgumentException(
                     "Choose either a branch or the company-level entries, not both.");
         }
+        RequestContext.Principal principal = RequestContext.get();
         if (unassigned) {
+            // Company-level lines belong to no branch, so they are not "my branches" for a
+            // branch-limited caller (owner ruling 2026-10-10).
+            if (!branchGuard.seesWholeCompany(principal, companyId)) {
+                throw new ForbiddenException("Company-level entries are shown only to staff with "
+                        + "access to the whole company. Choose one of your branches instead.");
+            }
             return StatementScope.unassigned();
         }
         if (!hasBranch) {
-            return StatementScope.companyWide();
+            BranchReadScope mine = branchGuard.readScope(principal, companyId, null);
+            return mine.everyBranchOfCompany()
+                    ? StatementScope.companyWide()
+                    : StatementScope.branches(mine.branchIds(), mine.label());
         }
         List<Object[]> rows = jdbc.query(
                 "SELECT id, name FROM branches WHERE uid = ? AND company_id = ?",
@@ -61,7 +73,7 @@ public class StatementScopeResolver {
         }
         Long   branchId   = (Long) rows.get(0)[0];
         String branchName = (String) rows.get(0)[1];
-        branchGuard.assertMayRead(RequestContext.get(), branchId);
+        branchGuard.readScope(principal, companyId, branchId);
         return StatementScope.branch(branchId, branchUid.trim(), branchName);
     }
 }

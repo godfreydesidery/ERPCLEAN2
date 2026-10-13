@@ -1,6 +1,10 @@
 package com.erp.api;
 
 import com.erp.modules.gl.domain.dto.JournalEntryDto;
+import com.erp.modules.gl.domain.dto.JournalSearchCriteria;
+import com.erp.modules.gl.domain.enums.JournalSourceType;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import com.erp.modules.gl.domain.dto.PostJournalRequest;
 import com.erp.modules.gl.domain.dto.ReversalRequest;
 import com.erp.modules.gl.service.JournalService;
@@ -48,10 +52,25 @@ public class JournalController {
         return service.getByUid(uid);
     }
 
+    /**
+     * Journal list. All filters are optional (ACC-19): posting-date range, source type, an account
+     * (journals with a line on it) and free text over description, batch number, refs and line
+     * memos. Rows carry {@code documentRef}, the source document's number when it can be read.
+     */
     @GetMapping
     @PreAuthorize("@perm.has('GL.VIEW')")
-    public ApiResponse<List<JournalEntryDto>> list(@RequestParam Long companyId, Pageable pageable) {
-        Page<JournalEntryDto> page = service.list(companyId, pageable);
+    public ApiResponse<List<JournalEntryDto>> list(
+            @RequestParam Long companyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate to,
+            @RequestParam(required = false) JournalSourceType sourceType,
+            @RequestParam(required = false) String accountUid,
+            @RequestParam(required = false) String q,
+            Pageable pageable) {
+        Page<JournalEntryDto> page = service.search(companyId,
+                new JournalSearchCriteria(from, to, sourceType, accountUid, q), pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 

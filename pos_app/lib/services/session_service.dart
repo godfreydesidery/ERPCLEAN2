@@ -94,16 +94,21 @@ class SessionService {
   /// journal uid, which is the only place that reference is ever visible.
   ///
   /// [reason] is now mandatory server-side (min 3 chars, trimmed).
+  ///
+  /// [authorisedByUid] (POS-05) is the uid a manager step-up returned; the
+  /// server re-verifies it and names the manager on the audit record.
   Future<PosPayout> payout(
     String uid,
     PosPayoutType type,
     double amount,
-    String? reason,
-  ) async {
+    String? reason, {
+    String? authorisedByUid,
+  }) async {
     final data = await _api.post('/pos/sessions/uid/$uid/payouts', body: {
       'payoutType': type.wire,
       'amount': amount,
       'reason': reason,
+      'authorisedByUid': ?authorisedByUid,
     });
     return PosPayout.fromJson(asMap(data));
   }
@@ -128,10 +133,16 @@ class SessionService {
     required String category,
     required String reason,
     required String entryId,
+    String? authorisedByUid,
   }) async {
     final data = await _api.post(
       '/pos/sessions/uid/$uid/expenses',
-      body: {'amount': amount, 'category': category, 'reason': reason},
+      body: {
+        'amount': amount,
+        'category': category,
+        'reason': reason,
+        'authorisedByUid': ?authorisedByUid,
+      },
       idempotencyKey: entryId,
       xRequestId: entryId,
     );

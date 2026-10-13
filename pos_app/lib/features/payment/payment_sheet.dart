@@ -11,6 +11,7 @@ import '../../models/enums.dart';
 import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
+import '../../state/price_cache.dart';
 import '../../state/pending_sale_store.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
@@ -43,7 +44,9 @@ Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
     builder: (_) => const _PaymentSheet(),
   );
   if (receipt != null) {
+    // Next sale: back to the walk-in customer (POS-15) and fresh prices (POS-18).
     ref.read(cartProvider.notifier).clearLines();
+    ref.read(priceCacheProvider).clear();
     // Persist locally so it can be reprinted without re-posting (G-8), offline.
     await ref.read(receiptJournalProvider).add(receipt);
     if (context.mounted) await showReceiptSheet(context, ref, receipt);

@@ -38,5 +38,12 @@ public record StockTransferDto(
         Instant receivedAt,
         Long receivedBy,
         String notes,
-        List<StockTransferLineDto> lines
+        List<StockTransferLineDto> lines,
+        /**
+         * Source/destination branch uids (additive, STK-05): the web compares them with the active
+         * branch (X-Branch-Uid) to offer Dispatch only at the source and Receive only at the
+         * destination — the same rule the service enforces.
+         */
+        String sourceBranchUid,
+        String destBranchUid
 ) {}

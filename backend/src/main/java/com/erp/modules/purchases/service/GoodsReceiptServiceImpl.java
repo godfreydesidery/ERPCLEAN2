@@ -29,13 +29,16 @@ import com.erp.platform.audit.AuditEvent;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
+import com.erp.platform.common.money.FxDocumentConverter;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEventType;
 import com.erp.platform.events.OutboxPublisher;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -91,6 +94,11 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
     private final AuditService                     audit;
     private final OutboxPublisher                  outbox;
     private final GoodsReceiptPrintQuery           printQuery;
+    private final ReceiptVoidStockGuard            voidStockGuard;
+    private final com.erp.modules.purchases.domain.dto.ReceiptBillingReader billingReader;
+    /** PUR-07 / ACC-08: converts a foreign-currency receipt's cost to base before it is valued. */
+    private final FxDocumentConverter              fxConverter;
+    private final CompanyCalendar calendar;
 
     public GoodsReceiptServiceImpl(GoodsReceiptRepository receipts,
                                    GoodsReceiptLineRepository grLines,
@@ -105,7 +113,12 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                                    ScopeGuard scopeGuard,
                                    AuditService audit,
                                    OutboxPublisher outbox,
-                                   GoodsReceiptPrintQuery printQuery) {
+                                   GoodsReceiptPrintQuery printQuery,
+                                   ReceiptVoidStockGuard voidStockGuard,
+                                   com.erp.modules.purchases.domain.dto.ReceiptBillingReader
+                                           billingReader,
+                                   FxDocumentConverter fxConverter,
+                                   CompanyCalendar calendar) {
         this.receipts      = receipts;
         this.grLines       = grLines;
         this.grLineSerials = grLineSerials;
@@ -120,6 +133,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         this.audit         = audit;
         this.outbox        = outbox;
         this.printQuery    = printQuery;
+        this.voidStockGuard = voidStockGuard;
+        this.billingReader  = billingReader;
+        this.fxConverter    = fxConverter;
+        this.calendar       = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -179,7 +196,11 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         poService.recomputePoStatus(po);
 
         // 8. Emit STOCK.RECEIVED inside the same TX (ADR-0011 D-7; NEVER REQUIRES_NEW)
-        List<StockReceivedPayload.LineItem> payloadLines = buildPayloadLines(savedLines);
+        // PUR-07 / ACC-08: the payload's unit cost is valued straight into stock and the GL, which
+        // are kept in BASE currency — so a USD order's cost is converted at the receipt date first.
+        List<StockReceivedPayload.LineItem> payloadLines = buildPayloadLines(savedLines,
+                CurrencyCode.value(po.getCurrency()), po.getCompanyId(),
+                receiptFxDate(po.getCompanyId(), receivedAt));
         outbox.publish(
                 DomainEventType.STOCK_RECEIVED,
                 DomainEventType.AGG_GOODS_RECEIPT,
@@ -261,9 +282,39 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         GoodsReceipt gr = requireReceipt(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), gr.getCompanyId());
         if (gr.getStatus() != GoodsReceiptStatus.RECEIVED) {
-            throw new IllegalStateException(
-                    "Only RECEIVED receipts can be voided; current status: " + gr.getStatus());
+            throw new IllegalStateException("This goods receipt has already been voided.");
         }
+
+        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
+
+        // PUR-03: goods already sent back to the supplier left stock on the return. The void
+        // reverses the WHOLE receipt, so voiding now would take those goods out a second time.
+        // Refuse rather than reverse a partial quantity: the return and its debit note stand, and
+        // what is left on the receipt can go back on a further return.
+        boolean hasReturns = lineList.stream().anyMatch(l ->
+                l.getReturnedQtyInBase() != null && l.getReturnedQtyInBase().signum() > 0);
+        if (hasReturns) {
+            throw new IllegalStateException(
+                    "Some of these goods have already been returned to the supplier, so this "
+                            + "receipt can't be voided. Raise a purchase return for the rest instead.");
+        }
+
+        // PUR-04 / LBO-04: a supplier bill already claims these goods. Voiding would take the stock
+        // out and reverse GRNI while AP still owes the supplier for it. The goods go back on a
+        // purchase return (which raises the debit note) instead.
+        List<String> billedBy = billingReader.billsClaimingReceiptLines(gr.getCompanyId(),
+                lineList.stream().map(GoodsReceiptLine::getUid)
+                        .filter(java.util.Objects::nonNull).toList());
+        if (!billedBy.isEmpty()) {
+            throw new IllegalStateException(
+                    "This receipt has already been billed by the supplier (bill "
+                            + String.join(", ", billedBy) + "), so it can't be voided. "
+                            + "Raise a purchase return for the goods, or a debit note on the bill.");
+        }
+
+        // OPN-13 (owner ruling 2026-10-10): refuse once the receipt's stock has partly been sold or
+        // used — the reversal would drive the branch negative and distort the moving average.
+        voidStockGuard.assertStockStillOnHand(gr, lineList);
 
         // 1. Transition to VOID
         gr.setStatus(GoodsReceiptStatus.VOID);
@@ -274,7 +325,6 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         gr.setUpdatedBy(actorId());
 
         // 2. Reverse PO line outstanding (OutstandingTracker, same TX, ADR-0011 D-3)
-        List<GoodsReceiptLine> lineList = grLines.findByGoodsReceiptIdOrderByLineNo(gr.getId());
         tracker.reverseReceipt(lineList);
 
         // 3. Recompute PO status (ADR-0011 D-4)
@@ -404,10 +454,20 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
             log.warn("Over-receipt rejected (BR-PURCH-10, ADR-0011 D-3) on PO line id={} uid={}: "
                             + "outstanding={}, tolerancePct={}, ceiling={}, requestedQtyInBase={}",
                     poLine.getId(), poLine.getUid(), outstanding, tolerancePct, ceiling, qtyInBase);
+            // PUR-01 / LBO-05: say what IS still outstanding, in the line's own unit (the unit the
+            // storekeeper types in), so "reduce it" comes with the number to reduce it to.
+            BigDecimal outstandingInUnit = outstanding.max(BigDecimal.ZERO)
+                    .multiply(poLine.getOrderedQty())
+                    .divide(poLine.getOrderedQtyInBase(), BASE_QTY_SCALE, java.math.RoundingMode.HALF_UP)
+                    .stripTrailingZeros();
+            if (outstandingInUnit.scale() < 0) {
+                outstandingInUnit = outstandingInUnit.setScale(0);
+            }
             throw new IllegalStateException(
                     "Over-receipt rejected for " + poLine.getProductName()
-                            + ": the quantity received exceeds the outstanding amount on this line. "
-                            + "Reduce it and try again.");
+                            + ": the quantity received exceeds the outstanding amount on this line"
+                            + " (outstanding: " + outstandingInUnit.toPlainString() + " "
+                            + poLine.getUnitName() + "). Reduce it and try again.");
         }
 
         short nextLineNo = (short) (grLines.findMaxLineNo(gr.getId()) + 1);
@@ -451,7 +511,10 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
         }
     }
 
-    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> savedLines) {
+    private List<StockReceivedPayload.LineItem> buildPayloadLines(List<GoodsReceiptLine> savedLines,
+                                                                  String docCurrency,
+                                                                  Long companyId,
+                                                                  LocalDate fxDate) {
         return savedLines.stream()
                 .map(l -> {
                     List<String> serials = grLineSerials.findByGoodsReceiptLineId(l.getId())
@@ -461,7 +524,8 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
                             resolveProductUid(l.getProductId()),
                             l.getUnitId(),
                             l.getQtyInBase(),
-                            baseUnitCost(l),         // ADR-0020 D-3 (K4: per BASE unit, not per order unit)
+                            // ADR-0020 D-3 (K4: per BASE unit, not per order unit), in BASE currency
+                            baseUnitCost(l, docCurrency, companyId, fxDate),
                             l.getLotNumber(),
                             l.getManufactureDate(),
                             l.getExpiryDate(),
@@ -491,13 +555,32 @@ public class GoodsReceiptServiceImpl implements GoodsReceiptService {
      * <p>Returns ZERO for a defensive non-positive base quantity; {@link #buildGrLine} already
      * rejects that case, so this is unreachable in practice and never divides by zero.
      */
-    private BigDecimal baseUnitCost(GoodsReceiptLine line) {
+    private BigDecimal baseUnitCost(GoodsReceiptLine line, String docCurrency, Long companyId,
+                                    LocalDate fxDate) {
         BigDecimal qtyInBase = line.getQtyInBase();
         BigDecimal lineCost  = line.getLineCostAmount();
         if (qtyInBase == null || qtyInBase.signum() <= 0 || lineCost == null) {
             return BigDecimal.ZERO;
         }
-        return lineCost.divide(qtyInBase, MONEY_SCALE, java.math.RoundingMode.HALF_UP);
+        // PUR-07 / ACC-08: line_cost_amount is in the ORDER's currency. Stock value, the moving
+        // average and GL 1300/2150 are all base, so a USD 1,000 receipt used to land as TZS 1,000.
+        // Convert the line total first (one rounding step, to base minor units), then spread it over
+        // the base quantity. A base-currency order short-circuits to the face amount unchanged. A
+        // missing rate refuses the receipt with the friendly "enter the rate" message rather than
+        // valuing the goods at face.
+        BigDecimal baseLineCost = docCurrency == null
+                ? lineCost
+                : fxConverter.toBase(lineCost, docCurrency, companyId, fxDate).baseAmount();
+        return baseLineCost.divide(qtyInBase, MONEY_SCALE, java.math.RoundingMode.HALF_UP);
+    }
+
+    /**
+     * The date a receipt's cost is converted at — the day the goods were received in the COMPANY's
+     * zone (owner ruling 2026-10-10), derived exactly as {@code GoodsReceiptStockHandler} derives
+     * the GL posting date from the same instant, so the rate and the journal date always agree.
+     */
+    private LocalDate receiptFxDate(Long companyId, Instant receivedAt) {
+        return calendar.dateOf(companyId, receivedAt);
     }
 
     /** Resolve product uid from id — needed to populate the outbox payload (ADR-0011 D-8). */

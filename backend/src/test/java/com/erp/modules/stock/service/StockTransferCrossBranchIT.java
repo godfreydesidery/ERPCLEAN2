@@ -199,6 +199,34 @@ class StockTransferCrossBranchIT extends PostgresIntegrationTest {
         assertAvg(arusha, arushaMain.getId(), AVG_COST);
     }
 
+    @Test
+    void list_filtersByDirectionStatusDateAndNumber_newestFirst_stk19() {
+        StockTransferDto older = transferService.create(new CreateStockTransferRequest(
+                darMain.getUid(), arushaMain.getUid(), LocalDate.now().minusDays(3), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null))));
+        StockTransferDto newer = transferService.create(new CreateStockTransferRequest(
+                darMain.getUid(), arushaMain.getUid(), LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null))));
+        transferService.cancel(older.uid());
+
+        org.springframework.data.domain.Pageable newestFirst = org.springframework.data.domain.PageRequest.of(
+                0, 20, org.springframework.data.domain.Sort.by(
+                        org.springframework.data.domain.Sort.Direction.DESC, "transferDate", "id"));
+
+        // Active branch is Dar (the source): both are OUTGOING, neither INCOMING.
+        assertThat(transferService.list(null, "OUTGOING", null, null, null, newestFirst).getContent())
+                .extracting(StockTransferDto::uid).containsExactly(newer.uid(), older.uid());
+        assertThat(transferService.list(null, "INCOMING", null, null, null, newestFirst).getContent())
+                .isEmpty();
+        assertThat(transferService.list("draft", null, null, null, null, newestFirst).getContent())
+                .extracting(StockTransferDto::uid).containsExactly(newer.uid());
+        assertThat(transferService.list(null, null, LocalDate.now().minusDays(1), null, null, newestFirst)
+                .getContent()).extracting(StockTransferDto::uid).containsExactly(newer.uid());
+        assertThat(transferService.list(null, null, null, null,
+                        newer.transferNumber().toLowerCase(), newestFirst).getContent())
+                .extracting(StockTransferDto::uid).containsExactly(newer.uid());
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------

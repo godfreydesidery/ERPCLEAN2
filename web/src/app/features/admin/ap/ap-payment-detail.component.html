@@ -7,6 +7,11 @@
       </h1>
     </div>
     <div class="erp-page-head__actions">
+      @if (showReverse() && !reverseOpen()) {
+        <button type="button" class="btn btn-outline-danger btn-sm" (click)="openReverse()">
+          <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Reverse payment
+        </button>
+      }
       <a routerLink="/admin/ap/payments" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Payments
       </a>
@@ -34,8 +39,17 @@
         <div class="erp-card mt-3 mb-4">
           <div class="erp-card__head">
             <h2 class="erp-section-title mb-0">Payment Details</h2>
+            @if (isReversed()) {
+              <span class="badge text-bg-danger ms-2">Reversed</span>
+            }
           </div>
           <div class="erp-card__body">
+            @if (isReversed()) {
+              <p class="small text-muted mb-2">
+                This payment was reversed on {{ p.reversedAt?.slice(0, 10) }}. Its bills are owed
+                again and the money is back in the cash book.
+              </p>
+            }
             <dl class="row mb-0">
               <dt class="col-sm-3">Payment Number</dt>
               <dd class="col-sm-9 mono">{{ p.paymentNumber }}</dd>
@@ -86,6 +100,41 @@
             </dl>
           </div>
         </div>
+
+        <!-- AP-03: reverse a wrong payment — confirmed here, with a required reason -->
+        @if (reverseOpen()) {
+          <div class="erp-card mb-4" style="max-width:560px" role="region" aria-labelledby="reverse_title">
+            <div class="erp-card__head">
+              <h2 id="reverse_title" class="erp-section-title mb-0">Reverse payment {{ p.paymentNumber }}?</h2>
+            </div>
+            <div class="erp-card__body">
+              <p class="small mb-2">
+                This puts {{ p.currency }} {{ fmtMoney(p.amount) }} back into the cash book, posts the
+                reversing journal and makes the bills it paid owed again. It cannot be undone; record a
+                new payment if the supplier was paid.
+              </p>
+              <label for="reverse_reason" class="form-label small fw-semibold">Reason (required)</label>
+              <textarea id="reverse_reason" name="reverse_reason" class="form-control form-control-sm"
+                        rows="2" maxlength="200" autocomplete="off"
+                        [ngModel]="reverseReason()" (ngModelChange)="reverseReason.set($event)"
+                        [disabled]="reversing()"></textarea>
+              @if (reverseError(); as msg) {
+                <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+              }
+              <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" (click)="closeReverse()"
+                        [disabled]="reversing()">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger" (click)="confirmReverse()"
+                        [disabled]="reverseDisabled()">
+                  @if (reversing()) {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                  }
+                  Reverse payment
+                </button>
+              </div>
+            </div>
+          </div>
+        }
 
         @if (p.allocations.length > 0) {
           <div class="erp-card mb-4">

@@ -11,6 +11,8 @@ export interface SalesReportRowDto {
   productName: string;
   currentStock: number | string | null;
   qtySold: number | string | null;
+  /** Unit qtySold is counted in (the product's base unit); absent from older servers. */
+  baseUnit?: string | null;
   discount: number | string | null;
   vat: number | string | null;
   /**
@@ -47,6 +49,11 @@ export interface SalesReportDto {
   rows: SalesReportRowDto[];
   totals: SalesReportTotalsDto;
   generatedAt: string;
+  /**
+   * False when the caller may not see cost (no INVENTORY.VALUATION.VIEW): every margin is null
+   * because it was withheld, not because the cost is unknown. Absent from older servers.
+   */
+  costVisible?: boolean;
 }
 
 /** Query filter for GET /api/v1/reports/sales (and its /export counterpart). */

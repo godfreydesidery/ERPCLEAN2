@@ -97,6 +97,38 @@ class ReorderReportQueryIT extends ReportQueryTestBase {
     }
 
     @Test
+    void productAndBranchLevels_areInherited_stk10() {
+        long co = company.getId();
+        long own = ownBranch.getId();
+        long unit = seed.unit(co, "BTL");
+        long main = seed.location(co, own, "STORE");
+        jdbc.update("UPDATE stock_locations SET is_default = true WHERE id = ?", main);
+        long back = seed.location(co, own, "BACK");
+
+        // P: the level lives only on the product (Product Master) → low at 23 of 24.
+        long p = seed.product(co, unit, "P", "Product-level item", null);
+        jdbc.update("UPDATE products SET reorder_level = 24 WHERE id = ?", p);
+        seed.onHand(co, own, main, p, bd("23"), null, null, null, null);
+        // Q: product level, but only an empty leftover row at a non-default location → not listed.
+        long q = seed.product(co, unit, "Q", "Leftover row", null);
+        jdbc.update("UPDATE products SET reorder_level = 10 WHERE id = ?", q);
+        seed.onHand(co, own, back, q, bd("0"), null, null, null, null);
+        // R: the branch level (5) overrides the product level (50) → 8 is not low.
+        long r = seed.product(co, unit, "R", "Branch-level item", null);
+        jdbc.update("UPDATE products SET reorder_level = 50 WHERE id = ?", r);
+        jdbc.update("INSERT INTO product_branch (product_id, branch_id, reorder_level, assigned_by) "
+                + "VALUES (?, ?, 5, ?)", r, own, root.getId());
+        seed.onHand(co, own, main, r, bd("8"), null, null, null, null);
+
+        ReorderReportDto report = query.report(company.getId(), null, null, true);
+
+        assertThat(report.rows()).extracting(ReorderRowDto::productCode)
+                .contains("P").doesNotContain("Q", "R");
+        assertThat(row(report, "P").reorderLevel()).isEqualByComparingTo("24");
+        assertThat(row(report, "P").shortfall()).isEqualByComparingTo("1");
+    }
+
+    @Test
     void withoutValuationRights_theCostColumnsAreWithheld() {
         ReorderReportDto r = query.report(company.getId(), null, null, false);
 

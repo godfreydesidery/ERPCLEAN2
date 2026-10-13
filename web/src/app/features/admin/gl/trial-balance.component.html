@@ -41,6 +41,40 @@
             </div>
           }
 
+          <!-- Basis (ACC-14): classic totals, or balances as at a date -->
+          <div class="erp-field" style="min-width:200px">
+            <label class="form-label small text-muted mb-1" for="tbBasis">Show</label>
+            <select id="tbBasis" name="tbBasis" class="form-select"
+                    [ngModel]="basis()" (ngModelChange)="onBasisChange($event)">
+              <option value="totals">Totals (all or one period)</option>
+              <option value="asAt">As at a date (opening, movement, closing)</option>
+            </select>
+          </div>
+
+          @if (basis() === 'asAt') {
+            <div class="erp-field">
+              <label class="form-label small text-muted mb-1" for="tbFrom">
+                From <span class="text-muted small">(opening before this)</span>
+              </label>
+              <input id="tbFrom" name="tbFrom" type="date" class="form-control"
+                     [ngModel]="rangeFrom()" (ngModelChange)="rangeFrom.set($event)" />
+            </div>
+            <div class="erp-field">
+              <label class="form-label small text-muted mb-1" for="tbAsAt">As at</label>
+              <input id="tbAsAt" name="tbAsAt" type="date" class="form-control"
+                     [ngModel]="asAt()" (ngModelChange)="asAt.set($event)" />
+            </div>
+            <div class="erp-field" style="min-width:200px">
+              <label class="form-label small text-muted mb-1" for="tbBranch">Branch</label>
+              <select id="tbBranch" name="tbBranch" class="form-select"
+                      [ngModel]="branchUid()" (ngModelChange)="branchUid.set($event)">
+                <option value="">All branches</option>
+                @for (b of branches(); track b.uid) {
+                  <option [value]="b.uid">{{ b.name }}</option>
+                }
+              </select>
+            </div>
+          } @else {
           <!-- Period filter -->
           <div class="erp-field" style="min-width:220px">
             <label class="form-label small text-muted mb-1" for="periodPicker">
@@ -64,6 +98,7 @@
               </select>
             }
           </div>
+          }
 
           <div class="align-self-end">
             <button type="button" class="btn btn-outline-secondary"
@@ -102,7 +137,98 @@
         </div>
       }
       @default {
-        @if (tb() === null) {
+        @if (basis() === 'asAt') {
+          @if (range(); as r) {
+            @if (rangeRows().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-calculator" aria-hidden="true"></i>
+                No account activity up to {{ r.asAt }}.
+              </div>
+            } @else {
+              @if (isBalanced()) {
+                <div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="status">
+                  <i class="bi bi-check-circle-fill fs-5" aria-hidden="true"></i>
+                  <strong>Balanced</strong> — {{ r.periodLabel }}.
+                </div>
+              } @else {
+                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+                  <i class="bi bi-exclamation-triangle-fill fs-5" aria-hidden="true"></i>
+                  <strong>Out of balance</strong> — {{ r.periodLabel }}.
+                </div>
+              }
+              @if (r.branchUid) {
+                <p class="small text-muted">
+                  Branch figures exclude journals posted at company level (without a branch).
+                </p>
+              }
+              @if (canExport()) {
+                <div class="erp-page-head mb-3">
+                  <div class="erp-page-head__actions">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            (click)="export('PDF')" [disabled]="exporting()">
+                      <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            (click)="export('XLSX')" [disabled]="exporting()">
+                      <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            (click)="export('CSV')" [disabled]="exporting()">
+                      <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                    </button>
+                  </div>
+                </div>
+              }
+              <div class="erp-table-wrap">
+                <table class="erp-table tb-sticky">
+                  <caption class="visually-hidden">Trial balance {{ r.periodLabel }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Code</th>
+                      <th scope="col">Account Name</th>
+                      <th scope="col" class="num">Opening Dr</th>
+                      <th scope="col" class="num">Opening Cr</th>
+                      <th scope="col" class="num">Debit</th>
+                      <th scope="col" class="num">Credit</th>
+                      <th scope="col" class="num">Closing Dr</th>
+                      <th scope="col" class="num">Closing Cr</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of rangeRows(); track row.accountUid) {
+                      <tr>
+                        <td class="mono small fw-semibold">{{ row.accountCode }}</td>
+                        <td class="small">{{ row.accountName }}</td>
+                        <td class="num mono small">{{ +row.openingDebit !== 0 ? fmtMoney(row.openingDebit) : '' }}</td>
+                        <td class="num mono small">{{ +row.openingCredit !== 0 ? fmtMoney(row.openingCredit) : '' }}</td>
+                        <td class="num mono small">{{ +row.movementDebit !== 0 ? fmtMoney(row.movementDebit) : '' }}</td>
+                        <td class="num mono small">{{ +row.movementCredit !== 0 ? fmtMoney(row.movementCredit) : '' }}</td>
+                        <td class="num mono small">{{ +row.closingDebit !== 0 ? fmtMoney(row.closingDebit) : '' }}</td>
+                        <td class="num mono small">{{ +row.closingCredit !== 0 ? fmtMoney(row.closingCredit) : '' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot class="erp-tfoot fw-semibold">
+                    <tr>
+                      <td colspan="2">Totals</td>
+                      <td class="num mono">{{ fmtMoney(r.openingDebit) }}</td>
+                      <td class="num mono">{{ fmtMoney(r.openingCredit) }}</td>
+                      <td class="num mono">{{ fmtMoney(r.movementDebit) }}</td>
+                      <td class="num mono">{{ fmtMoney(r.movementCredit) }}</td>
+                      <td class="num mono">{{ fmtMoney(r.closingDebit) }}</td>
+                      <td class="num mono">{{ fmtMoney(r.closingCredit) }}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            }
+          } @else {
+            <div class="erp-empty">
+              <i class="bi bi-calculator" aria-hidden="true"></i>
+              Choose the date and press Refresh.
+            </div>
+          }
+        } @else if (tb() === null) {
           <div class="erp-empty">
             <i class="bi bi-calculator"></i>
             Select a company to view the trial balance.

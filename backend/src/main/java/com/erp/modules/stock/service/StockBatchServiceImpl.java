@@ -4,6 +4,7 @@ import com.erp.modules.stock.domain.dto.StockBatchDto;
 import com.erp.modules.stock.domain.entity.StockBatch;
 import com.erp.modules.stock.repository.StockBatchRepository;
 import com.erp.platform.common.api.NotFoundException;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -31,11 +32,14 @@ public class StockBatchServiceImpl implements StockBatchService {
 
     private final StockBatchRepository batches;
     private final ScopeGuard           scopeGuard;
+    private final CompanyCalendar calendar;
 
     public StockBatchServiceImpl(StockBatchRepository batches,
-                                  ScopeGuard scopeGuard) {
+                                  ScopeGuard scopeGuard,
+                                  CompanyCalendar calendar) {
         this.batches    = batches;
         this.scopeGuard = scopeGuard;
+        this.calendar   = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -163,7 +167,7 @@ public class StockBatchServiceImpl implements StockBatchService {
         int total = all.size();
         int from  = (int) Math.min(pageable.getOffset(), total);
         int to    = (int) Math.min(pageable.getOffset() + pageable.getPageSize(), total);
-        List<StockBatchDto> page = all.subList(from, to).stream().map(StockBatchServiceImpl::toDto).toList();
+        List<StockBatchDto> page = all.subList(from, to).stream().map(this::toDto).toList();
         return new PageImpl<>(page, pageable, total);
     }
 
@@ -173,16 +177,16 @@ public class StockBatchServiceImpl implements StockBatchService {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
         return batches.findExpiring(companyId, horizon, pageable)
-                .map(StockBatchServiceImpl::toDto);
+                .map(this::toDto);
     }
 
     // -------------------------------------------------------------------------
     // Mapping
     // -------------------------------------------------------------------------
 
-    private static StockBatchDto toDto(StockBatch b) {
+    private StockBatchDto toDto(StockBatch b) {
         boolean expired = b.getExpiryDate() != null &&
-                b.getExpiryDate().isBefore(LocalDate.now());
+                b.getExpiryDate().isBefore(calendar.today(b.getCompanyId()));
         return new StockBatchDto(
                 b.getId(), b.getUid(),
                 b.getCompanyId(), b.getBranchId(), b.getLocationId(), b.getProductId(),

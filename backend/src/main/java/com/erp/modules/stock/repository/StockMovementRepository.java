@@ -73,6 +73,13 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
     boolean existsBySourceEventUidAndProductId(String sourceEventUid, Long productId);
 
     /**
+     * Whether ANY movement was ever posted for (company, branch, product) — the opening-balance
+     * guard (ADR-0010 D-11: "no prior movements"). An on-hand row alone is not evidence of stock
+     * activity: a sales-order reservation creates one with no movement (STK-17).
+     */
+    boolean existsByCompanyIdAndBranchIdAndProductId(Long companyId, Long branchId, Long productId);
+
+    /**
      * Per-product sum of a single movement type at a location within a business-time window
      * (ADR-0051 D-8.6) — the van-reconciliation derivation query. {@code loaded_qty} =
      * {@code sumByLocationTypeAndWindow(..., TRANSFER_IN, ...)}; {@code returned_qty} =
@@ -96,4 +103,24 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
             @Param("type") MovementType type,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /**
+     * Net signed quantity that moved for one product at one location AFTER {@code since}
+     * (by {@code occurred_at}, the moment the stock physically moved). Live on-hand minus this is
+     * what the system held at {@code since} — the stock count uses it to measure a line's variance
+     * against the system quantity as at the moment the line was counted (STK-02).
+     */
+    @Query("""
+            SELECT COALESCE(SUM(m.quantity), 0)
+            FROM StockMovement m
+            WHERE m.companyId = :companyId AND m.branchId = :branchId
+              AND m.locationId = :locationId AND m.productId = :productId
+              AND m.occurredAt > :since
+            """)
+    java.math.BigDecimal sumQuantityAtLocationSince(
+            @Param("companyId") Long companyId,
+            @Param("branchId") Long branchId,
+            @Param("locationId") Long locationId,
+            @Param("productId") Long productId,
+            @Param("since") Instant since);
 }

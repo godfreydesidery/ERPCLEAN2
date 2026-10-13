@@ -44,7 +44,7 @@ class DocumentModelBuilderBrandingTest {
     @Mock CompanyRepository companies;
 
     private DocumentModelBuilder builder() {
-        return new DocumentModelBuilder(new ObjectMapper(), companies);
+        return new DocumentModelBuilder(new ObjectMapper(), companies, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
     }
 
     // -------------------------------------------------------------------------

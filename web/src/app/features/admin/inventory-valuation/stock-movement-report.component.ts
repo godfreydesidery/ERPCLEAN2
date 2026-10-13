@@ -20,6 +20,7 @@ import {
   StockMovementReportMode,
 } from './models/stock-movement-report.model';
 import { StockMovementReportService } from './stock-movement-report.service';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -280,7 +281,7 @@ export class StockMovementReportComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfCurrentMonth(): string {

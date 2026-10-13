@@ -13,6 +13,7 @@ import { of, throwError } from 'rxjs';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SessionStore } from '../../../core/auth/session.store';
 import { HrPayrollService } from './hr-payroll.service';
+import { CashbankService } from '../cashbank/cashbank.service';
 import { PayrollStatutoryReportComponent } from './payroll-statutory-report.component';
 import type { PayrollStatutoryPeriodReportDto } from './models/payroll-statutory.model';
 
@@ -42,6 +43,13 @@ function makeBed(svcOverrides: Record<string, unknown> = {}, permissions = ['HR.
   const svc = {
     getStatutoryPeriodReport: vi.fn(() => of(MOCK_PERIOD_REPORT)),
     exportStatutoryPeriodReport: vi.fn(() => of(new Blob())),
+    getStatutoryOutstanding: vi.fn(() => of([
+      { liability: 'PAYE', accountCode: '2500', accountName: 'PAYE Payable',
+        outstanding: 210000, companyId: '10' },
+      { liability: 'SDL', accountCode: '2530', accountName: 'SDL Payable',
+        outstanding: 0, companyId: '10' },
+    ])),
+    payStatutory: vi.fn(() => of({ uid: 'c1', txnNumber: 'CT-1' })),
     ...svcOverrides,
   };
   TestBed.configureTestingModule({
@@ -49,6 +57,15 @@ function makeBed(svcOverrides: Record<string, unknown> = {}, permissions = ['HR.
     providers: [
       provideRouter([]),
       { provide: HrPayrollService, useValue: svc },
+      {
+        provide: CashbankService,
+        useValue: {
+          listAccountOptions: vi.fn(() => of([
+            { id: '5', uid: 'bank-1', code: 'CRDB', name: 'CRDB Main', accountType: 'BANK',
+              branchId: null, currency: 'TZS', isDefault: true, inCurrentBranch: true },
+          ])),
+        },
+      },
       {
         provide: SessionStore,
         useValue: {
@@ -125,5 +142,48 @@ describe('PayrollStatutoryReportComponent', () => {
     comp.toDate.set('2026-08-31');
     comp.export('XLSX');
     expect(svc.exportStatutoryPeriodReport).toHaveBeenCalledWith('2026-06-01', '2026-08-31', 'XLSX');
+  });
+});
+
+describe('PayrollStatutoryReportComponent — statutory payments (ACC-07)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('loads what is owed only for HR.PAYROLL.DISBURSE and offers a payment where something is owed', () => {
+    const svc = makeBed({}, ['HR.PAYROLL.VIEW', 'HR.PAYROLL.DISBURSE']);
+    const fixture = TestBed.createComponent(PayrollStatutoryReportComponent);
+    fixture.detectChanges();
+    expect(svc.getStatutoryOutstanding).toHaveBeenCalled();
+    const buttons = fixture.nativeElement.querySelectorAll('button[aria-label$="payment"]');
+    expect(buttons.length).toBe(1); // PAYE owed; SDL is zero
+    TestBed.resetTestingModule();
+
+    const viewOnly = makeBed({}, ['HR.PAYROLL.VIEW']);
+    const f2 = TestBed.createComponent(PayrollStatutoryReportComponent);
+    f2.detectChanges();
+    expect(viewOnly.getStatutoryOutstanding).not.toHaveBeenCalled();
+    expect(f2.nativeElement.textContent).not.toContain('Statutory payments');
+  });
+
+  it('prefills the owed amount + default bank, refuses over-payment, then pays', () => {
+    const svc = makeBed({}, ['HR.PAYROLL.VIEW', 'HR.PAYROLL.DISBURSE']);
+    const fixture = TestBed.createComponent(PayrollStatutoryReportComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.openPay(comp.outstanding()[0]);
+    expect(+comp.payAmount()).toBe(210000);
+    expect(comp.payAccountUid()).toBe('bank-1');
+
+    comp.payAmount.set('210001');
+    comp.submitPay();
+    expect(svc.payStatutory).not.toHaveBeenCalled();
+    expect(comp.payError()).toContain('PAYE');
+
+    comp.payAmount.set('210000');
+    comp.payRef.set('TRA-PAYE-9');
+    comp.submitPay();
+    expect(svc.payStatutory).toHaveBeenCalledWith(expect.objectContaining({
+      liability: 'PAYE', cashBankAccountUid: 'bank-1', amount: '210000', reference: 'TRA-PAYE-9',
+    }));
+    expect(comp.payFor()).toBeNull();
   });
 });

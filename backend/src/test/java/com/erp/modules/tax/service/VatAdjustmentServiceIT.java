@@ -157,7 +157,9 @@ class VatAdjustmentServiceIT extends PostgresIntegrationTest {
         VatAdjustmentDto adj = service.addAdjustment(ret.uid(),
                 new AddVatAdjustmentRequest(VatAdjustmentReason.OTHER,
                         VatAdjustmentSign.INCREASE, new BigDecimal("100.00"), "pre-file adj"));
-        file(ret, "TRA-ADJ-004", LocalDate.of(2025, 5, 15));
+        // ACC-06: an adjustment now reaches the GL as a settlement leg, so filing posts a journal
+        // even on a nil-activity return — the filing date must sit in the seeded (current) year.
+        file(ret, "TRA-ADJ-004", LocalDate.now());
 
         assertThatThrownBy(() -> service.removeAdjustment(ret.uid(), adj.uid()))
                 .isInstanceOf(IllegalStateException.class)

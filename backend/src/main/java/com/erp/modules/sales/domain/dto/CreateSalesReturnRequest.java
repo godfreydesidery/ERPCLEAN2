@@ -22,7 +22,9 @@ public record CreateSalesReturnRequest(
      * Per-line return qty.
      *
      * @param deliveryLineUid  the delivery line being returned
-     * @param qtyReturned      quantity to return (in the delivery line's unit; base in v1)
+     * @param qtyReturned      quantity to return, in the product's BASE unit (compare it with the
+     *                         delivery line's {@code qtyDeliveredBase − returnedQtyBase}); the
+     *                         return line also records it in the delivery line's unit
      */
     public record ReturnLineRequest(
             @NotNull String deliveryLineUid,

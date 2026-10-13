@@ -75,6 +75,13 @@ export interface StockTransferDto {
   receivedAt: string | null;
   notes: string | null;
   lines: StockTransferLineDto[];
+  /**
+   * Source / destination branch uids (STK-05). Dispatch is offered only when the active branch is
+   * the source, Receive only when it is the destination — the rule the API enforces. Optional: an
+   * older server does not send them.
+   */
+  sourceBranchUid?: string | null;
+  destBranchUid?: string | null;
 }
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────

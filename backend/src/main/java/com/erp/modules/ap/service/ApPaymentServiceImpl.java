@@ -174,10 +174,18 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // The caller named this one bill, so refuse it outright rather than quietly doing nothing.
         assertRatified(bill);
 
-        BigDecimal toAllocate = req.amount().min(bill.getOutstandingAmount());
-        if (toAllocate.compareTo(BigDecimal.ZERO) <= 0) {
+        if (bill.getOutstandingAmount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("This bill has zero outstanding amount.");
         }
+        // AP-18: an amount above what is owed used to be cut down silently to the outstanding
+        // balance, so the books showed less cash out than really left. Refuse it and say why.
+        if (req.amount().compareTo(bill.getOutstandingAmount()) > 0) {
+            throw new ConflictException("The amount entered (" + req.amount().toPlainString()
+                    + ") is more than this bill's outstanding balance ("
+                    + bill.getOutstandingAmount().toPlainString()
+                    + "). Enter at most the outstanding balance.");
+        }
+        BigDecimal toAllocate = req.amount();
         assertWhtFits(req.whtTypeUid(), req.whtAmount(), toAllocate);
 
         String currency = bill.getCurrency().value();
@@ -345,9 +353,12 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         BigDecimal settlementRate = settlementConv.rate();
         int baseScale = baseMinorUnits(currency);
 
+        // AP-07: what each bill receives - its outstanding, or the part-payment the caller named.
+        Map<Long, BigDecimal> amountByBill = runAmounts(openBills,
+                billsNamedByCaller ? req.billAmounts() : null);
+
         // Compute total first so the INSERT never violates chk_ap_payment_amount (amount > 0)
-        BigDecimal totalPaid = openBills.stream()
-                .map(SupplierBill::getOutstandingAmount)
+        BigDecimal totalPaid = amountByBill.values().stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // WHT is withheld from ONE supplier and certified to that supplier. A run spanning several
@@ -387,7 +398,7 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         BigDecimal sumBaseSettled  = BigDecimal.ZERO;
 
         for (SupplierBill bill : openBills) {
-            BigDecimal toAllocate = bill.getOutstandingAmount();
+            BigDecimal toAllocate = amountByBill.get(bill.getId());
             BigDecimal billRate   = bill.getFxRate() != null ? bill.getFxRate() : BigDecimal.ONE;
             BigDecimal baseRelieved = toAllocate.multiply(billRate)
                     .setScale(baseScale, RoundingMode.HALF_UP);
@@ -400,9 +411,17 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             alloc.setSettlementRate(settlementRate);
             allocList.add(allocations.save(alloc));
 
-            bill.setOutstandingAmount(BigDecimal.ZERO);
-            bill.setBaseOutstandingAmount(BigDecimal.ZERO);
-            bill.setStatus(SupplierBillStatus.PAID);
+            BigDecimal left = bill.getOutstandingAmount().subtract(toAllocate);
+            bill.setOutstandingAmount(left);
+            if (left.signum() == 0) {
+                bill.setBaseOutstandingAmount(BigDecimal.ZERO);
+            } else {
+                BigDecimal currentBase = bill.getBaseOutstandingAmount() != null
+                        ? bill.getBaseOutstandingAmount() : bill.getGrossAmount();
+                bill.setBaseOutstandingAmount(
+                        currentBase.subtract(baseRelieved).max(BigDecimal.ZERO));
+            }
+            bill.setStatus(billStatusAfterPayment(left));
             bills.save(bill);
 
             sumBaseRelieved = sumBaseRelieved.add(baseRelieved);
@@ -647,12 +666,27 @@ public class ApPaymentServiceImpl implements ApPaymentService {
         // The cash that leaves the account is the payment NET of the tax withheld (the WHT stays
         // with us until it is remitted to TRA) — the same figure the GL credits to the bank above.
         // Recording the gross here made the cash book disagree with the GL by the WHT amount.
+        //
+        // AP-23: the cash book is kept in the ACCOUNT's currency. A USD payment out of a TZS account
+        // used to be written as "5,000" in the TZS book while the GL credited the bank 13 million.
+        // A USD account paying a USD bill records the USD face amount (what left the account); any
+        // other account records the base amount the GL credited to it (cashCrBase).
         BigDecimal cashOut = hasWht ? payment.getAmount().subtract(whtAmount) : payment.getAmount();
+        String cashCurrency = currency;
+        String accountCurrency = cashAccounts
+                .findByCompanyIdAndId(companyId, cashRes.cashBankAccountId())
+                .map(a -> com.erp.platform.common.money.CurrencyCode.value(a.getCurrency()))
+                .orElse(baseCurrency);
+        if (currency != null && !currency.equalsIgnoreCase(baseCurrency)
+                && !currency.equalsIgnoreCase(accountCurrency)) {
+            cashOut = cashCrBase;
+            cashCurrency = baseCurrency;
+        }
         payment.setCashBankAccountId(cashRes.cashBankAccountId());
         cashTxnRecorder.recordSettlement(
                 companyId, branchId, cashRes.cashBankAccountId(),
                 CashTxnType.AP_PAYMENT, CashTxnDirection.OUT,
-                cashOut, currency,
+                cashOut, cashCurrency,
                 payment.getUid(), posted.uid(),
                 payment.getPaymentDate(), actorId());
 
@@ -698,6 +732,36 @@ public class ApPaymentServiceImpl implements ApPaymentService {
             case PAID  -> "This bill has already been paid in full.";
             default    -> "This bill can't be paid in its current state.";
         };
+    }
+
+    /**
+     * AP-07: the amount each bill in a run receives. No part-payment named = the full outstanding
+     * (the old behaviour). A named amount must be above zero and at most what is still owed; the
+     * message names the bill so the clerk can correct that one row.
+     */
+    private static Map<Long, BigDecimal> runAmounts(List<SupplierBill> openBills,
+                                                    Map<String, BigDecimal> requested) {
+        Map<Long, BigDecimal> out = new java.util.LinkedHashMap<>();
+        for (SupplierBill bill : openBills) {
+            BigDecimal amount = requested != null ? requested.get(bill.getUid()) : null;
+            if (amount == null) {
+                out.put(bill.getId(), bill.getOutstandingAmount());
+                continue;
+            }
+            String label = bill.getSupplierInvoiceNo() != null
+                    ? "bill " + bill.getSupplierInvoiceNo() : "a selected bill";
+            if (amount.signum() <= 0) {
+                throw new IllegalArgumentException(
+                        "The amount to pay on " + label + " must be more than zero.");
+            }
+            if (amount.compareTo(bill.getOutstandingAmount()) > 0) {
+                throw new IllegalArgumentException(
+                        "The amount to pay on " + label + " is more than is still owed ("
+                                + bill.getOutstandingAmount().toPlainString() + ").");
+            }
+            out.put(bill.getId(), amount);
+        }
+        return out;
     }
 
     private static SupplierBillStatus billStatusAfterPayment(BigDecimal outstanding) {
@@ -808,7 +872,8 @@ public class ApPaymentServiceImpl implements ApPaymentService {
                 p.getWhtAmount(), p.getWhtTransactionUid(),
                 p.getUnallocatedAmount(), p.getStatus(), p.getChequeUid(),
                 p.getPaymentRunId(),
-                dtoAllocs);
+                dtoAllocs,
+                p.getReversedAt());
     }
 
     // -------------------------------------------------------------------------

@@ -2,6 +2,8 @@ package com.erp.modules.tax.service;
 
 import com.erp.modules.tax.domain.dto.FileVatReturnRequest;
 import com.erp.modules.tax.domain.dto.OpenVatReturnRequest;
+import com.erp.modules.tax.domain.dto.RecordTaxPaymentRequest;
+import com.erp.modules.gl.domain.enums.GlConfigKey;
 import com.erp.modules.tax.domain.dto.VatReturnBandDto;
 import com.erp.modules.tax.domain.dto.VatReturnComputationDto;
 import com.erp.modules.tax.domain.dto.VatReturnDto;
@@ -19,10 +21,10 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.repository.Lookups;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -47,11 +49,12 @@ public class VatReturnServiceImpl implements VatReturnService {
     private final VatReturnNumberGenerator     numberGen;
     private final VatReturnComputationReader   computationReader;
     private final VatReturnFilingPoster        filingPoster;
+    private final TaxPaymentPoster             paymentPoster;
     private final ScopeGuard                   scopeGuard;
     private final AuditService                 audit;
-    /** R3 (persona UAT I4 follow-up): seam for the period-end filing guard — a test can inject a
-     * fixed {@link Clock} instead of depending on wall-clock time. */
-    private final Clock                        clock;
+    /** R3 (persona UAT I4 follow-up): seam for the period-end filing guard — "today" in the
+     * company's zone; a test injects a calendar over a fixed clock. */
+    private final CompanyCalendar              calendar;
 
     public VatReturnServiceImpl(VatReturnRepository returns,
                                  VatReturnBandRepository bands,
@@ -60,9 +63,10 @@ public class VatReturnServiceImpl implements VatReturnService {
                                  VatReturnNumberGenerator numberGen,
                                  VatReturnComputationReader computationReader,
                                  VatReturnFilingPoster filingPoster,
+                                 TaxPaymentPoster paymentPoster,
                                  ScopeGuard scopeGuard,
                                  AuditService audit,
-                                 Clock clock) {
+                                 CompanyCalendar calendar) {
         this.returns          = returns;
         this.bands            = bands;
         this.adjustments      = adjustments;
@@ -70,9 +74,10 @@ public class VatReturnServiceImpl implements VatReturnService {
         this.numberGen        = numberGen;
         this.computationReader = computationReader;
         this.filingPoster     = filingPoster;
+        this.paymentPoster    = paymentPoster;
         this.scopeGuard       = scopeGuard;
         this.audit            = audit;
-        this.clock            = clock;
+        this.calendar         = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -167,10 +172,9 @@ public class VatReturnServiceImpl implements VatReturnService {
         }
 
         // persona UAT I4 / R3: a return whose period has not yet ended cannot be filed — the
-        // figures aren't final until the period closes. Reads through the injected Clock (rather
-        // than a bare LocalDate.now()) so a test can pin "today" instead of depending on wall-clock
-        // time.
-        if (vatReturn.getPeriodEnd().isAfter(LocalDate.now(clock))) {
+        // figures aren't final until the period closes. "Today" is the company's date (owner
+        // ruling 2026-10-10), read through the injected calendar so a test can pin it.
+        if (vatReturn.getPeriodEnd().isAfter(calendar.today(vatReturn.getCompanyId()))) {
             throw new ConflictException(
                     "This VAT period has not yet ended and cannot be filed.");
         }
@@ -194,13 +198,16 @@ public class VatReturnServiceImpl implements VatReturnService {
         vatReturn.setFilingDate(req.filingDate());
         vatReturn.setFiledAt(Instant.now());
         vatReturn.setFiledBy(actorId());
+        // Lock with the filing metadata, BEFORE the GL post: the poster reads the adjustments, and
+        // that query auto-flushes this row — a DRAFT carrying a filing reference violates
+        // chk_vat_return_filed_fields. A GL failure still rolls the whole TX back.
+        vatReturn.setStatus(VatReturnStatus.FILED);
 
         // Step 3: post synchronous GL settlement (D-8); GL failure rolls back the whole TX
         String journalUid = filingPoster.post(vatReturn, actorId());
         vatReturn.setPostedJournalUid(journalUid);
 
-        // Step 4: lock the return
-        vatReturn.setStatus(VatReturnStatus.FILED);
+        // Step 4: stamp the lock
         vatReturn.setUpdatedAt(Instant.now());
         vatReturn.setUpdatedBy(actorId());
         vatReturn = returns.save(vatReturn);
@@ -212,6 +219,59 @@ public class VatReturnServiceImpl implements VatReturnService {
                         "glEntryUid", journalUid != null ? journalUid : "(nil return — no journal)",
                         "netVat", vatReturn.getNetVat().toPlainString())));
 
+        return toDto(vatReturn);
+    }
+
+    // -------------------------------------------------------------------------
+    // pay (ACC-07)
+    // -------------------------------------------------------------------------
+
+    @Override
+    public VatReturnDto recordPayment(String uid, RecordTaxPaymentRequest req) {
+        VatReturn vatReturn = Lookups.orNotFound(returns.findByUid(uid), "VatReturn", uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), vatReturn.getCompanyId());
+
+        if (vatReturn.getStatus() != VatReturnStatus.FILED) {
+            throw new ConflictException("Only a filed VAT return can be paid. File the return first.");
+        }
+        BigDecimal net = vatReturn.getNetVat() != null ? vatReturn.getNetVat() : BigDecimal.ZERO;
+        if (net.signum() <= 0) {
+            throw new ConflictException(
+                    "This VAT return has nothing to pay — it carries a credit forward instead.");
+        }
+        BigDecimal paidSoFar = vatReturn.getPaidAmount() != null
+                ? vatReturn.getPaidAmount() : BigDecimal.ZERO;
+        BigDecimal outstanding = net.subtract(paidSoFar);
+        if (outstanding.signum() <= 0) {
+            throw new ConflictException("This VAT return has already been paid in full.");
+        }
+        BigDecimal amount = req.amount() != null ? req.amount() : outstanding;
+        if (amount.compareTo(outstanding) > 0) {
+            throw new IllegalArgumentException(
+                    "The payment is more than the VAT still owed on this return.");
+        }
+
+        String reference = req.reference() != null && !req.reference().isBlank()
+                ? req.reference().trim() : null;
+        var txn = paymentPoster.pay(vatReturn.getCompanyId(), GlConfigKey.VAT_DUE,
+                req.cashBankAccountUid(), amount, req.paymentDate(),
+                "VAT payment " + vatReturn.getReturnNumber()
+                        + (reference != null ? " — " + reference : ""));
+
+        vatReturn.setPaidAmount(paidSoFar.add(amount));
+        vatReturn.setPaidAt(Instant.now());
+        if (reference != null) {
+            vatReturn.setPaymentReference(reference);
+        }
+        vatReturn.setUpdatedAt(Instant.now());
+        vatReturn.setUpdatedBy(actorId());
+        vatReturn = returns.save(vatReturn);
+
+        audit.record(AuditEvent.of(AuditActions.VAT_RETURN_PAY, "vat_returns",
+                vatReturn.getId(), vatReturn.getUid())
+                .detail(Map.of("returnNumber", vatReturn.getReturnNumber(),
+                        "amount", amount.toPlainString(),
+                        "cashTransactionUid", txn.uid())));
         return toDto(vatReturn);
     }
 
@@ -260,7 +320,11 @@ public class VatReturnServiceImpl implements VatReturnService {
             VatReturnComputationDto.BandTotalsDto b = comp.byBand().get(bandKey);
             BigDecimal base = b != null ? b.taxableBase() : BigDecimal.ZERO;
             BigDecimal vat  = b != null ? b.outputVat()   : BigDecimal.ZERO;
-            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey, base, vat, actorId));
+            // ACC-06/24: credits and voids can take a band below zero in a quiet month; the band
+            // row is a non-negative schedule line (chk_vat_return_band_amounts), so it floors at
+            // zero. The return totals (output/input/net, turnover) keep the exact signed figures.
+            bands.save(new VatReturnBand(vatReturn.getId(), companyId, bandKey,
+                    base.max(BigDecimal.ZERO), vat.max(BigDecimal.ZERO), actorId));
         }
 
         // Refresh totals

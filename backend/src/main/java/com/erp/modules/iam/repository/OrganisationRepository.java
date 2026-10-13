@@ -8,6 +8,15 @@ public interface OrganisationRepository extends JpaRepository<Organisation, Long
 
     Optional<Organisation> findByUid(String uid);
 
+    /**
+     * Sign-in aliases of every CUSTOMER organisation (the platform operator's own organisation is
+     * excluded). Used by login to resolve a bare username on a single-customer installation
+     * (LUI-16): with exactly one alias, {@code name} can only mean {@code name@alias}.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT o.alias FROM Organisation o WHERE o.alias IS NOT NULL AND o.alias <> 'platform'")
+    java.util.List<String> findCustomerAliases();
+
     /** One organisation per deployment — true once bootstrap has run (Slice 2). */
     boolean existsBy();
 

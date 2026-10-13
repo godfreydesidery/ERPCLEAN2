@@ -9,6 +9,7 @@ import com.erp.modules.purchases.domain.dto.PurchaseOrderLineDto;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderLineRequest;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.VoidPurchaseOrderRequest;
+import com.erp.modules.purchases.domain.enums.PurchaseOrderStatus;
 import com.erp.modules.purchases.service.PurchaseCostSuggestionService;
 import com.erp.modules.purchases.service.PurchaseOrderService;
 import com.erp.platform.common.api.ApiResponse;
@@ -64,8 +65,11 @@ public class PurchaseOrderController {
      * PO (read-gate widening only, tenant scope unchanged).
      */
     @GetMapping("/uid/{uid}")
+    // LRB-04: Enter Bill (AP.BILL.ENTER) opens the order it bills against; the list endpoint already
+    // admits AP.BILL.ENTER, so the detail read must too or 3-way matching dead-ends for finance.
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
-            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'AP.BILL.ENTER')")
     public ApiResponse<PurchaseOrderDto> getByUid(@PathVariable String uid) {
         return ApiResponse.ok(service.getByUid(uid));
     }
@@ -98,8 +102,11 @@ public class PurchaseOrderController {
             @RequestParam Long companyId,
             @RequestParam(required = false) String q,
             @RequestParam(required = false, defaultValue = "false") boolean includeDirectReceipts,
+            // PUR-11: optional status filter; repeat or comma-separate for several
+            // (?status=ORDERED,PARTIALLY_RECEIVED). Absent = every status, as before.
+            @RequestParam(required = false) List<PurchaseOrderStatus> status,
             Pageable pageable) {
-        Page<PurchaseOrderDto> page = service.list(companyId, q, includeDirectReceipts, pageable);
+        Page<PurchaseOrderDto> page = service.list(companyId, q, includeDirectReceipts, status, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
@@ -145,8 +152,10 @@ public class PurchaseOrderController {
      * company (read-gate widening only).
      */
     @GetMapping("/uid/{uid}/lines")
+    // LRB-04: Enter Bill links each bill line to a PO line from this list.
     @PreAuthorize("@perm.scoped(#uid, 'purchaseorder', 'PURCHASE.ORDER.VIEW') "
-            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE')")
+            + "or @perm.scoped(#uid, 'purchaseorder', 'PURCHASE.RECEIVE') "
+            + "or @perm.scoped(#uid, 'purchaseorder', 'AP.BILL.ENTER')")
     public ApiResponse<List<PurchaseOrderLineDto>> listLines(@PathVariable String uid) {
         return ApiResponse.ok(service.listLines(uid));
     }

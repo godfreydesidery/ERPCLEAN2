@@ -492,23 +492,24 @@ public class GLPostingServiceImpl implements GLPostingService {
         // Manual-posting gate: only user-entered MANUAL journals are subject to this check.
         // System/event-driven posters (YEAR_END_CLOSE, inventory, AP/AR settlement, payroll, FX)
         // are exempted — they post to control accounts by design and do not carry operator context.
-        if (enforceManualPostingGate && !account.isAllowManualPosting()) {
-            throw new com.erp.platform.common.api.ConflictException(
-                    "Account " + account.getAccountCode()
-                            + " does not allow manual posting. Update the account's allowManualPosting flag to permit direct entries.");
-        }
         // Belt-and-suspenders (D-1, ADR-0040): even if allowManualPosting was inadvertently left true
         // on a sub-ledger control account, reject the MANUAL journal at the control-type gate. Only
         // control types that block manual posting apply here — CASH/BANK are classified controls but
         // stay manually postable (reconciled via the cash/bank module), see ControlType.blocksManualPosting().
+        // ACC-18: checked FIRST and worded by module, so the accountant learns where to post instead
+        // of being sent to a flag the screens cannot change.
         if (enforceManualPostingGate
                 && account.getControlType() != null
                 && account.getControlType().blocksManualPosting()) {
             // D-1 (ADR-0013): sub-ledger control accounts block manual journal entries by design
             throw new com.erp.platform.common.api.ConflictException(
-                    "Account " + account.getAccountCode()
-                            + " is a sub-ledger control account and cannot be posted to directly"
-                            + " via a manual journal entry. Use the relevant sub-ledger module instead.");
+                    "Account " + accountLabel(account) + " is a control account and cannot take a"
+                            + " manual journal. " + account.getControlType().manualPostingGuidance());
+        }
+        if (enforceManualPostingGate && !account.isAllowManualPosting()) {
+            throw new com.erp.platform.common.api.ConflictException(
+                    "Account " + accountLabel(account) + " is closed to manual journals. Choose"
+                            + " another account, or post through the module that owns this one.");
         }
 
         // Base currency (BR-GL-06, D-9)
@@ -519,6 +520,13 @@ public class GLPostingServiceImpl implements GLPostingService {
                             + " does not match the company's base currency (" + baseCurrency + ")."
                             + " All lines must use the base currency.");
         }
+    }
+
+    /** "5160 (Stock Adjustment)" — the code a user types plus the name they recognise. */
+    private static String accountLabel(ChartOfAccount account) {
+        return account.getName() != null && !account.getName().isBlank()
+                ? account.getAccountCode() + " (" + account.getName() + ")"
+                : account.getAccountCode();
     }
 
     private JournalEntryDto toDto(JournalEntry entry, String batchNumber, List<JournalLine> lineList) {

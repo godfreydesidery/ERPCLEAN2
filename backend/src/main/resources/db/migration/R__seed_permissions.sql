@@ -19,6 +19,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('AP.DEBITNOTE', 'ap', 'Raise a debit note / adjustment against an open payable'),
     ('AP.OPENING.SET', 'ap', 'Enter AP opening balances at go-live'),
     ('AP.PAYMENT.RUN', 'ap', 'Pay a single bill and run a payment run (PAYRUN-####)'),
+    -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): undo a wrong supplier payment.
+    ('AP.PAYMENT.REVERSE', 'ap', 'Reverse a posted supplier payment'),
     ('AP.VIEW', 'ap', 'View the AP sub-ledger, balances, ageing, and the reconciliation read'),
     ('APPROVALS.ADMIN', 'approvals', 'Recall/cancel any approval request; override a stuck chain'),
     ('APPROVALS.DECIDE', 'approvals', 'Approve/reject approval-request steps and see the approvals inbox'),
@@ -31,6 +33,10 @@ INSERT INTO permissions (code, module, description) VALUES
     ('AR.OPENING.SET', 'ar', 'Enter AR opening balances at go-live'),
     ('AR.RECEIPT.ALLOCATE', 'ar', 'Allocate or re-allocate a receipt across open items'),
     ('AR.RECEIPT.RECORD', 'ar', 'Record a customer receipt (RCT-####) and post its cash leg'),
+    -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): undo a wrong receipt.
+    ('AR.RECEIPT.REVERSE', 'ar', 'Reverse a posted customer receipt'),
+    -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): pay a customer's credit back.
+    ('AR.REFUND', 'ar', 'Refund a customer over-payment, deposit or unused credit note'),
     ('AR.STATEMENT.VIEW', 'ar', 'View or print a customer statement'),
     ('AR.VIEW', 'ar', 'View the AR sub-ledger, balances, ageing, and the reconciliation read'),
     ('AR.WRITEOFF', 'ar', 'Write off an uncollectable open item (bad debt)'),
@@ -501,6 +507,9 @@ SELECT r.id, p.id FROM (VALUES
   ('STOREKEEPER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('STOREKEEPER','DOCUMENT.RENDER'),
   ('STOREKEEPER','BRANCH.VIEW'),
+  -- Gap review wave 2 (PRD-07, owner-approved 2026-10-10): opening stock now carries its value in
+  -- the same step; without this the storekeeper's opening balances stayed unvalued.
+  ('STOREKEEPER','INVENTORY.OPENING.SET'),
   -- ACCOUNTANT (59 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('ACCOUNTANT','GL.VIEW'),
   ('ACCOUNTANT','GL.POST'),
@@ -508,6 +517,12 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','AR.INVOICE.VIEW'),
   ('ACCOUNTANT','AR.RECEIPT.RECORD'),
   ('ACCOUNTANT','AR.RECEIPT.ALLOCATE'),
+  -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
+  -- finance seat, not the cashier who recorded it.
+  ('ACCOUNTANT','AR.RECEIPT.REVERSE'),
+  -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): money handed back to a customer is
+  -- paid out by the finance seat, like a receipt reversal.
+  ('ACCOUNTANT','AR.REFUND'),
   ('ACCOUNTANT','AR.CREDITNOTE'),
   ('ACCOUNTANT','AR.WRITEOFF'),
   ('ACCOUNTANT','AR.STATEMENT.VIEW'),
@@ -522,6 +537,9 @@ SELECT r.id, p.id FROM (VALUES
   -- is not the ability to create one, so this is a grant bug, not segregation of duties.
   ('ACCOUNTANT','PURCHASE.GOODS_RECEIPT.VIEW'),
   ('ACCOUNTANT','AP.PAYMENT.RUN'),
+  -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): a wrong supplier payment is reversed
+  -- by the finance seat.
+  ('ACCOUNTANT','AP.PAYMENT.REVERSE'),
   ('ACCOUNTANT','AP.DEBITNOTE'),
   ('ACCOUNTANT','AP.OPENING.SET'),
   ('ACCOUNTANT','CASH.VIEW'),
@@ -572,6 +590,14 @@ SELECT r.id, p.id FROM (VALUES
   ('ACCOUNTANT','NOTIFICATION.PREFERENCE.MANAGE'),
   ('ACCOUNTANT','DOCUMENT.RENDER'),
   ('ACCOUNTANT','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (LRB-08, owner-approved): the accountant reconciles daily takings and
+  -- returns against the books, but could not open sales invoices, till sessions, stock on hand or
+  -- the return documents behind the credit/debit notes they post.
+  ('ACCOUNTANT','SALES.INVOICE.VIEW'),
+  ('ACCOUNTANT','POS.SESSION.VIEW'),
+  ('ACCOUNTANT','STOCK.VIEW'),
+  ('ACCOUNTANT','SALES.RETURN.VIEW'),
+  ('ACCOUNTANT','PURCHASE.RETURN.VIEW'),
   -- SALES_MANAGER (76 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('SALES_MANAGER','SALES.QUOTE.CREATE'),
   ('SALES_MANAGER','SALES.QUOTE.SEND'),
@@ -659,6 +685,12 @@ SELECT r.id, p.id FROM (VALUES
   ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','POS.CASHUP.VIEW'),
   ('SALES_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-13, owner-approved): the sales manager reads every sales report but
+  -- could not export one to PDF/Excel.
+  ('SALES_MANAGER','REPORT.EXPORT'),
+  -- Gap review 2026-10-10 (ADM-14 ruling, owner-approved): cost and margin now require
+  -- INVENTORY.VALUATION.VIEW so counter staff no longer see them; the sales manager keeps them.
+  ('SALES_MANAGER','INVENTORY.VALUATION.VIEW'),
   -- BRANCH_MANAGER (56 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('BRANCH_MANAGER','SALES.QUOTE.VIEW'),
   ('BRANCH_MANAGER','SALES.ORDER.VIEW'),
@@ -723,6 +755,16 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','SALES.DISCOUNT.OVERRIDE'),
   ('BRANCH_MANAGER','POS.EXPENSE.VIEW'),
   ('BRANCH_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-12 / LRB-09, owner-approved): a branch manager could post a stock
+  -- count but not start one, view transfers but not receive one into their branch, and could not
+  -- see the debtors statement, deliveries or returns of the branch they run.
+  ('BRANCH_MANAGER','STOCK.TRANSFER.RECEIVE'),
+  ('BRANCH_MANAGER','STOCK.TRANSFER.CREATE'),
+  ('BRANCH_MANAGER','STOCK.COUNT.CREATE'),
+  ('BRANCH_MANAGER','AR.STATEMENT.VIEW'),
+  ('BRANCH_MANAGER','SALES.RETURN.VIEW'),
+  ('BRANCH_MANAGER','SALES.DELIVERY.VIEW'),
+  ('BRANCH_MANAGER','PURCHASE.RETURN.VIEW'),
   -- PROCUREMENT_OFFICER (25 perms; incl. baseline NOTIFICATION.*/DOCUMENT.RENDER/BRANCH.VIEW)
   ('PROCUREMENT_OFFICER','PURCHASE.REQUISITION.CREATE'),
   ('PROCUREMENT_OFFICER','PURCHASE.REQUISITION.VIEW'),
@@ -826,6 +868,12 @@ SELECT r.id, p.id FROM (VALUES
   ('FINANCE_DIRECTOR','AR.INVOICE.VIEW'),
   ('FINANCE_DIRECTOR','AR.RECEIPT.RECORD'),
   ('FINANCE_DIRECTOR','AR.RECEIPT.ALLOCATE'),
+  -- Gap review wave 3 (ARC-04, owner-approved 2026-10-10): a wrong receipt is reversed by the
+  -- finance seat, not the cashier who recorded it.
+  ('FINANCE_DIRECTOR','AR.RECEIPT.REVERSE'),
+  -- Gap review wave 3 (ARC-11, owner-approved 2026-10-10): money handed back to a customer is
+  -- paid out by the finance seat, like a receipt reversal.
+  ('FINANCE_DIRECTOR','AR.REFUND'),
   ('FINANCE_DIRECTOR','AR.CREDITNOTE'),
   ('FINANCE_DIRECTOR','AR.WRITEOFF'),
   ('FINANCE_DIRECTOR','AR.STATEMENT.VIEW'),
@@ -835,6 +883,9 @@ SELECT r.id, p.id FROM (VALUES
   ('FINANCE_DIRECTOR','AP.BILL.ENTER'),
   ('FINANCE_DIRECTOR','AP.BILL.MATCH'),
   ('FINANCE_DIRECTOR','AP.PAYMENT.RUN'),
+  -- Gap review wave 3 (AP-03, owner-approved 2026-10-10): a wrong supplier payment is reversed
+  -- by the finance seat.
+  ('FINANCE_DIRECTOR','AP.PAYMENT.REVERSE'),
   ('FINANCE_DIRECTOR','AP.DEBITNOTE'),
   ('FINANCE_DIRECTOR','AP.OPENING.SET'),
   ('FINANCE_DIRECTOR','CASH.VIEW'),
@@ -929,7 +980,10 @@ SELECT r.id, p.id FROM (VALUES
   ('PRODUCTION_MANAGER','NOTIFICATION.VIEW'),
   ('PRODUCTION_MANAGER','NOTIFICATION.PREFERENCE.MANAGE'),
   ('PRODUCTION_MANAGER','DOCUMENT.RENDER'),
-  ('PRODUCTION_MANAGER','BRANCH.VIEW')
+  ('PRODUCTION_MANAGER','BRANCH.VIEW'),
+  -- Gap review 2026-10-10 (ADM-39, owner-approved): the production manager holds
+  -- STOCK.TRANSFER.CREATE but the transfer form's location pickers 403'd without this.
+  ('PRODUCTION_MANAGER','STOCK.LOCATION.VIEW')
 ) AS g(role_code, perm_code)
 JOIN roles r ON r.code = g.role_code
 JOIN permissions p ON p.code = g.perm_code

@@ -10,6 +10,7 @@ import {
   ApDebitNoteDto,
   ApPaymentDto,
   ApAgeingRowDto,
+  ApSupplierAgeingRowDto,
   ApReconciliationDto,
   BillMatchResultDto,
   EnterBillRequest,
@@ -92,6 +93,14 @@ export class ApService {
     return this.http.post<SupplierBillDto>(`${this.base}/supplier-bills`, request);
   }
 
+  /**
+   * AP-01: delete a bill that never reached the books (DRAFT or HELD, nothing posted, paid or
+   * credited against it) so the invoice can be entered again. Gated AP.BILL.ENTER.
+   */
+  deleteBill(uid: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/supplier-bills/uid/${uid}`);
+  }
+
   // ── 3-way match ───────────────────────────────────────────────────────────
 
   runMatch(billUid: string): Observable<BillMatchResultDto> {
@@ -114,8 +123,12 @@ export class ApService {
     return this.http.post<ApPaymentDto>(`${this.base}/payments/single`, request);
   }
 
-  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto[]> {
-    return this.http.post<ApPaymentDto[]>(`${this.base}/payments/payment-run`, request);
+  /**
+   * A payment run posts ONE payment (allocated across the selected bills) — the backend returns a
+   * single ApPaymentDto, not a list (AP-17: typing it as an array broke the success screen).
+   */
+  paymentRun(request: PaymentRunRequest): Observable<ApPaymentDto> {
+    return this.http.post<ApPaymentDto>(`${this.base}/payments/payment-run`, request);
   }
 
   listPayments(
@@ -139,6 +152,14 @@ export class ApService {
           meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
         })),
       );
+  }
+
+  /**
+   * Reverse a posted supplier payment (AP-03): POST /ap/payments/uid/{uid}/reverse. Posts the
+   * reversing journal and cash-book row and restores the bills it settled. Gated AP.PAYMENT.REVERSE.
+   */
+  reversePayment(uid: string, reason: string): Observable<ApPaymentDto> {
+    return this.http.post<ApPaymentDto>(`${this.base}/payments/uid/${uid}/reverse`, { reason });
   }
 
   getPayment(uid: string): Observable<ApPaymentDto> {
@@ -194,6 +215,13 @@ export class ApService {
     return this.http.get<ApAgeingRowDto[]>(`${this.base}/statement/ageing`, { params });
   }
 
+  /** Creditors ageing: one row per supplier (and currency) with an open balance (AP-11). */
+  getSupplierAgeing(companyId: string, asAt?: string): Observable<ApSupplierAgeingRowDto[]> {
+    let params = new HttpParams().set('companyId', companyId);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get<ApSupplierAgeingRowDto[]>(`${this.base}/statement/ageing/by-supplier`, { params });
+  }
+
   getReconciliation(companyId: string): Observable<ApReconciliationDto> {
     return this.http.get<ApReconciliationDto>(`${this.base}/statement/reconciliation`, {
       params: { companyId },
@@ -230,5 +258,15 @@ export class ApService {
       .set('format', format);
     if (asAt) params = params.set('asAt', asAt);
     return this.http.get(`${this.base}/statement/ageing/export`, { params, responseType: 'blob' });
+  }
+
+  /** The creditors ageing (all suppliers) as a document. */
+  exportSupplierAgeing(companyId: string, format: ExportFormat, asAt?: string): Observable<Blob> {
+    let params = new HttpParams().set('companyId', companyId).set('format', format);
+    if (asAt) params = params.set('asAt', asAt);
+    return this.http.get(`${this.base}/statement/ageing/by-supplier/export`, {
+      params,
+      responseType: 'blob',
+    });
   }
 }

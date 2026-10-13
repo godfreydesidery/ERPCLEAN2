@@ -4,6 +4,8 @@ import com.erp.modules.products.domain.entity.ProductPrice;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ProductPriceRepository extends JpaRepository<ProductPrice, Long> {
 
@@ -34,6 +36,28 @@ public interface ProductPriceRepository extends JpaRepository<ProductPrice, Long
 
     /** The per-unit price row for a product/unit, regardless of price list — first wins (see above). */
     Optional<ProductPrice> findFirstByProductIdAndUnitIdOrderByIdAsc(Long productId, Long unitId);
+
+    /**
+     * Every price row of a product inside one company, its price list (and unit) fetched with it,
+     * oldest row first — the input the selling-price resolver chooses from (PRD-01).
+     *
+     * <p>Deliberately unfiltered by list status or validity dates: the resolver applies those rules
+     * in one place ({@code SellingPriceRules}) so the walk-in, customer and legacy tiers all judge a
+     * row the same way, and so {@code ProductServiceImpl.listPrices} can order the same rows by the
+     * same rules. A product has a handful of rows (one per list, plus pack rows), so loading them
+     * all is cheaper than one query per tier. {@code ORDER BY id} keeps the legacy "lowest id wins"
+     * tie-break deterministic.
+     */
+    @Query("""
+            SELECT pp FROM ProductPrice pp
+              JOIN FETCH pp.priceList
+              LEFT JOIN FETCH pp.unit
+            WHERE pp.companyId = :companyId
+              AND pp.product.id = :productId
+            ORDER BY pp.id ASC
+            """)
+    List<ProductPrice> findPricingRowsOfProduct(@Param("companyId") Long companyId,
+                                                @Param("productId") Long productId);
 
     /**
      * Whether this product carries ANY price row, on any price list, base or per-unit.

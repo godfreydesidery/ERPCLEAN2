@@ -8,6 +8,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { SILENT_ERROR } from '../../../core/api/http-context.tokens';
 import { SalesService } from './sales.service';
 
 const BASE = '/api/v1/sales-invoices';
@@ -43,6 +44,14 @@ describe('SalesService — fiscal receipt', () => {
     req.flush(STUB_FISCAL_RECEIPT);
 
     expect(result).toEqual(STUB_FISCAL_RECEIPT);
+  });
+
+  it('getFiscalReceipt() is marked SILENT_ERROR so a 404 never pops the global modal (LUI-03)', () => {
+    service.getFiscalReceipt('INV-UID-1').subscribe();
+
+    const req = http.expectOne(`${BASE}/uid/INV-UID-1/fiscal-receipt`);
+    expect(req.request.context.get(SILENT_ERROR)).toBe(true);
+    req.flush(STUB_FISCAL_RECEIPT);
   });
 
   it('getFiscalReceipt() maps a 404 (no receipt issued yet) to null', () => {

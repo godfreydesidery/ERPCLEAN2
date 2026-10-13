@@ -19,6 +19,7 @@ import {
 import { AgentService } from '../parties/agent.service';
 import { ProductService } from '../products/product.service';
 import { SalesOrdersService } from './sales-orders.service';
+import { baseToUnit, lineFactor } from './line-units';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -237,6 +238,14 @@ export class SalesOrderDetailComponent {
       next: (o) => this.order.set(o),
       error: () => undefined,
     });
+  }
+
+  /**
+   * A base-unit counter on an order line (reserved / fulfilled / invoiced / open) in the line's
+   * OWN unit, so it reads beside `unitName` correctly — "1 Crate", not "24 Crate" (SAL-01).
+   */
+  inLineUnit(line: SalesOrderLineDto, baseQty: string | number | null | undefined): number {
+    return baseToUnit(baseQty, lineFactor(line));
   }
 
   loadLines(): void {

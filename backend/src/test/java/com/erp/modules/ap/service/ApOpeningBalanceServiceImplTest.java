@@ -102,9 +102,15 @@ class ApOpeningBalanceServiceImplTest {
         scopeGuard = mock(ScopeGuard.class);
         audit      = mock(AuditService.class);
 
+        com.erp.platform.common.money.FxDocumentConverter fx =
+                mock(com.erp.platform.common.money.FxDocumentConverter.class);
+        when(fx.toBase(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> com.erp.platform.common.money.ConvertedAmount.identity(
+                        inv.getArgument(0)));
         service = new ApOpeningBalanceServiceImpl(
                 bills, lines, companies, suppliers, numbers,
-                glPosting, glConfig, scopeGuard, audit);
+                glPosting, glConfig, scopeGuard, audit, fx);
 
         RequestContext.set(new RequestContext.Principal(
                 ACTOR_ID, "clerk@test.com", false, COMPANY_ID, BRANCH_ID, null));

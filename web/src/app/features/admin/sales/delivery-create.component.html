@@ -68,9 +68,9 @@
                         <th scope="col">#</th>
                         <th scope="col">Product</th>
                         <th scope="col">Unit</th>
-                        <th scope="col" class="num">Open Qty</th>
+                        <th scope="col" class="num">Open Qty (in unit)</th>
                         <th scope="col" class="num">
-                          Deliver Qty <span class="text-danger" aria-hidden="true">*</span>
+                          Deliver Qty (in unit) <span class="text-danger" aria-hidden="true">*</span>
                         </th>
                       </tr>
                     </thead>
@@ -92,17 +92,22 @@
                             <span class="mono small">{{ entry.line.productCode }}</span>
                             <br><span class="small text-muted">{{ entry.line.productName }}</span>
                           </td>
-                          <td class="small">{{ entry.line.unitName }}</td>
-                          <td class="num">{{ +entry.line.openQtyBase | number:'1.3-3' }}</td>
+                          <td class="small">
+                            {{ entry.line.unitName }}
+                            @if (entry.factor !== 1) {
+                              <br><span class="text-muted">1 = {{ entry.factor | number:'1.0-6' }} base units</span>
+                            }
+                          </td>
+                          <td class="num">{{ entry.openQty | number:'1.3-3' }}</td>
                           <td class="num">
                             <label [for]="'qty_' + i" class="visually-hidden">
-                              Delivery qty for {{ entry.line.productCode }}
+                              Delivery qty for {{ entry.line.productCode }}, in {{ entry.line.unitName }}
                             </label>
                             <input [id]="'qty_' + i"
                                    [name]="'qty_' + i"
                                    type="number"
                                    min="0.001"
-                                   [max]="entry.line.openQtyBase"
+                                   [max]="entry.openQty"
                                    step="any"
                                    class="form-control form-control-sm"
                                    style="max-width:110px;margin-left:auto"

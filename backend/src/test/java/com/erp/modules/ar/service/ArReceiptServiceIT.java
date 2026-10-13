@@ -315,6 +315,36 @@ class ArReceiptServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // ARC-20 + ARC-06: a deposit kept on account on purpose, applied to an invoice later
+    // =========================================================================
+
+    @Test
+    void depositKeptOnAccountByChoice_thenAppliedToALaterInvoice() {
+        ArInvoiceDto older = openItemViaOpeningBalance(new BigDecimal("1000"),
+                LocalDate.now().minusDays(10));
+
+        // ARC-20: MANUAL with no lines = on account, even though an open invoice exists.
+        ArReceiptDto deposit = receiptService.recordAndAllocate(new RecordReceiptRequest(
+                companyUid, creditCustomerUid, new BigDecimal("1500"), TZS, LocalDate.now(),
+                "CASH", null, List.of(), null, null, null, null, RecordReceiptRequest.MODE_MANUAL));
+        assertThat(deposit.status()).isEqualTo(ArReceiptStatus.UNALLOCATED);
+        assertThat(deposit.unallocatedAmount()).isEqualByComparingTo("1500");
+        assertThat(invoiceService.getByUid(older.uid()).status()).isEqualTo(ArInvoiceStatus.OPEN);
+
+        // ARC-06: next week's invoice arrives; apply the deposit to it and part of the old one.
+        ArInvoiceDto later = creditSaleOpenItem(GROSS_1180);
+        ArReceiptDto applied = receiptService.reallocate(deposit.uid(), List.of(
+                new AllocationLineRequest(later.uid(), GROSS_1180),
+                new AllocationLineRequest(older.uid(), new BigDecimal("320"))));
+
+        assertThat(applied.unallocatedAmount()).isEqualByComparingTo("0");
+        assertThat(applied.status()).isEqualTo(ArReceiptStatus.ALLOCATED);
+        assertThat(invoiceService.getByUid(later.uid()).status()).isEqualTo(ArInvoiceStatus.PAID);
+        assertThat(invoiceService.getByUid(older.uid()).outstandingAmount())
+                .isEqualByComparingTo("680");
+    }
+
+    // =========================================================================
     // Bar 4: Over-allocation rejected (BR-AR-04)
     // =========================================================================
 

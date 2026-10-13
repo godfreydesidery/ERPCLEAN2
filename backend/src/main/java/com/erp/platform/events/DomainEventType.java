@@ -83,6 +83,14 @@ public final class DomainEventType {
     /** Purchase return confirmed — stock-out at original receipt cost + AP debit note (ADR-0027 D-7). */
     public static final String PURCHASE_RETURNED      = "PURCHASE.RETURNED";
 
+    /**
+     * A matched supplier bill differs from the receipt value of its goods (ACC-17 / LBO-13): the AP
+     * journal already moved the on-hand share into GL Inventory; the stock module re-averages the
+     * product cost by the same amount so the sub-ledger keeps tying to GL 1300. No GL in the handler.
+     */
+    public static final String BILL_COST_VARIANCE    = "AP.BILL.COST_VARIANCE";
+    public static final String AGG_SUPPLIER_BILL     = "SUPPLIER_BILL";
+
     public static final String AGG_LANDED_COST    = "LANDED_COST";
     public static final String AGG_PURCHASE_RETURN = "PURCHASE_RETURN";
 
@@ -163,6 +171,15 @@ public final class DomainEventType {
      */
     public static final String VAN_RECONCILED           = "VAN.RECONCILED";
     public static final String AGG_VAN_RECONCILIATION    = "VAN_RECONCILIATION";
+
+    // --- POS till cash (gap review wave 3, ARC-08) ---
+
+    /**
+     * A POS till payout / expense or a session over/short has been posted to the GL. The cash
+     * book consumes it and writes the matching cash_transactions row (it never posts to the GL).
+     */
+    public static final String POS_CASH_MOVED           = "POS.CASH.MOVED";
+    public static final String AGG_POS_SESSION          = "POS_SESSION";
 
     private DomainEventType() {
     }

@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.PaymentSummaryRowDto;
 import com.erp.modules.sales.domain.dto.PaymentSummaryTotalsDto;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -81,12 +82,12 @@ public class PaymentSummaryReportQuery {
         OffsetDateTime to   = toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
 
         NamedRef branch = resolveBranch(branchUid, companyId);
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         NamedRef cashier = resolveCashier(cashierUid, companyId);
 
         String baseCurrency = header.baseCurrency();
         List<PaymentSummaryRowDto> rows =
-                queryRows(zone, companyId, from, to, branch, cashier);
+                queryRows(zone, companyId, from, to, branch, scope, cashier);
 
         return new PaymentSummaryReportDto(
                 header.toDto(),
@@ -97,14 +98,14 @@ public class PaymentSummaryReportQuery {
                 baseCurrency,
                 rows,
                 totalsOf(rows, baseCurrency),
-                queryCashiers(companyId, from, to, branch),
+                queryCashiers(companyId, from, to, branch, scope),
                 Instant.now().toString());
     }
 
     // -------------------------------------------------------------------------
 
     private List<PaymentSummaryRowDto> queryRows(ZoneId zone, Long companyId, OffsetDateTime from,
-                                                 OffsetDateTime to, NamedRef branch,
+                                                 OffsetDateTime to, NamedRef branch, BranchReadScope scope,
                                                  NamedRef cashier) {
         List<Object> params = new ArrayList<>();
         params.add(zone.getId());   // the day expression is the first select item
@@ -112,7 +113,7 @@ public class PaymentSummaryReportQuery {
         params.add(companyId);
         params.add(from);
         params.add(to);
-        StringBuilder filter = new StringBuilder();
+        StringBuilder filter = new StringBuilder(scope.sql("p.branch_id"));
         if (branch != null) {
             filter.append(" AND p.branch_id = ?");
             params.add(branch.id());
@@ -163,13 +164,14 @@ public class PaymentSummaryReportQuery {
 
     /** Everyone who took a payment in the window (and branch), whatever the cashier filter says. */
     private List<CashierRefDto> queryCashiers(Long companyId, OffsetDateTime from,
-                                              OffsetDateTime to, NamedRef branch) {
+                                              OffsetDateTime to, NamedRef branch,
+                                              BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(companyId);
         params.add(from);
         params.add(to);
-        String branchSql = "";
+        String branchSql = scope.sql("p.branch_id");
         if (branch != null) {
             branchSql = " AND p.branch_id = ?";
             params.add(branch.id());

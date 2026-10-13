@@ -24,6 +24,13 @@
 *.example   text eol=lf
 Caddyfile   text eol=lf
 
+# Flutter regenerates its plugin registrants on every `flutter pub get` / build, and always writes
+# them with LF. Under `text=auto` a Windows checkout holds them as CRLF, so every Flutter run left
+# them showing as modified with no real change. Pin them to LF so the working tree matches what
+# Flutter writes.
+**/windows/flutter/generated_plugin_registrant.*   text eol=lf
+**/windows/flutter/generated_plugins.cmake         text eol=lf
+
 # Force LF in the working tree too for these — never CRLF, on any platform.
 *.sql   text eol=lf
 *.sh    text eol=lf

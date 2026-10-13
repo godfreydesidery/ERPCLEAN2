@@ -129,7 +129,18 @@ export interface SupplierModel {
   postalAddress: string | null;
   region: string | null;
   district: string | null;
+  country?: string | null;
   supplierKind: SupplierKind;
+  /** AP-10: credit terms in days; due date = bill date + this. */
+  paymentTermsDays?: number | null;
+  /** Wire: Long → string */
+  paymentTermsId?: string | null;
+  defaultCurrency?: string | null;
+  leadTimeDays?: number | null;
+  /** Wire: BigDecimal → number */
+  minOrderValue?: number | string | null;
+  /** Wire: Long → string */
+  defaultWhtTypeId?: string | null;
   status: MasterStatus;
   version: string | null;
   createdAt: string | null;
@@ -173,6 +184,16 @@ export interface UpdateSupplierRequest {
   region?: string;
   district?: string;
   supplierKind: SupplierKind;
+  /**
+   * AP-10: these are "omitted = unchanged" on the server. Blank strings clear a text field;
+   * '0' clears paymentTermsId / defaultWhtTypeId.
+   */
+  paymentTermsDays?: number;
+  paymentTermsId?: string;
+  country?: string;
+  defaultCurrency?: string;
+  leadTimeDays?: number;
+  defaultWhtTypeId?: string;
 }
 
 // ── Agent — mirrors AgentDto ─────────────────────────────────────────────────

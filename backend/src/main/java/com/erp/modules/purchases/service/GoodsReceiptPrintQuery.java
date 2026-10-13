@@ -228,10 +228,19 @@ public class GoodsReceiptPrintQuery {
                       AND pp.currency      = ?
                     GROUP BY pp.product_id
                 ),
+                unit_sell AS (
+                    SELECT pp.product_id, pp.unit_id, MIN(pp.amount) AS unit_price
+                    FROM product_prices pp
+                    WHERE pp.company_id    = ?
+                      AND pp.price_list_id = CAST(? AS BIGINT)
+                      AND pp.currency      = ?
+                      AND pp.unit_id IS NOT NULL
+                    GROUP BY pp.product_id, pp.unit_id
+                ),
                 prior AS (
                     SELECT DISTINCT ON (pl.product_id)
                            pl.product_id,
-                           pl.unit_cost_amount
+                           pl.line_cost_amount / NULLIF(pl.qty_in_base, 0) AS base_cost
                     FROM goods_receipt_lines pl
                     JOIN goods_receipts pr ON pr.id = pl.goods_receipt_id
                     WHERE pl.company_id = ?
@@ -248,12 +257,22 @@ public class GoodsReceiptPrintQuery {
                        grl.unit_name,
                        grl.unit_cost_amount,
                        grl.line_cost_amount,
-                       COALESCE(sell.base_price, sell.pack_unit_price) AS selling_price,
-                       prior.unit_cost_amount                          AS last_cost,
+                       -- LBO-08: CP is per GR-line unit (a crate), so SP must be too. Prefer the
+                       -- price set for that very unit; else scale the per-base price by the
+                       -- line's own factor (qty_in_base / received_qty).
+                       ROUND(COALESCE(
+                           usell.unit_price,
+                           COALESCE(sell.base_price, sell.pack_unit_price)
+                               * grl.qty_in_base / NULLIF(grl.received_qty, 0)), 4) AS selling_price,
+                       -- The prior receipt may have been in another unit: per base, then this unit.
+                       ROUND(prior.base_cost * grl.qty_in_base
+                               / NULLIF(grl.received_qty, 0), 4)              AS last_cost,
                        p.vat_status
                 FROM goods_receipt_lines grl
                 JOIN products p        ON p.id = grl.product_id
                 LEFT JOIN sell         ON sell.product_id  = grl.product_id
+                LEFT JOIN unit_sell usell
+                       ON usell.product_id = grl.product_id AND usell.unit_id = grl.unit_id
                 LEFT JOIN prior        ON prior.product_id = grl.product_id
                 WHERE grl.goods_receipt_id = ?
                 ORDER BY grl.line_no
@@ -279,6 +298,7 @@ public class GoodsReceiptPrintQuery {
                     rs.getBigDecimal("line_cost_amount"),
                     rs.getString("vat_status"));
         },
+        h.companyId(), priceListId, h.currency(),
         h.companyId(), priceListId, h.currency(),
         h.companyId(), h.id(), receivedAt, receivedAt, h.id(),
         h.id());

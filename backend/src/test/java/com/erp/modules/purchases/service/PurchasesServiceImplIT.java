@@ -32,6 +32,10 @@ import com.erp.modules.purchases.domain.dto.CreatePurchaseOrderRequest;
 import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptLineRequest;
 import com.erp.modules.purchases.domain.dto.DirectGoodsReceiptRequest;
 import com.erp.modules.purchases.domain.dto.PurchaseSettingsDto;
+import com.erp.modules.purchases.domain.dto.CreatePurchaseReturnRequest;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnDto;
+import com.erp.modules.purchases.domain.dto.PurchaseReturnPrintDto;
+import com.erp.modules.documents.service.DocumentRenderService;
 import com.erp.modules.purchases.domain.dto.UpdatePurchaseSettingsRequest;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceiptLineRequest;
@@ -116,6 +120,8 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
     @Autowired private ProductService          productService;
     @Autowired private UnitOfMeasureService    unitService;
     @Autowired private PurchaseSettingsService purchaseSettingsService;
+    @Autowired private PurchaseReturnService   purchaseReturnService;
+    @Autowired private DocumentRenderService   documentRenderService;
     @Autowired private PurchaseOrderRepository   poRepo;
     @Autowired private PurchaseOrderLineRepository poLineRepo;
     @Autowired private GoodsReceiptRepository    grRepo;
@@ -321,6 +327,90 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
         assertThat(printed.lines().get(0).lastCostPrice()).isNull();
     }
 
+    /**
+     * Kilimanjaro "cannot print purchase return": the print model's native SQL resolves against a
+     * real database — the GRN and PO numbers, the supplier, the lines in the line's unit, the stored
+     * totals, a formatted (not ISO) date — and the stream-only PDF renders from it.
+     */
+    @Test
+    void purchaseReturnPrintByUid_resolvesTheNoteAndRendersAPdf() {
+        ProductDto product = stockableProduct("ReturnPrint-Widget");
+        PurchaseOrderDto placed = placeOrderWithLine(product.uid(),
+                new BigDecimal("10"), new BigDecimal("250"));
+        GoodsReceiptDto gr = grService.createAndReceive(new CreateGoodsReceiptRequest(
+                placed.uid(), null,
+                List.of(new GoodsReceiptLineRequest(placed.lines().get(0).uid(), new BigDecimal("10")))));
+
+        PurchaseReturnDto ret = purchaseReturnService.create(new CreatePurchaseReturnRequest(
+                companyA.getUid(), gr.uid(), "Damaged in transit",
+                List.of(new CreatePurchaseReturnRequest.ReturnLineRequest(
+                        gr.lines().get(0).uid(), new BigDecimal("4")))));
+
+        PurchaseReturnPrintDto printed = purchaseReturnService.printByUid(ret.uid());
+
+        assertThat(printed.returnNumber()).isEqualTo(ret.returnNumber());
+        assertThat(printed.status()).isEqualTo("DRAFT");
+        assertThat(printed.goodsReceiptNumber()).isEqualTo(gr.receiptNumber());
+        assertThat(printed.purchaseOrderNumber()).isEqualTo(placed.orderNumber());
+        assertThat(printed.supplierName()).isEqualTo("Test Supplier");
+        assertThat(printed.reason()).isEqualTo("Damaged in transit");
+        assertThat(printed.returnDate()).matches("\\d{2}-[A-Z][a-z]{2}-\\d{4}");
+        assertThat(printed.debitNoteNumber()).isNull();
+        assertThat(printed.lines()).hasSize(1);
+        var line = printed.lines().get(0);
+        assertThat(line.productCode()).isEqualTo(product.code());
+        assertThat(line.returnedQty()).isEqualByComparingTo("4");
+        assertThat(line.unitCost()).isEqualByComparingTo("250");
+        assertThat(line.lineValue()).isEqualByComparingTo("1000");
+        assertThat(printed.netAmount()).isEqualByComparingTo("1000.00");
+        assertThat(printed.totalAmount()).isEqualByComparingTo("1000.00");
+
+        byte[] pdf = documentRenderService.renderPurchaseReturn(printed);
+        assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+    }
+
+    /** A uid that does not exist is a friendly not-found, never a stack trace. */
+    @Test
+    void purchaseReturnPrintByUid_unknownUidIsNotFound() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> purchaseReturnService.printByUid("01J00000000000000000000XXX"))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class)
+                .hasMessage("Purchase return not found.");
+    }
+
+    /**
+     * LBO-08: the printed note compares like with like. A crate line's previous cost is the earlier
+     * piece cost scaled to the crate, not a per-piece figure printed beside a per-crate one.
+     */
+    @Test
+    void printByUid_scalesTheLastCostToTheLinesPackUnit() {
+        ProductDto product = stockableProduct("PrintPack-Widget");
+        UnitOfMeasureDto carton = unitService.create(
+                new CreateUnitOfMeasureRequest(companyA.getUid(), "CTN", "Carton of 12"));
+        productService.addBulkPack(product.uid(),
+                new CreateBulkPackRequest(carton.uid(), new BigDecimal("12")));
+
+        // First delivery in pieces at 100 each.
+        PurchaseOrderDto first = placeOrderWithLine(product.uid(),
+                new BigDecimal("10"), new BigDecimal("100"));
+        grService.createAndReceive(new CreateGoodsReceiptRequest(first.uid(), null,
+                List.of(new GoodsReceiptLineRequest(first.lines().get(0).uid(), new BigDecimal("10")))));
+
+        // Second delivery in cartons at 1,300 per carton.
+        PurchaseOrderDto draft = poService.create(new CreatePurchaseOrderRequest(
+                companyA.getUid(), supplierUid, "TZS", null, null,
+                List.of(new AddPurchaseOrderLineRequest(product.uid(), carton.uid(),
+                        new BigDecimal("2"), new BigDecimal("1300"), null))));
+        PurchaseOrderDto second = poService.placeOrder(draft.uid());
+        GoodsReceiptDto gr2 = grService.createAndReceive(new CreateGoodsReceiptRequest(second.uid(), null,
+                List.of(new GoodsReceiptLineRequest(second.lines().get(0).uid(), new BigDecimal("2")))));
+
+        var line = grService.printByUid(gr2.uid()).lines().get(0);
+        assertThat(line.costPrice()).as("per carton").isEqualByComparingTo("1300");
+        assertThat(line.lastCostPrice()).as("100 per piece × 12 = 1,200 per carton")
+                .isEqualByComparingTo("1200");
+    }
+
     @Test
     void goodsReceipt_createsGoodsReceiptMovement_inStockLedger() {
         ProductDto product = stockableProduct("GR-Movement-Widget");
@@ -376,6 +466,10 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                 List.of(new GoodsReceiptLineRequest(poLine.uid(), new BigDecimal("4")))));
 
         assertThat(gr2.receiptNumber()).isEqualTo("GRN-0002");
+        // PUR-08: the number search matches a fragment, case-insensitively (was an exact match).
+        assertThat(grService.list(gr2.companyId(), "grn-0002",
+                        org.springframework.data.domain.PageRequest.of(0, 20)).getContent())
+                .extracting(GoodsReceiptDto::uid).containsExactly(gr2.uid());
         PurchaseOrderDto afterGr2 = poService.getByUid(placed.uid());
         assertThat(afterGr2.status()).isEqualTo(PurchaseOrderStatus.RECEIVED);
 
@@ -1336,6 +1430,31 @@ class PurchasesServiceImplIT extends PostgresIntegrationTest {
                 poService.findApprovalSnapshots(List.of(ownOrder.uid(), foreignUid));
 
         assertThat(snapshots).containsOnlyKeys(ownOrder.uid());
+    }
+
+    /** PUR-11: the status filter is honoured, for one status or several, with and without a search. */
+    @Test
+    void list_filtersByStatus() {
+        ProductDto product = stockableProduct("StatusFilter-Widget");
+        PurchaseOrderDto draft = createDraftWithLine(product.uid(), BigDecimal.ONE, BigDecimal.TEN);
+        PurchaseOrderDto ordered = placeOrderWithLine(product.uid(), new BigDecimal("4"), BigDecimal.TEN);
+        PurchaseOrderDto partial = placeOrderWithLine(product.uid(), new BigDecimal("4"), BigDecimal.TEN);
+        grService.createAndReceive(new CreateGoodsReceiptRequest(partial.uid(), null,
+                List.of(new GoodsReceiptLineRequest(partial.lines().get(0).uid(), BigDecimal.ONE))));
+
+        var onlyOrdered = poService.list(companyA.getId(), null, false,
+                List.of(PurchaseOrderStatus.ORDERED), Pageable.unpaged()).getContent();
+        assertThat(onlyOrdered).extracting(PurchaseOrderDto::uid).containsExactly(ordered.uid());
+
+        var receivable = poService.list(companyA.getId(), "Test Supplier", false,
+                List.of(PurchaseOrderStatus.ORDERED, PurchaseOrderStatus.PARTIALLY_RECEIVED),
+                Pageable.unpaged()).getContent();
+        assertThat(receivable).extracting(PurchaseOrderDto::uid)
+                .containsExactlyInAnyOrder(ordered.uid(), partial.uid())
+                .doesNotContain(draft.uid());
+
+        assertThat(poService.list(companyA.getId(), null, false, List.of(), Pageable.unpaged())
+                .getContent()).hasSize(3);
     }
 
     /** Creates a PO in another company, from that company's own context. */

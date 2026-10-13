@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -23,6 +25,9 @@ class CartLine {
     this.voided = false,
     this.discountAuthorisedByUid,
     this.discountAuthorisedByName,
+    this.unitNetPrice,
+    this.vatFraction = 0,
+    this.minorUnits = 2,
   });
 
   final String localId;
@@ -51,6 +56,23 @@ class CartLine {
   /// Who approved, for the on-screen "Approved by …" stamp. Display only.
   String? discountAuthorisedByName;
 
+  /// The NET unit price when the line was priced from a VAT-EXCLUSIVE price
+  /// list; null when the price list is VAT-inclusive (then [unitPricePreview]
+  /// is the list's own gross figure) or the line was priced the legacy way.
+  ///
+  /// POS-07: the server takes a line discount off the NET and adds VAT after
+  /// (`InvoiceTotalsCalculator`), so a preview that took it off the gross was
+  /// short by the VAT on the discount — the screen said one total, the receipt
+  /// another, and an exact M-Pesa tender of the screen figure was refused.
+  double? unitNetPrice;
+
+  /// VAT rate for this line as a fraction (0.18). Only used with [unitNetPrice].
+  double vatFraction;
+
+  /// Decimal places of the sale currency (TZS 0, USD 2) — the server rounds
+  /// each line to these, so the preview does too.
+  int minorUnits;
+
   /// True when this line carries a discount that no manager has approved. The
   /// SERVER decides whether that matters — the ceiling is company policy and
   /// the till is never told what it is — so this only ever drives what the UI
@@ -63,11 +85,27 @@ class CartLine {
   /// compares against on-hand quantities that are always in base units.
   double get baseQuantity => quantity * unitFactor;
 
-  /// Preview line total (VAT-inclusive convention from the prototype).
+  /// Preview line total, VAT included, mirroring `InvoiceTotalsCalculator`:
+  ///
+  /// * VAT-exclusive list ([unitNetPrice] set):
+  ///   `net = round(qty × net − disc)`, `gross = net + round(net × VAT)`.
+  /// * VAT-inclusive list: `gross = round(qty × gross − disc)`.
+  ///
+  /// Each line is rounded to the currency's minor units, as the server does.
   double get previewGross {
-    final g = quantity * (unitPricePreview ?? 0) - lineDiscountAmount;
-    return g < 0 ? 0 : g;
+    final net = unitNetPrice;
+    if (net != null) {
+      final rawNet = roundMinor(
+          _atLeastZero(quantity * net - lineDiscountAmount), minorUnits);
+      return rawNet + roundMinor(rawNet * vatFraction, minorUnits);
+    }
+    if (unitPricePreview == null) return 0;
+    return roundMinor(
+        _atLeastZero(quantity * unitPricePreview! - lineDiscountAmount),
+        minorUnits);
   }
+
+  static double _atLeastZero(double v) => v < 0 ? 0 : v;
 
   CartLine clone() => CartLine(
         localId: localId,
@@ -80,7 +118,26 @@ class CartLine {
         voided: voided,
         discountAuthorisedByUid: discountAuthorisedByUid,
         discountAuthorisedByName: discountAuthorisedByName,
+        unitNetPrice: unitNetPrice,
+        vatFraction: vatFraction,
+        minorUnits: minorUnits,
       );
+}
+
+/// Decimal places the server rounds an invoice in (`CurrencyMinorUnits`):
+/// none for TZS and the other zero-decimal currencies, two otherwise.
+int minorUnitsFor(String? currency) {
+  if (currency == null || currency.trim().isEmpty) return 0;
+  const zeroDp = {'TZS', 'UGX', 'RWF', 'BIF', 'JPY', 'KRW'};
+  return zeroDp.contains(currency.trim().toUpperCase()) ? 0 : 2;
+}
+
+/// HALF_UP rounding to [dp] places — the server's `RoundingMode.HALF_UP`.
+/// A tiny epsilon absorbs binary noise (2.675 stored as 2.67499…).
+double roundMinor(double v, int dp) {
+  final f = math.pow(10, dp < 0 ? 0 : dp).toDouble();
+  final r = (v.abs() * f + 0.5 + 1e-9).floorToDouble();
+  return (v < 0 ? -r : r) / f;
 }
 
 class CartState {
@@ -196,8 +253,14 @@ class CartController extends Notifier<CartState> {
   @override
   CartState build() => const CartState();
 
+  /// The customer every new basket starts with — the company's walk-in
+  /// customer, captured by [start]. Null when the company has none (the
+  /// register then reads "Select customer").
+  Customer? _defaultCustomer;
+
   /// Initialise the basket for a new shift with the resolved defaults.
   void start({Customer? customer, Agent? agent, required String currency}) {
+    _defaultCustomer = customer;
     state = CartState(customer: customer, agent: agent, currency: currency);
   }
 
@@ -285,6 +348,7 @@ class CartController extends Notifier<CartState> {
     line.unit = unit;
     line.unitFactor = factor;
     line.unitPricePreview = null;
+    line.unitNetPrice = null;
     state = state.copyWith(lines: lines, selectedId: localId);
   }
 
@@ -324,8 +388,39 @@ class CartController extends Notifier<CartState> {
       });
 
   /// Patch the preview unit price once the (async) price-list lookup returns.
-  void setLinePrice(String localId, double? price) =>
-      _mutate(localId, (l) => l.unitPricePreview = price);
+  /// [price] is a GROSS per-unit figure (legacy shape, no net/VAT split).
+  void setLinePrice(String localId, double? price) => _mutate(localId, (l) {
+        l.unitPricePreview = price;
+        l.unitNetPrice = null;
+      });
+
+  /// Patch a line with the SERVER's resolved unit price (POS-07 / PRD-01).
+  ///
+  /// [amount] is the price list's figure: NET when [vatInclusive] is false,
+  /// GROSS when true. [vatFraction] is the product's VAT rate. A null [amount]
+  /// means the server has no price for this line — it shows "—" and the
+  /// payment step stops trusting the on-screen total.
+  void setLinePricing(
+    String localId, {
+    required double? amount,
+    required bool vatInclusive,
+    required double vatFraction,
+    required int minorUnits,
+  }) =>
+      _mutate(localId, (l) {
+        l.minorUnits = minorUnits;
+        l.vatFraction = vatFraction;
+        if (amount == null) {
+          l.unitPricePreview = null;
+          l.unitNetPrice = null;
+        } else if (vatInclusive) {
+          l.unitPricePreview = amount;
+          l.unitNetPrice = null;
+        } else {
+          l.unitNetPrice = amount;
+          l.unitPricePreview = amount * (1 + vatFraction);
+        }
+      });
 
   void toggleVoid(String localId) {
     _mutate(localId, (l) => l.voided = !l.voided);
@@ -359,8 +454,12 @@ class CartController extends Notifier<CartState> {
         notes: n,
       );
 
+  /// Empties the basket for the next sale.
+  ///
+  /// POS-15: the customer goes back to the default (walk-in). Keeping the last
+  /// sale's named customer booked every following anonymous sale to them.
   void clearLines() => state = CartState(
-        customer: state.customer,
+        customer: _defaultCustomer,
         agent: state.agent,
         currency: state.currency,
       );

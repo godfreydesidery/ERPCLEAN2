@@ -313,10 +313,17 @@ public class AccountMovementQuery {
     private static String scopePredicate(StatementScope scope) {
         if (scope == null || scope.isCompanyWide()) return "";
         if (scope.unassignedOnly()) return " AND l.branchId IS NULL";
+        if (scope.branchIds() != null) {
+            // A branch-limited caller's own branches; none assigned reads nothing.
+            return scope.branchIds().isEmpty() ? " AND 1 = 0" : " AND l.branchId IN :branchIds";
+        }
         return " AND l.branchId = :branchId";
     }
 
     private static void bindScope(TypedQuery<?> q, StatementScope scope) {
+        if (scope != null && scope.branchIds() != null && !scope.branchIds().isEmpty()) {
+            q.setParameter("branchIds", scope.branchIds());
+        }
         if (scope != null && scope.branchId() != null) {
             q.setParameter("branchId", scope.branchId());
         }

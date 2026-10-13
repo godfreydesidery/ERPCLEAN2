@@ -5,6 +5,7 @@ import 'package:pos_app/core/api/api_client.dart';
 import 'package:pos_app/core/config/step_up_policy.dart';
 import 'package:pos_app/features/session/session_menu.dart';
 import 'package:pos_app/models/auth.dart';
+import 'package:pos_app/models/enums.dart';
 import 'package:pos_app/models/pos.dart';
 import 'package:pos_app/models/step_up.dart';
 import 'package:pos_app/services/session_service.dart';
@@ -55,6 +56,25 @@ class _StubSessions implements SessionService {
     calls.add('POST z-read/authorised');
     lastAuthorisedBy = authorisedByUid;
     return ZRead.fromJson(_zReadJson(uid));
+  }
+
+  /// The approver uid the last payout / expense carried (POS-05).
+  String? payoutAuthorisedBy;
+  PosPayoutType? lastPayoutType;
+
+  @override
+  Future<PosPayout> payout(String uid, PosPayoutType type, double amount,
+      String? reason,
+      {String? authorisedByUid}) async {
+    calls.add('POST payouts');
+    lastPayoutType = type;
+    payoutAuthorisedBy = authorisedByUid;
+    return PosPayout.fromJson({
+      'uid': 'PAY1',
+      'payoutType': type.wire,
+      'amount': amount,
+      'reason': reason,
+    });
   }
 
   // The drawer touches nothing else on the service in these flows.
@@ -131,6 +151,9 @@ class _StubApp extends AppController {
   final AppData _data;
   @override
   AppData build() => _data;
+
+  @override
+  Future<void> refreshShift() async {}
 }
 
 const _approverUid = 'MGR7ZZZZZZZZZZZZZZZZZZZZZZ';
@@ -449,6 +472,96 @@ void main() {
       await tester.pumpAndSettle();
       expect(sessions.calls, isEmpty);
       expect(find.text('Manager approval — Z-read'), findsNothing);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Wave-2 drawer controls: POS-02, POS-04, POS-05
+  // ---------------------------------------------------------------------------
+
+  group('wave-2 drawer controls', () {
+    test('paid-outs and till expenses take the manager who settles the till',
+        () {
+      for (final a in [GatedAction.payout, GatedAction.expense]) {
+        expect(stepUpRuleFor(a).requiresApproval, isTrue);
+        expect(stepUpRuleFor(a).permissionCode, 'POS.SESSION.RECONCILE');
+      }
+    });
+
+    test('a payout POSTs the approver uid only when there is one', () async {
+      final api = _RecordingApi()
+        ..reply = {'uid': 'P', 'payoutType': 'PAID_OUT', 'amount': 1};
+      await SessionService(api).payout('S', PosPayoutType.paidOut, 1, 'tea',
+          authorisedByUid: _approverUid);
+      expect((api.body! as Map)['authorisedByUid'], _approverUid);
+
+      await SessionService(api).payout('S', PosPayoutType.paidOut, 1, 'tea');
+      expect((api.body! as Map).containsKey('authorisedByUid'), isFalse,
+          reason: 'an absent approval is omitted, not sent as null');
+    });
+
+    testWidgets('the payout dialog offers no Refund and asks for a manager',
+        (tester) async {
+      final sessions = _StubSessions();
+      final stepUp = _StubStepUp(_approved);
+      await _openDrawer(tester,
+          app: _appData({Perms.saleCreate, Perms.sessionOpen}),
+          sessions: sessions,
+          stepUp: stepUp);
+
+      await tester.tap(find.text('Cash payout'));
+      await tester.pumpAndSettle();
+      expect(find.text('Refund'), findsNothing,
+          reason: 'POS-02: refunds go through the sale reversal');
+
+      final fields = find.descendant(
+          of: find.byType(AlertDialog), matching: find.byType(TextField));
+      await tester.enterText(fields.at(0), '5000');
+      await tester.enterText(fields.at(1), 'Casual labour');
+      await tester.tap(find.text('Record'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Manager approval — cash payout'), findsOneWidget);
+      // The prompt sits over the payout form, so its fields are the last two.
+      final all = find.byType(TextField);
+      final n = all.evaluate().length;
+      await tester.enterText(all.at(n - 2), 'branchmgr');
+      await tester.enterText(all.at(n - 1), 'correct horse');
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(stepUp.askedFor, ['POS.SESSION.RECONCILE']);
+      expect(sessions.lastPayoutType, PosPayoutType.paidOut);
+      expect(sessions.payoutAuthorisedBy, _approverUid);
+    });
+
+    testWidgets('a cashier reading the X-read is not shown the expected cash',
+        (tester) async {
+      await _openDrawer(tester,
+          app: _appData({Perms.saleCreate, Perms.sessionView}),
+          sessions: _StubSessions(),
+          stepUp: _StubStepUp(_approved));
+
+      await tester.tap(find.text('X-read'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sales (all tenders)'), findsOneWidget);
+      expect(find.text('Expected cash'), findsNothing,
+          reason: 'POS-04: blind cash-up');
+    });
+
+    testWidgets('someone who may settle the till sees the expected cash',
+        (tester) async {
+      await _openDrawer(tester,
+          app: _appData(
+              {Perms.saleCreate, Perms.sessionView, Perms.sessionReconcile}),
+          sessions: _StubSessions(),
+          stepUp: _StubStepUp(_approved));
+
+      await tester.tap(find.text('X-read'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Expected cash'), findsOneWidget);
     });
   });
 }

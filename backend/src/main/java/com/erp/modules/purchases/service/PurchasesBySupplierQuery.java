@@ -4,6 +4,7 @@ import com.erp.modules.purchases.domain.dto.PurchasesBySupplierDto;
 import com.erp.modules.purchases.domain.dto.PurchasesBySupplierRowDto;
 import com.erp.modules.purchases.domain.dto.PurchasesBySupplierTotalsDto;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -75,16 +76,16 @@ public class PurchasesBySupplierQuery {
 
         PurchaseReportSupport.Ref branch =
                 support.resolve("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         Long branchId = branch != null ? branch.id() : null;
 
         Map<String, Acc> bySupplier = new LinkedHashMap<>();
-        loadReceipts(bySupplier, companyId, from, to, branchId);
+        loadReceipts(bySupplier, companyId, from, to, branchId, scope);
         if (showReturns) {
-            loadReturns(bySupplier, companyId, from, to, branchId);
+            loadReturns(bySupplier, companyId, from, to, branchId, scope);
         }
         if (showBills) {
-            loadBills(bySupplier, companyId, fromDate, toDate, branchId);
+            loadBills(bySupplier, companyId, fromDate, toDate, branchId, scope);
         }
 
         String base = company.baseCurrency();
@@ -159,8 +160,8 @@ public class PurchasesBySupplierQuery {
     }
 
     private void loadReceipts(Map<String, Acc> map, Long companyId, OffsetDateTime from,
-                              OffsetDateTime to, Long branchId) {
-        String branchSql = branchId != null ? " AND gr.branch_id = ?" : "";
+                              OffsetDateTime to, Long branchId, BranchReadScope scope) {
+        String branchSql = branchId != null ? " AND gr.branch_id = ?" : scope.sql("gr.branch_id");
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(from);
@@ -208,7 +209,7 @@ public class PurchasesBySupplierQuery {
     }
 
     private void loadReturns(Map<String, Acc> map, Long companyId, OffsetDateTime from,
-                             OffsetDateTime to, Long branchId) {
+                             OffsetDateTime to, Long branchId, BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(from);
@@ -223,7 +224,7 @@ public class PurchasesBySupplierQuery {
                 WHERE pr.company_id = ?
                   AND pr.status = 'CONFIRMED'
                   AND pr.confirmed_at >= ? AND pr.confirmed_at < ?"""
-                + (branchId != null ? " AND pr.branch_id = ?" : "") + """
+                + (branchId != null ? " AND pr.branch_id = ?" : scope.sql("pr.branch_id")) + """
 
                 GROUP BY pr.supplier_id, s.code, s.display_name, prl.currency
                 """;
@@ -240,7 +241,7 @@ public class PurchasesBySupplierQuery {
      * entered with no branch belongs to no branch's figures.
      */
     private void loadBills(Map<String, Acc> map, Long companyId, LocalDate fromDate,
-                           LocalDate toDate, Long branchId) {
+                           LocalDate toDate, Long branchId, BranchReadScope scope) {
         List<Object> params = new ArrayList<>();
         params.add(companyId);
         params.add(fromDate);
@@ -257,7 +258,7 @@ public class PurchasesBySupplierQuery {
                   AND sb.status <> 'DRAFT'
                   AND sb.source = 'BILL'
                   AND sb.bill_date >= ? AND sb.bill_date <= ?"""
-                + (branchId != null ? " AND sb.branch_id = ?" : "") + """
+                + (branchId != null ? " AND sb.branch_id = ?" : scope.sql("sb.branch_id")) + """
 
                 GROUP BY sb.supplier_id, s.code, s.display_name, sb.currency
                 """;

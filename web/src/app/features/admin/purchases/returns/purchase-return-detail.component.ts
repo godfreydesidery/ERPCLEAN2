@@ -1,13 +1,17 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { AlertService } from '../../../../core/feedback/alert.service';
 import { SessionStore } from '../../../../core/auth/session.store';
+import { blobErrorMessage } from '../../../../core/api/blob-error';
 import { PurchaseReturnDto } from '../../models/purchases.model';
-import { PurchaseReturnService } from './purchase-return.service';
+import { PurchaseReturnExportFormat, PurchaseReturnService } from './purchase-return.service';
 
 type LoadState = 'loading' | 'idle' | 'error';
+
+const EXTENSIONS: Record<PurchaseReturnExportFormat, string> = { PDF: 'pdf', XLSX: 'xlsx', CSV: 'csv' };
 
 @Component({
   selector: 'app-purchase-return-detail',
@@ -18,6 +22,7 @@ type LoadState = 'loading' | 'idle' | 'error';
 export class PurchaseReturnDetailComponent {
   private readonly returnService = inject(PurchaseReturnService);
   private readonly alerts = inject(AlertService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -28,7 +33,17 @@ export class PurchaseReturnDetailComponent {
   readonly confirming = signal(false);
   readonly confirmError = signal<string | null>(null);
 
+  // ── Print / export ─────────────────────────────────────────────────────────
+  /** The format currently downloading, or null. One at a time. */
+  readonly exporting = signal<PurchaseReturnExportFormat | null>(null);
+  readonly exportError = signal<string | null>(null);
+
   readonly canConfirm = computed(() => this.session.hasPermission('PURCHASE.RETURN.CREATE'));
+  /**
+   * Same gate as the endpoint: this page already requires PURCHASE.RETURN.VIEW (route guard),
+   * and printing/exporting additionally needs DOCUMENT.RENDER — the code that gates GRN printing.
+   */
+  readonly canPrint = computed(() => this.session.hasPermission('DOCUMENT.RENDER'));
   readonly isDraft = computed(() => this.entity()?.status === 'DRAFT');
 
   constructor() {
@@ -60,6 +75,29 @@ export class PurchaseReturnDetailComponent {
     });
   }
 
+  /** Download the purchase return as PDF (print), Excel or CSV. */
+  download(format: PurchaseReturnExportFormat): void {
+    if (this.exporting()) return;
+    this.exporting.set(format);
+    this.exportError.set(null);
+    this.returnService
+      .exportBlob(this.uid(), format)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.exporting.set(null);
+          const number = this.entity()?.returnNumber ?? this.uid();
+          triggerBlobDownload(blob, `purchase-return-${number}.${EXTENSIONS[format]}`);
+        },
+        error: (err) => {
+          this.exporting.set(null);
+          const fallback = format === 'PDF' ? 'Could not generate the PDF.' : 'Could not export the return.';
+          // Error body is a Blob (responseType: 'blob') — surface the friendly server message.
+          void blobErrorMessage(err, fallback).then((m) => this.exportError.set(m));
+        },
+      });
+  }
+
   private messageFrom(err: unknown, fallback: string): string {
     if (err instanceof HttpErrorResponse) {
       const errors = (err.error as { errors?: string[] })?.errors;
@@ -67,4 +105,14 @@ export class PurchaseReturnDetailComponent {
     }
     return fallback;
   }
+}
+
+/** Create an object URL for a blob and click a synthetic anchor to download it. */
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import { SILENT_ERROR } from '../api/http-context.tokens';
 import {
   AuthorityVerificationDto,
+  ChangeOwnPasswordRequest,
   LoginRequest,
   MeResponse,
   TokenResponse,
@@ -75,6 +76,22 @@ export class AuthService {
           }
         }),
       );
+  }
+
+  /**
+   * Self-service password change (ADM-02 / PAR-14). The server signs out every other session and
+   * returns a fresh one for this tab; the branch the user is working in is kept, as on refresh().
+   */
+  changeOwnPassword(request: ChangeOwnPasswordRequest): Observable<TokenResponse> {
+    const branchUid = this.session.activeBranchUid();
+    return this.http.post<TokenResponse>(`${this.base}/me/password`, request).pipe(
+      tap((res) => {
+        this.session.setSession(res.accessToken, res.refreshToken, res.user);
+        if (branchUid) {
+          this.session.setActiveBranchUid(branchUid);
+        }
+      }),
+    );
   }
 
   logout(): Observable<void> {

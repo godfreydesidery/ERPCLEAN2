@@ -162,6 +162,46 @@ describe('BankReconciliationComponent', () => {
     expect(comp.fmtMoney('2000.5')).toBe('2000.50');
   });
 
+  it('month 2 (ARC-09): opening balance + items cleared on THIS statement must equal the closing', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(BankReconciliationComponent).componentInstance as any;
+    // Last month closed at 1500 (TXN1 + TXN2, cleared by reconciliation 1). This statement:
+    // opening 1500, closing 3000 → only TXN3 (IN 1500) is new.
+    comp.reconciliation.set({ ...MOCK_RECON, id: '2', uid: 'RECON2', statementOpeningBalance: 1500, statementClosingBalance: 3000 });
+    comp.transactions.set([
+      { ...MOCK_STATEMENT.transactions[0], cleared: true, clearedInReconciliationId: '1' },
+      { ...MOCK_STATEMENT.transactions[1], cleared: true, clearedInReconciliationId: '1' },
+      MOCK_STATEMENT.transactions[2],
+    ]);
+    comp.clearedUids.set(new Set(['TXN1', 'TXN2']));
+    expect(comp.reconciledEarlier(comp.transactions()[0])).toBe(true);
+    expect(comp.clearedBookBalance()).toBeCloseTo(1500, 5); // opening only; earlier items not counted twice
+    expect(comp.isBalanced()).toBe(false);
+
+    comp.clearedUids.update((s: Set<string>) => new Set([...s, 'TXN3']));
+    expect(comp.clearedBookBalance()).toBeCloseTo(3000, 5);
+    expect(comp.isBalanced()).toBe(true);
+    expect(comp.completeDisabled()).toBe(false);
+  });
+
+  it('a blank opening balance is not sent (the server carries the last one forward)', () => {
+    makeBed();
+    const comp = TestBed.createComponent(BankReconciliationComponent).componentInstance as any;
+    const svc = TestBed.inject(CashbankService) as any;
+    comp.selectedCompanyId.set('10');
+    comp.companies.set([{ uid: 'CO1', id: '10', name: 'Main Co' }]);
+    comp.selectedAccountUid.set('BANK1');
+    comp.statementClosingBalanceInput.set('3000');
+    comp.statementOpeningBalanceInput.set('');
+    comp.submitOpenRecon();
+    expect(svc.openReconciliation.mock.calls[0][0].statementOpeningBalance).toBeUndefined();
+
+    comp.statementOpeningBalanceInput.set('1500');
+    comp.submitOpenRecon();
+    expect(svc.openReconciliation.mock.calls[1][0].statementOpeningBalance).toBe('1500');
+  });
+
   it('difference is statementBalance minus clearedBook', () => {
     vi.useFakeTimers();
     makeBed();

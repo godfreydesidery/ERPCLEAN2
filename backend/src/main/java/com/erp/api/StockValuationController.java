@@ -14,10 +14,10 @@ import com.erp.modules.stock.domain.dto.StockValuationReportDto;
 import com.erp.modules.stock.domain.dto.StockValuationRowDto;
 import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.StockValuationQuery;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,16 +58,17 @@ public class StockValuationController {
     private final StockValuationQuery       valuationQuery;
     private final InventoryValuationService valuationService;
     private final TabularExporter           exporter;
-    private final Clock                     clock;
+    /** "Today" in the company's zone (owner ruling 2026-10-10); a test injects a fixed clock. */
+    private final CompanyCalendar           calendar;
 
     public StockValuationController(StockValuationQuery valuationQuery,
                                      InventoryValuationService valuationService,
                                      TabularExporter exporter,
-                                     Clock clock) {
+                                     CompanyCalendar calendar) {
         this.valuationQuery   = valuationQuery;
         this.valuationService = valuationService;
         this.exporter         = exporter;
-        this.clock            = clock;
+        this.calendar         = calendar;
     }
 
     /**
@@ -142,14 +143,16 @@ public class StockValuationController {
     @PreAuthorize("@perm.has('INVENTORY.OPENING.SET')")
     public OpeningValuationResultDto setOpening(
             @Valid @RequestBody SetOpeningValuationRequest request) {
-        return valuationService.setOpeningValue(request, LocalDate.now());
+        return valuationService.setOpeningValue(request,
+                calendar.today(RequestContext.get().companyId()));
     }
 
     // -------------------------------------------------------------------------
 
     /** Shared by the screen and the export so a downloaded file can never honour a laxer rule. */
     private void assertReportableDate(LocalDate asOf) {
-        LocalDate today = LocalDate.now(clock);
+        RequestContext.Principal principal = RequestContext.get();
+        LocalDate today = calendar.today(principal != null ? principal.companyId() : null);
         if (asOf != null && asOf.isBefore(today)) {
             throw new IllegalArgumentException(
                     "Stock valuation is only available for the current position. "

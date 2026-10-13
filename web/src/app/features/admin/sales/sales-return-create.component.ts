@@ -17,11 +17,16 @@ import { SalesOrdersService } from './sales-orders.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { UidPickerComponent, UidOption } from '../../../shared/uid-picker/uid-picker.component';
+import { todayLocal } from '../../../shared/date.util';
 
 /** Per-line entry state for the return form. */
 interface ReturnLineEntry {
   line: DeliveryLineDto;
-  /** Returnable = qtyDelivered − returnedQtyBase */
+  /**
+   * Returnable, in BASE units = qtyDeliveredBase − returnedQtyBase. A return is entered in base
+   * units (one broken bottle can come back out of a crate); qtyDelivered is in the delivery line's
+   * own unit and must not be mixed with the base counters (SAL-01).
+   */
   returnable: number;
   /** User-entered return qty; string for two-way binding, validated on submit */
   qtyInput: string;
@@ -72,7 +77,7 @@ export class SalesReturnCreateComponent implements OnInit {
   readonly deliveryError = signal<string | null>(null);
 
   // ── Return form ────────────────────────────────────────────────────────────
-  readonly returnDate = signal(new Date().toISOString().slice(0, 10));
+  readonly returnDate = signal(todayLocal());
   readonly reason = signal('');
   readonly lineEntries = signal<ReturnLineEntry[]>([]);
   readonly formError = signal<string | null>(null);
@@ -148,12 +153,18 @@ export class SalesReturnCreateComponent implements OnInit {
 
   private buildLineEntries(d: DeliveryDto): void {
     const entries: ReturnLineEntry[] = d.lines.map((line) => {
-      const delivered = +(line.qtyDelivered ?? 0);
+      const delivered = +(line.qtyDeliveredBase ?? 0);
       const alreadyReturned = +(line.returnedQtyBase ?? 0);
       const returnable = Math.max(0, delivered - alreadyReturned);
       return { line, returnable, qtyInput: '' };
     });
     this.lineEntries.set(entries);
+  }
+
+  /** Base units in one of the line's units; 1 for a base-unit line. */
+  factorOf(line: DeliveryLineDto): number {
+    const f = Number(line.factorToBase ?? 1);
+    return Number.isFinite(f) && f > 0 ? f : 1;
   }
 
   // ── Validation helpers ─────────────────────────────────────────────────────

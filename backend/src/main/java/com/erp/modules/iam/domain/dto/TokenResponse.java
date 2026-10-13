@@ -18,6 +18,8 @@ public record TokenResponse(
             boolean isRoot,
             String activeCompanyUid,
             String activeBranchUid,
-            boolean hasBranch) {
+            boolean hasBranch,
+            /** ADM-02: an administrator set this password; the client must force a change. */
+            boolean mustChangePassword) {
     }
 }

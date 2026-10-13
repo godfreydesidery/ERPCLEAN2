@@ -29,6 +29,10 @@ export interface AccountDto {
   normalBalance: NormalBalance;
   active: boolean;
   status: string;
+  /** False on accounts closed to manual journals (control accounts by default). */
+  allowManualPosting?: boolean;
+  /** AR / AP / INVENTORY / TAX / PAYROLL_CLEARING / FX_CLEARING / CASH / BANK, or null. */
+  controlType?: string | null;
 }
 
 export interface CreateAccountRequest {
@@ -65,7 +69,20 @@ export interface JournalEntryDto {
   sourceType: JournalSourceType;
   sourceRef: string | null;
   reversalOfId: string | null;
+  /** True once a reversing entry exists for this one. */
+  reversed?: boolean;
   lines: JournalLineDto[];
+  /** Source document number (GRN-0007, INV-0453) when the server could read it (ACC-19). */
+  documentRef?: string | null;
+}
+
+/** Optional journal-list filters (ACC-19). Dates are yyyy-MM-dd. */
+export interface JournalFilter {
+  from?: string;
+  to?: string;
+  sourceType?: string;
+  accountUid?: string;
+  q?: string;
 }
 
 export interface PostJournalLineRequest {
@@ -151,4 +168,97 @@ export interface TrialBalanceDto {
   rows: TrialBalanceRowDto[];
   totalDebits: string;
   totalCredits: string;
+}
+
+// ── Trial balance as at / range (ACC-14) ────────────────────────────────────
+
+/** Opening / movement / closing for one account. Amounts are JSON numbers. */
+export interface TrialBalanceRangeRowDto {
+  accountId: string;
+  accountUid: string;
+  accountCode: string;
+  accountName: string;
+  accountType: AccountType;
+  normalBalance: NormalBalance;
+  openingDebit: number | string;
+  openingCredit: number | string;
+  movementDebit: number | string;
+  movementCredit: number | string;
+  closingDebit: number | string;
+  closingCredit: number | string;
+}
+
+export interface TrialBalanceRangeDto {
+  companyId: string;
+  baseCurrency: string | null;
+  from: string | null;
+  asAt: string;
+  branchUid: string | null;
+  branchName: string | null;
+  periodLabel: string;
+  rows: TrialBalanceRangeRowDto[];
+  openingDebit: number | string;
+  openingCredit: number | string;
+  movementDebit: number | string;
+  movementCredit: number | string;
+  closingDebit: number | string;
+  closingCredit: number | string;
+}
+
+/** Filters of the "as at" trial balance; dates are yyyy-MM-dd. */
+export interface TrialBalanceRangeFilter {
+  from?: string;
+  asAt?: string;
+  branchUid?: string;
+}
+
+// ── Posting exceptions (ACC-02) ──────────────────────────────────────────────
+
+/**
+ * An automatic GL posting (sale, COGS, goods receipt, reversal…) that failed and was swallowed so
+ * its document could stand. BigDecimal `amount` arrives as a JSON number; format with formatMoney.
+ */
+export interface GlPostingExceptionDto {
+  uid: string;
+  kind: string;
+  sourceType: string | null;
+  sourceRef: string | null;
+  documentNumber: string | null;
+  postingDate: string | null;
+  amount: number | string | null;
+  reason: string | null;
+  failedAt: string;
+  status: 'OPEN' | 'RESOLVED';
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  outcome: 'REPOSTED' | 'ALREADY_POSTED' | null;
+  journalEntryUid: string | null;
+  batchNumber: string | null;
+}
+
+export interface GlPostingRepostResultDto {
+  exceptionUid: string;
+  outcome: 'REPOSTED' | 'ALREADY_POSTED';
+  journalEntryUid: string | null;
+  batchNumber: string | null;
+  postingDate: string | null;
+}
+
+export interface GlPostingExceptionFilter {
+  sourceType?: string;
+  from?: string;
+  to?: string;
+  includeResolved?: boolean;
+}
+
+/** Sales-vs-GL revenue/VAT tie-out (ACC-02). Amounts are JSON numbers. */
+export interface GlSalesTieOutDto {
+  from: string;
+  to: string;
+  salesNet: number | string;
+  salesVat: number | string;
+  glRevenue: number | string;
+  glVat: number | string;
+  revenueDifference: number | string;
+  vatDifference: number | string;
 }

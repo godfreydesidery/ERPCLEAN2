@@ -80,3 +80,33 @@ export interface PayrollStatutoryPeriodReportDto {
   currency: string;
   generatedAt: string;
 }
+
+// ── ACC-07: paying statutory liabilities ─────────────────────────────────────────
+
+export type StatutoryLiability = 'PAYE' | 'NSSF' | 'WCF' | 'SDL' | 'HESLB';
+
+/** GET /hr/payroll/statutory-payments/outstanding — the ledger balance still owed per liability. */
+export interface StatutoryLiabilityBalanceDto {
+  liability: StatutoryLiability;
+  accountCode: string;
+  accountName: string;
+  /** Wire: number (BigDecimal) — coerce with +v. */
+  outstanding: number | string;
+  /** Wire: string (Long) — the caller's company, for the cash/bank account picker. */
+  companyId: string;
+}
+
+/** POST /hr/payroll/statutory-payments — DR the liability / CR the chosen cash or bank account. */
+export interface RecordStatutoryPaymentRequest {
+  liability: StatutoryLiability;
+  cashBankAccountUid: string;
+  paymentDate: string;
+  amount: string;
+  reference?: string;
+}
+
+/** The cash transaction the payment created (only the fields this screen reads). */
+export interface StatutoryPaymentResultDto {
+  uid: string;
+  txnNumber: string;
+}

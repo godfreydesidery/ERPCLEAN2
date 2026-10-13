@@ -10,6 +10,8 @@ export interface MeResponse {
   activeCompanyUid: string | null;
   activeBranchUid: string | null;
   permissions: string[];
+  /** ADM-02: an administrator set the password; the user must replace it before working. */
+  mustChangePassword?: boolean;
 }
 
 /** Mirrors the backend TokenResponse. ids on the wire are strings; here uids are the identifiers. */
@@ -21,6 +23,14 @@ export interface AuthUser {
   activeCompanyUid: string | null;
   activeBranchUid: string | null;
   hasBranch: boolean;
+  /** ADM-02: an administrator set the password; the user must replace it before working. */
+  mustChangePassword?: boolean;
+}
+
+/** POST /api/v1/auth/me/password — self-service password change (ADM-02 / PAR-14). */
+export interface ChangeOwnPasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }
 
 export interface TokenResponse {

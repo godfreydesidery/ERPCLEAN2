@@ -83,4 +83,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      */
     @Query("SELECT p.companyId FROM Product p WHERE p.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
+
+    /** PRD-17 bulk re-upload: the product with this name (case-insensitive, trimmed; unique per company). */
+    @Query("SELECT p FROM Product p WHERE p.companyId = :companyId "
+            + "AND LOWER(TRIM(p.name)) = LOWER(TRIM(:name))")
+    java.util.List<Product> findByCompanyIdAndNormalizedName(@Param("companyId") Long companyId,
+                                                          @Param("name") String name);
 }

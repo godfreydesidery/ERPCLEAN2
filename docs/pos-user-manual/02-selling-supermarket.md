@@ -27,6 +27,7 @@ Before you can sell, you must be signed in and have an **open shift** (a cash se
 | **× Qty** / **− Disc** toggle | Right, mid-panel | Chooses what the number pad will set on the selected line. |
 | **Approve discount…** | Right, under the toggle | Appears only when the selected line has a discount. See section 3.5. |
 | Number box and keys | Right, lower | The number you are keying, the digits **0–9**, the **.** key, a backspace key, plus **Clear** and **Set qty** / **Set disc**. |
+| **Hold** / **Recall** keys | Right, under the number pad | Put the basket aside and bring it back later. See section 6a. |
 | **PAY** button | Bottom-right, dark blue | Shows the preview total and opens payment for the basket. |
 
 > **Tip.** When the basket is empty the grid shows a shopping-cart icon and the words **Scan or search to add items**. That is your cue that nothing has been added yet.
@@ -40,7 +41,7 @@ There are several ways to put a product in the basket, and the search bar handle
 1. If what you entered **looks like a barcode** (only digits, at least 6 of them), the till first asks the ERP for that barcode.
 2. Otherwise — or if no barcode matches — the till **searches** the product list on the ERP server. An exact product **code** match is added straight away; a single match is added straight away; several matches open a list for you to choose from.
 
-Products and prices are always read fresh from the ERP, so a price change made in the back office shows at the till straight away.
+Products and prices are read from the ERP. The prices in the basket are always read fresh; the prices shown in the search list are refreshed after every sale and at least every five minutes. So a price change made in the back office reaches the till within a few minutes, without restarting it.
 
 > **The search bar is always listening.** After every item you add, the field clears itself and the cursor returns to it, ready for the next scan. You should rarely need to click into it.
 
@@ -96,6 +97,8 @@ You can also change a line to a pack by hand — see section 3.4.
 4. The product is added to the basket, the list closes and the search bar clears.
 
 If you type and press **Enter** before the list has appeared, the till adds the product straight away when your text is an exact product code or matches only one product. If nothing matches, you see *No match for "…"*.
+
+> **"No match" and "Can't reach the ERP" are different.** *No match for "…"* means the ERP answered and has no such product. If the till could not reach the ERP at all — the network dropped for a moment — you see **Can't reach the ERP — check the connection.** instead. The product may well exist: check the network cable or Wi-Fi and scan again.
 
 ### 2.5 Type an exact code
 
@@ -236,13 +239,15 @@ These two action columns look similar but do different things.
 1. Tap the **Customer** chip on the right.
 2. The **Customer** picker opens with a search box reading *Search name / code / phone…*.
 3. Type part of the customer's **name**, **code**, or **phone number**. The list updates as you type.
-4. Tap the customer you want. The picker closes and the chip shows their name. A tick marks the currently selected customer in the list.
+4. Tap the customer you want. The picker closes and the chip shows their name. A tick marks the currently selected customer in the list. If the basket already has items, the till first re-reads their prices **for this customer** — an account customer may have their own price list or contract prices — so the total you read out is the one they will be charged.
 
 To go back to an anonymous sale, open the picker again and choose the walk-in entry (shown with a "walking person" icon and *· Walk-in* after its code).
 
 > **If the chip says "Select customer".** No walk-in customer could be found for your company (or your account cannot read the customer list). When you press **PAY** the till shows *Select a customer before completing the sale.* and opens the picker for you. Choose a customer to carry on. Ask your administrator to set up a walk-in customer so this does not happen on every sale.
 
-> **Tip.** You can set the customer before or after adding items — it does not affect what is in the basket.
+> **Tip.** You can set the customer before or after adding items — the items stay, and their prices are updated for the customer you choose.
+
+> **Every new sale starts on the walk-in customer.** After a sale is paid, the next basket goes back to the walk-in customer automatically, so a named customer is never carried onto the next shopper's sale.
 
 ---
 
@@ -252,9 +257,23 @@ To go back to an anonymous sale, open the picker again and choose the walk-in en
 
 **Why it exists.** It is the at-a-glance figure you read out to the customer and watch climb as you scan.
 
-**How it works.** The total updates instantly every time you add, void, remove, re-quantity, discount or change the unit of a line. Voided lines do not count. The prices already include VAT — whether your price list is entered with VAT included or without, the till shows the VAT-inclusive price, the same way the receipt will. Underneath you always see the small reminder **preview — ERP is authoritative**.
+**How it works.** The total updates instantly every time you add, void, remove, re-quantity, discount or change the unit of a line. Voided lines do not count. The prices already include VAT — whether your price list is entered with VAT included or without, the till shows the VAT-inclusive price, the same way the receipt will. Line discounts are taken off exactly the way the ERP takes them off, so a discounted basket shows the same total as the printed receipt — important when a customer pays the exact amount by mobile money. Underneath you always see the small reminder **preview — ERP is authoritative**.
 
 > **Remember.** This total is a preview. The amount the customer actually pays is the one the ERP returns when you complete the sale, and that finalised figure prints on the receipt.
+
+---
+
+## 6a. Putting a sale on hold — Hold and Recall
+
+**What it is.** **Hold** (under the number pad, beside **Recall**) puts the whole basket aside so you can serve the next customer — for example when a shopper goes back for an item or to fetch money. **Recall** brings it back.
+
+**How it works.**
+
+1. With items in the basket, press **Hold**. You see *Sale on hold. Use Recall when the customer is back.* and the basket empties for the next customer. The **Recall** key shows how many sales are waiting, for example **Recall (2)**.
+2. When the customer returns, finish or hold the sale you are on, then press **Recall**. The **Sales on hold** list shows each basket's first item, the customer, the time it was held and its total. Tap the one you want.
+3. The items and customer come back into the basket and the prices are read again from the ERP (they may have changed while the basket waited). Take payment as usual.
+
+> Held sales are kept **on this till only**, for **this shift**, and for at most a day. They are not sales yet: nothing is charged, no stock moves and nothing reaches the ERP until you recall the basket and take payment. A line discount comes back with the basket, but a manager's approval for it does not — ask again if the till needs one.
 
 ---
 
@@ -280,6 +299,8 @@ Taking payment, change, split tenders, and what to do when the outcome of a sale
 |---|---|
 | The basket shows **Scan or search to add items** and nothing happens when you scan. | The search bar may not have focus. Click once inside it, then scan again. |
 | A scan or search shows **No match for "…"**. | The code is not in this company's product list, or the barcode did not read cleanly. Try searching by name, or type the exact product code and press Enter. |
+| A scan or search shows **Can't reach the ERP — check the connection.** | The till could not reach the ERP for a moment — this does **not** mean the product is missing. Check the network, then scan again. |
+| The prices changed after you picked the customer. | Correct — the basket is priced for the chosen customer, who may have their own prices. |
 | *Price-embedded labels aren't supported yet — enter … manually.* | The scale label carries a price, not a weight. Search for the product and key the quantity instead. |
 | A search row says *no price*, or a line's **PRICE** stays a dash (—). | The product has no selling price in the ERP for this unit. Do not sell it until your supervisor or administrator sets a price — the ERP may refuse the sale. |
 | You typed a number and nothing changed on the line. | Press **Set qty** / **Set disc** (or Enter) to apply it. If you see *Select a line first.*, tap the line, then try again. |

@@ -578,6 +578,37 @@ describe('ProductMasterComponent — edit mode', () => {
     expect(svc['update']).toHaveBeenCalledOnce();
     expect(svc['create']).not.toHaveBeenCalled();
   });
+
+  // PRD-03/04/05/33: the update carries every field the master shows, an emptied planning field is
+  // named in clearFields (the server treats an omitted one as unchanged), and a BigDecimal that
+  // arrived as a JSON number does not crash .trim().
+  it('sends descriptive fields, tracking, restriction and clearFields on update', async () => {
+    const svc0 = { getByUid: vi.fn(() => of({ ...CREATED_PRODUCT, reorderLevel: 12 as unknown as string })) };
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    asMock(TestBed.inject(ProductService))['getByUid'] = svc0.getByUid;
+    fixture.componentRef.setInput('uid', 'PUID1');
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget Updated');
+    comp.fBaseUnitUid.set('U1');
+    comp.fCategory.set('Beers');
+    comp.fBrand.set('');
+    comp.fSerialTracked.set(true);
+    comp.fRestrictedKind.set('AGE_18');
+    comp.fReorderQty.set('');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const [, req] = svc['update'].mock.calls[0];
+    expect(req.category).toBe('Beers');
+    expect(req.brand).toBe('');
+    expect(req.serialTracked).toBe(true);
+    expect(req.lotTracked).toBe(false);
+    expect(req.restrictedKind).toBe('AGE_18');
+    expect(req.clearFields).toContain('reorderQty');
+  });
 });
 
 // ── 9. Barcode primary enforcement ───────────────────────────────────────────
@@ -657,6 +688,28 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['addBarcode']).toHaveBeenCalledOnce();
     expect(svc['addBulkPack']).toHaveBeenCalledOnce();
     expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
+  });
+
+  // PRD-06: the backend AddBarcodeRequest reads `unitUid`; `uomUid` was silently dropped, so a
+  // crate barcode rang a single bottle at the till.
+  it('sends a barcode row unit as unitUid', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.newBarcodeValue.set('6001234567890');
+    comp.newBarcodeUomUid.set('U2');
+    comp.addBarcodeRow();
+
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const [, req] = svc['addBarcode'].mock.calls[0];
+    expect(req.unitUid).toBe('U2');
+    expect('uomUid' in req).toBe(false);
   });
 
   // Regression (Kilimanjaro 2026-08-11): on EDIT the wizard re-POSTed packs it had just loaded from
@@ -955,5 +1008,69 @@ describe('ProductMasterComponent — barcode unit round-trip', () => {
 
     expect(row.barcodeType).toBe('');
     expect(comp.barcodeUnitLabel(row)).toBe('—');
+  });
+});
+
+// ── LRB-01 / ADM-28: a refused price-list lookup says "no access", not "none" ──
+
+describe('ProductMasterComponent — price lists forbidden', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    makeBed({
+      productServiceOverrides: {
+        listPriceLists: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
+      },
+    });
+  });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('marks the lookup forbidden and shows a no-access notice', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    fixture.detectChanges();
+
+    expect(comp.priceListsState()).toBe('forbidden');
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain("You don't have access to the price list list");
+    expect(text).not.toContain('No active price lists');
+  });
+});
+
+// ── LUI-04: amounts typed with thousands separators ───────────────────────────
+
+describe('ProductMasterComponent — amounts with separators', () => {
+  beforeEach(() => { vi.useFakeTimers(); makeBed(); });
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends "1,800" cost as "1800"', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.fCostAmount.set('1,800');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const req = (svc['create'].mock.calls[0] as unknown[])[0] as Record<string, unknown>;
+    expect((req['cost'] as { amount: string }).amount).toBe('1800');
+  });
+
+  it('stops on an unreadable cost with a message on the Pricing tab', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.fCostAmount.set('1,8');
+    comp.save();
+
+    expect(comp.formError()).toContain('Cost price');
+    expect(comp.activeTab()).toBe('pricing');
+    expect(asMock(TestBed.inject(ProductService))['create']).not.toHaveBeenCalled();
   });
 });

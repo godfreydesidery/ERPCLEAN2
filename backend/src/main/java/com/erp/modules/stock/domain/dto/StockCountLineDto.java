@@ -20,5 +20,7 @@ public record StockCountLineDto(
         BigDecimal varianceValue,
         String reasonCode,
         String movementUid,
-        String currency
+        String currency,
+        /** Additive (STK-08): the product's uid, so the count screen can offer its pack sizes. */
+        String productUid
 ) {}

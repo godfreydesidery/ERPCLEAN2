@@ -45,4 +45,18 @@ public interface AuditService {
      * @param event the security/business fact to record
      */
     void recordIndependent(AuditEvent event);
+
+    /**
+     * Records an audit event against an EXPLICIT company/branch scope, joining the caller's
+     * transaction ({@code MANDATORY}). For facts raised by system code (outbox handlers,
+     * REQUIRES_NEW posters) where the {@link com.erp.platform.security.RequestContext} may be absent
+     * or belong to another scope — notably a swallowed GL posting failure (ACC-02), whose recorder
+     * opens its own transaction so the row survives the rollback of the posting that raised it.
+     * Actor and IP still come from the request context when one is present.
+     *
+     * @param event     the business fact to record
+     * @param companyId the company the fact belongs to (nullable only for unscoped facts)
+     * @param branchId  the branch the fact belongs to (nullable)
+     */
+    void recordInScope(AuditEvent event, Long companyId, Long branchId);
 }

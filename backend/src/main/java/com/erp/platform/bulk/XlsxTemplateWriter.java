@@ -86,6 +86,9 @@ public class XlsxTemplateWriter {
             // are treated as numbers (not text) by Excel.
             if (col.numeric()) {
                 sheet.setDefaultColumnStyle(c, col.reference() ? styles.refNumeric : styles.numeric);
+            } else if (col.identifierLike() && !col.reference()) {
+                // PRD-08: Text ("@") so a typed barcode/phone keeps every digit and leading zero.
+                sheet.setDefaultColumnStyle(c, styles.text);
             }
             if (col.allowedValues() != null && !col.allowedValues().isEmpty()) {
                 addDropdown(sheet, c, col.allowedValues(), validatedRows);
@@ -110,6 +113,8 @@ public class XlsxTemplateWriter {
                 // cells to change (white) vs. which are just information.
                 if (col.reference()) {
                     cell.setCellStyle(styles.refData);
+                } else if (col.identifierLike()) {
+                    cell.setCellStyle(styles.text);
                 }
             }
         }
@@ -122,8 +127,11 @@ public class XlsxTemplateWriter {
         private final CellStyle refData;
         private final CellStyle numeric;
         private final CellStyle refNumeric;
+        private final CellStyle text;
 
         Styles(Workbook wb) {
+            this.text = wb.createCellStyle();
+            this.text.setDataFormat(wb.createDataFormat().getFormat("@"));
             this.header = headerStyle(wb);
             this.refHeader = referenceHeaderStyle(wb);
             this.refData = referenceDataStyle(wb);

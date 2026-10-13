@@ -63,6 +63,7 @@
               [(ngModel)]="pickedGrUid"
               name="grPicker"
               [options]="grOptions()"
+              [search]="searchGr"
               placeholder="Select receipt to add"
               (ngModelChange)="pickedGrUid.set($event)" />
           </div>

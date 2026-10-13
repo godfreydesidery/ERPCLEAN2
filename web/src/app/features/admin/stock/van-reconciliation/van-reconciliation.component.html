@@ -77,6 +77,8 @@
             </div>
           }
 
+          <app-lookup-notice [state]="branchesState()" what="branch" />
+
           <div class="erp-field">
             <label class="form-label" for="vrVanLocation">
               Van Location <span aria-hidden="true">*</span>
@@ -86,8 +88,8 @@
                 <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                 Loading van locations…
               </p>
-            } @else if (locationsState() === 'error') {
-              <p class="text-danger small mb-0" role="alert">Could not load van locations.</p>
+            } @else if (locationsState() === 'error' || locationsState() === 'forbidden') {
+              <app-lookup-notice [state]="locationsState()" what="van location" />
             } @else {
               <app-uid-picker
                 id="vrVanLocation"

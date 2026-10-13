@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpErrorResponse, HttpParams } from '@angular
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, map, of, throwError } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AddInvoiceLineRequest,
@@ -17,6 +17,7 @@ import {
   SalesInvoicePaymentDto,
   TaxRateDto,
   UpdateTaxRateRequest,
+  UpdateInvoiceLineRequest,
   VoidInvoiceRequest,
 } from '../models/sales.model';
 
@@ -45,6 +46,8 @@ export class SalesService {
     status?: string,
     page = 0,
     size = 20,
+    dateFrom?: string,
+    dateTo?: string,
   ): Observable<SalesInvoicePage> {
     let params = new HttpParams()
       .set('companyId', companyId)
@@ -52,6 +55,9 @@ export class SalesService {
       .set('size', String(size));
     if (q?.trim()) params = params.set('q', q.trim());
     if (status?.trim()) params = params.set('status', status.trim());
+    // SAL-10: optional creation-date window (yyyy-MM-dd, inclusive).
+    if (dateFrom) params = params.set('dateFrom', dateFrom);
+    if (dateTo) params = params.set('dateTo', dateTo);
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
@@ -81,6 +87,15 @@ export class SalesService {
     return this.http.put<void>(`${this.base}/uid/${uid}/void`, request);
   }
 
+  /**
+   * SAL-13 / LSF-17: discard an abandoned DRAFT invoice (no number, nothing posted). A finalised
+   * invoice is refused by the server — it is voided instead.
+   */
+  cancelDraft(uid: string, reason?: string): Observable<void> {
+    const r = reason?.trim();
+    return this.http.delete<void>(`${this.base}/uid/${uid}`, r ? { params: { reason: r } } : {});
+  }
+
   // ── Lines ─────────────────────────────────────────────────────────────────
 
   listLines(uid: string): Observable<SalesInvoiceLineDto[]> {
@@ -89,6 +104,11 @@ export class SalesService {
 
   addLine(uid: string, request: AddInvoiceLineRequest): Observable<SalesInvoiceLineDto> {
     return this.http.post<SalesInvoiceLineDto>(`${this.base}/uid/${uid}/lines`, request);
+  }
+
+  /** SAL-12: change a DRAFT line's quantity and/or discount. */
+  updateLine(uid: string, lineUid: string, request: UpdateInvoiceLineRequest): Observable<SalesInvoiceLineDto> {
+    return this.http.put<SalesInvoiceLineDto>(`${this.base}/uid/${uid}/lines/${lineUid}`, request);
   }
 
   removeLine(uid: string, lineUid: string): Observable<void> {
@@ -134,9 +154,15 @@ export class SalesService {
 
   // ── Fiscal receipt (D-6: EFD, ADR-0049) ──────────────────────────────────
 
-  /** No receipt issued yet → backend 404, mapped here to `null` (not an error). */
+  /**
+   * No receipt issued yet → backend 404, mapped here to `null` (not an error). SILENT_ERROR
+   * (LUI-03): without it the interceptor raised the blocking "Something went wrong — Fiscal
+   * receipt not found" modal on every finalised invoice. The detail screen renders its own
+   * fiscal-panel state for a genuine failure.
+   */
   getFiscalReceipt(uid: string): Observable<FiscalReceiptDto | null> {
-    return this.http.get<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`).pipe(
+    const context = new HttpContext().set(SILENT_ERROR, true);
+    return this.http.get<FiscalReceiptDto>(`${this.base}/uid/${uid}/fiscal-receipt`, { context }).pipe(
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 404) return of(null);
         return throwError(() => err);

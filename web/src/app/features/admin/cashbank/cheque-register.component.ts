@@ -16,6 +16,7 @@ import {
 } from './models/cashbank.model';
 import { CashbankService } from './cashbank.service';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
+import { todayLocal } from '../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -80,7 +81,7 @@ export class ChequeRegisterComponent {
   private readonly loadTrigger$ = new Subject<LoadTrigger>();
 
   constructor() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     this.newIssueDate.set(today);
     this.newValueDate.set(today);
 
@@ -169,7 +170,7 @@ export class ChequeRegisterComponent {
     this.newChequeNumber.set('');
     this.newPayee.set('');
     this.newAmount.set('');
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     this.newIssueDate.set(today);
     this.newValueDate.set(today);
   }

@@ -154,7 +154,7 @@ void main() {
           (x) => x.status == PosSessionStatus.open && x.cashierId == sub)) {
         try {
           final x = await sessions.xRead(s.uid);
-          await sessions.close(s.uid, x.expectedCashAmount);
+          await sessions.close(s.uid, x.expectedCashAmount!);
         } catch (_) {}
       }
     } catch (_) {}
@@ -305,7 +305,7 @@ void main() {
     final till = await freshTill();
     final s = await sessions.open(till.uid, 0);
     final x = await sessions.xRead(s.uid);
-    await sessions.close(s.uid, x.expectedCashAmount);
+    await sessions.close(s.uid, x.expectedCashAmount!);
     final body = cartBody(s.uid, [
       (p: priced[0].product, u: priced[0].unit, qty: 1, disc: 0),
     ], tenderedAmount: 1000000, ageVerified: true);
@@ -331,10 +331,10 @@ void main() {
 
     await sessions.payout(s.uid, PosPayoutType.paidOut, 1000, 'e2e drop');
     final x2 = await sessions.xRead(s.uid);
-    expect(x2.expectedCashAmount, closeTo(x1.expectedCashAmount - 1000, 0.001),
+    expect(x2.expectedCashAmount, closeTo(x1.expectedCashAmount! - 1000, 0.001),
         reason: 'a payout must reduce expected cash by its amount');
 
-    final counted = x2.expectedCashAmount; // count exactly => zero variance
+    final counted = x2.expectedCashAmount!; // count exactly => zero variance
     final closed = await sessions.close(s.uid, counted);
     expect(closed.status, PosSessionStatus.closed);
     expect(closed.varianceAmount ?? 0, closeTo(0, 0.001));
@@ -421,6 +421,6 @@ void main() {
         reason: 'the just-opened session must be findable as my open session');
     // tidy up so it does not linger as an orphan for the next run
     final x = await sessions.xRead(s.uid);
-    await sessions.close(s.uid, x.expectedCashAmount);
+    await sessions.close(s.uid, x.expectedCashAmount!);
   });
 }

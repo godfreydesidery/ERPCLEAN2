@@ -111,6 +111,7 @@
                 <tr>
                   <th scope="col">Receipt #</th>
                   <th scope="col">Date</th>
+                  <th scope="col">Customer</th>
                   <th scope="col" class="num">Amount</th>
                   <th scope="col" class="num">Unallocated</th>
                   <th scope="col">Tender</th>
@@ -122,6 +123,7 @@
                   <tr>
                     <td class="mono fw-semibold">{{ row.receiptNumber }}</td>
                     <td>{{ row.receiptDate }}</td>
+                    <td>{{ row.customerName || row.customerId }}</td>
                     <td class="num">{{ row.currency }} {{ fmtMoney(row.amount) }}</td>
                     <td class="num">{{ fmtMoney(row.unallocatedAmount) }}</td>
                     <td>{{ row.tenderType }}</td>

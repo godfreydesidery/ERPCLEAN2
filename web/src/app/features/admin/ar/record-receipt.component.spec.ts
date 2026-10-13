@@ -6,7 +6,8 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { signal } from '@angular/core';
 
-import { RecordReceiptComponent } from './record-receipt.component';
+import { RecordReceiptComponent, suggestAccountForTender } from './record-receipt.component';
+import { CashAccountOptionDto } from '../cashbank/models/cashbank.model';
 import { ArService } from './ar.service';
 import { CustomerService } from '../parties/customer.service';
 import { CompanyService } from '../company/company.service';
@@ -82,6 +83,25 @@ describe('RecordReceiptComponent — allocation guard', () => {
     expect(comp.submitDisabled()).toBe(false);
   });
 
+  it('reads "68,300" as 68300, not 0 (LUI-04)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    comp.receiptAmount.set('68,300');
+    expect(comp.receiptAmountNum()).toBe(68300);
+    expect(comp.receiptAmountInvalid()).toBe(false);
+  });
+
+  it('flags an unreadable amount and blocks submit instead of treating it as 0 (LUI-04)', () => {
+    vi.useFakeTimers();
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    primeValid(comp);
+    comp.receiptAmount.set('1,8');
+    expect(comp.receiptAmountInvalid()).toBe(true);
+    expect(comp.submitDisabled()).toBe(true);
+  });
+
   it('over-allocation (allocated > receipt amount) → overAllocated true, submit disabled', () => {
     vi.useFakeTimers();
     makeBed();
@@ -121,5 +141,123 @@ describe('RecordReceiptComponent — allocation guard', () => {
     expect(comp.unallocated()).toBeCloseTo(40, 5);
     expect(comp.overAllocated()).toBe(false);
     expect(comp.submitDisabled()).toBe(false);
+  });
+});
+
+describe('RecordReceiptComponent — tender and reference (ARC-18)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('offers only tenders the server accepts: Card instead of Other', () => {
+    makeBed();
+    const fixture = TestBed.createComponent(RecordReceiptComponent);
+    fixture.detectChanges();
+    const values = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('#tenderType option'),
+    ).map((o) => (o as HTMLOptionElement).value);
+    expect(values).toContain('CARD');
+    expect(values).not.toContain('OTHER');
+  });
+
+  it('sends the typed M-Pesa code as bankReference', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.tenderType.set('MOBILE_MONEY');
+    comp.bankReference.set(' QJK7XY12AB ');
+    comp.submit();
+    expect(ar.recordReceipt.mock.calls[0][0].bankReference).toBe('QJK7XY12AB');
+    expect(ar.recordReceipt.mock.calls[0][0].tenderType).toBe('MOBILE_MONEY');
+  });
+});
+
+describe('RecordReceiptComponent — the chosen customer\'s invoices only (ARC-02)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('picking a customer loads THAT customer\'s open items from the server', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { listOpenInvoices: ReturnType<typeof vi.fn> };
+    ar.listOpenInvoices.mockReturnValue(of([
+      { uid: 'ARI9', outstandingAmount: 500, status: 'OPEN', invoiceDate: '2026-10-01' },
+    ]));
+    comp.selectedCompanyId.set('10');
+
+    comp.selectCustomer({ uid: 'KIBO', code: 'C001', displayName: 'Kibo Bar' });
+
+    expect(ar.listOpenInvoices).toHaveBeenCalledWith('10', 'KIBO');
+    expect(comp.allocationRows().map((r: any) => r.invoice.uid)).toEqual(['ARI9']);
+  });
+});
+
+describe('suggestAccountForTender — receipt lands in the right account (ARC-05)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  const acct = (uid: string, accountType: 'CASH' | 'BANK', name: string, extra: Partial<CashAccountOptionDto> = {}) =>
+    ({ id: uid, uid, code: uid, name, accountType, branchId: null, currency: 'TZS',
+       isDefault: false, inCurrentBranch: false, ...extra }) as CashAccountOptionDto;
+  const options = [
+    acct('CB1', 'CASH', 'Head office cash', { isDefault: true }),
+    acct('CB2', 'CASH', 'Arusha till', { inCurrentBranch: true }),
+    acct('BK1', 'BANK', 'CRDB current account'),
+    acct('MP1', 'BANK', 'M-Pesa Lipa till'),
+  ];
+
+  it('cash goes to this branch\'s cash account', () => {
+    expect(suggestAccountForTender('CASH', options)).toBe('CB2');
+  });
+  it('M-Pesa goes to the mobile-money account', () => {
+    expect(suggestAccountForTender('MOBILE_MONEY', options)).toBe('MP1');
+  });
+  it('bank transfer and cheque go to the bank, not the wallet', () => {
+    expect(suggestAccountForTender('BANK_TRANSFER', options)).toBe('BK1');
+    expect(suggestAccountForTender('CHEQUE', options)).toBe('BK1');
+  });
+  it('falls back to the company default when no account of the kind exists', () => {
+    expect(suggestAccountForTender('BANK_TRANSFER', [options[0]])).toBe('CB1');
+    expect(suggestAccountForTender('CASH', [])).toBe('');
+  });
+
+  it('the chosen account is sent with the receipt; a hand-picked account survives a tender change', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.accountOptions.set(options);
+    comp.onTenderChange('MOBILE_MONEY');
+    expect(comp.cashBankAccountUid()).toBe('MP1');
+    comp.onAccountChange('BK1');
+    comp.onTenderChange('CASH');
+    expect(comp.cashBankAccountUid()).toBe('BK1');
+    comp.submit();
+    expect(ar.recordReceipt.mock.calls[0][0].cashBankAccountUid).toBe('BK1');
+  });
+});
+
+describe('RecordReceiptComponent — blank allocations stay on account (ARC-20)', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  it('sends MANUAL with no lines when nothing is allocated, so the server keeps it on account', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.clearAllocations();
+    expect(comp.unallocated()).toBeCloseTo(100, 5);
+    comp.submit();
+    const sent = ar.recordReceipt.mock.calls[0][0];
+    expect(sent.allocationMode).toBe('MANUAL');
+    expect(sent.allocations).toEqual([]);
+  });
+
+  it('sends the auto-filled lines as MANUAL', () => {
+    makeBed();
+    const comp = TestBed.createComponent(RecordReceiptComponent).componentInstance as any;
+    const ar = TestBed.inject(ArService) as unknown as { recordReceipt: ReturnType<typeof vi.fn> };
+    primeValid(comp);
+    comp.submit();
+    const sent = ar.recordReceipt.mock.calls[0][0];
+    expect(sent.allocationMode).toBe('MANUAL');
+    expect(sent.allocations.map((l: any) => l.arInvoiceUid)).toEqual(['ARI1', 'ARI2']);
   });
 });

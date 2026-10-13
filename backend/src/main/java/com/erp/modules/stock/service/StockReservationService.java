@@ -72,4 +72,12 @@ public interface StockReservationService {
      * entity crosses into sales).
      */
     StockAvailabilityDto getAvailability(Long companyId, Long branchId, Long productId);
+
+    /**
+     * True when the product has a non-zero quantity on hand at any branch/location of the company.
+     * Read-only. Used by the products module to refuse switching batch/serial tracking ON while
+     * untracked stock exists (PRD-04) — a primitive-returning read, so no stock entity crosses the
+     * module boundary.
+     */
+    boolean hasStockOnHand(Long companyId, Long productId);
 }

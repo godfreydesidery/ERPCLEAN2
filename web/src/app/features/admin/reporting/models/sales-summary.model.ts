@@ -49,6 +49,11 @@ export interface SalesSummaryReportDto {
   rows: SalesSummaryRowDto[];
   totals: SalesSummaryTotalsDto;
   generatedAt: string;
+  /**
+   * False when the caller may not see cost (no INVENTORY.VALUATION.VIEW): cost of sales, margin and
+   * margin % are null because they were withheld. Absent from older servers.
+   */
+  costVisible?: boolean;
 }
 
 export interface SalesSummaryFilter {

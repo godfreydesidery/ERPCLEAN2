@@ -13,7 +13,8 @@
 export type ArInvoiceStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'WRITTEN_OFF';
 export type ArInvoiceSource = 'SALE' | 'OPENING_BALANCE';
 export type AgeingBucket = 'CURRENT' | 'D1_30' | 'D31_60' | 'D61_90' | 'D90_PLUS';
-export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'OTHER';
+/** Exactly the values the ar_receipts tender CHECK admits (V11) — there is no 'OTHER'. */
+export type TenderType = 'CASH' | 'CHEQUE' | 'BANK_TRANSFER' | 'MOBILE_MONEY' | 'CARD';
 
 // ── AR Invoice ────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,10 @@ export interface ArInvoiceDto {
   dueDate: string | null;
   status: ArInvoiceStatus;
   source: ArInvoiceSource;
+  /** Read-time fill: the customer's uid / code / name. Absent on older servers. */
+  customerUid?: string | null;
+  customerCode?: string | null;
+  customerName?: string | null;
 }
 
 // ── AR Receipt ────────────────────────────────────────────────────────────────
@@ -48,8 +53,37 @@ export interface AllocationLineDto {
   allocatedAmount: number | string;
 }
 
+/** ARC-11: request for POST /ar/refunds — pay a customer's unused credit back. */
+export interface RefundCustomerRequest {
+  sourceType: 'RECEIPT' | 'CREDIT_NOTE';
+  sourceUid: string;
+  /** Wire: number. */
+  amount: number;
+  refundDate?: string | null;
+  cashBankAccountUid?: string | null;
+  reason: string;
+}
+
+/** ARC-11: a refund just paid (journal + cash-book row + reduced credit on the document). */
+export interface ArRefundDto {
+  sourceType: 'RECEIPT' | 'CREDIT_NOTE';
+  sourceUid: string;
+  documentNumber: string;
+  customerId: string | null;
+  /** Wire: number — coerce with +v */
+  amount: number | string;
+  currency: string;
+  refundDate: string;
+  cashBankAccountUid: string | null;
+  journalEntryUid: string;
+  /** Wire: number — credit still unused on the document after this refund. */
+  remainingCredit: number | string;
+}
+
 export interface ArReceiptDto {
   uid: string;
+  /** Wire: JSON string (Long). The receipt's company — used to load the customer's open items. */
+  companyId?: string;
   customerId: string;
   receiptNumber: string;
   receiptDate: string;
@@ -59,7 +93,16 @@ export interface ArReceiptDto {
   unallocatedAmount: number | string;
   currency: string;
   tenderType: TenderType;
+  /** Bank / M-Pesa / cheque reference typed at the counter. */
+  bankReference?: string | null;
+  status?: string;
   allocations: AllocationLineDto[];
+  /** Read-time fill: the customer's uid / code / name. Absent on older servers. */
+  customerUid?: string | null;
+  customerCode?: string | null;
+  customerName?: string | null;
+  /** ARC-04: when the receipt was reversed (bounced cheque or "Reverse receipt"); null when live. */
+  reversedAt?: string | null;
 }
 
 /** Allocation line inside RecordReceiptRequest. */
@@ -79,6 +122,17 @@ export interface RecordReceiptRequest {
   tenderType: TenderType;
   bankReference?: string;
   allocations: AllocationLineRequest[];
+  /**
+   * Optional: the cash / bank / M-Pesa account the money landed in (ARC-05). Omitted = the
+   * company's default cash/bank account (ADR-0016 D-10).
+   */
+  cashBankAccountUid?: string;
+  /**
+   * How the money is applied (ARC-20). MANUAL = exactly `allocations`, the rest on account (an
+   * empty list keeps it all on account); AUTO = oldest-first, send no lines; ON_ACCOUNT = none
+   * applied. Omitted = the old server rule (no lines → AUTO), so this screen always sends MANUAL.
+   */
+  allocationMode?: 'AUTO' | 'MANUAL' | 'ON_ACCOUNT';
   /**
    * Optional WHT_ON_RECEIPT capture (ADR-0017 D-9).
    * When set, the cash DR is reduced by whtAmount and a WHT receivable leg is posted.

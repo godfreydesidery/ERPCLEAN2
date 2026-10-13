@@ -47,6 +47,7 @@
                         (ngModelChange)="selectedLocationUid.set($event); onFilterChange()"
                         [options]="locationOptions()"
                         placeholder="Select location" />
+        <app-lookup-notice [state]="locationsLookup()" what="location" />
       </div>
     }
     <div>
@@ -57,6 +58,7 @@
                       [options]="productOptions()"
                       [search]="searchProducts"
                       placeholder="Select product" />
+        <app-lookup-notice [state]="productsLookup()" what="product" />
     </div>
     @if (viewMode() === 'location') {
       <div>

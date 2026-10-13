@@ -47,4 +47,12 @@ public interface StockTransferService {
 
     /** Paged list of transfers for the caller's company. */
     Page<StockTransferDto> list(Pageable pageable);
+
+    /**
+     * STK-19: filtered list. All filters optional. {@code direction} is relative to the caller's
+     * ACTIVE branch: {@code INCOMING} (destination), {@code OUTGOING} (source) or {@code BRANCH}
+     * (either); anything else / null = every branch. {@code q} matches the transfer number.
+     */
+    Page<StockTransferDto> list(String status, String direction, java.time.LocalDate fromDate,
+                                java.time.LocalDate toDate, String q, Pageable pageable);
 }

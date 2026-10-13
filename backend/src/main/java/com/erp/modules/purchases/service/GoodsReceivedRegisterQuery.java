@@ -4,6 +4,7 @@ import com.erp.modules.purchases.domain.dto.GoodsReceivedRegisterDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceivedRegisterRowDto;
 import com.erp.modules.purchases.domain.dto.GoodsReceivedRegisterTotalsDto;
 import com.erp.platform.security.BranchReadGuard;
+import com.erp.platform.security.BranchReadScope;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -95,13 +96,13 @@ public class GoodsReceivedRegisterQuery {
 
         PurchaseReportSupport.Ref branch =
                 support.resolve("branches", "name", branchUid, companyId, "Branch");
-        branchGuard.assertMayRead(principal, branch != null ? branch.id() : null);
+        BranchReadScope scope = branchGuard.readScope(principal, companyId, branch != null ? branch.id() : null);
         PurchaseReportSupport.Ref supplier =
                 support.resolve("suppliers", "display_name", supplierUid, companyId, "Supplier");
         PurchaseReportSupport.Ref product =
                 support.resolve("products", "name", productUid, companyId, "Product");
 
-        StringBuilder filterSql = new StringBuilder();
+        StringBuilder filterSql = new StringBuilder(scope.sql("gr.branch_id"));
         List<Object> filterParams = new ArrayList<>();
         if (branch != null) {
             filterSql.append(" AND gr.branch_id = ?");

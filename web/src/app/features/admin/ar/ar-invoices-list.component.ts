@@ -17,6 +17,7 @@ import { debounceTime, distinctUntilChanged, Subject as RxSubject } from 'rxjs';
 import { PaginatorComponent } from '../../../shared/paginator/paginator.component';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { formatMoney } from '../../../shared/money.util';
+import { todayLocal } from '../../../shared/date.util';
 
 const DEFAULT_SIZE = 20;
 
@@ -60,9 +61,6 @@ export class ArInvoicesListComponent {
 
   // ── Filters ────────────────────────────────────────────────────────────────
   readonly statusFilter = signal('');
-
-  // ── Customer lookup map (id → "code — displayName") ─────────────────────
-  readonly customerMap = signal<Map<string, string>>(new Map());
 
   // ── Customer picker (filter) ───────────────────────────────────────────────
   readonly customerFilterQ = signal('');
@@ -143,8 +141,8 @@ export class ArInvoicesListComponent {
       });
 
     // Default write-off date to today
-    this.writeOffDate.set(new Date().toISOString().slice(0, 10));
-    this.creditNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.writeOffDate.set(todayLocal());
+    this.creditNoteDate.set(todayLocal());
 
     this.loadCompanies();
   }
@@ -160,7 +158,6 @@ export class ArInvoicesListComponent {
             if (list.length > 0) {
               this.selectedCompanyId.set(list[0].id);
               this.load(0);
-              this.loadCustomerMap(list[0].id);
             }
           },
           error: () => this.companyState.set('error'),
@@ -170,24 +167,10 @@ export class ArInvoicesListComponent {
     });
   }
 
-  private loadCustomerMap(companyId: string): void {
-    this.customerService.list(companyId, undefined, 0, 200).subscribe({
-      next: ({ rows }) => {
-        const m = new Map<string, string>();
-        rows.forEach((c) => m.set(String(c.id), `${c.code} — ${c.displayName}`));
-        this.customerMap.set(m);
-      },
-      error: () => {},
-    });
-  }
-
   onCompanyChange(id: string): void {
     this.selectedCompanyId.set(id);
     this.clearCustomerFilter();
-    if (id) {
-      this.load(0);
-      this.loadCustomerMap(id);
-    }
+    if (id) this.load(0);
   }
 
   onStatusChange(status: string): void {
@@ -249,7 +232,7 @@ export class ArInvoicesListComponent {
     this.writeOffInvoice.set(inv);
     this.writeOffError.set(null);
     this.writeOffReason.set('');
-    this.writeOffDate.set(new Date().toISOString().slice(0, 10));
+    this.writeOffDate.set(todayLocal());
   }
 
   closeWriteOff(): void {
@@ -297,7 +280,7 @@ export class ArInvoicesListComponent {
     this.creditNoteVat.set('0');
     this.creditNoteCurrency.set(String(inv.currency ?? 'TZS'));
     this.creditNoteReason.set('');
-    this.creditNoteDate.set(new Date().toISOString().slice(0, 10));
+    this.creditNoteDate.set(todayLocal());
   }
 
   closeCreditNote(): void {
@@ -326,7 +309,9 @@ export class ArInvoicesListComponent {
 
     const request: RaiseCreditNoteRequest = {
       companyUid: company.uid,
-      customerUid: String(inv.customerId),
+      // The customer's UID (never the numeric id). Blank on an older server: the server then
+      // takes the customer from the invoice itself.
+      customerUid: String(inv.customerUid ?? ''),
       arInvoiceUid: inv.uid,
       noteDate: date,
       netAmount: net,
@@ -351,8 +336,12 @@ export class ArInvoicesListComponent {
 
   // ── Display helpers ────────────────────────────────────────────────────────
 
-  customerDisplay(customerId: string): string {
-    return this.customerMap().get(String(customerId)) ?? String(customerId);
+  /** "CODE — Name" from the server-side fill; never the raw numeric id unless nothing else exists. */
+  customerDisplay(inv: ArInvoiceDto): string {
+    const name = String(inv.customerName ?? '').trim();
+    const code = String(inv.customerCode ?? '').trim();
+    if (name) return code ? `${code} — ${name}` : name;
+    return String(inv.customerId ?? '');
   }
 
   /** Coerce + format money with thousand separators (shared util). */

@@ -89,6 +89,7 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
     @Autowired private ChequeService             chequeService;
     @Autowired private ChequeRepository          chequeRepo;
     @Autowired private CashBankAccountRepository cashAccountRepo;
+    @Autowired private com.erp.modules.cashbank.repository.CashTransactionRepository cashTxnRepo;
     @Autowired private ArInvoiceRepository       arInvoiceRepo;
     @Autowired private ArReceiptRepository       arReceiptRepo;
     @Autowired private JournalEntryRepository    journalEntryRepo;
@@ -205,6 +206,24 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
         ArReceipt reversedReceipt = arReceiptRepo.findByUid(receipt.uid()).orElseThrow();
         assertThat(reversedReceipt.getReversedAt())
                 .as("ar_receipts.reversed_at must be stamped after a bounce reversal").isNotNull();
+
+        // (4) The cash book moves with the GL: the bounced money goes back OUT, linked to the
+        // receipt's IN row, so the account's book balance nets to zero for this receipt.
+        var rows = cashRows(receipt.uid());
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0).getDirection())
+                .isEqualTo(com.erp.modules.cashbank.domain.enums.CashTxnDirection.IN);
+        assertThat(rows.get(1).getDirection())
+                .isEqualTo(com.erp.modules.cashbank.domain.enums.CashTxnDirection.OUT);
+        assertThat(rows.get(1).getAmount()).isEqualByComparingTo(rows.get(0).getAmount());
+        assertThat(rows.get(1).getReversalOfTransactionId()).isEqualTo(rows.get(0).getId());
+    }
+
+    private java.util.List<com.erp.modules.cashbank.domain.entity.CashTransaction> cashRows(String uid) {
+        return cashTxnRepo.findByCompanyIdAndSourceRef(company.getId(), uid).stream()
+                .sorted(java.util.Comparator.comparing(
+                        com.erp.modules.cashbank.domain.entity.CashTransaction::getId))
+                .toList();
     }
 
     // =========================================================================
@@ -239,6 +258,7 @@ class ChequeBounceReversalIT extends PostgresIntegrationTest {
         assertThat(arInvoiceRepo.findByUid(inv.uid()).orElseThrow().getOutstandingAmount())
                 .as("invoice outstanding must not be restored twice")
                 .isEqualByComparingTo(outstandingAfterFirst);
+        assertThat(cashRows(receipt.uid())).as("no second cash-book reversal").hasSize(2);
     }
 
     // =========================================================================

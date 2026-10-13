@@ -1,0 +1,145 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1><i class="bi bi-bar-chart-steps me-2" aria-hidden="true"></i>AP Ageing</h1>
+      <p class="subtitle">What you owe each supplier, by how long it is past due.</p>
+    </div>
+  </header>
+
+  @if (!canView()) {
+    <p class="text-muted d-flex align-items-center gap-2 mt-3" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view AP ageing.
+    </p>
+  } @else {
+    <div class="d-flex flex-wrap gap-3 align-items-end mb-3">
+      @switch (companyState()) {
+        @case ('loading') {
+          <p class="text-muted d-flex align-items-center gap-2 mb-0" aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading companies…
+          </p>
+        }
+        @case ('error') {
+          <p class="text-danger mb-0" role="alert">
+            <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load companies.
+          </p>
+        }
+        @default {
+          @if (companies().length > 1) {
+            <div style="min-width:240px">
+              <label for="apAgeCompany" class="form-label fw-semibold">Company</label>
+              <select id="apAgeCompany" class="form-select form-select-sm"
+                      [ngModel]="selectedCompanyId()"
+                      (ngModelChange)="onCompanyChange($event)">
+                @for (c of companies(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
+                }
+              </select>
+            </div>
+          }
+        }
+      }
+      <div>
+        <label for="apAgeAsAt" class="form-label fw-semibold">As at</label>
+        <input id="apAgeAsAt" type="date" class="form-control form-control-sm"
+               [ngModel]="asAt()" (ngModelChange)="onAsAtChange($event)" />
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading ageing…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>Could not load ageing data.
+        </p>
+      }
+      @case ('forbidden') {
+        <p class="text-muted" role="alert">
+          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>No permission.
+        </p>
+      }
+      @default {
+        @if (isEmpty()) {
+          <div class="erp-empty">
+            <i class="bi bi-inbox" aria-hidden="true"></i> No supplier has an open balance.
+          </div>
+        } @else {
+          @if (canExport()) {
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('PDF')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('XLSX')" [disabled]="exporting()">
+                <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      (click)="exportAgeing('CSV')" [disabled]="exporting()">
+                <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+              </button>
+            </div>
+            @if (exportError(); as msg) {
+              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+          }
+          <div class="erp-table-wrap mb-2">
+            <table class="erp-table">
+              <caption class="visually-hidden">AP ageing by supplier</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Supplier</th>
+                  <th scope="col" class="num">Current</th>
+                  <th scope="col" class="num">1–30 days</th>
+                  <th scope="col" class="num">31–60 days</th>
+                  <th scope="col" class="num">61–90 days</th>
+                  <th scope="col" class="num">90+ days</th>
+                  <th scope="col" class="num">Total</th>
+                  <th scope="col">Ccy</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows(); track row.supplierId + ':' + row.currency) {
+                  <tr>
+                    <td>
+                      <span class="fw-semibold">{{ row.supplierCode }}</span><br>
+                      <span class="text-muted" style="font-size:0.85em">{{ row.supplierName }}</span>
+                    </td>
+                    <td class="num">{{ fmtMoney(row.current) }}</td>
+                    <td class="num">{{ fmtMoney(row.days1to30) }}</td>
+                    <td class="num">{{ fmtMoney(row.days31to60) }}</td>
+                    <td class="num">{{ fmtMoney(row.days61to90) }}</td>
+                    <td class="num">{{ fmtMoney(row.days91Plus) }}</td>
+                    <td class="num fw-semibold">{{ fmtMoney(row.total) }}</td>
+                    <td>{{ row.currency }}</td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                @for (t of totals(); track t.currency) {
+                  <tr class="fw-semibold">
+                    <th scope="row">Total {{ t.currency }} ({{ t.suppliers }})</th>
+                    <td class="num">{{ fmtMoney(t.current) }}</td>
+                    <td class="num">{{ fmtMoney(t.days1to30) }}</td>
+                    <td class="num">{{ fmtMoney(t.days31to60) }}</td>
+                    <td class="num">{{ fmtMoney(t.days61to90) }}</td>
+                    <td class="num">{{ fmtMoney(t.days91Plus) }}</td>
+                    <td class="num">{{ fmtMoney(t.total) }}</td>
+                    <td>{{ t.currency }}</td>
+                  </tr>
+                }
+              </tfoot>
+            </table>
+          </div>
+          <p class="text-muted small">
+            Unapplied debit notes are netted. Payments not yet allocated to a bill are not in these buckets.
+          </p>
+        }
+      }
+    }
+  }
+</section>

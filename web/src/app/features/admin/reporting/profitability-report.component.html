@@ -277,7 +277,7 @@
                   <tr>
                     <td class="mono">{{ row.productCode }}</td>
                     <td>{{ row.productName }}</td>
-                    <td class="num">{{ fmtQty(row.qtySold) }}</td>
+                    <td class="num">{{ fmtQty(row.qtySold) }}@if (row.baseUnit) { <span class="muted">{{ row.baseUnit }}</span>}</td>
                     <td class="num">{{ fmtAmount(row.grossSales) }}</td>
                     <td class="num">{{ fmtAmount(row.vatAmount) }}</td>
                     <td class="num">{{ fmtAmount(row.netAmount) }}</td>

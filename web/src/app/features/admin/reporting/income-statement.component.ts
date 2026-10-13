@@ -15,6 +15,7 @@ import { ReportingService } from './reporting.service';
 import { downloadBlob } from './reporting.utils';
 import { UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
 import { BRANCH_STATEMENT_NOTE, StatementBranchFilterState } from './statement-branch-filter';
+import { todayLocal } from '../../../shared/date.util';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
 
@@ -157,7 +158,7 @@ export class IncomeStatementComponent implements OnInit {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private firstDayOfCurrentMonth(): string {

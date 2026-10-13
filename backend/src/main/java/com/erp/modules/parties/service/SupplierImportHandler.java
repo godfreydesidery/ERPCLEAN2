@@ -108,6 +108,16 @@ public class SupplierImportHandler implements BulkImportHandler {
     public RowOutcome process(Long companyId, ImportRow row, ImportMode mode, ImportContext ctx) {
         String code = row.get(COL_CODE);
         Supplier existing = code.isEmpty() ? null : findByCode(companyId, code);
+        if (code.isEmpty()) {
+            // PRD-12: a re-uploaded row without its code must update the supplier it describes,
+            // not create a second copy; and a repeat within the file is caught at Validate.
+            String name = row.get(COL_DISPLAY_NAME);
+            String tin = row.get(COL_TIN);
+            PartyImportMatcher.claimInFile(ctx, "supplier", name, tin);
+            existing = PartyImportMatcher.match("supplier", name, tin,
+                    t -> suppliers.findByCompanyIdAndNormalizedTin(companyId, t),
+                    n -> suppliers.findByCompanyIdAndNormalizedName(companyId, n));
+        }
 
         if (existing != null) {
             supplierService.updateByUid(existing.getUid(), buildUpdate(existing, row));

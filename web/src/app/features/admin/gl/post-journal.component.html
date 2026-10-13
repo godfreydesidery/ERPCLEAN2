@@ -164,8 +164,11 @@
                                   required>
                             <option value="">— select account —</option>
                             @for (a of accounts(); track a.uid) {
-                              <option [value]="a.uid">
-                                {{ a.accountCode }} — {{ a.name }}
+                              <!-- ACC-18: control accounts are shown, marked and not selectable,
+                                   so the refusal comes before the journal is typed, with the
+                                   module to use instead. -->
+                              <option [value]="a.uid" [disabled]="!!blockReason(a)">
+                                {{ a.accountCode }} — {{ a.name }}{{ blockReason(a) ? ' (' + blockReason(a) + ')' : '' }}
                               </option>
                             }
                           </select>

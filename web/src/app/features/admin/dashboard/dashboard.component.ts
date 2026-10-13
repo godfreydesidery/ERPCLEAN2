@@ -29,6 +29,7 @@ import {
   HealthIndicatorDto,
   SalesByBranchDto,
 } from './models/dashboard.model';
+import { todayLocal, firstOfMonthLocal } from '../../../shared/date.util';
 
 type LoadState = 'loading' | 'idle' | 'error' | 'forbidden';
 
@@ -237,13 +238,11 @@ export class DashboardComponent {
   // ── Bootstrap ────────────────────────────────────────────────────────────────
 
   private defaultFrom(): string {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
+    return firstOfMonthLocal();
   }
 
   private defaultTo(): string {
-    return new Date().toISOString().slice(0, 10);
+    return todayLocal();
   }
 
   private loadCompanies(): void {

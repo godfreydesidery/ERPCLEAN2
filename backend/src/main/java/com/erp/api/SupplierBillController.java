@@ -3,6 +3,7 @@ package com.erp.api;
 import com.erp.modules.ap.domain.dto.EnterBillRequest;
 import com.erp.modules.ap.domain.dto.SupplierBillDto;
 import com.erp.modules.ap.domain.enums.SupplierBillStatus;
+import com.erp.modules.ap.service.SupplierBillCorrectionService;
 import com.erp.modules.ap.service.SupplierBillService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,9 +34,23 @@ import org.springframework.web.bind.annotation.RestController;
 public class SupplierBillController {
 
     private final SupplierBillService service;
+    private final SupplierBillCorrectionService corrections;
 
-    public SupplierBillController(SupplierBillService service) {
+    public SupplierBillController(SupplierBillService service,
+                                  SupplierBillCorrectionService corrections) {
         this.service = service;
+        this.corrections = corrections;
+    }
+
+    /**
+     * AP-01: deletes a bill that never reached the ledger (DRAFT or HELD, nothing posted, paid or
+     * credited against it), so a held or failed bill can be entered again correctly.
+     */
+    @DeleteMapping("/uid/{uid}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@perm.scoped(#uid,'supplierbill','AP.BILL.ENTER')")
+    public void delete(@PathVariable String uid) {
+        corrections.deleteUnposted(uid);
     }
 
     @PostMapping

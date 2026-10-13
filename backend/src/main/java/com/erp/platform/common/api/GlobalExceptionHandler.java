@@ -69,6 +69,15 @@ public class GlobalExceptionHandler {
             "One of the values in this request could not be read. Please check the filters or "
             + "selections you chose and try again.";
 
+    /** Shown when an amount or quantity is not a plain number (LUI-04: "1,800"). */
+    static final String INVALID_NUMBER_MESSAGE =
+            "An amount or quantity is not a valid number. Enter digits only, without commas or "
+            + "spaces (for example 1800.50).";
+
+    /** Shown when a chosen option is not one the system knows (LRB-14). */
+    static final String INVALID_CHOICE_MESSAGE =
+            "One of the options chosen is not valid. Please pick it again from the list and retry.";
+
     // -------------------------------------------------------------------------
     // Existing handlers (preserved verbatim)
     // -------------------------------------------------------------------------
@@ -184,6 +193,20 @@ public class GlobalExceptionHandler {
     }
 
     /** Lacks permission, or acting outside the active scope (service-layer ScopeGuard) → 403. */
+    /**
+     * AP-20: a missing exchange rate is a business condition the user can fix (enter the day's
+     * rate), not a server fault. It used to fall through to the generic 500, so a USD bill just
+     * said "match failed". The message names only the two currencies and the date.
+     */
+    @ExceptionHandler(com.erp.platform.common.money.FxRateNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleFxRateNotFound(
+            com.erp.platform.common.money.FxRateNotFoundException ex) {
+        String msg = "No exchange rate is set for " + ex.getFromCurrency() + " to "
+                + ex.getToCurrency() + " on " + ex.getAsOf()
+                + ". Enter the rate on the exchange-rate screen, then try again.";
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(msg));
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(ex.getMessage()));
@@ -216,10 +239,37 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(ex.getMessage()));
     }
 
-    /** Bad input the caller can fix → 400. */
+    /**
+     * A number the JDK could not parse (e.g. {@code new BigDecimal("1,800")}) → 400 with a friendly
+     * sentence (LUI-04). {@link NumberFormatException} is an {@link IllegalArgumentException}, so
+     * without this handler its raw JDK text — "Character , is neither a decimal digit number…" —
+     * went straight to the user. The detail stays in the log.
+     */
+    @ExceptionHandler(NumberFormatException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNumberFormat(NumberFormatException ex) {
+        log.debug("Unparseable number in request: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(INVALID_NUMBER_MESSAGE));
+    }
+
+    /**
+     * Bad input the caller can fix → 400. The message is the service's own user-facing sentence,
+     * except for the JDK texts that are not (LRB-14): an {@code Enum.valueOf} miss ("No enum
+     * constant com.erp…StockCountType.PARTIAL") names an internal class, and a message-less
+     * exception would put a null in {@code errors[]}. Those get a friendly sentence; the detail is
+     * logged.
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        String msg = ex.getMessage();
+        if (msg == null || msg.isBlank()) {
+            log.debug("IllegalArgumentException without a message", ex);
+            return ResponseEntity.badRequest().body(ApiResponse.error(UNUSABLE_PARAMETER_MESSAGE));
+        }
+        if (msg.startsWith("No enum constant")) {
+            log.debug("Unknown enum value in request: {}", msg);
+            return ResponseEntity.badRequest().body(ApiResponse.error(INVALID_CHOICE_MESSAGE));
+        }
+        return ResponseEntity.badRequest().body(ApiResponse.error(msg));
     }
 
     /** Currency not enabled for the company/branch scope → 422 (ADR-0039 D-7/D-8). */
@@ -228,6 +278,45 @@ public class GlobalExceptionHandler {
             com.erp.modules.fx.domain.exception.CurrencyNotEnabledException ex) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Request paths whose callers are the people who maintain the books — the GL screens, VAT,
+     * depreciation, FX revaluation and payroll posting. They get the accountant's version of an
+     * {@link AccountingSetupException} (which period, which posting role, what to change).
+     */
+    private static final List<String> ACCOUNTING_PATH_PREFIXES = List.of(
+            "/api/v1/gl/",
+            "/api/v1/vat/",
+            "/api/v1/fixed-assets/depreciation-runs",
+            "/api/v1/fx/revaluation-runs",
+            "/api/v1/hr/payroll-runs");
+
+    /**
+     * The accounts cannot take a posting (no period for the date, period closed, posting role not
+     * mapped) → 409 (ACC-21). Accounting screens get the accountant's explanation; everyone else —
+     * a cashier, a storekeeper — gets a plain sentence telling them to ask the accountant, because
+     * "posting role" and "fiscal period" are nothing they can act on. The detail is always logged.
+     */
+    @ExceptionHandler(AccountingSetupException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountingSetup(
+            AccountingSetupException ex, jakarta.servlet.http.HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : null;
+        log.warn("Accounting setup refused a posting on {}: {}", path, ex.getMessage());
+        String message = isAccountingPath(path) ? ex.getMessage() : ex.userMessage();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error(message));
+    }
+
+    private static boolean isAccountingPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        for (String prefix : ACCOUNTING_PATH_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -365,6 +454,15 @@ public class GlobalExceptionHandler {
                 && ife.getTargetType().isEnum()) {
             return buildEnumMessage(ife);
         }
+        // LUI-04: "1,800" into a numeric JSON field. Name the field (its last segment) so the user
+        // knows which box to fix, never the Java type.
+        if (cause instanceof InvalidFormatException ife && isNumeric(ife.getTargetType())) {
+            String field = lastFieldName(ife);
+            return field.isEmpty()
+                    ? INVALID_NUMBER_MESSAGE
+                    : "The value entered for '" + field + "' is not a valid number. Enter digits "
+                            + "only, without commas or spaces (for example 1800.50).";
+        }
         // Defensive fallback: strip FQCN from any remaining cause message.
         if (cause != null && cause.getMessage() != null) {
             Matcher m = ENUM_CONSTANT_PATTERN.matcher(cause.getMessage());
@@ -387,6 +485,26 @@ public class GlobalExceptionHandler {
             return INVALID_VALUE_PREFIX + value + "' for " + typeName + ".";
         }
         return INVALID_VALUE_PREFIX + value + "' for field '" + fieldPath + "' (" + typeName + ").";
+    }
+
+    private static boolean isNumeric(Class<?> type) {
+        if (type == null) {
+            return false;
+        }
+        return Number.class.isAssignableFrom(type)
+                || type == int.class || type == long.class || type == double.class
+                || type == float.class || type == short.class || type == byte.class;
+    }
+
+    /** The innermost named field of Jackson's reference chain, or "" when there is none. */
+    private static String lastFieldName(InvalidFormatException ife) {
+        String last = "";
+        for (com.fasterxml.jackson.databind.JsonMappingException.Reference ref : ife.getPath()) {
+            if (ref.getFieldName() != null) {
+                last = ref.getFieldName();
+            }
+        }
+        return last;
     }
 
     /** Reconstructs the dot-notation field path from Jackson's reference chain. */

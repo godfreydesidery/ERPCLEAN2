@@ -47,7 +47,7 @@ class TabularCsvRendererTest {
                 "Sales Report",
                 "Acme Ltd",
                 "Dar es Salaam",
-                "Generated,2026-07-19T10:00:00Z",
+                "Generated,19-Jul-2026 13:00",   // 10:00 UTC printed in EAT (owner ruling 2026-10-10)
                 "",
                 "Code,Description,Qty,Amount",
                 "P001,Widget,10,\"1,000.00\"",
@@ -62,7 +62,7 @@ class TabularCsvRendererTest {
         List<String> lines = csv.lines().toList();
         assertThat(lines).containsExactly(
                 "Sales Report",
-                "Generated,2026-07-19T10:00:00Z",
+                "Generated,19-Jul-2026 13:00",   // 10:00 UTC printed in EAT (owner ruling 2026-10-10)
                 "",
                 "Code,Description,Qty,Amount",
                 "P001,Widget,10,100.00");

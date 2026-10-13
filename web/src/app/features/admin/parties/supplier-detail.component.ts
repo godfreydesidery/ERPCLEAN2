@@ -11,6 +11,8 @@ import { BranchService } from '../branch/branch.service';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
 import { SupplierService } from './supplier.service';
+import { TaxService } from '../tax/tax.service';
+import { WhtTypeDto } from '../tax/models/tax.model';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -26,6 +28,7 @@ export class SupplierDetailComponent {
   private readonly organisationService = inject(OrganisationService);
   private readonly branchService = inject(BranchService);
   private readonly alerts = inject(AlertService);
+  private readonly taxService = inject(TaxService);
   protected readonly session = inject(SessionStore);
 
   readonly uid = input.required<string>();
@@ -48,6 +51,14 @@ export class SupplierDetailComponent {
   readonly fRegion = signal('');
   readonly fDistrict = signal('');
   readonly fSupplierKind = signal<SupplierKind>('GOODS');
+  // AP-10: terms / currency / WHT defaults — loaded from the supplier and always sent back.
+  readonly fPaymentTermsDays = signal('');
+  readonly fDefaultCurrency = signal('');
+  readonly fCountry = signal('');
+  readonly fLeadTimeDays = signal('');
+  readonly fDefaultWhtTypeId = signal('');
+  readonly whtTypes = signal<WhtTypeDto[]>([]);
+  readonly canViewWht = computed(() => this.session.hasPermission('WHT.VIEW'));
 
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -116,6 +127,25 @@ export class SupplierDetailComponent {
     this.fRegion.set(s.region ?? '');
     this.fDistrict.set(s.district ?? '');
     this.fSupplierKind.set(s.supplierKind);
+    this.fPaymentTermsDays.set(s.paymentTermsDays != null ? String(s.paymentTermsDays) : '');
+    this.fDefaultCurrency.set(s.defaultCurrency ?? '');
+    this.fCountry.set(s.country ?? '');
+    this.fLeadTimeDays.set(s.leadTimeDays != null ? String(s.leadTimeDays) : '');
+    this.fDefaultWhtTypeId.set(s.defaultWhtTypeId != null ? String(s.defaultWhtTypeId) : '');
+    if (this.canViewWht() && this.whtTypes().length === 0) {
+      this.taxService.listWhtTypes(String(s.companyId)).subscribe({
+        next: (rows) => this.whtTypes.set(rows),
+        error: () => this.whtTypes.set([]),
+      });
+    }
+  }
+
+  /** A whole-number field: blank → undefined; anything else parsed. */
+  private intOrUndefined(v: string): number | undefined {
+    const t = String(v ?? '').trim();
+    if (!t) return undefined;
+    const n = parseInt(t, 10);
+    return Number.isFinite(n) ? n : undefined;
   }
 
   loadBranches(): void {
@@ -232,11 +262,19 @@ export class SupplierDetailComponent {
       region: this.fRegion().trim() || undefined,
       district: this.fDistrict().trim() || undefined,
       supplierKind: this.fSupplierKind(),
+      paymentTermsDays: this.intOrUndefined(this.fPaymentTermsDays()),
+      // Blank clears; the server keeps a value only when the field is omitted.
+      defaultCurrency: this.fDefaultCurrency().trim().toUpperCase(),
+      country: this.fCountry().trim().toUpperCase(),
+      leadTimeDays: this.intOrUndefined(this.fLeadTimeDays()),
+      // Only sent when the WHT list could be shown; '' (None) is sent as '0' = clear.
+      ...(this.canViewWht() ? { defaultWhtTypeId: this.fDefaultWhtTypeId() || '0' } : {}),
     };
 
     this.supplierService.update(this.uid(), request).subscribe({
       next: (updated) => {
         this.supplier.set(updated);
+        this.patchForm(updated);
         this.saving.set(false);
         this.alerts.success('Supplier saved', updated.displayName);
       },

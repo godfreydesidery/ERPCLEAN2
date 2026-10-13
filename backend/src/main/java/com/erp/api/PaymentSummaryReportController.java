@@ -3,6 +3,7 @@ package com.erp.api;
 import static com.erp.modules.reporting.export.ReportExportFormat.amount;
 import static com.erp.modules.reporting.export.ReportExportFormat.text;
 
+import com.erp.platform.security.BranchReadGuard;
 import com.erp.modules.reporting.domain.enums.ExportFormat;
 import com.erp.modules.reporting.export.ExportResult;
 import com.erp.modules.reporting.export.ReportExportFormat;
@@ -51,6 +52,14 @@ public class PaymentSummaryReportController {
         this.exporter = exporter;
     }
 
+    /** RPT-05: export headers state the real branch scope (setter-injected; null in hand-built tests). */
+    private BranchReadGuard branchGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setBranchGuard(BranchReadGuard branchGuard) {
+        this.branchGuard = branchGuard;
+    }
+
     @GetMapping
     @PreAuthorize("@perm.has('POS.CASHUP.VIEW')")
     public PaymentSummaryReportDto paymentSummary(
@@ -73,7 +82,8 @@ public class PaymentSummaryReportController {
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         PaymentSummaryReportDto dto = query.report(RequestContext.get().companyId(),
                 fromDate, toDate, branchUid, cashierUid);
-        return download(exporter.export(flatten(dto), format));
+        return download(exporter.export(
+                BranchScopeHeader.apply(flatten(dto), branchGuard, branchUid), format));
     }
 
     // -------------------------------------------------------------------------

@@ -20,6 +20,9 @@ public interface PaymentTermsRepository extends JpaRepository<PaymentTerms, Long
     /** Tenant-scoped existence check for the numeric FK used on customer/supplier records. */
     boolean existsByCompanyIdAndId(Long companyId, Long id);
 
+    /** Tenant-scoped load of the terms a customer/supplier record points at by numeric FK. */
+    Optional<PaymentTerms> findByCompanyIdAndId(Long companyId, Long id);
+
     @Query("""
             SELECT pt FROM PaymentTerms pt
             WHERE pt.companyId = :companyId

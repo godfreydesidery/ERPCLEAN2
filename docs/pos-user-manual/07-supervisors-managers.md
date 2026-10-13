@@ -25,8 +25,10 @@ The table shows what the **standard** roles can do. If your administrator has ch
 | Capability | Cashier | Sales Manager | Branch Manager |
 |---|---|---|---|
 | Open a shift and ring sales | Yes | No | No |
-| Record a **cash payout** (refund or paid-out) | Yes | No | No |
-| Record a **till expense** (by category) | Yes | No | No |
+| Record a **cash payout** (paid-out only) | Yes, with a manager's approval | No | No |
+| Record a **till expense** (by category) | Yes, with a manager's approval | No | No |
+| **Approve** a cash payout or till expense at a cashier's till | No | No | Yes |
+| See the **expected cash** on the X-read and the variance at close | No | No | Yes |
 | **Close** a session (count the drawer) | Own shift | No | Yes — any session, in the ERP web app |
 | Open the **X-read** and **Z-read (reprint)** without an approval | Yes | Yes | Yes |
 | Look up and reprint from **Today's sales** | Yes | Yes | Yes |
@@ -50,7 +52,7 @@ If you expect an action and it is not there, your account does not hold the perm
 
 **What it is.** Some actions a cashier can start but not finish alone. When the cashier gets to that point, OrbixPOS opens a **Manager approval** box on the cashier's own screen. A manager walks over, types **their own** username and password, and presses **Approve**. The cashier stays signed in the whole time.
 
-**Why it exists.** It puts a manager on every action that moves money or closes a shift's figures — a refund, a big discount, the Z-read — without the cashier having to sign out and the manager sign in.
+**Why it exists.** It puts a manager on every action that moves money or closes a shift's figures — a refund, a big discount, cash paid out of the drawer, the Z-read — without the cashier having to sign out and the manager sign in.
 
 **How it works.**
 
@@ -76,12 +78,15 @@ The rules the ERP enforces every time:
 | Opening the **Z-read (reprint)** for a cashier whose role has no report rights | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
 | **Printing** a Z-read (any copy) when the person signed in does not hold the session-reconcile permission — for example a cashier printing a reprint | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
 | **Leave unresolved…** on an unfinished sale whose outcome is unknown | **Manager approval — leave a sale unresolved** | the invoice-void permission | Sales Manager, Branch Manager |
+| Recording a **Cash payout** | **Manager approval — cash payout** | the session-reconcile permission | Branch Manager |
+| Recording a **Till expense** | **Manager approval — till expense** | the session-reconcile permission | Branch Manager |
 
 Notes on the table:
 
 - **Refunds.** A supervisor who holds the invoice-void permission and is running a till shift themselves is not asked for a second approval when they reverse a sale. A cashier may only refund sales from **their own** open shift, even with an approval — on a colleague's sale the **Refund / reverse** button does not appear at all, so you will not be called over to approve a refund the ERP would then refuse. To reverse such a sale, either the cashier who rang it does so from their own shift (with your approval), or you do it yourself from a till where **your own** shift is open. See the *Receipts and Refunds* chapter (Chapter 6).
 - **Discounts.** The discount limit is set per company in the ERP and is **off** unless your administrator switches it on. The till does not know the limit; the ERP checks it when the sale is completed. See the *Selling — Supermarket* chapter (Chapter 3).
 - **Drawer reports.** By default the Cashier role *can* read its own X-read and Z-read, so the report approvals only appear if your shop has removed that right from cashiers. **Printing** a Z-read is a manager's job. A user who holds the session-reconcile permission (a Branch Manager, by default) prints it straight away with no approval box — they *are* the manager the box would ask for, so a shop with only one manager on duty can still print its Z-read. Anyone else, such as a cashier printing a **Z-read (reprint)**, sees the **Manager approval — Z-read** box and needs a Branch Manager to approve.
+- **Cash payouts and till expenses.** Every payout and expense needs a manager who can settle the till, and the approver is named on the record. A user who holds the session-reconcile permission and works a till themselves is not asked; the entry is recorded in their own name. An older till (1.5.x) records payouts and expenses without asking — update every till to 1.6.0.
 - **Unfinished sales.** The till first asks the ERP one last time whether the sale went through. An approval is only asked for when the ERP still cannot say.
 - **Age-restricted items** are not a manager approval: the cashier confirms the customer's age at **Complete sale** in the **Age-restricted items** box. **Cancel** always stops the sale (*Sale stopped: age not verified.*). A user whose role holds the age-override permission (Branch Manager by default) also sees a third button, **Override without check**, which completes the sale without the age confirmation. A manager cannot approve the override for a cashier — only the person signed in can use it.
 
@@ -177,22 +182,21 @@ After reconciling on the till, **☰** › **Z-read (reprint)** (*The final figu
 1. On the till, open the session menu (**☰**).
 2. Tap **X-read** (*Mid-shift drawer report — resets nothing*).
 3. If the cashier's role has no report rights, a **Manager approval — X-read** box opens; a Branch Manager approves it. (With the standard Cashier role, the report opens straight away.)
-4. Read the report: **Sales (all tenders)** with the **By tender** split, **Opening float**, **Cash sales**, **Payouts** (as a deduction, with the split by type), **Expected cash**, and the number of invoices. It ends with *An X-read does not close the shift and resets nothing.*
+4. Read the report: **Sales (all tenders)** with the **By tender** split, **Opening float**, **Cash sales**, **Payouts** (as a deduction, with the split by type), **Expected cash**, and the number of invoices. **Expected cash** is shown only to someone who holds the session-reconcile permission, or when such a manager approved the X-read at the till. A cashier reading their own X-read does not see it — so they count the drawer *blind*, and their count cannot be bent to match the figure. It ends with *An X-read does not close the shift and resets nothing.*
 5. Tap **Print** for a paper copy (no approval is needed to print an X-read), or **Close**. The shift carries on unchanged.
 
 An X-read works while the session is open or closed. Once it is reconciled, use the Z-read instead.
 
 ### Cash payout — recording cash that leaves the drawer
 
-**What it is.** A record of money taken *out* of the drawer mid-shift. There are two kinds: **Paid out** (for example a drop to the safe) and **Refund** (cash handed back to a customer). A business expense paid from the drawer is recorded separately, as a **Till expense** (below). Any cash that leaves the drawer must be recorded, or the expected cash — and therefore the variance — will be wrong at close.
+**What it is.** A record of money taken *out* of the drawer mid-shift — a **Paid out**, for example a drop to the safe. There is no longer a **Refund** payout: money goes back to a customer only through **Refund / reverse** on the sale. A business expense paid from the drawer is recorded separately, as a **Till expense** (below). Any cash that leaves the drawer must be recorded, or the expected cash — and therefore the variance — will be wrong at close.
 
 1. Open the session menu (**☰**).
-2. Tap **Cash payout** (*Refund or drawer drop — reason required*). It is only available while the shift is open.
-3. Choose **Paid out** or **Refund** (the box opens on **Paid out**).
-4. Enter the **Amount (TZS)** and the **Reason (required)** — a few words saying what the cash is for. *A paid-out is booked to the ledger as an expense against the drawer, so the reason is what the entry is filed under.*
-5. Tap **Record**. OrbixPOS confirms *Payout recorded.* or *Payout recorded and posted to the ledger.*
+2. Tap **Cash payout** (*Cash paid out of the drawer — manager approves*). It is only available while the shift is open.
+3. Enter the **Amount (TZS)** and the **Reason (required)** — a few words saying what the cash is for. *A paid-out is booked to the ledger as an expense against the drawer, so the reason is what the entry is filed under.*
+4. Tap **Record**. A **Manager approval — cash payout** box opens; a Branch Manager types their own username and password and taps **Approve** (you are not asked if you hold the session-reconcile permission yourself). OrbixPOS confirms *Payout recorded.* or *Payout recorded and posted to the ledger.*
 
-> A **Refund** payout is also the way to give money back when a whole-sale reverse is not possible — for example a return from a shift that has already closed. OrbixPOS does **not** do partial or single-line refunds; see the *Receipts and Refunds* chapter (Chapter 6).
+> **No refund payouts.** A refund payout took cash out of the drawer on a typed reason alone, with no stock, sales or VAT reversed. To give money back, use **Refund / reverse** on the sale; when that is not possible at the till — a return from a shift that has already closed, or only some items coming back — record a sales return in the ERP web app. A till still on 1.5.x may show a **Refund** choice: the ERP refuses it for anyone who may not reverse sales (*A cash refund needs a supervisor…*). See the *Receipts and Refunds* chapter (Chapter 6).
 
 ### Till expense — business costs paid from the drawer
 
@@ -204,7 +208,7 @@ An X-read works while the session is open or closed. Once it is reconciled, use 
 2. Enter the **Amount (TZS)**.
 3. Under **Category (required)**, tap one of **Transport**, **Cleaning**, **Repairs**, **Meals**, **Utilities** or **Stationery**, or type another category (2 to 40 letters).
 4. Under **What was it for? (required)**, say in a few words what was bought.
-5. Tap **Record**. OrbixPOS confirms *Expense recorded and posted to the ledger.*
+5. Tap **Record**. A **Manager approval — till expense** box opens for a Branch Manager to approve (not asked if you hold the session-reconcile permission yourself). OrbixPOS confirms *Expense recorded and posted to the ledger.*
 
 > **Check the categories.** Ask cashiers to use the quick-pick categories wherever they fit. A category typed differently each time (for example *Taxi*, *taxi fare*, *Boda*) splits the same kind of cost into several categories. It also helps to have cashiers keep the seller's paper receipt for you.
 
@@ -325,9 +329,9 @@ The routine to square away every till in your store at the end of trading. Each 
 Do this for **each** active till in the store:
 
 1. **Stop selling on that till.** Make sure no sale is in progress.
-2. **(Optional) X-read.** On the till, **☰** › **X-read** to see the expected cash before counting.
-3. **Cashier closes the session.** **☰** › **Close session** (*Count the drawer → variance*), count the drawer, type the total into **Counted cash (TZS)**, and tap **Close session**. The **Session closed** panel shows Expected, Counted and Variance.
-4. **Note the variance.** Record or photograph the panel if your store policy needs a paper trail. Then the cashier taps **Done** and signs out. The session is **CLOSED**, not yet reconciled.
+2. **(Optional) X-read.** On the till, **☰** › **X-read** to check sales and payouts. Only a manager sees the expected cash on it — do not read it out to the cashier before they count.
+3. **Cashier closes the session.** **☰** › **Close session** (*Count the drawer → variance*), count the drawer, type the total into **Counted cash (TZS)**, and tap **Close session**. The cashier's **Session closed** panel shows only the Counted figure; Expected and Variance are shown to a manager.
+4. **Note the count.** Record or photograph the panel if your store policy needs a paper trail. Then the cashier taps **Done** and signs out. The session is **CLOSED**, not yet reconciled.
 5. **Manager reconciles.** A manager with the reconcile permission — ideally **not** the person who counted — opens the session in the ERP web app (**POS Sessions**), checks the figures and presses **Reconcile**. The session is now **RECONCILED** and the variance is posted.
 6. **Move on.** Repeat for the next till.
 

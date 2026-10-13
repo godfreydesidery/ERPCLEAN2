@@ -517,12 +517,12 @@
                     </td>
                     <td class="small">{{ line.unitName }}</td>
                     <td class="num">{{ +line.qtyOrdered | number:'1.3-3' }}</td>
-                    <td class="num">{{ +line.qtyReservedBase | number:'1.3-3' }}</td>
-                    <td class="num">{{ +line.qtyFulfilledBase | number:'1.3-3' }}</td>
-                    <td class="num">{{ +line.qtyInvoicedBase | number:'1.3-3' }}</td>
+                    <td class="num">{{ inLineUnit(line, line.qtyReservedBase) | number:'1.3-3' }}</td>
+                    <td class="num">{{ inLineUnit(line, line.qtyFulfilledBase) | number:'1.3-3' }}</td>
+                    <td class="num">{{ inLineUnit(line, line.qtyInvoicedBase) | number:'1.3-3' }}</td>
                     <td class="num"
                         [class.text-danger]="+line.openQtyBase > 0 && !isDraft()">
-                      {{ +line.openQtyBase | number:'1.3-3' }}
+                      {{ inLineUnit(line, line.openQtyBase) | number:'1.3-3' }}
                     </td>
                     <td class="num">
                       {{ +line.unitPriceAmount | number:'1.2-2' }}

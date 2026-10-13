@@ -122,7 +122,13 @@ function makeBed(overrides: {
 } = {}) {
   const listProductUnitsSpy =
     overrides.listProductUnitsSpy ?? vi.fn(() => of(STUB_UNITS));
-  const listPricesSpy = overrides.listPricesSpy ?? vi.fn(() => of([STUB_PRICE]));
+  // SAL-28: the price hint comes from POST /product-prices/resolve — one row per asked product.
+  const listPricesSpy = overrides.listPricesSpy ?? vi.fn((req: { productUids: string[] }) => of(
+    req.productUids.map((uid) => ({
+      productUid: uid, unitUid: null, amount: STUB_PRICE.price.amount, currency: 'TZS',
+      vatInclusive: false, status: 'RESOLVED',
+    })),
+  ));
   const invoice = overrides.invoice ?? STUB_INVOICE;
   const lines = overrides.lines ?? [];
   const renderBlobSpy = overrides.renderBlobSpy ?? vi.fn(() => of(new Blob(['%PDF'])));
@@ -162,7 +168,7 @@ function makeBed(overrides: {
         useValue: {
           list: vi.fn(() => of({ rows: [], meta: {} })),
           listProductUnits: listProductUnitsSpy,
-          listPrices: listPricesSpy,
+          resolveUnitPrices: listPricesSpy,
         },
       },
       {
@@ -1124,12 +1130,18 @@ describe('SalesInvoiceDetailComponent — stated unit price', () => {
     expect(fixture.nativeElement.textContent).toContain('List price 2500.00');
   });
 
-  // A pack row would quote a crate price against an "Each" line, which reads as simply wrong.
-  it('prefers this company base-unit row over a pack row', async () => {
-    const packRow = { ...STUB_PRICE, id: '2', unitUid: 'U-CRATE', price: { amount: '30000.00', currency: 'TZS' } };
-    const { comp } = await readyToAddLine({ listPricesSpy: vi.fn(() => of([packRow, STUB_PRICE])) });
+  // SAL-28: the hint is what the server will charge in the SELECTED unit, for this customer and
+  // currency — a crate is not quoted at the per-bottle price.
+  it('asks the server for the price in the selected unit and re-asks when the unit changes', async () => {
+    const { comp, listPricesSpy } = await readyToAddLine();
 
-    expect(comp.resolvedPrice()).toBe('2500.00');
+    expect(listPricesSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ unitUid: 'U-EACH', currency: 'TZS' }));
+
+    comp.onLineUnitChange('U-CRATE');
+    await vi.runAllTimersAsync();
+
+    expect(listPricesSpy).toHaveBeenLastCalledWith(expect.objectContaining({ unitUid: 'U-CRATE' }));
   });
 
   // Not knowing is not the same as knowing there is no price: claiming "no price set" on a failed

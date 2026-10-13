@@ -415,7 +415,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> stockService.openingBalance(
                 new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), "second")))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("already exists");
+                .hasMessageContaining("already has stock activity");
     }
 
     // =========================================================================
@@ -429,13 +429,70 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("10"), AdjustmentReason.COUNT_CORRECTION, null,
-                null, null));
+                null, null, null));
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("-5"), AdjustmentReason.DAMAGE, "broken",
-                null, null));
+                null, null, null));
 
         assertThat(onHand(product.id()).quantity()).isEqualByComparingTo(new BigDecimal("55")); // 50+10−5
         assertLedgerMatchesOnHand(product.id());
+    }
+
+    /** The branch's in-transit location (what V31 / StockLocationSeeder create), made if absent. */
+    private Long transitLocationIdForBranchA() {
+        String code = "TRANSIT-" + branchA.getCode();
+        return stockLocationRepo.findByCompanyIdAndBranchIdAndStatusOrderByCodeAsc(
+                        companyA.getId(), branchA.getId(), com.erp.platform.common.domain.MasterStatus.ACTIVE)
+                .stream().filter(l -> code.equals(l.getCode())).findFirst()
+                .map(com.erp.modules.stock.domain.entity.StockLocation::getId)
+                .orElseGet(() -> stockLocationRepo.save(new com.erp.modules.stock.domain.entity.StockLocation(
+                        companyA.getId(), branchA.getId(), code, "In-Transit",
+                        com.erp.modules.stock.domain.enums.LocationType.OTHER, false, null)).getId());
+    }
+
+    @Test
+    void adjustment_afterTransferReceipt_ignoresTheEmptyInTransitRow_stk01() {
+        ProductDto product = stockableProduct("TrfWidget");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("50"), null));
+        // What every received transfer leaves behind: a zero-quantity row at In-Transit.
+        stockOnHandRepo.saveAndFlush(new com.erp.modules.stock.domain.entity.StockOnHand(
+                companyA.getId(), branchA.getId(), transitLocationIdForBranchA(), product.id()));
+
+        stockService.adjust(new AdjustStockRequest(
+                product.uid(), new BigDecimal("-5"), AdjustmentReason.SHRINKAGE, null,
+                null, null, null));
+
+        BigDecimal total = stockOnHandRepo
+                .findAllByCompanyIdAndBranchIdAndProductId(companyA.getId(), branchA.getId(), product.id())
+                .stream().map(com.erp.modules.stock.domain.entity.StockOnHand::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(total).isEqualByComparingTo(new BigDecimal("45"));
+    }
+
+    @Test
+    void adjustment_belowZeroAtANoNegativeLocation_refused_stk15() {
+        ProductDto product = stockableProduct("TypoWidget");
+        stockService.openingBalance(new OpeningBalanceRequest(product.uid(), new BigDecimal("12"), null));
+
+        assertThatThrownBy(() -> stockService.adjust(new AdjustStockRequest(
+                product.uid(), new BigDecimal("-120"), AdjustmentReason.DAMAGE, null,
+                null, null, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("only 12 on hand");
+        assertThat(onHand(product.id()).quantity()).isEqualByComparingTo(new BigDecimal("12"));
+    }
+
+    @Test
+    void openingBalance_allowedWhenOnlyAnEmptyRowExists_stk17() {
+        ProductDto product = stockableProduct("ResvWidget");
+        // A sales-order reservation creates an on-hand row without moving any stock.
+        stockOnHandRepo.saveAndFlush(new com.erp.modules.stock.domain.entity.StockOnHand(
+                companyA.getId(), branchA.getId(), transitLocationIdForBranchA(), product.id()));
+
+        StockMovementDto mov = stockService.openingBalance(
+                new OpeningBalanceRequest(product.uid(), new BigDecimal("12"), null));
+
+        assertThat(mov.movementType()).isEqualTo(MovementType.OPENING_BALANCE);
     }
 
     @Test
@@ -444,7 +501,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> stockService.adjust(
                 new AdjustStockRequest(product.uid(), BigDecimal.ZERO,
-                        AdjustmentReason.COUNT_CORRECTION, null, null, null)))
+                        AdjustmentReason.COUNT_CORRECTION, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("non-zero");
     }
@@ -483,6 +540,28 @@ class StockServiceImplIT extends PostgresIntegrationTest {
     // =========================================================================
     // 11b. On-hand search (q): filters by product code/name within branch scope
     // =========================================================================
+
+    @Test
+    void productReorderLevel_flagsLowOnHandAndFeedsTheLowStockScan_stk10() {
+        ProductDto p = productService.create(new CreateProductRequest(
+                companyA.getUid(), null, "LevelWidget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD,
+                new BigDecimal("24"), null, null, null, null, null, null, null, null));
+        stockService.openingBalance(new OpeningBalanceRequest(p.uid(), new BigDecimal("23"), null));
+
+        StockOnHandDto row = stockService.listOnHand(null, Pageable.unpaged()).getContent().stream()
+                .filter(r -> r.productId().equals(p.id())).findFirst().orElseThrow();
+        assertThat(row.reorderLevel()).as("the row has no level of its own").isNull();
+        assertThat(row.effectiveReorderLevel()).isEqualByComparingTo("24");
+        assertThat(row.low()).isTrue();
+
+        assertThat(stockOnHandRepo.findAtOrBelowReorderByCompany(companyA.getId()))
+                .extracting(com.erp.modules.stock.domain.entity.StockOnHand::getProductId)
+                .contains(p.id());
+        assertThat(stockOnHandRepo.findAboveReorderByCompany(companyA.getId()))
+                .extracting(com.erp.modules.stock.domain.entity.StockOnHand::getProductId)
+                .doesNotContain(p.id());
+    }
 
     @Test
     void listOnHand_withSearchTerm_filtersByProductNameWithinScope() {
@@ -571,7 +650,7 @@ class StockServiceImplIT extends PostgresIntegrationTest {
 
         stockService.adjust(new AdjustStockRequest(
                 product.uid(), new BigDecimal("7"), AdjustmentReason.COUNT_CORRECTION, null,
-                null, null));
+                null, null, null));
 
         List<AuditLog> logs = auditRepository.findAll();
         assertThat(logs.size()).isGreaterThan((int) auditBefore);
@@ -599,12 +678,31 @@ class StockServiceImplIT extends PostgresIntegrationTest {
         salesInvoiceService.addPayment(draft.uid(), // 500 x 1.18 VAT
                 new AddPaymentRequest(TenderType.CASH, new BigDecimal("590"), "TZS", null));
         salesInvoiceService.finalise(draft.uid(), new FinaliseInvoiceRequest());
-        long auditAfterFinalise = auditRepository.count(); // SALES.INVOICE.FINALISE row already written
+        long lastIdBeforeDispatch = auditRepository.findAll().stream() // FINALISE row already written
+                .mapToLong(AuditLog::getId).max().orElse(0L);
 
         dispatcher.dispatchOne(pendingEventId(DomainEventType.SALE_FINALISED));
 
-        // Dispatching SALE.FINALISED must not add any new audit_logs rows (ADR-0010 D-12)
-        assertThat(auditRepository.count()).isEqualTo(auditAfterFinalise);
+        List<AuditLog> added = auditRepository.findAll().stream()
+                .filter(a -> a.getId() > lastIdBeforeDispatch)
+                .toList();
+        // ADR-0010 D-12: the event-driven SALE_ISSUE (stock move + COGS) writes no audit_logs row.
+        //
+        // This fixture seeds no chart of accounts / gl_configs / fiscal year, so the GL module's
+        // SalesPostingHandler on the same SALE.FINALISED dispatch cannot post the sale. Since ACC-02
+        // that swallowed failure is no longer only a log line: GlPostingFailureRecorder records ONE
+        // GL.POSTING.FAILED row (target gl_posting_exceptions) so the accountant can re-post it.
+        // That row is the GL module's exception record, not an audit of the stock move — so D-12
+        // is asserted as "nothing but that exception record", never as a bare row count.
+        assertThat(added)
+                .as("only the GL module's posting-exception record may be added: %s",
+                        added.stream().map(AuditLog::getAction).toList())
+                .allSatisfy(a -> {
+                    assertThat(a.getAction()).isEqualTo("GL.POSTING.FAILED");
+                    assertThat(a.getTargetType()).isEqualTo("gl_posting_exceptions");
+                    assertThat(a.getDetail()).contains("\"sourceType\": \"SALES\"");
+                })
+                .hasSize(1);
     }
 
     // =========================================================================

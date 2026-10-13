@@ -11,6 +11,7 @@ import com.erp.modules.stock.service.InventoryValuationService;
 import com.erp.modules.stock.service.RecipeExplosionResolver;
 import com.erp.modules.stock.service.StockPostingService;
 import com.erp.modules.stock.service.StockReservationService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -21,7 +22,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -66,6 +66,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
     private final DeliveryLineRepository    deliveryLineRepo;
     private final StockReservationService   reservations;
     private final ObjectMapper              objectMapper;
+    private final CompanyCalendar calendar;
 
     public DeliveryIssueStockHandler(IdempotencyGuard guard,
                                      StockPostingService posting,
@@ -75,7 +76,8 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
                                      InventoryGlPoster glPoster,
                                      DeliveryLineRepository deliveryLineRepo,
                                      StockReservationService reservations,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     CompanyCalendar calendar) {
         this.guard            = guard;
         this.posting          = posting;
         this.productService   = productService;
@@ -85,6 +87,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
         this.deliveryLineRepo = deliveryLineRepo;
         this.reservations     = reservations;
         this.objectMapper     = objectMapper;
+        this.calendar         = calendar;
     }
 
     @Override
@@ -113,9 +116,7 @@ public class DeliveryIssueStockHandler implements DomainEventHandler {
             }
 
             if (!cogsLegs.isEmpty()) {
-                LocalDate postingDate = payload.deliveredAt() != null
-                        ? payload.deliveredAt().atZone(ZoneOffset.UTC).toLocalDate()
-                        : LocalDate.now();
+                LocalDate postingDate = calendar.dateOf(event.getCompanyId(), payload.deliveredAt());
                 String glEntryUid = glPoster.postCogsInNewTx(
                         event.getCompanyId(), event.getBranchId(), postingDate,
                         payload.deliveryUid(), payload.deliveryNumber(), "TZS", cogsLegs);

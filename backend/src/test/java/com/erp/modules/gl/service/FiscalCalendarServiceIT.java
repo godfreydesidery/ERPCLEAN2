@@ -45,6 +45,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class FiscalCalendarServiceIT extends PostgresIntegrationTest {
 
     @Autowired private FiscalCalendarService fiscalCalendarService;
+    @Autowired private FiscalYearRolloverJob rolloverJob;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
@@ -143,6 +144,69 @@ class FiscalCalendarServiceIT extends PostgresIntegrationTest {
 
         assertThatThrownBy(() -> fiscalCalendarService.reopenPeriod(period.uid()))
                 .isInstanceOf(ConflictException.class);
+    }
+
+    // ---------------------------------------------------------------------------
+    // ACC-09: overlapping fiscal years are refused (query runs against real Postgres)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void openFiscalYear_overlappingExistingYearUnderAnotherCode_rejected() {
+        fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY2031", 1, 2031));
+
+        // Same dates, different code — the unique (company, year_code) key does not catch this.
+        assertThatThrownBy(() -> fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "2031", 1, 2031)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("overlap");
+        // A July–June year straddling it is refused too.
+        assertThatThrownBy(() -> fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY31/32", 7, 2031)))
+                .isInstanceOf(ConflictException.class);
+        // The adjacent year is fine.
+        FiscalYearDto next = fiscalCalendarService.openFiscalYear(
+                new OpenFiscalYearRequest(company.getUid(), "FY2032", 1, 2032));
+        assertThat(next.startDate()).isEqualTo(LocalDate.of(2032, 1, 1));
+        assertThat(fiscalCalendarService.listFiscalYears(company.getId())).hasSize(2);
+    }
+
+    // ---------------------------------------------------------------------------
+    // ACC-01: rollover job opens the next year, idempotently, against real Postgres
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void rolloverJob_opensNextYear_once_andCatchesUpAfterNewYear() {
+        fiscalCalendarService.seedCurrentYear(company.getId()); // FY<this year>
+        int thisYear = LocalDate.now().getYear();
+
+        // Mid-year (company time zone is Africa/Dar_es_Salaam by default): next year opened.
+        rolloverJob.rollOverAllCompanies(
+                java.time.Instant.parse(thisYear + "-10-10T09:00:00Z"));
+        List<FiscalYearDto> afterFirst = fiscalCalendarService.listFiscalYears(company.getId());
+        assertThat(afterFirst).extracting(FiscalYearDto::yearCode)
+                .containsExactly("FY" + (thisYear + 1), "FY" + thisYear);
+        FiscalYearDto next = afterFirst.get(0);
+        assertThat(next.startDate()).isEqualTo(LocalDate.of(thisYear + 1, 1, 1));
+        assertThat(fiscalCalendarService.listPeriodsForYear(next.uid())).hasSize(12)
+                .allMatch(p -> p.status() == PeriodStatus.OPEN);
+
+        // Running again the same day changes nothing.
+        rolloverJob.rollOverAllCompanies(
+                java.time.Instant.parse(thisYear + "-10-11T09:00:00Z"));
+        assertThat(fiscalCalendarService.listFiscalYears(company.getId())).hasSize(2);
+
+        // 2 Jan next year: the year after next is opened, still contiguous and non-overlapping.
+        rolloverJob.rollOverAllCompanies(
+                java.time.Instant.parse((thisYear + 1) + "-01-02T09:00:00Z"));
+        List<FiscalYearDto> afterNewYear = fiscalCalendarService.listFiscalYears(company.getId());
+        assertThat(afterNewYear).extracting(FiscalYearDto::yearCode)
+                .containsExactly("FY" + (thisYear + 2), "FY" + (thisYear + 1), "FY" + thisYear);
+        assertThat(afterNewYear.get(0).startDate())
+                .isEqualTo(afterNewYear.get(1).endDate().plusDays(1));
+
+        // The job ran under a SYSTEM principal and handed the caller's context back.
+        assertThat(RequestContext.get().userId()).isEqualTo(rootId);
     }
 
     // ---------------------------------------------------------------------------

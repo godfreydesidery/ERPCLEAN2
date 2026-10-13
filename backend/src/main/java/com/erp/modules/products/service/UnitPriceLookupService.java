@@ -26,7 +26,12 @@ public interface UnitPriceLookupService {
      * a null amount and an explanatory
      * {@link com.erp.modules.products.domain.enums.UnitPriceStatus}.
      *
-     * @param request the product uids plus an optional unit uid every price is expressed in
+     * <p>With a {@code customerUid} the prices are that customer's (contract price, then their
+     * default price list — PRD-01), exactly as their invoice will be priced; without one they are the
+     * walk-in prices (company default list). A customer uid outside the active company is a 404.
+     *
+     * @param request the product uids plus an optional unit uid every price is expressed in, and an
+     *                optional customer uid and document currency
      * @return one row per resolvable product, in the order the uids were requested (duplicates
      *         collapsed); never null
      */

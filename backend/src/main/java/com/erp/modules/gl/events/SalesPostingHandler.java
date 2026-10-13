@@ -1,9 +1,11 @@
 package com.erp.modules.gl.events;
 
 import com.erp.modules.gl.service.GLPostingSafeInvoker;
+import com.erp.modules.sales.domain.dto.InvoicePostingTenderDto;
 import com.erp.modules.sales.domain.dto.InvoicePostingTotalsDto;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.service.SalesInvoiceService;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventHandler;
 import com.erp.platform.events.DomainEventType;
@@ -11,7 +13,7 @@ import com.erp.platform.events.IdempotencyGuard;
 import com.erp.platform.security.RequestContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -29,6 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Mirrors {@code SaleIssueStockHandler} exactly: @Transactional(MANDATORY), idempotency via
  * IdempotencyGuard, system RequestContext, re-reads invoice by uid (never trusts payload amounts).
  */
+// ARC-08: runs before the cash book's handler for the same event, which mirrors the journal this
+// handler posts (in its own committed transaction). Unordered handlers keep their relative order.
+@org.springframework.core.annotation.Order(0)
 @Component
 public class SalesPostingHandler implements DomainEventHandler {
 
@@ -40,15 +45,18 @@ public class SalesPostingHandler implements DomainEventHandler {
     private final SalesInvoiceService salesInvoiceService;
     private final GLPostingSafeInvoker safeInvoker;
     private final ObjectMapper objectMapper;
+    private final CompanyCalendar calendar;
 
     public SalesPostingHandler(IdempotencyGuard guard,
                                 SalesInvoiceService salesInvoiceService,
                                 GLPostingSafeInvoker safeInvoker,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                CompanyCalendar calendar) {
         this.guard               = guard;
         this.salesInvoiceService = salesInvoiceService;
         this.safeInvoker         = safeInvoker;
         this.objectMapper        = objectMapper;
+        this.calendar            = calendar;
     }
 
     @Override
@@ -111,9 +119,9 @@ public class SalesPostingHandler implements DomainEventHandler {
             return;
         }
 
-        LocalDate postingDate = totals.finalisedAt() != null
-                ? totals.finalisedAt().atZone(ZoneOffset.UTC).toLocalDate()
-                : LocalDate.now();
+        // Business date in the COMPANY's zone (owner ruling 2026-10-10): a 00:30 EAT sale on the 1st
+        // is 21:30 UTC on the last day of the previous month, and belongs to the 1st.
+        LocalDate postingDate = calendar.dateOf(companyId, totals.finalisedAt());
 
         // Resolve accounts AND post inside ONE REQUIRES_NEW TX (ADR-0013 D-6). Account resolution
         // must NOT run in this handler's (dispatchOne's) TX — a missing gl_config there would mark
@@ -122,10 +130,14 @@ public class SalesPostingHandler implements DomainEventHandler {
         // ADR-0025 D-6: pass the invoice's header-level dimension default ids onto the revenue leg.
         // ADR-0033 D-4c: pass the invoice's project tag onto the revenue leg so the project P&L
         // roll-up includes this revenue (re-read from sales_invoices.project_id, not the payload).
-        safeInvoker.postSaleInNewTx(
+        // SAL-06 / ACC-04 / ACC-05: the counter tenders split the debit — each tender to its own
+        // cash/bank account's GL (else CASH), and only the outstanding to AR on a credit sale.
+        List<InvoicePostingTenderDto> tenders = salesInvoiceService
+                .findPostingTendersByUidAndCompany(payload.invoiceUid(), companyId);
+        safeInvoker.postSaleWithTendersInNewTx(
                 companyId, event.getBranchId(), payload.invoiceUid(),
                 totals.currency(), totals.grossTotalAmount(), totals.netTotalAmount(),
-                totals.vatTotalAmount(), totals.isCashSale(), postingDate,
+                totals.vatTotalAmount(), totals.isCashSale(), tenders, postingDate,
                 totals.costCentreValueId(), totals.departmentValueId(),
                 totals.projectId(), totals.projectTaskId());
         log.debug("SalesPostingHandler: GL posting attempted for invoice uid={} company={}",

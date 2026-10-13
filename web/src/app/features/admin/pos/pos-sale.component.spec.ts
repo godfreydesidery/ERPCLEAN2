@@ -117,6 +117,7 @@ function makeBed(opts: { canSell?: boolean; processSaleImpl?: () => any } = {}) 
           list: vi.fn(() => of({ rows: [], meta: {} })),
           listProductUnits: vi.fn(() => of([])),
           listPrices: vi.fn(() => of([])),
+          resolvePrices: vi.fn(() => of([])),
         },
       },
       {
@@ -263,6 +264,30 @@ describe('PosSaleComponent — submit success', () => {
     expect(payload.currency).toBe('TZS');
     expect(payload.lines).toHaveLength(1);
     expect(payload.tenderedAmount).toBe('1000');
+  });
+
+  // LUI-04: a cashier types "10,000" — it must be read as ten thousand, not refused or zeroed.
+  it('accepts a grouped tender such as "1,000"', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const svc = TestBed.inject(PosService) as any;
+    await vi.runAllTimersAsync();
+
+    comp.customers.set([stubCustomer]);
+    comp.agents.set([stubAgent]);
+    comp.selectedAgentUid.set('AGENT1');
+    comp.selectedSessionUid.set('SESS1');
+    comp.selectedCustomerUid.set('CUST1');
+    comp.currency.set('TZS');
+    comp.lines.set([{
+      id: 'line-1', productUid: 'P1', productId: '10', productName: 'Widget',
+      unitUid: 'U1', unitId: '1', unitName: 'pcs', quantity: '2', unitPrice: '500.00', lineDiscountAmount: '0.00', lineUnitOptions: [], lineUnitsLoading: false,
+    }]);
+    comp.tenderedAmount.set('1,000');
+    expect(comp.change()).toBe(0);
+    comp.submit();
+
+    expect(svc.processSale).toHaveBeenCalledOnce();
+    expect(svc.processSale.mock.calls[0][0].tenderedAmount).toBe('1000');
   });
 });
 
@@ -451,9 +476,8 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     const prodSvc = TestBed.inject(ProductService) as any;
     prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
-    prodSvc.listPrices.mockReturnValue(of([
-      { id: '1', productId: '10', priceListId: '1', priceListUid: 'PL1', priceListCode: 'RETAIL',
-        priceListName: 'Retail', companyId: '10', price: { amount: '2500.00', currency: 'TZS' } },
+    prodSvc.resolvePrices.mockReturnValue(of([
+      { productUid: 'P1', unitUid: 'U1', amount: 2500, currency: 'TZS', vatInclusive: false, status: 'RESOLVED' },
     ]));
     await vi.runAllTimersAsync();
 
@@ -467,7 +491,7 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     // Unit options populated from listProductUnits
     expect(comp.lines()[0].lineUnitOptions).toHaveLength(1);
     expect(comp.lines()[0].unitUid).toBe('U1');
-    expect(comp.lines()[0].unitPrice).toBe('2500.00');
+    expect(+comp.lines()[0].unitPrice).toBe(2500);
     expect(comp.lines()[0].priceState).toBe('ok');
     expect(comp.lines()[0].vatRate).toBe('0.18');
   });
@@ -487,11 +511,53 @@ describe('PosSaleComponent — price auto-fetch & VAT preview', () => {
     expect(comp.change()).toBeCloseTo(20); // 1200 tendered − 1180 gross
   });
 
+  it('asks the server for the selected customer and re-prices when the customer changes (PRD-01)', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    const prodSvc = TestBed.inject(ProductService) as any;
+    prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
+    prodSvc.resolvePrices.mockImplementation((req: any) => of([
+      { productUid: 'P1', unitUid: 'U1', amount: req.customerUid === 'BAR' ? 1500 : 1000,
+        currency: 'TZS', vatInclusive: false, status: 'RESOLVED' },
+    ]));
+    await vi.runAllTimersAsync();
+
+    comp.products.set([stubProduct]);
+    comp.currency.set('TZS');
+    comp.addLine();
+    comp.onLineProductChange(comp.lines()[0].id, 'P1');
+    await vi.runAllTimersAsync();
+    expect(+comp.lines()[0].unitPrice).toBe(1000);
+
+    comp.onCustomerChange('BAR');
+    await vi.runAllTimersAsync();
+    const last = prodSvc.resolvePrices.mock.calls.at(-1)[0];
+    expect(last).toEqual(expect.objectContaining({ productUids: ['P1'], customerUid: 'BAR', currency: 'TZS' }));
+    expect(+comp.lines()[0].unitPrice).toBe(1500);
+  });
+
+  it('takes a line discount off the NET before VAT, like the server (POS-07)', async () => {
+    const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
+    await vi.runAllTimersAsync();
+    comp.currency.set('TZS');
+    comp.lines.set([{
+      id: 'l1', productUid: 'P1', productId: '10', productName: 'Widget', unitUid: 'U1', unitId: '1',
+      unitName: 'pcs', quantity: '1', unitPrice: '10000', lineDiscountAmount: '1000', vatRate: '0.18',
+      priceState: 'ok', lineUnitOptions: [], lineUnitsLoading: false,
+    }]);
+    expect(comp.grossTotal()).toBe(10620); // (10,000 − 1,000) × 1.18
+
+    comp.lines.update((ls) => ls.map((l) => ({ ...l, unitPrice: '11800', vatInclusive: true })));
+    expect(comp.grossTotal()).toBe(10800); // inclusive list: discount off the gross
+    expect(comp.subtotal()).toBe(9153);    // round(10,800 / 1.18)
+  });
+
   it('flags a product with no price and blocks the sale', async () => {
     const comp = TestBed.createComponent(PosSaleComponent).componentInstance;
     const prodSvc = TestBed.inject(ProductService) as any;
     prodSvc.listProductUnits.mockReturnValue(of([stubUnit]));
-    prodSvc.listPrices.mockReturnValue(of([])); // no price configured
+    prodSvc.resolvePrices.mockReturnValue(of([
+      { productUid: 'P1', unitUid: 'U1', amount: null, currency: null, vatInclusive: false, status: 'NO_PRICE' },
+    ])); // no price configured
     const svc = TestBed.inject(PosService) as any;
     await vi.runAllTimersAsync();
 

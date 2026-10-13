@@ -49,6 +49,7 @@
                         (ngModelChange)="onLocationChange($event)"
                         [options]="locationOptions()"
                         placeholder="Select location" />
+        <app-lookup-notice [state]="locationsLookup()" what="location" />
       </div>
       <div>
         <label class="form-label mb-1" for="productPicker">Product <span aria-hidden="true">*</span></label>
@@ -58,6 +59,7 @@
                         [options]="productOptions()"
                         [search]="searchProducts"
                         placeholder="Select product" />
+        <app-lookup-notice [state]="productsLookup()" what="product" />
       </div>
     </div>
     @if (!selectedLocationId() || !selectedProductId()) {

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.parties.repository.AgentRepository;
 import com.erp.modules.parties.repository.CustomerRepository;
+import com.erp.modules.products.domain.dto.SellingPriceQuery;
 import com.erp.modules.products.domain.dto.UnitListPriceDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteDto;
 import com.erp.modules.products.domain.dto.UnitPriceQuoteResult;
@@ -33,6 +34,8 @@ import com.erp.modules.sales.repository.QuotationLineRepository;
 import com.erp.modules.sales.repository.QuotationRepository;
 import com.erp.modules.sales.repository.TaxRateRepository;
 import com.erp.platform.audit.AuditService;
+import com.erp.platform.common.time.BusinessZone;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
@@ -44,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -72,6 +76,9 @@ class QuotationServiceImplTest {
     @Mock ScopeGuard scopeGuard;
     @Mock AuditService audit;
 
+    // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
+    @Spy CompanyCalendar calendar =
+            CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
     @InjectMocks QuotationServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;
@@ -95,7 +102,7 @@ class QuotationServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000020"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 900L, 910L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("100.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -111,7 +118,7 @@ class QuotationServiceImplTest {
 
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("100.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(BigDecimal.TEN);
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 900L, 910L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 900L, 910L));
     }
 
     @Test
@@ -127,7 +134,7 @@ class QuotationServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BOXUID00000000000000021"))
                 .thenReturn(Optional.of(boxUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 901L, 920L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1150.0000"), false));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -145,7 +152,7 @@ class QuotationServiceImplTest {
 
         assertThat(dto.unitPriceAmount()).isEqualByComparingTo("1150.0000");
         assertThat(dto.qtyInBase()).isEqualByComparingTo(new BigDecimal("12"));
-        verify(priceResolutionService).resolveUnitListPrice(COMPANY_ID, 901L, 920L);
+        verify(priceResolutionService).resolveSellingPrice(sellingQuery(COMPANY_ID, 901L, 920L));
     }
 
     @Test
@@ -161,7 +168,7 @@ class QuotationServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000022"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 902L, 950L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 902L, 950L)))
                 .thenReturn(new UnitListPriceDto(new BigDecimal("1180.0000"), true));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -198,7 +205,7 @@ class QuotationServiceImplTest {
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000030"))
                 .thenReturn(Optional.of(baseUnit));
         // No price list exists anywhere in this company — the live UAT condition.
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 910L, 960L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 910L, 960L)))
                 .thenReturn(UnitPriceQuoteResult.unpriced(UnitPriceStatus.NO_PRICE));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
                 .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
@@ -229,7 +236,7 @@ class QuotationServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000031"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.findUnitListPriceQuote(COMPANY_ID, 911L, 961L))
+        when(priceResolutionService.findSellingPriceQuote(sellingQuery(COMPANY_ID, 911L, 961L)))
                 .thenReturn(UnitPriceQuoteResult.resolved(
                         new UnitPriceQuoteDto(new BigDecimal("100.0000"), "TZS", false)));
         when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
@@ -262,7 +269,7 @@ class QuotationServiceImplTest {
                 .thenReturn(Optional.of(product));
         when(units.findByCompanyIdAndUid(COMPANY_ID, "BASEUID0000000000000032"))
                 .thenReturn(Optional.of(baseUnit));
-        when(priceResolutionService.resolveUnitListPrice(COMPANY_ID, 912L, 962L))
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 912L, 962L)))
                 .thenThrow(new IllegalArgumentException(
                         "This product has no price yet — no price list is configured for this "
                         + "company. Set up a price list, or enter a unit price on the line."));
@@ -371,5 +378,16 @@ class QuotationServiceImplTest {
         ReflectionTestUtils.setField(product, "id", id);
         ReflectionTestUtils.setField(product, "uid", uid);
         return product;
+    }
+
+    /**
+     * Matches the selling-price question for (company, product, unit) whatever the customer side
+     * carries (PRD-01 threads the document's customer through; these tests pin the price, not who).
+     */
+    private static SellingPriceQuery sellingQuery(Long companyId, Long productId, Long unitId) {
+        return org.mockito.ArgumentMatchers.argThat(q -> q != null
+                && companyId.equals(q.companyId())
+                && productId.equals(q.productId())
+                && unitId.equals(q.unitId()));
     }
 }

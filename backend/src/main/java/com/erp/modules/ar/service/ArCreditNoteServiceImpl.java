@@ -38,6 +38,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -87,6 +88,17 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
     private static final String ERR_COMPANY_NOT_FOUND = "Company not found.";
 
+    /**
+     * ARC-11: reads what has been refunded from a note (its OUT cash-book rows). Setter-injected so
+     * the existing constructor keeps working; null means "no refunds can exist".
+     */
+    private com.erp.modules.cashbank.service.CashTransactionRecorder cashTxnRecorder;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setCashTxnRecorder(com.erp.modules.cashbank.service.CashTransactionRecorder recorder) {
+        this.cashTxnRecorder = recorder;
+    }
+
     public ArCreditNoteServiceImpl(ArCreditNoteRepository creditNotes,
                                     ArCreditNoteAllocationRepository cnAllocations,
                                     ArInvoiceRepository invoices,
@@ -124,9 +136,21 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
 
         String baseCurrency = company.getBaseCurrency();
 
-        Long customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
-                .map(c -> c.getId())
-                .orElseThrow(() -> new NotFoundException("Customer not found."));
+        // ARC-03: a credit note raised against an invoice may leave the customer blank — the
+        // invoice already names it. A customer that IS named must still own the invoice (below).
+        boolean customerNamed = req.customerUid() != null && !req.customerUid().isBlank();
+        Long customerId;
+        if (!customerNamed && req.arInvoiceUid() != null && !req.arInvoiceUid().isBlank()) {
+            customerId = invoices.findByCompanyIdAndUid(companyId, req.arInvoiceUid())
+                    .map(ArInvoice::getCustomerId)
+                    .orElseThrow(() -> new NotFoundException("Invoice not found."));
+        } else if (!customerNamed) {
+            throw new IllegalArgumentException("Choose the customer for this credit note.");
+        } else {
+            customerId = customers.findByCompanyIdAndUid(companyId, req.customerUid())
+                    .map(c -> c.getId())
+                    .orElseThrow(() -> new NotFoundException("Customer not found."));
+        }
 
         // D-6: carry the document currency from the request; default to base when blank.
         String docCurrency = (req.currency() != null && !req.currency().isBlank())
@@ -256,6 +280,74 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
     }
 
     // =========================================================================
+    // SAL-03 — SALE_VOID: clear a voided credit sale's open item, no GL
+    // =========================================================================
+
+    @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public java.util.Optional<String> raiseForSaleVoid(Long companyId, String salesInvoiceUid,
+                                                       String invoiceNumber, LocalDate noteDate,
+                                                       BigDecimal invoiceGross,
+                                                       BigDecimal invoiceVat) {
+        ArInvoice openItem = invoices.findBySalesInvoiceUid(companyId, salesInvoiceUid).orElse(null);
+        if (openItem == null) {
+            return java.util.Optional.empty(); // cash sale, or the sale never reached AR
+        }
+        boolean alreadyCleared = creditNotes.findByArInvoiceId(openItem.getId()).stream()
+                .anyMatch(n -> n.getOrigin() == ArCreditNoteOrigin.SALE_VOID);
+        BigDecimal outstanding = openItem.getOutstandingAmount();
+        if (alreadyCleared || outstanding == null || outstanding.signum() <= 0) {
+            return java.util.Optional.empty();
+        }
+
+        Company company = companies.findScopedById(companyId)
+                .orElseThrow(() -> new NotFoundException(ERR_COMPANY_NOT_FOUND));
+        String baseCurrency = company.getBaseCurrency();
+        int baseScale = baseMinorUnits(baseCurrency);
+
+        // Printed face only: split the cleared amount in the sale's own net/VAT proportion.
+        BigDecimal vatShare = BigDecimal.ZERO;
+        if (invoiceGross != null && invoiceGross.signum() > 0
+                && invoiceVat != null && invoiceVat.signum() > 0) {
+            vatShare = outstanding.multiply(invoiceVat)
+                    .divide(invoiceGross, 4, RoundingMode.HALF_UP).min(outstanding);
+        }
+        BigDecimal netShare = outstanding.subtract(vatShare);
+
+        String number = numberGen.nextCreditNote(companyId);
+        String reason = ("Sale " + (invoiceNumber != null ? invoiceNumber : salesInvoiceUid)
+                + " voided");
+        ArCreditNote note = new ArCreditNote(
+                companyId, openItem.getBranchId(), openItem.getCustomerId(), number,
+                openItem.getId(), noteDate, outstanding, netShare, vatShare,
+                openItem.getCurrency().value(), reason, ArCreditNoteOrigin.SALE_VOID, actorId());
+        // Settle at the open item's own rate: base relieved == base settled, so no FX plug posts.
+        BigDecimal rate = openItem.getFxRate() != null ? openItem.getFxRate() : BigDecimal.ONE;
+        BigDecimal base = outstanding.multiply(rate).setScale(baseScale, RoundingMode.HALF_UP);
+        note.setFxRate(rate);
+        note.setRateAt(openItem.getRateAt());
+        note.setBaseAmount(base);
+        note.setBaseUnappliedAmount(base);
+        // glEntryUid stays null: the sale's GL entry was reversed by the void (no second post).
+        note = creditNotes.save(note);
+
+        doApplyAllocations(note, companyId,
+                List.of(new AllocationLineRequest(openItem.getUid(), outstanding)),
+                baseCurrency, baseScale);
+
+        audit.record(AuditEvent.of(AuditActions.AR_CREDITNOTE_RAISE, "ar_credit_notes",
+                        note.getId(), note.getUid())
+                .detail(Map.of(
+                        "creditNoteNumber", number,
+                        "origin", ArCreditNoteOrigin.SALE_VOID.name(),
+                        "sourceInvoiceUid", salesInvoiceUid,
+                        "currency", openItem.getCurrency().value(),
+                        "amount", outstanding.toPlainString(),
+                        "actor", "SYSTEM")));
+        return java.util.Optional.of(note.getUid());
+    }
+
+    // =========================================================================
     // APPLY — sub-ledger move + realized-FX plug; no AR/Revenue legs
     // =========================================================================
 
@@ -298,6 +390,14 @@ public class ArCreditNoteServiceImpl implements ArCreditNoteService {
         ArCreditNote initial = Lookups.orNotFound(
                 creditNotes.findByUid(req.creditNoteUid()), "ArCreditNote", req.creditNoteUid());
         scopeGuard.assertCanActIn(RequestContext.get(), initial.getCompanyId());
+        // ARC-11: re-applying resets the note to its full amount, which would bring back credit
+        // already paid out to the customer.
+        if (cashTxnRecorder != null && cashTxnRecorder.refundedAmount(
+                initial.getCompanyId(), initial.getUid()).signum() > 0) {
+            throw new ConflictException("Part of credit note " + initial.getCreditNoteNumber()
+                    + " was refunded to the customer, so its applications cannot be redone."
+                    + " Apply the credit that is left instead.");
+        }
 
         Long reapplyCompanyId = initial.getCompanyId();
         Company company = companies.findById(reapplyCompanyId)

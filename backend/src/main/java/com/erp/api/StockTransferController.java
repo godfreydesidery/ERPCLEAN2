@@ -14,9 +14,9 @@ import com.erp.modules.stock.domain.dto.StockTransferLineDto;
 import com.erp.modules.stock.service.StockTransferService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
+import com.erp.platform.common.time.CompanyCalendar;
 import jakarta.validation.Valid;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import com.erp.modules.documents.domain.dto.DocumentBrandingDto;
@@ -66,22 +66,26 @@ import org.springframework.web.bind.annotation.RestController;
 public class StockTransferController {
 
     /** Date and time on the print footprint, matching the client's own documents (30-Aug-2026). */
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd-MMM-yyyy");
+    private static final DateTimeFormatter DATE_FMT =
+            DateTimeFormatter.ofPattern("dd-MMM-yyyy", java.util.Locale.ENGLISH);
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("h:mm:ss a");
 
     private final StockTransferService transferService;
     private final DocumentBrandingService branding;
     private final TabularExporter exporter;
     private final ReportCompanyHeaderQuery companyHeaderQuery;
+    private final CompanyCalendar calendar;
 
     public StockTransferController(StockTransferService transferService,
                                    TabularExporter exporter,
                                    ReportCompanyHeaderQuery companyHeaderQuery,
-                                   DocumentBrandingService branding) {
+                                   DocumentBrandingService branding,
+                                   CompanyCalendar calendar) {
         this.transferService    = transferService;
         this.exporter           = exporter;
         this.companyHeaderQuery = companyHeaderQuery;
         this.branding           = branding;
+        this.calendar           = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -139,8 +143,22 @@ public class StockTransferController {
 
     @GetMapping
     @PreAuthorize("@perm.has('STOCK.TRANSFER.VIEW')")
-    public ApiResponse<List<StockTransferDto>> list(Pageable pageable) {
-        Page<StockTransferDto> page = transferService.list(pageable);
+    public ApiResponse<List<StockTransferDto>> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate fromDate,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate toDate,
+            @RequestParam(required = false) String q,
+            // STK-19: newest first unless the caller asks otherwise (was unsorted).
+            @org.springframework.data.web.PageableDefault(size = 20,
+                    sort = {"transferDate", "id"},
+                    direction = org.springframework.data.domain.Sort.Direction.DESC)
+            Pageable pageable) {
+        Page<StockTransferDto> page = transferService.list(status, direction, fromDate, toDate, q, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
@@ -194,13 +212,13 @@ public class StockTransferController {
             headerLines.add(company.name());
         }
         headerLines.add("Transfer No: " + nullToEmpty(dto.transferNumber()));
-        headerLines.add("Date: " + (dto.transferDate() != null ? dto.transferDate().toString() : ""));
+        headerLines.add("Date: " + (dto.transferDate() != null ? dto.transferDate().format(DATE_FMT) : ""));
         headerLines.add("From: " + describeEnd(dto.sourceBranchName(), dto.sourceLocationName()));
         headerLines.add("To: " + describeEnd(dto.destBranchName(), dto.destLocationName()));
         headerLines.add("Status: " + (dto.status() != null ? dto.status().name() : "")
                 + "   Mode: " + (dto.transferMode() != null ? dto.transferMode().name() : ""));
         if (dto.expectedArrivalDate() != null) {
-            headerLines.add("Expected arrival: " + dto.expectedArrivalDate());
+            headerLines.add("Expected arrival: " + dto.expectedArrivalDate().format(DATE_FMT));
         }
         if (dto.notes() != null && !dto.notes().isBlank()) {
             headerLines.add("Notes: " + dto.notes());
@@ -266,7 +284,7 @@ public class StockTransferController {
                     + " no cost on record, and " + (unvalued == 1 ? "is" : "are")
                     + " left out of the total value.");
         }
-        ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime now = calendar.now(dto.companyId());
         footerLines.add(printFootprint(company, now));
 
         // generatedAt is rendered as "Generated: <value>" at the head. It gets the plain timestamp;

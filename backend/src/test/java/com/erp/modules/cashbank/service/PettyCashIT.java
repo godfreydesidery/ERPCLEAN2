@@ -12,7 +12,23 @@ import com.erp.modules.cashbank.domain.dto.PettyCashFundDto;
 import com.erp.modules.cashbank.domain.dto.PettyCashTransactionDto;
 import com.erp.modules.cashbank.domain.dto.RecordPettyCashTxnRequest;
 import com.erp.modules.cashbank.domain.enums.PettyCashTxnType;
+import com.erp.modules.cashbank.domain.entity.CashBankAccount;
+import com.erp.modules.cashbank.domain.entity.CashTransaction;
+import com.erp.modules.cashbank.domain.enums.CashTxnDirection;
+import com.erp.modules.cashbank.domain.enums.CashTxnType;
+import com.erp.modules.cashbank.repository.CashBankAccountRepository;
+import com.erp.modules.cashbank.repository.CashTransactionRepository;
 import com.erp.modules.cashbank.repository.PettyCashFundRepository;
+import com.erp.modules.cashbank.repository.PettyCashTransactionRepository;
+import com.erp.modules.gl.domain.entity.ChartOfAccount;
+import com.erp.modules.gl.domain.entity.JournalEntry;
+import com.erp.modules.gl.domain.entity.JournalLine;
+import com.erp.modules.gl.repository.ChartOfAccountRepository;
+import com.erp.modules.gl.repository.JournalEntryRepository;
+import com.erp.modules.gl.repository.JournalLineRepository;
+import com.erp.modules.gl.service.ChartOfAccountService;
+import com.erp.modules.gl.service.FiscalCalendarService;
+import com.erp.modules.gl.service.GlConfigService;
 import com.erp.platform.bootstrap.CompanyProvisioningService;
 import com.erp.modules.iam.domain.dto.BranchDto;
 import com.erp.modules.iam.domain.dto.CreateBranchRequest;
@@ -66,6 +82,16 @@ class PettyCashIT extends PostgresIntegrationTest {
 
     @Autowired private PettyCashService          pettyCashService;
     @Autowired private PettyCashFundRepository   fundRepo;
+    @Autowired private PettyCashTransactionRepository pettyTxnRepo;
+    @Autowired private ChartOfAccountService     chartOfAccountService;
+    @Autowired private FiscalCalendarService     fiscalCalendarService;
+    @Autowired private GlConfigService           glConfigService;
+    @Autowired private CashBankSeeder            cashBankSeeder;
+    @Autowired private ChartOfAccountRepository  accountRepo;
+    @Autowired private JournalEntryRepository    journalEntryRepo;
+    @Autowired private JournalLineRepository     journalLineRepo;
+    @Autowired private CashBankAccountRepository cashAccountRepo;
+    @Autowired private CashTransactionRepository cashTxnRepo;
     @Autowired private PettyCashFundSeeder       seeder;
     @Autowired private CompanyProvisioningService provisioningService;
     @Autowired private OrganisationRepository    organisations;
@@ -124,6 +150,12 @@ class PettyCashIT extends PostgresIntegrationTest {
         plainToken = jwtService.issueAccessToken(plainUser, company.getId(), branch.getId()).value();
 
         actAs(rootUser.getId(), "pc_root", company, branch);
+
+        // ARC-10: petty cash posts to the GL, so the company needs its accounting set up.
+        chartOfAccountService.seedDefaults(company.getId());
+        fiscalCalendarService.seedCurrentYear(company.getId());
+        glConfigService.seedDefaults(company.getId());
+        cashBankSeeder.seedDefaults(company.getId());
     }
 
     @AfterEach
@@ -152,7 +184,7 @@ class PettyCashIT extends PostgresIntegrationTest {
 
         PettyCashTransactionDto disburse = pettyCashService.recordTransaction(fund.uid(),
                 new RecordPettyCashTxnRequest(PettyCashTxnType.DISBURSEMENT, new BigDecimal("350"),
-                        LocalDate.now(), null, "DISB-1", "Office supplies"));
+                        LocalDate.now(), accountUid("5400"), "DISB-1", "Office supplies"));
         assertThat(disburse.balanceAfter()).isEqualByComparingTo("650");
         assertThat(disburse.amount()).isEqualByComparingTo("350");
 
@@ -172,7 +204,8 @@ class PettyCashIT extends PostgresIntegrationTest {
                 PettyCashTxnType.REPLENISHMENT, new BigDecimal("100"), LocalDate.now(), null, null, null));
 
         assertThatThrownBy(() -> pettyCashService.recordTransaction(fund.uid(), new RecordPettyCashTxnRequest(
-                PettyCashTxnType.DISBURSEMENT, new BigDecimal("500"), LocalDate.now(), null, null, null)))
+                PettyCashTxnType.DISBURSEMENT, new BigDecimal("500"), LocalDate.now(), accountUid("5400"),
+                null, null)))
                 .isInstanceOf(ConflictException.class);
 
         PettyCashFundDto reloaded = pettyCashService.getFund(fund.uid());
@@ -216,6 +249,113 @@ class PettyCashIT extends PostgresIntegrationTest {
         assertThat(adj.amount()).isEqualByComparingTo("40");
         assertThat(adj.amount().signum()).isEqualTo(1);
         assertThat(adj.balanceAfter()).isEqualByComparingTo("540");
+    }
+
+    // -------------------------------------------------------------------------
+    // ARC-10 / ACC-12: petty cash posts to the GL
+    // -------------------------------------------------------------------------
+
+    @Test
+    void replenishFromCashAccount_thenDisburse_postsBalancedJournals_andMovesTheCashBook() {
+        PettyCashFundDto fund = pettyCashService.createFund(new CreatePettyCashFundRequest(
+                companyUid, "PETTY-GL", "GL Petty Cash", null, new BigDecimal("1000"), "TZS"));
+        CashBankAccount till = cashAccountRepo.findByCompanyIdAndIsDefaultTrue(company.getId())
+                .orElseThrow();
+
+        // Top-up from the main cash account: DR 1010 Petty Cash / CR the till's GL (1000),
+        // plus an OUT row in the till's cash book.
+        PettyCashTransactionDto topUp = pettyCashService.recordTransaction(fund.uid(),
+                new RecordPettyCashTxnRequest(PettyCashTxnType.REPLENISHMENT, new BigDecimal("1000"),
+                        LocalDate.now(), null, "REPL-GL", "Float", till.getUid()));
+        assertThat(topUp.journalEntryRef()).isNotBlank();
+        List<JournalLine> topUpLines = linesOf(topUp.journalEntryRef());
+        assertBalanced(topUpLines);
+        assertThat(debit(topUpLines, "1010")).isEqualByComparingTo("1000");
+        assertThat(credit(topUpLines, "1000")).isEqualByComparingTo("1000");
+        List<CashTransaction> rows = cashTxnRepo.findByCompanyIdAndSourceRef(company.getId(), topUp.uid());
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getDirection()).isEqualTo(CashTxnDirection.OUT);
+        assertThat(rows.get(0).getTxnType()).isEqualTo(CashTxnType.DIRECT_ENTRY);
+        assertThat(rows.get(0).getCashBankAccountId()).isEqualTo(till.getId());
+        assertThat(rows.get(0).getAmount()).isEqualByComparingTo("1000");
+        assertThat(rows.get(0).getJournalEntryRef()).isEqualTo(topUp.journalEntryRef());
+
+        // Spend 350 on utilities: DR 5400 / CR 1010; no cash-book row (petty cash is not a till).
+        PettyCashTransactionDto spend = pettyCashService.recordTransaction(fund.uid(),
+                new RecordPettyCashTxnRequest(PettyCashTxnType.DISBURSEMENT, new BigDecimal("350"),
+                        LocalDate.now(), accountUid("5400"), "V-1", "Electricity token"));
+        List<JournalLine> spendLines = linesOf(spend.journalEntryRef());
+        assertBalanced(spendLines);
+        assertThat(debit(spendLines, "5400")).isEqualByComparingTo("350");
+        assertThat(credit(spendLines, "1010")).isEqualByComparingTo("350");
+        assertThat(cashTxnRepo.findByCompanyIdAndSourceRef(company.getId(), spend.uid())).isEmpty();
+        assertThat(pettyTxnRepo.findByUid(spend.uid()).orElseThrow().getJournalEntryRef())
+                .isEqualTo(spend.journalEntryRef());
+        assertThat(pettyCashService.getFund(fund.uid()).balanceAmount()).isEqualByComparingTo("650");
+    }
+
+    @Test
+    void disbursementWithoutExpenseAccount_isRefused() {
+        PettyCashFundDto fund = pettyCashService.createFund(new CreatePettyCashFundRequest(
+                companyUid, "PETTY-NOACC", "No-account Petty Cash", null, BigDecimal.ZERO, "TZS"));
+        pettyCashService.recordTransaction(fund.uid(), new RecordPettyCashTxnRequest(
+                PettyCashTxnType.REPLENISHMENT, new BigDecimal("100"), LocalDate.now(), null, null, null));
+
+        assertThatThrownBy(() -> pettyCashService.recordTransaction(fund.uid(), new RecordPettyCashTxnRequest(
+                PettyCashTxnType.DISBURSEMENT, new BigDecimal("40"), LocalDate.now(), null, null, "Lunch")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expense account");
+    }
+
+    @Test
+    void adjustmentShortage_postsToCashShort() {
+        PettyCashFundDto fund = pettyCashService.createFund(new CreatePettyCashFundRequest(
+                companyUid, "PETTY-ADJ", "Adj GL Petty Cash", null, BigDecimal.ZERO, "TZS"));
+        pettyCashService.recordTransaction(fund.uid(), new RecordPettyCashTxnRequest(
+                PettyCashTxnType.REPLENISHMENT, new BigDecimal("500"), LocalDate.now(), null, null, null));
+
+        PettyCashTransactionDto adj = pettyCashService.recordTransaction(fund.uid(),
+                new RecordPettyCashTxnRequest(PettyCashTxnType.ADJUSTMENT, new BigDecimal("-40"),
+                        LocalDate.now(), null, null, "Count short"));
+        List<JournalLine> lines = linesOf(adj.journalEntryRef());
+        assertBalanced(lines);
+        assertThat(debit(lines, "5170")).isEqualByComparingTo("40");
+        assertThat(credit(lines, "1010")).isEqualByComparingTo("40");
+    }
+
+    private String accountUid(String code) {
+        return accountRepo.findByCompanyIdAndAccountCode(company.getId(), code)
+                .map(ChartOfAccount::getUid)
+                .orElseThrow(() -> new AssertionError("Account " + code + " not seeded"));
+    }
+
+    private List<JournalLine> linesOf(String entryUid) {
+        JournalEntry entry = journalEntryRepo.findByUid(entryUid).orElseThrow();
+        return journalLineRepo.findByEntryIdOrderByLineNo(entry.getId());
+    }
+
+    private static void assertBalanced(List<JournalLine> lines) {
+        BigDecimal dr = lines.stream()
+                .map(l -> l.getDebitAmount() != null ? l.getDebitAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal cr = lines.stream()
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(dr).as("debits equal credits").isEqualByComparingTo(cr);
+    }
+
+    private BigDecimal debit(List<JournalLine> lines, String code) {
+        Long id = accountRepo.findByCompanyIdAndAccountCode(company.getId(), code).orElseThrow().getId();
+        return lines.stream().filter(l -> id.equals(l.getAccountId()))
+                .map(l -> l.getDebitAmount() != null ? l.getDebitAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal credit(List<JournalLine> lines, String code) {
+        Long id = accountRepo.findByCompanyIdAndAccountCode(company.getId(), code).orElseThrow().getId();
+        return lines.stream().filter(l -> id.equals(l.getAccountId()))
+                .map(l -> l.getCreditAmount() != null ? l.getCreditAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     // -------------------------------------------------------------------------

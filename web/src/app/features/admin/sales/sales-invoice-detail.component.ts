@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -16,17 +16,20 @@ import {
   SalesInvoiceLineDto,
   SalesInvoicePaymentDto,
   TenderType,
+  UpdateInvoiceLineRequest,
   VoidInvoiceRequest,
 } from '../models/sales.model';
 import { UnitOfMeasureDto } from '../models/product.model';
 import { ProductService } from '../products/product.service';
 import { DocumentsService } from '../documents/documents.service';
 import { SalesService } from './sales.service';
+import { INVALID_AMOUNT_MESSAGE, normaliseAmount, parseAmount } from '../../../shared/money.util';
 import {
   ManagerApproval,
   ManagerApprovalDialogComponent,
 } from '../../../shared/manager-approval/manager-approval-dialog.component';
 import { DISCOUNT_OVERRIDE_PERMISSION, DiscountPolicyService } from './discount-policy.service';
+import { AppDatePipe } from '../../../shared/app-date.pipe';
 
 type LoadState = 'loading' | 'idle' | 'error';
 
@@ -48,7 +51,7 @@ type LoadState = 'loading' | 'idle' | 'error';
  */
 @Component({
   selector: 'app-sales-invoice-detail',
-  imports: [FormsModule, RouterLink, ManagerApprovalDialogComponent],
+  imports: [AppDatePipe, FormsModule, RouterLink, ManagerApprovalDialogComponent],
   templateUrl: './sales-invoice-detail.component.html',
   styleUrl: './sales-invoice-detail.component.scss',
 })
@@ -58,6 +61,7 @@ export class SalesInvoiceDetailComponent {
   private readonly documentsService = inject(DocumentsService);
   private readonly discountPolicy = inject(DiscountPolicyService);
   private readonly alerts = inject(AlertService);
+  private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly session = inject(SessionStore);
 
@@ -132,8 +136,8 @@ export class SalesInvoiceDetailComponent {
   /** True when the line being added carries a discount at all — nothing to approve otherwise. */
   readonly newLineHasDiscount = computed(
     () =>
-      Number(this.newLineDiscountAmount().trim() || '0') > 0 ||
-      Number(this.newLineDiscountPercent().trim() || '0') > 0,
+      (parseAmount(this.newLineDiscountAmount()) ?? 0) > 0 ||
+      (parseAmount(this.newLineDiscountPercent()) ?? 0) > 0,
   );
 
   /** Show the "Ask a supervisor" button only where it could actually help. */
@@ -177,6 +181,30 @@ export class SalesInvoiceDetailComponent {
   readonly voiding = signal(false);
   readonly voidError = signal<string | null>(null);
 
+  // ── Cancel draft (SAL-13 / LSF-17) ─────────────────────────────────────────
+
+  readonly cancellingDraft = signal(false);
+
+  /** Discards this DRAFT (it has no number and posted nothing), then returns to the list. */
+  cancelDraft(): void {
+    if (this.cancellingDraft() || !this.isDraft()) return;
+    if (!window.confirm('Cancel this draft invoice? Its lines and any tenders on it are discarded.')) {
+      return;
+    }
+    this.cancellingDraft.set(true);
+    this.salesService.cancelDraft(this.uid()).subscribe({
+      next: () => {
+        this.cancellingDraft.set(false);
+        this.alerts.success('Draft cancelled');
+        void this.router.navigate(['/admin/sales-invoices']);
+      },
+      error: (err) => {
+        this.cancellingDraft.set(false);
+        this.alerts.error(this.messageFrom(err, 'Could not cancel the draft.'));
+      },
+    });
+  }
+
   // ── Print PDF ────────────────────────────────────────────────────────────
   readonly printing = signal(false);
   readonly printError = signal<string | null>(null);
@@ -199,6 +227,11 @@ export class SalesInvoiceDetailComponent {
   readonly isDraft = computed(() => this.invoice()?.status === 'DRAFT');
   readonly isFinalised = computed(() => this.invoice()?.status === 'FINALISED');
   readonly isVoid = computed(() => this.invoice()?.status === 'VOID');
+  /**
+   * SAL-02 (owner ruling 2026-10-10): voiding a finalised sale that took counter payments refunds
+   * them in full — the action is labelled "Void & refund" so nobody voids a paid sale unawares.
+   */
+  readonly voidRefunds = computed(() => this.isFinalised() && this.payments().length > 0);
 
   readonly invoiceLabel = computed(() => {
     const inv = this.invoice();
@@ -301,6 +334,13 @@ export class SalesInvoiceDetailComponent {
     });
   }
 
+  /** SAL-28: the price hint follows the chosen unit (a carton is not priced per bottle). */
+  onLineUnitChange(unitUid: string): void {
+    this.newLineUnitUid.set(unitUid);
+    const product = this.selectedProduct();
+    if (product) this.fetchLinePrice(product.uid);
+  }
+
   private loadUnitsForProduct(productUid: string): void {
     this.lineUnits.set([]);
     this.newLineUnitUid.set('');
@@ -343,16 +383,27 @@ export class SalesInvoiceDetailComponent {
    * authoritative. Gated PRODUCT.VIEW, the same permission the picker above already needs.
    */
   private fetchLinePrice(productUid: string): void {
-    const companyId = this.invoice()?.companyId;
+    const inv = this.invoice();
     this.priceState.set('loading');
     this.resolvedPrice.set(null);
-    this.productService.listPrices(productUid).subscribe({
+    // SAL-28: ask the server what THIS line will be charged — in the selected unit, for this
+    // invoice's customer and currency (the same resolution addLine applies). The first price row
+    // used to be shown, which quoted the per-bottle price against a carton or another list's price.
+    const unitUid = this.newLineUnitUid() || undefined;
+    this.productService.resolveUnitPrices({
+      productUids: [productUid],
+      unitUid,
+      customerUid: inv?.customerUid || undefined,
+      currency: inv?.currency || undefined,
+    }).subscribe({
       next: (rows) => {
-        const forCompany = rows.filter((p) => p.companyId === companyId);
-        // Prefer this company's base-unit row (unitUid === null) — a pack row would quote a crate
-        // price against an "Each" line and read as wrong.
-        const row = forCompany.find((p) => p.unitUid === null) ?? forCompany[0] ?? rows[0];
-        const amount = row?.price?.amount ?? null;
+        // Ignore a late answer for a product or unit the user has since moved away from.
+        if (this.selectedProduct()?.uid !== productUid
+            || (this.newLineUnitUid() || undefined) !== unitUid) {
+          return;
+        }
+        const row = rows.find((r) => r.productUid === productUid);
+        const amount = row?.amount != null ? String(row.amount) : null;
         this.resolvedPrice.set(amount);
         this.priceState.set(amount != null ? 'ok' : 'missing');
       },
@@ -400,11 +451,19 @@ export class SalesInvoiceDetailComponent {
     // outright (@Positive), and a zero is worse than a refusal: it gives the goods away and, reading
     // as equal to the resolved price, would slip past the override gate unmarked. Catch it here so
     // the answer names the way out instead of arriving as a bare rejection.
-    const price = this.newLineUnitPrice().trim();
-    if (price && (isNaN(Number(price)) || Number(price) <= 0)) {
+    // LUI-04: "1,800" is a price, not an error — normalise grouped input before checking it.
+    const priceNorm = normaliseAmount(this.newLineUnitPrice());
+    const price = priceNorm ?? '';
+    if (priceNorm === null || (price && Number(price) <= 0)) {
       this.lineFormError.set(
         'Enter a unit price greater than zero, or leave it blank to use the catalogue price.',
       );
+      return;
+    }
+
+    const discountAmount = normaliseAmount(this.newLineDiscountAmount());
+    if (discountAmount === null) {
+      this.lineFormError.set(INVALID_AMOUNT_MESSAGE);
       return;
     }
 
@@ -418,7 +477,7 @@ export class SalesInvoiceDetailComponent {
       // Omitted unless typed: an absent field means "price it from the catalogue", which is what
       // every ordinary line wants.
       unitPriceOverride: price || undefined,
-      lineDiscountAmount: this.newLineDiscountAmount().trim() || undefined,
+      lineDiscountAmount: discountAmount || undefined,
       lineDiscountPercent: this.newLineDiscountPercent().trim() || undefined,
       // K7: only ever sent when a supervisor actually signed for THIS discount. The server
       // re-resolves the uid and requires that user to be active and to genuinely hold the override
@@ -486,6 +545,68 @@ export class SalesInvoiceDetailComponent {
     this.addLine();
   }
 
+  // ── Edit a draft line (SAL-12) ──────────────────────────────────────────────
+
+  readonly editingLineUid = signal<string | null>(null);
+  readonly editQty = signal('');
+  /** A plain number is an amount off the line; a trailing % makes it a percentage. */
+  readonly editDiscount = signal('');
+  readonly editLineSaving = signal(false);
+  readonly editLineError = signal<string | null>(null);
+
+  startEditLine(line: SalesInvoiceLineDto): void {
+    this.editingLineUid.set(line.uid);
+    this.editQty.set(String(line.requestedQuantity ?? line.quantity ?? ''));
+    this.editDiscount.set(
+      line.lineDiscountAmount ? String(line.lineDiscountAmount)
+        : line.lineDiscountPercent ? `${line.lineDiscountPercent}%` : '',
+    );
+    this.editLineError.set(null);
+  }
+
+  cancelEditLine(): void {
+    this.editingLineUid.set(null);
+    this.editLineError.set(null);
+  }
+
+  saveEditLine(line: SalesInvoiceLineDto): void {
+    if (this.editLineSaving()) return;
+    const qty = this.editQty().trim().replace(/,/g, '');
+    if (!qty || !(Number(qty) > 0)) {
+      this.editLineError.set('Enter a quantity greater than zero.');
+      return;
+    }
+    const request: UpdateInvoiceLineRequest = { quantity: qty };
+    const disc = this.editDiscount().trim().replace(/,/g, '');
+    if (disc) {
+      const isPercent = disc.endsWith('%');
+      const value = isPercent ? disc.slice(0, -1).trim() : disc;
+      if (!(Number(value) >= 0) || value === '') {
+        this.editLineError.set('Enter the discount as an amount, or a percentage such as 10%.');
+        return;
+      }
+      if (Number(value) > 0) {
+        if (isPercent) request.lineDiscountPercent = value;
+        else request.lineDiscountAmount = value;
+      }
+    }
+    this.editLineSaving.set(true);
+    this.editLineError.set(null);
+    this.salesService.updateLine(this.uid(), line.uid, request).subscribe({
+      next: () => {
+        this.editLineSaving.set(false);
+        this.editingLineUid.set(null);
+        this.alerts.success('Line updated');
+        this.loadLines();
+        this.refetchInvoice();
+      },
+      error: (err) => {
+        this.editLineSaving.set(false);
+        this.editLineError.set(this.messageFrom(err, 'Could not update the line.'));
+      },
+    });
+  }
+
   removeLine(line: SalesInvoiceLineDto): void {
     if (this.rowBusyLineUid() !== null) return;
     this.rowBusyLineUid.set(line.uid);
@@ -514,7 +635,7 @@ export class SalesInvoiceDetailComponent {
   }
 
   saveOverridePrice(line: SalesInvoiceLineDto): void {
-    const entered = this.overridePriceInput().trim();
+    const entered = normaliseAmount(this.overridePriceInput()) ?? '';
     const price = Number(entered);
     if (!entered || Number.isNaN(price) || price <= 0) {
       this.overridePriceError.set('Enter a valid unit price greater than zero.');
@@ -585,7 +706,8 @@ export class SalesInvoiceDetailComponent {
   }
 
   addPayment(): void {
-    const amount = this.newPaymentAmount().trim();
+    // LUI-04: accept "68,300" — it used to be refused, or silently read as 0 elsewhere.
+    const amount = normaliseAmount(this.newPaymentAmount()) ?? '';
     const currency = this.invoice()?.currency ?? 'TZS';
 
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
