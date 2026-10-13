@@ -2018,9 +2018,13 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 
 ### Your session has expired / you were signed out
 
-**What it is.** When you sign in, the server gives the till a time-limited pass, which the till renews quietly in the background while you work. If it cannot be renewed — for example the server ended it, or your account was changed — you are returned to the **Sign in** screen with **Your session ended. Please sign in again.** (or **Your session has expired. Please sign in again.**). A brief network drop does **not** sign you out.
+**What it is.** When you sign in, the server gives the till a time-limited pass, which the till renews quietly in the background while you work. If the server refuses to renew it — for example the server ended it, or your account was changed — you are returned to the **Sign in** screen with **Your session ended. Please sign in again.** (or **Your session has expired. Please sign in again.**). If the server simply does not answer — a network drop, or the server restarting or busy — you are **not** signed out: you see **Cannot reach the ERP. Check the connection and host.**, and the till carries on as soon as the server answers again.
 
 **What to do.** Sign in again. Nothing you finalised is lost, and **your shift is still open** — OrbixPOS takes you straight back to your register in it. A basket you had not yet paid for is cleared, so re-ring those items.
+
+**If it keeps happening.** The usual cause is the **same username signed in somewhere else** at the same time — on another till, or in the ERP in a web browser. The server allows each sign-in pass to be renewed only once; when two places renew the same one, it treats that as a stolen sign-in and ends the session everywhere. Give each person their own username, and sign out of the ERP in the browser before using that username on a till. If it still happens, ask your administrator to check the ERP server's log.
+
+> **Only one OrbixPOS at a time.** Opening OrbixPOS while it is already running brings the open till to the front instead of starting a second copy. Two copies on one computer would share one sign-in and end each other's sessions.
 
 > A sign-in ending is not the same as your *cash session* (your shift) closing. Your shift stays **open** on the server until you count the drawer and close it.
 
