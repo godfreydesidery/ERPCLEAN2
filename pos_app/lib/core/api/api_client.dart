@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'api_exception.dart';
@@ -13,8 +14,11 @@ const _uuid = Uuid();
 /// callers get the `data` payload directly. Every method throws [ApiException]
 /// (status-driven) on failure — callers branch on status, never on text.
 class ApiClient {
-  ApiClient({required String apiBase, required TokenManager tokens})
-      : _tokens = tokens,
+  ApiClient({
+    required String apiBase,
+    required TokenManager tokens,
+    @visibleForTesting HttpClientAdapter? httpAdapter,
+  })  : _tokens = tokens,
         _dio = Dio(BaseOptions(
           baseUrl: apiBase,
           contentType: 'application/json',
@@ -23,6 +27,7 @@ class ApiClient {
           // We map non-2xx ourselves; let Dio surface them as errors.
         )) {
     applyErpTls(_dio);
+    if (httpAdapter != null) _dio.httpClientAdapter = httpAdapter;
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: _onRequest,
       onError: _onError,
@@ -69,19 +74,35 @@ class ApiClient {
     final alreadyRetried = opts.extra['retried'] == true;
 
     if (res?.statusCode == 401 && !isRefresh && !alreadyRetried) {
-      final ok = await _tokens.refreshNow();
-      if (ok) {
-        opts.extra['retried'] = true;
-        final token = _tokens.bundle?.accessToken;
-        if (token != null) opts.headers['Authorization'] = 'Bearer $token';
-        try {
-          final clone = await _dio.fetch(opts);
-          return handler.resolve(clone);
-        } on DioException catch (e) {
-          return handler.next(e);
-        }
-      } else {
-        onAuthLost?.call();
+      final refresh = await _tokens.refreshNow();
+      switch (refresh.outcome) {
+        case RefreshOutcome.refreshed:
+          opts.extra['retried'] = true;
+          final token = _tokens.bundle?.accessToken;
+          if (token != null) opts.headers['Authorization'] = 'Bearer $token';
+          try {
+            final clone = await _dio.fetch(opts);
+            return handler.resolve(clone);
+          } on DioException catch (e) {
+            return handler.next(e);
+          }
+        case RefreshOutcome.rejected:
+          onAuthLost?.call();
+        case RefreshOutcome.unavailable:
+          // The session could not be renewed because the ERP did not answer —
+          // NOT because it refused. Signing the cashier out here was a false
+          // "Your session ended" whenever the server was restarting or slow.
+          // Keep the session and report what actually happened, so the caller
+          // reads "can't reach the ERP" (and the sale path, seeing no answer,
+          // reconciles with the same idempotency key — a 401 never ran it).
+          final f = refresh.failure!;
+          return handler.next(DioException(
+            requestOptions: opts,
+            response: f.response,
+            type: f.type,
+            error: f.error,
+            message: f.message,
+          ));
       }
     }
     handler.next(err);
