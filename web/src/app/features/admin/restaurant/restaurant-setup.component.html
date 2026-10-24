@@ -1,0 +1,400 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Restaurant Setup</h1>
+      <p class="subtitle">
+        <i class="bi bi-cup-hot me-1" aria-hidden="true"></i>
+        Tables, kitchen and bar printers, and which items print where. Orders are taken on the till —
+        by the cashier, or by waiters signed in with the <strong>Waiter</strong> role (Users).
+      </p>
+    </div>
+  </header>
+
+  @if (branches().length > 1) {
+    <div class="mb-3 branch-pick">
+      <label class="form-label small text-muted mb-1" for="restoBranch">Branch</label>
+      <select id="restoBranch" name="restoBranch" class="form-select"
+              [ngModel]="branchUid()" (ngModelChange)="onBranchChange($event)">
+        @for (b of branches(); track b.branchUid) {
+          <option [value]="b.branchUid">{{ b.branchName }}</option>
+        }
+      </select>
+    </div>
+  } @else if (branchName()) {
+    <p class="text-muted small mb-3">Branch: <strong>{{ branchName() }}</strong></p>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <output class="text-muted d-flex align-items-center gap-2">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading restaurant setup…
+      </output>
+    }
+    @case ('error') {
+      <p class="text-danger" role="alert">
+        <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+        Could not load the restaurant setup. Please try again.
+      </p>
+    }
+    @case ('forbidden') {
+      <p class="text-muted d-flex align-items-center gap-2">
+        <i class="bi bi-shield-lock" aria-hidden="true"></i>
+        You don't have permission to set up the restaurant for this branch.
+      </p>
+    }
+    @default {
+      <!-- ── Prep stations ─────────────────────────────────────────────── -->
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2>Kitchen &amp; bar printers</h2>
+        </div>
+        <div class="erp-card__body">
+          <p class="text-muted small">
+            Each station gets its own slip when an order is sent. Items whose category is not routed
+            below print at the default station. Every way of printing works:
+          </p>
+          <ul class="text-muted small">
+            <li><strong>Network printer</strong> (cable or WiFi): enter its IP address and port —
+              usually 9100. Every till prints to it directly.</li>
+            <li><strong>Printer plugged into a PC by USB</strong>: leave the IP empty. On that PC, open
+              OrbixPOS → Settings, choose the printer for this station and tick
+              <em>Print ALL slips here</em>. That PC then prints for every till.</li>
+            <li><strong>No printer</strong>: leave the IP empty and use the
+              <em>Kitchen Display</em> on a screen at the station.</li>
+          </ul>
+
+          @if (stations().length === 0) {
+            <div class="erp-empty mb-3">
+              <i class="bi bi-printer" aria-hidden="true"></i> No stations yet. Add the kitchen first.
+            </div>
+          } @else {
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="visually-hidden">Prep stations</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Station</th>
+                    <th scope="col">Printer</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (s of stations(); track s.uid) {
+                    <tr>
+                      <td>
+                        {{ s.name }}
+                        @if (s.defaultStation) {
+                          <span class="badge text-bg-light ms-1">Default</span>
+                        }
+                      </td>
+                      <td class="text-muted">{{ printerLabel(s) }}</td>
+                      <td>
+                        <span class="status-tag" [class.status-tag--ok]="s.status === 'ACTIVE'"
+                              [class.status-tag--neutral]="s.status !== 'ACTIVE'">
+                          <span class="status-tag__dot"></span>{{ s.status === 'ACTIVE' ? 'Active' : 'Inactive' }}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                (click)="editStation(s)" [attr.aria-label]="'Edit station ' + s.name">
+                          <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          <form (ngSubmit)="saveStation()" aria-label="Prep station">
+            <h3 class="h6">{{ stationEditUid() ? 'Edit station' : 'Add a station' }}</h3>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" for="stationName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="stationName" name="stationName" type="text" class="form-control" maxlength="60"
+                       placeholder="e.g. Kitchen" autocomplete="off"
+                       [ngModel]="stationName()" (ngModelChange)="stationName.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="stationHost">
+                  Printer IP address <span class="text-muted small">(empty for USB or display)</span>
+                </label>
+                <input id="stationHost" name="stationHost" type="text" class="form-control" maxlength="255"
+                       placeholder="e.g. 192.168.1.50" autocomplete="off"
+                       [ngModel]="stationHost()" (ngModelChange)="stationHost.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="stationPort">Port</label>
+                <input id="stationPort" name="stationPort" type="number" class="form-control" min="1" max="65535"
+                       [ngModel]="stationPort()" (ngModelChange)="stationPort.set($event)" />
+              </div>
+            </div>
+            <div class="form-check mt-2">
+              <input id="stationDefault" name="stationDefault" type="checkbox" class="form-check-input"
+                     [ngModel]="stationDefault()" (ngModelChange)="stationDefault.set($event)" />
+              <label class="form-check-label" for="stationDefault">Default station (prints anything not routed)</label>
+            </div>
+            @if (stationEditUid()) {
+              <div class="form-check">
+                <input id="stationActive" name="stationActive" type="checkbox" class="form-check-input"
+                       [ngModel]="stationActive()" (ngModelChange)="stationActive.set($event)" />
+                <label class="form-check-label" for="stationActive">Active</label>
+              </div>
+            }
+            @if (stationError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="stationSaving()">
+                @if (stationSaving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+                } @else {
+                  {{ stationEditUid() ? 'Save station' : 'Add station' }}
+                }
+              </button>
+              @if (stationEditUid()) {
+                <button type="button" class="btn btn-outline-secondary" (click)="resetStationForm()">Cancel</button>
+              }
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ── Category routing ──────────────────────────────────────────── -->
+      <div class="erp-card mb-4">
+        <div class="erp-card__head">
+          <h2>What prints where</h2>
+        </div>
+        <div class="erp-card__body">
+          <p class="text-muted small">
+            Route each product category to a station — for example Drinks to the Bar. Categories are
+            set on the products (the "Department" column in the product import).
+          </p>
+          @if (routeRows().length === 0) {
+            <div class="erp-empty">
+              <i class="bi bi-tags" aria-hidden="true"></i>
+              No product categories yet. Give your menu items a category first.
+            </div>
+          } @else if (activeStations().length === 0) {
+            <div class="erp-empty">
+              <i class="bi bi-printer" aria-hidden="true"></i> Add a station above before routing categories.
+            </div>
+          } @else {
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="visually-hidden">Category routing</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Prints at</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (r of routeRows(); track r.category; let i = $index) {
+                    <tr>
+                      <td><label [for]="routeId(i)" class="mb-0">{{ r.category }}</label></td>
+                      <td>
+                        <select class="form-select form-select-sm route-select" [id]="routeId(i)" [name]="routeId(i)"
+                                [ngModel]="r.stationUid" (ngModelChange)="setRoute(r.category, $event)">
+                          <option value="">Default ({{ defaultStation()?.name ?? 'none' }})</option>
+                          @for (s of activeStations(); track s.uid) {
+                            <option [value]="s.uid">{{ s.name }}</option>
+                          }
+                        </select>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            @if (routesError(); as msg) {
+              <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+            }
+            <button type="button" class="btn btn-primary" (click)="saveRoutes()" [disabled]="routesSaving()">
+              @if (routesSaving()) {
+                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+              } @else {
+                Save routing
+              }
+            </button>
+          }
+
+          @if (canEditProducts() && uncategorised().length > 0) {
+            <h3 class="h6 mt-4">Items without a category ({{ uncategorised().length }})</h3>
+            <p class="text-muted small">
+              These print at the default station ({{ defaultStation()?.name ?? 'none' }}). Give drinks a
+              category such as <em>Drinks</em> and route it to the bar above.
+            </p>
+            <datalist id="knownCategories">
+              @for (c of knownCategories(); track c) { <option [value]="c"></option> }
+            </datalist>
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Items without a category</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Category</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of uncategorised(); track p.uid; let i = $index) {
+                    <tr>
+                      <td><label class="mb-0" [for]="'cat-' + i">{{ p.name }}</label></td>
+                      <td>
+                        <input class="form-control form-control-sm route-select" type="text" maxlength="60"
+                               list="knownCategories" placeholder="e.g. Drinks"
+                               [id]="'cat-' + i" [name]="'cat-' + i"
+                               [ngModel]="categoryDraft()[p.uid] ?? ''" (ngModelChange)="setDraft(p.uid, $event)" />
+                      </td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary" (click)="saveCategory(p)"
+                                [disabled]="!(categoryDraft()[p.uid] ?? '').trim()"
+                                [attr.aria-label]="'Save category for ' + p.name">Save</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- ── Choices & add-ons (ADR-0066 D-4) ──────────────────────────── -->
+      <app-restaurant-modifiers />
+
+      <!-- ── Tables ────────────────────────────────────────────────────── -->
+      <div class="erp-card">
+        <div class="erp-card__head">
+          <h2>Tables</h2>
+        </div>
+        <div class="erp-card__body">
+          @if (tables().length === 0) {
+            <div class="erp-empty mb-3">
+              <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> No tables yet.
+            </div>
+          } @else {
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="visually-hidden">Tables</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Table</th>
+                    <th scope="col">Area</th>
+                    <th scope="col" class="text-end">Seats</th>
+                    <th scope="col">Now</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (t of tables(); track t.uid) {
+                    <tr>
+                      <td>{{ t.name }}</td>
+                      <td class="text-muted">{{ t.area ?? '—' }}</td>
+                      <td class="text-end">{{ t.seats }}</td>
+                      <td>{{ stateLabel(t) }}</td>
+                      <td>
+                        <span class="status-tag" [class.status-tag--ok]="t.status === 'ACTIVE'"
+                              [class.status-tag--neutral]="t.status !== 'ACTIVE'">
+                          <span class="status-tag__dot"></span>{{ t.status === 'ACTIVE' ? 'In use' : 'Not in use' }}
+                        </span>
+                      </td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                (click)="editTable(t)" [attr.aria-label]="'Edit table ' + t.name">
+                          <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          @if (!tableEditUid()) {
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-3" role="group" aria-label="Add several tables">
+              <div>
+                <label class="form-label small mb-1" for="bulkPrefix">Name starts with</label>
+                <input id="bulkPrefix" name="bulkPrefix" class="form-control form-control-sm" maxlength="20"
+                       [ngModel]="bulkPrefix()" (ngModelChange)="bulkPrefix.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small mb-1" for="bulkFrom">From</label>
+                <input id="bulkFrom" name="bulkFrom" type="number" min="1" class="form-control form-control-sm"
+                       [ngModel]="bulkFrom()" (ngModelChange)="bulkFrom.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small mb-1" for="bulkTo">To</label>
+                <input id="bulkTo" name="bulkTo" type="number" min="1" class="form-control form-control-sm"
+                       [ngModel]="bulkTo()" (ngModelChange)="bulkTo.set($event)" />
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addTables()" [disabled]="bulkSaving()">
+                @if (bulkSaving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Adding…
+                } @else {
+                  Add {{ bulkPrefix() }}{{ bulkFrom() }} to {{ bulkPrefix() }}{{ bulkTo() }}
+                }
+              </button>
+            </div>
+          }
+
+          <form (ngSubmit)="saveTable()" aria-label="Table">
+            <h3 class="h6">{{ tableEditUid() ? 'Edit table' : 'Add a table' }}</h3>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" for="tableName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="tableName" name="tableName" type="text" class="form-control" maxlength="40"
+                       placeholder="e.g. T1" autocomplete="off"
+                       [ngModel]="tableName()" (ngModelChange)="tableName.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="tableArea">Area</label>
+                <input id="tableArea" name="tableArea" type="text" class="form-control" maxlength="40"
+                       placeholder="e.g. Terrace" autocomplete="off"
+                       [ngModel]="tableArea()" (ngModelChange)="tableArea.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="tableSeats">Seats</label>
+                <input id="tableSeats" name="tableSeats" type="number" class="form-control" min="1" max="999"
+                       [ngModel]="tableSeats()" (ngModelChange)="tableSeats.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="tableSort">Order on the floor</label>
+                <input id="tableSort" name="tableSort" type="number" class="form-control"
+                       [ngModel]="tableSort()" (ngModelChange)="tableSort.set($event)" />
+              </div>
+            </div>
+            @if (tableEditUid()) {
+              <div class="form-check mt-2">
+                <input id="tableActive" name="tableActive" type="checkbox" class="form-check-input"
+                       [ngModel]="tableActive()" (ngModelChange)="tableActive.set($event)" />
+                <label class="form-check-label" for="tableActive">In use</label>
+              </div>
+            }
+            @if (tableError(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="tableSaving()">
+                @if (tableSaving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+                } @else {
+                  {{ tableEditUid() ? 'Save table' : 'Add table' }}
+                }
+              </button>
+              @if (tableEditUid()) {
+                <button type="button" class="btn btn-outline-secondary" (click)="resetTableForm()">Cancel</button>
+              }
+            </div>
+          </form>
+        </div>
+      </div>
+    }
+  }
+</section>

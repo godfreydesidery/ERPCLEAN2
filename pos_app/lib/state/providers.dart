@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/catalog_service.dart';
 import '../services/context_service.dart';
 import '../services/party_service.dart';
+import '../services/restaurant_service.dart';
 import '../services/sale_service.dart';
 import '../services/session_service.dart';
 import '../services/step_up_service.dart';
@@ -70,6 +71,10 @@ final sessionServiceProvider =
 
 final saleServiceProvider =
     Provider<SaleService>((ref) => SaleService(ref.watch(apiClientProvider)));
+
+/// Restaurant orders (ERP ADR-0065): tables, kitchen/bar slips, bill, pay.
+final restaurantServiceProvider = Provider<RestaurantService>(
+    (ref) => RestaurantService(ref.watch(apiClientProvider)));
 
 /// Manager step-up. Rides on the cashier's own token — it verifies a second
 /// person's credentials without ever replacing the session.

@@ -74,6 +74,11 @@ export class ProductService {
       );
   }
 
+  /** Sets only the category (blank clears it) — PRODUCT.MANAGE. */
+  setCategory(uid: string, category: string | null): Observable<ProductModel> {
+    return this.http.put<ProductModel>(`${this.base}/uid/${uid}/category`, { category });
+  }
+
   getByUid(uid: string): Observable<ProductModel> {
     return this.http.get<ProductModel>(`${this.base}/uid/${uid}`);
   }

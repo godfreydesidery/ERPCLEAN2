@@ -1183,6 +1183,25 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./pos/pos-sale.component').then((m) => m.PosSaleComponent),
   },
+  // ── Restaurant (ADR-0065) — guards equal the endpoint codes ─────────────────
+  {
+    path: 'restaurant/setup',
+    canActivate: [requirePermission('RESTAURANT.SETUP.MANAGE')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-setup.component').then((m) => m.RestaurantSetupComponent),
+  },
+  {
+    path: 'restaurant/orders',
+    canActivate: [requirePermission('RESTAURANT.ORDER.MANAGE')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-orders.component').then((m) => m.RestaurantOrdersComponent),
+  },
+  {
+    path: 'restaurant/kitchen',
+    canActivate: [requirePermission('RESTAURANT.KITCHEN.MANAGE')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-kitchen.component').then((m) => m.RestaurantKitchenComponent),
+  },
   // ── Stock Transfers ─────────────────���──────────────────────────��──────────
   {
     path: 'stock-transfers',

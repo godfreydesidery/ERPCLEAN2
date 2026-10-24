@@ -147,8 +147,14 @@ Migrations live in `backend/src/main/resources/db/migration/` (`V<n>__*.sql` ver
 - **Author against populated tables**, not an empty DB: expand→backfill→constrain across separate
   migrations (never single-shot `NOT NULL`/`UNIQUE`/`FK` on a populated table); `CREATE INDEX
   CONCURRENTLY` in its own non-transactional migration.
-- CI enforces both **rule 1** (no duplicate versions) and **rule 2** (immutability vs the base
-  branch) via `scripts/check-migrations.sh` (job `migration-hygiene`). `application.yml` pins
+- **A migration that locks an existing table sets a lock timeout** — `SET LOCAL lock_timeout =
+  '10s';` at the top (owner convention, 2026-10-24). That covers ALTER TABLE, a new foreign key
+  *to* an existing table (it locks the referenced table), CREATE INDEX, UPDATE/DELETE, TRUNCATE,
+  DROP. A held write lock then fails the migration fast (clean rollback, retry the deploy) instead
+  of queueing every till behind it. Reviewed opt-out: `-- lock-timeout: not-needed (<reason>)`.
+- CI enforces **rule 1** (no duplicate versions), **rule 2** (immutability vs the base branch) and
+  **rule 3** (lock timeout on new migrations that lock existing tables) via
+  `scripts/check-migrations.sh` (job `migration-hygiene`). `application.yml` pins
   `clean-disabled`, `validate-on-migrate`, `out-of-order: false`, `baseline-on-migrate: false`.
 - Full runbook (authoring, recovery, the durable-DB patterns): [docs/ops/migrations-and-seeding.md](docs/ops/migrations-and-seeding.md).
 

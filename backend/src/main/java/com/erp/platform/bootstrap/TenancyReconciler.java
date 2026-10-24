@@ -59,8 +59,8 @@ public class TenancyReconciler implements ApplicationRunner {
     private static final long ADVISORY_LOCK_KEY = 0x0A5E_1D62L;
 
     /**
-     * The thirteen shipped roles, by uid: ORG_ADMIN from {@code V1__baseline.sql} plus the twelve
-     * ADR-0057 bundles from {@code R__seed_permissions.sql}. These stay global — {@code
+     * The fifteen shipped roles, by uid: ORG_ADMIN from {@code V1__baseline.sql} plus the twelve
+     * ADR-0057 bundles and the two ADR-0066 bundles from {@code R__seed_permissions.sql}. These stay global — {@code
      * organisation_id IS NULL} — and V100's {@code uq_role_code_global} partial index depends on it.
      */
     private static final Set<String> SEED_ROLE_UIDS = Set.of(
@@ -70,7 +70,9 @@ public class TenancyReconciler implements ApplicationRunner {
             "00000000000000000000000005", "00000000000000000000000006",
             "00000000000000000000000007", "00000000000000000000000008",
             "00000000000000000000000009", "0000000000000000000000000A",
-            "0000000000000000000000000B", "0000000000000000000000000C");
+            "0000000000000000000000000B", "0000000000000000000000000C",
+            // WAITER and KITCHEN (ADR-0066 D-7).
+            "0000000000000000000000000D", "0000000000000000000000000E");
 
     private final OrganisationRepository organisations;
     private final RoleRepository roles;

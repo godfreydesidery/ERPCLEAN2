@@ -582,4 +582,26 @@ public final class AuditActions {
     public static final String VAN_RECON_ENTER     = "VAN_RECON.ENTER";
     public static final String VAN_RECON_RECONCILE = "VAN_RECON.RECONCILE";
     public static final String VAN_RECON_CANCEL    = "VAN_RECON.CANCEL";
+
+    // ---- Restaurant orders (ADR-0065) ----
+    public static final String RESTAURANT_TABLE_CREATE   = "RESTAURANT.TABLE.CREATE";
+    public static final String RESTAURANT_TABLE_UPDATE   = "RESTAURANT.TABLE.UPDATE";
+    public static final String PREP_STATION_CREATE       = "RESTAURANT.STATION.CREATE";
+    public static final String PREP_STATION_UPDATE       = "RESTAURANT.STATION.UPDATE";
+    public static final String PREP_ROUTING_REPLACE      = "RESTAURANT.ROUTING.REPLACE";
+    public static final String RESTAURANT_ORDER_OPEN     = "RESTAURANT.ORDER.OPEN";
+    public static final String RESTAURANT_ORDER_UPDATE   = "RESTAURANT.ORDER.UPDATE";
+    public static final String RESTAURANT_ORDER_SEND     = "RESTAURANT.ORDER.SEND";
+    /** A sent item was voided, or a void was refused for want of authority. */
+    public static final String RESTAURANT_ORDER_VOID     = "RESTAURANT.ORDER.VOID";
+    public static final String RESTAURANT_ORDER_BILL     = "RESTAURANT.ORDER.BILL";
+    public static final String RESTAURANT_ORDER_PAY      = "RESTAURANT.ORDER.PAY";
+    public static final String RESTAURANT_ORDER_CANCEL   = "RESTAURANT.ORDER.CANCEL";
+    public static final String RESTAURANT_ORDER_SPLIT    = "RESTAURANT.ORDER.SPLIT";
+    public static final String RESTAURANT_ORDER_MERGE    = "RESTAURANT.ORDER.MERGE";
+    public static final String RESTAURANT_ORDER_FIRE     = "RESTAURANT.ORDER.FIRE";
+    public static final String RESTAURANT_KITCHEN_READY  = "RESTAURANT.KITCHEN.READY";
+    public static final String RESTAURANT_KITCHEN_RECALL = "RESTAURANT.KITCHEN.RECALL";
+    public static final String MODIFIER_GROUP_CREATE     = "RESTAURANT.MODIFIER.CREATE";
+    public static final String MODIFIER_GROUP_UPDATE     = "RESTAURANT.MODIFIER.UPDATE";
 }

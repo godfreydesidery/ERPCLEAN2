@@ -77,6 +77,9 @@ enum GatedAction {
 
   /// POS-05: a categorised till expense paid out of the drawer.
   expense,
+
+  /// Cancel an item (or a whole order) already sent to the kitchen or bar.
+  restaurantVoid,
 }
 
 /// How one [GatedAction] is treated.
@@ -182,6 +185,15 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'POS.SESSION.RECONCILE',
     title: 'Manager approval — till expense',
     purpose: 'Pay a business expense out of the drawer.',
+  ),
+  GatedAction.restaurantVoid: StepUpRule(
+    requiresApproval: true,
+    // Must equal RestaurantOrderServiceImpl.VOID_PERMISSION on the server: the void carries the
+    // approver's uid and the server re-resolves it against this same code. The CASHIER bundle does
+    // not hold it, so a cashier cannot approve their own void.
+    permissionCode: 'RESTAURANT.ORDER.VOID',
+    title: 'Manager approval — void',
+    purpose: 'Cancel food or drinks the kitchen or bar has already been asked to make.',
   ),
   GatedAction.abandonUnfinishedSale: StepUpRule(
     requiresApproval: true,
