@@ -1,8 +1,8 @@
 # 0065 — Restaurant orders: open checks, prep-station tickets, bill, then payment
 
-- **Status:** Proposed (2026-10-24). Design approved in principle by the owner ("build it the
-  standard way"). **The DDL in Appendix A and the permission seed in Appendix B still need explicit
-  approval before any migration is written.**
+- **Status:** Accepted (2026-10-24). Design approved by the owner ("build it the standard way");
+  the DDL in Appendix A and the permission seed in Appendix B were approved the same day and ship
+  as `V107__restaurant_orders.sql` and an edit to `R__seed_permissions.sql`.
 - **Builds on:** ADR-0029 (POS tills, sessions, quick sale), ADR-0042 (POS idempotency, tenders,
   step-up authority), ADR-0044 (POS supermarket readiness).
 - **Requested by:** J COB (CAFE TULIA, tulia Ltd), 2026-10-24. A second food business they spoke to
@@ -117,7 +117,9 @@ free-text `products.category`) to a station within a branch, for example `Drinks
 `Coffee → Bar`. When an item is sent:
 
 1. If the product's category is mapped in this branch, the item goes to that station.
-2. Otherwise it goes to the branch's default station.
+2. Otherwise it goes to the branch's default station. The branch's first station becomes the
+   default automatically. If the default is later deactivated, the first active station by name
+   takes its place, so an unrouted item is never left without a slip.
 3. If the branch has no stations at all, the item is marked sent and **no slip prints.** This suits
    a counter-service café with no kitchen printer, where Send just locks the items.
 
@@ -144,7 +146,7 @@ network address on the server is the default, and the device override wins.
 
 **Header** (`restaurant_orders`):
 
-- `order_number`: `ORD-#####` per company, allocated from the existing `code_sequence` with the new
+- `order_number`: `ORD-####` per company (the shared `SalesDepthNumberGenerator` format), allocated from the existing `code_sequence` with the new
   entity kind `RESTAURANT_ORDER`, created lazily on first use with no seed row.
 - `order_type`: `DINE_IN` (table required) or `TAKEAWAY` (no table)
 - `restaurant_table_id`, `guest_count`
@@ -184,13 +186,14 @@ OPEN/BILLED ──cancel──▶ CANCELLED           (terminal; see D-9)
 The order is not bound to a POS session. Open checks carry across a shift change, as in every
 standard system. Payment binds to the **paying** till's open session (D-8).
 
-**Closing a session while the branch has open orders is allowed but warned:** the close response
-lists them. Refusing would strand a cashier at the end of a shift for a table someone else is
-serving.
+**Closing a session while the branch has open orders is allowed but warned.** Refusing would
+strand a cashier at the end of a shift for a table someone else is serving. The warning is given by
+the till, which reads the branch's live orders (`GET /restaurant/orders`) before it closes the
+shift; the session close response is unchanged, so no existing client is affected.
 
 ### D-6 — Send (fire)
 
-`POST /api/v1/restaurant-orders/uid/{uid}/send`
+`POST /api/v1/restaurant/orders/uid/{uid}/send`
 
 The server does the following under a `SELECT … FOR UPDATE` lock on the header, so two devices
 pressing Send cannot fire the same lines twice:
@@ -214,13 +217,13 @@ override. The server never prints:
 **Print failures do not undo the send.** The food may already be cooking from the other slip. The
 till shows "Kitchen slip failed" with a **Reprint** action:
 
-`GET /api/v1/restaurant-orders/uid/{uid}/slips?round=N&station=…`
+`GET /api/v1/restaurant/orders/uid/{uid}/slips?round=N&stationUid=…`
 
 This rebuilds the slip from the stored lines and marks it **REPRINT**.
 
 ### D-7 — Bill
 
-`POST /api/v1/restaurant-orders/uid/{uid}/bill`
+`POST /api/v1/restaurant/orders/uid/{uid}/bill`
 
 1. Prices every non-voided line through **the same path the sale uses** (`LinePriceResolver` + the
    invoice tax computation), for the order's customer or the walk-in customer.
@@ -240,7 +243,7 @@ allowed, and the bill response tells the till which lines were never sent, so it
 
 ### D-8 — Pay: the check becomes a POS sale, atomically
 
-`POST /api/v1/restaurant-orders/uid/{uid}/pay`
+`POST /api/v1/restaurant/orders/uid/{uid}/pay`
 
 The request carries `sessionUid`, `tenders[]`, `tenderedAmount`, `expectedTotal` and an
 `Idempotency-Key` header. In **one transaction** the server:
@@ -282,10 +285,10 @@ longer finds an open order.
 
 | Endpoint | Permission |
 |---|---|
-| `GET/POST/PATCH /restaurant-tables…`, `/prep-stations…`, `/prep-station-categories…` (writes) | `RESTAURANT.SETUP.MANAGE` |
+| `POST/PUT /restaurant/tables…`, `/restaurant/prep-stations…`, `PUT /restaurant/category-routes`, `GET /restaurant/product-categories` | `RESTAURANT.SETUP.MANAGE` |
 | `GET` of the same (floor, stations, mapping; needed by every till) | `RESTAURANT.ORDER.MANAGE` **or** `RESTAURANT.SETUP.MANAGE` |
-| `GET /restaurant-orders?status=&tableUid=` · `GET …/uid/{uid}` | `RESTAURANT.ORDER.MANAGE` |
-| `POST /restaurant-orders` · lines add/patch/delete · `/send` · `/slips` · `/bill` | `RESTAURANT.ORDER.MANAGE` |
+| `GET /restaurant/orders?status=&tableUid=` · `GET …/uid/{uid}` | `RESTAURANT.ORDER.MANAGE` |
+| `POST /restaurant/orders` · `PATCH …/uid/{uid}` · lines add/patch/delete · `/send` · `/slips` · `/bill` | `RESTAURANT.ORDER.MANAGE` |
 | `POST …/lines/uid/{lineUid}/void` · `POST …/cancel` (when SENT lines exist) | `RESTAURANT.ORDER.VOID` (or step-up) |
 | `POST …/pay` | `RESTAURANT.ORDER.MANAGE` **and** `POS.SALE.CREATE` |
 
@@ -384,7 +387,7 @@ The menu grid shows the **VAT-inclusive unit price** under each item name, in pl
 
 ---
 
-## Appendix A — Proposed DDL: `V107__restaurant_orders.sql` (NOT YET APPROVED)
+## Appendix A — DDL: `V107__restaurant_orders.sql` (approved 2026-10-24)
 
 Style mirrors `V37__pos.sql`: plural tables, singular constraint roots, `ix_<plural table>_…`
 indexes. Every table is new and empty, so there is no populated-table risk. No ALTER on any
@@ -569,7 +572,7 @@ CREATE INDEX ix_restaurant_order_lines_order_id ON restaurant_order_lines (resta
 CREATE INDEX ix_restaurant_order_lines_product  ON restaurant_order_lines (product_id);
 ```
 
-## Appendix B — Proposed permission seed (edit to `R__seed_permissions.sql`, NOT YET APPROVED)
+## Appendix B — Permission seed (edit to `R__seed_permissions.sql`, approved 2026-10-24)
 
 ```sql
 -- permissions
