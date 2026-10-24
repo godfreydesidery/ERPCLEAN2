@@ -599,4 +599,9 @@ public final class AuditActions {
     public static final String RESTAURANT_ORDER_CANCEL   = "RESTAURANT.ORDER.CANCEL";
     public static final String RESTAURANT_ORDER_SPLIT    = "RESTAURANT.ORDER.SPLIT";
     public static final String RESTAURANT_ORDER_MERGE    = "RESTAURANT.ORDER.MERGE";
+    public static final String RESTAURANT_ORDER_FIRE     = "RESTAURANT.ORDER.FIRE";
+    public static final String RESTAURANT_KITCHEN_READY  = "RESTAURANT.KITCHEN.READY";
+    public static final String RESTAURANT_KITCHEN_RECALL = "RESTAURANT.KITCHEN.RECALL";
+    public static final String MODIFIER_GROUP_CREATE     = "RESTAURANT.MODIFIER.CREATE";
+    public static final String MODIFIER_GROUP_UPDATE     = "RESTAURANT.MODIFIER.UPDATE";
 }

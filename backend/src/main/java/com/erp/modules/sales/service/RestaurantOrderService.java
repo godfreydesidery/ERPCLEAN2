@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.dto.AddRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.BillRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -49,8 +50,11 @@ public interface RestaurantOrderService {
     /** Deletes an UNSENT item. A sent one must be voided. */
     RestaurantOrderDto deleteLine(String uid, String lineUid);
 
-    /** Fires every unsent item and returns one slip per prep station to print. */
+    /** Fires every unsent item that is not held and returns one slip per prep station to print. */
     RestaurantSendResultDto send(String uid);
+
+    /** Releases held items — of one course, or all — and sends them (ADR-0066 D-5). */
+    RestaurantSendResultDto fire(String uid, FireRestaurantOrderRequest request);
 
     /**
      * Rebuilds slips for reprinting: round {@code round} (null = the latest), optionally for one

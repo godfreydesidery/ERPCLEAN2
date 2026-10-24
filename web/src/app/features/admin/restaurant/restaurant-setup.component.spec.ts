@@ -13,6 +13,8 @@ import { of, throwError } from 'rxjs';
 import { assertA11y } from '../../../../testing/a11y.helper';
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { CompanyService } from '../company/company.service';
+import { OrganisationService } from '../organisation/organisation.service';
 import { RestaurantService } from './restaurant.service';
 import { RestaurantSetupComponent } from './restaurant-setup.component';
 
@@ -23,7 +25,7 @@ const kitchen = {
 const bar = { ...kitchen, id: '2', uid: 'S2', name: 'Bar', printerHost: null, defaultStation: false };
 const table = {
   id: '9', uid: 'T1', branchId: '2', name: 'T1', seats: 4, area: 'Inside', sortOrder: 1,
-  status: 'ACTIVE' as const, state: 'OCCUPIED' as const, liveOrderCount: 1,
+  status: 'ACTIVE' as const, state: 'OCCUPIED' as const, liveOrderCount: 1, readyItemCount: 0,
 };
 
 function makeBed(opts: { tablesError?: unknown } = {}) {
@@ -34,6 +36,7 @@ function makeBed(opts: { tablesError?: unknown } = {}) {
       { uid: 'R1', category: 'Drinks', prepStationUid: 'S2', prepStationName: 'Bar' },
     ])),
     listProductCategories: vi.fn(() => of(['Food', 'drinks'])),
+    listModifierGroups: vi.fn(() => of([])),
     replaceCategoryRoutes: vi.fn(() => of([])),
     createTable: vi.fn(() => of(table)),
     updateTable: vi.fn(() => of(table)),
@@ -45,6 +48,8 @@ function makeBed(opts: { tablesError?: unknown } = {}) {
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
       { provide: RestaurantService, useValue: restaurant },
+      { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
+      { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
       {
         provide: AuthService,
         useValue: {

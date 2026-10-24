@@ -514,6 +514,7 @@ export class ShellComponent {
         { label: 'POS Sessions', route: '/admin/pos/sessions', icon: 'bi-shop', available: true, permission: 'POS.SESSION.VIEW' },
         { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-safe2', available: true, permission: 'POS.TILL.VIEW' },
         { label: 'Restaurant Orders', route: '/admin/restaurant/orders', icon: 'bi-receipt', available: true, permission: 'RESTAURANT.ORDER.MANAGE' },
+        { label: 'Kitchen Display', route: '/admin/restaurant/kitchen', icon: 'bi-fire', available: true, permission: 'RESTAURANT.KITCHEN.MANAGE' },
         { label: 'Restaurant Setup', route: '/admin/restaurant/setup', icon: 'bi-cup-hot', available: true, permission: 'RESTAURANT.SETUP.MANAGE' },
       ],
     },

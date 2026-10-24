@@ -6,6 +6,8 @@ import {
   CancelRestaurantOrderRequest,
   CreatePrepStationRequest,
   CreateRestaurantTableRequest,
+  KitchenTicketDto,
+  ModifierGroupDto,
   PrepStationCategoryDto,
   PrepStationDto,
   ReplaceCategoryRoutesRequest,
@@ -13,6 +15,7 @@ import {
   RestaurantOrderStatus,
   RestaurantTableDto,
   RestaurantVoidResultDto,
+  SaveModifierGroupRequest,
   UpdatePrepStationRequest,
   UpdateRestaurantTableRequest,
 } from './models/restaurant.model';
@@ -70,6 +73,36 @@ export class RestaurantService {
   /** The product categories in use in the company — the rows of the routing screen. */
   listProductCategories(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/product-categories`);
+  }
+
+  // ── Choices & add-ons (ADR-0066 D-4) ─────────────────────────────────────
+
+  listModifierGroups(): Observable<ModifierGroupDto[]> {
+    return this.http.get<ModifierGroupDto[]>(`${this.base}/modifier-groups`);
+  }
+
+  createModifierGroup(request: SaveModifierGroupRequest): Observable<ModifierGroupDto> {
+    return this.http.post<ModifierGroupDto>(`${this.base}/modifier-groups`, request);
+  }
+
+  updateModifierGroup(uid: string, request: SaveModifierGroupRequest): Observable<ModifierGroupDto> {
+    return this.http.put<ModifierGroupDto>(`${this.base}/modifier-groups/uid/${uid}`, request);
+  }
+
+  // ── Kitchen display (ADR-0066 D-6) ────────────────────────────────────────
+
+  kitchenTickets(stationUid: string): Observable<KitchenTicketDto[]> {
+    return this.http.get<KitchenTicketDto[]>(`${this.base}/kitchen`, {
+      params: new HttpParams().set('stationUid', stationUid),
+    });
+  }
+
+  kitchenReady(lineUids: string[]): Observable<void> {
+    return this.http.post<void>(`${this.base}/kitchen/ready`, { lineUids });
+  }
+
+  kitchenRecall(lineUids: string[]): Observable<void> {
+    return this.http.post<void>(`${this.base}/kitchen/recall`, { lineUids });
   }
 
   // ── Orders ────────────────────────────────────────────────────────────────

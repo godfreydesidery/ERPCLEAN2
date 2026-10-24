@@ -14,6 +14,11 @@ String _qty(double q) => formatAmount(q, decimals: q % 1 == 0 ? 0 : 3);
 String _time(DateTime? at) =>
     DateFormat('dd/MM/yyyy HH:mm').format((at ?? DateTime.now()).toLocal());
 
+/// [text] wrapped to fit, every line indented by [by] spaces. ([wrapText] drops
+/// leading spaces, so the indent is added after wrapping.)
+List<String> _indented(String text, int by, int width) =>
+    [for (final l in wrapText(text, width - by)) '${' ' * by}$l'];
+
 /// A slip for one prep station. Says WHAT to make (or stop making) and for
 /// WHOM — never a price. A VOID slip leads with the cancellation so a cook
 /// glancing at the rail cannot mistake it for a new order.
@@ -32,14 +37,26 @@ String buildSlipText(PrepSlip slip, {required int width}) {
     ...labelValue('By', slip.byName, width),
     rule(width),
   ];
+  // Course headings only when the slip spans more than one course.
+  final courses = slip.lines.where((l) => !l.addOn).map((l) => l.course).toSet();
+  int? course;
   for (final l in slip.lines) {
+    if (l.addOn) {
+      // An add-on belongs to the item above it: indented, never a line of its own.
+      lines.addAll(_indented('+ ${_qty(l.quantity)} ${l.productName}', 4, width));
+      continue;
+    }
+    if (courses.length > 1 && l.course != course) {
+      course = l.course;
+      lines.add(centered('-- COURSE $course --', width));
+    }
     final head = '${_qty(l.quantity)} x ${l.productName}';
     lines.addAll(wrapText(head, width));
     if (l.note != null && l.note!.trim().isNotEmpty) {
-      lines.addAll(wrapText('  >> ${l.note!.trim()}', width));
+      lines.addAll(_indented('>> ${l.note!.trim()}', 2, width));
     }
     if (slip.isVoid && l.voidReason != null && l.voidReason!.trim().isNotEmpty) {
-      lines.addAll(wrapText('  Reason: ${l.voidReason!.trim()}', width));
+      lines.addAll(_indented('Reason: ${l.voidReason!.trim()}', 2, width));
     }
   }
   lines.add(rule(width));

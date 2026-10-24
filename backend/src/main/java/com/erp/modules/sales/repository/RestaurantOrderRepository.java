@@ -25,6 +25,9 @@ public interface RestaurantOrderRepository extends JpaRepository<RestaurantOrder
     Optional<RestaurantOrder> findByCompanyIdAndUidForUpdate(@Param("companyId") Long companyId,
                                                              @Param("uid") String uid);
 
+    /** Company-scoped batch lookup (kitchen tickets). */
+    List<RestaurantOrder> findByCompanyIdAndIdIn(Long companyId, Collection<Long> ids);
+
     List<RestaurantOrder> findByCompanyIdAndBranchIdAndStatusInOrderByOpenedAtAsc(
             Long companyId, Long branchId, Collection<RestaurantOrderStatus> statuses);
 

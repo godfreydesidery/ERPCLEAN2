@@ -83,6 +83,28 @@ public class RestaurantOrderLine extends UidEntity {
     @Column(name = "void_reason", length = 255)
     private String voidReason;
 
+    /**
+     * Set on a priced add-on (ADR-0066 D-4): the item line this one was chosen on. A child follows
+     * its parent everywhere — sent, voided, split, merged and re-quantified with it.
+     */
+    @Column(name = "parent_line_id")
+    private Long parentLineId;
+
+    /** 1 = starters/drinks, 2 = mains, 3 = dessert... (ADR-0066 D-5). */
+    @Column(name = "course", nullable = false)
+    private Short course = 1;
+
+    /** A held item is not sent until it is fired ("mains later"). */
+    @Column(name = "held", nullable = false)
+    private boolean held;
+
+    /** When the kitchen display marked it ready (ADR-0066 D-6). */
+    @Column(name = "ready_at")
+    private Instant readyAt;
+
+    @Column(name = "ready_by")
+    private Long readyBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -120,6 +142,40 @@ public class RestaurantOrderLine extends UidEntity {
 
     public boolean isVoided() {
         return status == RestaurantOrderLineStatus.VOIDED;
+    }
+
+    /** True for a priced add-on chosen on another line. */
+    public boolean isChild() {
+        return parentLineId != null;
+    }
+
+    /** Makes this a priced add-on of [parentId]. */
+    public void attachTo(Long parentId) {
+        this.parentLineId = parentId;
+    }
+
+    /** Course and hold of an unsent line (children follow their parent's). */
+    public void plan(short course, boolean held, Long by, Instant at) {
+        requirePending();
+        this.course    = course;
+        this.held      = held;
+        this.updatedBy = by;
+        this.updatedAt = at;
+    }
+
+    /** The kitchen display bumped it: made (or, for a void, seen). */
+    public void markReady(Long by, Instant at) {
+        if (isPending()) {
+            throw new IllegalStateException("This item has not been sent yet.");
+        }
+        this.readyAt = at;
+        this.readyBy = by;
+    }
+
+    /** Undoes a bump made by mistake. */
+    public void recall() {
+        this.readyAt = null;
+        this.readyBy = null;
     }
 
     /** Changes an unsent line. A sent line is immutable — the service refuses before this. */
@@ -163,6 +219,10 @@ public class RestaurantOrderLine extends UidEntity {
         voided.prepStationId     = prepStationId;
         voided.sentAt            = sentAt;
         voided.sentBy            = sentBy;
+        voided.course            = course;
+        voided.held              = held;
+        voided.readyAt           = readyAt;
+        voided.readyBy           = readyBy;
         voided.createdBy         = by;
         voided.markVoided(reason, by, authorisedBy, at);
         this.quantity  = quantity.subtract(voidQty);
@@ -214,6 +274,10 @@ public class RestaurantOrderLine extends UidEntity {
         copy.prepStationId     = prepStationId;
         copy.sentAt            = sentAt;
         copy.sentBy            = sentBy;
+        copy.course            = course;
+        copy.held              = held;
+        copy.readyAt           = readyAt;
+        copy.readyBy           = readyBy;
         copy.createdBy         = by;
         this.quantity  = quantity.subtract(qty);
         this.updatedBy = by;

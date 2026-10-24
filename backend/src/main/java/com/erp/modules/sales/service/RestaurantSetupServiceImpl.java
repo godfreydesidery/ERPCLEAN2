@@ -16,6 +16,7 @@ import com.erp.modules.sales.domain.enums.RestaurantOrderStatus;
 import com.erp.modules.sales.domain.enums.RestaurantTableState;
 import com.erp.modules.sales.repository.PrepStationCategoryRepository;
 import com.erp.modules.sales.repository.PrepStationRepository;
+import com.erp.modules.sales.repository.RestaurantOrderLineRepository;
 import com.erp.modules.sales.repository.RestaurantOrderRepository;
 import com.erp.modules.sales.repository.RestaurantTableRepository;
 import com.erp.platform.audit.AuditActions;
@@ -47,6 +48,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
     private final PrepStationRepository stations;
     private final PrepStationCategoryRepository routes;
     private final RestaurantOrderRepository orders;
+    private final RestaurantOrderLineRepository orderLines;
     private final RestaurantScope scope;
     private final AuditService audit;
     private final JdbcTemplate jdbc;
@@ -55,6 +57,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                                       PrepStationRepository stations,
                                       PrepStationCategoryRepository routes,
                                       RestaurantOrderRepository orders,
+                                      RestaurantOrderLineRepository orderLines,
                                       RestaurantScope scope,
                                       AuditService audit,
                                       JdbcTemplate jdbc) {
@@ -62,6 +65,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
         this.stations = stations;
         this.routes   = routes;
         this.orders   = orders;
+        this.orderLines = orderLines;
         this.scope    = scope;
         this.audit    = audit;
         this.jdbc     = jdbc;
@@ -82,9 +86,11 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                 .stream()
                 .filter(o -> o.getRestaurantTableId() != null)
                 .collect(Collectors.groupingBy(RestaurantOrder::getRestaurantTableId));
+        Map<Long, Integer> ready = readyItemsByTable(liveByTable);
         return tables.findByCompanyIdAndBranchIdOrderBySortOrderAscNameAsc(companyId, branchId)
                 .stream()
-                .map(t -> toDto(t, liveByTable.getOrDefault(t.getId(), List.of())))
+                .map(t -> toDto(t, liveByTable.getOrDefault(t.getId(), List.of()),
+                        ready.getOrDefault(t.getId(), 0)))
                 .toList();
     }
 
@@ -107,7 +113,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
         t = tables.save(t);
         audit.record(AuditEvent.of(AuditActions.RESTAURANT_TABLE_CREATE, "restaurant_tables",
                 t.getId(), t.getUid()).detail(Map.of("name", name)));
-        return toDto(t, List.of());
+        return toDto(t, List.of(), 0);
     }
 
     @Override
@@ -136,7 +142,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                 t.getId(), t.getUid()).detail(Map.of("name", name, "status", t.getStatus().name())));
         var live = orders.findByCompanyIdAndBranchIdAndRestaurantTableIdAndStatusInOrderByOpenedAtAsc(
                 t.getCompanyId(), t.getBranchId(), t.getId(), LIVE);
-        return toDto(t, live);
+        return toDto(t, live, readyItemsByTable(Map.of(t.getId(), live)).getOrDefault(t.getId(), 0));
     }
 
     // -------------------------------------------------------------------------
@@ -313,14 +319,34 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
     // Mapping
     // -------------------------------------------------------------------------
 
-    static RestaurantTableDto toDto(RestaurantTable t, List<RestaurantOrder> live) {
+    /**
+     * Items the kitchen has marked ready on each table's live orders (ADR-0066 D-6) — the floor
+     * shows "Food ready". Add-ons and voided items are not counted. One read for the whole floor.
+     */
+    private Map<Long, Integer> readyItemsByTable(Map<Long, List<RestaurantOrder>> liveByTable) {
+        Map<Long, Long> tableByOrder = new HashMap<>();
+        liveByTable.forEach((tableId, os) -> os.forEach(o -> tableByOrder.put(o.getId(), tableId)));
+        if (tableByOrder.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> out = new HashMap<>();
+        for (var l : orderLines.findByRestaurantOrderIdInOrderByLineNoAsc(tableByOrder.keySet())) {
+            if (l.getReadyAt() != null && !l.isVoided() && !l.isChild()) {
+                out.merge(tableByOrder.get(l.getRestaurantOrderId()), 1, Integer::sum);
+            }
+        }
+        return out;
+    }
+
+    static RestaurantTableDto toDto(RestaurantTable t, List<RestaurantOrder> live, int readyItems) {
         RestaurantTableState state = live.isEmpty()
                 ? RestaurantTableState.FREE
                 : live.stream().anyMatch(o -> o.getStatus() == RestaurantOrderStatus.BILLED)
                         ? RestaurantTableState.BILLED
                         : RestaurantTableState.OCCUPIED;
         return new RestaurantTableDto(t.getId(), t.getUid(), t.getBranchId(), t.getName(),
-                t.getSeats(), t.getArea(), t.getSortOrder(), t.getStatus(), state, live.size());
+                t.getSeats(), t.getArea(), t.getSortOrder(), t.getStatus(), state, live.size(),
+                readyItems);
     }
 
     static PrepStationDto toDto(PrepStation s) {

@@ -45,20 +45,51 @@ class RestaurantService {
           {required String productId,
           required String unitId,
           double? quantity,
-          String? note}) async =>
+          String? note,
+          List<String> optionUids = const [],
+          int? course,
+          bool held = false}) async =>
       RestaurantOrder.fromJson(asMap(await _api.post('$_orders/uid/$uid/lines', body: {
         'productId': productId,
         'unitId': unitId,
         'quantity': ?quantity,
         'note': ?note,
+        if (optionUids.isNotEmpty) 'modifierOptionUids': optionUids,
+        'course': ?course,
+        if (held) 'held': true,
       })));
 
   /// Changes an item that has not been sent yet.
   Future<RestaurantOrder> changeItem(String uid, String lineUid,
-          {required double quantity, String? note}) async =>
+          {required double quantity, String? note, int? course, bool? held}) async =>
       RestaurantOrder.fromJson(asMap(await _api.patch(
           '$_orders/uid/$uid/lines/uid/$lineUid',
-          body: {'quantity': quantity, 'note': note})));
+          body: {'quantity': quantity, 'note': note, 'course': ?course, 'held': ?held})));
+
+  /// Releases held items — of [course], or all — and sends them ("mains now").
+  Future<OrderWithSlips> fire(String uid, {int? course}) async =>
+      OrderWithSlips.fromJson(asMap(
+          await _api.post('$_orders/uid/$uid/fire', body: {'course': ?course})));
+
+  // ---------------------------------------------------------------- choices (ADR-0066 D-4)
+
+  /// The active choices of the company's menu.
+  Future<List<ModifierGroup>> listModifierGroups() async =>
+      ModifierGroup.activeFrom(await _api.get('$_base/modifier-groups'));
+
+  /// Product uid → the uids of the groups it offers, in order.
+  Future<Map<String, List<String>>> listModifierLinks() async {
+    final data = await _api.get('$_base/modifier-links');
+    final out = <String, List<String>>{};
+    if (data is List) {
+      for (final m in data.whereType<Map>()) {
+        final uid = m['productUid']?.toString();
+        final groups = (m['groupUids'] as List? ?? const []).map((e) => e.toString()).toList();
+        if (uid != null && groups.isNotEmpty) out[uid] = groups;
+      }
+    }
+    return out;
+  }
 
   /// Removes an item that has not been sent yet.
   Future<RestaurantOrder> removeItem(String uid, String lineUid) async =>

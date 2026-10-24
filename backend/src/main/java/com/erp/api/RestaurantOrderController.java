@@ -4,6 +4,7 @@ import com.erp.modules.sales.domain.dto.AddRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.BillRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -112,6 +113,14 @@ public class RestaurantOrderController {
     @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
     public RestaurantSendResultDto send(@PathVariable String uid) {
         return orders.send(uid);
+    }
+
+    /** Releases held items — of one course, or all — and sends them ("mains now"). */
+    @PostMapping("/uid/{uid}/fire")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
+    public RestaurantSendResultDto fire(@PathVariable String uid,
+                                       @Valid @RequestBody(required = false) FireRestaurantOrderRequest request) {
+        return orders.fire(uid, request);
     }
 
     /** Rebuilds slips to reprint: {@code round} absent = the latest. */

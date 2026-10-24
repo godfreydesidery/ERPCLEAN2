@@ -46,6 +46,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   List<RestaurantOrder> _live = const [];
   List<PrepStation> _stations = const [];
 
+  /// The menu's choices (ADR-0066 D-4), and which items ask them (product uid →
+  /// group uids). Empty against a server without them.
+  List<ModifierGroup> _groups = const [];
+  Map<String, List<String>> _links = const {};
+
   // ---------------------------------------------------------------- order
   RestaurantOrder? _order;
   bool _busy = false;
@@ -109,7 +114,31 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           : e.isNotFound
               ? _Load.unsupported
               : _Load.error);
+      return;
     }
+    await _loadChoices();
+  }
+
+  /// Best effort: a menu without choices (or an older server) just adds plain.
+  Future<void> _loadChoices() async {
+    try {
+      final groups = await _svc.listModifierGroups();
+      final links = await _svc.listModifierLinks();
+      if (mounted) {
+        setState(() {
+          _groups = groups;
+          _links = links;
+        });
+      }
+    } catch (_) {/* plain items only */}
+  }
+
+  /// The active groups [p] offers, in order.
+  List<ModifierGroup> _groupsFor(Product p) {
+    final uids = _links[p.uid] ?? const [];
+    return [
+      for (final uid in uids) ?_groups.where((g) => g.uid == uid).firstOrNull,
+    ];
   }
 
   Future<void> _browse() async {
@@ -226,7 +255,25 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   // ================================================================ order actions
 
-  Future<void> _add(Product p, {String? note}) async {
+  /// A tap: straight onto the order, unless the item asks a choice ("Milk?").
+  Future<void> _add(Product p) async {
+    if (_groupsFor(p).isNotEmpty) return _addWithChoices(p);
+    await _addItem(p);
+  }
+
+  /// A long-press (or an item with choices): choices, course, hold and a note.
+  Future<void> _addWithChoices(Product p) async {
+    final choice = await askItemChoices(context, p.name, _groupsFor(p));
+    if (choice == null || !mounted) return;
+    await _addItem(p,
+        note: choice.note,
+        optionUids: choice.optionUids,
+        course: choice.course,
+        held: choice.held);
+  }
+
+  Future<void> _addItem(Product p,
+      {String? note, List<String> optionUids = const [], int? course, bool held = false}) async {
     final order = _order;
     if (order == null) return;
     final unit = ref.read(appControllerProvider).unitsByUid[p.baseUnitUid];
@@ -234,16 +281,47 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       showToast(context, '${p.name}: no usable unit.');
       return;
     }
-    final updated = await _run(() =>
-        _svc.addItem(order.uid, productId: p.id, unitId: unit.id, note: note));
+    final updated = await _run(() => _svc.addItem(order.uid,
+        productId: p.id,
+        unitId: unit.id,
+        note: note,
+        optionUids: optionUids,
+        course: course,
+        held: held));
     if (updated != null) _showOrder(updated);
   }
 
-  Future<void> _addWithNote(Product p) async {
-    final note = await _askText(context, 'Note for ${p.name}',
-        hint: 'e.g. no sugar, well done', maxLength: 200);
-    if (note == null || note.trim().isEmpty || !mounted) return;
-    await _add(p, note: note.trim());
+  /// Hold an unsent item back, or release it (ADR-0066 D-5).
+  Future<void> _toggleHold(RestaurantOrderLine l) => _plan(l, held: !l.held);
+
+  /// Moves an unsent item to the next course (1 → 2 → 3 → 1).
+  Future<void> _nextCourse(RestaurantOrderLine l) => _plan(l, course: l.course % 3 + 1);
+
+  Future<void> _plan(RestaurantOrderLine l, {int? course, bool? held}) async {
+    final order = _order;
+    if (order == null) return;
+    final updated = await _run(() => _svc.changeItem(order.uid, l.uid,
+        quantity: l.quantity, note: l.note, course: course, held: held));
+    if (updated != null) _showOrder(updated);
+  }
+
+  /// Fires held items: the one course waiting, or the one the waiter picks.
+  Future<void> _fire() async {
+    final order = _order;
+    if (order == null) return;
+    final courses = order.lines
+        .where((l) => l.isPending && l.held && !l.isAddOn)
+        .map((l) => l.course)
+        .toSet()
+        .toList()
+      ..sort();
+    if (courses.isEmpty) return;
+    final course = courses.length == 1 ? courses.first : await askFireCourse(context, courses);
+    if (course == null || !mounted) return;
+    final res = await _run(() => _svc.fire(order.uid, course: course));
+    if (res == null || !mounted) return;
+    _showOrder(res.order);
+    await _printSlips(res.slips, okMessage: 'Course $course sent');
   }
 
   Future<void> _changeQty(RestaurantOrderLine l, double delta) async {
@@ -755,7 +833,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           child: InkWell(
             borderRadius: AppRadii.brLg,
             onTap: _busy ? null : () => _add(p),
-            onLongPress: _busy ? null : () => _addWithNote(p),
+            onLongPress: _busy ? null : () => _addWithChoices(p),
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -833,9 +911,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   // ---------------------------------------------------------------- ticket
 
   Widget _ticket(RestaurantOrder order) {
-    final pending = order.lines.where((l) => l.isPending).toList();
-    final sent = order.lines.where((l) => !l.isPending).toList()
-      ..sort((a, b) => (a.fireRound ?? 0).compareTo(b.fireRound ?? 0));
+    final pending = _withAddOns(order.lines.where((l) => l.isPending).toList(), byCourse: true);
+    final sent = _withAddOns(order.lines.where((l) => !l.isPending).toList(), byCourse: false);
+    final toSend = pending.where((l) => !l.held && !l.isAddOn).length;
+    final heldCount = pending.where((l) => l.held && !l.isAddOn).length;
     final billed = order.status == OrderStatus.billed && order.billedTotal != null;
     final estimate = billed ? null : _estimate(order);
     final hasItems = order.activeLines.isNotEmpty;
@@ -901,7 +980,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           Expanded(
             child: order.lines.isEmpty
                 ? const Center(
-                    child: Text('Tap menu items to build the order.\nLong-press to add a note.',
+                    child: Text('Tap menu items to build the order.\nLong-press for choices, a course or a note.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.ink3)))
                 : ListView(
@@ -909,11 +988,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     children: [
                       if (pending.isNotEmpty) ...[
                         _groupLabel('NEW — NOT SENT YET', AppColors.warn),
-                        for (final l in pending) _pendingRow(l),
+                        for (final l in pending) l.isAddOn ? _addOnRow(l) : _pendingRow(l),
                       ],
                       if (sent.isNotEmpty) ...[
                         _groupLabel('SENT', AppColors.ink3),
-                        for (final l in sent) _sentRow(l),
+                        for (final l in sent) l.isAddOn ? _addOnRow(l) : _sentRow(l),
                       ],
                     ],
                   ),
@@ -924,13 +1003,25 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
               children: [
                 Expanded(
                   child: OrbixButton(
-                    label: pending.isEmpty ? 'Send' : 'Send (${pending.length})',
+                    label: toSend == 0 ? 'Send' : 'Send ($toSend)',
                     icon: Icons.soup_kitchen_outlined,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: pending.isEmpty || _busy ? null : _send,
+                    onPressed: toSend == 0 || _busy ? null : _send,
                   ),
                 ),
+                if (heldCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OrbixButton(
+                      label: 'Fire ($heldCount)',
+                      icon: Icons.local_fire_department_outlined,
+                      kind: BtnKind.ghost,
+                      block: true,
+                      onPressed: _busy ? null : _fire,
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 Expanded(
                   child: OrbixButton(
@@ -1007,6 +1098,66 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                 fontSize: 11, fontWeight: FontWeight.w800, color: color, letterSpacing: .4)),
       );
 
+  /// Items in order, each followed by its own add-ons; unsent items by course.
+  static List<RestaurantOrderLine> _withAddOns(List<RestaurantOrderLine> lines,
+      {required bool byCourse}) {
+    final items = lines.where((l) => !l.isAddOn).toList();
+    if (byCourse) {
+      items.sort((a, b) => a.course.compareTo(b.course));
+    } else {
+      items.sort((a, b) => (a.fireRound ?? 0).compareTo(b.fireRound ?? 0));
+    }
+    final out = <RestaurantOrderLine>[];
+    final placed = <String>{};
+    for (final item in items) {
+      out.add(item);
+      for (final a in lines.where((x) => x.parentLineUid == item.uid)) {
+        out.add(a);
+        placed.add(a.uid);
+      }
+    }
+    out.addAll(lines.where((l) => l.isAddOn && !placed.contains(l.uid)));
+    return out;
+  }
+
+  /// An add-on, under its item: changed, sent and voided with it, never alone.
+  Widget _addOnRow(RestaurantOrderLine l) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(46, 0, 8, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text('+ ${l.productName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: l.isVoided ? AppColors.ink3 : AppColors.ink2,
+                    decoration: l.isVoided ? TextDecoration.lineThrough : null)),
+          ),
+          Text(formatAmount(l.quantity, decimals: 0),
+              style: const TextStyle(fontSize: 13, color: AppColors.ink2)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String text, Color color, {VoidCallback? onTap, String? tooltip}) => Tooltip(
+        message: tooltip ?? '',
+        child: InkWell(
+          borderRadius: AppRadii.brPill,
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+                borderRadius: AppRadii.brPill, border: Border.all(color: color)),
+            child: Text(text,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+          ),
+        ),
+      );
+
   Widget _pendingRow(RestaurantOrderLine l) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1020,6 +1171,19 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      _chip('Course ${l.course}', AppColors.brand,
+                          tooltip: 'Move to the next course',
+                          onTap: _busy ? null : () => _nextCourse(l)),
+                      _chip(l.held ? 'Held' : 'Hold', l.held ? AppColors.warn : AppColors.ink3,
+                          tooltip: l.held ? 'Release: send with the next Send' : 'Hold until fired',
+                          onTap: _busy ? null : () => _toggleHold(l)),
+                    ],
+                  ),
+                ),
                 if (l.note != null)
                   Text(l.note!,
                       style: const TextStyle(fontSize: 12, color: AppColors.ink2)),
@@ -1071,12 +1235,20 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                 Text(
                     voided
                         ? 'Voided: ${l.voidReason ?? ''}'
-                        : '${l.prepStationName ?? 'No station'} · round ${l.fireRound ?? 1}'
+                        : '${l.isReady ? 'READY · ' : ''}'
+                            '${l.prepStationName ?? 'No station'} · round ${l.fireRound ?? 1}'
+                            '${l.course > 1 ? ' · course ${l.course}' : ''}'
                             '${l.note != null ? ' · ${l.note}' : ''}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        fontSize: 12, color: voided ? AppColors.danger : AppColors.ink2)),
+                        fontSize: 12,
+                        fontWeight: l.isReady ? FontWeight.w700 : null,
+                        color: voided
+                            ? AppColors.danger
+                            : l.isReady
+                                ? AppColors.ok
+                                : AppColors.ink2)),
               ],
             ),
           ),
@@ -1152,7 +1324,10 @@ class _TableTile extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              Text(label, style: TextStyle(color: border, fontWeight: FontWeight.w700)),
+              Text(table.readyItemCount > 0 ? 'Food ready' : label,
+                  style: TextStyle(
+                      color: table.readyItemCount > 0 ? AppColors.ok : border,
+                      fontWeight: FontWeight.w800)),
               Text('seats ${table.seats}${table.area != null ? ' · ${table.area}' : ''}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1190,30 +1365,4 @@ class _FloorNotice extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A one-line text prompt. Returns null when backed out.
-Future<String?> _askText(BuildContext context, String title,
-    {String? hint, int maxLength = 200}) {
-  final ctrl = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (_) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
-      title: Text(title),
-      content: TextField(
-        controller: ctrl,
-        autofocus: true,
-        maxLength: maxLength,
-        decoration: InputDecoration(hintText: hint),
-        onSubmitted: (v) => Navigator.pop(context, v),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        OrbixButton(label: 'Add', onPressed: () => Navigator.pop(context, ctrl.text)),
-      ],
-    ),
-  ).whenComplete(ctrl.dispose);
 }

@@ -125,6 +125,38 @@ void main() {
       expect(o.lines.first.productId, '147');
     });
 
+    test('choices: only active groups with active options; rules read as words', () {
+      final groups = ModifierGroup.activeFrom([
+        {'uid': 'G1', 'name': 'Milk', 'minSelect': 1, 'maxSelect': 1, 'status': 'ACTIVE', 'options': [
+          {'uid': 'O1', 'label': 'Oat', 'status': 'ACTIVE'},
+          {'uid': 'O2', 'label': 'Soy', 'status': 'INACTIVE'},
+        ]},
+        {'uid': 'G2', 'name': 'Old', 'minSelect': 0, 'status': 'INACTIVE', 'options': [
+          {'uid': 'O3', 'label': 'X', 'status': 'ACTIVE'},
+        ]},
+        {'uid': 'G3', 'name': 'Extras', 'minSelect': 0, 'maxSelect': null, 'status': 'ACTIVE', 'options': [
+          {'uid': 'O4', 'label': 'Syrup', 'productUid': 'P9', 'status': 'ACTIVE'},
+        ]},
+      ]);
+      expect(groups.map((g) => g.name), ['Milk', 'Extras']);
+      expect(groups.first.options.map((o) => o.label), ['Oat']);
+      expect(groups.first.rule, 'Choose 1');
+      expect(groups.first.single, isTrue);
+      expect(groups.last.rule, 'Optional');
+      expect(groups.last.options.single.priced, isTrue);
+    });
+
+    test('an add-on line knows its item; held and ready parse', () {
+      final l = RestaurantOrderLine.fromJson({
+        'uid': 'L2', 'productId': '9', 'productName': 'Syrup', 'unitId': '1', 'quantity': 2,
+        'status': 'SENT', 'parentLineUid': 'L1', 'course': 2, 'held': false,
+        'readyAt': '2026-10-24T12:00:00Z',
+      });
+      expect(l.isAddOn, isTrue);
+      expect(l.course, 2);
+      expect(l.isReady, isTrue);
+    });
+
     test('a takeaway says so, and a table state parses', () {
       expect(RestaurantOrder.fromJson({'orderType': 'TAKEAWAY'}).where, 'Takeaway');
       expect(RestaurantTable.fromJson({'state': 'BILLED', 'status': 'ACTIVE'}).state,
@@ -144,6 +176,23 @@ void main() {
       for (final line in text.split('\n')) {
         expect(line.length, lessThanOrEqualTo(32), reason: line);
       }
+    });
+
+    test('add-ons print indented under their item; courses get headings', () {
+      final slip = PrepSlip(
+        isVoid: false, stationUid: 'S1', stationName: 'Kitchen', printerPort: 9100,
+        orderNumber: 'ORD-0009', takeaway: true, round: 1, reprint: false, byName: 'Asha',
+        lines: [
+          PrepSlipLine(productName: 'Soup', quantity: 1, course: 1),
+          PrepSlipLine(productName: 'Burger', quantity: 2, course: 2),
+          PrepSlipLine(productName: 'Extra cheese', quantity: 2, addOn: true, course: 2),
+        ],
+      );
+      final text = buildSlipText(slip, width: 32).split('\n');
+      final burger = text.indexWhere((l) => l.contains('2 x Burger'));
+      expect(text[burger + 1], '    + 2 Extra cheese');
+      expect(text.indexWhere((l) => l.contains('COURSE 2')), lessThan(burger));
+      expect(text.where((l) => l.contains('COURSE')), hasLength(2));
     });
 
     test('a VOID slip leads with the cancellation and says why', () {

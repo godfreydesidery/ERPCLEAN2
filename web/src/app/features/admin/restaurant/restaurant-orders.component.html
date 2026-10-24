@@ -92,13 +92,18 @@
                       <td colspan="7">
                         <ul class="list-unstyled mb-0 small">
                           @for (l of o.lines; track l.uid) {
-                            <li [class.text-decoration-line-through]="l.status === 'VOIDED'">
-                              {{ l.quantity }} × {{ l.productName }}
+                            <li [class.text-decoration-line-through]="l.status === 'VOIDED'"
+                                [class.ms-4]="l.parentLineUid">
+                              @if (l.parentLineUid) { + } {{ l.quantity }} × {{ l.productName }}
+                              @if (l.course > 1) { <span class="badge text-bg-secondary">Course {{ l.course }}</span> }
                               @if (l.note) { <span class="text-muted">({{ l.note }})</span> }
                               —
                               @switch (l.status) {
-                                @case ('PENDING') { <span class="text-warning-emphasis">not sent</span> }
-                                @case ('SENT') { <span class="text-muted">sent to {{ l.prepStationName ?? 'no station' }}</span> }
+                                @case ('PENDING') { <span class="text-warning-emphasis">{{ l.held ? 'held' : 'not sent' }}</span> }
+                                @case ('SENT') {
+                                  <span class="text-muted">sent to {{ l.prepStationName ?? 'no station' }}</span>
+                                  @if (l.readyAt) { <span class="text-success"> · ready</span> }
+                                }
                                 @case ('VOIDED') { <span class="text-danger">voided: {{ l.voidReason }}</span> }
                               }
                             </li>

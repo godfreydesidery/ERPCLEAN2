@@ -31,7 +31,10 @@ public record PrepSlipDto(
         Instant at,
         List<Line> lines
 ) {
-    /** {@code voidReason} is set on VOID slips only. */
+    /**
+     * {@code voidReason} is set on VOID slips only. {@code addOn} marks a priced add-on, printed
+     * indented under the item before it; {@code course} groups the slip (ADR-0066 D-4, D-5).
+     */
     public record Line(String productName, String unitName, BigDecimal quantity, String note,
-                       String voidReason) {}
+                       String voidReason, boolean addOn, int course) {}
 }

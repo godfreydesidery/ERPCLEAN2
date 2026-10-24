@@ -7,6 +7,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { UserBranch } from '../models/user-branch.model';
 import { MasterStatus, PrepStationDto, RestaurantTableDto } from './models/restaurant.model';
+import { RestaurantModifiersComponent } from './restaurant-modifiers.component';
 import { RestaurantService } from './restaurant.service';
 
 /** One row of the routing grid: a product category and the station it prints at ('' = default). */
@@ -22,7 +23,7 @@ interface RouteRow {
  */
 @Component({
   selector: 'app-restaurant-setup',
-  imports: [FormsModule],
+  imports: [FormsModule, RestaurantModifiersComponent],
   templateUrl: './restaurant-setup.component.html',
   styleUrl: './restaurant-setup.component.scss',
 })

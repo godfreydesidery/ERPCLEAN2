@@ -2,6 +2,7 @@ package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.erp.modules.cashbank.domain.dto.CreateCashBankAccountRequest;
 import com.erp.modules.cashbank.domain.enums.CashBankAccountType;
@@ -45,6 +46,11 @@ import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.CreatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantTableRequest;
+import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.KitchenTicketDto;
+import com.erp.modules.sales.domain.dto.ModifierGroupDto;
+import com.erp.modules.sales.domain.dto.SaveModifierGroupRequest;
+import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
@@ -92,6 +98,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -136,6 +143,9 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
 
     @Autowired private RestaurantSetupService  setup;
     @Autowired private RestaurantOrderService  orders;
+    @Autowired private RestaurantMenuService   menu;
+    @Autowired private RestaurantKitchenService kitchenDisplay;
+    @Autowired private JdbcTemplate            jdbc;
 
     private Company company;
     private Branch  branch;
@@ -547,8 +557,140 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Phase 3 with schema (ADR-0066 D-4..D-7): modifiers, courses, kitchen display, roles.
+    // =========================================================================
+
+    @Test
+    void modifiers_pricedAddOnsBecomeChildLines_instructionsGoToTheNote_andTheRulesHold() {
+        setRootCtx();
+        ProductDto syrup = menuItem("Syrup extra", "1000", "Drinks");
+        menu.createGroup(new SaveModifierGroupRequest("Milk", (short) 1, (short) 1, 1, null,
+                List.of(new SaveModifierGroupRequest.Option(null, "Oat milk", null, null),
+                        new SaveModifierGroupRequest.Option(null, "Full milk", null, null)),
+                List.of(latte.uid())));
+        menu.createGroup(new SaveModifierGroupRequest("Extras", (short) 0, null, 2, null,
+                List.of(new SaveModifierGroupRequest.Option(null, "Syrup", syrup.uid(), null),
+                        new SaveModifierGroupRequest.Option(null, "No sugar", null, null)),
+                List.of(latte.uid())));
+        var groups = menu.listGroups();
+        String oat = option(groups, "Oat milk");
+        String full = option(groups, "Full milk");
+        String syrupOpt = option(groups, "Syrup");
+        String noSugar = option(groups, "No sugar");
+        assertThat(menu.listLinks()).singleElement()
+                .satisfies(l -> assertThat(l.productUid()).isEqualTo(latte.uid()));
+
+        setCashierCtx();
+        RestaurantOrderDto order = orders.open(new CreateRestaurantOrderRequest(null, table1.uid(), null, null));
+        String orderUid = order.uid();
+        assertThatThrownBy(() -> orders.addLine(orderUid, item(latte)))
+                .as("Milk must be chosen").hasMessageContaining("Choose the Milk");
+        assertThatThrownBy(() -> orders.addLine(orderUid, new AddRestaurantOrderLineRequest(
+                latte.id(), pcsId, null, null, List.of(oat, full), null, null)))
+                .hasMessageContaining("at most 1 Milk");
+
+        order = orders.addLine(orderUid, new AddRestaurantOrderLineRequest(
+                latte.id(), pcsId, new BigDecimal("2"), "extra hot", List.of(oat, syrupOpt, noSugar), null, null));
+        RestaurantOrderLineDto parent = lineFor(order, latte);
+        assertThat(parent.note()).isEqualTo("Oat milk, No sugar — extra hot");
+        RestaurantOrderLineDto child = lineFor(order, syrup);
+        assertThat(child.parentLineUid()).isEqualTo(parent.uid());
+        assertThat(child.quantity()).isEqualByComparingTo("2");
+        assertThatThrownBy(() -> orders.deleteLine(orderUid, child.uid()))
+                .hasMessageContaining("item this add-on belongs to");
+
+        // Changing the item's quantity changes its add-on with it.
+        order = orders.updateLine(orderUid, parent.uid(),
+                new UpdateRestaurantOrderLineRequest(new BigDecimal("3"), parent.note()));
+        assertThat(lineFor(order, syrup).quantity()).isEqualByComparingTo("3");
+
+        RestaurantSendResultDto sent = orders.send(orderUid);
+        assertThat(slip(sent.slips(), "Bar").lines()).extracting(PrepSlipDto.Line::productName, PrepSlipDto.Line::addOn)
+                .containsExactly(tuple("Pumpkin Spice Latte", false), tuple("Syrup extra", true));
+
+        RestaurantBillDto bill = orders.bill(orderUid, new BillRestaurantOrderRequest(customerId, "TZS"));
+        assertThat(bill.lines()).extracting(RestaurantBillDto.Line::productName)
+                .contains("Pumpkin Spice Latte", "Syrup extra");
+
+        setRootCtx();
+        RestaurantVoidResultDto voided = orders.voidLine(orderUid, parent.uid(),
+                new VoidRestaurantOrderLineRequest("Wrong order", null, null));
+        assertThat(voided.order().lines()).allSatisfy(l ->
+                assertThat(l.status()).isEqualTo(RestaurantOrderLineStatus.VOIDED));
+        assertThat(slip(voided.slips(), "Bar").lines()).hasSize(2);
+    }
+
+    @Test
+    void courses_heldItemsWaitUntilFired() {
+        setCashierCtx();
+        RestaurantOrderDto order = orders.open(new CreateRestaurantOrderRequest(null, table1.uid(), null, null));
+        orders.addLine(order.uid(), item(latte));
+        orders.addLine(order.uid(), new AddRestaurantOrderLineRequest(
+                tacos.id(), pcsId, null, null, null, (short) 2, true));
+
+        RestaurantSendResultDto first = orders.send(order.uid());
+        assertThat(first.slips()).extracting(PrepSlipDto::stationName).containsExactly("Bar");
+        assertThat(lineFor(first.order(), tacos).status()).isEqualTo(RestaurantOrderLineStatus.PENDING);
+        assertThat(first.order().pendingLineCount()).as("a held item is not waiting to be sent").isZero();
+
+        RestaurantSendResultDto mains = orders.fire(order.uid(), new FireRestaurantOrderRequest((short) 2));
+        assertThat(mains.slips()).singleElement().satisfies(s -> {
+            assertThat(s.stationName()).isEqualTo("Kitchen");
+            assertThat(s.lines().get(0).course()).isEqualTo(2);
+        });
+        assertThat(lineFor(mains.order(), tacos).held()).isFalse();
+    }
+
+    @Test
+    void kitchenDisplay_showsTheStationsTickets_bumpMarksReady_andTheFloorSaysFoodReady() {
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(tacos);
+        orders.send(order.uid());
+        String tacoLine = lineFor(orders.get(order.uid()), tacos).uid();
+
+        setRootCtx();
+        var tickets = kitchenDisplay.tickets(kitchen.uid());
+        assertThat(tickets).singleElement().satisfies(t -> {
+            assertThat(t.tableName()).isEqualTo("T1");
+            assertThat(t.items()).extracting(KitchenTicketDto.Item::productName)
+                    .containsExactly("Grilled Chicken Tacos");
+        });
+        assertThat(kitchenDisplay.tickets(bar.uid())).as("nothing for the bar").isEmpty();
+
+        kitchenDisplay.ready(List.of(tacoLine));
+        assertThat(kitchenDisplay.tickets(kitchen.uid())).isEmpty();
+        assertThat(lineFor(orders.get(order.uid()), tacos).readyAt()).isNotNull();
+        assertThat(setup.listTables(null).stream().filter(t -> t.uid().equals(table1.uid()))
+                .findFirst().orElseThrow().readyItemCount()).isEqualTo(1);
+
+        kitchenDisplay.recall(List.of(tacoLine));
+        assertThat(kitchenDisplay.tickets(kitchen.uid())).hasSize(1);
+    }
+
+    @Test
+    void waiterAndKitchenRoles_areSeededWithTheirBundles() {
+        List<String> waiter = jdbc.queryForList("""
+                SELECT p.code FROM role_permission rp
+                JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id
+                WHERE r.code = 'WAITER' AND r.organisation_id IS NULL""", String.class);
+        assertThat(waiter).contains("RESTAURANT.ORDER.MANAGE", "PRODUCT.VIEW")
+                .doesNotContain("POS.SALE.CREATE", "POS.SESSION.OPEN", "RESTAURANT.ORDER.VOID");
+        List<String> kitchenRole = jdbc.queryForList("""
+                SELECT p.code FROM role_permission rp
+                JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id
+                WHERE r.code = 'KITCHEN' AND r.organisation_id IS NULL""", String.class);
+        assertThat(kitchenRole).contains("RESTAURANT.KITCHEN.MANAGE")
+                .doesNotContain("RESTAURANT.ORDER.MANAGE", "POS.SALE.CREATE");
+    }
+
+    // =========================================================================
     // helpers
     // =========================================================================
+
+    private static String option(List<ModifierGroupDto> groups, String label) {
+        return groups.stream().flatMap(g -> g.options().stream())
+                .filter(o -> o.label().equals(label)).findFirst().orElseThrow().uid();
+    }
 
     private BigDecimal onHand(ProductDto p) {
         return stockOnHandRepo.findByCompanyIdAndBranchIdAndProductId(company.getId(), branch.getId(), p.id())

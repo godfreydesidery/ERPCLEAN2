@@ -56,6 +56,7 @@ class RestaurantTable {
     required this.active,
     required this.state,
     required this.liveOrderCount,
+    this.readyItemCount = 0,
   });
 
   final String uid;
@@ -66,6 +67,9 @@ class RestaurantTable {
   final TableState state;
   final int liveOrderCount;
 
+  /// Items the kitchen marked ready (ADR-0066 D-6): the floor says "Food ready".
+  final int readyItemCount;
+
   factory RestaurantTable.fromJson(Map<String, dynamic> j) => RestaurantTable(
         uid: asStrOr(j['uid']),
         name: asStrOr(j['name']),
@@ -74,6 +78,7 @@ class RestaurantTable {
         active: asStr(j['status']) == 'ACTIVE',
         state: TableState.parse(asStr(j['state'])),
         liveOrderCount: asIntOr(j['liveOrderCount']),
+        readyItemCount: asIntOr(j['readyItemCount']),
       );
 }
 
@@ -120,6 +125,10 @@ class RestaurantOrderLine {
     this.fireRound,
     this.prepStationName,
     this.voidReason,
+    this.parentLineUid,
+    this.course = 1,
+    this.held = false,
+    this.readyAt,
   });
 
   final String uid;
@@ -133,6 +142,22 @@ class RestaurantOrderLine {
   final int? fireRound;
   final String? prepStationName;
   final String? voidReason;
+
+  /// Set on a priced add-on: the item it was chosen on (ADR-0066 D-4). An add-on
+  /// follows its item — it is never changed, removed or voided on its own.
+  final String? parentLineUid;
+
+  /// 1 = starters/drinks, 2 = mains, 3 = dessert (ADR-0066 D-5).
+  final int course;
+
+  /// Held back from Send until fired.
+  final bool held;
+
+  /// When the kitchen display marked it ready (ADR-0066 D-6).
+  final DateTime? readyAt;
+
+  bool get isAddOn => parentLineUid != null;
+  bool get isReady => readyAt != null;
 
   bool get isPending => status == OrderLineStatus.pending;
   bool get isSent => status == OrderLineStatus.sent;
@@ -151,6 +176,10 @@ class RestaurantOrderLine {
         fireRound: asInt(j['fireRound']),
         prepStationName: asStr(j['prepStationName']),
         voidReason: asStr(j['voidReason']),
+        parentLineUid: asStr(j['parentLineUid']),
+        course: asIntOr(j['course'], 1),
+        held: asBool(j['held']),
+        readyAt: asDate(j['readyAt']),
       );
 }
 
@@ -270,6 +299,8 @@ class PrepSlipLine {
     required this.quantity,
     this.note,
     this.voidReason,
+    this.addOn = false,
+    this.course = 1,
   });
 
   final String productName;
@@ -278,12 +309,18 @@ class PrepSlipLine {
   final String? note;
   final String? voidReason;
 
+  /// A priced add-on, printed indented under the item before it.
+  final bool addOn;
+  final int course;
+
   factory PrepSlipLine.fromJson(Map<String, dynamic> j) => PrepSlipLine(
         productName: asStrOr(j['productName'], 'Item'),
         unitName: asStr(j['unitName']),
         quantity: asNumOr(j['quantity']),
         note: asStr(j['note']),
         voidReason: asStr(j['voidReason']),
+        addOn: asBool(j['addOn']),
+        course: asIntOr(j['course'], 1),
       );
 }
 
@@ -382,4 +419,81 @@ class RestaurantPayment {
         RestaurantOrder.fromJson(asMap(j['order'])),
         SalesInvoice.fromJson(asMap(j['invoice'])),
       );
+}
+
+// ---------------------------------------------------------------- modifiers (ADR-0066 D-4)
+
+class ModifierOption {
+  ModifierOption({required this.uid, required this.label, this.productName, required this.priced});
+
+  final String uid;
+  final String label;
+  final String? productName;
+
+  /// A priced add-on (charged, its own line) rather than a free instruction.
+  final bool priced;
+
+  factory ModifierOption.fromJson(Map<String, dynamic> j) => ModifierOption(
+        uid: asStrOr(j['uid']),
+        label: asStrOr(j['label']),
+        productName: asStr(j['productName']),
+        priced: asStr(j['productUid']) != null,
+      );
+}
+
+/// A choice offered on menu items: "Milk" (choose one), "Extras" (any).
+class ModifierGroup {
+  ModifierGroup({
+    required this.uid,
+    required this.name,
+    required this.minSelect,
+    this.maxSelect,
+    required this.options,
+  });
+
+  final String uid;
+  final String name;
+  final int minSelect;
+
+  /// Null = no upper limit.
+  final int? maxSelect;
+  final List<ModifierOption> options;
+
+  bool get single => maxSelect == 1;
+
+  /// The rule in words, for the dialog: "Choose 1", "Optional".
+  String get rule {
+    if (minSelect == 0 && maxSelect == null) return 'Optional';
+    if (minSelect == 0) return 'Optional — up to $maxSelect';
+    if (minSelect == maxSelect) return 'Choose $minSelect';
+    return 'Choose $minSelect to ${maxSelect ?? 'any'}';
+  }
+
+  factory ModifierGroup.fromJson(Map<String, dynamic> j) => ModifierGroup(
+        uid: asStrOr(j['uid']),
+        name: asStrOr(j['name']),
+        minSelect: asIntOr(j['minSelect']),
+        maxSelect: asInt(j['maxSelect']),
+        options: asList(j['options'], ModifierOption.fromJson)
+            .where((o) => o.uid.isNotEmpty)
+            .toList(),
+      );
+
+  /// Groups as the server sends them, keeping active ones with active options.
+  static List<ModifierGroup> activeFrom(dynamic data) => (data is List ? data : const [])
+      .whereType<Map>()
+      .map((m) => m.cast<String, dynamic>())
+      .where((m) => m['status'] == 'ACTIVE')
+      .map((m) {
+        final g = ModifierGroup.fromJson({
+          ...m,
+          'options': (m['options'] as List? ?? const [])
+              .whereType<Map>()
+              .where((o) => o['status'] == 'ACTIVE')
+              .toList(),
+        });
+        return g;
+      })
+      .where((g) => g.options.isNotEmpty)
+      .toList();
 }

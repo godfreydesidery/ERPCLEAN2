@@ -24,11 +24,11 @@ const order: RestaurantOrderDto = {
     { id: '1', uid: 'L1', lineNo: 1, productId: '7', productUid: 'P7', productCode: '147',
       productName: 'Tacos', unitId: '1', unitName: 'Pieces', quantity: 1, note: null, status: 'SENT',
       fireRound: 1, prepStationUid: 'S1', prepStationName: 'Kitchen', sentAt: '2026-10-24T10:01:00Z',
-      voidedAt: null, voidReason: null },
+      voidedAt: null, voidReason: null, parentLineUid: null, course: 1, held: false, readyAt: null },
     { id: '2', uid: 'L2', lineNo: 2, productId: '8', productUid: 'P8', productCode: '171',
       productName: 'Latte', unitId: '1', unitName: 'Pieces', quantity: 2, note: 'no sugar',
       status: 'PENDING', fireRound: null, prepStationUid: null, prepStationName: null, sentAt: null,
-      voidedAt: null, voidReason: null },
+      voidedAt: null, voidReason: null, parentLineUid: null, course: 1, held: false, readyAt: null },
   ],
 };
 

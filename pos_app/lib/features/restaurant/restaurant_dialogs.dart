@@ -409,6 +409,176 @@ Future<void> showBillPreview(BuildContext context,
   );
 }
 
+// ---------------------------------------------------------------- item choices (ADR-0066)
+
+/// What the waiter chose for an item.
+typedef ItemChoice = ({List<String> optionUids, int course, bool held, String? note});
+
+/// The item dialog: its choices ([groups], each with its rule), the course, a
+/// hold, and a free note. Returns null when backed out.
+Future<ItemChoice?> askItemChoices(
+    BuildContext context, String productName, List<ModifierGroup> groups) {
+  return showDialog<ItemChoice>(
+    context: context,
+    builder: (_) => _ItemChoicesDialog(productName: productName, groups: groups),
+  );
+}
+
+class _ItemChoicesDialog extends StatefulWidget {
+  const _ItemChoicesDialog({required this.productName, required this.groups});
+  final String productName;
+  final List<ModifierGroup> groups;
+  @override
+  State<_ItemChoicesDialog> createState() => _ItemChoicesDialogState();
+}
+
+class _ItemChoicesDialogState extends State<_ItemChoicesDialog> {
+  final Map<String, Set<String>> _chosen = {};
+  final _note = TextEditingController();
+  int _course = 1;
+  bool _held = false;
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  Set<String> _of(ModifierGroup g) => _chosen.putIfAbsent(g.uid, () => <String>{});
+
+  void _toggle(ModifierGroup g, ModifierOption o) {
+    setState(() {
+      final set = _of(g);
+      if (set.contains(o.uid)) {
+        set.remove(o.uid);
+      } else if (g.single) {
+        set
+          ..clear()
+          ..add(o.uid);
+      } else if (g.maxSelect == null || set.length < g.maxSelect!) {
+        set.add(o.uid);
+      }
+    });
+  }
+
+  /// The first group whose minimum is not met yet, for the button hint.
+  ModifierGroup? get _missing =>
+      widget.groups.where((g) => _of(g).length < g.minSelect).firstOrNull;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = _missing;
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: Text(widget.productName),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final g in widget.groups) ...[
+                Row(
+                  children: [
+                    Text(g.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(width: 8),
+                    Text(g.rule, style: const TextStyle(color: AppColors.ink2, fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final o in g.options)
+                      FilterChip(
+                        label: Text(o.priced ? '${o.label} (+)' : o.label),
+                        selected: _of(g).contains(o.uid),
+                        onSelected: (_) => _toggle(g, o),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+              const Text('Course', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 1, label: Text('1 · Starters/Drinks')),
+                  ButtonSegment(value: 2, label: Text('2 · Mains')),
+                  ButtonSegment(value: 3, label: Text('3 · Dessert')),
+                ],
+                selected: {_course},
+                onSelectionChanged: (s) => setState(() => _course = s.first),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Hold — send when I fire it'),
+                value: _held,
+                onChanged: (v) => setState(() => _held = v),
+              ),
+              TextField(
+                controller: _note,
+                maxLength: 200,
+                decoration: const InputDecoration(labelText: 'Note for the kitchen (optional)'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        OrbixButton(
+          label: missing == null ? 'Add' : 'Choose ${missing.name}',
+          onPressed: missing != null
+              ? null
+              : () {
+                  final uids = <String>[
+                    for (final g in widget.groups)
+                      for (final o in g.options)
+                        if (_of(g).contains(o.uid)) o.uid,
+                  ];
+                  final note = _note.text.trim();
+                  Navigator.pop(context, (
+                    optionUids: uids,
+                    course: _course,
+                    held: _held,
+                    note: note.isEmpty ? null : note,
+                  ));
+                },
+        ),
+      ],
+    );
+  }
+}
+
+/// Which held course to fire. Returns null when backed out.
+Future<int?> askFireCourse(BuildContext context, List<int> courses) {
+  return showDialog<int>(
+    context: context,
+    builder: (_) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: const Text('Fire which course?'),
+      content: Wrap(
+        spacing: 8,
+        children: [
+          for (final c in courses)
+            OrbixButton(
+                label: 'Course $c', onPressed: () => Navigator.pop(context, c)),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+      ],
+    ),
+  );
+}
+
 // ---------------------------------------------------------------- split / merge
 
 /// Chooses what moves to a new check: line uid → quantity. Returns null when
@@ -432,7 +602,8 @@ class _SplitDialogState extends State<_SplitDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final lines = widget.order.activeLines;
+    // Add-ons move with their item, so only items are offered.
+    final lines = widget.order.activeLines.where((l) => !l.isAddOn).toList();
     final chosen = _move.values.fold<double>(0, (s, q) => s + q);
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),

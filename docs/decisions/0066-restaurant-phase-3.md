@@ -1,8 +1,8 @@
 # 0066 — Restaurant phase 3: modifiers, courses, kitchen display, split and merge, waiter and kitchen roles
 
-- **Status:** Proposed (2026-10-24). The owner asked for "all the phases" of ADR-0065. **The DDL in
-  Appendix A and the seed in Appendix B need explicit approval before the migration is written.**
-  Everything that needs no schema change (D-1, D-2, D-3, D-8) is built without waiting.
+- **Status:** Accepted (2026-10-24). The owner asked for "all the phases" of ADR-0065 and approved
+  the DDL in Appendix A and the seed in Appendix B the same day. They ship as
+  `V108__restaurant_phase3.sql` and an edit to `R__seed_permissions.sql`.
 - **Builds on:** ADR-0065 (restaurant orders), ADR-0058 (point-of-sale kit recipes), ADR-0042
   (step-up authority, split tenders).
 
@@ -105,7 +105,7 @@ flag:
 - The till lets the waiter set the course while adding items (1 / 2 / 3), and hold or release a
   pending line.
 - Billing and payment ignore `held`: an item is charged whether or not it was fired. The
-  send-first prompt counts held items too.
+  send-first prompt counts only items Send would actually send, so held items never trigger it.
 
 ### D-6 — Kitchen display (KDS)
 
@@ -170,7 +170,7 @@ Two new shipped role bundles:
 
 ---
 
-## Appendix A — Proposed DDL: `V108__restaurant_phase3.sql` (NOT YET APPROVED)
+## Appendix A — DDL: `V108__restaurant_phase3.sql` (approved 2026-10-24)
 
 ```sql
 -- V108 — Restaurant phase 3 (ADR-0066): modifier groups/options, the item → group link, and on
@@ -263,7 +263,7 @@ ALTER TABLE restaurant_order_lines
 CREATE INDEX ix_restaurant_order_lines_parent ON restaurant_order_lines (parent_line_id);
 ```
 
-## Appendix B — Proposed seed (edit to `R__seed_permissions.sql`, NOT YET APPROVED)
+## Appendix B — Seed (edit to `R__seed_permissions.sql`, approved 2026-10-24)
 
 ```sql
 -- permission
@@ -293,3 +293,12 @@ CREATE INDEX ix_restaurant_order_lines_parent ON restaurant_order_lines (parent_
 
 `DefaultRoleBundlesSeededTest` gains the two roles, with anchors WAITER → `RESTAURANT.ORDER.MANAGE`
 and KITCHEN → `RESTAURANT.KITCHEN.MANAGE`.
+
+**Implementation notes (no change to what was approved):**
+
+- **The WAITER and KITCHEN grants are a statement of their own,** joined to the GLOBAL roles only
+  (`r.organisation_id IS NULL`). These role codes are new, so a customer may already have a role of
+  their own called WAITER or KITCHEN. The existing grant statement joins by code alone, and would
+  have silently handed that customer role these permissions.
+- **`TenancyReconciler.SEED_ROLE_UIDS` lists the two new uids.** Without them every boot logs a
+  false "the seed has adopted a customer role" warning for the shipped bundles.

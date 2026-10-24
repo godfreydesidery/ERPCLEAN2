@@ -14,6 +14,7 @@ import com.erp.modules.sales.domain.dto.AddRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.BillRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -30,8 +31,11 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.VoidRestaurantOrderLineRequest;
+import com.erp.modules.sales.domain.entity.ModifierGroup;
+import com.erp.modules.sales.domain.entity.ModifierOption;
 import com.erp.modules.sales.domain.entity.PrepStation;
 import com.erp.modules.sales.domain.entity.PrepStationCategory;
+import com.erp.modules.sales.domain.entity.ProductModifierGroup;
 import com.erp.modules.sales.domain.entity.RestaurantOrder;
 import com.erp.modules.sales.domain.entity.RestaurantOrderLine;
 import com.erp.modules.sales.domain.entity.RestaurantTable;
@@ -40,9 +44,12 @@ import com.erp.modules.sales.domain.enums.PrepSlipKind;
 import com.erp.modules.sales.domain.enums.RestaurantOrderStatus;
 import com.erp.modules.sales.domain.enums.RestaurantOrderType;
 import com.erp.modules.sales.domain.exception.PosSaleFlowException;
+import com.erp.modules.sales.repository.ModifierGroupRepository;
+import com.erp.modules.sales.repository.ModifierOptionRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
 import com.erp.modules.sales.repository.PrepStationCategoryRepository;
 import com.erp.modules.sales.repository.PrepStationRepository;
+import com.erp.modules.sales.repository.ProductModifierGroupRepository;
 import com.erp.modules.sales.repository.RestaurantOrderLineRepository;
 import com.erp.modules.sales.repository.RestaurantOrderRepository;
 import com.erp.modules.sales.repository.RestaurantTableRepository;
@@ -62,6 +69,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -104,6 +112,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     private final AppUserRepository users;
     private final UserLookupService userLookup;
     private final AuditService audit;
+    private final ModifierGroupRepository modifierGroups;
+    private final ModifierOptionRepository modifierOptions;
+    private final ProductModifierGroupRepository productModifierGroups;
 
     public RestaurantOrderServiceImpl(RestaurantOrderRepository orders,
                                       RestaurantOrderLineRepository lines,
@@ -124,7 +135,10 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                                       StepUpAuthService stepUpAuth,
                                       AppUserRepository users,
                                       UserLookupService userLookup,
-                                      AuditService audit) {
+                                      AuditService audit,
+                                      ModifierGroupRepository modifierGroups,
+                                      ModifierOptionRepository modifierOptions,
+                                      ProductModifierGroupRepository productModifierGroups) {
         this.orders             = orders;
         this.lines              = lines;
         this.tables             = tables;
@@ -145,6 +159,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         this.users              = users;
         this.userLookup         = userLookup;
         this.audit              = audit;
+        this.modifierGroups     = modifierGroups;
+        this.modifierOptions    = modifierOptions;
+        this.productModifierGroups = productModifierGroups;
     }
 
     // -------------------------------------------------------------------------
@@ -234,14 +251,17 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     // Items
     // -------------------------------------------------------------------------
 
+    /** The choices made on an item (ADR-0066 D-4): priced add-ons, and instructions for the note. */
+    private record Choice(List<ModifierOption> priced, List<String> instructions) {
+        boolean isEmpty() {
+            return priced.isEmpty() && instructions.isEmpty();
+        }
+    }
+
     @Override
     public RestaurantOrderDto addLine(String uid, AddRestaurantOrderLineRequest req) {
         var order = lockLive(uid);
-        Product product = products.findByCompanyIdAndId(order.getCompanyId(), req.productId())
-                .orElseThrow(() -> new NotFoundException("This menu item was not found."));
-        if (!product.isSellable() || product.getStatus() != MasterStatus.ACTIVE) {
-            throw new IllegalArgumentException(product.getName() + " is not for sale.");
-        }
+        Product product = requireSellable(order.getCompanyId(), req.productId());
         UnitOfMeasure unit = units.findByCompanyIdAndId(order.getCompanyId(), req.unitId())
                 .orElseThrow(() -> new NotFoundException("This unit was not found."));
         boolean baseUnit = product.getBaseUnit() != null
@@ -251,15 +271,23 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                     product.getName() + " is not sold in " + unit.getName() + ".");
         }
         BigDecimal qty = req.quantity() != null ? req.quantity() : BigDecimal.ONE;
-        String note = blankToNull(req.note());
+        short course = req.course() != null ? req.course() : 1;
+        boolean held = Boolean.TRUE.equals(req.held());
+        Choice choice = resolveChoice(order.getCompanyId(), product, req.modifierOptionUids());
+        String note = composeNote(choice.instructions(), blankToNull(req.note()));
         Long actor = scope.actorId();
         Instant now = Instant.now();
+        var all = lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId());
 
-        // Tapping the same item again adds to its unsent line — unless a note makes it different
-        // ("one tea, no sugar" is not the same as "one tea").
-        var existing = note != null ? null : lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId())
-                .stream()
-                .filter(l -> l.isPending() && l.getNote() == null
+        // Tapping the same plain item again adds to its unsent line. Anything that makes it
+        // different — a note, a choice, another course, a hold — makes a line of its own ("one tea,
+        // no sugar" is not "one tea").
+        Set<Long> parents = all.stream().map(RestaurantOrderLine::getParentLineId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        var existing = note != null || !choice.isEmpty() ? null : all.stream()
+                .filter(l -> l.isPending() && l.getNote() == null && !l.isChild()
+                        && !parents.contains(l.getId())
+                        && l.getCourse() == course && l.isHeld() == held
                         && l.getProductId().equals(product.getId())
                         && l.getUnitId().equals(unit.getId()))
                 .findFirst()
@@ -267,23 +295,135 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         if (existing != null) {
             existing.changePending(existing.getQuantity().add(qty), null, actor, now);
         } else {
-            lines.save(new RestaurantOrderLine(order, lines.findMaxLineNo(order.getId()) + 1,
-                    product.getId(), unit.getId(), qty, note, actor));
+            int lineNo = lines.findMaxLineNo(order.getId());
+            var line = new RestaurantOrderLine(order, ++lineNo, product.getId(), unit.getId(), qty,
+                    note, actor);
+            line.plan(course, held, actor, now);
+            line = lines.save(line);
+            // Priced add-ons become child lines: priced, taxed and stock-deducted like any line.
+            for (var opt : choice.priced()) {
+                Product addOn = requireSellable(order.getCompanyId(), opt.getProductId());
+                var child = new RestaurantOrderLine(order, ++lineNo, addOn.getId(),
+                        addOn.getBaseUnit().getId(), qty, null, actor);
+                child.attachTo(line.getId());
+                child.plan(course, held, actor, now);
+                lines.save(child);
+            }
         }
         order.reopenAfterChange();
         touch(order);
         return toDto(order);
     }
 
+    /**
+     * The choices made on [product], checked against the groups it offers: each option must be
+     * active and belong to one of them, and each group's minimum and maximum must hold.
+     */
+    private Choice resolveChoice(Long companyId, Product product, List<String> optionUids) {
+        Map<Long, ModifierGroup> offered = new LinkedHashMap<>();
+        var groupIds = productModifierGroups.findByCompanyIdAndProductId(companyId, product.getId())
+                .stream().map(ProductModifierGroup::getModifierGroupId).toList();
+        if (!groupIds.isEmpty()) {
+            modifierGroups.findByCompanyIdAndIdIn(companyId, groupIds).stream()
+                    .filter(g -> g.getStatus() == MasterStatus.ACTIVE)
+                    .sorted(Comparator.comparing(ModifierGroup::getSortOrder)
+                            .thenComparing(ModifierGroup::getName))
+                    .forEach(g -> offered.put(g.getId(), g));
+        }
+        Set<String> wanted = optionUids == null ? Set.of() : new LinkedHashSet<>(optionUids);
+        List<ModifierOption> chosen = wanted.isEmpty() ? List.of()
+                : modifierOptions.findByCompanyIdAndUidIn(companyId, wanted);
+        if (chosen.size() != wanted.size()) {
+            throw new NotFoundException("One of the choices was not found. Refresh and try again.");
+        }
+        Map<Long, Integer> perGroup = new HashMap<>();
+        for (var o : chosen) {
+            if (o.getStatus() != MasterStatus.ACTIVE) {
+                throw new IllegalArgumentException(o.getLabel() + " is no longer offered.");
+            }
+            if (!offered.containsKey(o.getModifierGroupId())) {
+                throw new IllegalArgumentException(
+                        o.getLabel() + " is not offered on " + product.getName() + ".");
+            }
+            perGroup.merge(o.getModifierGroupId(), 1, Integer::sum);
+        }
+        for (var g : offered.values()) {
+            int n = perGroup.getOrDefault(g.getId(), 0);
+            if (n < g.getMinSelect()) {
+                throw new IllegalArgumentException("Choose " + (g.getMinSelect() == 1 ? "the" : g.getMinSelect())
+                        + " " + g.getName() + " for " + product.getName() + ".");
+            }
+            if (g.getMaxSelect() != null && n > g.getMaxSelect()) {
+                throw new IllegalArgumentException("Choose at most " + g.getMaxSelect() + " "
+                        + g.getName() + " for " + product.getName() + ".");
+            }
+        }
+        List<Long> groupOrder = new ArrayList<>(offered.keySet());
+        var ordered = chosen.stream()
+                .sorted(Comparator.comparing((ModifierOption o) -> groupOrder.indexOf(o.getModifierGroupId()))
+                        .thenComparing(ModifierOption::getSortOrder)
+                        .thenComparing(ModifierOption::getLabel))
+                .toList();
+        return new Choice(
+                ordered.stream().filter(o -> o.getProductId() != null).toList(),
+                ordered.stream().filter(o -> o.getProductId() == null).map(ModifierOption::getLabel).toList());
+    }
+
+    /** Instructions first ("Oat milk, No onions"), then what the waiter typed. */
+    private static String composeNote(List<String> instructions, String typed) {
+        List<String> parts = new ArrayList<>();
+        if (!instructions.isEmpty()) {
+            parts.add(String.join(", ", instructions));
+        }
+        if (typed != null) {
+            parts.add(typed);
+        }
+        if (parts.isEmpty()) {
+            return null;
+        }
+        String note = String.join(" — ", parts);
+        if (note.length() > 200) {
+            throw new IllegalArgumentException("The note is too long. Keep it under 200 characters.");
+        }
+        return note;
+    }
+
+    private Product requireSellable(Long companyId, Long productId) {
+        Product product = products.findByCompanyIdAndId(companyId, productId)
+                .orElseThrow(() -> new NotFoundException("This menu item was not found."));
+        if (!product.isSellable() || product.getStatus() != MasterStatus.ACTIVE) {
+            throw new IllegalArgumentException(product.getName() + " is not for sale.");
+        }
+        return product;
+    }
+
+    /** The add-ons of [line] among [all] — they follow it everywhere. */
+    private static List<RestaurantOrderLine> childrenOf(RestaurantOrderLine line,
+                                                        List<RestaurantOrderLine> all) {
+        return all.stream().filter(l -> line.getId().equals(l.getParentLineId())).toList();
+    }
+
     @Override
     public RestaurantOrderDto updateLine(String uid, String lineUid, UpdateRestaurantOrderLineRequest req) {
         var order = lockLive(uid);
         var line = requireLine(order, lineUid);
+        if (line.isChild()) {
+            throw new IllegalStateException("Change the item this add-on belongs to.");
+        }
         if (!line.isPending()) {
             throw new IllegalStateException(
                     "This item has already been sent. Void it instead, then add the right one.");
         }
-        line.changePending(req.quantity(), blankToNull(req.note()), scope.actorId(), Instant.now());
+        Long actor = scope.actorId();
+        Instant now = Instant.now();
+        short course = req.course() != null ? req.course() : line.getCourse();
+        boolean held = req.held() != null ? req.held() : line.isHeld();
+        line.changePending(req.quantity(), blankToNull(req.note()), actor, now);
+        line.plan(course, held, actor, now);
+        for (var child : childrenOf(line, lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId()))) {
+            child.changePending(req.quantity(), null, actor, now);
+            child.plan(course, held, actor, now);
+        }
         order.reopenAfterChange();
         touch(order);
         return toDto(order);
@@ -293,10 +433,16 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     public RestaurantOrderDto deleteLine(String uid, String lineUid) {
         var order = lockLive(uid);
         var line = requireLine(order, lineUid);
+        if (line.isChild()) {
+            throw new IllegalStateException("Remove the item this add-on belongs to.");
+        }
         if (!line.isPending()) {
             throw new IllegalStateException(
                     "This item has already been sent to the kitchen or bar. Void it instead.");
         }
+        // Children first: they reference the parent.
+        lines.deleteAll(childrenOf(line, lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId())));
+        lines.flush();
         lines.delete(line);
         order.reopenAfterChange();
         touch(order);
@@ -304,14 +450,41 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     }
 
     // -------------------------------------------------------------------------
-    // Send (D-6)
+    // Send (D-6) and fire (ADR-0066 D-5)
     // -------------------------------------------------------------------------
 
     @Override
     public RestaurantSendResultDto send(String uid) {
+        return sendPending(lockLive(uid));
+    }
+
+    @Override
+    public RestaurantSendResultDto fire(String uid, FireRestaurantOrderRequest req) {
         var order = lockLive(uid);
-        var pending = lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId()).stream()
-                .filter(RestaurantOrderLine::isPending)
+        Short course = req == null ? null : req.course();
+        Long actor = scope.actorId();
+        Instant now = Instant.now();
+        int released = 0;
+        for (var l : lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId())) {
+            if (l.isPending() && l.isHeld() && (course == null || l.getCourse().equals(course))) {
+                l.plan(l.getCourse(), false, actor, now);
+                released++;
+            }
+        }
+        if (released > 0) {
+            audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_FIRE, "restaurant_orders",
+                    order.getId(), order.getUid())
+                    .detail(Map.of("course", course == null ? "all" : String.valueOf(course),
+                            "items", String.valueOf(released))));
+        }
+        return sendPending(order);
+    }
+
+    /** Fires every unsent, unheld item of a locked order; one slip per station. */
+    private RestaurantSendResultDto sendPending(RestaurantOrder order) {
+        var all = lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId());
+        var pending = all.stream()
+                .filter(l -> l.isPending() && !l.isHeld())
                 .toList();
         if (pending.isEmpty()) {
             return new RestaurantSendResultDto(toDto(order), List.of());
@@ -320,11 +493,25 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         short round = (short) (lines.findMaxFireRound(order.getId()) + 1);
         Router router = router(order.getCompanyId(), order.getBranchId());
         Map<Long, Product> productCache = new HashMap<>();
+        Map<Long, RestaurantOrderLine> byId = all.stream()
+                .collect(Collectors.toMap(RestaurantOrderLine::getId, Function.identity()));
         Long actor = scope.actorId();
         Instant now = Instant.now();
+        // Items first, so an add-on can follow its item to the same station.
         for (var line : pending) {
-            Product p = product(order.getCompanyId(), line.getProductId(), productCache);
-            line.markSent(round, router.stationFor(p == null ? null : p.getCategory()), actor, now);
+            if (!line.isChild()) {
+                Product p = product(order.getCompanyId(), line.getProductId(), productCache);
+                line.markSent(round, router.stationFor(p == null ? null : p.getCategory()), actor, now);
+            }
+        }
+        for (var line : pending) {
+            if (line.isChild()) {
+                var parent = byId.get(line.getParentLineId());
+                Long station = parent != null && parent.getPrepStationId() != null
+                        ? parent.getPrepStationId()
+                        : router.stationFor(null);
+                line.markSent(round, station, actor, now);
+            }
         }
         touch(order);
 
@@ -375,6 +562,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     public RestaurantVoidResultDto voidLine(String uid, String lineUid, VoidRestaurantOrderLineRequest req) {
         var order = lockLive(uid);
         var line = requireLine(order, lineUid);
+        if (line.isChild()) {
+            throw new IllegalStateException("Void the item this add-on belongs to.");
+        }
         if (line.isPending()) {
             throw new IllegalStateException(
                     "This item has not been sent yet. Remove it from the order instead.");
@@ -390,23 +580,38 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         Long actor = scope.actorId();
         Instant now = Instant.now();
         String reason = req.reason().trim();
+        var children = childrenOf(line, lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId()))
+                .stream().filter(c -> !c.isVoided()).toList();
 
-        RestaurantOrderLine voided;
+        List<RestaurantOrderLine> voided = new ArrayList<>();
         if (qty.compareTo(line.getQuantity()) == 0) {
             line.voidWhole(reason, actor, authorisedBy, now);
-            voided = line;
+            voided.add(line);
+            for (var c : children) {
+                c.voidWhole(reason, actor, authorisedBy, now);
+                voided.add(c);
+            }
         } else {
-            voided = lines.save(line.splitVoided(lines.findMaxLineNo(order.getId()) + 1, qty,
-                    reason, actor, authorisedBy, now));
+            BigDecimal share = qty.divide(line.getQuantity(), 10, java.math.RoundingMode.HALF_UP);
+            int lineNo = lines.findMaxLineNo(order.getId());
+            var parentPart = lines.save(line.splitVoided(++lineNo, qty, reason, actor, authorisedBy, now));
+            voided.add(parentPart);
+            for (var c : children) {
+                BigDecimal childQty = c.getQuantity().multiply(share)
+                        .setScale(4, java.math.RoundingMode.HALF_UP);
+                var childPart = c.splitVoided(++lineNo, childQty, reason, actor, authorisedBy, now);
+                childPart.attachTo(parentPart.getId());
+                voided.add(lines.save(childPart));
+            }
         }
         order.reopenAfterChange();
         touch(order);
 
-        List<PrepSlipDto> slips = slipsFor(PrepSlipKind.VOID, order, List.of(voided),
-                voided.getFireRound(), false, nameOf(actor), now, new HashMap<>());
+        List<PrepSlipDto> slips = slipsFor(PrepSlipKind.VOID, order, voided,
+                voided.get(0).getFireRound(), false, nameOf(actor), now, new HashMap<>());
         audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_VOID, "restaurant_orders",
                 order.getId(), order.getUid())
-                .detail(voidDetail("VOIDED", voided.getUid(), qty, reason, authorisedBy)));
+                .detail(voidDetail("VOIDED", voided.get(0).getUid(), qty, reason, authorisedBy)));
         return new RestaurantVoidResultDto(toDto(order), slips);
     }
 
@@ -469,6 +674,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             if (line == null) {
                 throw NotFoundException.of("RestaurantOrderLine", item.lineUid());
             }
+            if (line.isChild()) {
+                throw new IllegalArgumentException("Move the item this add-on belongs to.");
+            }
             if (line.isVoided()) {
                 throw new IllegalArgumentException("A voided item cannot be moved to another check.");
             }
@@ -480,7 +688,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             }
             wanted.put(line.getUid(), already.add(qty));
         }
-        BigDecimal left = all.stream().filter(l -> !l.isVoided())
+        BigDecimal left = all.stream().filter(l -> !l.isVoided() && !l.isChild())
                 .map(l -> l.getQuantity().subtract(wanted.getOrDefault(l.getUid(), BigDecimal.ZERO)))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (left.signum() <= 0) {
@@ -499,10 +707,23 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         int lineNo = 0;
         for (var e : wanted.entrySet()) {
             var line = byUid.get(e.getKey());
+            // Its add-ons go with it, in the same proportion.
+            var children = childrenOf(line, all).stream().filter(c -> !c.isVoided()).toList();
             if (e.getValue().compareTo(line.getQuantity()) == 0) {
                 line.moveTo(created, ++lineNo, actor, now);
+                for (var c : children) {
+                    c.moveTo(created, ++lineNo, actor, now);
+                }
             } else {
-                lines.save(line.splitOff(created, ++lineNo, e.getValue(), actor, now));
+                BigDecimal share = e.getValue().divide(line.getQuantity(), 10, java.math.RoundingMode.HALF_UP);
+                var moved = lines.save(line.splitOff(created, ++lineNo, e.getValue(), actor, now));
+                for (var c : children) {
+                    BigDecimal childQty = c.getQuantity().multiply(share)
+                            .setScale(4, java.math.RoundingMode.HALF_UP);
+                    var childCopy = c.splitOff(created, ++lineNo, childQty, actor, now);
+                    childCopy.attachTo(moved.getId());
+                    lines.save(childCopy);
+                }
             }
         }
         source.reopenAfterChange();
@@ -756,6 +977,36 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         return new Router(byCategory, fallback);
     }
 
+    /**
+     * Slip order: by course, items in line order, each followed by its own add-ons. An add-on whose
+     * item is not on this slip (it went to another station) closes the list.
+     */
+    private static List<RestaurantOrderLine> slipOrder(List<RestaurantOrderLine> group) {
+        Map<Long, List<RestaurantOrderLine>> childrenByParent = new HashMap<>();
+        Set<Long> ids = new HashSet<>();
+        group.forEach(l -> ids.add(l.getId()));
+        List<RestaurantOrderLine> items = new ArrayList<>();
+        List<RestaurantOrderLine> orphans = new ArrayList<>();
+        for (var l : group) {
+            if (!l.isChild()) {
+                items.add(l);
+            } else if (ids.contains(l.getParentLineId())) {
+                childrenByParent.computeIfAbsent(l.getParentLineId(), k -> new ArrayList<>()).add(l);
+            } else {
+                orphans.add(l);
+            }
+        }
+        items.sort(Comparator.comparing((RestaurantOrderLine l) -> l.getCourse() == null ? 1 : l.getCourse())
+                .thenComparing(RestaurantOrderLine::getLineNo));
+        List<RestaurantOrderLine> out = new ArrayList<>();
+        for (var item : items) {
+            out.add(item);
+            out.addAll(childrenByParent.getOrDefault(item.getId(), List.of()));
+        }
+        out.addAll(orphans);
+        return out;
+    }
+
     /** One slip per station that has items in {@code group}; items without a station get none. */
     private List<PrepSlipDto> slipsFor(PrepSlipKind kind, RestaurantOrder order,
                                        List<RestaurantOrderLine> group, int round, boolean reprint,
@@ -780,12 +1031,13 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             if (s == null) {
                 continue;
             }
-            var slipLines = e.getValue().stream().map(l -> {
+            var slipLines = slipOrder(e.getValue()).stream().map(l -> {
                 Product p = product(order.getCompanyId(), l.getProductId(), productCache);
                 UnitOfMeasure u = unit(order.getCompanyId(), l.getUnitId(), unitCache);
                 return new PrepSlipDto.Line(p == null ? "Item" : p.getName(),
                         u == null ? null : u.getName(), l.getQuantity(), l.getNote(),
-                        kind == PrepSlipKind.VOID ? l.getVoidReason() : null);
+                        kind == PrepSlipKind.VOID ? l.getVoidReason() : null,
+                        l.isChild(), l.getCourse() == null ? 1 : l.getCourse());
             }).toList();
             slips.add(new PrepSlipDto(kind, s.getUid(), s.getName(), s.getPrinterHost(),
                     s.getPrinterPort(), order.getOrderNumber(), order.getOrderType(), tableName,
@@ -946,6 +1198,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         List<RestaurantOrderDto> out = new ArrayList<>(list.size());
         for (var o : list) {
             var orderLines = linesByOrder.getOrDefault(o.getId(), List.of());
+            Map<Long, String> uidById = orderLines.stream()
+                    .collect(Collectors.toMap(RestaurantOrderLine::getId, RestaurantOrderLine::getUid));
             var lineDtos = orderLines.stream().map(l -> {
                 Product p = product(companyId, l.getProductId(), productCache);
                 UnitOfMeasure u = unit(companyId, l.getUnitId(), unitCache);
@@ -956,9 +1210,12 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                         l.getUnitId(), u == null ? null : u.getName(),
                         l.getQuantity(), l.getNote(), l.getStatus(), l.getFireRound(),
                         s == null ? null : s.getUid(), s == null ? null : s.getName(),
-                        l.getSentAt(), l.getVoidedAt(), l.getVoidReason());
+                        l.getSentAt(), l.getVoidedAt(), l.getVoidReason(),
+                        l.getParentLineId() == null ? null : uidById.get(l.getParentLineId()),
+                        l.getCourse(), l.isHeld(), l.getReadyAt());
             }).toList();
-            int pending = (int) orderLines.stream().filter(RestaurantOrderLine::isPending).count();
+            int pending = (int) orderLines.stream()
+                    .filter(l -> l.isPending() && !l.isHeld() && !l.isChild()).count();
             RestaurantTable t = o.getRestaurantTableId() == null ? null : tableById.get(o.getRestaurantTableId());
             out.add(new RestaurantOrderDto(o.getId(), o.getUid(), o.getBranchId(), o.getOrderNumber(),
                     o.getOrderType(), o.getStatus(),

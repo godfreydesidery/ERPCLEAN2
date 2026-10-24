@@ -1196,6 +1196,12 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./restaurant/restaurant-orders.component').then((m) => m.RestaurantOrdersComponent),
   },
+  {
+    path: 'restaurant/kitchen',
+    canActivate: [requirePermission('RESTAURANT.KITCHEN.MANAGE')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-kitchen.component').then((m) => m.RestaurantKitchenComponent),
+  },
   // ── Stock Transfers ─────────────────���──────────────────────────��──────────
   {
     path: 'stock-transfers',

@@ -21,6 +21,8 @@ export interface RestaurantTableDto {
   status: MasterStatus;
   state: RestaurantTableState;
   liveOrderCount: number;
+  /** Items the kitchen has marked ready (ADR-0066 D-6). */
+  readyItemCount: number;
 }
 
 export interface CreateRestaurantTableRequest {
@@ -102,6 +104,11 @@ export interface RestaurantOrderLineDto {
   sentAt: string | null;
   voidedAt: string | null;
   voidReason: string | null;
+  /** Set on a priced add-on: the item it was chosen on (ADR-0066 D-4). */
+  parentLineUid: string | null;
+  course: number;
+  held: boolean;
+  readyAt: string | null;
 }
 
 export interface RestaurantOrderDto {
@@ -163,4 +170,73 @@ export interface RestaurantVoidResultDto {
 export interface CancelRestaurantOrderRequest {
   reason?: string | null;
   authorisedByUid?: string | null;
+}
+
+// ── Phase 3 (ADR-0066) ────────────────────────────────────────────────────────
+
+export interface ProductRef {
+  uid: string;
+  name: string;
+}
+
+export interface ModifierOptionDto {
+  uid: string;
+  label: string;
+  productId: string | null;
+  productUid: string | null;
+  productName: string | null;
+  sortOrder: number;
+  status: MasterStatus;
+}
+
+export interface ModifierGroupDto {
+  uid: string;
+  name: string;
+  minSelect: number;
+  /** null = no upper limit. */
+  maxSelect: number | null;
+  sortOrder: number;
+  status: MasterStatus;
+  options: ModifierOptionDto[];
+  products: ProductRef[];
+}
+
+export interface SaveModifierGroupRequest {
+  name: string;
+  minSelect: number;
+  maxSelect: number | null;
+  sortOrder?: number | null;
+  status?: MasterStatus | null;
+  options: { uid?: string | null; label: string; productUid?: string | null; sortOrder?: number | null }[];
+  productUids: string[];
+}
+
+export interface KitchenAddOn {
+  lineUid: string;
+  productName: string;
+  quantity: number;
+  voided: boolean;
+}
+
+export interface KitchenItem {
+  lineUid: string;
+  productName: string;
+  quantity: number;
+  note: string | null;
+  course: number;
+  voided: boolean;
+  voidReason: string | null;
+  addOns: KitchenAddOn[];
+}
+
+export interface KitchenTicketDto {
+  orderUid: string;
+  orderNumber: string;
+  orderType: RestaurantOrderType;
+  tableName: string | null;
+  guestCount: number | null;
+  round: number;
+  sentAt: string;
+  sentByName: string | null;
+  items: KitchenItem[];
 }

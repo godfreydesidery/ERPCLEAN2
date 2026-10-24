@@ -4,7 +4,12 @@ import com.erp.modules.sales.domain.enums.RestaurantOrderLineStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/** One item on a restaurant order (ADR-0065 D-5). The station is set once the item is sent. */
+/**
+ * One item on a restaurant order (ADR-0065 D-5). The station is set once the item is sent.
+ *
+ * <p>Phase 3 (ADR-0066): {@code parentLineUid} marks a priced add-on and names the item it belongs
+ * to; {@code course}, {@code held}, and {@code readyAt} (the kitchen display bumped it).
+ */
 public record RestaurantOrderLineDto(
         Long id,
         String uid,
@@ -23,5 +28,9 @@ public record RestaurantOrderLineDto(
         String prepStationName,
         Instant sentAt,
         Instant voidedAt,
-        String voidReason
+        String voidReason,
+        String parentLineUid,
+        Short course,
+        boolean held,
+        Instant readyAt
 ) {}
