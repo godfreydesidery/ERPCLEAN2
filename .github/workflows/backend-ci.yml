@@ -85,6 +85,9 @@ jobs:
   #                be edited/renamed/deleted — its checksum would drift and the app refuses to boot
   #                (validate-on-migrate) on the durable QA/prod DB. Corrections are NEW Vn migrations
   #                (or, for convergent reference data, an edit to the repeatable R__ file).
+  #   Rule 3 (lock timeout, ON since 2026-10-24): a NEW migration that locks an existing table
+  #                (ALTER, a foreign key to it, index, UPDATE/DELETE, DROP) must set lock_timeout, so a
+  #                held lock fails the deploy fast instead of stalling every till behind it.
   migration-hygiene:
     name: Migration hygiene (versions + immutability)
     runs-on: ubuntu-latest
@@ -93,5 +96,5 @@ jobs:
         with:
           fetch-depth: 0   # full history so Rule 2 can diff against the base branch
       - name: Check Flyway migration hygiene
-        # Rule 1 (always) + Rule 2 (immutability vs the PR base branch).
+        # Rule 1 (always) + Rules 2 and 3 (vs the PR base branch).
         run: BASE=origin/${{ github.base_ref || 'main' }} bash ../scripts/check-migrations.sh

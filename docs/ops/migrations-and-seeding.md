@@ -61,6 +61,24 @@ tables under load**. The empty-DB CI build cannot catch these — they only fail
   migration, marked non-transactional, because Flyway wraps a migration in a transaction by default
   and `CONCURRENTLY` cannot run inside one. Plain `CREATE INDEX` takes a write lock = downtime on
   `gl_entries` / `stock_*`.
+- **Set a lock timeout whenever a migration locks an existing table** (owner convention, 2026-10-24).
+  `ALTER TABLE`, a foreign key (`REFERENCES` — it takes SHARE ROW EXCLUSIVE on the *referenced*
+  table), `LOCK TABLE`, `CREATE INDEX`, `UPDATE`, `DELETE`, `TRUNCATE` and `DROP` all wait for any
+  write held open on that table — and every till write then queues behind the waiting migration.
+  Put this at the top of the migration:
+
+  ```sql
+  -- Fail fast (the whole migration rolls back) rather than queue every write behind a held lock.
+  SET LOCAL lock_timeout = '10s';
+  ```
+
+  `SET LOCAL` lasts only for the migration's own transaction (Flyway wraps each one). In a
+  non-transactional migration (`CONCURRENTLY`) use `SET lock_timeout` instead. If it trips, the
+  migration rolls back cleanly — no failed history row — and the deploy is simply retried
+  (rehearsed on a client copy 2026-10-24: V107 cancelled at 10.1 s, DB left at V106, retry applied).
+  A migration that only creates brand-new tables with no foreign keys to existing ones needs none;
+  one that genuinely needs none despite matching may say so on its own line:
+  `-- lock-timeout: not-needed (<reason>)`. Rule 3 of `scripts/check-migrations.sh` enforces this.
 - **Widen `CHECK` constraints additively** with the DROP-IF-EXISTS / ADD pattern already used for the
   `chk_*_origin` / `chk_*_source_type` constraints, and keep each new constraint a **superset** of
   the previous one so existing rows stay valid.
@@ -98,6 +116,10 @@ Set explicitly in `application.yml` (applies to all profiles; safe because no co
   - **Rule 2 (immutability, ON since 2026-06-20):** an applied versioned migration must not be
     edited, renamed, or deleted (diffed against the PR base branch). Repeatable `R__*` files are
     exempt — they are designed to change and re-run.
+  - **Rule 3 (lock timeout, ON since 2026-10-24):** a versioned migration *added* on the branch that
+    locks an existing table (`ALTER TABLE`, `REFERENCES`, `LOCK TABLE`, `CREATE INDEX`, `UPDATE`,
+    `DELETE`, `TRUNCATE`, `DROP` — comments ignored) must set `lock_timeout` or carry the reviewed
+    `-- lock-timeout: not-needed (<reason>)` opt-out. See §2.
 
 ---
 
