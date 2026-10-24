@@ -198,6 +198,8 @@ its station: on the Kitchen Display it previously got a 403.
 -- Additive only. restaurant_order_lines was created by V107; every column added here is nullable or
 -- carries a constant default (metadata-only in PostgreSQL 11+, no table rewrite).
 
+SET LOCAL lock_timeout = '10s';  -- fail fast instead of queueing behind an open write (added 2026-10-24, owner)
+
 -- (1) modifier_groups — a choice offered on menu items
 CREATE TABLE modifier_groups (
     id           BIGSERIAL PRIMARY KEY,

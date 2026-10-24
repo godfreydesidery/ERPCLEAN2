@@ -8,6 +8,12 @@
 -- shipped in the same release) only nullable columns or constant defaults - no table rewrite.
 -- ============================================================================
 
+-- Flyway runs this migration in one transaction. The foreign keys below take SHARE ROW EXCLUSIVE
+-- on the tables they reference; if something is holding a write open on one of them, fail fast
+-- (the whole migration rolls back) instead of queueing every till behind it. lock_timeout bounds
+-- each statement; retry the deploy if it trips.
+SET LOCAL lock_timeout = '10s';
+
 -- V108 — Restaurant phase 3 (ADR-0066): modifier groups/options, the item → group link, and on
 -- restaurant_order_lines: child lines for priced add-ons, course + hold, and the kitchen "ready" stamp.
 -- Additive only. restaurant_order_lines was created by V107; every column added here is nullable or

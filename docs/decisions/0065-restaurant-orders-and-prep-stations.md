@@ -397,6 +397,8 @@ existing table.
 -- V107 — Restaurant orders (ADR-0065): floor tables, prep stations + category routing,
 -- open orders (checks) and their lines. Additive only: five new tables, no ALTER.
 
+SET LOCAL lock_timeout = '10s';  -- fail fast instead of queueing behind an open write (added 2026-10-24, owner)
+
 -- (1) restaurant_tables — the per-branch floor
 CREATE TABLE restaurant_tables (
     id            BIGSERIAL PRIMARY KEY,

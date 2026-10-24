@@ -10,6 +10,12 @@
 -- through the existing POS sale (sales_invoices), so no existing table changes meaning.
 -- ============================================================================
 
+-- Flyway runs this migration in one transaction. The foreign keys below take SHARE ROW EXCLUSIVE
+-- on the tables they reference; if something is holding a write open on one of them, fail fast
+-- (the whole migration rolls back) instead of queueing every till behind it. lock_timeout bounds
+-- each statement; retry the deploy if it trips.
+SET LOCAL lock_timeout = '10s';
+
 -- V107 — Restaurant orders (ADR-0065): floor tables, prep stations + category routing,
 -- open orders (checks) and their lines. Additive only: five new tables, no ALTER.
 
