@@ -226,7 +226,7 @@ From left to right, the top bar contains:
 |---|---|---|
 | **🛒 Supermarket** | Fast, scanner-first grocery checkout | A wide, Excel-style grid of sale lines on the left with a number pad on the right. You scan or type a code and the item drops in; you can adjust quantity and discount inline. |
 | **💊 Pharmacy** | Dispensing with prescriptions | A patient/prescriber header (patient, prescriber, prescription number) above a dispensing line table, with the running totals down the side. |
-| **🍽 Restaurant** | Table service | A floor/table picker and a menu grid that build an order ticket, with a **Send to kitchen** action. |
+| **🍽 Restaurant** | Table service | The floor of tables and takeaways; orders stay open on the ERP, **Send** prints kitchen and bar slips, **Bill** prints the bill, **PAY** closes the order. |
 
 ### Switching mode
 
