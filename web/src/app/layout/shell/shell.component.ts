@@ -513,6 +513,8 @@ export class ShellComponent {
         { label: 'Point of Sale', route: '/admin/pos/sell', icon: 'bi-cart-check', available: true, permission: 'POS.SALE.CREATE' },
         { label: 'POS Sessions', route: '/admin/pos/sessions', icon: 'bi-shop', available: true, permission: 'POS.SESSION.VIEW' },
         { label: 'POS Tills', route: '/admin/pos/tills', icon: 'bi-safe2', available: true, permission: 'POS.TILL.VIEW' },
+        { label: 'Restaurant Orders', route: '/admin/restaurant/orders', icon: 'bi-receipt', available: true, permission: 'RESTAURANT.ORDER.MANAGE' },
+        { label: 'Restaurant Setup', route: '/admin/restaurant/setup', icon: 'bi-cup-hot', available: true, permission: 'RESTAURANT.SETUP.MANAGE' },
       ],
     },
   ];
