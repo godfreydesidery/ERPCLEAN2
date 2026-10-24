@@ -137,6 +137,16 @@ class ApiClient {
         ));
   }
 
+  /// PATCH, returning the unwrapped `data`.
+  Future<dynamic> patch(String path, {Object? body}) async {
+    return _send(() => _dio.patch(path, data: body));
+  }
+
+  /// PUT, returning the unwrapped `data`.
+  Future<dynamic> put(String path, {Object? body}) async {
+    return _send(() => _dio.put(path, data: body));
+  }
+
   /// DELETE; returns the unwrapped `data` (usually null/204).
   Future<dynamic> delete(String path, {Object? body}) async {
     return _send(() => _dio.delete(path, data: body));

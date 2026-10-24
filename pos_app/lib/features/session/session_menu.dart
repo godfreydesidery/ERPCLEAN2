@@ -14,6 +14,7 @@ import '../../models/auth.dart';
 import '../../models/context.dart';
 import '../../models/enums.dart';
 import '../../models/pos.dart';
+import '../../models/restaurant.dart';
 import '../../models/sale.dart';
 import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
@@ -505,11 +506,46 @@ class _SessionDrawer extends ConsumerWidget {
     final app = ref.read(appControllerProvider);
     final uid = app.shift?.uid;
     if (uid == null) return;
+    if (!await _confirmOpenRestaurantOrders(context, ref)) return;
+    if (!context.mounted) return;
     Navigator.pop(context); // close the drawer
     await showDialog(
       context: context,
       builder: (_) => _CloseDialog(sessionUid: uid, currency: app.currency),
     );
+  }
+
+  /// Restaurant orders still open in this branch (ERP ADR-0065 D-5): closing the
+  /// shift is allowed — the orders carry over to the next shift — but the
+  /// cashier is told first, so a table is not forgotten at cash-up. Any failure
+  /// to ask (older server, no permission, offline) never blocks the close.
+  Future<bool> _confirmOpenRestaurantOrders(BuildContext context, WidgetRef ref) async {
+    if (!ref.read(appControllerProvider).can(Perms.restaurantOrderManage)) return true;
+    List<RestaurantOrder> open;
+    try {
+      open = await ref.read(restaurantServiceProvider).listLiveOrders();
+    } catch (_) {
+      return true;
+    }
+    if (open.isEmpty || !context.mounted) return true;
+    final where = open.map((o) => o.where).toSet().join(', ');
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        title: Text('${open.length} restaurant order${open.length == 1 ? ' is' : 's are'} still open'),
+        content: Text('$where.\n\nThey stay open for the next shift and are paid from any '
+            'till. Close this session anyway?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Back')),
+          OrbixButton(
+              label: 'Close session', onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    return go == true;
   }
 
   Future<void> _reconcile(BuildContext context, WidgetRef ref) async {

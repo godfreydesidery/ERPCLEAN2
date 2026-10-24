@@ -83,6 +83,9 @@ class _TopBar extends ConsumerWidget {
     final app = ref.watch(appControllerProvider);
     final ctx = app.context;
     final shift = app.shift;
+    // A tablet in portrait has no room for the chips; the branch and session
+    // are still in the session menu.
+    final compact = MediaQuery.sizeOf(context).width < 900;
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -94,20 +97,27 @@ class _TopBar extends ConsumerWidget {
         children: [
           const Brand(),
           const SizedBox(width: 16),
-          if (ctx != null)
+          if (ctx != null && !compact)
             InfoChip(
                 icon: Icons.store_outlined,
                 label: ctx.branch.name,
                 value: ctx.company.name),
           const SizedBox(width: 8),
-          if (shift != null)
+          if (shift != null && !compact)
             InfoChip(
                 icon: Icons.receipt_long_outlined,
                 label: 'Session',
                 value: shift.sessionNumber,
                 ok: true),
+          if (app.isWaiter)
+            const InfoChip(
+                icon: Icons.room_service_outlined, label: 'Waiter', value: 'Orders only'),
           const Spacer(),
-          const _ModeSwitch(),
+          // A waiter works the restaurant only; the other modes sell over a till.
+          if (!app.isWaiter)
+            const Flexible(
+                flex: 4,
+                child: FittedBox(fit: BoxFit.scaleDown, child: _ModeSwitch())),
           const Spacer(),
           IconButton(
             tooltip: 'Session menu',

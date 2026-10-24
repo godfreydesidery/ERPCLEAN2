@@ -137,6 +137,9 @@ class Perms {
   static const expenseRecord = 'POS.EXPENSE.RECORD';
   static const tillView = 'POS.TILL.VIEW';
   static const tillManage = 'POS.TILL.MANAGE';
+  // restaurant orders (ERP ADR-0065)
+  static const restaurantOrderManage = 'RESTAURANT.ORDER.MANAGE';
+  static const restaurantOrderVoid = 'RESTAURANT.ORDER.VOID';
   // cross-module reads
   static const productView = 'PRODUCT.VIEW';
   static const customerView = 'CUSTOMER.VIEW';

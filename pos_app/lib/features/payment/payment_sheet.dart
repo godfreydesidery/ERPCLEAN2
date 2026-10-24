@@ -8,6 +8,7 @@ import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/enums.dart';
+import '../../models/restaurant.dart';
 import '../../models/sale.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
@@ -53,11 +54,61 @@ Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
   }
 }
 
+/// What a restaurant payment settles (ERP ADR-0065 D-8): an open order on the
+/// server, not the till's basket.
+class RestaurantCheckout {
+  const RestaurantCheckout({
+    required this.order,
+    required this.total,
+    this.hasRestricted = false,
+  });
+
+  /// The order being paid. It lives on the server, so a payment that dies
+  /// half-way cannot be lost or double-posted: the server locks the order and
+  /// refuses to settle it twice, and Retry reuses the same key.
+  final RestaurantOrder order;
+
+  /// The bill total the customer was shown. Sent as `expectedTotal`, so a price
+  /// that changed since is refused instead of charged.
+  final double total;
+
+  /// Whether the order holds age-restricted items (asks the age question).
+  final bool hasRestricted;
+}
+
+/// Opens the payment modal for a restaurant order. Returns the receipt once the
+/// order has been paid (and shown), or null when the cashier backed out.
+Future<Receipt?> openRestaurantPaymentSheet(
+    BuildContext context, WidgetRef ref, RestaurantCheckout checkout) async {
+  // An unresolved supermarket sale from earlier still blocks the drawer.
+  if (!await resolvePendingSale(context, ref)) return null;
+  if (!context.mounted) return null;
+  if (ref.read(cartProvider).customer == null) {
+    showToast(context, 'Select a customer before completing the sale.');
+    await showCustomerPicker(context, ref);
+    if (!context.mounted || ref.read(cartProvider).customer == null) return null;
+  }
+  final receipt = await showDialog<Receipt>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => _PaymentSheet(restaurant: checkout),
+  );
+  if (receipt != null) {
+    ref.read(priceCacheProvider).clear();
+    await ref.read(receiptJournalProvider).add(receipt);
+    if (context.mounted) await showReceiptSheet(context, ref, receipt);
+  }
+  return receipt;
+}
+
 /// The cashier's answer to the age check.
 enum _AgeDecision { verified, overridden, cancelled }
 
 class _PaymentSheet extends ConsumerStatefulWidget {
-  const _PaymentSheet();
+  const _PaymentSheet({this.restaurant});
+
+  /// Set when paying a restaurant order rather than the basket.
+  final RestaurantCheckout? restaurant;
   @override
   ConsumerState<_PaymentSheet> createState() => _PaymentSheetState();
 }
@@ -125,7 +176,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     super.dispose();
   }
 
-  double get _gross => ref.read(cartProvider).previewSubtotal;
+  RestaurantCheckout? get _resto => widget.restaurant;
+
+  double get _gross => _resto?.total ?? ref.read(cartProvider).previewSubtotal;
+
+  /// A line without a preview price makes the basket total indeterminate. A
+  /// restaurant total comes from the server's bill, so it is always known.
+  bool get _hasUnpriced => _resto == null && ref.read(cartProvider).hasUnpricedLine;
   double get _paid => _tenders.fold(0, (s, t) => s + t.amount);
   double get _remaining => (_gross - _paid).clamp(0, double.infinity);
 
@@ -188,12 +245,14 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// as "stop" completed the sale.
   Future<_AgeDecision> _confirmAge({required bool canOverride}) async {
     final cart = ref.read(cartProvider);
-    final kinds = cart.activeLines
-        .map((l) => l.product.restrictedKind)
-        .where((k) => k.isRestricted)
-        .map((k) => k.ageLabel)
-        .toSet()
-        .join(', ');
+    final kinds = _resto != null
+        ? 'age-restricted'
+        : cart.activeLines
+            .map((l) => l.product.restrictedKind)
+            .where((k) => k.isRestricted)
+            .map((k) => k.ageLabel)
+            .toSet()
+            .join(', ');
     final decision = await showDialog<_AgeDecision>(
       context: context,
       builder: (_) => AlertDialog(
@@ -204,7 +263,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           Text('Age-restricted items'),
         ]),
         content: Text(
-            'This basket contains $kinds items. Confirm you have verified the '
+            'This ${_resto != null ? 'order' : 'basket'} contains $kinds items. Confirm you have verified the '
             'customer meets the minimum age.'),
         actions: [
           TextButton(
@@ -234,7 +293,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     final session = app.shift;
     if (session == null) return;
 
-    final hasUnpriced = cart.hasUnpricedLine;
+    final hasUnpriced = _hasUnpriced;
     final knownGross = !hasUnpriced && _gross > 0;
 
     // Tender-coverage guard — only when the total is KNOWN (a fully-priced
@@ -254,7 +313,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     // Age gate (ADR-0044 D-3a). Verified, or an explicit override by someone who
     // holds it (the server re-checks that permission); Cancel always stops.
     var ageVerified = false;
-    if (cart.hasRestricted) {
+    if (_resto?.hasRestricted ?? cart.hasRestricted) {
       final decision =
           await _confirmAge(canOverride: app.can(Perms.saleAgeOverride));
       if (!mounted) return;
@@ -285,6 +344,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       }
       tenders = [PosTender(tenderType: _type, amount: amt)];
       tendered = null;
+    }
+
+    final resto = _resto;
+    if (resto != null) {
+      await _payRestaurantOrder(resto, session.uid,
+          tenders: tenders, tendered: tendered, ageVerified: ageVerified);
+      return;
     }
 
     final body = cart.buildRequest(
@@ -351,6 +417,61 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     }
   }
 
+  /// Pays a restaurant order: the server turns it into a POS sale (ADR-0065 D-8).
+  ///
+  /// No pending-sale slot is armed. The order itself is the durable record: it
+  /// stays on the server until it is paid, the server locks it and refuses a
+  /// second settlement, and Retry reuses [_txnId] so an ambiguous attempt
+  /// returns the same sale instead of a new one.
+  Future<void> _payRestaurantOrder(
+    RestaurantCheckout resto,
+    String sessionUid, {
+    required List<PosTender>? tenders,
+    required double? tendered,
+    required bool ageVerified,
+  }) async {
+    final cart = ref.read(cartProvider);
+    final body = <String, dynamic>{
+      'sessionUid': sessionUid,
+      'customerId': cart.customer?.id,
+      'currency': cart.currency,
+      if (tenders != null && tenders.isNotEmpty)
+        'tenders': tenders.map((t) => t.toJson()).toList(),
+      'tenderedAmount': ?tendered,
+      'expectedTotal': resto.total,
+      'ageVerified': ageVerified,
+    };
+    setState(() {
+      _busy = true;
+      _ambiguous = false;
+      _rejection = null;
+      _serverDetail = null;
+      _offerDiscountApproval = false;
+    });
+    try {
+      final paid = await ref
+          .read(restaurantServiceProvider)
+          .pay(resto.order.uid, body, idempotencyKey: _txnId);
+      final sale = ref.read(saleServiceProvider);
+      Receipt receipt;
+      try {
+        receipt = await sale.loadReceipt(paid.invoice.uid,
+            clientTxnId: _txnId, tenderedAmount: tendered);
+      } catch (_) {
+        receipt = Receipt(
+            invoice: paid.invoice,
+            lines: const [],
+            payments: const [],
+            clientTxnId: _txnId,
+            tenderedAmount: tendered);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(receipt);
+    } on ApiException catch (e) {
+      await _handleRingFailure(e, null);
+    }
+  }
+
   /// Decides what the refusal means for the till.
   ///
   /// **This is the K11 defect.** The old rule was "409 = undecided, keep the
@@ -373,7 +494,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// fixed. Branching is on the machine-readable code and the status — never on
   /// the message.
   Future<void> _handleRingFailure(
-      ApiException e, PendingSaleStore pendingStore) async {
+      ApiException e, PendingSaleStore? pendingStore) async {
     final status = PosSaleFlowStatus.resolve(e.code, e.statusCode);
     // "Nothing was written" is a claim only the SERVER may make, via an explicit
     // REJECTED or STALE_REPLAY verdict. Anything else — a proxy that rewrote a 502
@@ -386,14 +507,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     final undecided = !declaredNoWrite ||
         e.isAmbiguousWrite ||
         status == PosSaleFlowStatus.inFlight;
-    if (!undecided) await pendingStore.clear();
+    if (!undecided) await pendingStore?.clear();
     if (!mounted) return;
 
     // Offer the manager-approval path only for an explicit business REJECTED,
     // and only when there is in fact an unapproved discount it could be about.
     // Offering it after a 403 or a validation error would be a guess dressed up
     // as a remedy — the till does not know the ceiling and must not pretend to.
-    final canApprove = status == PosSaleFlowStatus.rejected &&
+    final canApprove = _resto == null &&
+        status == PosSaleFlowStatus.rejected &&
         ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty;
 
     setState(() {
@@ -511,7 +633,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   double _changePreview() {
     // Total is indeterminate while a line has no preview price — don't show a
     // change figure computed against a 0/partial total.
-    if (ref.read(cartProvider).hasUnpricedLine) return 0;
+    if (_hasUnpriced) return 0;
     if (_tenders.isEmpty) {
       return (_typed - _gross).clamp(0, double.infinity);
     }
@@ -525,8 +647,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           border: Border(bottom: BorderSide(color: AppColors.line))),
       child: Row(
         children: [
-          const Text('Payment',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(
+              _resto == null
+                  ? 'Payment'
+                  : 'Payment · ${_resto!.order.where} · ${_resto!.order.orderNumber}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
           IconButton(
             onPressed: _busy ? null : () => Navigator.pop(context),
@@ -838,6 +963,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             ),
           ),
           const SizedBox(height: 12),
+          if (_resto != null) ...[_splitEvenly(), const SizedBox(height: 8)],
           _quickCash(),
           const SizedBox(height: 12),
           Expanded(child: _keypad()),
@@ -861,6 +987,40 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       ),
     );
   }
+
+  /// Splitting a bill evenly (ADR-0066 D-2): one sale, several payments. Each
+  /// button keys in one share of what is still to pay, rounded UP to the
+  /// currency's smallest unit so the last guest never comes up short; the
+  /// cashier then picks the tender and taps Add tender for each guest.
+  Widget _splitEvenly() {
+    final minor = minorUnitsFor(ref.read(cartProvider).currency);
+    final factor = 1.0 * _pow10(minor);
+    return Row(
+      children: [
+        const Text('Split evenly', style: TextStyle(color: AppColors.ink2, fontSize: 12.5)),
+        const Spacer(),
+        for (final n in const [2, 3, 4])
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: _quickBtnSized('÷$n', () {
+              final share = (_remaining / n * factor).ceil() / factor;
+              _setAmount(share.toStringAsFixed(minor));
+            }),
+          ),
+      ],
+    );
+  }
+
+  static int _pow10(int n) {
+    var v = 1;
+    for (var i = 0; i < n; i++) {
+      v *= 10;
+    }
+    return v;
+  }
+
+  Widget _quickBtnSized(String label, VoidCallback onTap) =>
+      SizedBox(width: 52, height: 34, child: _quickBtn(label, onTap));
 
   Widget _quickCash() {
     final presets = _presets(_gross);

@@ -64,6 +64,14 @@ class AppData {
 
   bool can(String code) => me?.can(code) ?? false;
 
+  /// Waiter mode (ERP ADR-0066 D-8): someone who takes restaurant orders but
+  /// may not run a till. They work the floor with no shift — send and bill,
+  /// never take money.
+  bool get isWaiter => me != null && isWaiterLogin(me!);
+
+  static bool isWaiterLogin(Me me) =>
+      me.can(Perms.restaurantOrderManage) && !me.can(Perms.sessionOpen);
+
   /// VAT fraction for a `vatStatus` (e.g. 0.18); 0 when unknown. Values are
   /// already fractions (see [vatRates]) — no percentage/fraction conversion.
   double vatFractionFor(String vatStatus) => vatRates[vatStatus] ?? 0;
@@ -226,8 +234,12 @@ class AppController extends Notifier<AppData> {
           'If your till shows as in use, open it again from the list below.';
     }
 
+    // A waiter has no till to open: straight to the restaurant floor.
+    final waiter = AppData.isWaiterLogin(me);
+
     state = state.copyWith(
-      phase: resumable != null ? AppPhase.register : AppPhase.openShift,
+      phase: waiter || resumable != null ? AppPhase.register : AppPhase.openShift,
+      mode: waiter ? BusinessMode.restaurant : null,
       me: me,
       context: context,
       shift: resumable,

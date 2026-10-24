@@ -1,0 +1,212 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/core/config/app_config.dart';
+import 'package:pos_app/features/restaurant/restaurant_printing.dart';
+import 'package:pos_app/features/restaurant/slip_text.dart';
+import 'package:pos_app/models/auth.dart';
+import 'package:pos_app/models/restaurant.dart';
+import 'package:pos_app/state/app_controller.dart';
+import 'package:pos_app/services/network_printer.dart';
+import 'package:pos_app/services/receipt_printer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Restaurant orders on the till (ERP ADR-0065): the server's JSON, the kitchen
+/// and bar slips, the bill, and where each slip is sent.
+
+PrepSlip _slip({
+  bool isVoid = false,
+  String station = 'Bar',
+  String? host = '192.168.1.51',
+  String uid = 'S2',
+}) =>
+    PrepSlip(
+      isVoid: isVoid,
+      stationUid: uid,
+      stationName: station,
+      printerHost: host,
+      printerPort: 9100,
+      orderNumber: 'ORD-0007',
+      takeaway: false,
+      tableName: 'T4',
+      guestCount: 3,
+      round: 2,
+      reprint: false,
+      byName: 'Asha Waiter',
+      at: DateTime(2026, 10, 24, 12, 40),
+      lines: [
+        PrepSlipLine(productName: 'Pumpkin Spice Latte Iced Extra Large', quantity: 2, note: 'no sugar'),
+        PrepSlipLine(productName: 'Mango smoothie', quantity: 1, voidReason: isVoid ? 'Wrong item' : null),
+      ],
+    );
+
+RestaurantBill _bill({int printCount = 1}) => RestaurantBill(
+      orderUid: 'O1',
+      orderNumber: 'ORD-0007',
+      takeaway: false,
+      tableName: 'T4',
+      guestCount: 3,
+      serverName: 'Asha Waiter',
+      billedAt: DateTime(2026, 10, 24, 13, 5),
+      printCount: printCount,
+      currency: 'TZS',
+      lines: [
+        BillLine(productName: 'Grilled Chicken Tacos', quantity: 1, unitPrice: 12000, amount: 12000),
+        BillLine(productName: 'Pumpkin Spice Latte', quantity: 2, unitPrice: 6000, amount: 12000),
+      ],
+      netTotal: 20339,
+      vatTotal: 3661,
+      grossTotal: 24000,
+      unsentLineCount: 0,
+    );
+
+class _FakeNetwork implements NetworkPrinter {
+  final sent = <String>[];
+  bool fail = false;
+  @override
+  bool get supported => true;
+  @override
+  Future<void> send(String host, int port, List<int> bytes) async {
+    if (fail) throw ReceiptPrinterException('Could not reach the printer at $host:$port.');
+    sent.add('$host:$port');
+  }
+}
+
+class _FakeSpooler implements ReceiptPrinter {
+  final printed = <String>[];
+  @override
+  bool get supported => true;
+  @override
+  List<String> listPrinters() => const ['USB Kitchen'];
+  @override
+  Future<void> printRaw(String printerName, List<int> bytes) async => printed.add(printerName);
+}
+
+void main() {
+  group('waiter mode', () {
+    Me me(List<String> perms, {bool root = false}) =>
+        Me.fromJson({'uid': 'U', 'username': 'u', 'isRoot': root, 'permissions': perms});
+
+    test('order-taker without a till is a waiter; a cashier and root are not', () {
+      expect(AppData.isWaiterLogin(me(['RESTAURANT.ORDER.MANAGE', 'PRODUCT.VIEW'])), isTrue);
+      expect(AppData.isWaiterLogin(me(['RESTAURANT.ORDER.MANAGE', 'POS.SESSION.OPEN'])), isFalse);
+      expect(AppData.isWaiterLogin(me(['POS.SESSION.OPEN'])), isFalse);
+      expect(AppData.isWaiterLogin(me(const [], root: true)), isFalse);
+    });
+  });
+
+  group('server JSON', () {
+    test('an order parses ids as strings, amounts as numbers and line states', () {
+      final o = RestaurantOrder.fromJson({
+        'uid': 'O1',
+        'orderNumber': 'ORD-0001',
+        'orderType': 'DINE_IN',
+        'status': 'BILLED',
+        'tableUid': 'T1',
+        'tableName': 'T1',
+        'guestCount': 2,
+        'openedByName': 'Asha',
+        'billedTotalAmount': 24000,
+        'billPrintCount': 1,
+        'pendingLineCount': 1,
+        'lines': [
+          {'uid': 'L1', 'productId': '147', 'productName': 'Tacos', 'unitId': '3',
+           'quantity': 1, 'status': 'SENT', 'fireRound': 1, 'prepStationName': 'Kitchen'},
+          {'uid': 'L2', 'productId': '159', 'productName': 'Latte', 'unitId': '3',
+           'quantity': 2, 'status': 'PENDING', 'note': 'no sugar'},
+          {'uid': 'L3', 'productId': '171', 'productName': 'Donut', 'unitId': '3',
+           'quantity': 1, 'status': 'VOIDED', 'voidReason': 'Wrong item'},
+        ],
+      });
+      expect(o.status, OrderStatus.billed);
+      expect(o.where, 'Table T1');
+      expect(o.billedTotal, 24000);
+      expect(o.lines.map((l) => l.status),
+          [OrderLineStatus.sent, OrderLineStatus.pending, OrderLineStatus.voided]);
+      expect(o.activeLines, hasLength(2));
+      expect(o.lines.first.productId, '147');
+    });
+
+    test('a takeaway says so, and a table state parses', () {
+      expect(RestaurantOrder.fromJson({'orderType': 'TAKEAWAY'}).where, 'Takeaway');
+      expect(RestaurantTable.fromJson({'state': 'BILLED', 'status': 'ACTIVE'}).state,
+          TableState.billed);
+    });
+  });
+
+  group('slip text', () {
+    test('a kitchen/bar slip names the station, table and items — never a price', () {
+      final text = buildSlipText(_slip(), width: 32);
+      expect(text, contains('BAR'));
+      expect(text, contains('TABLE T4'));
+      expect(text, contains('ORD-0007'));
+      expect(text, contains('2 x Pumpkin Spice Latte'));
+      expect(text, contains('>> no sugar'));
+      expect(text, isNot(contains('6,000')));
+      for (final line in text.split('\n')) {
+        expect(line.length, lessThanOrEqualTo(32), reason: line);
+      }
+    });
+
+    test('a VOID slip leads with the cancellation and says why', () {
+      final text = buildSlipText(_slip(isVoid: true), width: 48);
+      expect(text.split('\n')[1], contains('VOID - DO NOT MAKE'));
+      expect(text, contains('Reason: Wrong item'));
+    });
+  });
+
+  group('bill text', () {
+    test('is plainly not a receipt and carries the server totals', () {
+      final text = buildBillText(_bill(), companyName: 'CAFE TULIA', branchName: 'Main', width: 32);
+      expect(text, contains('BILL - NOT A RECEIPT'));
+      expect(text, isNot(contains('REPRINT')));
+      expect(text, contains('24,000'));
+      for (final line in text.split('\n')) {
+        expect(line.length, lessThanOrEqualTo(32), reason: line);
+      }
+    });
+
+    test('a second print says REPRINT', () {
+      final text = buildBillText(_bill(printCount: 3), companyName: 'C', branchName: '', width: 48);
+      expect(text, contains('REPRINT 2'));
+    });
+  });
+
+  group('where slips go', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('network address by default; a local override wins; no address is a failure', () async {
+      final net = _FakeNetwork();
+      final spool = _FakeSpooler();
+      final printing = RestaurantPrinting(
+        network: net,
+        spooler: spool,
+        loadConfig: () async => AppConfig(
+            baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}),
+      );
+      final failures = await printing.printSlips([
+        _slip(station: 'Bar', uid: 'S2', host: '192.168.1.51'),
+        _slip(station: 'Kitchen', uid: 'S1', host: '192.168.1.50'),
+        _slip(station: 'Grill', uid: 'S3', host: null),
+      ]);
+      expect(net.sent, ['192.168.1.51:9100']);
+      expect(spool.printed, ['USB Kitchen']);
+      expect(failures.single.slip.stationName, 'Grill');
+      expect(failures.single.message, contains('no printer set'));
+    });
+
+    test('a printer that is off is reported per slip, not thrown', () async {
+      final net = _FakeNetwork()..fail = true;
+      final printing = RestaurantPrinting(
+          network: net, spooler: _FakeSpooler(),
+          loadConfig: () async => AppConfig(baseHost: 'http://x'));
+      final failures = await printing.printSlips([_slip()]);
+      expect(failures.single.message, contains('Could not reach the printer'));
+    });
+
+    test('station overrides survive a restart', () async {
+      final cfg = AppConfig(baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen', 'S2': ' '});
+      await cfg.save();
+      final loaded = await AppConfig.load();
+      expect(loaded.stationPrinters, {'S1': 'USB Kitchen'});
+    });
+  });
+}
