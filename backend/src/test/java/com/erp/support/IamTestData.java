@@ -129,6 +129,12 @@ public class IamTestData {
                 "TRUNCATE delivery_lines, deliveries, sales_order_lines, sales_orders, " +
                 "quotation_lines, quotations RESTART IDENTITY CASCADE")
                 .executeUpdate();
+        // 4d-R. Clear restaurant orders (ADR-0065) BEFORE sales_invoices/products/branches:
+        //       restaurant_orders.sales_invoice_id FK → sales_invoices; lines FK → products, stations.
+        em.createNativeQuery(
+                "TRUNCATE restaurant_order_lines, restaurant_orders, prep_station_categories, " +
+                "prep_stations, restaurant_tables RESTART IDENTITY CASCADE")
+                .executeUpdate();
         // 4d. Clear sales tables (FK children before parents; before products/parties).
         //     tax_rates after invoices because invoices do NOT FK into tax_rates; payments/lines first.
         //     sales_invoices.route_id nullable — routes already cleared above so FK is satisfied.

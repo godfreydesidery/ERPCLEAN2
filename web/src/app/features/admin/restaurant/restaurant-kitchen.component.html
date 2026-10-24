@@ -1,0 +1,108 @@
+<section class="admin-page kitchen">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Kitchen Display{{ stationName() ? ' — ' + stationName() : '' }}</h1>
+      <p class="subtitle">
+        <i class="bi bi-fire me-1" aria-hidden="true"></i>
+        Tap an item when it is ready, or Done for the whole ticket. Refreshes by itself.
+      </p>
+    </div>
+  </header>
+
+  <div class="erp-toolbar">
+    @if (branches().length > 1) {
+      <div class="kitchen__pick">
+        <label class="form-label small text-muted mb-1" for="kdsBranch">Branch</label>
+        <select id="kdsBranch" name="kdsBranch" class="form-select"
+                [ngModel]="branchUid()" (ngModelChange)="onBranchChange($event)">
+          @for (b of branches(); track b.branchUid) {
+            <option [value]="b.branchUid">{{ b.branchName }}</option>
+          }
+        </select>
+      </div>
+    }
+    @if (stations().length > 0) {
+      <div class="kitchen__pick">
+        <label class="form-label small text-muted mb-1" for="kdsStation">Station</label>
+        <select id="kdsStation" name="kdsStation" class="form-select"
+                [ngModel]="stationUid()" (ngModelChange)="onStationChange($event)">
+          @for (s of stations(); track s.uid) {
+            <option [value]="s.uid">{{ s.name }}</option>
+          }
+        </select>
+      </div>
+    }
+    <button type="button" class="btn btn-outline-secondary" (click)="undo()"
+            [disabled]="lastBumped().length === 0 || busy()">
+      <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Undo last
+    </button>
+    <button type="button" class="btn btn-outline-secondary" (click)="refresh()">
+      <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+    </button>
+  </div>
+
+  @switch (state()) {
+    @case ('loading') {
+      <output class="text-muted d-flex align-items-center gap-2">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tickets…
+      </output>
+    }
+    @case ('error') {
+      <p class="text-danger" role="alert">Could not load the tickets. Check the connection.</p>
+    }
+    @case ('forbidden') {
+      <p class="text-muted">You don't have permission to use the kitchen display for this branch.</p>
+    }
+    @default {
+      @if (stations().length === 0) {
+        <div class="erp-empty">
+          <i class="bi bi-printer" aria-hidden="true"></i>
+          No kitchen or bar stations are set up for this branch (Restaurant Setup).
+        </div>
+      } @else if (tickets().length === 0) {
+        <div class="erp-empty">
+          <i class="bi bi-check2-circle" aria-hidden="true"></i> All caught up — nothing to make.
+        </div>
+      } @else {
+        <ul class="kitchen__tickets list-unstyled" aria-live="polite">
+          @for (t of tickets(); track t.orderUid + '#' + t.round) {
+            <li class="kitchen__ticket" [class.kitchen__ticket--late]="minutes(t) >= 15">
+              <div class="kitchen__head">
+                <span class="kitchen__where">{{ where(t) }}</span>
+                <span class="kitchen__age">{{ minutes(t) }} min</span>
+              </div>
+              <div class="kitchen__meta">
+                {{ t.orderNumber }} · round {{ t.round }}@if (t.sentByName) { · {{ t.sentByName }} }
+              </div>
+              <ul class="list-unstyled mb-2">
+                @for (i of t.items; track i.lineUid) {
+                  <li>
+                    <button type="button" class="kitchen__item" (click)="bumpItem(i.lineUid)"
+                            [class.kitchen__item--void]="i.voided" [disabled]="busy()"
+                            [attr.aria-label]="(i.voided ? 'Seen: cancelled ' : 'Ready: ') + i.quantity + ' ' + i.productName">
+                      <span class="kitchen__qty">{{ i.quantity }}</span>
+                      <span>
+                        @if (i.course > 1) { <span class="badge text-bg-secondary me-1">Course {{ i.course }}</span> }
+                        @if (i.voided) { <strong class="text-danger">VOID </strong> }
+                        {{ i.productName }}
+                        @for (a of i.addOns; track a.lineUid) {
+                          <span class="kitchen__addon">+ {{ a.productName }}</span>
+                        }
+                        @if (i.note) { <span class="kitchen__note">» {{ i.note }}</span> }
+                        @if (i.voided && i.voidReason) { <span class="kitchen__note">{{ i.voidReason }}</span> }
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+              <button type="button" class="btn btn-success w-100" (click)="bumpTicket(t)" [disabled]="busy()"
+                      [attr.aria-label]="'Done: ' + where(t) + ' ' + t.orderNumber">
+                <i class="bi bi-check2-all me-1" aria-hidden="true"></i>Done
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+  }
+</section>

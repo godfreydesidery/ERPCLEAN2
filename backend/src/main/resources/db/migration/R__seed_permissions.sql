@@ -150,6 +150,12 @@ INSERT INTO permissions (code, module, description) VALUES
     ('POS.SESSION.VIEW', 'sales', 'View POS cashier sessions and X/Z reads'),
     ('POS.TILL.MANAGE', 'sales', 'Create and manage POS tills (registers)'),
     ('POS.TILL.VIEW', 'sales', 'View POS tills (registers)'),
+    -- Restaurant orders (ADR-0065, owner-approved 2026-10-24): open checks, kitchen/bar slips, bill, pay.
+    ('RESTAURANT.ORDER.MANAGE', 'sales', 'Open restaurant orders, add items, send to prep stations, print the bill and take payment'),
+    ('RESTAURANT.ORDER.VOID', 'sales', 'Void an item already sent to a prep station, or cancel an order with sent items'),
+    ('RESTAURANT.SETUP.MANAGE', 'sales', 'Manage restaurant tables, prep stations and category routing'),
+    -- Restaurant phase 3 (ADR-0066, owner-approved 2026-10-24): the kitchen display.
+    ('RESTAURANT.KITCHEN.MANAGE', 'sales', 'View the kitchen display and mark items ready'),
     ('PRICELIST.MANAGE', 'products', 'Create, update, archive price lists'),
     ('PRICELIST.VIEW', 'products', 'View price lists'),
     ('PRODUCT.BRANCH.ASSIGN', 'products', 'Associate/dissociate a product with branches of its company'),
@@ -325,7 +331,10 @@ INSERT INTO roles (uid, code, name, description, is_system) VALUES
   ('00000000000000000000000009', 'PROCUREMENT_MANAGER', 'Procurement Manager', 'Procurement officer plus approve, void and settings.', true),
   ('0000000000000000000000000A', 'HR_PAYROLL_MANAGER', 'HR and Payroll Manager', 'Employees, leave, payroll run/approve/post/disburse.', true),
   ('0000000000000000000000000B', 'FINANCE_DIRECTOR', 'Finance Director', 'Accountant plus GL close, VAT file, FA, budgeting, policy.', true),
-  ('0000000000000000000000000C', 'PRODUCTION_MANAGER', 'Production Manager', 'Work orders, BOMs, material movements, WIP costing.', true)
+  ('0000000000000000000000000C', 'PRODUCTION_MANAGER', 'Production Manager', 'Work orders, BOMs, material movements, WIP costing.', true),
+  -- ADR-0066 D-7 (owner-approved 2026-10-24).
+  ('0000000000000000000000000D', 'WAITER', 'Waiter', 'Takes restaurant orders, sends them to the kitchen and bar, prints bills. Takes no payment.', true),
+  ('0000000000000000000000000E', 'KITCHEN', 'Kitchen', 'Kitchen and bar display: sees what to make and marks it ready.', true)
 -- ON CONFLICT needs an index it can INFER. V102 replaced the global uq_role_code with two partial
 -- indexes, so a bare `ON CONFLICT (code)` no longer matches anything and this statement fails with
 -- "there is no unique or exclusion constraint matching the ON CONFLICT specification". The predicate
@@ -392,6 +401,7 @@ SELECT r.id, p.id FROM (VALUES
   -- (POS.EXPENSE.VIEW) and is deliberately NOT granted here.
   ('CASHIER','POS.EXPENSE.RECORD'),
   ('CASHIER','POS.TILL.VIEW'),
+  ('CASHIER','RESTAURANT.ORDER.MANAGE'),
   ('CASHIER','SALES.INVOICE.SETTLE'),
   ('CASHIER','SALES.INVOICE.VIEW'),
   ('CASHIER','AR.RECEIPT.RECORD'),
@@ -684,6 +694,8 @@ SELECT r.id, p.id FROM (VALUES
   -- failure, not a security posture.
   ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','POS.CASHUP.VIEW'),
+  ('SALES_MANAGER','RESTAURANT.ORDER.MANAGE'),
+  ('SALES_MANAGER','RESTAURANT.ORDER.VOID'),
   ('SALES_MANAGER','BRANCH.VIEW'),
   -- Gap review 2026-10-10 (ADM-13, owner-approved): the sales manager reads every sales report but
   -- could not export one to PDF/Excel.
@@ -712,6 +724,10 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','POS.SALE.AGE_OVERRIDE'),
   ('BRANCH_MANAGER','POS.TILL.MANAGE'),
   ('BRANCH_MANAGER','POS.TILL.VIEW'),
+  ('BRANCH_MANAGER','RESTAURANT.ORDER.MANAGE'),
+  ('BRANCH_MANAGER','RESTAURANT.ORDER.VOID'),
+  ('BRANCH_MANAGER','RESTAURANT.SETUP.MANAGE'),
+  ('BRANCH_MANAGER','RESTAURANT.KITCHEN.MANAGE'),
   ('BRANCH_MANAGER','CASH.COUNT.MANAGE'),
   ('BRANCH_MANAGER','CASH.COUNT.VIEW'),
   ('BRANCH_MANAGER','PETTY_CASH.VIEW'),
@@ -986,5 +1002,35 @@ SELECT r.id, p.id FROM (VALUES
   ('PRODUCTION_MANAGER','STOCK.LOCATION.VIEW')
 ) AS g(role_code, perm_code)
 JOIN roles r ON r.code = g.role_code
+JOIN permissions p ON p.code = g.perm_code
+ON CONFLICT DO NOTHING;
+
+-- ==========================================================================
+-- WAITER and KITCHEN bundles (ADR-0066 D-7, owner-approved 2026-10-24).
+-- A statement of their own because the join below is restricted to the GLOBAL roles. These codes
+-- are new: a customer may already have created a role called WAITER or KITCHEN of their own, and
+-- the code-only join above would silently hand that role these permissions. Additive floor, as
+-- above: ON CONFLICT DO NOTHING, never revoked here.
+-- ==========================================================================
+INSERT INTO role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM (VALUES
+  -- WAITER (ADR-0066 D-7): takes orders and prints bills; holds no payment, till or void authority.
+  ('WAITER','RESTAURANT.ORDER.MANAGE'),
+  ('WAITER','PRODUCT.VIEW'),
+  ('WAITER','UOM.VIEW'),
+  ('WAITER','PRICELIST.VIEW'),
+  ('WAITER','TAXRATE.VIEW'),
+  ('WAITER','CUSTOMER.VIEW'),
+  ('WAITER','CURRENCY.VIEW'),
+  ('WAITER','BRANCH.VIEW'),
+  ('WAITER','NOTIFICATION.VIEW'),
+  ('WAITER','NOTIFICATION.PREFERENCE.MANAGE'),
+  -- KITCHEN (ADR-0066 D-7): the kitchen display only.
+  ('KITCHEN','RESTAURANT.KITCHEN.MANAGE'),
+  ('KITCHEN','BRANCH.VIEW'),
+  ('KITCHEN','NOTIFICATION.VIEW'),
+  ('KITCHEN','NOTIFICATION.PREFERENCE.MANAGE')
+) AS g(role_code, perm_code)
+JOIN roles r ON r.code = g.role_code AND r.organisation_id IS NULL
 JOIN permissions p ON p.code = g.perm_code
 ON CONFLICT DO NOTHING;

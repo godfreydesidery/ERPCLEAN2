@@ -37,6 +37,12 @@ public interface ProductService {
 
     ProductDto updateByUid(String uid, UpdateProductRequest req);
 
+    /**
+     * Sets only the product's category (blank clears it) — what restaurant routing reads to send
+     * an item to the kitchen or the bar (ADR-0066). Trimmed, inner whitespace collapsed.
+     */
+    ProductDto setCategory(String uid, String category);
+
     void archiveByUid(String uid);
 
     void restoreByUid(String uid);

@@ -44,11 +44,11 @@ class DefaultRoleBundlesSeededTest {
     private static final Pattern GRANT_PAIR =
             Pattern.compile("\\('([A-Z][A-Z0-9_]*)','([A-Z][A-Z0-9_]*(?:\\.[A-Z0-9_]+)+)'\\)");
 
-    /** The 12 shipped roles (ADR-0057 §2). */
+    /** The 14 shipped roles (ADR-0057 §2; WAITER and KITCHEN from ADR-0066 D-7). */
     private static final List<String> EXPECTED_ROLES = List.of(
             "SALESPERSON", "CASHIER", "FIELD_SALES_AGENT", "STOREKEEPER", "ACCOUNTANT",
             "SALES_MANAGER", "BRANCH_MANAGER", "PROCUREMENT_OFFICER", "PROCUREMENT_MANAGER",
-            "HR_PAYROLL_MANAGER", "FINANCE_DIRECTOR", "PRODUCTION_MANAGER");
+            "HR_PAYROLL_MANAGER", "FINANCE_DIRECTOR", "PRODUCTION_MANAGER", "WAITER", "KITCHEN");
 
     /** One signature capability per role — its removal would break the persona's core job. */
     private static final Map<String, String> ANCHORS = Map.ofEntries(
@@ -67,7 +67,9 @@ class DefaultRoleBundlesSeededTest {
             Map.entry("PROCUREMENT_MANAGER", "PURCHASE.ORDER.APPROVE"),
             Map.entry("HR_PAYROLL_MANAGER", "HR.PAYROLL.RUN"),
             Map.entry("FINANCE_DIRECTOR", "GL.YEAR.CLOSE"),
-            Map.entry("PRODUCTION_MANAGER", "WORKORDER.RELEASE"));
+            Map.entry("PRODUCTION_MANAGER", "WORKORDER.RELEASE"),
+            Map.entry("WAITER", "RESTAURANT.ORDER.MANAGE"),
+            Map.entry("KITCHEN", "RESTAURANT.KITCHEN.MANAGE"));
 
     @Test
     void allDefaultRoleBundlesAreSeededConsistently() throws IOException {

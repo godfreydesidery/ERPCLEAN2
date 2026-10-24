@@ -1,0 +1,161 @@
+<div class="erp-card mb-4">
+  <div class="erp-card__head">
+    <h2>Choices &amp; add-ons</h2>
+  </div>
+  <div class="erp-card__body">
+    <p class="text-muted small">
+      Choices the till asks for when an item is tapped — for example <strong>Milk</strong> (choose one) or
+      <strong>Extras</strong> (any). Give an option an item to <strong>charge</strong> for it ("Syrup extra");
+      leave it without one for a free <strong>instruction</strong> to the kitchen ("No sugar").
+    </p>
+
+    @switch (state()) {
+      @case ('loading') {
+        <output class="text-muted d-flex align-items-center gap-2">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading choices…
+        </output>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">Could not load the choices. Please try again.</p>
+      }
+      @default {
+        @if (groups().length === 0) {
+          <div class="erp-empty mb-3">
+            <i class="bi bi-ui-checks" aria-hidden="true"></i> No choices yet.
+          </div>
+        } @else {
+          <div class="erp-table-wrap mb-3">
+            <table class="erp-table">
+              <caption class="visually-hidden">Choices and add-ons</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Choice</th>
+                  <th scope="col">Rule</th>
+                  <th scope="col">Options</th>
+                  <th scope="col" class="text-end">Items</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (g of groups(); track g.uid) {
+                  <tr [class.text-muted]="g.status !== 'ACTIVE'">
+                    <td>{{ g.name }}@if (g.status !== 'ACTIVE') { <span class="small"> (not in use)</span> }</td>
+                    <td>{{ rule(g) }}</td>
+                    <td class="small">{{ optionsText(g) }}</td>
+                    <td class="text-end">{{ g.products.length }}</td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-outline-secondary" (click)="edit(g)"
+                              [attr.aria-label]="'Edit choice ' + g.name">
+                        <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (!editing()) {
+          <button type="button" class="btn btn-outline-primary" (click)="startNew()">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add a choice
+          </button>
+        } @else {
+          <form (ngSubmit)="save()" aria-label="Choice">
+            <h3 class="h6">{{ editUid() ? 'Edit choice' : 'Add a choice' }}</h3>
+            <div class="erp-form-grid">
+              <div class="erp-field">
+                <label class="form-label" for="modName">Name <span class="text-danger" aria-hidden="true">*</span></label>
+                <input id="modName" name="modName" type="text" class="form-control" maxlength="60"
+                       placeholder="e.g. Milk" autocomplete="off"
+                       [ngModel]="name()" (ngModelChange)="name.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="modMin">Guest must choose at least</label>
+                <input id="modMin" name="modMin" type="number" class="form-control" min="0" max="20"
+                       [ngModel]="minSelect()" (ngModelChange)="minSelect.set($event)" />
+              </div>
+              <div class="erp-field">
+                <label class="form-label" for="modMax">At most <span class="text-muted small">(blank = any)</span></label>
+                <input id="modMax" name="modMax" type="number" class="form-control" min="1" max="20"
+                       [ngModel]="maxSelect()" (ngModelChange)="maxSelect.set($event === '' ? null : $event)" />
+              </div>
+            </div>
+            @if (editUid()) {
+              <div class="form-check mt-2">
+                <input id="modActive" name="modActive" type="checkbox" class="form-check-input"
+                       [ngModel]="active()" (ngModelChange)="active.set($event)" />
+                <label class="form-check-label" for="modActive">In use</label>
+              </div>
+            }
+
+            <h4 class="h6 mt-3">Options</h4>
+            @for (o of options(); track $index; let i = $index) {
+              <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+                <div>
+                  <label class="form-label small mb-1" [for]="optionId(i)">Option</label>
+                  <input class="form-control form-control-sm" type="text" maxlength="60"
+                         [id]="optionId(i)" [name]="optionId(i)" placeholder="e.g. Oat milk"
+                         [ngModel]="o.label" (ngModelChange)="setOption(i, { label: $event })" />
+                </div>
+                <div class="flex-grow-1">
+                  <label class="form-label small mb-1" [for]="optionId(i) + '-item'">
+                    Charged as <span class="text-muted">(optional item)</span>
+                  </label>
+                  <app-uid-picker [id]="optionId(i) + '-item'" [name]="optionId(i) + '-item'"
+                                  [ngModel]="o.productUid"
+                                  (ngModelChange)="setOption(i, { productUid: $event })"
+                                  [options]="o.productUid && o.productName ? [{ uid: o.productUid, label: o.productName }] : []"
+                                  [search]="searchProducts"
+                                  placeholder="Free instruction" />
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger" (click)="removeOption(i)"
+                        [attr.aria-label]="'Remove option ' + (o.label || (i + 1))">
+                  <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+              </div>
+            }
+            <button type="button" class="btn btn-sm btn-outline-secondary" (click)="addOption()">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add option
+            </button>
+
+            <h4 class="h6 mt-3">Offered on</h4>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              @for (p of items(); track p.uid) {
+                <span class="badge text-bg-light d-inline-flex align-items-center gap-1">
+                  {{ p.name }}
+                  <button type="button" class="btn btn-sm p-0 border-0" (click)="removeItem(p.uid)"
+                          [attr.aria-label]="'Stop offering on ' + p.name">
+                    <i class="bi bi-x" aria-hidden="true"></i>
+                  </button>
+                </span>
+              } @empty {
+                <span class="text-muted small">No items yet — this choice is not asked anywhere.</span>
+              }
+            </div>
+            <div class="mb-2 offered-on-picker">
+              <label class="form-label small mb-1" for="modAddItem">Add a menu item</label>
+              <app-uid-picker id="modAddItem" name="modAddItem"
+                              [ngModel]="addItemUid()" (ngModelChange)="addItem($event)"
+                              [options]="[]" [search]="searchProducts" placeholder="Type an item name" />
+            </div>
+
+            @if (error(); as msg) {
+              <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+            }
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary" [disabled]="saving()">
+                @if (saving()) {
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…
+                } @else {
+                  Save choice
+                }
+              </button>
+              <button type="button" class="btn btn-outline-secondary" (click)="cancel()">Cancel</button>
+            </div>
+          </form>
+        }
+      }
+    }
+  </div>
+</div>

@@ -116,8 +116,11 @@ REST controllers live flat under `com.erp.api..`, one per resource.
      (`validate-on-migrate`) on a populated DB. Any schema/seed change is a **new `V<n>` migration**
      (the next free version), or — for convergent reference data (permissions/grants) — an edit to
      the repeatable `R__seed_permissions.sql`. CI enforces this (`scripts/check-migrations.sh`, job
-     `migration-hygiene`, rules 1+2). Author changes against populated tables (expand→backfill→
-     constrain; `CREATE INDEX CONCURRENTLY` in its own migration). Full discipline:
+     `migration-hygiene`, rules 1–3). Author changes against populated tables (expand→backfill→
+     constrain; `CREATE INDEX CONCURRENTLY` in its own migration), and **set
+     `SET LOCAL lock_timeout = '10s';` at the top of any migration that locks an existing table**
+     (ALTER, a foreign key to it, index, UPDATE/DELETE, DROP) so a held lock fails the deploy
+     instead of stalling every till. Full discipline:
      [docs/ops/migrations-and-seeding.md](docs/ops/migrations-and-seeding.md).
 
 7. **Coding standards.** Java: Google Java Style, `final` where reasonable, records for DTOs.
