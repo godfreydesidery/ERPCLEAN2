@@ -320,7 +320,7 @@ From left to right, the top bar contains:
 |---|---|---|
 | **🛒 Supermarket** | Fast, scanner-first grocery checkout | A wide, Excel-style grid of sale lines on the left with a number pad on the right. You scan or type a code and the item drops in; you can adjust quantity and discount inline. |
 | **💊 Pharmacy** | Dispensing with prescriptions | A patient/prescriber header (patient, prescriber, prescription number) above a dispensing line table, with the running totals down the side. |
-| **🍽 Restaurant** | Table service | A floor/table picker and a menu grid that build an order ticket, with a **Send to kitchen** action. |
+| **🍽 Restaurant** | Table service | The floor of tables and takeaways; orders stay open on the ERP, **Send** prints kitchen and bar slips, **Bill** prints the bill, **PAY** closes the order. |
 
 ### Switching mode
 
@@ -1121,11 +1121,11 @@ Taking payment, change, split tenders, and what to do when the outcome of a sale
 
 # Selling — Pharmacy and Restaurant
 
-This chapter covers OrbixPOS's two other tills: the **Pharmacy** register (a dispensing counter with a patient and prescription header) and the **Restaurant** register (table service, with a table picker, a menu grid and an order ticket). It also covers how to **switch between modes** — and the guard that stops you switching in the middle of a sale.
+This chapter covers OrbixPOS's two other tills: the **Pharmacy** register (a dispensing counter with a patient and prescription header) and the **Restaurant** register (table service and takeaway, with orders kept on the ERP, kitchen and bar slips, and a bill before payment). It also covers how to **switch between modes** — and the guard that stops you switching in the middle of a sale.
 
 If you work a supermarket checkout, see the previous chapter, *Selling — Supermarket* (Chapter 3). The way you take payment, print the receipt, and open and close your shift is **the same in all three modes** — only the part of the screen where you build the basket changes.
 
-> **Read this first — these two modes are simpler than the supermarket till.** The Pharmacy and Restaurant registers ring real sales: payment, receipts, stock and the cash drawer work exactly as in the supermarket. But they have fewer tools. Neither has a number pad, line discounts or the void tick box, and neither does anything a dedicated pharmacy or restaurant system would do on top of selling (no prescription records, no kitchen printer, no saved table orders). The limits are listed at the end of each section so you are never surprised. If your shop is a supermarket, use the **Supermarket** register.
+> **Read this first.** The Pharmacy and Restaurant registers ring real sales: payment, receipts, stock and the cash drawer work exactly as in the supermarket. The Pharmacy register has fewer tools than the supermarket till (no number pad, line discounts or void tick box, no prescription records). The Restaurant register works differently: orders stay open on the ERP while the table eats, slips go to the kitchen and bar, and the bill is printed before payment. The limits are listed at the end of each section so you are never surprised. If your shop is a supermarket, use the **Supermarket** register.
 
 > **Before you read on.** A "register" (also called a "till mode") is the central selling screen. OrbixPOS has three of them. You pick one when you open your shift. Nothing in this chapter changes prices, tax or totals: the on-screen total is always a **preview**, and the ERP server works out the real figures for the receipt.
 
@@ -1257,70 +1257,107 @@ When the sale is complete, the table clears and the cursor returns to the search
 
 ## 3. The Restaurant register
 
-The Restaurant register is for table service. On the **left** are a **Pick a table** button, a **Search the menu…** box, and a grid of **item tiles**; on the **right** is the **order ticket** with a **Send to kitchen** button and the **PAY** button at the bottom.
+The Restaurant register is for table service and takeaway. Orders are kept **on the ERP server**, not on the till, so every till, every waiter's tablet and the kitchen see the same orders. One table can stay open for the whole meal while other tables are served. If a till restarts, nothing is lost.
 
-> **How it differs.** Here you build the order by **tapping tiles**, not by scanning. As in the other modes, the total is only a preview until you take payment.
+The flow is the standard one:
 
-> **One open order at a time.** The ticket on screen is the only order the till holds. There is no way to park Table 3's order, start Table 5's, and come back — an order lives only until it is paid or cleared. If the till restarts, the ticket is lost. Most restaurants using this mode take payment as each order is placed (a counter or quick-service style), or keep table orders on paper and ring each bill when the table pays.
+1. **Open an order** at a table (or as a takeaway).
+2. **Add items** and tap **Send**: a slip prints at each station that makes something on the order — the kitchen for food, the bar or barista for drinks.
+3. When the guests ask for the bill, tap **Bill**: the bill prints on **this till's receipt printer only**.
+4. Tap **PAY** and take payment as usual. The order is closed and the table is free again.
 
-### 3.1 Pick a table
+> **Set up once, in the ERP.** A manager sets up the tables, the kitchen and bar stations and their printers, and which item categories go to which station in the ERP under **Point of Sale → Restaurant Setup**. The till reads all of that; nothing is typed on the till except which printer each station uses on *this* device (3.10).
 
-**What it is.** The **Pick a table** button at the top-left. Once you choose, it shows **Table N**, and the order ticket on the right is titled with the same table.
+### 3.1 The floor
 
-**How it works.** Tapping **Pick a table** opens the **Choose a table** dialog: a grid of tables numbered **1** to **12**, each labelled *seats 4*. The floor is fixed — it is the same 12 tables in every shop and cannot be changed. Tap a table to select it. The table number is saved with the sale as a note (for example `Table 5`). **It is not printed on the receipt.**
+When you open the Restaurant register you see the **Floor**: one tile per table with its name and seats, and its state.
 
-1. Tap **Pick a table** (top-left).
-2. In the **Choose a table** dialog, tap the table number.
-3. The dialog closes. The button now reads **Table N**, and the order ticket is titled **Table N**.
+- **Free** — no open order.
+- **Occupied** — an order is open. A small number on the tile means more than one order is open at that table (for example two groups at a long table).
+- **Bill printed** — the bill has been printed and the table is waiting to pay.
 
-To change tables, tap the button again and pick a different one.
+On the right (above the tables on a tablet) is the **Takeaway orders** list. Along the top are **Settings** (3.10), **Refresh** (reloads the floor — useful when another till has opened or paid an order) and **New takeaway**.
 
-> **The table resets when you leave the payment screen.** When the payment screen closes, the button goes back to **Pick a table** — even if you closed it without completing the sale. If you go back to finish that order, pick the table again so the screen shows it.
+If the floor says **No tables are set up for this branch**, a manager has not added tables yet; takeaway still works. If it says **Restaurant orders are not enabled for your login**, ask a manager to give you the restaurant permission.
 
-### 3.2 Browse and search the menu
+### 3.2 Open an order
 
-**What it is.** The grid of tiles, one per item, each showing a dish icon, the item name and its code. Tiles do not show prices — the price appears on the order ticket once you add the item.
+- **At a table:** tap a **Free** table. Type **How many?** guests (or skip) and the order opens. Tapping an **Occupied** table opens its order; if it has more than one, choose which, or choose **New order at this table**.
+- **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Takeaway orders**.
 
-**How it works.** The grid shows the first part of your company's **whole product list** (up to 120 items) — there is no separate menu, so everything the company sells can appear here. To find an item, type part of its name or code in **Search the menu…**; the grid updates as you type. Clear the box to see the starting grid again. If nothing matches, the grid shows **No menu items**.
+The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`) and the number of guests. **Floor** (top-left) goes back to the floor — the order stays open.
 
-### 3.3 Build the order ticket
+### 3.3 Add items
 
-**What it is.** The panel on the right, titled **Order ticket** (or **Table N** once a table is picked). It lists each item ordered, with a quantity stepper, the line amount and a **✕** to remove it. Until you add anything it reads **Tap menu items to build the order**.
+The menu tiles show each item's name and **price** (VAT included). Type in **Search the menu…** to find an item by name or code.
 
-> **About the count in the ticket header.** The figure such as *3 items* counts **lines on the ticket**, not portions. Two lines of 4 sodas and 1 burger read *2 items*.
+- **Tap** a tile to add one. Tap again to add another.
+- **Long-press** a tile to add it with **choices** (for example *Milk: oat*, *No sugar*), a **course**, **Hold until fired**, or a **note for the kitchen**. Items that must have a choice (a manager sets these up as *modifiers*) open the choices on a normal tap.
+- A choice with a price is added as its own line under the item (shown as **+ Extra cheese**), so the bill shows what it cost.
 
-- **Add an item:** tap its tile. It appears on the ticket with quantity **1**. Tapping the same tile again adds one more to that line.
-- **Change a quantity:** use **–** / **+** on the ticket line (never below 1).
-- **Remove an item:** tap **✕** at the end of the ticket line. To abandon the order, remove every line — this also frees the mode switcher.
+New items appear under **NEW — NOT SENT YET**. Until they are sent you can change them freely: **–** / **+** for the quantity, **✕** to remove, tap **Course N** to move the item to the next course, tap **Hold** to keep it back.
 
-Items are always sold in their base unit in this mode; there is no carton or pack choice.
+The total at the bottom says **Estimated** until the bill is printed; the ERP works out the exact figure.
 
-### 3.4 Send to kitchen
+### 3.4 Send to the kitchen and bar
 
-**What it is.** The **Send to kitchen** button, just above the total. It appears once the ticket has at least one item.
+Tap **Send (N)**. Each station that makes something on the order gets its own slip, with the table, the order number, who is serving, the items with their choices and notes, and the course. The items move under **SENT**, and a message confirms where they went (for example *Sent to Kitchen and Bar.*).
 
-**How it works.** Tap **Send to kitchen**. A green confirmation **Sent to kitchen.** appears, and the button changes to **Sent to kitchen ✓**. If you add another item afterwards, the button goes back to **Send to kitchen** so you can confirm the updated order.
+Only the new items are sent: adding a coffee later and tapping **Send** again prints a slip with just the coffee.
 
-> **Important — Send to kitchen is a screen tick only.** It does **not** print to a kitchen printer, send to a kitchen screen, or record anything in the ERP. It does not take payment. Pass the order to the kitchen by your usual means (a paper docket, or calling it through).
+**If a slip does not print**, the till lists which station failed and why, with **Print again** for each. The order **is** sent — only the paper is missing. Reprint, or tell the station by voice. **More → Reprint last kitchen/bar slips** prints them again at any time.
 
-### 3.5 The total and PAY
+If a station has no printer at all, nothing prints at the till: the station gets the order on the **Kitchen Display** in the ERP, or from a PC at the station that prints for every till (3.10).
 
-The footer of the ticket shows **Total (TZS)** and the **PAY** button, which shows the preview amount.
+### 3.5 Courses: hold and fire
 
-1. Confirm the order and the **Total** with the customer.
-2. Tap **PAY** (disabled while the ticket is empty).
-3. The payment screen opens. Choose the tender(s) and complete the sale — see the *Taking Payment* chapter (Chapter 5).
+To send starters now and mains later, give the mains **Course 2** (tap the course tag, or choose it on a long-press) and tap **Hold**. **Send** then sends only the starters. When the table is ready for the mains, tap **Fire (N)** (and choose the course if more than one is held): the held items are sent with a *COURSE 2* heading on the slip.
 
-When the sale completes, the ticket clears and the table resets, ready for the next order.
+### 3.6 Change or void a sent item
 
-### 3.6 What the Restaurant register does not do
+A sent item cannot be edited — the kitchen already has it. Tap **Void** on the line, choose how many and a reason (**Wrong item**, **Customer changed mind**, **Food ready**…). If your login may not void, a manager approves it on the till with their own sign-in. A **VOID** slip prints at the station so they stop making it, and the item comes off the bill.
 
-- Holds only one open order; orders cannot be parked per table, split, or transferred.
-- The floor is a fixed 12 tables; table names and seat counts cannot be set.
-- The "menu" is the general product list; there are no menu categories, modifiers or prices on the tiles.
-- **Send to kitchen** is a screen tick only — nothing reaches the kitchen.
-- No line discounts, no void tick box, no pack units.
-- The table number is saved as a note on the sale but is not printed on the receipt.
+### 3.7 Bill and pay
+
+- **Bill** prints the bill on this till's receipt printer (the receipt printer from *Setup*). If any items have not been sent yet, the till asks whether to send them first. The table turns **Bill printed** and the total reads **Bill**. If the printer fails, the bill is shown on screen so you can still tell the customer the total; **Reprint bill** prints it again.
+- **PAY** opens the normal payment screen (Chapter 5) with the bill total. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor.
+
+If an item is added after the bill was printed, the order goes back to open and the bill must be printed again. If prices changed in the ERP since the bill, the payment is refused with a message — print the bill again.
+
+### 3.8 Split, merge, move and cancel
+
+All four are under **More** (⋮) in the order header.
+
+- **Split the bill…** — choose items (and how many of each) to move to a **new check** at the same table; each check is billed and paid on its own. To split one amount equally instead, use **÷2 ÷3 ÷4** at payment.
+- **Merge another order into this…** — tables pushed together, or a takeaway that sat down: the other order's items move into this one.
+- **Move to another table** — the whole order moves; the old table is free.
+- **Cancel order** — closes the order without a sale. If anything was already sent, it needs a reason and the void permission (or a manager's approval), and VOID slips print at the stations.
+
+### 3.9 Waiters
+
+There are two ways to work with waiters; both can run in the same restaurant.
+
+- **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment.
+- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+
+A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.10) instead of the floor.
+
+### 3.10 Settings — printers on this device
+
+**Settings** on the floor opens **Restaurant settings — this device**. For each station (Kitchen, Bar…) it shows where its slips print from this till, with a **Test** button:
+
+- **Printer:** leave it on the station's network printer from the ERP, or choose **This device — *printer name*** for a printer plugged into this computer by USB.
+- **Paper:** 58 mm or 80 mm.
+- **Print ALL *station* slips here, from every till** — tick this on the **PC the station printer is plugged into** (for example a kitchen PC with a USB printer). Keep OrbixPOS open on that PC: it fetches new slips from the ERP every few seconds and prints them, whichever till or tablet sent the order. The floor then shows **Printing for: all tills**.
+
+These settings are kept on this device only.
+
+### 3.11 What the Restaurant register does not do
+
+- Line discounts and pack units are not available on restaurant orders.
+- Table layout, stations, routing and choices are set up in the ERP, not on the till.
+- The till cannot print to a printer it cannot reach: a network printer must be on the same network, and a USB printer must be on this computer or on a PC running OrbixPOS with **Print ALL slips here** ticked.
+
 
 ---
 
@@ -1328,17 +1365,18 @@ When the sale completes, the ticket clears and the table resets, ready for the n
 
 | Task | Pharmacy | Restaurant |
 |---|---|---|
-| Add an item | Scan, or type in **Scan or search a drug…** and press **Enter** (adds the first match) | Tap a tile in the menu grid |
+| Add an item | Scan, or type in **Scan or search a drug…** and press **Enter** (adds the first match) | Tap a tile; long-press for choices, course, hold or a note |
 | Find an item | Type a code or name; check the line that was added | Type in **Search the menu…**; the grid updates |
-| Set who/where the sale is for | Tap the **Patient** tile (customer picker); type **Prescriber** and **Rx #** | Tap **Pick a table**, choose 1–12 |
-| Change a quantity | **–** / **+** on the line | **–** / **+** on the ticket line |
+| Set who/where the sale is for | Tap the **Patient** tile (customer picker); type **Prescriber** and **Rx #** | Tap a table on the **Floor**, or **New takeaway** |
+| Change a quantity | **–** / **+** on the line | **–** / **+** before sending; **Void** after |
 | Sell by box/pack | Tap the unit under the name → **Sell by** | Not available |
-| Remove a line | **✕** at the end of the line | **✕** at the end of the ticket line |
-| Fire the order to the kitchen | — | **Send to kitchen** (screen tick only) |
-| Take payment | **PAY** (right-hand panel) | **PAY** (bottom of the ticket) |
-| Switch register | Top-bar switcher — only when the sale is empty | Top-bar switcher — only when the ticket is empty |
+| Remove a line | **✕** at the end of the line | **✕** before sending; **Void** after (a VOID slip prints) |
+| Fire the order to the kitchen | — | **Send (N)**; held courses with **Fire (N)** |
+| Print the bill | — | **Bill** (this till's receipt printer) |
+| Take payment | **PAY** (right-hand panel) | **PAY** (bottom of the order); **÷2 ÷3 ÷4** to split evenly |
+| Switch register | Top-bar switcher — only when the sale is empty | Top-bar switcher — open orders stay on the ERP |
 
-> **One more reminder.** The patient/prescriber/Rx details and the table number are saved as a **note** on the sale for the back office. They are not printed on the receipt and they do not change the price. The ERP server is always the authority on price, VAT and totals.
+> **One more reminder.** The patient/prescriber/Rx details are saved as a **note** on the sale for the back office; they are not printed on the receipt and do not change the price. The ERP server is always the authority on price, VAT and totals.
 
 ---
 
