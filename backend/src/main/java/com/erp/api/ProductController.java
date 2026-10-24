@@ -11,6 +11,7 @@ import com.erp.modules.products.domain.dto.ProductBranchDto;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
+import com.erp.modules.products.domain.dto.SetProductCategoryRequest;
 import com.erp.modules.products.domain.dto.UnitOfMeasureDto;
 import com.erp.modules.products.domain.dto.ProductPriceDto;
 import com.erp.modules.products.domain.dto.SetProductPriceRequest;
@@ -91,6 +92,14 @@ public class ProductController {
     public ProductDto update(@PathVariable String uid,
                              @Valid @RequestBody UpdateProductRequest request) {
         return productService.updateByUid(uid, request);
+    }
+
+    /** Sets only the category — e.g. from the restaurant routing screen (ADR-0066). */
+    @PutMapping("/uid/{uid}/category")
+    @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.MANAGE')")
+    public ProductDto setCategory(@PathVariable String uid,
+                                  @Valid @RequestBody SetProductCategoryRequest request) {
+        return productService.setCategory(uid, request.category());
     }
 
     @PutMapping("/uid/{uid}/archive")

@@ -33,6 +33,17 @@ public interface RestaurantOrderLineRepository extends JpaRepository<RestaurantO
 
     List<RestaurantOrderLine> findByCompanyIdAndUidIn(Long companyId, Collection<String> uids);
 
+    /** A station's lines sent or voided in (since, until] — the slip feed (ADR-0066 D-6). */
+    @Query("SELECT l FROM RestaurantOrderLine l WHERE l.companyId = :companyId "
+            + "AND l.prepStationId = :stationId AND ("
+            + "(l.sentAt > :since AND l.sentAt <= :until) OR "
+            + "(l.voidedAt > :since AND l.voidedAt <= :until)) "
+            + "ORDER BY l.restaurantOrderId ASC, l.lineNo ASC")
+    List<RestaurantOrderLine> findForStationWindow(@Param("companyId") Long companyId,
+                                                   @Param("stationId") Long stationId,
+                                                   @Param("since") Instant since,
+                                                   @Param("until") Instant until);
+
     List<RestaurantOrderLine> findByCompanyIdAndParentLineIdIn(Long companyId, Collection<Long> parentIds);
 
     @Query("SELECT COALESCE(MAX(l.lineNo), 0) FROM RestaurantOrderLine l "

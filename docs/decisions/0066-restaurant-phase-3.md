@@ -146,6 +146,26 @@ Two new shipped role bundles:
 - An Android tablet build of OrbixPOS is the waiter device. Network printing works from Android, so
   a waiter's Send prints at the kitchen directly.
 
+### D-9 — Every set-up works without asking the client (no schema)
+
+The owner's ruling (2026-10-24): don't ask the client how their kitchen is wired; make every common
+set-up work and let them configure it themselves.
+
+| Set-up | How it works |
+|---|---|
+| **Kitchen/bar printer on the network** | Its IP and port go on the station in the ERP. Every till prints to it directly (ADR-0065 D-6). |
+| **Printer plugged into a PC by USB** | Leave the station's IP empty. On that PC, OrbixPOS → Settings: choose the printer for the station and tick *Print ALL slips here*. That device polls `GET /restaurant/kitchen/slips?stationUid=&since=` every 5 s and prints what any till sent or voided. Each slip carries its `lineUids`, so a 60-second overlap on every ask never prints twice, and a failed print is retried. A KITCHEN-role login on that PC gets a dedicated *Kitchen printer* screen. |
+| **USB printer on the sending till itself** | Choose it for the station in that till's Settings (device override, ADR-0065 D-4). |
+| **No printer** | Leave the IP empty and use the Kitchen Display. A till sending to a station with no address and no local printer hands the slip off: this is not an error. |
+| **58 or 80 mm paper** | Paper width is set per station on each device. |
+| **Waiters on their own devices** | A user with the WAITER role (D-7) signs in on a tablet or phone and goes straight to the floor (D-8). |
+| **Waiters sharing the cashier's till** | *Who's serving?* on the floor (or always, with *Shared till: ask who is serving* in Settings). The waiter types their own username and password, verified by `/auth/verify-authority` for `RESTAURANT.ORDER.MANAGE`. The till stays signed in as the cashier. The waiter's uid travels on open/send/fire as `waiterUid`, and the server re-verifies it every time (`verifyAuthoriserUid`) before recording it as the order's server and naming it on slips and the bill. The waiter is signed out after 3 minutes idle. |
+| **Items without a category** | They print at the default station. Restaurant Setup lists them, and anyone with `PRODUCT.MANAGE` can give each one a category (`PUT /products/uid/{uid}/category`). |
+| **Tables** | Added one by one or as a run ("T1 to T20"). Takeaway works with no tables at all. |
+
+`GET /restaurant/prep-stations` also admits `RESTAURANT.KITCHEN.MANAGE`, so a KITCHEN login can choose
+its station: on the Kitchen Display it previously got a 403.
+
 ## Consequences
 
 - **One additive migration (V108).** It adds three new modifier tables and five nullable/defaulted

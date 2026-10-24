@@ -66,7 +66,8 @@ public class RestaurantSetupController {
     // ---- prep stations ----
 
     @GetMapping("/prep-stations")
-    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')"
+            + " or @perm.has('RESTAURANT.KITCHEN.MANAGE')")
     public List<PrepStationDto> listStations(@RequestParam(required = false) String branchUid) {
         return setup.listStations(branchUid);
     }

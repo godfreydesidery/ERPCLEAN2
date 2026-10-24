@@ -1,11 +1,15 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin } from 'rxjs';
+import { EMPTY, concatMap, expand, forkJoin, from, reduce, switchMap, toArray } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { AlertService } from '../../../core/feedback/alert.service';
+import { CompanyService } from '../company/company.service';
+import { ProductModel } from '../models/product.model';
 import { UserBranch } from '../models/user-branch.model';
+import { OrganisationService } from '../organisation/organisation.service';
+import { ProductService } from '../products/product.service';
 import { MasterStatus, PrepStationDto, RestaurantTableDto } from './models/restaurant.model';
 import { RestaurantModifiersComponent } from './restaurant-modifiers.component';
 import { RestaurantService } from './restaurant.service';
@@ -31,7 +35,23 @@ export class RestaurantSetupComponent {
   private readonly restaurant = inject(RestaurantService);
   private readonly auth = inject(AuthService);
   private readonly alerts = inject(AlertService);
+  private readonly products = inject(ProductService);
+  private readonly organisations = inject(OrganisationService);
+  private readonly companies = inject(CompanyService);
   protected readonly session = inject(SessionStore);
+
+  // ── Items without a category (they all print at the default station) ─────
+  private readonly companyId = signal('');
+  readonly uncategorised = signal<ProductModel[]>([]);
+  readonly categoryDraft = signal<Record<string, string>>({});
+  readonly canEditProducts = computed(() => this.session.hasPermission('PRODUCT.MANAGE'));
+  readonly knownCategories = computed(() => this.routeRows().map((r) => r.category));
+
+  // ── Add several tables at once ────────────────────────────────────────────
+  readonly bulkPrefix = signal('T');
+  readonly bulkFrom = signal<number | null>(1);
+  readonly bulkTo = signal<number | null>(10);
+  readonly bulkSaving = signal(false);
 
   // ── Branch ────────────────────────────────────────────────────────────────
   readonly branches = signal<UserBranch[]>([]);
@@ -78,6 +98,16 @@ export class RestaurantSetupComponent {
   );
 
   constructor() {
+    this.organisations
+      .current()
+      .pipe(switchMap((org) => this.companies.list(org.uid)))
+      .subscribe({
+        next: (list) => {
+          this.companyId.set(list[0]?.id ?? '');
+          this.loadUncategorised();
+        },
+        error: () => this.companyId.set(''),
+      });
     this.auth.myBranches().subscribe({
       next: (list) => {
         this.branches.set(list);
@@ -261,6 +291,94 @@ export class RestaurantSetupComponent {
     });
   }
 
+  // ── Items without a category ─────────────────────────────────────────────
+
+  /**
+   * Sellable items with no category — they all print at the default station. Read in pages of
+   * 200 (a menu is rarely bigger than a few pages); only someone who may edit products sees it.
+   */
+  loadUncategorised(): void {
+    const companyId = this.companyId();
+    if (!companyId || !this.canEditProducts()) return;
+    const size = 200;
+    this.products
+      .list(companyId, '', 0, size)
+      .pipe(
+        expand((res) => (res.meta.hasNext && res.meta.page < 9
+          ? this.products.list(companyId, '', res.meta.page + 1, size)
+          : EMPTY)),
+        reduce((all, res) => all.concat(res.rows), [] as ProductModel[]),
+      )
+      .subscribe({
+        next: (rows) => this.uncategorised.set(
+          rows.filter((p) => p.sellable && p.status === 'ACTIVE' && !(p.category ?? '').trim()),
+        ),
+        error: () => this.uncategorised.set([]),
+      });
+  }
+
+  setDraft(uid: string, value: string): void {
+    this.categoryDraft.update((d) => ({ ...d, [uid]: value }));
+  }
+
+  saveCategory(p: ProductModel): void {
+    const value = (this.categoryDraft()[p.uid] ?? '').trim();
+    if (!value) return;
+    this.products.setCategory(p.uid, value).subscribe({
+      next: () => {
+        this.uncategorised.update((list) => list.filter((x) => x.uid !== p.uid));
+        this.alerts.success('Category set', `${p.name}: ${value}`);
+        this.load();
+      },
+      error: (err: unknown) =>
+        this.alerts.error('Could not set the category', messageFrom(err, 'Please try again.')),
+    });
+  }
+
+  // ── Add several tables ──────────────────────────────────────────────────
+
+  /** Adds tables [prefix][from]..[prefix][to], skipping names the branch already has. */
+  addTables(): void {
+    const from_ = this.bulkFrom() ?? 0;
+    const to = this.bulkTo() ?? 0;
+    const prefix = this.bulkPrefix().trim();
+    if (from_ < 1 || to < from_ || to - from_ > 99) {
+      this.tableError.set('Choose a range of up to 100 tables, for example 1 to 12.');
+      return;
+    }
+    const existing = new Set(this.tables().map((t) => t.name.toLowerCase()));
+    const names: string[] = [];
+    for (let n = from_; n <= to; n++) {
+      const name = `${prefix}${n}`;
+      if (!existing.has(name.toLowerCase())) names.push(name);
+    }
+    if (names.length === 0) {
+      this.tableError.set('Those tables already exist.');
+      return;
+    }
+    this.bulkSaving.set(true);
+    this.tableError.set(null);
+    from(names)
+      .pipe(
+        concatMap((name, i) => this.restaurant.createTable({
+          branchUid: this.branchUid() || null, name, seats: 4, sortOrder: from_ + i,
+        })),
+        toArray(),
+      )
+      .subscribe({
+        next: (created) => {
+          this.bulkSaving.set(false);
+          this.alerts.success('Tables added', `${created.length} tables`);
+          this.load();
+        },
+        error: (err: unknown) => {
+          this.bulkSaving.set(false);
+          this.tableError.set(messageFrom(err, 'Could not add the tables.'));
+          this.load();
+        },
+      });
+  }
+
   // ── Display ───────────────────────────────────────────────────────────────
 
   stateLabel(t: RestaurantTableDto): string {
@@ -270,7 +388,9 @@ export class RestaurantSetupComponent {
   }
 
   printerLabel(s: PrepStationDto): string {
-    return s.printerHost ? `${s.printerHost}:${s.printerPort}` : 'Not set (till prints locally)';
+    return s.printerHost
+      ? `${s.printerHost}:${s.printerPort}`
+      : 'No network printer — prints from a PC at the station, or the Kitchen Display';
   }
 
   routeId(i: number): string {

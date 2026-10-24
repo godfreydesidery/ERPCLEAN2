@@ -18,6 +18,7 @@ import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.StationSlipsDto;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.PosSaleRequest;
 import com.erp.modules.sales.domain.dto.PrepSlipDto;
@@ -214,7 +215,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             tableId = requireTable(companyId, branchId, req.tableUid(), true).getId();
         }
         var order = new RestaurantOrder(companyId, branchId, numberGen.nextRestaurantOrder(companyId),
-                type, tableId, scope.actorId());
+                type, tableId, servedBy(companyId, req.waiterUid()));
         order.setGuestCount(req.guestCount());
         order.setNotes(blankToNull(req.notes()));
         order = orders.save(order);
@@ -455,7 +456,13 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
 
     @Override
     public RestaurantSendResultDto send(String uid) {
-        return sendPending(lockLive(uid));
+        return send(uid, null);
+    }
+
+    @Override
+    public RestaurantSendResultDto send(String uid, String waiterUid) {
+        var order = lockLive(uid);
+        return sendPending(order, servedBy(order.getCompanyId(), waiterUid));
     }
 
     @Override
@@ -477,11 +484,34 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                     .detail(Map.of("course", course == null ? "all" : String.valueOf(course),
                             "items", String.valueOf(released))));
         }
-        return sendPending(order);
+        return sendPending(order, servedBy(order.getCompanyId(), req == null ? null : req.waiterUid()));
+    }
+
+    /**
+     * Who is serving: the signed-in user, or the waiter who signed in on this shared till
+     * (ADR-0066 D-8). A waiter uid is never trusted as sent — it must name a real, active user of
+     * this company who holds RESTAURANT.ORDER.MANAGE, re-verified here.
+     */
+    private Long servedBy(Long companyId, String waiterUid) {
+        Long actor = scope.actorId();
+        if (waiterUid == null || waiterUid.isBlank()) {
+            return actor;
+        }
+        var user = users.findByUid(waiterUid.trim()).orElse(null);
+        if (user != null && user.getId().equals(actor)) {
+            return actor;  // the signed-in user named themselves
+        }
+        var verdict = stepUpAuth.verifyAuthoriserUid(waiterUid.trim(), "RESTAURANT.ORDER.MANAGE",
+                companyId);
+        if (user == null || !verdict.authorised()) {
+            throw new ForbiddenException(
+                    "That waiter could not be confirmed. Ask them to sign in again on this till.");
+        }
+        return user.getId();
     }
 
     /** Fires every unsent, unheld item of a locked order; one slip per station. */
-    private RestaurantSendResultDto sendPending(RestaurantOrder order) {
+    private RestaurantSendResultDto sendPending(RestaurantOrder order, Long sender) {
         var all = lines.findByRestaurantOrderIdOrderByLineNoAsc(order.getId());
         var pending = all.stream()
                 .filter(l -> l.isPending() && !l.isHeld())
@@ -495,7 +525,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         Map<Long, Product> productCache = new HashMap<>();
         Map<Long, RestaurantOrderLine> byId = all.stream()
                 .collect(Collectors.toMap(RestaurantOrderLine::getId, Function.identity()));
-        Long actor = scope.actorId();
+        Long actor = sender;
         Instant now = Instant.now();
         // Items first, so an add-on can follow its item to the same station.
         for (var line : pending) {
@@ -552,6 +582,70 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         Long sender = sent.get(0).getSentBy();
         return slipsFor(PrepSlipKind.FIRE, order, sent, wanted, true, nameOf(sender),
                 sent.get(0).getSentAt(), new HashMap<>());
+    }
+
+    // -------------------------------------------------------------------------
+    // Station slip feed — a device that prints a station itself (ADR-0066 D-6)
+    // -------------------------------------------------------------------------
+
+    /** How far back the feed looks, however old the device's cursor is. */
+    private static final java.time.Duration FEED_WINDOW = java.time.Duration.ofHours(24);
+
+    @Override
+    @Transactional(readOnly = true)
+    public StationSlipsDto stationSlips(String stationUid, Instant since) {
+        Long companyId = scope.companyId();
+        var station = stations.findByCompanyIdAndUid(companyId, stationUid)
+                .orElseThrow(() -> NotFoundException.of("PrepStation", stationUid));
+        scope.assertCanActOn(station.getCompanyId(), station.getBranchId());
+        Instant until = Instant.now();
+        if (since == null) {
+            // First call: the cursor starts now — a device switched on does not print history.
+            return new StationSlipsDto(until, List.of());
+        }
+        Instant from = since.isBefore(until.minus(FEED_WINDOW)) ? until.minus(FEED_WINDOW) : since;
+        var window = lines.findForStationWindow(companyId, station.getId(), from, until);
+        if (window.isEmpty()) {
+            return new StationSlipsDto(until, List.of());
+        }
+        Map<Long, RestaurantOrder> orderById = orders.findByCompanyIdAndIdIn(companyId,
+                        window.stream().map(RestaurantOrderLine::getRestaurantOrderId).collect(Collectors.toSet()))
+                .stream().collect(Collectors.toMap(RestaurantOrder::getId, Function.identity()));
+        Map<Long, Product> productCache = new HashMap<>();
+        List<PrepSlipDto> slips = new ArrayList<>();
+        Map<Long, List<RestaurantOrderLine>> byOrder = window.stream()
+                .collect(Collectors.groupingBy(RestaurantOrderLine::getRestaurantOrderId,
+                        LinkedHashMap::new, Collectors.toList()));
+        for (var e : byOrder.entrySet()) {
+            var order = orderById.get(e.getKey());
+            if (order == null) {
+                continue;
+            }
+            // Sent in the window: a FIRE slip per round (even if voided since — the void follows).
+            Map<Integer, List<RestaurantOrderLine>> fired = e.getValue().stream()
+                    .filter(l -> l.getSentAt() != null && l.getSentAt().isAfter(from)
+                            && !l.getSentAt().isAfter(until))
+                    .collect(Collectors.groupingBy(l -> (int) l.getFireRound(), LinkedHashMap::new,
+                            Collectors.toList()));
+            for (var r : fired.entrySet()) {
+                var first = r.getValue().get(0);
+                slips.addAll(slipsFor(PrepSlipKind.FIRE, order, r.getValue(), r.getKey(), false,
+                        nameOf(first.getSentBy()), first.getSentAt(), productCache));
+            }
+            // Voided in the window: a VOID slip per round.
+            Map<Integer, List<RestaurantOrderLine>> voided = e.getValue().stream()
+                    .filter(l -> l.isVoided() && l.getVoidedAt() != null
+                            && l.getVoidedAt().isAfter(from) && !l.getVoidedAt().isAfter(until))
+                    .collect(Collectors.groupingBy(l -> (int) l.getFireRound(), LinkedHashMap::new,
+                            Collectors.toList()));
+            for (var r : voided.entrySet()) {
+                var first = r.getValue().get(0);
+                slips.addAll(slipsFor(PrepSlipKind.VOID, order, r.getValue(), r.getKey(), false,
+                        nameOf(first.getVoidedBy()), first.getVoidedAt(), productCache));
+            }
+        }
+        slips.sort(Comparator.comparing(PrepSlipDto::at));
+        return new StationSlipsDto(until, slips);
     }
 
     // -------------------------------------------------------------------------
@@ -1031,7 +1125,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             if (s == null) {
                 continue;
             }
-            var slipLines = slipOrder(e.getValue()).stream().map(l -> {
+            var ordered = slipOrder(e.getValue());
+            var slipLines = ordered.stream().map(l -> {
                 Product p = product(order.getCompanyId(), l.getProductId(), productCache);
                 UnitOfMeasure u = unit(order.getCompanyId(), l.getUnitId(), unitCache);
                 return new PrepSlipDto.Line(p == null ? "Item" : p.getName(),
@@ -1041,7 +1136,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
             }).toList();
             slips.add(new PrepSlipDto(kind, s.getUid(), s.getName(), s.getPrinterHost(),
                     s.getPrinterPort(), order.getOrderNumber(), order.getOrderType(), tableName,
-                    order.getGuestCount(), round, reprint, byName, at, slipLines));
+                    order.getGuestCount(), round, reprint, byName, at, slipLines,
+                    ordered.stream().map(RestaurantOrderLine::getUid).toList()));
         }
         return slips;
     }

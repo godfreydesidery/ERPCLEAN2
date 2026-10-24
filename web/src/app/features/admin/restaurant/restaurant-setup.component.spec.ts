@@ -15,6 +15,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { CompanyService } from '../company/company.service';
 import { OrganisationService } from '../organisation/organisation.service';
+import { ProductService } from '../products/product.service';
 import { RestaurantService } from './restaurant.service';
 import { RestaurantSetupComponent } from './restaurant-setup.component';
 
@@ -48,6 +49,19 @@ function makeBed(opts: { tablesError?: unknown } = {}) {
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
       { provide: RestaurantService, useValue: restaurant },
+      {
+        provide: ProductService,
+        useValue: {
+          list: vi.fn(() => of({
+            rows: [
+              { uid: 'P1', name: 'Passion juice', sellable: true, status: 'ACTIVE', category: null },
+              { uid: 'P2', name: 'Tacos', sellable: true, status: 'ACTIVE', category: 'Food' },
+            ],
+            meta: { page: 0, size: 200, totalElements: 2, totalPages: 1, hasNext: false },
+          })),
+          setCategory: vi.fn(() => of({})),
+        },
+      },
       { provide: OrganisationService, useValue: { current: vi.fn(() => of({ uid: 'ORG1', id: '1', name: 'Acme' })) } },
       { provide: CompanyService, useValue: { list: vi.fn(() => of([{ uid: 'CO1', id: '10', name: 'Main Co' }])) } },
       {
@@ -122,6 +136,32 @@ describe('RestaurantSetupComponent', () => {
     c.saveTable();
     expect(restaurant.createTable).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'T2', seats: 2, branchUid: 'BR1' }));
+  });
+
+  it('adds a run of tables, skipping names that already exist', () => {
+    const restaurant = makeBed();
+    const fixture = TestBed.createComponent(RestaurantSetupComponent);
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+    c.bulkPrefix.set('T');
+    c.bulkFrom.set(1);
+    c.bulkTo.set(3);
+    c.addTables();
+    const names = restaurant.createTable.mock.calls.map((call: unknown[]) => (call[0] as { name: string }).name);
+    expect(names).toEqual(['T2', 'T3']);
+  });
+
+  it('lists sellable items without a category and saves one', () => {
+    makeBed();
+    const fixture = TestBed.createComponent(RestaurantSetupComponent);
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+    expect(c.uncategorised().map((p) => p.name)).toEqual(['Passion juice']);
+    const products = TestBed.inject(ProductService) as unknown as { setCategory: ReturnType<typeof vi.fn> };
+    c.setDraft('P1', ' Drinks ');
+    c.saveCategory(c.uncategorised()[0]);
+    expect(products.setCategory).toHaveBeenCalledWith('P1', 'Drinks');
+    expect(c.uncategorised()).toHaveLength(0);
   });
 
   it('shows the forbidden state on 403', () => {

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/config/app_config.dart';
 import 'package:pos_app/features/restaurant/restaurant_printing.dart';
 import 'package:pos_app/features/restaurant/slip_text.dart';
+import 'package:pos_app/features/restaurant/station_print_agent.dart';
 import 'package:pos_app/models/auth.dart';
 import 'package:pos_app/models/restaurant.dart';
 import 'package:pos_app/state/app_controller.dart';
@@ -80,7 +81,94 @@ class _FakeSpooler implements ReceiptPrinter {
   Future<void> printRaw(String printerName, List<int> bytes) async => printed.add(printerName);
 }
 
+class _FailingOnceSpooler extends _FakeSpooler {
+  bool _failed = false;
+  @override
+  Future<void> printRaw(String printerName, List<int> bytes) async {
+    if (!_failed) {
+      _failed = true;
+      throw ReceiptPrinterException('Printer out of paper.');
+    }
+    await super.printRaw(printerName, bytes);
+  }
+}
+
 void main() {
+  group('kitchen PC printing for every till', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      PrintedSlips.instance.clear();
+    });
+
+    PrepSlip fired(String line) => PrepSlip(
+          isVoid: false, stationUid: 'S1', stationName: 'Kitchen', printerPort: 9100,
+          orderNumber: 'ORD-0001', takeaway: false, tableName: 'T1', round: 1, reprint: false,
+          byName: 'Asha', lines: [PrepSlipLine(productName: 'Tacos', quantity: 1)],
+          lineUids: [line]);
+
+    StationPrintAgent agentWith(_FakeSpooler spool, List<List<PrepSlip>> answers,
+        List<DateTime?> asked) {
+      var call = 0;
+      return StationPrintAgent(
+        fetch: (station, since) async {
+          asked.add(since);
+          final slips = call < answers.length ? answers[call] : <PrepSlip>[];
+          call++;
+          return (until: DateTime.utc(2026, 10, 24, 12, 0, call), slips: slips);
+        },
+        printing: RestaurantPrinting(
+            network: _FakeNetwork(), spooler: spool,
+            loadConfig: () async => AppConfig(
+                baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'})),
+        loadConfig: () async => AppConfig(
+            baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'}),
+      );
+    }
+
+    test('prints each slip once though the overlapping asks return it twice', () async {
+      final spool = _FakeSpooler();
+      final asked = <DateTime?>[];
+      final agent = agentWith(spool, [[], [fired('L1')], [fired('L1'), fired('L2')]], asked);
+      await agent.tick();
+      await agent.tick();
+      await agent.tick();
+      expect(spool.printed, ['USB Kitchen', 'USB Kitchen']);
+      expect(asked.first, isNull, reason: 'the first ask starts the cursor: no history');
+      expect(asked[1], DateTime.utc(2026, 10, 24, 12, 0, 1).subtract(StationPrintAgent.overlap));
+      expect(agent.log.value, hasLength(2));
+      agent.dispose();
+    });
+
+    test('a slip this device already printed directly is not printed again', () async {
+      final spool = _FakeSpooler();
+      PrintedSlips.instance.remember(fired('L7'));
+      final agent = agentWith(spool, [[fired('L7')]], []);
+      await agent.tick();
+      expect(spool.printed, isEmpty);
+      agent.dispose();
+    });
+
+    test('a slip that fails to print is retried on the next round', () async {
+      final spool = _FailingOnceSpooler();
+      final agent = StationPrintAgent(
+        fetch: (station, since) async =>
+            (until: DateTime.now(), slips: since == null ? [fired('L9')] : <PrepSlip>[]),
+        printing: RestaurantPrinting(
+            network: _FakeNetwork(), spooler: spool,
+            loadConfig: () async => AppConfig(
+                baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'})),
+        loadConfig: () async => AppConfig(
+            baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'}),
+      );
+      await agent.tick();
+      expect(spool.printed, isEmpty);
+      expect(agent.log.value.first.failed, isTrue);
+      await agent.tick();
+      expect(spool.printed, ['USB Kitchen']);
+      agent.dispose();
+    });
+  });
+
   group('waiter mode', () {
     Me me(List<String> perms, {bool root = false}) =>
         Me.fromJson({'uid': 'U', 'username': 'u', 'isRoot': root, 'permissions': perms});
@@ -222,7 +310,7 @@ void main() {
   group('where slips go', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
-    test('network address by default; a local override wins; no address is a failure', () async {
+    test('network address by default; a local override wins; no address is handed off', () async {
       final net = _FakeNetwork();
       final spool = _FakeSpooler();
       final printing = RestaurantPrinting(
@@ -238,8 +326,7 @@ void main() {
       ]);
       expect(net.sent, ['192.168.1.51:9100']);
       expect(spool.printed, ['USB Kitchen']);
-      expect(failures.single.slip.stationName, 'Grill');
-      expect(failures.single.message, contains('no printer set'));
+      expect(failures, isEmpty, reason: 'Grill prints from its own device or the Kitchen Display');
     });
 
     test('a printer that is off is reported per slip, not thrown', () async {
@@ -249,6 +336,25 @@ void main() {
           loadConfig: () async => AppConfig(baseHost: 'http://x'));
       final failures = await printing.printSlips([_slip()]);
       expect(failures.single.message, contains('Could not reach the printer'));
+    });
+
+    test('a station with no printer anywhere is handed to its own device, not failed', () async {
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: _FakeSpooler(),
+          loadConfig: () async => AppConfig(baseHost: 'http://x'));
+      expect(await printing.printSlips([_slip(station: 'Grill', uid: 'S3', host: null)]), isEmpty);
+    });
+
+    test('per-device settings survive a restart', () async {
+      final cfg = AppConfig(baseHost: 'http://x', stationWidths: {'S1': 48, 'S2': 99},
+          agentStations: {'S1'}, askWaiter: true);
+      await cfg.save();
+      final loaded = await AppConfig.load();
+      expect(loaded.stationWidths, {'S1': 48});
+      expect(loaded.widthFor('S1'), 48);
+      expect(loaded.widthFor('S9'), AppConfig.defaultWidthCols);
+      expect(loaded.agentStations, {'S1'});
+      expect(loaded.askWaiter, isTrue);
     });
 
     test('station overrides survive a restart', () async {

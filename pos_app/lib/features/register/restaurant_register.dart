@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
+import '../../core/config/app_config.dart';
 import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
@@ -21,6 +22,7 @@ import '../payment/payment_sheet.dart';
 import '../restaurant/restaurant_dialogs.dart';
 import '../restaurant/restaurant_printing.dart';
 import '../restaurant/slip_text.dart';
+import '../restaurant/station_print_agent.dart';
 
 /// Restaurant register (ERP ADR-0065): the floor, then one order at a time.
 ///
@@ -76,18 +78,118 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
   PriceCache get _prices => ref.read(priceCacheProvider);
 
+  // ---------------------------------------------------------------- waiter (ADR-0066 D-8)
+
+  /// The waiter signed in on this shared till, and when they last did something.
+  ({String uid, String name})? _waiter;
+  DateTime? _waiterAt;
+
+  /// A waiter left signed in is signed out after this long untouched, so the next
+  /// person's orders are not put under their name.
+  static const Duration _waiterIdle = Duration(minutes: 3);
+
+  /// This device asks who is serving before a new order (Settings).
+  bool _askWaiter = false;
+
+  /// Prints the stations this device prints for, from every till (ADR-0066 D-6).
+  StationPrintAgent? _agent;
+
+  bool get _kitchenOnly => ref.read(appControllerProvider).isKitchenOnly;
+
+  /// A shared till: the signed-in user is not a waiter on their own device.
+  bool get _sharedTill {
+    final app = ref.read(appControllerProvider);
+    return !app.isWaiter && !app.isKitchenOnly;
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadFloor();
-    _browse();
+    if (_kitchenOnly) {
+      _loadStationsOnly();
+    } else {
+      _loadFloor();
+      _browse();
+    }
+    _applyDeviceSettings();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _q.dispose();
+    _agent?.dispose();
     super.dispose();
+  }
+
+  /// Reads this device's settings: waiter prompt, and whether to run the agent.
+  Future<void> _applyDeviceSettings() async {
+    final cfg = await AppConfig.load();
+    if (!mounted) return;
+    setState(() => _askWaiter = cfg.askWaiter);
+    if (cfg.agentStations.isEmpty) {
+      _agent?.stop();
+      return;
+    }
+    _agent ??= StationPrintAgent(
+        fetch: (station, since) => _svc.stationSlips(station, since: since));
+    _agent!.start();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openSettings() async {
+    await showStationPrinters(context, _stations, allowWaiterSetting: !_kitchenOnly);
+    await _applyDeviceSettings();
+  }
+
+  /// The signed-in waiter's uid — or null once they have been idle too long.
+  String? get _waiterUid {
+    final w = _waiter;
+    final at = _waiterAt;
+    if (w == null || at == null) return null;
+    if (DateTime.now().difference(at) > _waiterIdle) {
+      _waiter = null;
+      return null;
+    }
+    _waiterAt = DateTime.now();
+    return w.uid;
+  }
+
+  Future<bool> _signInWaiter() async {
+    final w = await askWaiterSignIn(context, ref);
+    if (w == null || !mounted) return false;
+    setState(() {
+      _waiter = w;
+      _waiterAt = DateTime.now();
+    });
+    showToast(context, '${w.name} is serving.', ok: true);
+    return true;
+  }
+
+  void _signOutWaiter() => setState(() {
+        _waiter = null;
+        _waiterAt = null;
+      });
+
+  /// Before a new order on a shared till that asks who is serving.
+  Future<bool> _ensureWaiter() async {
+    if (!_sharedTill || !_askWaiter || _waiterUid != null) return true;
+    return _signInWaiter();
+  }
+
+  Future<void> _loadStationsOnly() async {
+    setState(() => _load = _Load.loading);
+    try {
+      final stations = await _svc.listStations();
+      if (!mounted) return;
+      setState(() {
+        _stations = stations;
+        _load = _Load.ready;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _load = e.isForbidden ? _Load.forbidden : _Load.error);
+    }
   }
 
   // ================================================================ data
@@ -236,15 +338,19 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         return;
       }
     }
+    if (!await _ensureWaiter() || !mounted) return;
     final guests = await askGuestCount(context, t.name);
     if (guests == null || !mounted) return;
-    final opened = await _run(
-        () => _svc.open(tableUid: t.uid, guestCount: guests == 0 ? null : guests));
+    final waiterUid = _waiterUid;
+    final opened = await _run(() => _svc.open(
+        tableUid: t.uid, guestCount: guests == 0 ? null : guests, waiterUid: waiterUid));
     if (opened != null) _showOrder(opened);
   }
 
   Future<void> _newTakeaway() async {
-    final opened = await _run(() => _svc.open());
+    if (!await _ensureWaiter() || !mounted) return;
+    final waiterUid = _waiterUid;
+    final opened = await _run(() => _svc.open(waiterUid: waiterUid));
     if (opened != null) _showOrder(opened);
   }
 
@@ -318,7 +424,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     if (courses.isEmpty) return;
     final course = courses.length == 1 ? courses.first : await askFireCourse(context, courses);
     if (course == null || !mounted) return;
-    final res = await _run(() => _svc.fire(order.uid, course: course));
+    final waiterUid = _waiterUid;
+    final res = await _run(() => _svc.fire(order.uid, course: course, waiterUid: waiterUid));
     if (res == null || !mounted) return;
     _showOrder(res.order);
     await _printSlips(res.slips, okMessage: 'Course $course sent');
@@ -344,7 +451,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   Future<void> _send({bool quiet = false}) async {
     final order = _order;
     if (order == null) return;
-    final res = await _run(() => _svc.send(order.uid));
+    final waiterUid = _waiterUid;
+    final res = await _run(() => _svc.send(order.uid, waiterUid: waiterUid));
     if (res == null || !mounted) return;
     _showOrder(res.order);
     await _printSlips(res.slips, okMessage: quiet ? null : 'Sent');
@@ -595,6 +703,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   @override
   Widget build(BuildContext context) {
+    if (_kitchenOnly) return _kitchenPrinter();
     final order = _order;
     if (order == null) return _floor();
     return LayoutBuilder(builder: (context, box) {
@@ -642,29 +751,38 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Floor',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              const Spacer(),
-              OrbixButton(
-                  label: 'Printers',
-                  icon: Icons.print_outlined,
-                  kind: BtnKind.ghost,
-                  onPressed: _load == _Load.ready
-                      ? () => showStationPrinters(context, _stations)
-                      : null),
-              const SizedBox(width: 8),
-              OrbixButton(
-                  label: 'Refresh',
-                  icon: Icons.refresh,
-                  kind: BtnKind.ghost,
-                  onPressed: _busy ? null : _loadFloor),
-              const SizedBox(width: 8),
-              OrbixButton(
-                  label: 'New takeaway',
-                  icon: Icons.takeout_dining_outlined,
-                  busy: _busy,
-                  onPressed: _load == _Load.ready && !_busy ? _newTakeaway : null),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (_sharedTill) _waiterChip(),
+                    if (_agent?.active ?? false)
+                      const InfoChip(icon: Icons.print_outlined, label: 'Printing for', value: 'all tills'),
+                    OrbixButton(
+                        label: 'Settings',
+                        icon: Icons.tune,
+                        kind: BtnKind.ghost,
+                        onPressed: _load == _Load.ready ? _openSettings : null),
+                    OrbixButton(
+                        label: 'Refresh',
+                        icon: Icons.refresh,
+                        kind: BtnKind.ghost,
+                        onPressed: _busy ? null : _loadFloor),
+                    OrbixButton(
+                        label: 'New takeaway',
+                        icon: Icons.takeout_dining_outlined,
+                        busy: _busy,
+                        onPressed: _load == _Load.ready && !_busy ? _newTakeaway : null),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -760,6 +878,98 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         const SizedBox(width: 16),
         SizedBox(width: 280, child: takeawayPanel),
       ],
+    );
+  }
+
+  /// "Serving: Baraka · Sign out", or "Who's serving?" on a shared till.
+  Widget _waiterChip() {
+    final w = _waiter;
+    if (w == null || _waiterUid == null) {
+      return OrbixButton(
+          label: "Who's serving?",
+          icon: Icons.room_service_outlined,
+          kind: BtnKind.ghost,
+          onPressed: _signInWaiter);
+    }
+    return InputChip(
+      avatar: const Icon(Icons.room_service_outlined, size: 18),
+      label: Text('Serving: ${w.name}'),
+      onDeleted: _signOutWaiter,
+      deleteButtonTooltipMessage: 'Sign out ${w.name}',
+    );
+  }
+
+  // ---------------------------------------------------------------- kitchen printer
+
+  /// The kitchen PC's screen (ADR-0066 D-6): which stations this device prints
+  /// for, and what it printed. Keep it open; it fetches new slips every few seconds.
+  Widget _kitchenPrinter() {
+    final agent = _agent;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Kitchen printer',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              ),
+              OrbixButton(
+                  label: 'Settings',
+                  icon: Icons.tune,
+                  kind: BtnKind.ghost,
+                  onPressed: _load == _Load.ready ? _openSettings : null),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+              agent?.active ?? false
+                  ? 'Printing new kitchen and bar slips from every till. Keep this screen open.'
+                  : 'Not printing yet. Open Settings, choose this PC\'s printer for a station, '
+                      'and tick "Print ALL slips here".',
+              style: const TextStyle(color: AppColors.ink2)),
+          if (_load == _Load.forbidden)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('This login may not see the stations. Ask a manager.',
+                  style: TextStyle(color: AppColors.danger)),
+            ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: Panel(
+              child: agent == null
+                  ? const Center(
+                      child: Text('Nothing printed yet.', style: TextStyle(color: AppColors.ink3)))
+                  : ValueListenableBuilder<List<AgentLogEntry>>(
+                      valueListenable: agent.log,
+                      builder: (context, entries, _) => entries.isEmpty
+                          ? const Center(
+                              child: Text('Waiting for orders…',
+                                  style: TextStyle(color: AppColors.ink3)))
+                          : ListView(
+                              padding: const EdgeInsets.all(8),
+                              children: [
+                                for (final e in entries)
+                                  ListTile(
+                                    dense: true,
+                                    leading: Icon(
+                                        e.failed ? Icons.error_outline : Icons.check_circle_outline,
+                                        color: e.failed ? AppColors.danger : AppColors.ok),
+                                    title: Text(e.text),
+                                    trailing: Text(
+                                        '${e.at.hour.toString().padLeft(2, '0')}:'
+                                        '${e.at.minute.toString().padLeft(2, '0')}',
+                                        style: const TextStyle(color: AppColors.ink3)),
+                                  ),
+                              ],
+                            ),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

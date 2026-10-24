@@ -16,6 +16,7 @@ import com.erp.modules.sales.domain.dto.RestaurantOrderDto;
 import com.erp.modules.sales.domain.dto.RestaurantPaymentDto;
 import com.erp.modules.sales.domain.dto.RestaurantSendResultDto;
 import com.erp.modules.sales.domain.dto.RestaurantVoidResultDto;
+import com.erp.modules.sales.domain.dto.SendRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.VoidRestaurantOrderLineRequest;
@@ -111,8 +112,9 @@ public class RestaurantOrderController {
 
     @PostMapping("/uid/{uid}/send")
     @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
-    public RestaurantSendResultDto send(@PathVariable String uid) {
-        return orders.send(uid);
+    public RestaurantSendResultDto send(@PathVariable String uid,
+                                       @Valid @RequestBody(required = false) SendRestaurantOrderRequest request) {
+        return orders.send(uid, request == null ? null : request.waiterUid());
     }
 
     /** Releases held items — of one course, or all — and sends them ("mains now"). */

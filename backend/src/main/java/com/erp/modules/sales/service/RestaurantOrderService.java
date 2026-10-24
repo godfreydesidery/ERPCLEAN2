@@ -8,6 +8,7 @@ import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.StationSlipsDto;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.PrepSlipDto;
 import com.erp.modules.sales.domain.dto.RestaurantBillDto;
@@ -50,8 +51,20 @@ public interface RestaurantOrderService {
     /** Deletes an UNSENT item. A sent one must be voided. */
     RestaurantOrderDto deleteLine(String uid, String lineUid);
 
-    /** Fires every unsent item that is not held and returns one slip per prep station to print. */
+    /**
+     * Fires every unsent item that is not held and returns one slip per prep station to print.
+     * {@code waiterUid}: a waiter signed in on a shared till (re-verified), else null.
+     */
+    RestaurantSendResultDto send(String uid, String waiterUid);
+
+    /** Send by the signed-in user. */
     RestaurantSendResultDto send(String uid);
+
+    /**
+     * Slips for one station sent or voided after {@code since} (null = start the cursor now), for
+     * a device that prints that station itself (ADR-0066 D-6).
+     */
+    StationSlipsDto stationSlips(String stationUid, java.time.Instant since);
 
     /** Releases held items — of one course, or all — and sends them (ADR-0066 D-5). */
     RestaurantSendResultDto fire(String uid, FireRestaurantOrderRequest request);

@@ -30,11 +30,14 @@ class RestaurantService {
       RestaurantOrder.fromJson(asMap(await _api.get('$_orders/uid/$uid')));
 
   /// Opens an order at [tableUid], or a takeaway when it is null.
-  Future<RestaurantOrder> open({String? tableUid, int? guestCount}) async =>
+  /// [waiterUid]: the waiter signed in on this shared till (ADR-0066 D-8); the
+  /// server re-verifies it and records them as the order's server.
+  Future<RestaurantOrder> open({String? tableUid, int? guestCount, String? waiterUid}) async =>
       RestaurantOrder.fromJson(asMap(await _api.post(_orders, body: {
         'orderType': tableUid == null ? 'TAKEAWAY' : 'DINE_IN',
         'tableUid': ?tableUid,
         'guestCount': ?guestCount,
+        'waiterUid': ?waiterUid,
       })));
 
   Future<RestaurantOrder> moveTo(String uid, String tableUid) async =>
@@ -67,9 +70,9 @@ class RestaurantService {
           body: {'quantity': quantity, 'note': note, 'course': ?course, 'held': ?held})));
 
   /// Releases held items — of [course], or all — and sends them ("mains now").
-  Future<OrderWithSlips> fire(String uid, {int? course}) async =>
-      OrderWithSlips.fromJson(asMap(
-          await _api.post('$_orders/uid/$uid/fire', body: {'course': ?course})));
+  Future<OrderWithSlips> fire(String uid, {int? course, String? waiterUid}) async =>
+      OrderWithSlips.fromJson(asMap(await _api.post('$_orders/uid/$uid/fire',
+          body: {'course': ?course, 'waiterUid': ?waiterUid})));
 
   // ---------------------------------------------------------------- choices (ADR-0066 D-4)
 
@@ -97,8 +100,23 @@ class RestaurantService {
           asMap(await _api.delete('$_orders/uid/$uid/lines/uid/$lineUid')));
 
   /// Fires every unsent item; returns one slip per station to print.
-  Future<OrderWithSlips> send(String uid) async =>
-      OrderWithSlips.fromJson(asMap(await _api.post('$_orders/uid/$uid/send')));
+  Future<OrderWithSlips> send(String uid, {String? waiterUid}) async =>
+      OrderWithSlips.fromJson(asMap(await _api.post('$_orders/uid/$uid/send',
+          body: waiterUid == null ? null : {'waiterUid': waiterUid})));
+
+  /// A station's slips sent or voided after [since] — for a device that prints
+  /// the station itself. [since] null starts the cursor now (no history).
+  Future<({DateTime until, List<PrepSlip> slips})> stationSlips(String stationUid,
+      {DateTime? since}) async {
+    final data = asMap(await _api.get('$_base/kitchen/slips', query: {
+      'stationUid': stationUid,
+      'since': since?.toUtc().toIso8601String(),
+    }));
+    return (
+      until: asDate(data['until']) ?? DateTime.now(),
+      slips: asList(data['slips'], PrepSlip.fromJson),
+    );
+  }
 
   /// Slips rebuilt for a reprint ([round] null = the latest).
   Future<List<PrepSlip>> slips(String uid, {int? round, String? stationUid}) async =>

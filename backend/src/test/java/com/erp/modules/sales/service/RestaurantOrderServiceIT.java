@@ -64,6 +64,7 @@ import com.erp.modules.sales.domain.dto.RestaurantPaymentDto;
 import com.erp.modules.sales.domain.dto.RestaurantSendResultDto;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.StationSlipsDto;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
 import com.erp.modules.sales.domain.dto.RestaurantVoidResultDto;
 import com.erp.modules.sales.domain.dto.VoidRestaurantOrderLineRequest;
@@ -150,6 +151,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     private Company company;
     private Branch  branch;
     private Long    rootId;
+    private Long    orgId;
     private Long    cashierId;
     private Long    customerId;
     private Long    pcsId;
@@ -169,6 +171,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         testData.clearAll();
 
         Organisation org = organisations.save(new Organisation("Restaurant IT Org"));
+        orgId = org.getId();
         company = companies.save(new Company(org, "RESTO", "Cafe Restaurant Co"));
         branch  = branches.save(new Branch(company, "RS1", "Cafe Branch"));
 
@@ -684,6 +687,83 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     }
 
     // =========================================================================
+    // Any set-up works: waiters on a shared till, USB printers on a kitchen PC, items without a
+    // category given one from the routing screen.
+    // =========================================================================
+
+    @Test
+    void aWaiterSignedInOnTheSharedTill_isRecordedAsTheServer_andNamedOnTheSlip() {
+        setRootCtx();
+        AppUser waiter = new AppUser("resto_waiter", passwordEncoder.encode("W@iter1Pass"), "Baraka Waiter");
+        waiter.setOrganisationId(orgId);
+        waiter = users.save(waiter);
+        userBranches.save(new UserBranch(waiter.getId(), branch, rootId));
+        grantRole(waiter.getId(), "WAITER");
+        String waiterUid = waiter.getUid();
+
+        setCashierCtx();  // the cashier's till, the waiter's order
+        RestaurantOrderDto order = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), null, null, waiterUid));
+        assertThat(order.openedByName()).isEqualTo("Baraka Waiter");
+        orders.addLine(order.uid(), item(tacos));
+        RestaurantSendResultDto sent = orders.send(order.uid(), waiterUid);
+        assertThat(sent.slips().get(0).byName()).isEqualTo("Baraka Waiter");
+
+        assertThatThrownBy(() -> orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), null, null, "01NOTAREALUSER0000000000XX")))
+                .as("a waiter uid is re-verified, never trusted")
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void stationFeed_givesAKitchenPcEverySlipOnce_andVoidsAfterThem() {
+        setCashierCtx();
+        var start = kitchenFeed(null);
+        assertThat(start.slips()).as("a device switched on prints no history").isEmpty();
+
+        RestaurantOrderDto order = openWith(tacos);
+        orders.send(order.uid());
+        var first = kitchenFeed(start.until());
+        assertThat(first.slips()).singleElement().satisfies(s -> {
+            assertThat(s.kind()).isEqualTo(PrepSlipKind.FIRE);
+            assertThat(s.stationName()).isEqualTo("Kitchen");
+            assertThat(s.lineUids()).hasSize(1);
+        });
+        assertThat(kitchenFeed(first.until()).slips()).as("nothing new").isEmpty();
+
+        setRootCtx();
+        String line = lineFor(orders.get(order.uid()), tacos).uid();
+        orders.voidLine(order.uid(), line, new VoidRestaurantOrderLineRequest("Changed mind", null, null));
+        assertThat(kitchenFeed(first.until()).slips()).singleElement()
+                .satisfies(s -> assertThat(s.kind()).isEqualTo(PrepSlipKind.VOID));
+    }
+
+    @Test
+    void anItemWithoutACategory_canBeGivenOne_andThenRoutesToTheBar() {
+        setRootCtx();
+        ProductDto juice = menuItem("Passion Juice", "4000", null);
+        productService.setCategory(juice.uid(), "  drinks ");
+        assertThat(productService.getByUid(juice.uid()).category()).isEqualTo("drinks");
+
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(juice);
+        assertThat(orders.send(order.uid()).slips()).extracting(PrepSlipDto::stationName)
+                .containsExactly("Bar");
+    }
+
+    private StationSlipsDto kitchenFeed(java.time.Instant since) {
+        return orders.stationSlips(kitchen.uid(), since);
+    }
+
+    private void grantRole(Long userId, String roleCode) {
+        jdbc.update("""
+                INSERT INTO user_role (uid, user_id, role_id, company_id, granted_at, granted_by, version)
+                SELECT ?, ?, r.id, ?, now(), ?, 0 FROM roles r
+                WHERE r.code = ? AND r.organisation_id IS NULL""",
+                "UR-" + roleCode + "-" + userId, userId, company.getId(), rootId, roleCode);
+    }
+
+    // =========================================================================
     // helpers
     // =========================================================================
 
@@ -772,11 +852,11 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
 
     private void setRootCtx() {
         RequestContext.set(new RequestContext.Principal(
-                rootId, "resto_root", true, company.getId(), branch.getId(), null));
+                rootId, "resto_root", true, company.getId(), branch.getId(), null, orgId));
     }
 
     private void setCashierCtx() {
         RequestContext.set(new RequestContext.Principal(
-                cashierId, "resto_cashier", false, company.getId(), branch.getId(), null));
+                cashierId, "resto_cashier", false, company.getId(), branch.getId(), null, orgId));
     }
 }

@@ -112,9 +112,12 @@ class _TopBar extends ConsumerWidget {
           if (app.isWaiter)
             const InfoChip(
                 icon: Icons.room_service_outlined, label: 'Waiter', value: 'Orders only'),
+          if (app.isKitchenOnly)
+            const InfoChip(
+                icon: Icons.print_outlined, label: 'Kitchen printer', value: 'Prints slips'),
           const Spacer(),
           // A waiter works the restaurant only; the other modes sell over a till.
-          if (!app.isWaiter)
+          if (!app.isWaiter && !app.isKitchenOnly)
             const Flexible(
                 flex: 4,
                 child: FittedBox(fit: BoxFit.scaleDown, child: _ModeSwitch())),

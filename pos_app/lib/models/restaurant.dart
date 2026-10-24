@@ -257,6 +257,7 @@ class PrepSlip {
     required this.byName,
     this.at,
     required this.lines,
+    this.lineUids = const [],
   });
 
   final bool isVoid;
@@ -274,6 +275,13 @@ class PrepSlip {
   final DateTime? at;
   final List<PrepSlipLine> lines;
 
+  /// The order lines on the slip — how a device recognises a slip it has
+  /// already printed.
+  final List<String> lineUids;
+
+  /// Identity of this slip's paper: kind, station and the lines on it.
+  String get key => '${isVoid ? 'V' : 'F'}:$stationUid:${([...lineUids]..sort()).join(',')}';
+
   factory PrepSlip.fromJson(Map<String, dynamic> j) => PrepSlip(
         isVoid: asStr(j['kind']) == 'VOID',
         stationUid: asStrOr(j['stationUid']),
@@ -289,6 +297,7 @@ class PrepSlip {
         byName: asStrOr(j['byName']),
         at: asDate(j['at']),
         lines: asList(j['lines'], PrepSlipLine.fromJson),
+        lineUids: (j['lineUids'] as List? ?? const []).map((e) => e.toString()).toList(),
       );
 }
 

@@ -4,7 +4,8 @@
       <h1>Restaurant Setup</h1>
       <p class="subtitle">
         <i class="bi bi-cup-hot me-1" aria-hidden="true"></i>
-        Tables, kitchen and bar printers, and which items print where. Orders are taken on the till.
+        Tables, kitchen and bar printers, and which items print where. Orders are taken on the till —
+        by the cashier, or by waiters signed in with the <strong>Waiter</strong> role (Users).
       </p>
     </div>
   </header>
@@ -49,10 +50,18 @@
         </div>
         <div class="erp-card__body">
           <p class="text-muted small">
-            Each station gets its own slip when an order is sent. Use the printer's network address
-            (IP) and port — usually 9100. Items whose category is not routed below print at the
-            default station.
+            Each station gets its own slip when an order is sent. Items whose category is not routed
+            below print at the default station. Every way of printing works:
           </p>
+          <ul class="text-muted small">
+            <li><strong>Network printer</strong> (cable or WiFi): enter its IP address and port —
+              usually 9100. Every till prints to it directly.</li>
+            <li><strong>Printer plugged into a PC by USB</strong>: leave the IP empty. On that PC, open
+              OrbixPOS → Settings, choose the printer for this station and tick
+              <em>Print ALL slips here</em>. That PC then prints for every till.</li>
+            <li><strong>No printer</strong>: leave the IP empty and use the
+              <em>Kitchen Display</em> on a screen at the station.</li>
+          </ul>
 
           @if (stations().length === 0) {
             <div class="erp-empty mb-3">
@@ -109,7 +118,9 @@
                        [ngModel]="stationName()" (ngModelChange)="stationName.set($event)" />
               </div>
               <div class="erp-field">
-                <label class="form-label" for="stationHost">Printer IP address</label>
+                <label class="form-label" for="stationHost">
+                  Printer IP address <span class="text-muted small">(empty for USB or display)</span>
+                </label>
                 <input id="stationHost" name="stationHost" type="text" class="form-control" maxlength="255"
                        placeholder="e.g. 192.168.1.50" autocomplete="off"
                        [ngModel]="stationHost()" (ngModelChange)="stationHost.set($event)" />
@@ -209,6 +220,47 @@
               }
             </button>
           }
+
+          @if (canEditProducts() && uncategorised().length > 0) {
+            <h3 class="h6 mt-4">Items without a category ({{ uncategorised().length }})</h3>
+            <p class="text-muted small">
+              These print at the default station ({{ defaultStation()?.name ?? 'none' }}). Give drinks a
+              category such as <em>Drinks</em> and route it to the bar above.
+            </p>
+            <datalist id="knownCategories">
+              @for (c of knownCategories(); track c) { <option [value]="c"></option> }
+            </datalist>
+            <div class="erp-table-wrap">
+              <table class="erp-table">
+                <caption class="visually-hidden">Items without a category</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Category</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (p of uncategorised(); track p.uid; let i = $index) {
+                    <tr>
+                      <td><label class="mb-0" [for]="'cat-' + i">{{ p.name }}</label></td>
+                      <td>
+                        <input class="form-control form-control-sm route-select" type="text" maxlength="60"
+                               list="knownCategories" placeholder="e.g. Drinks"
+                               [id]="'cat-' + i" [name]="'cat-' + i"
+                               [ngModel]="categoryDraft()[p.uid] ?? ''" (ngModelChange)="setDraft(p.uid, $event)" />
+                      </td>
+                      <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary" (click)="saveCategory(p)"
+                                [disabled]="!(categoryDraft()[p.uid] ?? '').trim()"
+                                [attr.aria-label]="'Save category for ' + p.name">Save</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
         </div>
       </div>
 
@@ -262,6 +314,33 @@
                   }
                 </tbody>
               </table>
+            </div>
+          }
+
+          @if (!tableEditUid()) {
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-3" role="group" aria-label="Add several tables">
+              <div>
+                <label class="form-label small mb-1" for="bulkPrefix">Name starts with</label>
+                <input id="bulkPrefix" name="bulkPrefix" class="form-control form-control-sm" maxlength="20"
+                       [ngModel]="bulkPrefix()" (ngModelChange)="bulkPrefix.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small mb-1" for="bulkFrom">From</label>
+                <input id="bulkFrom" name="bulkFrom" type="number" min="1" class="form-control form-control-sm"
+                       [ngModel]="bulkFrom()" (ngModelChange)="bulkFrom.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small mb-1" for="bulkTo">To</label>
+                <input id="bulkTo" name="bulkTo" type="number" min="1" class="form-control form-control-sm"
+                       [ngModel]="bulkTo()" (ngModelChange)="bulkTo.set($event)" />
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-primary" (click)="addTables()" [disabled]="bulkSaving()">
+                @if (bulkSaving()) {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Adding…
+                } @else {
+                  Add {{ bulkPrefix() }}{{ bulkFrom() }} to {{ bulkPrefix() }}{{ bulkTo() }}
+                }
+              </button>
             </div>
           }
 

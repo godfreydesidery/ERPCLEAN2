@@ -506,6 +506,28 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public ProductDto setCategory(String uid, String category) {
+        Product p = require(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+        String value = category == null ? null : category.trim().replaceAll("\\s+", " ");
+        if (value != null && value.isEmpty()) {
+            value = null;
+        }
+        if (value != null && value.length() > 60) {
+            throw new IllegalArgumentException("A category can be at most 60 characters.");
+        }
+        String before = p.getCategory();
+        p.setCategory(value);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("action", "CATEGORY_SET");
+        detail.put("from", before == null ? "" : before);
+        detail.put("to", value == null ? "" : value);
+        audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
+                .detail(detail));
+        return ProductDto.from(p);
+    }
+
+    @Override
     public ProductBulkPackDto updateBulkPack(String productUid, String bulkPackUid,
                                              UpdateBulkPackRequest req) {
         Product p = require(productUid);

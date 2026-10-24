@@ -72,6 +72,16 @@ class AppData {
   static bool isWaiterLogin(Me me) =>
       me.can(Perms.restaurantOrderManage) && !me.can(Perms.sessionOpen);
 
+  /// Kitchen printer (ADR-0066 D-6): a kitchen login on the PC the station
+  /// printer is plugged into. It takes no orders — it prints the station's
+  /// slips for every till.
+  bool get isKitchenOnly => me != null && isKitchenLogin(me!);
+
+  static bool isKitchenLogin(Me me) =>
+      me.can(Perms.restaurantKitchenManage) &&
+      !me.can(Perms.restaurantOrderManage) &&
+      !me.can(Perms.sessionOpen);
+
   /// VAT fraction for a `vatStatus` (e.g. 0.18); 0 when unknown. Values are
   /// already fractions (see [vatRates]) — no percentage/fraction conversion.
   double vatFractionFor(String vatStatus) => vatRates[vatStatus] ?? 0;
@@ -235,7 +245,7 @@ class AppController extends Notifier<AppData> {
     }
 
     // A waiter has no till to open: straight to the restaurant floor.
-    final waiter = AppData.isWaiterLogin(me);
+    final waiter = AppData.isWaiterLogin(me) || AppData.isKitchenLogin(me);
 
     state = state.copyWith(
       phase: waiter || resumable != null ? AppPhase.register : AppPhase.openShift,

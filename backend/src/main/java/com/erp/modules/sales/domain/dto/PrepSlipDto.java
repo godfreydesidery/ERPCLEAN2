@@ -14,6 +14,8 @@ import java.util.List;
  * @param round   the send round the items went out in (1 = the order's first send)
  * @param reprint true when rebuilt on request, so the slip says REPRINT
  * @param byName  who sent (or voided) the items
+ * @param lineUids the order lines on the slip — lets a printing device recognise a slip it has
+ *                 already printed
  */
 public record PrepSlipDto(
         PrepSlipKind kind,
@@ -29,7 +31,8 @@ public record PrepSlipDto(
         boolean reprint,
         String byName,
         Instant at,
-        List<Line> lines
+        List<Line> lines,
+        List<String> lineUids
 ) {
     /**
      * {@code voidReason} is set on VOID slips only. {@code addOn} marks a priced add-on, printed
