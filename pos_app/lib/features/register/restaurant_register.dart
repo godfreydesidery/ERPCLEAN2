@@ -9,6 +9,7 @@ import '../../models/catalog.dart';
 import '../../state/app_controller.dart';
 import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
+import '../../state/price_cache.dart';
 import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../payment/payment_sheet.dart';
@@ -31,6 +32,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   Timer? _debounce;
 
   String get _companyId => ref.read(appControllerProvider).context!.companyId;
+  PriceCache get _prices => ref.read(priceCacheProvider);
 
   @override
   void initState() {
@@ -50,9 +52,24 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           .read(catalogServiceProvider)
           .searchProducts(_companyId, size: 120);
       if (mounted) setState(() => _menu = hits);
+      _refreshPrices(hits);
     } catch (_) {
       if (mounted) setState(() => _menu = const []);
     }
+  }
+
+  /// Prices the visible menu in one batch request, from the ERP's own resolver,
+  /// so the tile shows what the sale will charge (same cache as the supermarket
+  /// search).
+  void _refreshPrices(List<Product> items) {
+    if (items.isEmpty) return;
+    final cart = ref.read(cartProvider);
+    _prices
+        .refreshFor(items.map((p) => p.uid),
+            customerUid: cart.customer?.uid, currency: cart.currency)
+        .then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -95,6 +112,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
             .read(catalogServiceProvider)
             .searchProducts(_companyId, q: s, size: 120);
         if (mounted) setState(() => _menu = hits);
+        _refreshPrices(hits);
       } catch (_) {}
     });
   }
@@ -121,6 +139,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         _table = null;
         _sent = false;
       });
+      // A completed sale clears the price cache (POS-18); re-price the menu.
+      _refreshPrices(_menu);
     }
   }
 
@@ -246,9 +266,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, fontSize: 13.5)),
-                  Text(p.code,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.ink3)),
+                  _tilePrice(p),
                 ],
               ),
             ),
@@ -256,6 +274,30 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         );
       },
     );
+  }
+
+  /// The tile's price line, VAT-inclusive (J COB 2026-10-24: price, not the
+  /// item code). Empty while the answer is in flight or when this till may not
+  /// read prices; an explicit "No price" when the server has none.
+  Widget _tilePrice(Product p) {
+    if (_prices.denied) return const SizedBox(height: 15);
+    final price = _prices.priceFor(p.uid);
+    if (price == null) return const SizedBox(height: 15);
+    if (!price.isResolved) {
+      return const Text('No price',
+          style: TextStyle(
+              fontSize: 11.5,
+              fontStyle: FontStyle.italic,
+              color: AppColors.warn));
+    }
+    final gross = ref.read(appControllerProvider).grossUnitPrice(
+        price.amount!, p.vatStatus,
+        vatInclusive: price.vatInclusive);
+    return Text(formatAmount(gross),
+        maxLines: 1,
+        softWrap: false,
+        overflow: TextOverflow.ellipsis,
+        style: numStyle(size: 12.5, weight: FontWeight.w700));
   }
 
   Widget _ticket() {
