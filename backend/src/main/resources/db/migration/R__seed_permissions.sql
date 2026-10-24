@@ -150,6 +150,10 @@ INSERT INTO permissions (code, module, description) VALUES
     ('POS.SESSION.VIEW', 'sales', 'View POS cashier sessions and X/Z reads'),
     ('POS.TILL.MANAGE', 'sales', 'Create and manage POS tills (registers)'),
     ('POS.TILL.VIEW', 'sales', 'View POS tills (registers)'),
+    -- Restaurant orders (ADR-0065, owner-approved 2026-10-24): open checks, kitchen/bar slips, bill, pay.
+    ('RESTAURANT.ORDER.MANAGE', 'sales', 'Open restaurant orders, add items, send to prep stations, print the bill and take payment'),
+    ('RESTAURANT.ORDER.VOID', 'sales', 'Void an item already sent to a prep station, or cancel an order with sent items'),
+    ('RESTAURANT.SETUP.MANAGE', 'sales', 'Manage restaurant tables, prep stations and category routing'),
     ('PRICELIST.MANAGE', 'products', 'Create, update, archive price lists'),
     ('PRICELIST.VIEW', 'products', 'View price lists'),
     ('PRODUCT.BRANCH.ASSIGN', 'products', 'Associate/dissociate a product with branches of its company'),
@@ -392,6 +396,7 @@ SELECT r.id, p.id FROM (VALUES
   -- (POS.EXPENSE.VIEW) and is deliberately NOT granted here.
   ('CASHIER','POS.EXPENSE.RECORD'),
   ('CASHIER','POS.TILL.VIEW'),
+  ('CASHIER','RESTAURANT.ORDER.MANAGE'),
   ('CASHIER','SALES.INVOICE.SETTLE'),
   ('CASHIER','SALES.INVOICE.VIEW'),
   ('CASHIER','AR.RECEIPT.RECORD'),
@@ -684,6 +689,8 @@ SELECT r.id, p.id FROM (VALUES
   -- failure, not a security posture.
   ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','POS.CASHUP.VIEW'),
+  ('SALES_MANAGER','RESTAURANT.ORDER.MANAGE'),
+  ('SALES_MANAGER','RESTAURANT.ORDER.VOID'),
   ('SALES_MANAGER','BRANCH.VIEW'),
   -- Gap review 2026-10-10 (ADM-13, owner-approved): the sales manager reads every sales report but
   -- could not export one to PDF/Excel.
@@ -712,6 +719,9 @@ SELECT r.id, p.id FROM (VALUES
   ('BRANCH_MANAGER','POS.SALE.AGE_OVERRIDE'),
   ('BRANCH_MANAGER','POS.TILL.MANAGE'),
   ('BRANCH_MANAGER','POS.TILL.VIEW'),
+  ('BRANCH_MANAGER','RESTAURANT.ORDER.MANAGE'),
+  ('BRANCH_MANAGER','RESTAURANT.ORDER.VOID'),
+  ('BRANCH_MANAGER','RESTAURANT.SETUP.MANAGE'),
   ('BRANCH_MANAGER','CASH.COUNT.MANAGE'),
   ('BRANCH_MANAGER','CASH.COUNT.VIEW'),
   ('BRANCH_MANAGER','PETTY_CASH.VIEW'),
