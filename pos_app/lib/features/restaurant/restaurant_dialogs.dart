@@ -438,26 +438,47 @@ class _WaiterSignInDialog extends ConsumerStatefulWidget {
 class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
+  final _search = TextEditingController();
   final _userFocus = FocusNode();
   final _passFocus = FocusNode();
+  final _searchFocus = FocusNode();
   bool _busy = false;
   String? _error;
 
   /// The branch's waiters as tiles (J COB 2026-10-30), from this till's list.
   List<RestaurantWaiter> _waiters = const [];
-  bool _typingPassword = false;
+
+  /// The field the on-screen keyboard types into: 'user', 'pass' or 'search'.
+  String _active = 'user';
+
+  /// Past this many tiles a search box is shown (a restaurant may have 50 waiters).
+  static const _searchFrom = 6;
+
+  /// The keys show once a name is picked or a field is tapped; a long list is
+  /// browsed with the whole dialog.
+  bool _keys = false;
 
   @override
   void initState() {
     super.initState();
-    _userFocus.addListener(() {
-      if (_userFocus.hasFocus) setState(() => _typingPassword = false);
-    });
-    _passFocus.addListener(() {
-      if (_passFocus.hasFocus) setState(() => _typingPassword = true);
-    });
+    void track(FocusNode n, String field) => n.addListener(() {
+          if (n.hasFocus) {
+            setState(() {
+              _active = field;
+              _keys = true;
+            });
+          }
+        });
+    track(_userFocus, 'user');
+    track(_passFocus, 'pass');
+    track(_searchFocus, 'search');
+    _search.addListener(() => setState(() {}));
     AppConfig.load().then((cfg) {
-      if (mounted) setState(() => _waiters = cfg.waiters);
+      if (!mounted) return;
+      setState(() {
+        _waiters = cfg.waiters;
+        _keys = _waiters.length <= WaiterTiles.compactFrom;
+      });
     });
   }
 
@@ -465,8 +486,10 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
   void dispose() {
     _user.dispose();
     _pass.dispose();
+    _search.dispose();
     _userFocus.dispose();
     _passFocus.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -474,10 +497,26 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
     setState(() {
       _user.text = w.username;
       _pass.clear();
-      _typingPassword = true;
+      _active = 'pass';
+      _keys = true;
       _error = null;
     });
     _passFocus.requestFocus();
+  }
+
+  TextEditingController get _activeController =>
+      _active == 'pass' ? _pass : _active == 'search' ? _search : _user;
+
+  void _enter() {
+    switch (_active) {
+      case 'pass':
+        _go();
+      case 'search':
+        final hits = _waiters.where((w) => w.matches(_search.text)).toList();
+        if (hits.length == 1) _pick(hits.first);
+      default:
+        _passFocus.requestFocus();
+    }
   }
 
   Future<void> _go() async {
@@ -529,12 +568,25 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
                       : 'Waiter, tap your name and type your password.',
                   style: const TextStyle(color: AppColors.ink2)),
               const SizedBox(height: 10),
+              if (_waiters.length > _searchFrom) ...[
+                TextField(
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  decoration: const InputDecoration(
+                      labelText: 'Search waiters', prefixIcon: Icon(Icons.search)),
+                  onSubmitted: (_) => _enter(),
+                ),
+                const SizedBox(height: 8),
+              ],
               if (_waiters.isNotEmpty) ...[
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 210),
+                  constraints: BoxConstraints(maxHeight: _keys ? 200 : 380),
                   child: SingleChildScrollView(
                     child: WaiterTiles(
-                        waiters: _waiters, selected: _user.text.trim(), onPick: _pick),
+                        waiters: _waiters,
+                        query: _search.text,
+                        selected: _user.text.trim(),
+                        onPick: _pick),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -557,13 +609,13 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
                 const SizedBox(height: 8),
                 Text(_error!, style: const TextStyle(color: AppColors.danger)),
               ],
-              if (_waiters.isNotEmpty) ...[
+              if (_waiters.isNotEmpty && _keys) ...[
                 const SizedBox(height: 10),
                 OnScreenKeyboard(
-                  controller: _typingPassword ? _pass : _user,
+                  controller: _activeController,
                   keyHeight: 40,
-                  enterLabel: _typingPassword ? 'Sign in' : 'Next',
-                  onEnter: _typingPassword ? _go : () => _passFocus.requestFocus(),
+                  enterLabel: _active == 'pass' ? 'Sign in' : 'Next',
+                  onEnter: _enter,
                 ),
               ],
             ],

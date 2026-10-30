@@ -45,14 +45,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _waiters = cfg.waiters;
-        // A restaurant till with waiter tiles is a touch till: keys on screen.
-        _keyboard = cfg.waiters.isNotEmpty;
+        // A restaurant till with waiter tiles is a touch till: keys on screen —
+        // except while a long list is being browsed, which needs the height.
+        _keyboard = cfg.waiters.isNotEmpty && cfg.waiters.length <= WaiterTiles.compactFrom;
       });
     });
   }
 
   void _track(FocusNode node, _Field field) {
-    if (node.hasFocus && _active != field) setState(() => _active = field);
+    if (!node.hasFocus) return;
+    setState(() {
+      _active = field;
+      // Typing into a field needs keys; a long list keeps them hidden until then.
+      if (_waiters.isNotEmpty) _keyboard = true;
+    });
   }
 
   @override
@@ -77,6 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _user.text = w.username;
       _pass.clear();
       _active = _Field.pass;
+      _keyboard = true;
     });
     _passFocus.requestFocus();
   }
@@ -135,7 +142,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           if (_waiters.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                              child: _waiterPanel(),
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxHeight: 340),
+                                child: _waiterPanel(),
+                              ),
                             ),
                           form,
                         ],
@@ -228,7 +238,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               label: 'Username',
               controller: _user,
               focusNode: _userFocus,
-              autofocus: true,
+              autofocus: _waiters.isEmpty,
               prefixIcon: Icons.person_outline,
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _passFocus.requestFocus(),
