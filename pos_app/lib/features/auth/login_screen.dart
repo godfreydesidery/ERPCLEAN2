@@ -45,9 +45,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _waiters = cfg.waiters;
-        // A restaurant till with waiter tiles is a touch till: keys on screen —
-        // except while a long list is being browsed, which needs the height.
-        _keyboard = cfg.waiters.isNotEmpty && cfg.waiters.length <= WaiterTiles.compactFrom;
+        // The keys come up once a waiter picks their name (or taps a field):
+        // before that there is nothing to type, and the tiles need the height.
+        _keyboard = false;
       });
     });
   }

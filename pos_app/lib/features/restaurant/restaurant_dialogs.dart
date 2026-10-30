@@ -477,7 +477,7 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       if (!mounted) return;
       setState(() {
         _waiters = cfg.waiters;
-        _keys = _waiters.length <= WaiterTiles.compactFrom;
+        _keys = false;  // up once a name is picked or a field is tapped
       });
     });
   }
