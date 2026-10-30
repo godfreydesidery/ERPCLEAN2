@@ -584,6 +584,8 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
                 ConstrainedBox(
                   constraints: BoxConstraints(maxHeight: _keys ? 200 : 380),
                   child: SingleChildScrollView(
+                    // A gutter for the scrollbar, which draws over the right edge.
+                    padding: const EdgeInsets.only(right: 16),
                     child: WaiterTiles(
                         waiters: _waiters,
                         query: _search.text,

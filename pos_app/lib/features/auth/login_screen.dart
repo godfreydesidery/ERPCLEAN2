@@ -209,6 +209,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ],
         Flexible(
           child: SingleChildScrollView(
+            // A gutter for the scrollbar, which draws over the right edge.
+            padding: const EdgeInsets.only(right: 16),
             child: WaiterTiles(
               waiters: _waiters,
               query: _search.text,
