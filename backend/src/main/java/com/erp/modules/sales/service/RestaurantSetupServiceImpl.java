@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
+import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantTableRequest;
 import com.erp.modules.sales.domain.entity.PrepStation;
@@ -300,6 +301,36 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
         List<String> out = new ArrayList<>(byKey.values());
         out.sort(String.CASE_INSENSITIVE_ORDER);
         return out;
+    }
+
+    @Override
+    public List<RestaurantWaiterDto> listWaiters(String branchUid) {
+        Long companyId = scope.companyId();
+        Long branchId = scope.branchId(branchUid);
+        // A live grant of the global WAITER role (ADR-0066 D-7) in this company, company-wide or for
+        // this branch, held by an active user who is assigned to the branch.
+        return jdbc.query("""
+                SELECT DISTINCT u.uid, u.display_name, u.username
+                FROM app_users u
+                JOIN user_role ur ON ur.user_id = u.id
+                                 AND ur.company_id = ?
+                                 AND ur.revoked_at IS NULL
+                                 AND (ur.expires_at IS NULL OR ur.expires_at > now())
+                                 AND (ur.branch_id IS NULL OR ur.branch_id = ?)
+                JOIN roles r       ON r.id = ur.role_id
+                                 AND r.code = 'WAITER'
+                                 AND r.organisation_id IS NULL
+                                 AND r.status = 'ACTIVE'
+                JOIN user_branch ub ON ub.user_id = u.id
+                                 AND ub.branch_id = ?
+                                 AND ub.active
+                                 AND ub.revoked_at IS NULL
+                WHERE u.status = 'ACTIVE'
+                ORDER BY u.display_name
+                """,
+                (rs, i) -> new RestaurantWaiterDto(
+                        rs.getString("uid"), rs.getString("display_name"), rs.getString("username")),
+                companyId, branchId, branchId);
     }
 
     private List<PrepStationCategoryDto> toRouteDtos(Long companyId, Long branchId) {

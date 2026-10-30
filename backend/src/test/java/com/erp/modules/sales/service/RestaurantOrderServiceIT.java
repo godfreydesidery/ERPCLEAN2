@@ -146,6 +146,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantOrderService  orders;
     @Autowired private RestaurantMenuService   menu;
     @Autowired private RestaurantKitchenService kitchenDisplay;
+    @Autowired private RestaurantReportQuery   reports;
     @Autowired private JdbcTemplate            jdbc;
 
     private Company company;
@@ -749,6 +750,75 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         RestaurantOrderDto order = openWith(juice);
         assertThat(orders.send(order.uid()).slips()).extracting(PrepSlipDto::stationName)
                 .containsExactly("Bar");
+    }
+
+    // =========================================================================
+    // J COB 2026-10-30: waiter tiles, and the reports per waiter.
+    // =========================================================================
+
+    @Test
+    void waiterTilesAndReports_followTheWaiterWhoOpenedEachOrder() {
+        setRootCtx();
+        AppUser waiter = new AppUser("resto_waiter2", passwordEncoder.encode("W@iter1Pass"), "Baraka Waiter");
+        waiter.setOrganisationId(orgId);
+        waiter = users.save(waiter);
+        userBranches.save(new UserBranch(waiter.getId(), branch, rootId));
+        grantRole(waiter.getId(), "WAITER");
+        String waiterUid = waiter.getUid();
+
+        assertThat(setup.listWaiters(null))
+                .as("only WAITER-role users of the branch get a tile; the cashier is not one")
+                .singleElement().satisfies(w -> {
+                    assertThat(w.uid()).isEqualTo(waiterUid);
+                    assertThat(w.name()).isEqualTo("Baraka Waiter");
+                    assertThat(w.username()).isEqualTo("resto_waiter2");
+                });
+
+        // The waiter's table: billed and paid at the cashier's till.
+        setCashierCtx();
+        RestaurantOrderDto served = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, waiterUid));
+        orders.addLine(served.uid(), item(tacos));
+        RestaurantBillDto bill = orders.bill(served.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos);
+        setCashierCtx();
+        orders.pay(served.uid(), "resto-report-pay", payment(bill.grossTotal()));
+
+        // The cashier's own order, still open.
+        RestaurantOrderDto pending = openWith(latte);
+
+        setRootCtx();
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        var sales = reports.waiterSales(company.getId(), today, today, null, null);
+        assertThat(sales.rows()).singleElement().satisfies(r -> {
+            assertThat(r.waiterName()).isEqualTo("Baraka Waiter");
+            assertThat(r.bills()).isEqualTo(1);
+            assertThat(r.guests()).isEqualTo(2);
+            assertThat(r.amount()).isEqualByComparingTo(bill.grossTotal());
+        });
+        assertThat(sales.totals().amount()).isEqualByComparingTo(bill.grossTotal());
+
+        var bills = reports.bills(company.getId(), today, today, waiterUid, null);
+        assertThat(bills.waiterName()).isEqualTo("Baraka Waiter");
+        assertThat(bills.rows()).singleElement().satisfies(r -> {
+            assertThat(r.orderNumber()).isEqualTo(served.orderNumber());
+            assertThat(r.servedAt()).isEqualTo("T1");
+            assertThat(r.cashierName()).as("the till session's cashier").isEqualTo("Asha Waiter");
+            assertThat(r.invoiceNumber()).isNotBlank();
+            assertThat(r.invoiceStatus()).isEqualTo("FINALISED");
+        });
+        assertThat(bills.totalAmount()).isEqualByComparingTo(bill.grossTotal());
+
+        var open = reports.pendingBills(company.getId(), null, null);
+        assertThat(open.rows()).singleElement().satisfies(r -> {
+            assertThat(r.orderUid()).isEqualTo(pending.uid());
+            assertThat(r.waiterName()).isEqualTo("Asha Waiter");
+            assertThat(r.status()).isEqualTo("OPEN");
+            assertThat(r.items()).isEqualByComparingTo("1");
+            assertThat(r.billedAmount()).isNull();
+        });
+        assertThat(reports.pendingBills(company.getId(), waiterUid, null).rows())
+                .as("filtered to the waiter, whose only order is paid").isEmpty();
     }
 
     private StationSlipsDto kitchenFeed(java.time.Instant since) {
