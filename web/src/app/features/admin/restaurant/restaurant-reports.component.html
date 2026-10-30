@@ -1,0 +1,298 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1><i class="bi bi-person-badge me-2" aria-hidden="true"></i>Restaurant Reports</h1>
+    <p class="subtitle">
+      Sales, bills paid and pending bills — for one waiter or all of them. The waiter is whoever
+      opened the order.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the restaurant reports.
+    </div>
+  } @else {
+
+    <div class="btn-group mb-3" role="group" aria-label="Report">
+      @for (k of kinds; track k.kind) {
+        <button type="button" class="btn"
+                [class.btn-primary]="kind() === k.kind"
+                [class.btn-outline-primary]="kind() !== k.kind"
+                [attr.aria-pressed]="kind() === k.kind"
+                (click)="setKind(k.kind)">{{ k.label }}</button>
+      }
+    </div>
+
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>Filters</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          @if (needsDates()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="rr-from">
+                From date <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="rr-from" name="rr-from" type="date" class="form-control"
+                     [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" required />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="rr-to">
+                To date <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+              <input id="rr-to" name="rr-to" type="date" class="form-control"
+                     [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
+            </div>
+          }
+          @if (canFilterWaiter()) {
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label" for="rr-waiter">
+                Waiter <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker id="rr-waiter" name="rr-waiter"
+                              [(ngModel)]="waiterUid"
+                              [options]="waiterOptions()"
+                              placeholder="All waiters" />
+            </div>
+          }
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rr-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="rr-branch" name="rr-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary"
+                    (click)="run()"
+                    [disabled]="state() === 'loading' || (needsDates() && (!fromDate() || !toDate()))">
+              @if (state() === 'loading') {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Running…
+              } @else {
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run report
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Building the report…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the report. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view this report.
+        </div>
+      }
+      @default {
+        @if (current(); as r) {
+          @if (canExport()) {
+            <div class="erp-page-head mb-3">
+              <div class="erp-page-head__actions">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('PDF')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Export PDF
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('XLSX')" [disabled]="exporting()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        (click)="export('CSV')" [disabled]="exporting()">
+                  <i class="bi bi-filetype-csv me-1" aria-hidden="true"></i>Export CSV
+                </button>
+              </div>
+            </div>
+          }
+
+          <div class="erp-card mb-3">
+            <div class="erp-card__body">
+              @if (r.company.name) {
+                <p class="fw-semibold mb-1">{{ r.company.name }}</p>
+              }
+              @if (addressLine(r.company)) {
+                <p class="small mb-1">{{ addressLine(r.company) }}</p>
+              }
+              <p class="small text-muted mb-0 d-flex flex-wrap gap-3">
+                @if (r.company.contactPhone) { <span>Tel: {{ r.company.contactPhone }}</span> }
+                @if (r.company.contactEmail) { <span>Email: {{ r.company.contactEmail }}</span> }
+                @if (r.company.taxId) { <span>TIN: {{ r.company.taxId }}</span> }
+              </p>
+            </div>
+          </div>
+        } @else {
+          <div class="erp-empty">
+            <i class="bi bi-person-badge" aria-hidden="true"></i>
+            Choose the filters, then click Run report.
+          </div>
+        }
+
+        <!-- Sales by waiter -->
+        @if (kind() === 'waiter-sales' && sales(); as r) {
+          <h2 class="h5">Sales by waiter</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Waiter: {{ r.waiterName ?? 'All waiters' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Sales by waiter for the selected period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Waiter</th>
+                  <th scope="col" class="num">Bills</th>
+                  <th scope="col" class="num">Guests</th>
+                  <th scope="col" class="num">Average bill</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.waiterUid) {
+                  <tr>
+                    <td>{{ row.waiterName }}</td>
+                    <td class="num mono">{{ fmtCount(row.bills) }}</td>
+                    <td class="num mono">{{ fmtCount(row.guests) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.averageBill) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="5" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td class="text-end">Totals</td>
+                  <td class="num mono">{{ fmtCount(r.totals.bills) }}</td>
+                  <td class="num mono">{{ fmtCount(r.totals.guests) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.averageBill) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.amount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+
+        <!-- Bills paid -->
+        @if (kind() === 'bills' && bills(); as r) {
+          <h2 class="h5">Bills paid</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Waiter: {{ r.waiterName ?? 'All waiters' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Restaurant bills paid in the selected period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Paid</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Table</th>
+                  <th scope="col">Waiter</th>
+                  <th scope="col">Cashier</th>
+                  <th scope="col">Receipt</th>
+                  <th scope="col">Paid by</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.orderUid) {
+                  <tr [class.text-muted]="row.invoiceStatus !== 'FINALISED'">
+                    <td class="mono">{{ row.paidAt }}</td>
+                    <td class="mono">{{ row.orderNumber }}</td>
+                    <td>{{ row.servedAt }}</td>
+                    <td>{{ row.waiterName }}</td>
+                    <td>{{ row.cashierName }}</td>
+                    <td class="mono">
+                      {{ row.invoiceNumber }}
+                      @if (row.invoiceStatus !== 'FINALISED') {
+                        <span class="badge text-bg-secondary ms-1">Void</span>
+                      }
+                    </td>
+                    <td>{{ row.tenders }}</td>
+                    <td class="num mono">{{ fmtMoney(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="8" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="7" class="text-end">Totals · {{ fmtCount(r.billCount) }} bills</td>
+                  <td class="num mono">{{ fmtMoney(r.totalAmount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="small text-muted mt-2 mb-0">A voided receipt is listed but left out of the totals.</p>
+        }
+
+        <!-- Pending bills -->
+        @if (kind() === 'pending-bills' && pending(); as r) {
+          <h2 class="h5">Pending bills</h2>
+          <p class="text-muted small mb-3">
+            Orders not yet paid, as of {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+            · Waiter: {{ r.waiterName ?? 'All waiters' }} · Currency: {{ r.currency }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Restaurant orders not yet paid</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Opened</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Table</th>
+                  <th scope="col">Waiter</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" class="num">Items</th>
+                  <th scope="col" class="num">Bill</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.orderUid) {
+                  <tr>
+                    <td class="mono">{{ row.openedAt }}</td>
+                    <td class="mono">{{ row.orderNumber }}</td>
+                    <td>{{ row.servedAt }}</td>
+                    <td>{{ row.waiterName }}</td>
+                    <td>{{ row.status === 'BILLED' ? 'Bill printed' : 'Open' }}</td>
+                    <td class="num mono">{{ fmtCount(row.items) }}</td>
+                    <td class="num mono">{{ row.billedAmount === null ? '—' : fmtMoney(row.billedAmount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7" class="text-center text-muted py-4">No pending bills.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="6" class="text-end">
+                    {{ fmtCount(r.openCount) }} open · {{ fmtCount(r.billedCount) }} bills printed
+                  </td>
+                  <td class="num mono">{{ fmtMoney(r.billedAmount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="small text-muted mt-2 mb-0">
+            An open order has no amount until its bill is printed.
+          </p>
+        }
+      }
+    }
+  }
+</section>

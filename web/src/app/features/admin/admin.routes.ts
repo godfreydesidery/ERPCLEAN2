@@ -1202,6 +1202,13 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./restaurant/restaurant-kitchen.component').then((m) => m.RestaurantKitchenComponent),
   },
+  // Reports per waiter (J COB 2026-10-30) — the Sales Report's code, equal to the endpoints.
+  {
+    path: 'restaurant/reports',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-reports.component').then((m) => m.RestaurantReportsComponent),
+  },
   // ── Stock Transfers ─────────────────���──────────────────────────��──────────
   {
     path: 'stock-transfers',
