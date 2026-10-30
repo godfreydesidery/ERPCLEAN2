@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/config/app_config.dart';
 import '../../core/version.dart';
+import '../../models/restaurant.dart';
 import '../../state/app_controller.dart';
+import '../../widgets/on_screen_keyboard.dart';
 import '../../widgets/ui.dart';
+import '../restaurant/waiter_tiles.dart';
 import 'setup_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -13,22 +17,86 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
+/// Which field the on-screen keyboard types into.
+enum _Field { user, pass, search }
+
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
+  final _search = TextEditingController();
+  final _userFocus = FocusNode();
   final _passFocus = FocusNode();
+  final _searchFocus = FocusNode();
+
+  /// The branch's waiters this till keeps for its sign-in tiles (J COB
+  /// 2026-10-30). Empty on a till nobody with the restaurant has signed in to.
+  List<RestaurantWaiter> _waiters = const [];
+  _Field _active = _Field.user;
+  bool _keyboard = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _userFocus.addListener(() => _track(_userFocus, _Field.user));
+    _passFocus.addListener(() => _track(_passFocus, _Field.pass));
+    _searchFocus.addListener(() => _track(_searchFocus, _Field.search));
+    _search.addListener(() => setState(() {}));
+    AppConfig.load().then((cfg) {
+      if (!mounted) return;
+      setState(() {
+        _waiters = cfg.waiters;
+        // A restaurant till with waiter tiles is a touch till: keys on screen.
+        _keyboard = cfg.waiters.isNotEmpty;
+      });
+    });
+  }
+
+  void _track(FocusNode node, _Field field) {
+    if (node.hasFocus && _active != field) setState(() => _active = field);
+  }
 
   @override
   void dispose() {
     _user.dispose();
     _pass.dispose();
+    _search.dispose();
+    _userFocus.dispose();
     _passFocus.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (_user.text.trim().isEmpty || _pass.text.isEmpty) return;
     ref.read(appControllerProvider.notifier).login(_user.text, _pass.text);
+  }
+
+  /// A waiter tapped their tile: their username is in, type the password.
+  void _pick(RestaurantWaiter w) {
+    setState(() {
+      _user.text = w.username;
+      _pass.clear();
+      _active = _Field.pass;
+    });
+    _passFocus.requestFocus();
+  }
+
+  TextEditingController get _activeController => switch (_active) {
+        _Field.user => _user,
+        _Field.pass => _pass,
+        _Field.search => _search,
+      };
+
+  void _enter() {
+    switch (_active) {
+      case _Field.user:
+        _passFocus.requestFocus();
+      case _Field.pass:
+        _submit();
+      case _Field.search:
+        final hits = _waiters.where((w) => w.matches(_search.text)).toList();
+        if (hits.length == 1) _pick(hits.first);
+    }
   }
 
   @override
@@ -40,15 +108,102 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         builder: (context, c) {
           final wide = c.maxWidth >= 900;
           final form = _form(app);
-          if (!wide) return Center(child: SingleChildScrollView(child: form));
-          return Row(
+          final keyboard = _keyboard
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: OnScreenKeyboard(
+                        controller: _activeController,
+                        onEnter: _enter,
+                        enterLabel: _active == _Field.pass ? 'Sign in' : 'Enter',
+                      ),
+                    ),
+                  ),
+                )
+              : null;
+          if (!wide) {
+            return Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_waiters.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                              child: _waiterPanel(),
+                            ),
+                          form,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                ?keyboard,
+              ],
+            );
+          }
+          return Column(
             children: [
-              Expanded(child: Center(child: SingleChildScrollView(child: form))),
-              Expanded(flex: 1, child: const _Aside()),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(child: Center(child: SingleChildScrollView(child: form))),
+                    Expanded(
+                      flex: 1,
+                      child: _waiters.isEmpty
+                          ? const _Aside()
+                          : Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: _waiterPanel(),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              ?keyboard,
             ],
           );
         },
       ),
+    );
+  }
+
+  /// Waiter tiles with a search box: tap your name, then type your password.
+  Widget _waiterPanel() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Waiters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        const Text('Tap your name, then type your password.',
+            style: TextStyle(color: AppColors.ink2)),
+        const SizedBox(height: 12),
+        if (_waiters.length > 6) ...[
+          OrbixField(
+            hint: 'Search waiters',
+            controller: _search,
+            focusNode: _searchFocus,
+            prefixIcon: Icons.search,
+          ),
+          const SizedBox(height: 12),
+        ],
+        Flexible(
+          child: SingleChildScrollView(
+            child: WaiterTiles(
+              waiters: _waiters,
+              query: _search.text,
+              selected: _user.text.trim(),
+              onPick: _pick,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -72,6 +227,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             OrbixField(
               label: 'Username',
               controller: _user,
+              focusNode: _userFocus,
               autofocus: true,
               prefixIcon: Icons.person_outline,
               textInputAction: TextInputAction.next,
@@ -100,6 +256,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onPressed: app.busy ? null : _submit,
             ),
             const SizedBox(height: 16),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => setState(() => _keyboard = !_keyboard),
+                icon: Icon(_keyboard ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined,
+                    size: 16),
+                label: Text(_keyboard ? 'Hide keyboard' : 'Show keyboard'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.ink2),
+              ),
+            ),
             Center(
               child: TextButton.icon(
                 onPressed: () => showSetupDialog(context, ref),

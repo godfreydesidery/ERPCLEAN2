@@ -84,6 +84,30 @@ String _text({
     );
 
 void main() {
+  group('restaurant receipt (J COB 2026-10-30)', () {
+    test('names the waiter and the table under the cashier', () {
+      final t = buildReceiptText(
+        receipt: _receipt(),
+        companyName: 'Tulia Ltd',
+        branchName: 'Cafe Tulia',
+        cashierName: 'Sir Jacob',
+        width: kCols80mm,
+        gift: false,
+        served: (waiter: 'Baraka', where: 'Table T2', order: 'ORD-0013'),
+      );
+      final lines = t.split('\n');
+      final cashier = lines.indexWhere((l) => l.startsWith('CASHIER:'));
+      expect(lines[cashier + 1], startsWith('WAITER:'));
+      expect(lines[cashier + 1], endsWith('Baraka'));
+      expect(lines[cashier + 2], startsWith('TABLE / ORDER:'));
+      expect(lines[cashier + 2], endsWith('Table T2 / ORD-0013'));
+    });
+
+    test('a sale that is not a restaurant order prints no waiter', () {
+      expect(_text(width: kCols80mm), isNot(contains('WAITER:')));
+    });
+  });
+
   group('centered', () {
     test('left-pads to centre for short text', () {
       expect(centered('AB', 6), '  AB');

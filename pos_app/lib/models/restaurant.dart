@@ -506,3 +506,28 @@ class ModifierGroup {
       .where((g) => g.options.isNotEmpty)
       .toList();
 }
+
+/// A waiter of the branch, as a sign-in tile (J COB 2026-10-30). The till keeps
+/// the list so the tiles are there while nobody is signed in; the password is
+/// still typed and checked by the ERP.
+class RestaurantWaiter {
+  const RestaurantWaiter({required this.uid, required this.name, required this.username});
+
+  final String uid;
+  final String name;
+  final String username;
+
+  factory RestaurantWaiter.fromJson(Map<String, dynamic> j) => RestaurantWaiter(
+        uid: asStrOr(j['uid']),
+        name: asStrOr(j['name']),
+        username: asStrOr(j['username']),
+      );
+
+  Map<String, dynamic> toJson() => {'uid': uid, 'name': name, 'username': username};
+
+  /// Whether a search for [q] (name or username, any case) finds this waiter.
+  bool matches(String q) {
+    final t = q.trim().toLowerCase();
+    return t.isEmpty || name.toLowerCase().contains(t) || username.toLowerCase().contains(t);
+  }
+}

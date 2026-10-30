@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../models/restaurant.dart';
+
 /// Per-install configuration — the ERP host plus the local receipt-printer
 /// settings. The `/api/v1` path is identical in every environment (AS-1), so
 /// only the scheme+host+port is configurable. Surfaced on the Setup/diagnostics
@@ -17,7 +19,10 @@ class AppConfig {
     Map<String, int>? stationWidths,
     Set<String>? agentStations,
     this.askWaiter = false,
-  })  : stationPrinters = stationPrinters ?? {},
+    this.restaurantOnly = false,
+    List<RestaurantWaiter>? waiters,
+  })  : waiters = waiters ?? [],
+        stationPrinters = stationPrinters ?? {},
         stationWidths = stationWidths ?? {},
         agentStations = agentStations ?? {};
 
@@ -57,6 +62,14 @@ class AppConfig {
   /// Shared till: ask which waiter is serving before a new order is opened.
   bool askWaiter;
 
+  /// This till shows only the Restaurant register (J COB 2026-10-30). Set per
+  /// till, by a manager, in the restaurant Settings.
+  bool restaurantOnly;
+
+  /// The branch's waiters, kept for the sign-in tiles. Refreshed whenever
+  /// someone signs in on this till, so the tiles are there while nobody is.
+  List<RestaurantWaiter> waiters;
+
   /// Initial host used until the operator sets one on the Setup screen. Overridable
   /// at build time with `--dart-define=POS_HOST=http://your-erp-host` so a shipped
   /// build can pre-fill the right server (e.g. QA/prod); dev builds fall back to the
@@ -76,6 +89,8 @@ class AppConfig {
   static const String _kWidths = 'cfg.stationWidths';
   static const String _kAgent = 'cfg.agentStations';
   static const String _kAskWaiter = 'cfg.askWaiter';
+  static const String _kRestaurantOnly = 'cfg.restaurantOnly';
+  static const String _kWaiters = 'cfg.waiters';
 
   /// Full API base, e.g. `http://localhost:8081/api/v1`.
   String get apiBase => '${_trim(baseHost)}/api/v1';
@@ -96,6 +111,8 @@ class AppConfig {
       stationWidths: _decodeWidths(prefs.getString(_kWidths)),
       agentStations: (prefs.getStringList(_kAgent) ?? const []).toSet(),
       askWaiter: prefs.getBool(_kAskWaiter) ?? false,
+      restaurantOnly: prefs.getBool(_kRestaurantOnly) ?? false,
+      waiters: _decodeWaiters(prefs.getString(_kWaiters)),
     );
   }
 
@@ -131,6 +148,23 @@ class AppConfig {
     }
     await prefs.setStringList(_kAgent, agentStations.toList());
     await prefs.setBool(_kAskWaiter, askWaiter);
+    await prefs.setBool(_kRestaurantOnly, restaurantOnly);
+    await prefs.setString(_kWaiters, jsonEncode([for (final w in waiters) w.toJson()]));
+  }
+
+  /// A corrupt or missing list means "no tiles" — never a crash at start.
+  static List<RestaurantWaiter> _decodeWaiters(String? raw) {
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final l = jsonDecode(raw);
+      if (l is! List) return [];
+      return [
+        for (final e in l)
+          if (e is Map<String, dynamic>) RestaurantWaiter.fromJson(e),
+      ].where((w) => w.username.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Slip width for [stationUid] on this device.

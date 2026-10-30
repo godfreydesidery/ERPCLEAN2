@@ -34,6 +34,7 @@ class AppData {
     this.unitsByUid = const {},
     this.currency = 'TZS',
     this.vatRates = const {},
+    this.restaurantOnly = false,
   });
 
   final AppPhase phase;
@@ -61,6 +62,13 @@ class AppData {
   /// backend's canonical form (TaxRate.rate is stored 0 ≤ rate < 1). Empty when
   /// TAXRATE.VIEW is not granted, in which case the preview shows net prices.
   final Map<String, double> vatRates;
+
+  /// This till shows only the Restaurant register (a per-till setting).
+  final bool restaurantOnly;
+
+  /// The registers this till offers.
+  List<BusinessMode> get modes =>
+      restaurantOnly ? const [BusinessMode.restaurant] : BusinessMode.values;
 
   bool can(String code) => me?.can(code) ?? false;
 
@@ -111,6 +119,7 @@ class AppData {
     Map<String, Unit>? unitsByUid,
     String? currency,
     Map<String, double>? vatRates,
+    bool? restaurantOnly,
   }) {
     return AppData(
       phase: phase ?? this.phase,
@@ -126,6 +135,7 @@ class AppData {
       unitsByUid: unitsByUid ?? this.unitsByUid,
       currency: currency ?? this.currency,
       vatRates: vatRates ?? this.vatRates,
+      restaurantOnly: restaurantOnly ?? this.restaurantOnly,
     );
   }
 }
@@ -246,10 +256,13 @@ class AppController extends Notifier<AppData> {
 
     // A waiter has no till to open: straight to the restaurant floor.
     final waiter = AppData.isWaiterLogin(me) || AppData.isKitchenLogin(me);
+    final config = await AppConfig.load();
+    await _refreshWaiters(me, config);
 
     state = state.copyWith(
       phase: waiter || resumable != null ? AppPhase.register : AppPhase.openShift,
-      mode: waiter ? BusinessMode.restaurant : null,
+      mode: waiter || config.restaurantOnly ? BusinessMode.restaurant : null,
+      restaurantOnly: config.restaurantOnly,
       me: me,
       context: context,
       shift: resumable,
@@ -265,7 +278,38 @@ class AppController extends Notifier<AppData> {
     );
   }
 
-  void setMode(BusinessMode mode) => state = state.copyWith(mode: mode);
+  void setMode(BusinessMode mode) {
+    if (!state.modes.contains(mode)) return;
+    state = state.copyWith(mode: mode);
+  }
+
+  /// Re-reads the per-till settings after the restaurant Settings changed them.
+  Future<void> reloadDeviceSettings() async {
+    final config = await AppConfig.load();
+    state = state.copyWith(
+      restaurantOnly: config.restaurantOnly,
+      mode: config.restaurantOnly ? BusinessMode.restaurant : null,
+    );
+  }
+
+  /// Keeps this till's waiter tiles current (J COB 2026-10-30). Best effort: a
+  /// login without the restaurant, or a server without the list, keeps the old
+  /// tiles rather than wiping them.
+  Future<void> _refreshWaiters(Me me, AppConfig config) async {
+    if (!me.can(Perms.restaurantOrderManage) && !me.can(Perms.restaurantSetupManage)) return;
+    try {
+      final fresh = await ref.read(restaurantServiceProvider).listWaiters();
+      config.waiters = fresh;
+      await config.save();
+    } catch (_) {/* keep the tiles we have */}
+  }
+
+  /// The floor's own refresh of the tiles, while a till is signed in.
+  Future<void> refreshWaiterTiles() async {
+    final me = state.me;
+    if (me == null) return;
+    await _refreshWaiters(me, await AppConfig.load());
+  }
 
   /// Open a shift on [tillUid] with [openingFloat] in the chosen [mode].
   Future<void> openShift(
@@ -275,7 +319,10 @@ class AppController extends Notifier<AppData> {
       final session =
           await ref.read(sessionServiceProvider).open(tillUid, openingFloat);
       state = state.copyWith(
-          phase: AppPhase.register, shift: session, mode: mode, busy: false);
+          phase: AppPhase.register,
+          shift: session,
+          mode: state.restaurantOnly ? BusinessMode.restaurant : mode,
+          busy: false);
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
     }
@@ -325,7 +372,7 @@ class AppController extends Notifier<AppData> {
     state = state.copyWith(
         phase: AppPhase.register,
         shift: session,
-        mode: mode,
+        mode: state.restaurantOnly ? BusinessMode.restaurant : mode,
         busy: false,
         clearNotice: true);
   }

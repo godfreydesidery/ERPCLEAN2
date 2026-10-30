@@ -141,6 +141,7 @@ class Perms {
   static const restaurantOrderManage = 'RESTAURANT.ORDER.MANAGE';
   static const restaurantOrderVoid = 'RESTAURANT.ORDER.VOID';
   static const restaurantKitchenManage = 'RESTAURANT.KITCHEN.MANAGE';
+  static const restaurantSetupManage = 'RESTAURANT.SETUP.MANAGE';
   // cross-module reads
   static const productView = 'PRODUCT.VIEW';
   static const customerView = 'CUSTOMER.VIEW';

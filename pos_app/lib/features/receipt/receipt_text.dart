@@ -137,6 +137,11 @@ String _ratePercent(double rate) {
       : '${rounded.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '')}%';
 }
 
+/// Who served a restaurant sale and where (J COB 2026-10-30): printed under the
+/// cashier as WAITER and TABLE / ORDER. Known straight after the restaurant
+/// payment; a later reprint from the sales list does not carry it.
+typedef ServedBy = ({String waiter, String where, String order});
+
 /// Builds the full receipt as a newline-joined string for [width] columns.
 ///
 /// Laid out after the TRA-style supermarket receipt: centred company header
@@ -162,6 +167,7 @@ String buildReceiptText({
   String? reversedBy,
   DateTime? now,
   List<String> companyDetailLines = const [],
+  ServedBy? served,
 }) {
   final inv = receipt.invoice;
   final lines = <String>[];
@@ -196,6 +202,13 @@ String buildReceiptText({
       'RECEIPT TIME:', DateFormat('HH:mm:ss').format(when), width));
   if (cashierName.isNotEmpty) {
     lines.addAll(labelValue('CASHIER:', cashierName, width));
+  }
+  if (served != null) {
+    if (served.waiter.trim().isNotEmpty) {
+      lines.addAll(labelValue('WAITER:', served.waiter.trim(), width));
+    }
+    final where = [served.where.trim(), served.order.trim()].where((s) => s.isNotEmpty).join(' / ');
+    if (where.isNotEmpty) lines.addAll(labelValue('TABLE / ORDER:', where, width));
   }
   lines.add(doubleRule(width));
 
@@ -380,6 +393,7 @@ List<int> buildReceiptBytes({
   bool kickDrawer = false,
   DateTime? now,
   List<String> companyDetailLines = const [],
+  ServedBy? served,
 }) {
   final text = buildReceiptText(
     receipt: receipt,
@@ -392,6 +406,7 @@ List<int> buildReceiptBytes({
     reversedBy: reversedBy,
     now: now,
     companyDetailLines: companyDetailLines,
+    served: served,
   );
   return mode == 'plain'
       ? encodePlainText(text)

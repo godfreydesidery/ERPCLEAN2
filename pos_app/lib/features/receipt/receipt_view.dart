@@ -26,10 +26,10 @@ import 'receipt_text.dart';
 /// that pops it on every reprint is an open drawer on request.
 Future<void> showReceiptSheet(
     BuildContext context, WidgetRef ref, Receipt receipt,
-    {bool reprint = false}) {
+    {bool reprint = false, ServedBy? served}) {
   return showDialog(
     context: context,
-    builder: (_) => _ReceiptDialog(receipt: receipt, reprint: reprint),
+    builder: (_) => _ReceiptDialog(receipt: receipt, reprint: reprint, served: served),
   );
 }
 
@@ -72,9 +72,12 @@ List<String> companyReceiptLines(Company company) {
 }
 
 class _ReceiptDialog extends ConsumerStatefulWidget {
-  const _ReceiptDialog({required this.receipt, this.reprint = false});
+  const _ReceiptDialog({required this.receipt, this.reprint = false, this.served});
   final Receipt receipt;
   final bool reprint;
+
+  /// The waiter and table of a restaurant sale, printed under the cashier.
+  final ServedBy? served;
   @override
   ConsumerState<_ReceiptDialog> createState() => _ReceiptDialogState();
 }
@@ -225,6 +228,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       reversedBy: _reversedBy,
       companyDetailLines:
           ctx == null ? const [] : companyReceiptLines(ctx.company),
+      served: widget.served,
     );
     return Container(
       color: Colors.white,
@@ -275,6 +279,7 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
       reversedBy: _reversedBy,
       kickDrawer: kick,
       companyDetailLines: company == null ? const [] : companyReceiptLines(company),
+      served: widget.served,
     );
     setState(() => _printing = true);
     try {
