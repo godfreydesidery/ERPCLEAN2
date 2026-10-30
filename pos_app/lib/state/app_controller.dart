@@ -35,6 +35,7 @@ class AppData {
     this.currency = 'TZS',
     this.vatRates = const {},
     this.restaurantOnly = false,
+    this.serverUnreachable = false,
   });
 
   final AppPhase phase;
@@ -65,6 +66,10 @@ class AppData {
 
   /// This till shows only the Restaurant register (a per-till setting).
   final bool restaurantOnly;
+
+  /// The last sign-in could not reach the ERP at all. The sign-in screen then
+  /// shows Server setup, which is otherwise hidden behind seven taps.
+  final bool serverUnreachable;
 
   /// The registers this till offers.
   List<BusinessMode> get modes =>
@@ -120,6 +125,7 @@ class AppData {
     String? currency,
     Map<String, double>? vatRates,
     bool? restaurantOnly,
+    bool? serverUnreachable,
   }) {
     return AppData(
       phase: phase ?? this.phase,
@@ -136,6 +142,7 @@ class AppData {
       currency: currency ?? this.currency,
       vatRates: vatRates ?? this.vatRates,
       restaurantOnly: restaurantOnly ?? this.restaurantOnly,
+      serverUnreachable: serverUnreachable ?? this.serverUnreachable,
     );
   }
 }
@@ -163,19 +170,20 @@ class AppController extends Notifier<AppData> {
       // network / 5xx / permission hiccup at startup must NOT wipe a valid
       // token — surface the error and let the cashier retry by signing in.
       if (e.isUnauthorized) await tokens.clear();
-      state = state.copyWith(phase: AppPhase.login, error: e.message);
+      state = state.copyWith(
+          phase: AppPhase.login, error: e.message, serverUnreachable: e.isUnreachable);
     } catch (e) {
       state = state.copyWith(phase: AppPhase.login, error: _friendly(e));
     }
   }
 
   Future<void> login(String username, String password) async {
-    state = state.copyWith(busy: true, clearError: true);
+    state = state.copyWith(busy: true, clearError: true, serverUnreachable: false);
     try {
       await ref.read(authServiceProvider).login(username.trim(), password);
       await _afterAuth();
     } on ApiException catch (e) {
-      state = state.copyWith(busy: false, error: e.message);
+      state = state.copyWith(busy: false, error: e.message, serverUnreachable: e.isUnreachable);
     } catch (e) {
       state = state.copyWith(busy: false, error: _friendly(e));
     }

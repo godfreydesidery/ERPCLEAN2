@@ -34,6 +34,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   _Field _active = _Field.user;
   bool _keyboard = false;
 
+  /// Server setup hides behind seven taps on the version line, so nobody
+  /// changes the server or printer by accident (owner 2026-10-30). Taps more
+  /// than [_tapGap] apart start the count again.
+  static const _setupTaps = 7;
+  static const _tapGap = Duration(seconds: 2);
+  int _taps = 0;
+  DateTime? _lastTap;
+
+  void _versionTapped() {
+    final now = DateTime.now();
+    final last = _lastTap;
+    _taps = last != null && now.difference(last) <= _tapGap ? _taps + 1 : 1;
+    _lastTap = now;
+    if (_taps >= _setupTaps) {
+      _taps = 0;
+      _lastTap = null;
+      showSetupDialog(context, ref);
+    } else if (_taps >= 4) {
+      final left = _setupTaps - _taps;
+      showToast(context, '$left more ${left == 1 ? 'tap' : 'taps'} for Server setup.');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -280,18 +303,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 style: TextButton.styleFrom(foregroundColor: AppColors.ink2),
               ),
             ),
-            Center(
-              child: TextButton.icon(
-                onPressed: () => showSetupDialog(context, ref),
-                icon: const Icon(Icons.settings_outlined, size: 16),
-                label: const Text('Server setup'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.ink2),
+            // Shown only when the ERP could not be reached — a new till, or a
+            // server that moved — so it can be fixed without knowing the taps.
+            if (app.serverUnreachable)
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => showSetupDialog(context, ref),
+                  icon: const Icon(Icons.settings_outlined, size: 16),
+                  label: const Text('Server setup'),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.ink2),
+                ),
               ),
-            ),
             const SizedBox(height: 4),
-            const Center(
-              child: Text('OrbixPOS $kAppVersion',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
+            Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _versionTapped,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text('OrbixPOS $kAppVersion',
+                      style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
+                ),
+              ),
             ),
           ],
         ),

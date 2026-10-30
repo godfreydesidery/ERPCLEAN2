@@ -38,7 +38,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 ### Check the server, step by step
 
 1. If you are signed in, sign out (your shift stays open). **Setup & diagnostics** is only on the sign-in screen.
-2. On the **Sign in** screen, click **Server setup** (the small link with a gear icon below the **Sign in** button).
+2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession.
 3. Look at the **ERP host** field. It should hold exactly the address your administrator gave you.
 4. Click **Test connection** and read the coloured result:
 
@@ -267,7 +267,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 **Symptom.** After a scan the search list stays open over an empty box, and the *next* scan adds the **previous** item again instead of the one you just scanned.
 
-**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look under **Server setup** on the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.6.0+13**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
+**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look at the bottom of the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.6.0+13**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
 
 ### The scanner is a "keyboard wedge" — keep the field focused
 
@@ -289,7 +289,7 @@ Printing works on the **Windows** till only. The printer, paper width, print mod
 
 | What you see | Cause | What to do |
 |---|---|---|
-| **No receipt printer set — configure one in Setup.** | No printer is chosen in Setup. | Sign out → **Server setup** → choose the **Printer** → **Test print** → **Save** → sign in. The sale itself is complete; reprint it afterwards. |
+| **No receipt printer set — configure one in Setup.** | No printer is chosen in Setup. | Sign out → **Server setup** (tap the version text seven times) → choose the **Printer** → **Test print** → **Save** → sign in. The sale itself is complete; reprint it afterwards. |
 | **Choose a printer first.** (on **Test print**) | The **Printer** box is **— none —**. | Pick the receipt printer from the list. |
 | **No printers detected (Windows desktop only).** | No printer is installed in Windows, or you are on the web or Android version. | Install the printer in Windows (with its driver), then close and reopen **Server setup** so the list refreshes. Web and Android cannot print. |
 | **Cannot open printer "…". Is it installed and online?** | The printer was removed or renamed in Windows, or is switched off. | Switch it on and check its cable. If it was reinstalled under a new name, choose it again in Setup. |
@@ -348,7 +348,7 @@ Closing the app, signing out or switching the PC off leaves your shift open. At 
 
 ### Check, don't guess
 
-If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version (shown in small grey text under **Server setup** on the sign-in screen and at the bottom of the **Session** menu, for example **OrbixPOS 1.5.4+12**), and hand it on.
+If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version (shown in small grey text at the bottom of the sign-in screen and of the **Session** menu, for example **OrbixPOS 1.5.4+12**), and hand it on.
 
 ---
 

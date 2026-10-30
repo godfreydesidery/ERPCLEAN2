@@ -89,4 +89,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(OnScreenKeyboard), findsOneWidget);
   });
+
+  testWidgets('Server setup is hidden; seven taps on the version open it', (tester) async {
+    await _pump(tester, const Size(1366, 768));
+    expect(find.text('Server setup'), findsNothing);
+    final version = find.textContaining('OrbixPOS ');
+    for (var i = 0; i < 6; i++) {
+      await tester.tap(version);
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Setup & diagnostics'), findsNothing);
+    await tester.tap(version);
+    await tester.pumpAndSettle();
+    expect(find.text('Setup & diagnostics'), findsOneWidget);
+  });
 }

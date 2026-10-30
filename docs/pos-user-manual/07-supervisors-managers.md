@@ -308,7 +308,7 @@ Three company-level settings also affect every till. Check them once when a shop
 |---|---|
 | A **walk-in (cash) customer** for the company | Every sale shows **Select customer** and asks the cashier to pick a customer before payment. |
 | The company's **address, phone, TIN and VRN** on the company record | Those lines are left off the receipt. |
-| A **receipt printer** chosen on each till (**Server setup** on the sign-in screen) | **Print** shows *No receipt printer set — configure one in Setup.* |
+| A **receipt printer** chosen on each till (**Server setup** on the sign-in screen: tap the version text seven times) | **Print** shows *No receipt printer set — configure one in Setup.* |
 
 ### What it looks like when a cashier is not provisioned
 
