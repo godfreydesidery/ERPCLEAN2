@@ -43,23 +43,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _search.addListener(() => setState(() {}));
     AppConfig.load().then((cfg) {
       if (!mounted) return;
-      setState(() {
-        _waiters = cfg.waiters;
-        // The keys come up once a waiter picks their name (or taps a field):
-        // before that there is nothing to type, and the tiles need the height.
-        _keyboard = false;
-      });
+      setState(() => _waiters = cfg.waiters);
+      // No tiles: the username is typed, so it takes the focus as it always did.
+      if (cfg.waiters.isEmpty) _userFocus.requestFocus();
     });
   }
 
+  /// Which field the keys type into. Focus alone never brings the keys up — a
+  /// field takes focus on its own when the window is activated (J COB
+  /// 2026-10-30: "keyboard is visible before tapping").
   void _track(FocusNode node, _Field field) {
-    if (!node.hasFocus) return;
-    setState(() {
-      _active = field;
-      // Typing into a field needs keys; a long list keeps them hidden until then.
-      if (_waiters.isNotEmpty) _keyboard = true;
-    });
+    if (node.hasFocus && _active != field) setState(() => _active = field);
   }
+
+  /// A field the waiter TAPPED brings the keys up (on a till with tiles; the
+  /// keys come up once a name is picked or a field is tapped, never before).
+  Widget _tapToType(Widget field) => Listener(
+        onPointerDown: (_) {
+          if (_waiters.isNotEmpty && !_keyboard) setState(() => _keyboard = true);
+        },
+        child: field,
+      );
 
   @override
   void dispose() {
@@ -195,12 +199,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             style: TextStyle(color: AppColors.ink2)),
         const SizedBox(height: 12),
         if (_waiters.length > 6) ...[
-          OrbixField(
+          _tapToType(OrbixField(
             hint: 'Search waiters',
             controller: _search,
             focusNode: _searchFocus,
             prefixIcon: Icons.search,
-          ),
+          )),
           const SizedBox(height: 12),
         ],
         Flexible(
@@ -234,17 +238,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             const Text('Open your till and start your shift.',
                 style: TextStyle(color: AppColors.ink2)),
             const SizedBox(height: 24),
-            OrbixField(
+            _tapToType(OrbixField(
               label: 'Username',
               controller: _user,
               focusNode: _userFocus,
-              autofocus: _waiters.isEmpty,
               prefixIcon: Icons.person_outline,
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _passFocus.requestFocus(),
-            ),
+            )),
             const SizedBox(height: 16),
-            OrbixField(
+            _tapToType(OrbixField(
               label: 'Password',
               controller: _pass,
               focusNode: _passFocus,
@@ -252,7 +255,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               prefixIcon: Icons.lock_outline,
               textInputAction: TextInputAction.go,
               onSubmitted: (_) => _submit(),
-            ),
+            )),
             if (app.error != null) ...[
               const SizedBox(height: 16),
               _ErrorBanner(app.error!),

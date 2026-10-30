@@ -63,4 +63,30 @@ void main() {
     expect(find.text('Kassim Ali'), findsOneWidget);
     expect(find.text('Neema Ali'), findsNothing);
   });
+
+  testWidgets('focus alone never brings the keys up; a tap does', (tester) async {
+    await _pump(tester, const Size(1366, 768));
+    final username = find.byWidgetPredicate((w) => w is EditableText && !w.obscureText).at(1);
+    // What Windows does when the window is activated: the field takes focus by itself.
+    tester.widget<EditableText>(username).focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byType(OnScreenKeyboard), findsNothing);
+
+    await tester.tap(username);
+    await tester.pumpAndSettle();
+    expect(find.byType(OnScreenKeyboard), findsOneWidget);
+  });
+
+  testWidgets('a small restaurant also starts without the keys', (tester) async {
+    SharedPreferences.setMockInitialValues({'cfg.waiters': jsonEncode(_fiftyWaiters().take(4).toList())});
+    tester.view.physicalSize = const Size(1366, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: LoginScreen())));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnScreenKeyboard), findsNothing);
+    await tester.tap(find.text('Amina Juma'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnScreenKeyboard), findsOneWidget);
+  });
 }

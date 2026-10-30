@@ -81,7 +81,7 @@ class _WaiterTilesState extends State<WaiterTiles> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: compact ? 150 : 160,
-              mainAxisExtent: compact ? 50 : 96,
+              mainAxisExtent: compact ? 50 : 112,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
             ),
@@ -122,7 +122,7 @@ class _WaiterTilesState extends State<WaiterTiles> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       CircleAvatar(
-                        radius: 18,
+                        radius: 16,
                         backgroundColor: on ? AppColors.brand : AppColors.panel2,
                         child: Text(_initials(w.name),
                             style: TextStyle(

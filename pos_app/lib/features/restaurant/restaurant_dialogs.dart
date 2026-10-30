@@ -461,13 +461,9 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
   @override
   void initState() {
     super.initState();
+    // Focus only says which field the keys type into; a tap brings them up.
     void track(FocusNode n, String field) => n.addListener(() {
-          if (n.hasFocus) {
-            setState(() {
-              _active = field;
-              _keys = true;
-            });
-          }
+          if (n.hasFocus && _active != field) setState(() => _active = field);
         });
     track(_userFocus, 'user');
     track(_passFocus, 'pass');
@@ -479,6 +475,7 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
         _waiters = cfg.waiters;
         _keys = false;  // up once a name is picked or a field is tapped
       });
+      if (_waiters.isEmpty) _userFocus.requestFocus();
     });
   }
 
@@ -502,6 +499,10 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       _error = null;
     });
     _passFocus.requestFocus();
+  }
+
+  void _showKeys() {
+    if (!_keys) setState(() => _keys = true);
   }
 
   TextEditingController get _activeController =>
@@ -572,6 +573,7 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
                 TextField(
                   controller: _search,
                   focusNode: _searchFocus,
+                  onTap: _showKeys,
                   decoration: const InputDecoration(
                       labelText: 'Search waiters', prefixIcon: Icon(Icons.search)),
                   onSubmitted: (_) => _enter(),
@@ -594,13 +596,14 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
               TextField(
                 controller: _user,
                 focusNode: _userFocus,
-                autofocus: _waiters.isEmpty,
+                onTap: _showKeys,
                 decoration: const InputDecoration(labelText: 'Username'),
                 onSubmitted: (_) => _passFocus.requestFocus(),
               ),
               TextField(
                 controller: _pass,
                 focusNode: _passFocus,
+                onTap: _showKeys,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'Password'),
                 onSubmitted: (_) => _go(),
