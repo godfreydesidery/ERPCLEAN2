@@ -120,8 +120,10 @@ folder (and see section 8 for the settings).
 
 ## 5. First run: server setup and receipt printer
 
-On the sign-in screen click **Server setup** (below the *Sign in* button). The *Setup &
-diagnostics* window opens.
+Server setup is hidden so nobody changes it by accident. On the sign-in screen, tap the
+version text at the bottom (*OrbixPOS {{VERSION}}*) **seven times** quickly; the till counts down
+after the fourth tap. On a new till that cannot reach the ERP yet, a **Server setup** link also
+appears below *Sign in* after the first failed sign-in. The *Setup & diagnostics* window opens.
 
 ### ERP host
 
@@ -208,7 +210,7 @@ once. Repeat the steps above with the new file.
 4. Start `pos_app.exe`. The server address, printer settings and sign-in are kept.
 5. Do a test sale and print a receipt before the shop gets busy.
 
-Check the version: it shows under *Server setup* on the sign-in screen and at the bottom of the
+Check the version: it shows at the bottom of the sign-in screen and at the bottom of the
 Session menu, and must match this guide's title. To go back, unzip the previous version's zip
 over the folder the same way.
 
@@ -303,7 +305,7 @@ payment aside and call a manager.
 
 ### "No receipt printer set - configure one in Setup."
 
-Sign out, open *Server setup*, choose the printer, *Save*.
+Sign out, open *Server setup* (tap the version text seven times), choose the printer, *Save*.
 
 ### The receipt prints strange characters, or nothing
 
@@ -332,7 +334,7 @@ copy.
 
 When you contact your supplier, send:
 
-- the version (shown under *Server setup* on the sign-in screen) and the *Build* line from the
+- the version (shown at the bottom of the sign-in screen) and the *Build* line from the
   top of this guide;
 - the till name and branch, and the cashier signed in;
 - the date and time it happened;

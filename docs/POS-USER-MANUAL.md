@@ -153,7 +153,7 @@ To upgrade to a new version:
 
 > **Keep your certificate files when you upgrade.** If you created a `certs` folder or an `erp-ca.pem` file in the OrbixPOS folder (see the next section), they are not part of the zip. Copy the new files *over* the old folder rather than deleting the folder first, or put the certificate files back afterwards.
 
-> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — on the sign-in screen just under the **Server setup** link, and at the bottom of the **Session** menu — for example **OrbixPOS 1.6.0+13**. When reporting a problem, always say which version the till runs.
+> **Which version is installed?** The folder contains a `README.txt` that names the version and what changed (the full history is in `Docs\RELEASE-NOTES.txt`). You can also right-click `pos_app.exe`, choose **Properties**, open the **Details** tab and read **Product version**. OrbixPOS also shows its version on screen, in small grey text — at the bottom of the sign-in screen, and at the bottom of the **Session** menu — for example **OrbixPOS 1.6.0+13**. When reporting a problem, always say which version the till runs.
 
 > **One setup per Windows user.** OrbixPOS remembers its settings for the Windows user account that ran it. If the till PC has more than one Windows login, do the First-Run Setup under each login that will run the till.
 
@@ -196,11 +196,13 @@ To trust a server's certificate:
 
 **How it works.** You open the **Setup & diagnostics** dialog from the sign-in screen, type the host, press **Test connection**, choose the printer settings, press **Test print**, and **Save**. Everything is remembered on the device, so you do not repeat it every day.
 
-> **Setup is only on the sign-in screen.** To change the server or printer during a shift, sign out (your shift stays open), click **Server setup**, make the change, **Save**, and sign in again. OrbixPOS takes you straight back to your open shift.
+> **Setup is only on the sign-in screen, and it is hidden.** So that nobody changes the server or printer by accident, there is no Server setup button in normal use: tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession. After the fourth tap the till says how many taps are left. The one exception: when the till cannot reach the ERP at all, a **Server setup** link appears below **Sign in** by itself, so a till pointed at the wrong server can always be put right.
+>
+> To change the server or printer during a shift, sign out (your shift stays open), open **Server setup**, make the change, **Save**, and sign in again. OrbixPOS takes you straight back to your open shift.
 
 ### Setting the ERP host
 
-1. On the sign-in screen, click **Server setup** (the small link with a gear icon below the **Sign in** button). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
+1. On the sign-in screen, tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession (or click the **Server setup** link, if the till has just failed to reach the ERP). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
 2. In the **ERP host** field, type the address your administrator gave you. Type the scheme and the server **only** — `http://` or `https://`, the server name or IP address, and a port if your administrator gave one. For example:
    - `http://192.168.1.10:8081` — a server on your shop's network;
    - `http://localhost:8081` — the ERP running on this same PC;
@@ -1276,16 +1278,20 @@ When you open the Restaurant register you see the **Floor**: one tile per table 
 - **Occupied** — an order is open. A small number on the tile means more than one order is open at that table (for example two groups at a long table).
 - **Bill printed** — the bill has been printed and the table is waiting to pay.
 
-On the right (above the tables on a tablet) is the **Takeaway orders** list. Along the top are **Settings** (3.10), **Refresh** (reloads the floor — useful when another till has opened or paid an order) and **New takeaway**.
+An occupied table also shows **who is serving it** (the waiter who opened the order), so the cashier knows whose bill it is at a glance.
+
+On the right (above the tables on a tablet) is the **Open orders** list: every order not yet paid, tables and takeaways, each with its waiter, the number of items, and the bill amount once printed. Orders whose bill is printed come first. When more than one waiter has orders open, choose a name in **All waiters** to see only that waiter's orders. Tap an order to open it.
+
+Along the top are **Settings** (3.10), **Refresh** (reloads the floor — useful when another till has opened or paid an order) and **New takeaway**.
 
 If the floor says **No tables are set up for this branch**, a manager has not added tables yet; takeaway still works. If it says **Restaurant orders are not enabled for your login**, ask a manager to give you the restaurant permission.
 
 ### 3.2 Open an order
 
 - **At a table:** tap a **Free** table. Type **How many?** guests (or skip) and the order opens. Tapping an **Occupied** table opens its order; if it has more than one, choose which, or choose **New order at this table**.
-- **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Takeaway orders**.
+- **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Open orders**.
 
-The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`) and the number of guests. **Floor** (top-left) goes back to the floor — the order stays open.
+The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`), the number of guests and the waiter. **Floor** (top-left) goes back to the floor — the order stays open.
 
 ### 3.3 Add items
 
@@ -1320,7 +1326,7 @@ A sent item cannot be edited — the kitchen already has it. Tap **Void** on the
 ### 3.7 Bill and pay
 
 - **Bill** prints the bill on this till's receipt printer (the receipt printer from *Setup*). If any items have not been sent yet, the till asks whether to send them first. The table turns **Bill printed** and the total reads **Bill**. If the printer fails, the bill is shown on screen so you can still tell the customer the total; **Reprint bill** prints it again.
-- **PAY** opens the normal payment screen (Chapter 5) with the bill total. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor.
+- **PAY** opens the normal payment screen (Chapter 5) with the bill total; its title names the table, the order and the waiter. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor. The receipt shows **WAITER** and **TABLE / ORDER** under the cashier.
 
 If an item is added after the bill was printed, the order goes back to open and the bill must be printed again. If prices changed in the ERP since the bill, the payment is refused with a message — print the bill again.
 
@@ -1337,8 +1343,9 @@ All four are under **More** (⋮) in the order header.
 
 There are two ways to work with waiters; both can run in the same restaurant.
 
-- **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment.
-- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+- **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment. **Sign out** on the floor ends the waiter's session.
+- **Waiters signing in on the till itself.** The sign-in screen shows the branch's waiters as **tiles**. A waiter taps their name — the username fills in — and types their password on the **on-screen keyboard**, which appears once a name (or a field) is tapped. With many waiters there is a **Search waiters** box and an **A–Z** strip: tap a letter to see only the names starting with it. On a shared till (below), a waiter signed in this way is signed out after 3 minutes without use, so the next waiter finds the tiles. The tiles come from the ERP each time someone signs in on the till, so a new waiter appears after the next sign-in.
+- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. **Who is serving?** shows the same tiles, search and keyboard. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
 
 A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.10) instead of the floor.
 
@@ -1349,6 +1356,8 @@ A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.1
 - **Printer:** leave it on the station's network printer from the ERP, or choose **This device — *printer name*** for a printer plugged into this computer by USB.
 - **Paper:** 58 mm or 80 mm.
 - **Print ALL *station* slips here, from every till** — tick this on the **PC the station printer is plugged into** (for example a kitchen PC with a USB printer). Keep OrbixPOS open on that PC: it fetches new slips from the ERP every few seconds and prints them, whichever till or tablet sent the order. The floor then shows **Printing for: all tills**.
+
+A manager also sees **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
 
 These settings are kept on this device only.
 
@@ -1801,7 +1810,7 @@ When you are done with the receipt, press **Done** (or the **✕** in the top-ri
 | Message | What it means |
 |---|---|
 | *Printed.* | The receipt went to the printer. |
-| *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, press **Server setup** on the sign-in screen, choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
+| *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, open **Server setup** on the sign-in screen (tap the version text at the bottom seven times), choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
 | *Could not print the receipt.* (or a message from the printer) | The printer did not accept the job. Check it is switched on, has paper and is connected, then press **Print** again. The sale is not affected. |
 
 > **The cash drawer.** If your till is set up to **Open cash drawer after printing**, the drawer opens **once per sale**: on the first print of the sale's own receipt, straight after the sale, so you can put the money in and give change. It does **not** open when you print a second copy, a gift receipt, a reversed sale, or a reprint from **Today's sales** or **Recent receipts** — no money is going in, so the drawer stays shut. If the drawer is not set up to open, use its key or release lever as usual.
@@ -1955,7 +1964,7 @@ Earlier versions of OrbixPOS let a cashier hand cash back as a **Refund** *cash 
 | A customer lost a receipt from earlier today (any till at this branch) | **☰** › **Today's sales** › tap the sale › **Print**. Needs the network. |
 | A customer lost a receipt and you are offline | **☰** › **Recent receipts** › tap the sale › **Print**. Works without the network (this till's sales only). |
 | You reprinted a receipt — was the customer charged again? | No. Reprinting never creates a new sale and never charges anyone. |
-| *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen (usually an administrator's job). |
+| *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen — tap the version text at the bottom seven times (usually an administrator's job). |
 | The company address, TIN or VRN is missing from the receipt | It has not been filled in on the company record in the ERP. Ask your administrator. |
 | You need to undo a whole sale and the shift is still open | On the receipt, press **Refund / reverse**, enter a reason, press **Continue**, and have a manager approve it. |
 | **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
@@ -2013,7 +2022,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 ### Check the server, step by step
 
 1. If you are signed in, sign out (your shift stays open). **Setup & diagnostics** is only on the sign-in screen.
-2. On the **Sign in** screen, click **Server setup** (the small link with a gear icon below the **Sign in** button).
+2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession.
 3. Look at the **ERP host** field. It should hold exactly the address your administrator gave you.
 4. Click **Test connection** and read the coloured result:
 
@@ -2242,7 +2251,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 
 **Symptom.** After a scan the search list stays open over an empty box, and the *next* scan adds the **previous** item again instead of the one you just scanned.
 
-**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look under **Server setup** on the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.6.0+13**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
+**Cause and fix.** This was a fault in OrbixPOS versions before **1.5.2**, fixed in 1.5.2. To see which version your till runs, look at the bottom of the sign-in screen or at the bottom of the **Session** menu (for example **OrbixPOS 1.6.0+13**). Ask whoever looks after the till to upgrade (see *Getting Started*, Chapter 1, **Installing OrbixPOS**). Until then, check each line after scanning and remove any wrong line with the **×** on its row.
 
 ### The scanner is a "keyboard wedge" — keep the field focused
 
@@ -2264,7 +2273,7 @@ Printing works on the **Windows** till only. The printer, paper width, print mod
 
 | What you see | Cause | What to do |
 |---|---|---|
-| **No receipt printer set — configure one in Setup.** | No printer is chosen in Setup. | Sign out → **Server setup** → choose the **Printer** → **Test print** → **Save** → sign in. The sale itself is complete; reprint it afterwards. |
+| **No receipt printer set — configure one in Setup.** | No printer is chosen in Setup. | Sign out → **Server setup** (tap the version text seven times) → choose the **Printer** → **Test print** → **Save** → sign in. The sale itself is complete; reprint it afterwards. |
 | **Choose a printer first.** (on **Test print**) | The **Printer** box is **— none —**. | Pick the receipt printer from the list. |
 | **No printers detected (Windows desktop only).** | No printer is installed in Windows, or you are on the web or Android version. | Install the printer in Windows (with its driver), then close and reopen **Server setup** so the list refreshes. Web and Android cannot print. |
 | **Cannot open printer "…". Is it installed and online?** | The printer was removed or renamed in Windows, or is switched off. | Switch it on and check its cable. If it was reinstalled under a new name, choose it again in Setup. |
@@ -2323,7 +2332,7 @@ Closing the app, signing out or switching the PC off leaves your shift open. At 
 
 ### Check, don't guess
 
-If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version (shown in small grey text under **Server setup** on the sign-in screen and at the bottom of the **Session** menu, for example **OrbixPOS 1.5.4+12**), and hand it on.
+If a message stops you, read it and match it to a table in this chapter. If it is a permission or setup issue (no sales agent, a missing action, a host that will not connect, a certificate), it needs your administrator, supervisor or store manager — not repeated retries. Note the exact wording, the time and the OrbixPOS version (shown in small grey text at the bottom of the sign-in screen and of the **Session** menu, for example **OrbixPOS 1.5.4+12**), and hand it on.
 
 ---
 
@@ -2687,7 +2696,7 @@ Three company-level settings also affect every till. Check them once when a shop
 |---|---|
 | A **walk-in (cash) customer** for the company | Every sale shows **Select customer** and asks the cashier to pick a customer before payment. |
 | The company's **address, phone, TIN and VRN** on the company record | Those lines are left off the receipt. |
-| A **receipt printer** chosen on each till (**Server setup** on the sign-in screen) | **Print** shows *No receipt printer set — configure one in Setup.* |
+| A **receipt printer** chosen on each till (**Server setup** on the sign-in screen: tap the version text seven times) | **Print** shows *No receipt printer set — configure one in Setup.* |
 
 ### What it looks like when a cashier is not provisioned
 

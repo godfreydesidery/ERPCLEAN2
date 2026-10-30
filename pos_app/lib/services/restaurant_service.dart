@@ -19,6 +19,10 @@ class RestaurantService {
   Future<List<PrepStation>> listStations() async =>
       asList(await _api.get('$_base/prep-stations'), PrepStation.fromJson);
 
+  /// The branch's waiters, for the sign-in tiles (J COB 2026-10-30).
+  Future<List<RestaurantWaiter>> listWaiters() async =>
+      asList(await _api.get('$_base/waiters'), RestaurantWaiter.fromJson);
+
   // ---------------------------------------------------------------- orders
 
   /// The branch's live orders (open and billed), optionally for one table.

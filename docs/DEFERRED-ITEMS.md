@@ -241,3 +241,40 @@ after fifteen minutes with none. Add the triage line to TROUBLESHOOTING.md.
 **Key files:** `dist/bundle/install.sh`, `dist/bundle/install.ps1`, `dist/bundle/orbixerp.sh`
 (`container_health`), `dist/bundle/docs/TROUBLESHOOTING.md`. Full evidence:
 [`docs/ops/fresh-install-rehearsal.md`](ops/fresh-install-rehearsal.md).
+
+## D-10 · Restaurant till enrolment + waiter PIN sign-in (the POS industry standard)
+
+**Deferred:** 2026-10-30 (owner: "just put it as a future requirement"). **Effort:** M.
+**Needs:** an ADR and a migration (DDL presented for approval first), changes to the sign-in flow.
+
+**What ships instead (POS 1.7.1, no schema).** Waiter tiles on the till's sign-in screen and in
+"Who's serving?", a search box and an on-screen keyboard; the waiter taps their name and types their
+**password**. The tiles come from `GET /restaurant/waiters`, which only a signed-in till may call; the
+till keeps the list (`AppConfig.waiters`) and refreshes it whenever someone signs in or the floor
+loads, so the tiles are there while nobody is signed in. A waiter signed in on a shared till is signed
+out after 3 idle minutes.
+
+**The gap against the standard** (Toast, Square, Lightspeed, Micros, Aloha, TouchBistro):
+
+1. **Till enrolment.** A manager activates each till once (an activation code or manager sign-in);
+   the till then holds its own credential. Only an enrolled till may fetch the staff list, so a brand
+   new till shows tiles before anyone has signed in on it, and no unauthenticated endpoint ever lists
+   usernames. Today the list exists only on a till someone has signed in on before.
+2. **A short POS PIN per waiter** (4–6 digits, unique per branch, hashed, lockout after a few wrong
+   tries, valid only on an enrolled till and only for POS work) instead of the full password typed on
+   a shared touch screen. Faster at the table and less exposed to shoulder-surfing.
+3. **PIN pad on the lock screen.** The tiles stay; the password keyboard becomes a PIN pad.
+
+**Why deferred.** J COB's request is met by the shipping version; WAITER logins carry only restaurant
+permissions, and their install is LAN-only, so the security gain is modest today. Revisit if waiters
+find the password slow, a client runs several tills per branch, or a second restaurant client goes
+live.
+
+**Way forward (outline).** Enrolment: a till credential tied to `pos_tills` (hashed secret, issued by a
+manager, revocable), presented on the waiter-list and PIN-sign-in calls. PIN: a hashed `pos_pin` per
+user with failed-attempt lockout, a `/auth/pos/pin-login` that issues the normal token pair for that
+user only from an enrolled till, audited like a password sign-in. ADR first; the DDL goes to the owner
+with its version number before any migration is written.
+
+**Key files:** `pos_app/lib/features/auth/login_screen.dart`, `pos_app/lib/features/restaurant/waiter_tiles.dart`,
+`pos_app/lib/core/config/app_config.dart`, `RestaurantSetupController#listWaiters`, the IAM auth service.

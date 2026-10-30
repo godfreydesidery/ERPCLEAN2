@@ -364,4 +364,41 @@ void main() {
       expect(loaded.stationPrinters, {'S1': 'USB Kitchen'});
     });
   });
+
+  group('waiter tiles (J COB 2026-10-30)', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('the till keeps the waiter list, so the tiles are there with nobody signed in', () async {
+      final cfg = await AppConfig.load();
+      expect(cfg.waiters, isEmpty);
+      cfg.waiters = [
+        const RestaurantWaiter(uid: 'U1', name: 'Baraka Juma', username: 'baraka'),
+        const RestaurantWaiter(uid: 'U2', name: 'Neema Ali', username: 'neema'),
+      ];
+      cfg.restaurantOnly = true;
+      await cfg.save();
+
+      final loaded = await AppConfig.load();
+      expect(loaded.waiters.map((w) => w.username), ['baraka', 'neema']);
+      expect(loaded.restaurantOnly, isTrue);
+    });
+
+    test('a corrupt saved list means no tiles, never a crash', () async {
+      SharedPreferences.setMockInitialValues({'cfg.waiters': 'not json'});
+      expect((await AppConfig.load()).waiters, isEmpty);
+    });
+
+    test('search finds a waiter by name or username, in any case', () {
+      const w = RestaurantWaiter(uid: 'U1', name: 'Baraka Juma', username: 'bjuma');
+      expect(w.matches(''), isTrue);
+      expect(w.matches('bara'), isTrue);
+      expect(w.matches('BJU'), isTrue);
+      expect(w.matches('neema'), isFalse);
+    });
+
+    test('server JSON', () {
+      final w = RestaurantWaiter.fromJson({'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+      expect(w.toJson(), {'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+    });
+  });
 }

@@ -91,6 +91,24 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// This device asks who is serving before a new order (Settings).
   bool _askWaiter = false;
 
+  /// The Open orders list shows one waiter's orders, or everyone's (null).
+  String? _waiterFilter;
+
+  /// A waiter signed in on a shared till (their tile on the sign-in screen) is
+  /// signed out after [_waiterIdle] untouched, so the next waiter finds the
+  /// tiles and not someone else's floor (J COB 2026-10-30).
+  Timer? _waiterLock;
+
+  bool get _lockWhenIdle => _askWaiter && ref.read(appControllerProvider).isWaiter;
+
+  void _armWaiterLock() {
+    _waiterLock?.cancel();
+    if (!_lockWhenIdle) return;
+    _waiterLock = Timer(_waiterIdle, () {
+      if (mounted) ref.read(appControllerProvider.notifier).logout();
+    });
+  }
+
   /// Prints the stations this device prints for, from every till (ADR-0066 D-6).
   StationPrintAgent? _agent;
 
@@ -117,6 +135,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _waiterLock?.cancel();
     _q.dispose();
     _agent?.dispose();
     super.dispose();
@@ -127,6 +146,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     final cfg = await AppConfig.load();
     if (!mounted) return;
     setState(() => _askWaiter = cfg.askWaiter);
+    _armWaiterLock();
     if (cfg.agentStations.isEmpty) {
       _agent?.stop();
       return;
@@ -138,8 +158,12 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   }
 
   Future<void> _openSettings() async {
-    await showStationPrinters(context, _stations, allowWaiterSetting: !_kitchenOnly);
+    final app = ref.read(appControllerProvider);
+    await showStationPrinters(context, _stations,
+        allowWaiterSetting: !_kitchenOnly,
+        allowRestaurantOnly: app.can(Perms.restaurantSetupManage));
     await _applyDeviceSettings();
+    await ref.read(appControllerProvider.notifier).reloadDeviceSettings();
   }
 
   /// The signed-in waiter's uid — or null once they have been idle too long.
@@ -203,6 +227,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         _svc.listStations(),
       ]);
       if (!mounted) return;
+      // Keep this till's waiter tiles current while someone is signed in.
+      ref.read(appControllerProvider.notifier).refreshWaiterTiles();
       setState(() {
         _tables = (results[0] as List<RestaurantTable>).where((t) => t.active).toList();
         _live = results[1] as List<RestaurantOrder>;
@@ -703,6 +729,17 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   @override
   Widget build(BuildContext context) {
+    // Every touch restarts a shared-till waiter's idle sign-out.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        if (_waiterLock != null) _armWaiterLock();
+      },
+      child: _screen(),
+    );
+  }
+
+  Widget _screen() {
     if (_kitchenOnly) return _kitchenPrinter();
     final order = _order;
     if (order == null) return _floor();
@@ -763,6 +800,12 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                   runSpacing: 8,
                   children: [
                     if (_sharedTill) _waiterChip(),
+                    if (ref.read(appControllerProvider).isWaiter)
+                      OrbixButton(
+                          label: 'Sign out',
+                          icon: Icons.logout,
+                          kind: BtnKind.ghost,
+                          onPressed: () => ref.read(appControllerProvider.notifier).logout()),
                     if (_agent?.active ?? false)
                       const InfoChip(icon: Icons.print_outlined, label: 'Printing for', value: 'all tills'),
                     OrbixButton(
@@ -814,35 +857,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       case _Load.ready:
         break;
     }
-    final takeaways = _live.where((o) => o.takeaway).toList();
     final narrow = MediaQuery.sizeOf(context).width < _tabletBreakpoint;
-    final takeawayPanel = Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 12, 14, 6),
-            child: SectionLabel('Takeaway orders'),
-          ),
-          if (takeaways.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: Text('None open.', style: TextStyle(color: AppColors.ink3)),
-            )
-          else
-            for (final o in takeaways)
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.takeout_dining_outlined),
-                title: Text(o.orderNumber),
-                subtitle: Text('${o.activeLines.length} items · ${o.openedByName}'
-                    '${o.status == OrderStatus.billed ? ' · bill printed' : ''}'),
-                onTap: _busy ? null : () => _openExisting(o),
-              ),
-        ],
-      ),
-    );
+    final ordersPanel = _openOrdersPanel();
     final tablesView = _tables.isEmpty
         ? const _FloorNotice(
             icon: Icons.table_restaurant_outlined,
@@ -851,13 +867,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         : GridView.builder(
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
               maxCrossAxisExtent: 150,
-              mainAxisExtent: 104,
+              mainAxisExtent: 122,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
             itemCount: _tables.length,
             itemBuilder: (context, i) => _TableTile(
               table: _tables[i],
+              waiter: _waitersAt(_tables[i]),
               onTap: _busy ? null : () => _tapTable(_tables[i]),
             ),
           );
@@ -866,7 +883,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (takeaways.isNotEmpty) ...[takeawayPanel, const SizedBox(height: 12)],
+          if (_live.isNotEmpty) ...[
+            ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240), child: ordersPanel),
+            const SizedBox(height: 12),
+          ],
           Expanded(child: tablesView),
         ],
       );
@@ -876,8 +897,98 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       children: [
         Expanded(child: tablesView),
         const SizedBox(width: 16),
-        SizedBox(width: 280, child: takeawayPanel),
+        SizedBox(width: 300, child: ordersPanel),
       ],
+    );
+  }
+
+  /// The waiters serving [table]'s open orders, for its tile.
+  String _waitersAt(RestaurantTable table) => _live
+      .where((o) => o.tableUid == table.uid)
+      .map((o) => o.openedByName)
+      .where((n) => n.isNotEmpty)
+      .toSet()
+      .join(', ');
+
+  /// Every open order in the branch — tables and takeaways — with the waiter
+  /// who serves it, so the cashier finds a bill by waiter (J COB 2026-10-30).
+  Widget _openOrdersPanel() {
+    final waiters = _live.map((o) => o.openedByName).where((n) => n.isNotEmpty).toSet().toList()
+      ..sort();
+    final filter = waiters.contains(_waiterFilter) ? _waiterFilter : null;
+    final shown = _live.where((o) => filter == null || o.openedByName == filter).toList()
+      ..sort((a, b) {
+        // Bills printed first: those tables are waiting to pay.
+        final ab = a.status == OrderStatus.billed ? 0 : 1;
+        final bb = b.status == OrderStatus.billed ? 0 : 1;
+        return ab != bb ? ab - bb : a.orderNumber.compareTo(b.orderNumber);
+      });
+    return Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 4),
+            child: Row(
+              children: [
+                const Expanded(child: SectionLabel('Open orders')),
+                if (waiters.length > 1)
+                  DropdownButton<String?>(
+                    value: filter,
+                    isDense: true,
+                    underline: const SizedBox.shrink(),
+                    hint: const Text('All waiters', style: TextStyle(fontSize: 13)),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('All waiters', style: TextStyle(fontSize: 13))),
+                      for (final w in waiters)
+                        DropdownMenuItem<String?>(
+                            value: w, child: Text(w, style: const TextStyle(fontSize: 13))),
+                    ],
+                    onChanged: (v) => setState(() => _waiterFilter = v),
+                  ),
+              ],
+            ),
+          ),
+          if (shown.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: Text('None open.', style: TextStyle(color: AppColors.ink3)),
+            )
+          else
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 6),
+                children: [
+                  for (final o in shown)
+                    ListTile(
+                      dense: true,
+                      leading: Icon(o.takeaway
+                          ? Icons.takeout_dining_outlined
+                          : Icons.table_restaurant_outlined),
+                      title: Text('${o.where} · ${o.orderNumber}',
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text([
+                        if (o.openedByName.isNotEmpty) o.openedByName,
+                        '${o.activeLines.length} items',
+                        if (o.status == OrderStatus.billed)
+                          o.billedTotal != null
+                              ? 'bill ${formatAmount(o.billedTotal!)}'
+                              : 'bill printed',
+                      ].join(' · ')),
+                      trailing: o.status == OrderStatus.billed
+                          ? const Icon(Icons.receipt_long_outlined, color: AppColors.warn, size: 20)
+                          : null,
+                      onTap: _busy ? null : () => _openExisting(o),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1151,6 +1262,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       Text(
                           '${order.orderNumber}'
                           '${order.guestCount != null ? ' · ${order.guestCount} guests' : ''}'
+                          '${order.openedByName.isEmpty ? '' : ' · Waiter: ${order.openedByName}'}'
                           '${billed ? ' · bill printed' : ''}',
                           style: const TextStyle(color: AppColors.ink2, fontSize: 12)),
                     ],
@@ -1488,9 +1600,13 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
 /// One table on the floor, coloured by its live state.
 class _TableTile extends StatelessWidget {
-  const _TableTile({required this.table, required this.onTap});
+  const _TableTile({required this.table, required this.onTap, this.waiter = ''});
   final RestaurantTable table;
   final VoidCallback? onTap;
+
+  /// Who is serving the table's open orders (J COB 2026-10-30), so the cashier
+  /// knows whose bill it is at a glance. Empty for a free table.
+  final String waiter;
 
   @override
   Widget build(BuildContext context) {
@@ -1538,6 +1654,20 @@ class _TableTile extends StatelessWidget {
                   style: TextStyle(
                       color: table.readyItemCount > 0 ? AppColors.ok : border,
                       fontWeight: FontWeight.w800)),
+              if (waiter.isNotEmpty)
+                Row(
+                  children: [
+                    const Icon(Icons.room_service_outlined, size: 13, color: AppColors.ink2),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(waiter,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.ink)),
+                    ),
+                  ],
+                ),
               Text('seats ${table.seats}${table.area != null ? ' · ${table.area}' : ''}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
