@@ -36,7 +36,9 @@ describe('RestaurantReportsComponent', () => {
     TestBed.resetTestingModule();
   });
 
-  it('runs Sales by waiter with the form filter; blank waiter and branch go as null', async () => {
+  // The service stubs answer synchronously (of()), so a run has rendered by the next detectChanges;
+  // no whenStable, which can wait on another spec's leftovers in a shared worker.
+  it('runs Sales by waiter with the form filter; blank waiter and branch go as null', () => {
     const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
@@ -44,7 +46,6 @@ describe('RestaurantReportsComponent', () => {
     comp.fromDate.set('2026-10-01');
     comp.toDate.set('2026-10-30');
     comp.run();
-    await fixture.whenStable();
     fixture.detectChanges();
 
     expect(svc.waiterSales).toHaveBeenCalledWith({
@@ -55,7 +56,7 @@ describe('RestaurantReportsComponent', () => {
     expect(text).toContain('94,000.00');
   });
 
-  it('Bills paid marks a voided receipt', async () => {
+  it('Bills paid marks a voided receipt', () => {
     const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
@@ -63,7 +64,6 @@ describe('RestaurantReportsComponent', () => {
     comp.setKind('bills');
     comp.waiterUid.set('W1');
     comp.run();
-    await fixture.whenStable();
     fixture.detectChanges();
 
     expect(svc.bills).toHaveBeenCalledWith(expect.objectContaining({ waiterUid: 'W1' }));
@@ -73,7 +73,7 @@ describe('RestaurantReportsComponent', () => {
     expect(text).toContain('Sir Jacob');
   });
 
-  it('Pending bills needs no dates and shows open orders without an amount', async () => {
+  it('Pending bills needs no dates and shows open orders without an amount', () => {
     const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
@@ -83,7 +83,6 @@ describe('RestaurantReportsComponent', () => {
     expect(fixture.nativeElement.querySelector('#rr-from')).toBeNull();
 
     comp.run();
-    await fixture.whenStable();
     fixture.detectChanges();
     expect(svc.pendingBills).toHaveBeenCalled();
     const text: string = fixture.nativeElement.textContent;
@@ -100,14 +99,13 @@ describe('RestaurantReportsComponent', () => {
     expect(svc.waiters).not.toHaveBeenCalled();
   });
 
-  it('a 403 reads as forbidden', async () => {
+  it('a 403 reads as forbidden', () => {
     makeReportsBed(undefined, {
       waiterSales: vi.fn(() => throwError(() => new HttpErrorResponse({ status: 403 }))),
     });
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
     fixture.componentInstance.run();
-    await fixture.whenStable();
     expect(fixture.componentInstance.state()).toBe('forbidden');
   });
 
