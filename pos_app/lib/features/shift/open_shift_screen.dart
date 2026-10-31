@@ -7,7 +7,6 @@ import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
-import '../../models/enums.dart';
 import '../../models/pos.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
@@ -179,11 +178,11 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
 
   Widget _modeCards(AppData app) {
     return Row(
-      children: BusinessMode.values.map((m) {
+      children: app.modes.map((m) {
         final active = app.mode == m;
         return Expanded(
           child: Padding(
-            padding: EdgeInsets.only(right: m == BusinessMode.restaurant ? 0 : 12),
+            padding: EdgeInsets.only(right: m == app.modes.last ? 0 : 12),
             child: InkWell(
               borderRadius: AppRadii.brLg,
               onTap: () => ref.read(appControllerProvider.notifier).setMode(m),

@@ -39,6 +39,7 @@ import com.erp.modules.products.domain.enums.VatStatus;
 import com.erp.modules.products.service.PriceListService;
 import com.erp.modules.products.service.ProductService;
 import com.erp.modules.products.service.UnitOfMeasureService;
+import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.AddRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.BillRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
@@ -146,6 +147,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantOrderService  orders;
     @Autowired private RestaurantMenuService   menu;
     @Autowired private RestaurantKitchenService kitchenDisplay;
+    @Autowired private RestaurantReportQuery   reports;
     @Autowired private JdbcTemplate            jdbc;
 
     private Company company;
@@ -751,6 +753,157 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 .containsExactly("Bar");
     }
 
+    // =========================================================================
+    // J COB 2026-10-30: waiter tiles, and the reports per waiter.
+    // =========================================================================
+
+    @Test
+    void waiterTilesAndReports_followTheWaiterWhoOpenedEachOrder() {
+        setRootCtx();
+        AppUser waiter = new AppUser("resto_waiter2", passwordEncoder.encode("W@iter1Pass"), "Baraka Waiter");
+        waiter.setOrganisationId(orgId);
+        waiter = users.save(waiter);
+        userBranches.save(new UserBranch(waiter.getId(), branch, rootId));
+        grantRole(waiter.getId(), "WAITER");
+        String waiterUid = waiter.getUid();
+
+        assertThat(setup.listWaiters(null))
+                .as("only WAITER-role users of the branch get a tile; the cashier is not one")
+                .singleElement().satisfies(w -> {
+                    assertThat(w.uid()).isEqualTo(waiterUid);
+                    assertThat(w.name()).isEqualTo("Baraka Waiter");
+                    assertThat(w.username()).isEqualTo("resto_waiter2");
+                });
+
+        // The waiter's table: billed and paid at the cashier's till.
+        setCashierCtx();
+        RestaurantOrderDto served = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, waiterUid));
+        orders.addLine(served.uid(), item(tacos));
+        RestaurantBillDto bill = orders.bill(served.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos);
+        setCashierCtx();
+        orders.pay(served.uid(), "resto-report-pay", payment(bill.grossTotal()));
+
+        // The cashier's own order, still open.
+        RestaurantOrderDto pending = openWith(latte);
+
+        setRootCtx();
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        var sales = reports.waiterSales(company.getId(), today, today, null, null);
+        assertThat(sales.rows()).singleElement().satisfies(r -> {
+            assertThat(r.waiterName()).isEqualTo("Baraka Waiter");
+            assertThat(r.bills()).isEqualTo(1);
+            assertThat(r.guests()).isEqualTo(2);
+            assertThat(r.amount()).isEqualByComparingTo(bill.grossTotal());
+        });
+        assertThat(sales.totals().amount()).isEqualByComparingTo(bill.grossTotal());
+
+        var bills = reports.bills(company.getId(), today, today, waiterUid, null);
+        assertThat(bills.waiterName()).isEqualTo("Baraka Waiter");
+        assertThat(bills.rows()).singleElement().satisfies(r -> {
+            assertThat(r.orderNumber()).isEqualTo(served.orderNumber());
+            assertThat(r.servedAt()).isEqualTo("T1");
+            assertThat(r.cashierName()).as("the till session's cashier").isEqualTo("Asha Waiter");
+            assertThat(r.invoiceNumber()).isNotBlank();
+            assertThat(r.invoiceStatus()).isEqualTo("FINALISED");
+        });
+        assertThat(bills.totalAmount()).isEqualByComparingTo(bill.grossTotal());
+
+        var open = reports.pendingBills(company.getId(), null, null);
+        assertThat(open.rows()).singleElement().satisfies(r -> {
+            assertThat(r.orderUid()).isEqualTo(pending.uid());
+            assertThat(r.waiterName()).isEqualTo("Asha Waiter");
+            assertThat(r.status()).isEqualTo("OPEN");
+            assertThat(r.items()).isEqualByComparingTo("1");
+            assertThat(r.billedAmount()).isNull();
+        });
+        assertThat(reports.pendingBills(company.getId(), waiterUid, null).rows())
+                .as("filtered to the waiter, whose only order is paid").isEmpty();
+    }
+
+    // =========================================================================
+    // ADR-0067: the waiter holding a table, and moving it to another waiter.
+    // =========================================================================
+
+    @Test
+    void transfer_movesTheTableToAnotherWaiter_withAuthority_andTheReportsFollowIt() {
+        setRootCtx();
+        String baraka = waiter("resto_baraka", "Baraka Waiter");
+        String neema  = waiter("resto_neema", "Neema Waiter");
+        String rootUid = users.findByUsername("resto_root").orElseThrow().getUid();
+
+        setCashierCtx();
+        RestaurantOrderDto order = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, baraka));
+        assertThat(order.waiterUid()).isEqualTo(baraka);
+        assertThat(order.waiterName()).isEqualTo("Baraka Waiter");
+        assertThat(order.waiterSince()).isNull();
+        orders.addLine(order.uid(), item(tacos));
+
+        // A waiter on the shared till may not take the table without a manager.
+        assertThatThrownBy(() -> orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest(neema, neema, null)))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("manager's approval");
+
+        // With a manager's approval at the till it moves; who opened it is kept.
+        RestaurantOrderDto moved = orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest(neema, neema, rootUid));
+        assertThat(moved.waiterUid()).isEqualTo(neema);
+        assertThat(moved.waiterName()).isEqualTo("Neema Waiter");
+        assertThat(moved.waiterSince()).isNotNull();
+        assertThat(moved.openedByName()).isEqualTo("Baraka Waiter");
+        assertThat(orders.list(null, null, null).stream().filter(o -> o.uid().equals(order.uid())))
+                .singleElement().satisfies(o -> assertThat(o.waiterName()).isEqualTo("Neema Waiter"));
+
+        // A waiter signed in on their own takes a table over for themselves, with approval
+        // (the step-up check refuses self-vouching, so the server must not use it on them).
+        setWaiterCtx("resto_baraka");
+        RestaurantOrderDto back = orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest(baraka, baraka, rootUid));
+        assertThat(back.waiterUid()).isEqualTo(baraka);
+        setRootCtx();
+        moved = orders.transfer(order.uid(), new TransferRestaurantOrderRequest(neema, null, null));
+        assertThat(moved.waiterUid()).isEqualTo(neema);
+        setCashierCtx();
+
+        // Not a waiter of the branch, or the same waiter again: refused.
+        assertThatThrownBy(() -> orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest("01NOTAREALUSER0000000000XX", null, rootUid)))
+                .isInstanceOf(IllegalArgumentException.class);
+        setRootCtx();  // a manager acting on their own needs no approval
+        assertThatThrownBy(() -> orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest(neema, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("already serving");
+
+        // The bill and the waiter reports follow the waiter holding the table when it is paid.
+        setCashierCtx();
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        assertThat(bill.serverName()).isEqualTo("Neema Waiter");
+        stock(tacos);
+        setCashierCtx();
+        orders.pay(order.uid(), "resto-transfer-pay", payment(bill.grossTotal()));
+
+        setRootCtx();
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        assertThat(reports.waiterSales(company.getId(), today, today, null, null).rows())
+                .singleElement().satisfies(r -> assertThat(r.waiterName()).isEqualTo("Neema Waiter"));
+        assertThat(reports.bills(company.getId(), today, today, neema, null).rows()).hasSize(1);
+        assertThat(reports.bills(company.getId(), today, today, baraka, null).rows()).isEmpty();
+    }
+
+    /** A user of this branch holding the WAITER role; returns their uid. */
+    private String waiter(String username, String name) {
+        AppUser w = new AppUser(username, passwordEncoder.encode("W@iter1Pass"), name);
+        w.setOrganisationId(orgId);
+        w = users.save(w);
+        userBranches.save(new UserBranch(w.getId(), branch, rootId));
+        grantRole(w.getId(), "WAITER");
+        return w.getUid();
+    }
+
     private StationSlipsDto kitchenFeed(java.time.Instant since) {
         return orders.stationSlips(kitchen.uid(), since);
     }
@@ -853,6 +1006,13 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     private void setRootCtx() {
         RequestContext.set(new RequestContext.Principal(
                 rootId, "resto_root", true, company.getId(), branch.getId(), null, orgId));
+    }
+
+    /** A waiter signed in on their own device or login. */
+    private void setWaiterCtx(String username) {
+        AppUser w = users.findByUsername(username).orElseThrow();
+        RequestContext.set(new RequestContext.Principal(
+                w.getId(), username, false, company.getId(), branch.getId(), null, orgId));
     }
 
     private void setCashierCtx() {

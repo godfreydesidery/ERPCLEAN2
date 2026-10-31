@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
+import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantTableRequest;
 import java.util.List;
@@ -37,4 +38,10 @@ public interface RestaurantSetupService {
 
     /** The distinct product categories in use in the caller's company, for the routing screen. */
     List<String> listProductCategories();
+
+    /**
+     * The active users holding the WAITER role in a branch ({@code branchUid}, or the caller's
+     * active branch): the tiles a till signs waiters in from.
+     */
+    List<RestaurantWaiterDto> listWaiters(String branchUid);
 }

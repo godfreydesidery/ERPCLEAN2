@@ -76,7 +76,7 @@
                       </button>
                     </td>
                     <td>{{ where(o) }}</td>
-                    <td class="text-muted">{{ o.openedAt | appDate: 'datetime' }} · {{ o.openedByName }}</td>
+                    <td class="text-muted">{{ o.openedAt | appDate: 'datetime' }} · {{ o.waiterName || o.openedByName }}</td>
                     <td class="text-end">{{ itemCount(o) }}</td>
                     <td>{{ statusLabel(o) }}</td>
                     <td class="text-end">{{ o.billedTotalAmount === null ? '—' : formatMoney(o.billedTotalAmount) }}</td>

@@ -59,6 +59,15 @@ public class UserLookupServiceImpl implements UserLookupService {
     }
 
     @Override
+    public boolean isAssignedToBranch(Long userId, Long branchId) {
+        if (userId == null || branchId == null) {
+            return false;
+        }
+        return userBranches.findByUserIdAndBranchIdAndRevokedAtIsNullAndActiveTrue(userId, branchId)
+                .isPresent();
+    }
+
+    @Override
     public Map<Long, String> displayNamesByIds(Collection<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
@@ -71,5 +80,18 @@ public class UserLookupServiceImpl implements UserLookupService {
         return users.findAllById(ids).stream()
                 .filter(u -> u.getDisplayName() != null && !u.getDisplayName().isBlank())
                 .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
+    }
+
+    @Override
+    public Map<Long, String> uidsByIds(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        var ids = userIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return users.findAllById(ids).stream()
+                .collect(Collectors.toMap(AppUser::getId, AppUser::getUid));
     }
 }

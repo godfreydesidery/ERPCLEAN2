@@ -63,6 +63,13 @@ public class RestaurantOrder extends UidEntity {
     @Column(name = "opened_at", nullable = false, updatable = false)
     private Instant openedAt = Instant.now();
 
+    /** The waiter holding the order since the last transfer (ADR-0067); null = {@link #openedBy}. */
+    @Column(name = "served_by")
+    private Long servedBy;
+
+    @Column(name = "served_since")
+    private Instant servedSince;
+
     @Column(name = "billed_at")
     private Instant billedAt;
 
@@ -126,6 +133,23 @@ public class RestaurantOrder extends UidEntity {
     }
 
     /** Moves a dine-in order to another table. A takeaway has no table to move. */
+    /** The waiter who holds the order now: the last one it was transferred to, else its opener. */
+    public Long currentWaiter() {
+        return servedBy != null ? servedBy : openedBy;
+    }
+
+    /** Hands the order to another waiter (ADR-0067 D-2). */
+    public void transferTo(Long waiterId, Instant at) {
+        if (status != RestaurantOrderStatus.OPEN && status != RestaurantOrderStatus.BILLED) {
+            throw new IllegalArgumentException("Only an open order can move to another waiter.");
+        }
+        if (waiterId.equals(currentWaiter())) {
+            throw new IllegalArgumentException("That waiter is already serving this order.");
+        }
+        this.servedBy    = waiterId;
+        this.servedSince = at;
+    }
+
     public void moveToTable(Long tableId) {
         if (orderType != RestaurantOrderType.DINE_IN) {
             throw new IllegalArgumentException("A takeaway order is not at a table.");

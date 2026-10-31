@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.StationSlipsDto;
@@ -88,4 +89,7 @@ public interface RestaurantOrderService {
 
     /** Moves every item of another live order onto this one and closes it (ADR-0066 D-3). */
     RestaurantOrderDto merge(String uid, MergeRestaurantOrderRequest request);
+
+    /** Hands the order to another waiter (ADR-0067 D-2): a cashier or manager, or with approval. */
+    RestaurantOrderDto transfer(String uid, TransferRestaurantOrderRequest request);
 }

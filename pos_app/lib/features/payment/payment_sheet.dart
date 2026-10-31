@@ -96,7 +96,14 @@ Future<Receipt?> openRestaurantPaymentSheet(
   if (receipt != null) {
     ref.read(priceCacheProvider).clear();
     await ref.read(receiptJournalProvider).add(receipt);
-    if (context.mounted) await showReceiptSheet(context, ref, receipt);
+    if (context.mounted) {
+      await showReceiptSheet(context, ref, receipt,
+          served: (
+            waiter: checkout.order.waiterName,
+            where: checkout.order.where,
+            order: checkout.order.orderNumber,
+          ));
+    }
   }
   return receipt;
 }
@@ -650,7 +657,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           Text(
               _resto == null
                   ? 'Payment'
-                  : 'Payment · ${_resto!.order.where} · ${_resto!.order.orderNumber}',
+                  : 'Payment · ${_resto!.order.where} · ${_resto!.order.orderNumber}'
+                      '${_resto!.order.waiterName.isEmpty ? '' : ' · Waiter: ${_resto!.order.waiterName}'}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
           IconButton(
@@ -1071,36 +1079,56 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     );
   }
 
+  /// The number pad. Four rows that always share the height they are given, so
+  /// the bottom row (C 0 ⌫) never falls off the screen. A fixed key shape did
+  /// exactly that once the restaurant's Split evenly row took its space (J COB
+  /// 2026-10-30: "0 is missing").
   Widget _keypad() {
-    final keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '<'];
-    return GridView.count(
-      crossAxisCount: 3,
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 1.5,
-      physics: const NeverScrollableScrollPhysics(),
-      children: keys.map((k) {
-        return Material(
-          color: AppColors.panel,
-          borderRadius: AppRadii.brSm,
-          child: InkWell(
-            borderRadius: AppRadii.brSm,
-            onTap: () => _key(k),
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: AppRadii.brSm,
-                border: Border.all(color: AppColors.line2),
-              ),
-              child: k == '<'
-                  ? const Icon(Icons.backspace_outlined, size: 18)
-                  : Text(k,
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700)),
+    const rows = [
+      ['7', '8', '9'],
+      ['4', '5', '6'],
+      ['1', '2', '3'],
+      ['C', '0', '<'],
+    ];
+    return Column(
+      children: [
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var c = 0; c < 3; c++) ...[
+                  if (c > 0) const SizedBox(width: 8),
+                  Expanded(child: _keypadKey(rows[r][c])),
+                ],
+              ],
             ),
           ),
-        );
-      }).toList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _keypadKey(String k) {
+    return Material(
+      color: AppColors.panel,
+      borderRadius: AppRadii.brSm,
+      child: InkWell(
+        borderRadius: AppRadii.brSm,
+        onTap: () => _key(k),
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: AppRadii.brSm,
+            border: Border.all(color: AppColors.line2),
+          ),
+          child: k == '<'
+              ? const Icon(Icons.backspace_outlined, size: 18)
+              : Text(k,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        ),
+      ),
     );
   }
 }

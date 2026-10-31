@@ -19,6 +19,10 @@ class RestaurantService {
   Future<List<PrepStation>> listStations() async =>
       asList(await _api.get('$_base/prep-stations'), PrepStation.fromJson);
 
+  /// The branch's waiters, for the sign-in tiles (J COB 2026-10-30).
+  Future<List<RestaurantWaiter>> listWaiters() async =>
+      asList(await _api.get('$_base/waiters'), RestaurantWaiter.fromJson);
+
   // ---------------------------------------------------------------- orders
 
   /// The branch's live orders (open and billed), optionally for one table.
@@ -160,6 +164,17 @@ class RestaurantService {
   }
 
   /// Moves every item of [fromOrderUid] onto order [uid] and closes it (D-3).
+  /// Moves the order to another waiter (ADR-0067). [actingWaiterUid] is the
+  /// waiter doing it when one is acting; then [authorisedByUid] is the manager
+  /// who approved it at the till.
+  Future<RestaurantOrder> transfer(String uid,
+          {required String toWaiterUid, String? actingWaiterUid, String? authorisedByUid}) async =>
+      RestaurantOrder.fromJson(asMap(await _api.post('$_orders/uid/$uid/transfer', body: {
+        'toWaiterUid': toWaiterUid,
+        'actingWaiterUid': ?actingWaiterUid,
+        'authorisedByUid': ?authorisedByUid,
+      })));
+
   Future<RestaurantOrder> merge(String uid, String fromOrderUid) async =>
       RestaurantOrder.fromJson(asMap(await _api.post('$_orders/uid/$uid/merge',
           body: {'fromOrderUid': fromOrderUid})));

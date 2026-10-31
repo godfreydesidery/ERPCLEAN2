@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
+import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantTableRequest;
 import com.erp.modules.sales.service.RestaurantSetupService;
@@ -61,6 +62,18 @@ public class RestaurantSetupController {
     public RestaurantTableDto updateTable(@PathVariable String uid,
                                           @Valid @RequestBody UpdateRestaurantTableRequest request) {
         return setup.updateTable(uid, request);
+    }
+
+    // ---- waiters ----
+
+    /**
+     * The branch's waiters, for the till's sign-in tiles. The till keeps the list so the tiles are
+     * there while nobody is signed in; only a signed-in till can refresh it.
+     */
+    @GetMapping("/waiters")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')")
+    public List<RestaurantWaiterDto> listWaiters(@RequestParam(required = false) String branchUid) {
+        return setup.listWaiters(branchUid);
     }
 
     // ---- prep stations ----

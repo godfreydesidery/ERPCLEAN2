@@ -599,6 +599,8 @@ public final class AuditActions {
     public static final String RESTAURANT_ORDER_CANCEL   = "RESTAURANT.ORDER.CANCEL";
     public static final String RESTAURANT_ORDER_SPLIT    = "RESTAURANT.ORDER.SPLIT";
     public static final String RESTAURANT_ORDER_MERGE    = "RESTAURANT.ORDER.MERGE";
+    /** An order moved to another waiter, or a move refused for want of authority (ADR-0067). */
+    public static final String RESTAURANT_ORDER_TRANSFER = "RESTAURANT.ORDER.TRANSFER";
     public static final String RESTAURANT_ORDER_FIRE     = "RESTAURANT.ORDER.FIRE";
     public static final String RESTAURANT_KITCHEN_READY  = "RESTAURANT.KITCHEN.READY";
     public static final String RESTAURANT_KITCHEN_RECALL = "RESTAURANT.KITCHEN.RECALL";

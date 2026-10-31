@@ -140,6 +140,8 @@ class _ModeSwitch extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    // A restaurant-only till (J COB 2026-10-30) offers no other register.
+    final modes = ref.watch(appControllerProvider.select((s) => s.modes));
     final cart = ref.watch(cartProvider);
     return Container(
       padding: const EdgeInsets.all(4),
@@ -150,7 +152,7 @@ class _ModeSwitch extends ConsumerWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: BusinessMode.values.map((m) {
+        children: modes.map((m) {
           final active = mode == m;
           return InkWell(
             borderRadius: AppRadii.brPill,

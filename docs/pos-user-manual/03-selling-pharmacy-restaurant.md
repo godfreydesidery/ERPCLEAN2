@@ -155,16 +155,20 @@ When you open the Restaurant register you see the **Floor**: one tile per table 
 - **Occupied** — an order is open. A small number on the tile means more than one order is open at that table (for example two groups at a long table).
 - **Bill printed** — the bill has been printed and the table is waiting to pay.
 
-On the right (above the tables on a tablet) is the **Takeaway orders** list. Along the top are **Settings** (3.10), **Refresh** (reloads the floor — useful when another till has opened or paid an order) and **New takeaway**.
+An occupied table also shows **who is serving it** (the waiter who opened the order), so the cashier knows whose bill it is at a glance.
+
+On the right (above the tables on a tablet) is the **Open orders** list: every order not yet paid, tables and takeaways, each with its waiter, the number of items, and the bill amount once printed. Orders whose bill is printed come first. When more than one waiter has orders open, choose a name in **All waiters** to see only that waiter's orders. Tap an order to open it.
+
+Along the top are **Settings** (3.10), **Refresh** (reloads the floor — useful when another till has opened or paid an order) and **New takeaway**.
 
 If the floor says **No tables are set up for this branch**, a manager has not added tables yet; takeaway still works. If it says **Restaurant orders are not enabled for your login**, ask a manager to give you the restaurant permission.
 
 ### 3.2 Open an order
 
 - **At a table:** tap a **Free** table. Type **How many?** guests (or skip) and the order opens. Tapping an **Occupied** table opens its order; if it has more than one, choose which, or choose **New order at this table**.
-- **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Takeaway orders**.
+- **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Open orders**.
 
-The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`) and the number of guests. **Floor** (top-left) goes back to the floor — the order stays open.
+The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`), the number of guests and the waiter. **Floor** (top-left) goes back to the floor — the order stays open.
 
 ### 3.3 Add items
 
@@ -199,7 +203,7 @@ A sent item cannot be edited — the kitchen already has it. Tap **Void** on the
 ### 3.7 Bill and pay
 
 - **Bill** prints the bill on this till's receipt printer (the receipt printer from *Setup*). If any items have not been sent yet, the till asks whether to send them first. The table turns **Bill printed** and the total reads **Bill**. If the printer fails, the bill is shown on screen so you can still tell the customer the total; **Reprint bill** prints it again.
-- **PAY** opens the normal payment screen (Chapter 5) with the bill total. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor.
+- **PAY** opens the normal payment screen (Chapter 5) with the bill total; its title names the table, the order and the waiter. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor. The receipt shows **WAITER** and **TABLE / ORDER** under the cashier.
 
 If an item is added after the bill was printed, the order goes back to open and the bill must be printed again. If prices changed in the ERP since the bill, the payment is refused with a message — print the bill again.
 
@@ -216,10 +220,25 @@ All four are under **More** (⋮) in the order header.
 
 There are two ways to work with waiters; both can run in the same restaurant.
 
-- **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment.
-- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+- **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment. **Sign out** on the floor ends the waiter's session.
+- **Waiters signing in on the till itself.** The sign-in screen shows the branch's waiters as **tiles**. A waiter taps their name — the username fills in — and types their password on the **on-screen keyboard**, which appears once a name (or a field) is tapped. With many waiters there is a **Search waiters** box and an **A–Z** strip: tap a letter to see only the names starting with it. On a shared till (below), a waiter signed in this way is signed out after 3 minutes without use, so the next waiter finds the tiles. The tiles come from the ERP each time someone signs in on the till, so a new waiter appears after the next sign-in.
+- **Waiters sharing the cashier's till.** A manager chooses **Who is serving?** in **Settings** (3.10):
+  - **Don't ask** — orders go to whoever is signed in on the till.
+  - **Ask before a new order** — before opening a table or takeaway, the waiter taps their name and types their password. The top of the floor shows **Serving: Name**; the till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+  - **Ask every time a table is opened** — the waiter taps their name and types their password **every time** they open a table, a takeaway or an order from the list. Nothing is remembered. The cashier signed in on the till is a tile too (*Name (cashier)*) and confirms with their own password, so the till always knows who is standing at it.
+
+  **Who is serving?** shows the same tiles, search and keyboard as the sign-in screen. The waiter's name is on the order, the slips and the bill.
 
 A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.10) instead of the floor.
+
+### Whose table is it?
+
+A table belongs to the **waiter serving it** — the one who opened it, or the one it was last moved to. Their name is on the table tile, the order, the bill and the receipt, and the waiter reports credit the bill to them.
+
+- **Another waiter's table opens read-only.** A waiter who opens a colleague's table sees the order with the note **Served by Name — ask a manager to move the table to you**. They cannot add, send, void, bill, split, merge, move or cancel it.
+- **Cashiers and managers can work any table** — to take payment, print the bill or fix a mistake.
+- **Moving a table to another waiter** (a shift change, a break): open the order, then **More → Transfer to another waiter…** and tap the waiter taking it over. A cashier or manager does this alone; when a waiter does it, a manager approves on the till with their own sign-in. From then on the new waiter serves the table and is credited with its bill when it is paid.
+- **Team service.** Some restaurants let any waiter serve any table. A manager can switch on **Team service** in **Settings** for that till; the tables then open normally for every waiter, and the bill is still credited to the waiter holding the table.
 
 ### 3.10 Settings — printers on this device
 
@@ -228,6 +247,8 @@ A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.1
 - **Printer:** leave it on the station's network printer from the ERP, or choose **This device — *printer name*** for a printer plugged into this computer by USB.
 - **Paper:** 58 mm or 80 mm.
 - **Print ALL *station* slips here, from every till** — tick this on the **PC the station printer is plugged into** (for example a kitchen PC with a USB printer). Keep OrbixPOS open on that PC: it fetches new slips from the ERP every few seconds and prints them, whichever till or tablet sent the order. The floor then shows **Printing for: all tills**.
+
+A manager also sets **Who is serving?** and **Team service** here (3.9), and **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
 
 These settings are kept on this device only.
 

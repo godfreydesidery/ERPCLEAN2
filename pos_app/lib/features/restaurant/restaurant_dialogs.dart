@@ -8,9 +8,12 @@ import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/restaurant.dart';
 import '../../services/receipt_printer.dart';
+import '../../state/app_controller.dart';
 import '../../state/providers.dart';
+import '../../widgets/on_screen_keyboard.dart';
 import '../../widgets/ui.dart';
 import 'restaurant_printing.dart';
+import 'waiter_tiles.dart';
 
 /// Dialogs for the restaurant register (ERP ADR-0065). Each returns the
 /// cashier's answer; none of them talks to the server.
@@ -76,7 +79,7 @@ Future<({RestaurantOrder? order})?> pickOrderAtTable(
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
                 title: Text(o.orderNumber),
-                subtitle: Text('${o.openedByName} · '
+                subtitle: Text('${o.waiterName} · '
                     '${o.activeLines.length} items'
                     '${o.status == OrderStatus.billed ? ' · bill printed' : ''}'),
                 onTap: () => Navigator.pop(context, (order: o)),
@@ -420,15 +423,20 @@ Future<void> showBillPreview(BuildContext context,
 /// the cashier — nothing is issued; the waiter is only named on what they open
 /// and send, and the server re-verifies that on every request.
 /// Returns (uid, name), or null when backed out.
-Future<({String uid, String name})?> askWaiterSignIn(BuildContext context, WidgetRef ref) {
+///
+/// [include] is put first among the tiles — on "ask every time" the signed-in
+/// cashier confirms with their own password too (ADR-0067 D-4).
+Future<({String uid, String name})?> askWaiterSignIn(BuildContext context, WidgetRef ref,
+    {RestaurantWaiter? include}) {
   return showDialog<({String uid, String name})>(
     context: context,
-    builder: (_) => const _WaiterSignInDialog(),
+    builder: (_) => _WaiterSignInDialog(include: include),
   );
 }
 
 class _WaiterSignInDialog extends ConsumerStatefulWidget {
-  const _WaiterSignInDialog();
+  const _WaiterSignInDialog({this.include});
+  final RestaurantWaiter? include;
   @override
   ConsumerState<_WaiterSignInDialog> createState() => _WaiterSignInDialogState();
 }
@@ -436,14 +444,90 @@ class _WaiterSignInDialog extends ConsumerStatefulWidget {
 class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
+  final _search = TextEditingController();
+  final _userFocus = FocusNode();
+  final _passFocus = FocusNode();
+  final _searchFocus = FocusNode();
   bool _busy = false;
   String? _error;
+
+  /// The branch's waiters as tiles (J COB 2026-10-30), from this till's list.
+  List<RestaurantWaiter> _waiters = const [];
+
+  /// The field the on-screen keyboard types into: 'user', 'pass' or 'search'.
+  String _active = 'user';
+
+  /// Past this many tiles a search box is shown (a restaurant may have 50 waiters).
+  static const _searchFrom = 6;
+
+  /// The keys show once a name is picked or a field is tapped; a long list is
+  /// browsed with the whole dialog.
+  bool _keys = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Focus only says which field the keys type into; a tap brings them up.
+    void track(FocusNode n, String field) => n.addListener(() {
+          if (n.hasFocus && _active != field) setState(() => _active = field);
+        });
+    track(_userFocus, 'user');
+    track(_passFocus, 'pass');
+    track(_searchFocus, 'search');
+    _search.addListener(() => setState(() {}));
+    AppConfig.load().then((cfg) {
+      if (!mounted) return;
+      final first = widget.include;
+      setState(() {
+        _waiters = [
+          ?first,
+          ...cfg.waiters.where((w) => w.uid != first?.uid),
+        ];
+        _keys = false;  // up once a name is picked or a field is tapped
+      });
+      if (_waiters.isEmpty) _userFocus.requestFocus();
+    });
+  }
 
   @override
   void dispose() {
     _user.dispose();
     _pass.dispose();
+    _search.dispose();
+    _userFocus.dispose();
+    _passFocus.dispose();
+    _searchFocus.dispose();
     super.dispose();
+  }
+
+  void _pick(RestaurantWaiter w) {
+    setState(() {
+      _user.text = w.username;
+      _pass.clear();
+      _active = 'pass';
+      _keys = true;
+      _error = null;
+    });
+    _passFocus.requestFocus();
+  }
+
+  void _showKeys() {
+    if (!_keys) setState(() => _keys = true);
+  }
+
+  TextEditingController get _activeController =>
+      _active == 'pass' ? _pass : _active == 'search' ? _search : _user;
+
+  void _enter() {
+    switch (_active) {
+      case 'pass':
+        _go();
+      case 'search':
+        final hits = _waiters.where((w) => w.matches(_search.text)).toList();
+        if (hits.length == 1) _pick(hits.first);
+      default:
+        _passFocus.requestFocus();
+    }
   }
 
   Future<void> _go() async {
@@ -453,6 +537,14 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       _error = null;
     });
     try {
+      // The person signed in on this till confirms themselves with their own
+      // password: an approval check would refuse them as self-approval.
+      final me = ref.read(appControllerProvider).me;
+      if (me != null && _user.text.trim().toLowerCase() == me.username.toLowerCase()) {
+        await ref.read(authServiceProvider).confirmOwnPassword(_pass.text);
+        if (mounted) Navigator.pop(context, (uid: me.uid, name: me.displayName));
+        return;
+      }
       final v = await ref.read(stepUpServiceProvider).verify(
           username: _user.text.trim(),
           password: _pass.text,
@@ -483,29 +575,74 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
       title: const Text('Who is serving?'),
       content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Waiter, sign in with your own username and password.',
-                style: TextStyle(color: AppColors.ink2)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _user,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Username'),
-            ),
-            TextField(
-              controller: _pass,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
-              onSubmitted: (_) => _go(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: AppColors.danger)),
+        width: _waiters.isEmpty ? 360 : 640,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                  _waiters.isEmpty
+                      ? 'Waiter, sign in with your own username and password.'
+                      : 'Waiter, tap your name and type your password.',
+                  style: const TextStyle(color: AppColors.ink2)),
+              const SizedBox(height: 10),
+              if (_waiters.length > _searchFrom) ...[
+                TextField(
+                  controller: _search,
+                  focusNode: _searchFocus,
+                  onTap: _showKeys,
+                  decoration: const InputDecoration(
+                      labelText: 'Search waiters', prefixIcon: Icon(Icons.search)),
+                  onSubmitted: (_) => _enter(),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (_waiters.isNotEmpty) ...[
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: _keys ? 200 : 380),
+                  child: SingleChildScrollView(
+                    // A gutter for the scrollbar, which draws over the right edge.
+                    padding: const EdgeInsets.only(right: 16),
+                    child: WaiterTiles(
+                        waiters: _waiters,
+                        query: _search.text,
+                        selected: _user.text.trim(),
+                        onPick: _pick),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+              TextField(
+                controller: _user,
+                focusNode: _userFocus,
+                onTap: _showKeys,
+                decoration: const InputDecoration(labelText: 'Username'),
+                onSubmitted: (_) => _passFocus.requestFocus(),
+              ),
+              TextField(
+                controller: _pass,
+                focusNode: _passFocus,
+                onTap: _showKeys,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password'),
+                onSubmitted: (_) => _go(),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: AppColors.danger)),
+              ],
+              if (_waiters.isNotEmpty && _keys) ...[
+                const SizedBox(height: 10),
+                OnScreenKeyboard(
+                  controller: _activeController,
+                  keyHeight: 40,
+                  enterLabel: _active == 'pass' ? 'Sign in' : 'Next',
+                  onEnter: _enter,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -514,6 +651,33 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------- move to another waiter (ADR-0067)
+
+/// Which waiter takes the table over. Returns null when backed out.
+Future<RestaurantWaiter?> pickWaiter(
+    BuildContext context, String title, List<RestaurantWaiter> waiters) {
+  return showDialog<RestaurantWaiter>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: Text(title),
+      content: SizedBox(
+        width: 560,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 420),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(right: 16),
+            child: WaiterTiles(waiters: waiters, onPick: (w) => Navigator.pop(context, w)),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------- item choices (ADR-0066)
@@ -792,7 +956,7 @@ Future<RestaurantOrder?> pickOrderToMerge(
                     ListTile(
                       leading: const Icon(Icons.call_merge),
                       title: Text('${o.where} · ${o.orderNumber}'),
-                      subtitle: Text('${o.activeLines.length} items · ${o.openedByName}'),
+                      subtitle: Text('${o.activeLines.length} items · ${o.waiterName}'),
                       onTap: () => Navigator.pop(context, o),
                     ),
                 ],
@@ -856,18 +1020,24 @@ Future<RestaurantTable?> pickTable(BuildContext context,
 /// [allowWaiterSetting] is false where waiter sign-in makes no sense (a kitchen
 /// printer login).
 Future<void> showStationPrinters(BuildContext context, List<PrepStation> stations,
-    {bool allowWaiterSetting = true}) {
+    {bool allowWaiterSetting = true, bool allowRestaurantOnly = false}) {
   return showDialog<void>(
     context: context,
     builder: (_) => _StationPrintersDialog(
-        stations: stations, allowWaiterSetting: allowWaiterSetting),
+        stations: stations,
+        allowWaiterSetting: allowWaiterSetting,
+        allowRestaurantOnly: allowRestaurantOnly),
   );
 }
 
 class _StationPrintersDialog extends StatefulWidget {
-  const _StationPrintersDialog({required this.stations, required this.allowWaiterSetting});
+  const _StationPrintersDialog(
+      {required this.stations, required this.allowWaiterSetting, this.allowRestaurantOnly = false});
   final List<PrepStation> stations;
   final bool allowWaiterSetting;
+
+  /// A manager (RESTAURANT.SETUP.MANAGE) may make this a restaurant-only till.
+  final bool allowRestaurantOnly;
   @override
   State<_StationPrintersDialog> createState() => _StationPrintersDialogState();
 }
@@ -939,14 +1109,53 @@ class _StationPrintersDialogState extends State<_StationPrintersDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.allowWaiterSetting) ...[
+                      const SectionLabel('Who is serving?'),
+                      RadioGroup<WaiterPrompt>(
+                        groupValue: cfg.waiterPrompt,
+                        onChanged: (v) => _change((c) => c.waiterPrompt = v ?? WaiterPrompt.off),
+                        child: Column(
+                          children: [
+                            for (final (value, title, detail) in const [
+                              (WaiterPrompt.off, "Don't ask",
+                                  'Orders go to whoever is signed in on this till.'),
+                              (WaiterPrompt.newOrder, 'Ask before a new order',
+                                  'A waiter taps their name and types their password before '
+                                      'opening a table or takeaway; the till remembers them for 3 '
+                                      'idle minutes.'),
+                              (WaiterPrompt.everyTable, 'Ask every time a table is opened',
+                                  'Name and password on every tap of a table, a takeaway or an '
+                                      'order. Nothing is remembered; the cashier confirms with '
+                                      'their own password too.'),
+                            ])
+                              RadioListTile<WaiterPrompt>(
+                                contentPadding: EdgeInsets.zero,
+                                value: value,
+                                title: Text(title),
+                                subtitle: Text(detail),
+                              ),
+                          ],
+                        ),
+                      ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Shared till: ask who is serving'),
+                        title: const Text('Team service — any waiter can serve any table'),
                         subtitle: const Text(
-                            'A waiter signs in before opening an order, and is named on the '
-                            'order, the kitchen slips and the bill.'),
-                        value: cfg.askWaiter,
-                        onChanged: (v) => _change((c) => c.askWaiter = v),
+                            'Off: a table belongs to the waiter serving it; other waiters can see '
+                            'it but not change it, and a manager moves it to another waiter.'),
+                        value: cfg.teamService,
+                        onChanged: (v) => _change((c) => c.teamService = v),
+                      ),
+                      const Divider(),
+                    ],
+                    if (widget.allowRestaurantOnly) ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Restaurant only — this till'),
+                        subtitle: const Text(
+                            'This till shows only the Restaurant register: Supermarket and '
+                            'Pharmacy are hidden for everyone who signs in here.'),
+                        value: cfg.restaurantOnly,
+                        onChanged: (v) => _change((c) => c.restaurantOnly = v),
                       ),
                       const Divider(),
                     ],

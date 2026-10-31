@@ -193,14 +193,17 @@ class RestaurantOrder {
     this.tableName,
     this.guestCount,
     required this.openedByName,
+    this.waiterUid,
+    String waiterName = '',
     this.openedAt,
     this.billedTotal,
     required this.billPrintCount,
     this.salesInvoiceUid,
     required this.pendingLineCount,
     required this.lines,
-  });
+  }) : _waiterName = waiterName;
 
+  final String _waiterName;
   final String uid;
   final String orderNumber;
   final bool takeaway;
@@ -209,12 +212,19 @@ class RestaurantOrder {
   final String? tableName;
   final int? guestCount;
   final String openedByName;
+
+  /// The waiter holding the order now (ADR-0067): the last one it was moved
+  /// to, else whoever opened it. Null from a server older than 1.7.2.
+  final String? waiterUid;
   final DateTime? openedAt;
   final double? billedTotal;
   final int billPrintCount;
   final String? salesInvoiceUid;
   final int pendingLineCount;
   final List<RestaurantOrderLine> lines;
+
+  /// The waiter holding the order, named everywhere the till says "waiter".
+  String get waiterName => _waiterName.isNotEmpty ? _waiterName : openedByName;
 
   /// Where the order is being served, for headers and slips.
   String get where => takeaway ? 'Takeaway' : 'Table ${tableName ?? ''}'.trim();
@@ -231,6 +241,8 @@ class RestaurantOrder {
         tableName: asStr(j['tableName']),
         guestCount: asInt(j['guestCount']),
         openedByName: asStrOr(j['openedByName']),
+        waiterUid: asStr(j['waiterUid']),
+        waiterName: asStrOr(j['waiterName']),
         openedAt: asDate(j['openedAt']),
         billedTotal: asNum(j['billedTotalAmount']),
         billPrintCount: asIntOr(j['billPrintCount']),
@@ -505,4 +517,29 @@ class ModifierGroup {
       })
       .where((g) => g.options.isNotEmpty)
       .toList();
+}
+
+/// A waiter of the branch, as a sign-in tile (J COB 2026-10-30). The till keeps
+/// the list so the tiles are there while nobody is signed in; the password is
+/// still typed and checked by the ERP.
+class RestaurantWaiter {
+  const RestaurantWaiter({required this.uid, required this.name, required this.username});
+
+  final String uid;
+  final String name;
+  final String username;
+
+  factory RestaurantWaiter.fromJson(Map<String, dynamic> j) => RestaurantWaiter(
+        uid: asStrOr(j['uid']),
+        name: asStrOr(j['name']),
+        username: asStrOr(j['username']),
+      );
+
+  Map<String, dynamic> toJson() => {'uid': uid, 'name': name, 'username': username};
+
+  /// Whether a search for [q] (name or username, any case) finds this waiter.
+  bool matches(String q) {
+    final t = q.trim().toLowerCase();
+    return t.isEmpty || name.toLowerCase().contains(t) || username.toLowerCase().contains(t);
+  }
 }

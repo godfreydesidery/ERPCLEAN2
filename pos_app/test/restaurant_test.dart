@@ -347,14 +347,25 @@ void main() {
 
     test('per-device settings survive a restart', () async {
       final cfg = AppConfig(baseHost: 'http://x', stationWidths: {'S1': 48, 'S2': 99},
-          agentStations: {'S1'}, askWaiter: true);
+          agentStations: {'S1'}, waiterPrompt: WaiterPrompt.everyTable, teamService: true);
       await cfg.save();
       final loaded = await AppConfig.load();
       expect(loaded.stationWidths, {'S1': 48});
       expect(loaded.widthFor('S1'), 48);
       expect(loaded.widthFor('S9'), AppConfig.defaultWidthCols);
       expect(loaded.agentStations, {'S1'});
-      expect(loaded.askWaiter, isTrue);
+      expect(loaded.waiterPrompt, WaiterPrompt.everyTable);
+      expect(loaded.teamService, isTrue);
+    });
+
+    test('a till set to "ask who is serving" before 1.7.2 keeps asking before a new order',
+        () async {
+      SharedPreferences.setMockInitialValues({'cfg.askWaiter': true});
+      expect((await AppConfig.load()).waiterPrompt, WaiterPrompt.newOrder);
+      SharedPreferences.setMockInitialValues({});
+      final fresh = await AppConfig.load();
+      expect(fresh.waiterPrompt, WaiterPrompt.off);
+      expect(fresh.teamService, isFalse, reason: 'ownership is the default');
     });
 
     test('station overrides survive a restart', () async {
@@ -362,6 +373,64 @@ void main() {
       await cfg.save();
       final loaded = await AppConfig.load();
       expect(loaded.stationPrinters, {'S1': 'USB Kitchen'});
+    });
+  });
+
+  group('waiter tiles (J COB 2026-10-30)', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('the till keeps the waiter list, so the tiles are there with nobody signed in', () async {
+      final cfg = await AppConfig.load();
+      expect(cfg.waiters, isEmpty);
+      cfg.waiters = [
+        const RestaurantWaiter(uid: 'U1', name: 'Baraka Juma', username: 'baraka'),
+        const RestaurantWaiter(uid: 'U2', name: 'Neema Ali', username: 'neema'),
+      ];
+      cfg.restaurantOnly = true;
+      await cfg.save();
+
+      final loaded = await AppConfig.load();
+      expect(loaded.waiters.map((w) => w.username), ['baraka', 'neema']);
+      expect(loaded.restaurantOnly, isTrue);
+    });
+
+    test('a corrupt saved list means no tiles, never a crash', () async {
+      SharedPreferences.setMockInitialValues({'cfg.waiters': 'not json'});
+      expect((await AppConfig.load()).waiters, isEmpty);
+    });
+
+    test('search finds a waiter by name or username, in any case', () {
+      const w = RestaurantWaiter(uid: 'U1', name: 'Baraka Juma', username: 'bjuma');
+      expect(w.matches(''), isTrue);
+      expect(w.matches('bara'), isTrue);
+      expect(w.matches('BJU'), isTrue);
+      expect(w.matches('neema'), isFalse);
+    });
+
+    test('server JSON', () {
+      final w = RestaurantWaiter.fromJson({'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+      expect(w.toJson(), {'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+    });
+  });
+
+  group('the waiter holding an order (ADR-0067)', () {
+    Map<String, dynamic> order(Map<String, dynamic> extra) => {
+          'uid': 'O1', 'orderNumber': 'ORD-0001', 'orderType': 'DINE_IN', 'status': 'OPEN',
+          'tableName': 'T1', 'openedByName': 'Baraka', 'billPrintCount': 0,
+          'pendingLineCount': 0, 'lines': <dynamic>[], ...extra,
+        };
+
+    test('a moved table names the waiter now holding it', () {
+      final o = RestaurantOrder.fromJson(order({'waiterUid': 'W2', 'waiterName': 'Neema'}));
+      expect(o.waiterUid, 'W2');
+      expect(o.waiterName, 'Neema');
+      expect(o.openedByName, 'Baraka');
+    });
+
+    test('an older server (no waiter fields) still names the opener', () {
+      final o = RestaurantOrder.fromJson(order({}));
+      expect(o.waiterUid, isNull);
+      expect(o.waiterName, 'Baraka');
     });
   });
 }

@@ -117,7 +117,7 @@ When you are done with the receipt, press **Done** (or the **✕** in the top-ri
 | Message | What it means |
 |---|---|
 | *Printed.* | The receipt went to the printer. |
-| *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, press **Server setup** on the sign-in screen, choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
+| *No receipt printer set — configure one in Setup.* | This till has no printer chosen. Sign out, open **Server setup** on the sign-in screen (tap the version text at the bottom seven times), choose the printer, the paper width (**58 mm · 32 cols** or **80 mm · 48 cols**) and the print mode, and press **Test print** to check it. Usually your administrator does this once when the till is installed. |
 | *Could not print the receipt.* (or a message from the printer) | The printer did not accept the job. Check it is switched on, has paper and is connected, then press **Print** again. The sale is not affected. |
 
 > **The cash drawer.** If your till is set up to **Open cash drawer after printing**, the drawer opens **once per sale**: on the first print of the sale's own receipt, straight after the sale, so you can put the money in and give change. It does **not** open when you print a second copy, a gift receipt, a reversed sale, or a reprint from **Today's sales** or **Recent receipts** — no money is going in, so the drawer stays shut. If the drawer is not set up to open, use its key or release lever as usual.
@@ -271,7 +271,7 @@ Earlier versions of OrbixPOS let a cashier hand cash back as a **Refund** *cash 
 | A customer lost a receipt from earlier today (any till at this branch) | **☰** › **Today's sales** › tap the sale › **Print**. Needs the network. |
 | A customer lost a receipt and you are offline | **☰** › **Recent receipts** › tap the sale › **Print**. Works without the network (this till's sales only). |
 | You reprinted a receipt — was the customer charged again? | No. Reprinting never creates a new sale and never charges anyone. |
-| *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen (usually an administrator's job). |
+| *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen — tap the version text at the bottom seven times (usually an administrator's job). |
 | The company address, TIN or VRN is missing from the receipt | It has not been filled in on the company record in the ERP. Ask your administrator. |
 | You need to undo a whole sale and the shift is still open | On the receipt, press **Refund / reverse**, enter a reason, press **Continue**, and have a manager approve it. |
 | **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
