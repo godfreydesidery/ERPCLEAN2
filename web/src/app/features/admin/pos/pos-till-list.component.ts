@@ -15,7 +15,7 @@ import { PosService } from './pos.service';
 /**
  * POS Till management screen.
  * Lists tills for the selected company + branch.
- * Inline create: name + branch picker. Deactivate action.
+ * Inline create: name + branch picker. Deactivate, and Activate for a deactivated till.
  * Gated: POS.TILL.VIEW / POS.TILL.MANAGE.
  */
 @Component({
@@ -191,6 +191,24 @@ export class PosTillListComponent {
       error: (err: unknown) => {
         this.rowBusyUid.set(null);
         this.alerts.error('Could not deactivate till', this.messageFrom(err, 'Unknown error.'));
+      },
+    });
+  }
+
+  // ── Reactivate ─────────────────────────────────────────────────────────────
+
+  reactivate(till: PosTillDto): void {
+    if (this.rowBusyUid() !== null) return;
+    this.rowBusyUid.set(till.uid);
+    this.posService.reactivateTill(till.uid).subscribe({
+      next: () => {
+        this.rowBusyUid.set(null);
+        this.alerts.success('Till activated', till.name);
+        this.load();
+      },
+      error: (err: unknown) => {
+        this.rowBusyUid.set(null);
+        this.alerts.error('Could not activate till', this.messageFrom(err, 'Unknown error.'));
       },
     });
   }
