@@ -436,6 +436,7 @@ public final class AuditActions {
     public static final String POS_TILL_CREATE           = "POS.TILL.CREATE";
     public static final String POS_TILL_UPDATE           = "POS.TILL.UPDATE";
     public static final String POS_TILL_DEACTIVATE       = "POS.TILL.DEACTIVATE";
+    public static final String POS_TILL_REACTIVATE       = "POS.TILL.REACTIVATE";
     // POS session lifecycle
     public static final String POS_SESSION_OPEN          = "POS.SESSION.OPEN";
     public static final String POS_SESSION_PAYOUT        = "POS.SESSION.PAYOUT";
