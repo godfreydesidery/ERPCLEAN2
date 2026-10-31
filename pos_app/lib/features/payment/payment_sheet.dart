@@ -99,7 +99,7 @@ Future<Receipt?> openRestaurantPaymentSheet(
     if (context.mounted) {
       await showReceiptSheet(context, ref, receipt,
           served: (
-            waiter: checkout.order.openedByName,
+            waiter: checkout.order.waiterName,
             where: checkout.order.where,
             order: checkout.order.orderNumber,
           ));
@@ -658,7 +658,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               _resto == null
                   ? 'Payment'
                   : 'Payment · ${_resto!.order.where} · ${_resto!.order.orderNumber}'
-                      '${_resto!.order.openedByName.isEmpty ? '' : ' · Waiter: ${_resto!.order.openedByName}'}',
+                      '${_resto!.order.waiterName.isEmpty ? '' : ' · Waiter: ${_resto!.order.waiterName}'}',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const Spacer(),
           IconButton(

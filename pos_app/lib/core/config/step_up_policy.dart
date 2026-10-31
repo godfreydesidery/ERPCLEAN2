@@ -80,6 +80,9 @@ enum GatedAction {
 
   /// Cancel an item (or a whole order) already sent to the kitchen or bar.
   restaurantVoid,
+
+  /// Move a table to another waiter (ADR-0067 D-2), when a waiter asks.
+  restaurantTransfer,
 }
 
 /// How one [GatedAction] is treated.
@@ -194,6 +197,13 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'RESTAURANT.ORDER.VOID',
     title: 'Manager approval — void',
     purpose: 'Cancel food or drinks the kitchen or bar has already been asked to make.',
+  ),
+  GatedAction.restaurantTransfer: StepUpRule(
+    requiresApproval: true,
+    // Equal to the server's transfer authority (RestaurantOrderServiceImpl: VOID_PERMISSION).
+    permissionCode: 'RESTAURANT.ORDER.VOID',
+    title: 'Manager approval — move table',
+    purpose: 'Move a table to another waiter, who then serves it and is credited with its bill.',
   ),
   GatedAction.abandonUnfinishedSale: StepUpRule(
     requiresApproval: true,

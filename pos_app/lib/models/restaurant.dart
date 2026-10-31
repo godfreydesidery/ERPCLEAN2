@@ -193,14 +193,17 @@ class RestaurantOrder {
     this.tableName,
     this.guestCount,
     required this.openedByName,
+    this.waiterUid,
+    String waiterName = '',
     this.openedAt,
     this.billedTotal,
     required this.billPrintCount,
     this.salesInvoiceUid,
     required this.pendingLineCount,
     required this.lines,
-  });
+  }) : _waiterName = waiterName;
 
+  final String _waiterName;
   final String uid;
   final String orderNumber;
   final bool takeaway;
@@ -209,12 +212,19 @@ class RestaurantOrder {
   final String? tableName;
   final int? guestCount;
   final String openedByName;
+
+  /// The waiter holding the order now (ADR-0067): the last one it was moved
+  /// to, else whoever opened it. Null from a server older than 1.7.2.
+  final String? waiterUid;
   final DateTime? openedAt;
   final double? billedTotal;
   final int billPrintCount;
   final String? salesInvoiceUid;
   final int pendingLineCount;
   final List<RestaurantOrderLine> lines;
+
+  /// The waiter holding the order, named everywhere the till says "waiter".
+  String get waiterName => _waiterName.isNotEmpty ? _waiterName : openedByName;
 
   /// Where the order is being served, for headers and slips.
   String get where => takeaway ? 'Takeaway' : 'Table ${tableName ?? ''}'.trim();
@@ -231,6 +241,8 @@ class RestaurantOrder {
         tableName: asStr(j['tableName']),
         guestCount: asInt(j['guestCount']),
         openedByName: asStrOr(j['openedByName']),
+        waiterUid: asStr(j['waiterUid']),
+        waiterName: asStrOr(j['waiterName']),
         openedAt: asDate(j['openedAt']),
         billedTotal: asNum(j['billedTotalAmount']),
         billPrintCount: asIntOr(j['billPrintCount']),
