@@ -44,6 +44,9 @@ public interface UserLookupService {
      */
     boolean isActiveUserInCompany(Long userId, Long companyId);
 
+    /** Whether the user holds a live (active, unrevoked) assignment to this branch. */
+    boolean isAssignedToBranch(Long userId, Long branchId);
+
     /**
      * Returns the display names of the given users, keyed by {@code app_users.id}.
      *
@@ -66,4 +69,7 @@ public interface UserLookupService {
      * @param userIds internal {@code app_users.id} values, already scoped by the caller
      */
     Map<Long, String> displayNamesByIds(Collection<Long> userIds);
+
+    /** The external uids of these users, in one read. Same scoping rule as {@link #displayNamesByIds}. */
+    Map<Long, String> uidsByIds(Collection<Long> userIds);
 }

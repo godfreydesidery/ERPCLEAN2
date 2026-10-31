@@ -38,7 +38,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 ### Check the server, step by step
 
 1. If you are signed in, sign out (your shift stays open). **Setup & diagnostics** is only on the sign-in screen.
-2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession.
+2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession.
 3. Look at the **ERP host** field. It should hold exactly the address your administrator gave you.
 4. Click **Test connection** and read the coloured result:
 

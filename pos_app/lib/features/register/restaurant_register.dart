@@ -88,8 +88,16 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// person's orders are not put under their name.
   static const Duration _waiterIdle = Duration(minutes: 3);
 
-  /// This device asks who is serving before a new order (Settings).
-  bool _askWaiter = false;
+  /// Who is serving? on this till (Settings, ADR-0067 D-4).
+  WaiterPrompt _prompt = WaiterPrompt.off;
+
+  /// Team service: any waiter may work any table (Settings). Off = a table
+  /// belongs to the waiter holding it (ADR-0067 D-3).
+  bool _teamService = false;
+
+  /// On "ask every time": who confirmed, with their password, for the order on
+  /// screen. [cashier] when it was the signed-in cashier themselves.
+  ({String uid, String name, bool cashier})? _actor;
 
   /// The Open orders list shows one waiter's orders, or everyone's (null).
   String? _waiterFilter;
@@ -99,7 +107,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// tiles and not someone else's floor (J COB 2026-10-30).
   Timer? _waiterLock;
 
-  bool get _lockWhenIdle => _askWaiter && ref.read(appControllerProvider).isWaiter;
+  bool get _lockWhenIdle =>
+      _prompt != WaiterPrompt.off && ref.read(appControllerProvider).isWaiter;
 
   void _armWaiterLock() {
     _waiterLock?.cancel();
@@ -145,7 +154,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   Future<void> _applyDeviceSettings() async {
     final cfg = await AppConfig.load();
     if (!mounted) return;
-    setState(() => _askWaiter = cfg.askWaiter);
+    setState(() {
+      _prompt = cfg.waiterPrompt;
+      _teamService = cfg.teamService;
+    });
     _armWaiterLock();
     if (cfg.agentStations.isEmpty) {
       _agent?.stop();
@@ -159,9 +171,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   Future<void> _openSettings() async {
     final app = ref.read(appControllerProvider);
+    // Who is serving and team service are controls over waiters: managers set them.
+    final manager = app.can(Perms.restaurantSetupManage);
     await showStationPrinters(context, _stations,
-        allowWaiterSetting: !_kitchenOnly,
-        allowRestaurantOnly: app.can(Perms.restaurantSetupManage));
+        allowWaiterSetting: !_kitchenOnly && manager,
+        allowRestaurantOnly: manager);
     await _applyDeviceSettings();
     await ref.read(appControllerProvider.notifier).reloadDeviceSettings();
   }
@@ -197,8 +211,66 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   /// Before a new order on a shared till that asks who is serving.
   Future<bool> _ensureWaiter() async {
-    if (!_sharedTill || !_askWaiter || _waiterUid != null) return true;
+    if (!_sharedTill || _prompt != WaiterPrompt.newOrder || _waiterUid != null) return true;
     return _signInWaiter();
+  }
+
+  /// "Ask every time a table is opened" (ADR-0067 D-4): name and password for
+  /// this order, every time. The signed-in cashier is a tile too and confirms
+  /// with their own password — the till never guesses who is standing at it.
+  /// False when backed out.
+  Future<bool> _confirmActor() async {
+    if (_prompt != WaiterPrompt.everyTable) return true;
+    final app = ref.read(appControllerProvider);
+    final me = app.me;
+    final self = me == null
+        ? null
+        : RestaurantWaiter(
+            uid: me.uid,
+            name: app.isWaiter ? me.displayName : '${me.displayName} (cashier)',
+            username: me.username);
+    final w = await askWaiterSignIn(context, ref, include: self);
+    if (w == null || !mounted) return false;
+    setState(() => _actor = (uid: w.uid, name: w.name, cashier: !app.isWaiter && w.uid == me?.uid));
+    return true;
+  }
+
+  /// The waiter acting on the order on screen, for the ownership rule — or null
+  /// for a cashier or manager acting on their own, who may work any table.
+  String? get _actingWaiterUid {
+    final app = ref.read(appControllerProvider);
+    final actor = _actor;
+    if (_prompt == WaiterPrompt.everyTable && actor != null) {
+      return actor.cashier ? null : actor.uid;
+    }
+    if (app.isWaiter) return app.me?.uid;
+    if (_sharedTill && _prompt == WaiterPrompt.newOrder) return _waiterUid;
+    return null;
+  }
+
+  /// The waiter the server records as serving (open, send, fire): a waiter
+  /// other than the signed-in user, re-verified there.
+  String? get _serverWaiterUid {
+    final acting = _actingWaiterUid;
+    final me = ref.read(appControllerProvider).me;
+    return acting == null || acting == me?.uid ? null : acting;
+  }
+
+  /// The order on screen belongs to another waiter (ADR-0067 D-3): it opens
+  /// read-only unless the till runs team service.
+  bool get _ro {
+    final o = _order;
+    final acting = _actingWaiterUid;
+    if (o == null || _teamService || acting == null || o.waiterUid == null) return false;
+    return o.waiterUid != acting;
+  }
+
+  /// Says why nothing happened when a waiter tries to change another's table.
+  bool _lockedOut() {
+    if (!_ro) return false;
+    showToast(context,
+        'Served by ${_order!.waiterName}. Ask a manager to move this table to you (More → Transfer).');
+    return true;
   }
 
   Future<void> _loadStationsOnly() async {
@@ -339,7 +411,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   void _showOrder(RestaurantOrder o) => setState(() => _order = o);
 
   Future<void> _backToFloor() async {
-    setState(() => _order = null);
+    setState(() {
+      _order = null;
+      _actor = null;  // "ask every time": the next order asks again
+    });
     // A paid sale cleared the price cache; re-price the menu for the next order.
     _refreshPrices(_menu);
     await _loadFloor();
@@ -348,6 +423,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   // ================================================================ floor actions
 
   Future<void> _tapTable(RestaurantTable t) async {
+    if (!await _confirmActor() || !mounted) return;
     final here = _live.where((o) => o.tableUid == t.uid).toList();
     if (here.length == 1) {
       final fresh = await _run(() => _svc.get(here.first.uid));
@@ -367,20 +443,22 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     if (!await _ensureWaiter() || !mounted) return;
     final guests = await askGuestCount(context, t.name);
     if (guests == null || !mounted) return;
-    final waiterUid = _waiterUid;
+    final waiterUid = _serverWaiterUid;
     final opened = await _run(() => _svc.open(
         tableUid: t.uid, guestCount: guests == 0 ? null : guests, waiterUid: waiterUid));
     if (opened != null) _showOrder(opened);
   }
 
   Future<void> _newTakeaway() async {
+    if (!await _confirmActor() || !mounted) return;
     if (!await _ensureWaiter() || !mounted) return;
-    final waiterUid = _waiterUid;
+    final waiterUid = _serverWaiterUid;
     final opened = await _run(() => _svc.open(waiterUid: waiterUid));
     if (opened != null) _showOrder(opened);
   }
 
   Future<void> _openExisting(RestaurantOrder o) async {
+    if (!await _confirmActor() || !mounted) return;
     final fresh = await _run(() => _svc.get(o.uid));
     if (fresh != null) _showOrder(fresh);
   }
@@ -389,12 +467,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 
   /// A tap: straight onto the order, unless the item asks a choice ("Milk?").
   Future<void> _add(Product p) async {
+    if (_lockedOut()) return;
     if (_groupsFor(p).isNotEmpty) return _addWithChoices(p);
     await _addItem(p);
   }
 
   /// A long-press (or an item with choices): choices, course, hold and a note.
   Future<void> _addWithChoices(Product p) async {
+    if (_lockedOut()) return;
     final choice = await askItemChoices(context, p.name, _groupsFor(p));
     if (choice == null || !mounted) return;
     await _addItem(p,
@@ -450,7 +530,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     if (courses.isEmpty) return;
     final course = courses.length == 1 ? courses.first : await askFireCourse(context, courses);
     if (course == null || !mounted) return;
-    final waiterUid = _waiterUid;
+    final waiterUid = _serverWaiterUid;
     final res = await _run(() => _svc.fire(order.uid, course: course, waiterUid: waiterUid));
     if (res == null || !mounted) return;
     _showOrder(res.order);
@@ -477,7 +557,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   Future<void> _send({bool quiet = false}) async {
     final order = _order;
     if (order == null) return;
-    final waiterUid = _waiterUid;
+    final waiterUid = _serverWaiterUid;
     final res = await _run(() => _svc.send(order.uid, waiterUid: waiterUid));
     if (res == null || !mounted) return;
     _showOrder(res.order);
@@ -709,6 +789,37 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     showToast(context, '${other.orderNumber} merged into ${merged.orderNumber}.', ok: true);
   }
 
+  /// Moves the order to another waiter (ADR-0067 D-2): a cashier or manager on
+  /// their own, or a waiter with a manager's approval at the till.
+  Future<void> _transfer() async {
+    final order = _order;
+    if (order == null) return;
+    final cfg = await AppConfig.load();
+    if (!mounted) return;
+    final others = cfg.waiters.where((w) => w.uid != order.waiterUid).toList();
+    if (others.isEmpty) {
+      showToast(context,
+          'No other waiters on this till yet. They appear after someone signs in on it.');
+      return;
+    }
+    final to = await pickWaiter(context, 'Move ${order.where} to which waiter?', others);
+    if (to == null || !mounted) return;
+    final acting = _actingWaiterUid;
+    String? approver;
+    if (acting != null) {
+      final approval = await showManagerApproval(context, ref,
+          action: GatedAction.restaurantTransfer,
+          detail: '${order.where} · ${order.orderNumber}: ${order.waiterName} → ${to.name}');
+      approver = approval?.authoriserUid?.trim();
+      if (approver == null || approver.isEmpty || !mounted) return;
+    }
+    final moved = await _run(() => _svc.transfer(order.uid,
+        toWaiterUid: to.uid, actingWaiterUid: acting, authorisedByUid: approver));
+    if (moved == null || !mounted) return;
+    _showOrder(moved);
+    showToast(context, '${order.where} is now served by ${to.name}.', ok: true);
+  }
+
   Future<void> _moveTable() async {
     final order = _order;
     if (order == null || order.takeaway) return;
@@ -905,7 +1016,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// The waiters serving [table]'s open orders, for its tile.
   String _waitersAt(RestaurantTable table) => _live
       .where((o) => o.tableUid == table.uid)
-      .map((o) => o.openedByName)
+      .map((o) => o.waiterName)
       .where((n) => n.isNotEmpty)
       .toSet()
       .join(', ');
@@ -913,10 +1024,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// Every open order in the branch — tables and takeaways — with the waiter
   /// who serves it, so the cashier finds a bill by waiter (J COB 2026-10-30).
   Widget _openOrdersPanel() {
-    final waiters = _live.map((o) => o.openedByName).where((n) => n.isNotEmpty).toSet().toList()
+    final waiters = _live.map((o) => o.waiterName).where((n) => n.isNotEmpty).toSet().toList()
       ..sort();
     final filter = waiters.contains(_waiterFilter) ? _waiterFilter : null;
-    final shown = _live.where((o) => filter == null || o.openedByName == filter).toList()
+    final shown = _live.where((o) => filter == null || o.waiterName == filter).toList()
       ..sort((a, b) {
         // Bills printed first: those tables are waiting to pay.
         final ab = a.status == OrderStatus.billed ? 0 : 1;
@@ -972,7 +1083,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       title: Text('${o.where} · ${o.orderNumber}',
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: Text([
-                        if (o.openedByName.isNotEmpty) o.openedByName,
+                        if (o.waiterName.isNotEmpty) o.waiterName,
                         '${o.activeLines.length} items',
                         if (o.status == OrderStatus.billed)
                           o.billedTotal != null
@@ -1262,7 +1373,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       Text(
                           '${order.orderNumber}'
                           '${order.guestCount != null ? ' · ${order.guestCount} guests' : ''}'
-                          '${order.openedByName.isEmpty ? '' : ' · Waiter: ${order.openedByName}'}'
+                          '${order.waiterName.isEmpty ? '' : ' · Waiter: ${order.waiterName}'}'
                           '${billed ? ' · bill printed' : ''}',
                           style: const TextStyle(color: AppColors.ink2, fontSize: 12)),
                     ],
@@ -1273,6 +1384,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                   enabled: !_busy,
                   onSelected: (v) {
                     switch (v) {
+                      case 'transfer':
+                        _transfer();
                       case 'move':
                         _moveTable();
                       case 'split':
@@ -1286,19 +1399,34 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     }
                   },
                   itemBuilder: (_) => [
-                    if (!order.takeaway)
-                      const PopupMenuItem(value: 'move', child: Text('Move to another table')),
-                    const PopupMenuItem(value: 'split', child: Text('Split the bill…')),
                     const PopupMenuItem(
-                        value: 'merge', child: Text('Merge another order into this…')),
+                        value: 'transfer', child: Text('Transfer to another waiter…')),
+                    // Another waiter's table: only the transfer and a reprint (ADR-0067 D-3).
+                    if (!_ro) ...[
+                      if (!order.takeaway)
+                        const PopupMenuItem(value: 'move', child: Text('Move to another table')),
+                      const PopupMenuItem(value: 'split', child: Text('Split the bill…')),
+                      const PopupMenuItem(
+                          value: 'merge', child: Text('Merge another order into this…')),
+                    ],
                     const PopupMenuItem(
                         value: 'reprint', child: Text('Reprint last kitchen/bar slips')),
-                    const PopupMenuItem(value: 'cancel', child: Text('Cancel order')),
+                    if (!_ro) const PopupMenuItem(value: 'cancel', child: Text('Cancel order')),
                   ],
                 ),
               ],
             ),
           ),
+          if (_ro)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              color: AppColors.warnSoft,
+              child: Text(
+                  'Served by ${order.waiterName}. You can see this order but not change it — '
+                  'ask a manager to move the table to you (More → Transfer).',
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)),
+            ),
           Expanded(
             child: order.lines.isEmpty
                 ? const Center(
@@ -1329,7 +1457,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     icon: Icons.soup_kitchen_outlined,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: toSend == 0 || _busy ? null : _send,
+                    onPressed: toSend == 0 || _busy || _ro ? null : _send,
                   ),
                 ),
                 if (heldCount > 0) ...[
@@ -1340,7 +1468,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       icon: Icons.local_fire_department_outlined,
                       kind: BtnKind.ghost,
                       block: true,
-                      onPressed: _busy ? null : _fire,
+                      onPressed: _busy || _ro ? null : _fire,
                     ),
                   ),
                 ],
@@ -1351,7 +1479,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     icon: Icons.receipt_long_outlined,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: !hasItems || _busy ? null : _bill,
+                    onPressed: !hasItems || _busy || _ro ? null : _bill,
                   ),
                 ),
               ],
@@ -1499,10 +1627,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     children: [
                       _chip('Course ${l.course}', AppColors.brand,
                           tooltip: 'Move to the next course',
-                          onTap: _busy ? null : () => _nextCourse(l)),
+                          onTap: _busy || _ro ? null : () => _nextCourse(l)),
                       _chip(l.held ? 'Held' : 'Hold', l.held ? AppColors.warn : AppColors.ink3,
                           tooltip: l.held ? 'Release: send with the next Send' : 'Hold until fired',
-                          onTap: _busy ? null : () => _toggleHold(l)),
+                          onTap: _busy || _ro ? null : () => _toggleHold(l)),
                     ],
                   ),
                 ),
@@ -1511,14 +1639,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       style: const TextStyle(fontSize: 12, color: AppColors.ink2)),
                 Row(
                   children: [
-                    _qbtn(Icons.remove, _busy ? null : () => _changeQty(l, -1)),
+                    _qbtn(Icons.remove, _busy || _ro ? null : () => _changeQty(l, -1)),
                     SizedBox(
                       width: 34,
                       child: Text(formatAmount(l.quantity, decimals: 0),
                           textAlign: TextAlign.center,
                           style: numStyle(weight: FontWeight.w700)),
                     ),
-                    _qbtn(Icons.add, _busy ? null : () => _changeQty(l, 1)),
+                    _qbtn(Icons.add, _busy || _ro ? null : () => _changeQty(l, 1)),
                   ],
                 ),
               ],
@@ -1526,7 +1654,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           ),
           IconButton(
               tooltip: 'Remove',
-              onPressed: _busy ? null : () => _remove(l),
+              onPressed: _busy || _ro ? null : () => _remove(l),
               icon: const Icon(Icons.close, size: 16, color: AppColors.ink3)),
         ],
       ),
@@ -1576,7 +1704,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
           ),
           if (!voided)
             TextButton(
-                onPressed: _busy ? null : () => _void(l),
+                onPressed: _busy || _ro ? null : () => _void(l),
                 child: const Text('Void', style: TextStyle(color: AppColors.danger))),
         ],
       ),

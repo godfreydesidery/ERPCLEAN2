@@ -196,13 +196,13 @@ To trust a server's certificate:
 
 **How it works.** You open the **Setup & diagnostics** dialog from the sign-in screen, type the host, press **Test connection**, choose the printer settings, press **Test print**, and **Save**. Everything is remembered on the device, so you do not repeat it every day.
 
-> **Setup is only on the sign-in screen, and it is hidden.** So that nobody changes the server or printer by accident, there is no Server setup button in normal use: tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession. After the fourth tap the till says how many taps are left. The one exception: when the till cannot reach the ERP at all, a **Server setup** link appears below **Sign in** by itself, so a till pointed at the wrong server can always be put right.
+> **Setup is only on the sign-in screen, and it is hidden.** So that nobody changes the server or printer by accident, there is no Server setup button in normal use: tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession. After the fourth tap the till says how many taps are left. The one exception: when the till cannot reach the ERP at all, a **Server setup** link appears below **Sign in** by itself, so a till pointed at the wrong server can always be put right.
 >
 > To change the server or printer during a shift, sign out (your shift stays open), open **Server setup**, make the change, **Save**, and sign in again. OrbixPOS takes you straight back to your open shift.
 
 ### Setting the ERP host
 
-1. On the sign-in screen, tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession (or click the **Server setup** link, if the till has just failed to reach the ERP). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
+1. On the sign-in screen, tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession (or click the **Server setup** link, if the till has just failed to reach the ERP). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
 2. In the **ERP host** field, type the address your administrator gave you. Type the scheme and the server **only** — `http://` or `https://`, the server name or IP address, and a port if your administrator gave one. For example:
    - `http://192.168.1.10:8081` — a server on your shop's network;
    - `http://localhost:8081` — the ERP running on this same PC;
@@ -1345,9 +1345,23 @@ There are two ways to work with waiters; both can run in the same restaurant.
 
 - **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment. **Sign out** on the floor ends the waiter's session.
 - **Waiters signing in on the till itself.** The sign-in screen shows the branch's waiters as **tiles**. A waiter taps their name — the username fills in — and types their password on the **on-screen keyboard**, which appears once a name (or a field) is tapped. With many waiters there is a **Search waiters** box and an **A–Z** strip: tap a letter to see only the names starting with it. On a shared till (below), a waiter signed in this way is signed out after 3 minutes without use, so the next waiter finds the tiles. The tiles come from the ERP each time someone signs in on the till, so a new waiter appears after the next sign-in.
-- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. **Who is serving?** shows the same tiles, search and keyboard. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+- **Waiters sharing the cashier's till.** A manager chooses **Who is serving?** in **Settings** (3.10):
+  - **Don't ask** — orders go to whoever is signed in on the till.
+  - **Ask before a new order** — before opening a table or takeaway, the waiter taps their name and types their password. The top of the floor shows **Serving: Name**; the till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+  - **Ask every time a table is opened** — the waiter taps their name and types their password **every time** they open a table, a takeaway or an order from the list. Nothing is remembered. The cashier signed in on the till is a tile too (*Name (cashier)*) and confirms with their own password, so the till always knows who is standing at it.
+
+  **Who is serving?** shows the same tiles, search and keyboard as the sign-in screen. The waiter's name is on the order, the slips and the bill.
 
 A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.10) instead of the floor.
+
+### Whose table is it?
+
+A table belongs to the **waiter serving it** — the one who opened it, or the one it was last moved to. Their name is on the table tile, the order, the bill and the receipt, and the waiter reports credit the bill to them.
+
+- **Another waiter's table opens read-only.** A waiter who opens a colleague's table sees the order with the note **Served by Name — ask a manager to move the table to you**. They cannot add, send, void, bill, split, merge, move or cancel it.
+- **Cashiers and managers can work any table** — to take payment, print the bill or fix a mistake.
+- **Moving a table to another waiter** (a shift change, a break): open the order, then **More → Transfer to another waiter…** and tap the waiter taking it over. A cashier or manager does this alone; when a waiter does it, a manager approves on the till with their own sign-in. From then on the new waiter serves the table and is credited with its bill when it is paid.
+- **Team service.** Some restaurants let any waiter serve any table. A manager can switch on **Team service** in **Settings** for that till; the tables then open normally for every waiter, and the bill is still credited to the waiter holding the table.
 
 ### 3.10 Settings — printers on this device
 
@@ -1357,7 +1371,7 @@ A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.1
 - **Paper:** 58 mm or 80 mm.
 - **Print ALL *station* slips here, from every till** — tick this on the **PC the station printer is plugged into** (for example a kitchen PC with a USB printer). Keep OrbixPOS open on that PC: it fetches new slips from the ERP every few seconds and prints them, whichever till or tablet sent the order. The floor then shows **Printing for: all tills**.
 
-A manager also sees **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
+A manager also sets **Who is serving?** and **Team service** here (3.9), and **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
 
 These settings are kept on this device only.
 
@@ -2022,7 +2036,7 @@ At the end of the chapter, **Quick reference — symptom to fix** lists every pr
 ### Check the server, step by step
 
 1. If you are signed in, sign out (your shift stays open). **Setup & diagnostics** is only on the sign-in screen.
-2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession.
+2. On the **Sign in** screen, open **Server setup**: after a *Cannot reach the ERP* message a **Server setup** link appears below **Sign in**; otherwise tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession.
 3. Look at the **ERP host** field. It should hold exactly the address your administrator gave you.
 4. Click **Test connection** and read the coloured result:
 

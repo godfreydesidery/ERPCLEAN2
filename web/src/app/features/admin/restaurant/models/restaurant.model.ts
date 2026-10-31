@@ -124,6 +124,10 @@ export interface RestaurantOrderDto {
   customerId: string | null;
   openedBy: string;
   openedByName: string;
+  /** The waiter holding the order now (ADR-0067); absent from a server before 1.7.2. */
+  waiterUid?: string | null;
+  waiterName?: string | null;
+  waiterSince?: string | null;
   openedAt: string;
   billedAt: string | null;
   billedTotalAmount: number | null;

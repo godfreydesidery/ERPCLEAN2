@@ -4,6 +4,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/restaurant.dart';
 
+/// Who is serving? on a till (ADR-0067 D-4).
+enum WaiterPrompt {
+  /// Orders go to whoever is signed in.
+  off,
+
+  /// Name and password before a new table or takeaway; remembered 3 idle minutes.
+  newOrder,
+
+  /// Name and password every time a table, takeaway or order is opened.
+  everyTable;
+
+  static WaiterPrompt parse(String? s) =>
+      WaiterPrompt.values.firstWhere((v) => v.name == s, orElse: () => WaiterPrompt.off);
+}
+
 /// Per-install configuration — the ERP host plus the local receipt-printer
 /// settings. The `/api/v1` path is identical in every environment (AS-1), so
 /// only the scheme+host+port is configurable. Surfaced on the Setup/diagnostics
@@ -18,7 +33,8 @@ class AppConfig {
     Map<String, String>? stationPrinters,
     Map<String, int>? stationWidths,
     Set<String>? agentStations,
-    this.askWaiter = false,
+    this.waiterPrompt = WaiterPrompt.off,
+    this.teamService = false,
     this.restaurantOnly = false,
     List<RestaurantWaiter>? waiters,
   })  : waiters = waiters ?? [],
@@ -59,8 +75,12 @@ class AppConfig {
   /// slips from the ERP and prints them on [stationPrinters].
   final Set<String> agentStations;
 
-  /// Shared till: ask which waiter is serving before a new order is opened.
-  bool askWaiter;
+  /// Who is serving? — when the till asks a waiter for their name and password.
+  WaiterPrompt waiterPrompt;
+
+  /// Team service: any waiter may work any table. Off = a table belongs to the
+  /// waiter holding it (ADR-0067 D-3). Managers set it.
+  bool teamService;
 
   /// This till shows only the Restaurant register (J COB 2026-10-30). Set per
   /// till, by a manager, in the restaurant Settings.
@@ -88,7 +108,10 @@ class AppConfig {
   static const String _kStations = 'cfg.stationPrinters';
   static const String _kWidths = 'cfg.stationWidths';
   static const String _kAgent = 'cfg.agentStations';
+  /// Before 1.7.2: the yes/no "shared till" switch, read once into [waiterPrompt].
   static const String _kAskWaiter = 'cfg.askWaiter';
+  static const String _kWaiterPrompt = 'cfg.waiterPrompt';
+  static const String _kTeamService = 'cfg.teamService';
   static const String _kRestaurantOnly = 'cfg.restaurantOnly';
   static const String _kWaiters = 'cfg.waiters';
 
@@ -110,7 +133,10 @@ class AppConfig {
       stationPrinters: _decodeStations(prefs.getString(_kStations)),
       stationWidths: _decodeWidths(prefs.getString(_kWidths)),
       agentStations: (prefs.getStringList(_kAgent) ?? const []).toSet(),
-      askWaiter: prefs.getBool(_kAskWaiter) ?? false,
+      waiterPrompt: prefs.containsKey(_kWaiterPrompt)
+          ? WaiterPrompt.parse(prefs.getString(_kWaiterPrompt))
+          : ((prefs.getBool(_kAskWaiter) ?? false) ? WaiterPrompt.newOrder : WaiterPrompt.off),
+      teamService: prefs.getBool(_kTeamService) ?? false,
       restaurantOnly: prefs.getBool(_kRestaurantOnly) ?? false,
       waiters: _decodeWaiters(prefs.getString(_kWaiters)),
     );
@@ -147,7 +173,10 @@ class AppConfig {
       await prefs.setString(_kWidths, jsonEncode(widths));
     }
     await prefs.setStringList(_kAgent, agentStations.toList());
-    await prefs.setBool(_kAskWaiter, askWaiter);
+    await prefs.setString(_kWaiterPrompt, waiterPrompt.name);
+    await prefs.setBool(_kTeamService, teamService);
+    // An older version reading this till's settings keeps a sensible answer.
+    await prefs.setBool(_kAskWaiter, waiterPrompt != WaiterPrompt.off);
     await prefs.setBool(_kRestaurantOnly, restaurantOnly);
     await prefs.setString(_kWaiters, jsonEncode([for (final w in waiters) w.toJson()]));
   }

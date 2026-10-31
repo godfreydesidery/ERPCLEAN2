@@ -16,6 +16,7 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.StationSlipsDto;
@@ -870,6 +871,80 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         return toDto(target);
     }
 
+    // -------------------------------------------------------------------------
+    // Transfer to another waiter (ADR-0067 D-2)
+    // -------------------------------------------------------------------------
+
+    private static final String CASHIER_PERMISSION = "POS.SESSION.OPEN";
+
+    @Override
+    public RestaurantOrderDto transfer(String uid, TransferRestaurantOrderRequest req) {
+        var order = lockLive(uid);
+        Long to = requireWaiterFor(order, req.toWaiterUid());
+        Long approvedBy = requireTransferAuthority(order, req);
+        Long from = order.currentWaiter();
+        order.transferTo(to, Instant.now());
+        touch(order);
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("from", nameOf(from));
+        detail.put("to", nameOf(to));
+        if (approvedBy != null) {
+            detail.put("approvedBy", nameOf(approvedBy));
+        }
+        audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_TRANSFER, "restaurant_orders",
+                order.getId(), order.getUid()).detail(detail));
+        return toDto(order);
+    }
+
+    /**
+     * The waiter taking the table: an active user of the order's company who may take restaurant
+     * orders and works in its branch — re-verified here, never trusted from the request.
+     */
+    private Long requireWaiterFor(RestaurantOrder order, String waiterUid) {
+        var user = users.findByUid(waiterUid.trim()).orElse(null);
+        // A waiter taking the table over for themselves is the signed-in caller, who already holds
+        // RESTAURANT.ORDER.MANAGE (the endpoint's gate). The step-up check refuses anyone vouching
+        // for themselves, so it is only for someone else — the same shortcut as servedBy().
+        boolean self = user != null && user.getId().equals(scope.actorId());
+        boolean mayTakeOrders = self || stepUpAuth.verifyAuthoriserUid(waiterUid.trim(),
+                "RESTAURANT.ORDER.MANAGE", order.getCompanyId()).authorised();
+        if (user == null || !mayTakeOrders
+                || !userLookup.isAssignedToBranch(user.getId(), order.getBranchId())) {
+            throw new IllegalArgumentException(
+                    "That person cannot take this table: they are not a waiter of this branch.");
+        }
+        return user.getId();
+    }
+
+    /**
+     * A cashier or manager acting on their own moves a table alone. A waiter — signed in on their
+     * own, or named as the one acting on a shared till — needs a manager's approval (step-up for
+     * {@link #VOID_PERMISSION}, re-verified). Returns the approving manager's id, or null.
+     */
+    private Long requireTransferAuthority(RestaurantOrder order, TransferRestaurantOrderRequest req) {
+        RequestContext.Principal caller = RequestContext.get();
+        long now = System.currentTimeMillis();
+        boolean waiterActing = req.actingWaiterUid() != null && !req.actingWaiterUid().isBlank();
+        if (!waiterActing && (permissionResolver.hasPermission(caller, CASHIER_PERMISSION, now)
+                || permissionResolver.hasPermission(caller, VOID_PERMISSION, now))) {
+            return null;
+        }
+        var verdict = stepUpAuth.verifyAuthoriserUid(req.authorisedByUid(), VOID_PERMISSION,
+                order.getCompanyId());
+        if (!verdict.authorised()) {
+            audit.recordIndependent(AuditEvent.of(AuditActions.RESTAURANT_ORDER_TRANSFER,
+                    "restaurant_orders", order.getId(), order.getUid())
+                    .detail(Map.of("outcome", "NOT_AUTHORISED",
+                            "toWaiterUid", req.toWaiterUid(),
+                            "authorisedByUid", req.authorisedByUid() == null ? "" : req.authorisedByUid())));
+            throw new ForbiddenException(
+                    "Moving a table to another waiter needs a manager's approval. Ask a manager to "
+                            + "approve it at the till, then try again.");
+        }
+        return users.findByUid(verdict.authoriserUid()).map(AppUser::getId).orElse(null);
+    }
+
     private String productName(RestaurantOrder order, RestaurantOrderLine line) {
         Product p = product(order.getCompanyId(), line.getProductId(), new HashMap<>());
         return p == null ? "of this item" : p.getName();
@@ -935,7 +1010,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                         l.unitGross(), l.gross()))
                 .toList();
         return new RestaurantBillDto(order.getUid(), order.getOrderNumber(), order.getOrderType(),
-                tableName(order), order.getGuestCount(), nameOf(order.getOpenedBy()), now,
+                tableName(order), order.getGuestCount(), nameOf(order.currentWaiter()), now,
                 order.getBillPrintCount(), req.currency(), billLines,
                 priced.net(), priced.vat(), priced.gross(), unsent);
     }
@@ -1286,8 +1361,12 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                         .collect(Collectors.toMap(PrepStation::getId, Function.identity()));
 
         Set<Long> userIds = new HashSet<>();
-        list.forEach(o -> userIds.add(o.getOpenedBy()));
+        list.forEach(o -> {
+            userIds.add(o.getOpenedBy());
+            userIds.add(o.currentWaiter());
+        });
         Map<Long, String> names = userLookup.displayNamesByIds(userIds);
+        Map<Long, String> userUids = userLookup.uidsByIds(userIds);
 
         Map<Long, Product> productCache = new HashMap<>();
         Map<Long, UnitOfMeasure> unitCache = new HashMap<>();
@@ -1320,7 +1399,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                     names.getOrDefault(o.getOpenedBy(), UNNAMED), o.getOpenedAt(),
                     o.getBilledAt(), o.getBilledTotalAmount(), o.getBillPrintCount(),
                     o.getPaidAt(), o.getSalesInvoiceUid(), o.getCancelledAt(), o.getCancelReason(),
-                    o.getNotes(), pending, lineDtos));
+                    o.getNotes(), pending, lineDtos,
+                    userUids.get(o.currentWaiter()),
+                    names.getOrDefault(o.currentWaiter(), UNNAMED), o.getServedSince()));
         }
         return out;
     }

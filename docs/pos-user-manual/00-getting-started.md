@@ -102,13 +102,13 @@ To trust a server's certificate:
 
 **How it works.** You open the **Setup & diagnostics** dialog from the sign-in screen, type the host, press **Test connection**, choose the printer settings, press **Test print**, and **Save**. Everything is remembered on the device, so you do not repeat it every day.
 
-> **Setup is only on the sign-in screen, and it is hidden.** So that nobody changes the server or printer by accident, there is no Server setup button in normal use: tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession. After the fourth tap the till says how many taps are left. The one exception: when the till cannot reach the ERP at all, a **Server setup** link appears below **Sign in** by itself, so a till pointed at the wrong server can always be put right.
+> **Setup is only on the sign-in screen, and it is hidden.** So that nobody changes the server or printer by accident, there is no Server setup button in normal use: tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession. After the fourth tap the till says how many taps are left. The one exception: when the till cannot reach the ERP at all, a **Server setup** link appears below **Sign in** by itself, so a till pointed at the wrong server can always be put right.
 >
 > To change the server or printer during a shift, sign out (your shift stays open), open **Server setup**, make the change, **Save**, and sign in again. OrbixPOS takes you straight back to your open shift.
 
 ### Setting the ERP host
 
-1. On the sign-in screen, tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.1+16*) **seven times** in quick succession (or click the **Server setup** link, if the till has just failed to reach the ERP). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
+1. On the sign-in screen, tap the version text at the bottom of the sign-in screen (for example *OrbixPOS 1.7.2+17*) **seven times** in quick succession (or click the **Server setup** link, if the till has just failed to reach the ERP). The **Setup & diagnostics** dialog opens, with the line "Point the till at your ERP server and receipt printer."
 2. In the **ERP host** field, type the address your administrator gave you. Type the scheme and the server **only** — `http://` or `https://`, the server name or IP address, and a port if your administrator gave one. For example:
    - `http://192.168.1.10:8081` — a server on your shop's network;
    - `http://localhost:8081` — the ERP running on this same PC;

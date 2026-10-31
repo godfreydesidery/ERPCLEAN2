@@ -347,14 +347,25 @@ void main() {
 
     test('per-device settings survive a restart', () async {
       final cfg = AppConfig(baseHost: 'http://x', stationWidths: {'S1': 48, 'S2': 99},
-          agentStations: {'S1'}, askWaiter: true);
+          agentStations: {'S1'}, waiterPrompt: WaiterPrompt.everyTable, teamService: true);
       await cfg.save();
       final loaded = await AppConfig.load();
       expect(loaded.stationWidths, {'S1': 48});
       expect(loaded.widthFor('S1'), 48);
       expect(loaded.widthFor('S9'), AppConfig.defaultWidthCols);
       expect(loaded.agentStations, {'S1'});
-      expect(loaded.askWaiter, isTrue);
+      expect(loaded.waiterPrompt, WaiterPrompt.everyTable);
+      expect(loaded.teamService, isTrue);
+    });
+
+    test('a till set to "ask who is serving" before 1.7.2 keeps asking before a new order',
+        () async {
+      SharedPreferences.setMockInitialValues({'cfg.askWaiter': true});
+      expect((await AppConfig.load()).waiterPrompt, WaiterPrompt.newOrder);
+      SharedPreferences.setMockInitialValues({});
+      final fresh = await AppConfig.load();
+      expect(fresh.waiterPrompt, WaiterPrompt.off);
+      expect(fresh.teamService, isFalse, reason: 'ownership is the default');
     });
 
     test('station overrides survive a restart', () async {
@@ -399,6 +410,27 @@ void main() {
     test('server JSON', () {
       final w = RestaurantWaiter.fromJson({'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
       expect(w.toJson(), {'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+    });
+  });
+
+  group('the waiter holding an order (ADR-0067)', () {
+    Map<String, dynamic> order(Map<String, dynamic> extra) => {
+          'uid': 'O1', 'orderNumber': 'ORD-0001', 'orderType': 'DINE_IN', 'status': 'OPEN',
+          'tableName': 'T1', 'openedByName': 'Baraka', 'billPrintCount': 0,
+          'pendingLineCount': 0, 'lines': <dynamic>[], ...extra,
+        };
+
+    test('a moved table names the waiter now holding it', () {
+      final o = RestaurantOrder.fromJson(order({'waiterUid': 'W2', 'waiterName': 'Neema'}));
+      expect(o.waiterUid, 'W2');
+      expect(o.waiterName, 'Neema');
+      expect(o.openedByName, 'Baraka');
+    });
+
+    test('an older server (no waiter fields) still names the opener', () {
+      final o = RestaurantOrder.fromJson(order({}));
+      expect(o.waiterUid, isNull);
+      expect(o.waiterName, 'Baraka');
     });
   });
 }

@@ -222,9 +222,23 @@ There are two ways to work with waiters; both can run in the same restaurant.
 
 - **Waiters on their own tablet or phone.** A login with the **Waiter** role opens straight onto the floor. A waiter opens orders, sends them and prints bills, but **PAY** is replaced by **Payment is taken at the cashier**: the cashier opens the same order on the till and takes payment. **Sign out** on the floor ends the waiter's session.
 - **Waiters signing in on the till itself.** The sign-in screen shows the branch's waiters as **tiles**. A waiter taps their name — the username fills in — and types their password on the **on-screen keyboard**, which appears once a name (or a field) is tapped. With many waiters there is a **Search waiters** box and an **A–Z** strip: tap a letter to see only the names starting with it. On a shared till (below), a waiter signed in this way is signed out after 3 minutes without use, so the next waiter finds the tiles. The tiles come from the ERP each time someone signs in on the till, so a new waiter appears after the next sign-in.
-- **Waiters sharing the cashier's till.** Turn on **Shared till: ask who is serving** in **Settings**. Before a new order, the till asks **Who is serving?** and the waiter signs in with their own username and password. **Who is serving?** shows the same tiles, search and keyboard. The top of the floor shows **Serving: Name**; the waiter's name is on the order, the slips and the bill. The till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+- **Waiters sharing the cashier's till.** A manager chooses **Who is serving?** in **Settings** (3.10):
+  - **Don't ask** — orders go to whoever is signed in on the till.
+  - **Ask before a new order** — before opening a table or takeaway, the waiter taps their name and types their password. The top of the floor shows **Serving: Name**; the till forgets the waiter after 3 minutes without use, or when you tap **✕** on the chip.
+  - **Ask every time a table is opened** — the waiter taps their name and types their password **every time** they open a table, a takeaway or an order from the list. Nothing is remembered. The cashier signed in on the till is a tile too (*Name (cashier)*) and confirms with their own password, so the till always knows who is standing at it.
+
+  **Who is serving?** shows the same tiles, search and keyboard as the sign-in screen. The waiter's name is on the order, the slips and the bill.
 
 A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.10) instead of the floor.
+
+### Whose table is it?
+
+A table belongs to the **waiter serving it** — the one who opened it, or the one it was last moved to. Their name is on the table tile, the order, the bill and the receipt, and the waiter reports credit the bill to them.
+
+- **Another waiter's table opens read-only.** A waiter who opens a colleague's table sees the order with the note **Served by Name — ask a manager to move the table to you**. They cannot add, send, void, bill, split, merge, move or cancel it.
+- **Cashiers and managers can work any table** — to take payment, print the bill or fix a mistake.
+- **Moving a table to another waiter** (a shift change, a break): open the order, then **More → Transfer to another waiter…** and tap the waiter taking it over. A cashier or manager does this alone; when a waiter does it, a manager approves on the till with their own sign-in. From then on the new waiter serves the table and is credited with its bill when it is paid.
+- **Team service.** Some restaurants let any waiter serve any table. A manager can switch on **Team service** in **Settings** for that till; the tables then open normally for every waiter, and the bill is still credited to the waiter holding the table.
 
 ### 3.10 Settings — printers on this device
 
@@ -234,7 +248,7 @@ A login with only the **Kitchen** role opens the **Kitchen printer** screen (3.1
 - **Paper:** 58 mm or 80 mm.
 - **Print ALL *station* slips here, from every till** — tick this on the **PC the station printer is plugged into** (for example a kitchen PC with a USB printer). Keep OrbixPOS open on that PC: it fetches new slips from the ERP every few seconds and prints them, whichever till or tablet sent the order. The floor then shows **Printing for: all tills**.
 
-A manager also sees **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
+A manager also sets **Who is serving?** and **Team service** here (3.9), and **Restaurant only — this till**: switched on, this till shows only the Restaurant register — Supermarket and Pharmacy are hidden for everyone who signs in on it, and a new shift opens in Restaurant mode.
 
 These settings are kept on this device only.
 

@@ -246,6 +246,29 @@ public class AuthServiceImpl implements AuthService {
      * caller gets a fresh session back. Clears {@code must_change_password}.
      */
     @Override
+    public void confirmOwnPassword(String password, String ip) {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.userId() == null) {
+            throw new AuthenticationException("Authentication is required.");
+        }
+        AppUser user = users.findScopedById(principal.userId()) // id from the verified JWT
+                .orElseThrow(AuthenticationException::invalidCredentials);
+        Instant now = Instant.now();
+        if (!user.isActive()) {
+            throw AuthenticationException.invalidCredentials();
+        }
+        if (user.isLocked(now)) {
+            throw new AuthenticationException(
+                    "Account is locked. Try again later or contact an administrator.");
+        }
+        if (password == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            // Separate REQUIRES_NEW tx so the lockout bookkeeping survives this request's rollback.
+            loginAttempts.recordFailure(user.getId(), ip, now);
+            throw new IllegalArgumentException("That password is not correct.");
+        }
+    }
+
+    @Override
     public TokenResponse changeOwnPassword(String currentPassword, String newPassword, String ip) {
         RequestContext.Principal principal = RequestContext.get();
         if (principal == null || principal.userId() == null) {

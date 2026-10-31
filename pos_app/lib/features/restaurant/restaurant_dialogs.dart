@@ -8,6 +8,7 @@ import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/restaurant.dart';
 import '../../services/receipt_printer.dart';
+import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/on_screen_keyboard.dart';
 import '../../widgets/ui.dart';
@@ -78,7 +79,7 @@ Future<({RestaurantOrder? order})?> pickOrderAtTable(
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
                 title: Text(o.orderNumber),
-                subtitle: Text('${o.openedByName} · '
+                subtitle: Text('${o.waiterName} · '
                     '${o.activeLines.length} items'
                     '${o.status == OrderStatus.billed ? ' · bill printed' : ''}'),
                 onTap: () => Navigator.pop(context, (order: o)),
@@ -422,15 +423,20 @@ Future<void> showBillPreview(BuildContext context,
 /// the cashier — nothing is issued; the waiter is only named on what they open
 /// and send, and the server re-verifies that on every request.
 /// Returns (uid, name), or null when backed out.
-Future<({String uid, String name})?> askWaiterSignIn(BuildContext context, WidgetRef ref) {
+///
+/// [include] is put first among the tiles — on "ask every time" the signed-in
+/// cashier confirms with their own password too (ADR-0067 D-4).
+Future<({String uid, String name})?> askWaiterSignIn(BuildContext context, WidgetRef ref,
+    {RestaurantWaiter? include}) {
   return showDialog<({String uid, String name})>(
     context: context,
-    builder: (_) => const _WaiterSignInDialog(),
+    builder: (_) => _WaiterSignInDialog(include: include),
   );
 }
 
 class _WaiterSignInDialog extends ConsumerStatefulWidget {
-  const _WaiterSignInDialog();
+  const _WaiterSignInDialog({this.include});
+  final RestaurantWaiter? include;
   @override
   ConsumerState<_WaiterSignInDialog> createState() => _WaiterSignInDialogState();
 }
@@ -471,8 +477,12 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
     _search.addListener(() => setState(() {}));
     AppConfig.load().then((cfg) {
       if (!mounted) return;
+      final first = widget.include;
       setState(() {
-        _waiters = cfg.waiters;
+        _waiters = [
+          ?first,
+          ...cfg.waiters.where((w) => w.uid != first?.uid),
+        ];
         _keys = false;  // up once a name is picked or a field is tapped
       });
       if (_waiters.isEmpty) _userFocus.requestFocus();
@@ -527,6 +537,14 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       _error = null;
     });
     try {
+      // The person signed in on this till confirms themselves with their own
+      // password: an approval check would refuse them as self-approval.
+      final me = ref.read(appControllerProvider).me;
+      if (me != null && _user.text.trim().toLowerCase() == me.username.toLowerCase()) {
+        await ref.read(authServiceProvider).confirmOwnPassword(_pass.text);
+        if (mounted) Navigator.pop(context, (uid: me.uid, name: me.displayName));
+        return;
+      }
       final v = await ref.read(stepUpServiceProvider).verify(
           username: _user.text.trim(),
           password: _pass.text,
@@ -633,6 +651,33 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------- move to another waiter (ADR-0067)
+
+/// Which waiter takes the table over. Returns null when backed out.
+Future<RestaurantWaiter?> pickWaiter(
+    BuildContext context, String title, List<RestaurantWaiter> waiters) {
+  return showDialog<RestaurantWaiter>(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: Text(title),
+      content: SizedBox(
+        width: 560,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 420),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(right: 16),
+            child: WaiterTiles(waiters: waiters, onPick: (w) => Navigator.pop(context, w)),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------- item choices (ADR-0066)
@@ -911,7 +956,7 @@ Future<RestaurantOrder?> pickOrderToMerge(
                     ListTile(
                       leading: const Icon(Icons.call_merge),
                       title: Text('${o.where} · ${o.orderNumber}'),
-                      subtitle: Text('${o.activeLines.length} items · ${o.openedByName}'),
+                      subtitle: Text('${o.activeLines.length} items · ${o.waiterName}'),
                       onTap: () => Navigator.pop(context, o),
                     ),
                 ],
@@ -1064,14 +1109,41 @@ class _StationPrintersDialogState extends State<_StationPrintersDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (widget.allowWaiterSetting) ...[
+                      const SectionLabel('Who is serving?'),
+                      RadioGroup<WaiterPrompt>(
+                        groupValue: cfg.waiterPrompt,
+                        onChanged: (v) => _change((c) => c.waiterPrompt = v ?? WaiterPrompt.off),
+                        child: Column(
+                          children: [
+                            for (final (value, title, detail) in const [
+                              (WaiterPrompt.off, "Don't ask",
+                                  'Orders go to whoever is signed in on this till.'),
+                              (WaiterPrompt.newOrder, 'Ask before a new order',
+                                  'A waiter taps their name and types their password before '
+                                      'opening a table or takeaway; the till remembers them for 3 '
+                                      'idle minutes.'),
+                              (WaiterPrompt.everyTable, 'Ask every time a table is opened',
+                                  'Name and password on every tap of a table, a takeaway or an '
+                                      'order. Nothing is remembered; the cashier confirms with '
+                                      'their own password too.'),
+                            ])
+                              RadioListTile<WaiterPrompt>(
+                                contentPadding: EdgeInsets.zero,
+                                value: value,
+                                title: Text(title),
+                                subtitle: Text(detail),
+                              ),
+                          ],
+                        ),
+                      ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Shared till: ask who is serving'),
+                        title: const Text('Team service — any waiter can serve any table'),
                         subtitle: const Text(
-                            'A waiter signs in before opening an order, and is named on the '
-                            'order, the kitchen slips and the bill.'),
-                        value: cfg.askWaiter,
-                        onChanged: (v) => _change((c) => c.askWaiter = v),
+                            'Off: a table belongs to the waiter serving it; other waiters can see '
+                            'it but not change it, and a manager moves it to another waiter.'),
+                        value: cfg.teamService,
+                        onChanged: (v) => _change((c) => c.teamService = v),
                       ),
                       const Divider(),
                     ],
