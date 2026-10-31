@@ -11,7 +11,8 @@ class ReceiptPrinterException implements Exception {
   String toString() => message;
 }
 
-/// Sends raw bytes (ESC/POS or plain text) to a Windows spooler printer.
+/// Sends raw bytes (ESC/POS or plain text) to a Windows spooler printer, or on
+/// Android to a paired Bluetooth printer (`bt_printer_android.dart`).
 ///
 /// A thin, stateless facade over the platform implementation. The real work runs
 /// on Windows desktop via the win32 print-spooler API; everywhere else (web,
@@ -30,8 +31,13 @@ class ReceiptPrinter {
   /// never work, rather than offering one that always fails.
   bool get supported => impl.rawPrintingSupported();
 
-  /// Names of installed printers, for the Setup dropdown. Empty off Windows.
+  /// Names of installed printers, for the Setup dropdown: the Windows printers,
+  /// or on Android the paired Bluetooth printers as of the last [refresh].
   List<String> listPrinters() => impl.listPrinters();
+
+  /// Re-reads the paired Bluetooth printers on Android (and asks for the
+  /// Bluetooth permission the first time). Nothing to do elsewhere.
+  Future<void> refresh() => impl.refreshPrinters();
 
   /// Sends [bytes] to the printer named [printerName] using the **RAW** spooler
   /// datatype (so ESC/POS control codes reach the device untouched). Throws

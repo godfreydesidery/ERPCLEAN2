@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -611,25 +612,84 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     // default on desktop. Esc pressed during a slow POST disposed this State mid
     // sale, which is one of the ways a committed sale used to lose its sheet. The
     // route stays put until the request settles.
+    final screen = MediaQuery.sizeOf(context);
+    // A phone: one column that scrolls. A phone held sideways: both sides, each
+    // scrolling. A till or a tablet: the sheet as it always was.
+    final narrow = screen.width < 760;
+    final short = screen.height < 600;
+    final Widget body;
+    if (narrow) {
+      // Complete sale stays pinned under the scrolling part, never below the fold.
+      body = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _left(change, compact: true),
+                  _right(compact: true, below: true, actions: false),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+            decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: AppColors.line))),
+            child: _actions(),
+          ),
+        ],
+      );
+    } else if (short) {
+      body = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: SingleChildScrollView(child: _left(change, compact: true))),
+          SizedBox(
+            width: 320,
+            child: Column(
+              children: [
+                Expanded(
+                    child: SingleChildScrollView(child: _right(compact: true, actions: false))),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                  decoration: const BoxDecoration(
+                      border: Border(
+                          left: BorderSide(color: AppColors.line),
+                          top: BorderSide(color: AppColors.line))),
+                  child: _actions(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else {
+      body = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _left(change)),
+          SizedBox(width: 320, child: _right()),
+        ],
+      );
+    }
     return PopScope(
       canPop: !_busy,
       child: Dialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        insetPadding: narrow || short
+            ? const EdgeInsets.all(8)
+            : const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 840, maxHeight: 620),
+          // A phone gets the whole height; elsewhere the sheet keeps its size.
+          constraints: BoxConstraints(maxWidth: 840, maxHeight: narrow ? screen.height : 620),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _header(),
-              Flexible(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: _left(change)),
-                    SizedBox(width: 320, child: _right()),
-                  ],
-                ),
-              ),
+              Flexible(child: body),
             ],
           ),
         ),
@@ -654,13 +714,16 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           border: Border(bottom: BorderSide(color: AppColors.line))),
       child: Row(
         children: [
-          Text(
+          Expanded(
+            child: Text(
               _resto == null
                   ? 'Payment'
                   : 'Payment · ${_resto!.order.where} · ${_resto!.order.orderNumber}'
                       '${_resto!.order.waiterName.isEmpty ? '' : ' · Waiter: ${_resto!.order.waiterName}'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          const Spacer(),
+          ),
           IconButton(
             onPressed: _busy ? null : () => Navigator.pop(context),
             icon: const Icon(Icons.close),
@@ -670,10 +733,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     );
   }
 
-  Widget _left(double change) {
+  /// [compact]: the sheet scrolls, so nothing in it may claim the leftover height.
+  Widget _left(double change, {bool compact = false}) {
     final cart = ref.watch(cartProvider);
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 14 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -701,7 +765,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           const SizedBox(height: 16),
           _tenderTypes(),
           const SizedBox(height: 14),
-          Expanded(child: _tenderList()),
+          if (compact)
+            _tenderList(shrink: true)
+          else
+            Expanded(child: _tenderList()),
           const Divider(),
           _summaryRow('Total', _gross, bold: true),
           _summaryRow('Paid', _paid),
@@ -769,14 +836,19 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     );
   }
 
-  Widget _tenderList() {
+  Widget _tenderList({bool shrink = false}) {
     if (_tenders.isEmpty) {
-      return const Center(
-        child: Text('Quick-cash or add a tender →',
-            style: TextStyle(color: AppColors.ink3)),
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: shrink ? 6 : 0),
+          child: Text(shrink ? 'Quick-cash or add a tender' : 'Quick-cash or add a tender →',
+              style: const TextStyle(color: AppColors.ink3)),
+        ),
       );
     }
     return ListView.builder(
+      shrinkWrap: shrink,
+      physics: shrink ? const NeverScrollableScrollPhysics() : null,
       itemCount: _tenders.length,
       itemBuilder: (context, i) {
         final t = _tenders[i];
@@ -925,11 +997,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     );
   }
 
-  Widget _right() {
+  /// [below]: under the amounts on a phone rather than beside them.
+  /// [actions]: false when the sheet pins Add tender / Complete sale itself.
+  Widget _right({bool compact = false, bool below = false, bool actions = true}) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-          border: Border(left: BorderSide(color: AppColors.line))),
+      padding: EdgeInsets.all(compact ? 14 : 20),
+      decoration: BoxDecoration(
+          border: below
+              ? const Border(top: BorderSide(color: AppColors.line))
+              : const Border(left: BorderSide(color: AppColors.line))),
       child: Column(
         children: [
           Container(
@@ -940,10 +1016,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             child: TextField(
               controller: _amountCtrl,
               focusNode: _amountFocus,
+              // On Android the sheet's own keypad does the typing; the system
+              // keyboard would cover half the sheet.
               autofocus: true,
               textAlign: TextAlign.right,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: defaultTargetPlatform == TargetPlatform.android
+                  ? TextInputType.none
+                  : const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [decimalInputFormatter],
               cursorColor: Colors.white,
               onChanged: (_) => setState(() {}),
@@ -974,25 +1053,39 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           if (_resto != null) ...[_splitEvenly(), const SizedBox(height: 8)],
           _quickCash(),
           const SizedBox(height: 12),
-          Expanded(child: _keypad()),
-          const SizedBox(height: 12),
-          OrbixButton(
-              label: 'Add tender',
-              icon: Icons.add,
-              kind: BtnKind.ghost,
-              block: true,
-              onPressed: _addTender),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: PayButton(
-              label: _ambiguous ? 'Retry this sale' : 'Complete sale',
-              amount: formatAmount(_gross),
-              onPressed: _busy ? null : _complete,
-            ),
-          ),
+          if (compact)
+            SizedBox(height: 216, child: _keypad())
+          else
+            Expanded(child: _keypad()),
+          if (actions) ...[
+            const SizedBox(height: 12),
+            _actions(),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _actions() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OrbixButton(
+            label: 'Add tender',
+            icon: Icons.add,
+            kind: BtnKind.ghost,
+            block: true,
+            onPressed: _addTender),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: PayButton(
+            label: _ambiguous ? 'Retry this sale' : 'Complete sale',
+            amount: formatAmount(_gross),
+            onPressed: _busy ? null : _complete,
+          ),
+        ),
+      ],
     );
   }
 

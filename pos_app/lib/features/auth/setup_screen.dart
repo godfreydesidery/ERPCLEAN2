@@ -12,7 +12,10 @@ import '../../widgets/ui.dart';
 
 /// Setup / diagnostics: configure the ERP host and the receipt printer, and test
 /// both before go-live (integrator persona). Persists everything to AppConfig.
-Future<void> showSetupDialog(BuildContext context, WidgetRef ref) {
+Future<void> showSetupDialog(BuildContext context, WidgetRef ref) async {
+  // Android: the paired Bluetooth printers, read before the picker builds.
+  await const ReceiptPrinter().refresh();
+  if (!context.mounted) return;
   return showDialog(
     context: context,
     builder: (_) => const _SetupDialog(),

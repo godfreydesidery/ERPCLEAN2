@@ -58,6 +58,11 @@ export class PosService {
     return this.http.delete<void>(`${this.tillBase}/uid/${uid}`);
   }
 
+  /** Bring a deactivated till back into use. */
+  reactivateTill(uid: string): Observable<PosTillDto> {
+    return this.http.post<PosTillDto>(`${this.tillBase}/uid/${uid}/reactivate`, {});
+  }
+
   // ── Sessions ──────────────────────────────────────────────────────────────
 
   listSessions(companyId: string, page = 0, size = 20, status?: PosSessionStatus): Observable<PosSessionPage> {

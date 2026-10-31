@@ -1,10 +1,13 @@
 package com.erp.modules.sales.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -329,5 +332,34 @@ class PosTillServiceImplTest {
         } catch (ReflectiveOperationException e) {
             throw new RuntimeException("Test helper setIdAndUid failed", e);
         }
+    }
+
+    // ---- reactivate: the reverse of deactivate ----
+
+    @Test
+    void reactivateTill_bringsADeactivatedTillBack_andAuditsIt() {
+        PosTill till = new PosTill(10L, 20L, "Till 2", 55L, 1L);
+        setIdAndUid(till, 43L, "01HXYZ0000000000000000TIL2");
+        till.setStatus(MasterStatus.INACTIVE);
+        when(tills.findByUid("01HXYZ0000000000000000TIL2")).thenReturn(Optional.of(till));
+
+        PosTillDto dto = service.reactivateTill("01HXYZ0000000000000000TIL2");
+
+        assertThat(dto.status()).isEqualTo(MasterStatus.ACTIVE);
+        assertThat(till.getStatus()).isEqualTo(MasterStatus.ACTIVE);
+        verify(scopeGuard).assertCanActIn(any(), eq(10L));
+        verify(audit).record(any());
+    }
+
+    @Test
+    void reactivateTill_refusesATillThatIsAlreadyActive() {
+        PosTill till = new PosTill(10L, 20L, "Till 1", 55L, 1L);
+        setIdAndUid(till, 42L, "01HXYZ0000000000000000TEST");
+        when(tills.findByUid("01HXYZ0000000000000000TEST")).thenReturn(Optional.of(till));
+
+        assertThatThrownBy(() -> service.reactivateTill("01HXYZ0000000000000000TEST"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("already active");
+        verify(audit, never()).record(any());
     }
 }

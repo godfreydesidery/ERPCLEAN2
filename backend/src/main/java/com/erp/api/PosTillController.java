@@ -56,4 +56,11 @@ public class PosTillController {
     public void deactivate(@PathVariable String uid) {
         tillService.deactivateTill(uid);
     }
+
+    /** Brings a deactivated till back into use (the reverse of deactivate, audited the same way). */
+    @PostMapping("/uid/{uid}/reactivate")
+    @PreAuthorize("@perm.scoped(#uid,'postill','POS.TILL.MANAGE')")
+    public PosTillDto reactivate(@PathVariable String uid) {
+        return tillService.reactivateTill(uid);
+    }
 }

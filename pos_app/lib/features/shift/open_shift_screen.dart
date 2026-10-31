@@ -73,6 +73,7 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appControllerProvider);
+    final phone = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -80,13 +81,13 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
           child: Center(
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+              padding: EdgeInsets.symmetric(horizontal: phone ? 16 : 24, vertical: phone ? 18 : 28),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 720),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _head(app),
+                    _head(app, phone: phone),
                     if (app.context?.branchFallback ?? false) ...[
                       const SizedBox(height: 14),
                       BranchFallbackBanner(app.context!.branch.name),
@@ -100,7 +101,7 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                     ],
                     const SizedBox(height: 24),
                     const SectionLabel('Business mode'),
-                    _modeCards(app),
+                    _modeCards(app, phone: phone),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -120,7 +121,7 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                     ),
                     _tillGrid(app),
                     const SizedBox(height: 24),
-                    _floatRow(app),
+                    _floatRow(app, phone: phone),
                   ],
                 ),
               ),
@@ -131,38 +132,55 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
     );
   }
 
-  Widget _head(AppData app) {
+  /// [phone]: the signed-in user shrinks to the avatar, so the header fits.
+  Widget _head(AppData app, {bool phone = false}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Brand(),
-            const SizedBox(height: 14),
-            const Text('Open shift',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text(
-              '${app.context?.company.name ?? ''} · ${app.context?.branch.name ?? ''}',
-              style: const TextStyle(color: AppColors.ink2),
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Brand(),
+              const SizedBox(height: 14),
+              const Text('Open shift',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                '${app.context?.company.name ?? ''} · ${app.context?.branch.name ?? ''}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.ink2),
+              ),
+            ],
+          ),
         ),
-        const Spacer(),
+        const SizedBox(width: 12),
         Row(
           children: [
-            Avatar(app.me?.displayName ?? '?', size: 42),
-            const SizedBox(width: 11),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(app.me?.displayName ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text('@${app.me?.username ?? ''}',
-                    style: const TextStyle(color: AppColors.ink3, fontSize: 12)),
-              ],
+            Tooltip(
+              message: app.me?.displayName ?? '',
+              child: Avatar(app.me?.displayName ?? '?', size: 42),
             ),
+            if (!phone) ...[
+              const SizedBox(width: 11),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(app.me?.displayName ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text('@${app.me?.username ?? ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.ink3, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(width: 8),
             IconButton(
               tooltip: 'Sign out',
@@ -176,7 +194,49 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
     );
   }
 
-  Widget _modeCards(AppData app) {
+  /// [phone]: one card per row, the glyph beside the words; three cards across
+  /// a phone broke "Supermarket" mid-word.
+  Widget _modeCards(AppData app, {bool phone = false}) {
+    if (phone) {
+      return Column(
+        children: [
+          for (final m in app.modes)
+            Padding(
+              padding: EdgeInsets.only(bottom: m == app.modes.last ? 0 : 8),
+              child: InkWell(
+                borderRadius: AppRadii.brLg,
+                onTap: () => ref.read(appControllerProvider.notifier).setMode(m),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: app.mode == m ? AppColors.brandSoft : AppColors.panel,
+                    borderRadius: AppRadii.brLg,
+                    border: Border.all(
+                        color: app.mode == m ? AppColors.brand : AppColors.line2, width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(m.glyph, style: const TextStyle(fontSize: 24)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(m.label,
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                            Text(m.blurb,
+                                style: const TextStyle(color: AppColors.ink2, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
     return Row(
       children: app.modes.map((m) {
         final active = app.mode == m;
@@ -345,30 +405,38 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
     );
   }
 
-  Widget _floatRow(AppData app) {
+  /// [phone]: the float above a full-width Open session button.
+  Widget _floatRow(AppData app, {bool phone = false}) {
+    final field = OrbixField(
+      label: 'Opening float (${app.currency})',
+      controller: _float,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+      ],
+      big: true,
+      prefixIcon: Icons.savings_outlined,
+    );
+    final open = OrbixButton(
+      label: 'Open session',
+      icon: Icons.lock_open,
+      large: true,
+      block: phone,
+      busy: app.busy,
+      onPressed: app.busy ? null : _open,
+    );
+    if (phone) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [field, const SizedBox(height: 12), open],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Expanded(
-          child: OrbixField(
-            label: 'Opening float (${app.currency})',
-            controller: _float,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
-            ],
-            big: true,
-            prefixIcon: Icons.savings_outlined,
-          ),
-        ),
+        Expanded(child: field),
         const SizedBox(width: 16),
-        OrbixButton(
-          label: 'Open session',
-          icon: Icons.lock_open,
-          large: true,
-          busy: app.busy,
-          onPressed: app.busy ? null : _open,
-        ),
+        open,
       ],
     );
   }
