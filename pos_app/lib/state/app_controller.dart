@@ -11,6 +11,7 @@ import '../models/context.dart';
 import '../models/enums.dart';
 import '../models/parties.dart';
 import '../models/pos.dart';
+import '../services/receipt_printer.dart';
 import 'providers.dart';
 
 /// Where the app is in the shift flow.
@@ -154,6 +155,9 @@ class AppController extends Notifier<AppData> {
   /// One-time startup: load persisted config, wire the auth-lost callback,
   /// restore any session, and resolve context. Falls back to login on failure.
   Future<void> bootstrap() async {
+    // Android: read the paired Bluetooth printers now, so the "Nearby devices"
+    // permission is asked when the app opens rather than at the first receipt.
+    await const ReceiptPrinter().refresh();
     final config = await AppConfig.load();
     ref.read(baseHostProvider.notifier).set(config.baseHost);
     ref.read(apiClientProvider).onAuthLost = onAuthLost;

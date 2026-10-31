@@ -1020,7 +1020,10 @@ Future<RestaurantTable?> pickTable(BuildContext context,
 /// [allowWaiterSetting] is false where waiter sign-in makes no sense (a kitchen
 /// printer login).
 Future<void> showStationPrinters(BuildContext context, List<PrepStation> stations,
-    {bool allowWaiterSetting = true, bool allowRestaurantOnly = false}) {
+    {bool allowWaiterSetting = true, bool allowRestaurantOnly = false}) async {
+  // Android: the paired Bluetooth printers, read before the picker builds.
+  await const ReceiptPrinter().refresh();
+  if (!context.mounted) return;
   return showDialog<void>(
     context: context,
     builder: (_) => _StationPrintersDialog(
@@ -1227,6 +1230,7 @@ class _StationPrintersDialogState extends State<_StationPrintersDialog> {
                 flex: 2,
                 child: DropdownButtonFormField<int>(
                   initialValue: cfg.widthFor(s.uid),
+                  isExpanded: true,
                   decoration: const InputDecoration(isDense: true, labelText: 'Paper'),
                   items: const [
                     DropdownMenuItem(value: 32, child: Text('58 mm')),

@@ -1,8 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The ERP is reached over the network. Flutter adds this only to debug builds. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Printing to a paired Bluetooth printer: the built-in printer of most Android POS
+         devices (e.g. Sunmi InnerPrinter) or a standalone Bluetooth receipt printer. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- usesCleartextTraffic: a shop's ERP is often plain http on the LAN
+         (http://192.168.x.x:8081), the same as the Windows tills; Android blocks it otherwise. -->
     <application
-        android:label="pos_app"
+        android:label="Orbix POS"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
@@ -27,6 +29,27 @@ class PharmacyRegister extends ConsumerStatefulWidget {
 class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
+
+  /// On Android the search box takes the scanner without the system keyboard,
+  /// which would otherwise pop up over the lines after every item; a tap on the
+  /// box brings it up for typing.
+  static final bool _android = defaultTargetPlatform == TargetPlatform.android;
+  bool _typing = false;
+
+  void _refocusSearch() {
+    if (_android && _typing && mounted) {
+      setState(() => _typing = false);
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    }
+    _searchFocus.requestFocus();
+  }
+
+  void _typeInSearch() {
+    if (!_android || _typing) return;
+    setState(() => _typing = true);
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+  }
   final _prescriber = TextEditingController();
   final _rxNo = TextEditingController();
 
@@ -51,7 +74,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
   void _load() {
     // No catalogue preload — products/prices are fetched fresh per action so the
     // till never shows stale data.
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   @override
@@ -207,7 +230,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
 
   void _reset() {
     _search.clear();
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   /// Small red tag on a dispensed line when the branch on-hand is known and
@@ -250,26 +273,55 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     if (mounted) {
       _prescriber.clear();
       _rxNo.clear();
-      _searchFocus.requestFocus();
+      _refocusSearch();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: _main()),
-        SizedBox(width: 360, child: _side()),
-      ],
-    );
+    return LayoutBuilder(builder: (context, box) {
+      // A phone or a tablet in portrait: the totals and PAY sit under the lines.
+      // A phone held sideways: the totals beside the lines, not on top of them.
+      if (box.maxWidth < 860 && box.maxHeight < 520) {
+        return Row(
+          children: [
+            Expanded(child: _main()),
+            Container(
+              width: 280,
+              decoration: const BoxDecoration(
+                  border: Border(left: BorderSide(color: AppColors.line))),
+              child: SingleChildScrollView(child: _totals()),
+            ),
+          ],
+        );
+      }
+      if (box.maxWidth < 860) {
+        return Column(
+          children: [
+            Expanded(child: _main(narrow: true)),
+            Container(
+              decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.line))),
+              child: _totals(),
+            ),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: _main()),
+          SizedBox(width: box.maxWidth >= 1180 ? 360 : 300, child: _side()),
+        ],
+      );
+    });
   }
 
-  Widget _main() {
+  Widget _main({bool narrow = false}) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(narrow ? 10 : 16),
       child: Column(
         children: [
-          _rxBar(),
+          _rxBar(narrow: narrow),
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
@@ -286,6 +338,8 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                   child: TextField(
                     controller: _search,
                     focusNode: _searchFocus,
+                    keyboardType: _android && !_typing ? TextInputType.none : null,
+                    onTap: _typeInSearch,
                     decoration: const InputDecoration(
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
@@ -301,25 +355,15 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
             ),
           ),
           const SizedBox(height: 12),
-          Expanded(child: _lineTable()),
+          Expanded(child: _lineTable(narrow: narrow)),
         ],
       ),
     );
   }
 
-  Widget _rxBar() {
+  Widget _rxBar({bool narrow = false}) {
     final cart = ref.watch(cartProvider);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.panel,
-        borderRadius: AppRadii.brLg,
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
+    final patient = InkWell(
               borderRadius: AppRadii.brSm,
               onTap: () => showCustomerPicker(context, ref),
               child: Container(
@@ -354,24 +398,31 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                   ],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OrbixField(
-                controller: _prescriber, hint: 'Prescriber', label: null),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 130,
-            child: OrbixField(controller: _rxNo, hint: 'Rx #'),
-          ),
-        ],
+            );
+    final rx = [
+      Expanded(
+        child: OrbixField(controller: _prescriber, hint: 'Prescriber', label: null),
       ),
+      const SizedBox(width: 10),
+      SizedBox(
+        width: narrow ? 110 : 130,
+        child: OrbixField(controller: _rxNo, hint: 'Rx #'),
+      ),
+    ];
+    return Container(
+      padding: EdgeInsets.all(narrow ? 10 : 12),
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: AppRadii.brLg,
+        border: Border.all(color: AppColors.line),
+      ),
+      child: narrow
+          ? Column(children: [patient, const SizedBox(height: 8), Row(children: rx)])
+          : Row(children: [Expanded(child: patient), const SizedBox(width: 10), ...rx]),
     );
   }
 
-  Widget _lineTable() {
+  Widget _lineTable({bool narrow = false}) {
     final cart = ref.watch(cartProvider);
     final ctrl = ref.read(cartProvider.notifier);
     if (cart.lines.isEmpty) {
@@ -436,7 +487,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                 ),
                 _qtyStepper(l, ctrl),
                 SizedBox(
-                  width: 108,
+                  width: narrow ? 84 : 108,
                   child: NumText(formatAmount(l.previewGross),
                       style: numStyle(weight: FontWeight.w700)),
                 ),
@@ -482,7 +533,6 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       );
 
   Widget _side() {
-    final cart = ref.watch(cartProvider);
     return Container(
       decoration: const BoxDecoration(
           color: AppColors.panel,
@@ -490,7 +540,15 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       child: Column(
         children: [
           const Spacer(),
-          Container(
+          _totals(),
+        ],
+      ),
+    );
+  }
+
+  Widget _totals() {
+    final cart = ref.watch(cartProvider);
+    return Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             color: AppColors.panel2,
@@ -527,10 +585,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
+          );
   }
 
   Widget _totalRow(String l, String v) => Padding(

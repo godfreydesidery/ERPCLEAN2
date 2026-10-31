@@ -14,3 +14,5 @@ Future<void> printRaw(String printerName, List<int> bytes) async {
   throw ReceiptPrinterException(
       'Receipt printing is only available on the Windows desktop app.');
 }
+
+Future<void> refreshPrinters() async {}
