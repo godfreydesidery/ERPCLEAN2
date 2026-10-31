@@ -6,6 +6,7 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
@@ -162,6 +163,14 @@ public class RestaurantOrderController {
     public RestaurantOrderDto merge(@PathVariable String uid,
                                     @Valid @RequestBody MergeRestaurantOrderRequest request) {
         return orders.merge(uid, request);
+    }
+
+    /** Hands the order to another waiter (ADR-0067): a cashier or manager, or with approval. */
+    @PostMapping("/uid/{uid}/transfer")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
+    public RestaurantOrderDto transfer(@PathVariable String uid,
+                                       @Valid @RequestBody TransferRestaurantOrderRequest request) {
+        return orders.transfer(uid, request);
     }
 
     @PostMapping("/uid/{uid}/bill")

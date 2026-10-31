@@ -36,5 +36,10 @@ public record RestaurantOrderDto(
         String cancelReason,
         String notes,
         int pendingLineCount,
-        List<RestaurantOrderLineDto> lines
+        List<RestaurantOrderLineDto> lines,
+        /** The waiter holding the order now (ADR-0067): the last transfer's, else the opener. */
+        String waiterUid,
+        String waiterName,
+        /** When it was transferred to them; null while the opener still holds it. */
+        Instant waiterSince
 ) {}

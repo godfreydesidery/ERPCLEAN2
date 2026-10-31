@@ -31,8 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * The restaurant reports per waiter (J COB 2026-10-30): sales, paid bills and pending bills. One
  * waiter or all of them; one branch or every branch the caller may read.
  *
- * <p>The waiter is whoever opened the order ({@code restaurant_orders.opened_by}): the waiter
- * signed in on the till, or the cashier when nobody else was (ADR-0066 D-8). The cashier is the
+ * <p>The waiter is whoever holds the order: the last waiter it was transferred to
+ * ({@code served_by}, ADR-0067), else whoever opened it — the waiter signed in on the till, or the
+ * cashier when nobody else was (ADR-0066 D-8). A bill counts for the waiter holding it when paid. The cashier is the
  * till session's cashier, else whoever finalised the receipt. Money is the receipt's gross in the
  * company's base currency ({@link BaseCurrencySql}); a voided receipt is listed but never summed.
  * Scalar cross-module reads by native SQL, the same pattern as {@link SalesReportQuery}.
@@ -75,7 +76,7 @@ public class RestaurantReportQuery {
                 ), 0) AS amount
                 FROM restaurant_orders o
                 JOIN sales_invoices i ON i.id = o.sales_invoice_id
-                JOIN app_users u      ON u.id = o.opened_by
+                JOIN app_users u      ON u.id = COALESCE(o.served_by, o.opened_by)
                 WHERE o.company_id = ?
                   AND o.status = 'PAID'
                   AND i.status = 'FINALISED'
@@ -131,7 +132,7 @@ public class RestaurantReportQuery {
                           FROM sales_invoice_payments p WHERE p.invoice_id = i.id) AS tenders
                 FROM restaurant_orders o
                 JOIN sales_invoices i       ON i.id = o.sales_invoice_id
-                JOIN app_users u            ON u.id = o.opened_by
+                JOIN app_users u            ON u.id = COALESCE(o.served_by, o.opened_by)
                 LEFT JOIN restaurant_tables t ON t.id = o.restaurant_table_id
                 LEFT JOIN pos_sessions ps   ON ps.id = i.pos_session_id
                 LEFT JOIN app_users cs      ON cs.id = ps.cashier_id
@@ -187,7 +188,7 @@ public class RestaurantReportQuery {
                            AND l.parent_line_id IS NULL) AS items,
                        o.billed_total_amount
                 FROM restaurant_orders o
-                JOIN app_users u              ON u.id = o.opened_by
+                JOIN app_users u              ON u.id = COALESCE(o.served_by, o.opened_by)
                 LEFT JOIN restaurant_tables t ON t.id = o.restaurant_table_id
                 WHERE o.company_id = ?
                   AND o.status IN ('OPEN', 'BILLED')
@@ -291,7 +292,7 @@ public class RestaurantReportQuery {
             if (found.isEmpty()) {
                 throw NotFoundException.of("Waiter", waiterUid);
             }
-            sql.append(" AND o.opened_by = ?");
+            sql.append(" AND COALESCE(o.served_by, o.opened_by) = ?");
             params.add(found.get(0)[0]);
             waiterName = (String) found.get(0)[1];
         }
