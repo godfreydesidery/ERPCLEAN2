@@ -429,6 +429,8 @@ Nothing in Phase 1 should start until all eight are closed. Record the answer in
 
 **Every decision is now taken.** What remains is build work, not deliberation.
 
+> **Update 2026-10-31:** D-4, D-5, D-6 and D-8 were re-answered on the shared-instance premise, and P4-2b's scope set — see **§14.1**. The remaining build work is §14.2.
+
 **The owner chose the SHARED INSTANCE (D-11) on 2026-08-15.** That single answer settles the three
 that looked open — by making all of them REQUIRED rather than not-applicable. D-4 (RLS), D-5
 (per-tenant restore) and D-6 (departure) all turn on whether one database holds two customers, and it
@@ -2458,6 +2460,51 @@ reversed: legacy usernames are never rewritten, and the POS stores only a host.
 | 2026-08-14 | **New §12 — release strategy.** Answers two questions the phase list never did: deploy per phase or once at the end, and when the customer is told. Records the deployment fact that constrains everything: **web and API are ONE artefact** (`infra/prod/Dockerfile` compiles the Angular SPA into the Spring Boot jar's static resources), so every deploy ships both and the SPA updates itself — the **POS is the only separately-deployed client and on current scope needs no change at all**, to be confirmed before P2-2c. **Three environments, not two:** QA stays permanently single-tenant and mirrors production, one batch ahead; a new **disposable rehearsal stack** restored from a production dump carries the migration rehearsals and the two-org probe; production is continuously updated. Rationale: QA has one durable never-wiped volume, so giving it a second organisation would permanently disqualify it from validating the single-tenant releases the live customer actually runs. **"All 8 phases on QA, then one production update" evaluated and rejected**, with five reasons — QA's synthetic data cannot exercise the real risk (migration lock time, `audit_logs` volume, already-adopted `is_system` roles); it concentrates all risk into the one deploy with the worst rollback; **shadow mode becomes theatre** without real traffic; QA cannot be single- and multi-tenant at once; and production would sit unpatched for months while `develop` drifts. **Replaced by: stream the invisible work, batch the visible work** — so the customer perceives *one* change (Phase 6), while the technical risk stays spread across many small revertible deploys. Adds the **A–H stage sequence** with deploy counts and what the client sees at each, and records the key scheduling call: **Phase 6 is gated only on Phase 2, so run it in parallel with Phase 3** rather than after it — Phase 3's pace is set by observation windows, which the web work can absorb for free. §12.5 notes the single customer-facing communication is Phase 6 and is about screens, not credentials — the payoff of never rewriting usernames. Change log renumbered §12 → §13. | owner |
 | 2026-08-14 | **Implementation started — Stage A opened on `feat/multitenancy-phase-0`.** Two decisions closed, both of which gated Phase 1's DDL. **D-9 resolved (b)**: the ~20 aggregate-root hedge, with columns added **nullable in V99 and left unconstrained** — populated forward by app code from Phase 2 and backfilled by a bounded background pass, deliberately *not* in V101's `NOT NULL` set, since backfilling twenty transactional tables would give back exactly the migration window that cutting `audit_logs` bought. Root list verified against the shipped schema, with a naming correction: the table is **`stock_movements`**, not `stock_move` as §9 and CLAUDE.md invariant 9 both say. **P0-1b promoted to D-10 and resolved**: email scoped to `(organisation_id, email)`, swapped in V101 *after* the `SET NOT NULL` (a composite unique would otherwise permit duplicates while the column is nullable) — inert at one organisation, and it costs §5.1 its "purely additive `app_users`" claim, which is now stated plainly rather than implied. Adds [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql), a read-only script closing P0-1c and P1-0 across prod and QA. **ADR numbering corrected: next free is ADR-0062**, not 0060 — both 0060 and 0061 are taken. Six of ten decisions now closed; every decision gating Phase 1 is closed. | owner |
 | 2026-08-14 | **P0-1c / P1-0 MEASURED on QA and on the live production client.** 19 read-only blocks, zero errors on both; a fresh backup taken on each box first (production via the supported `orbixerp.sh backup`). **The go/no-go gate passes: `organisations = 1` on both** — QA "ERP QA", production "Kilimanjaro" — so §5.1's self-sufficient V101 is valid as written. Full results recorded against P0-1c. **One plan claim is refuted by the data:** the `ROOT_BYPASS` inflation behind the `audit_logs` cut is a **QA artefact** — QA is 28% `ROOT.BYPASS`, production has none in its top 15 and is dominated by real business actions, at 6,265 rows / 3.4 MB. The cut is now hygiene rather than necessity and the §5.1 box says so; the reasoning must not be restated as "the table is huge". **Three findings strengthen the design:** COALESCE beats actor-only by **545 rows (8.7%)** on production versus 86 on QA, validating the step-3 key correction; `pass_d = 0` on production, so the sole-organisation fallback carries **nobody** and the V101 derivation is robust on real data; and **zero users have an email on either estate**, making D-10's index swap a literal no-op. **Two items cleared:** H-5 ships safely (0 revoked, 0 inactive `user_branch` rows on both), and P1-8's `permission denied` risk is resolved. **One item confirmed on a live client:** the append-only audit invariant **was never applied** — the `erp` role holds UPDATE, DELETE and TRUNCATE on `audit_logs` in production (**P8-9**). **Production topology recorded:** the client runs `orbixerp-api:1.6.1` from a `dist/` bundle with native host Postgres at `/opt/orbixerp`, not the `infra/prod` compose topology — so §5.1's and §10's offline-estate analysis applies to a real paying customer. | owner |
+| 2026-10-31 | **Shared-instance readiness (§14).** Owner decisions: D-5/D-6 whole-instance PITR + per-tenant export + tested per-tenant delete; D-4 RLS rejected with compensating build-time and sweep checks; D-8 shared server does not fiscalise until the TRA adapter exists; P4-2b MFA optional for everyone, with backup codes. Work items R-1…R-10 listed; plan only, no code. | owner |
+
+## 14. Shared-instance readiness — the remaining work (2026-10-31)
+
+Phases 0–7 are done. The server can already create a tenant (`POST /organisations`, `ORG.CREATE`,
+platform-only) and isolation is proven between two organisations (`TwoOrganisationIsolationIT`).
+This section is what still stands between that and a shared server that is **fully ready** for
+customer #2. The owner asked for "enablement, so that we are fully ready" and took four decisions on
+2026-10-31; they supersede the earlier entries for D-4, D-5, D-6 and D-8 and close P4-2b's scope.
+
+### 14.1 Decisions — 2026-10-31
+
+| Item | Decision | Supersedes |
+|---|---|---|
+| **D-5 / D-6** restore and departure | **Whole-instance point-in-time restore** + **per-tenant export** + a **tested per-tenant delete** on departure. Restoring one tenant to an earlier state is a documented **support procedure** (restore into a scratch database, repair that tenant), not a product feature. | D-5 "open", D-6 "departure reopened" |
+| **D-4** row-level security | **Rejected**, deliberately, on the shared-instance premise. Compensating controls instead: a **build-time rule** that every query on a tenant table is scoped, and a **cross-tenant sweep test** over every endpoint (R-3). | D-4 "reopened by D-11" |
+| **D-8** fiscalisation | The shared server **does not fiscalise**: a tenant cannot be created while a fiscal provider is enabled, and a provider cannot be enabled while more than one tenant exists (R-1). Per-tenant provider settings are built **with the real TRA adapter**, which does not exist yet. | D-8 "per-tenant fiscalisation: YES" (still the end state; deferred to the adapter) |
+| **P4-2b** two-factor sign-in | **Optional for everyone** (TOTP authenticator app). Nobody is forced — including the platform operator and tenant admins. Backup codes: **yes** (a new table — DDL to the owner before it is written). | P4-2b "MFA on tiers 2 and 3" |
+
+**Consequence to accept knowingly:** with MFA optional and no RLS, the security of the platform
+account rests on its password and on the application's predicates plus the R-3 checks. Both are
+recorded choices, revisitable without a schema change (MFA can be made mandatory per tier later).
+
+### 14.2 Work items
+
+| # | Item | What it covers | Size | Schema |
+|---|---|---|---|---|
+| **R-1** | Fiscal guard (D-8) | Tenant creation refused while a fiscal provider is enabled; a provider cannot be enabled with more than one tenant. Enforced in the service, not by a boot-time flag (§0: no tenancy-mode flag). | S | No |
+| **R-2** | Platform console (web) | List tenants; create (organisation, company, branch, admin, price list, walk-in customer, till); suspend / reactivate. Platform account only (`ORG.CREATE`, `ORG.SUSPEND`). | M | No |
+| **R-3** | Isolation checks in place of RLS (D-4) | (a) Build-time rule: every repository query on a tenant table carries a company or organisation predicate. (b) Two-tenant sweep: every list and detail endpoint called as tenant A must never return a tenant-B uid. Fails the build, not a report. | M | No |
+| **R-4** | Signing-key custody (P8-7) | Key from a secret store (the `file` mode already loads a mounted key); rotation with a key id, old key accepted during the changeover; runbook; blast-radius text in `docs/ops/jwt-keys.md` updated to "every tenant". | S–M | No |
+| **R-5** | Shared server stack (D-11) | A new deployment, not an existing client box: compose, connection-pool sizing, **one app node** (the scheduler is not multi-node safe, P8-6), per-tenant metrics (P8-4 already tags them), onboarding runbook. | M | No |
+| **R-6** | Point-in-time restore (D-5) | Continuous WAL archiving + base backups, restore runbook, a timed drill. The one-tenant support procedure written and rehearsed once. | M | No |
+| **R-7** | Per-tenant export (D-6) | Every row of one organisation (org-scoped and company-scoped tables) as a portable archive: one file per table + a manifest with counts. Platform-only, audited. | L | No |
+| **R-8** | Per-tenant delete on departure (D-6) | Only after export, suspension and a grace period. Dry-run count report first, then an ordered deletion across the tables in FK order; audited; drilled on a restored copy. Highest-risk item in the list. | L | No |
+| **R-9** | Optional two-factor sign-in (P4-2b) | Enrol / disable on the web profile and a second step at sign-in on **web and POS**; secret stored encrypted (key from the environment); admin reset; backup codes. | M–L | **Yes** — backup-code table; DDL to the owner first |
+| **R-10** | Per-tenant email identity (P8-5) | Display name = the tenant's name, Reply-To = the company's contact email, one platform sending address. Mail is unconfigured on every estate today. | S | No |
+
+**Order:** the guards first (R-1, R-3), then what is needed to operate (R-2, R-4, R-5, R-6), then
+departure (R-7, R-8), then the extras (R-9, R-10).
+
+**Follow-ups, not blocking customer #2:** per-tenant fairness in the outbox (`ORDER BY occurredAt`,
+batch 100, serial), an outbox purge path, multi-node operation (scheduler locks).
+
+**Status:** planned only. The owner asked that no code be changed yet (2026-10-31).
 
 ---
 
