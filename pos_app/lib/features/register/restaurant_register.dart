@@ -855,11 +855,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     final order = _order;
     if (order == null) return _floor();
     return LayoutBuilder(builder: (context, box) {
-      if (box.maxWidth >= _tabletBreakpoint) {
+      // A phone held sideways is wide but short: tabs would leave the ticket no
+      // room for its lines and PAY, so the two panes sit side by side there too.
+      final landscapePhone = box.maxWidth >= 640 && box.maxHeight < 500;
+      if (box.maxWidth >= _tabletBreakpoint || landscapePhone) {
         return Row(
           children: [
             Expanded(child: _menuPane()),
-            SizedBox(width: 400, child: _ticket(order)),
+            SizedBox(width: landscapePhone ? 330 : 400, child: _ticket(order)),
           ],
         );
       }
@@ -1252,7 +1255,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
-        mainAxisExtent: 110,
+        // Room for a two-line dish name under the icon, plus the price.
+        mainAxisExtent: 124,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),

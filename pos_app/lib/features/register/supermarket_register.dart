@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,27 @@ class SupermarketRegister extends ConsumerStatefulWidget {
 class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   final _search = TextEditingController();
   late final FocusNode _searchFocus = FocusNode(onKeyEvent: _onSearchKey);
+
+  /// On Android the search box takes the scanner without the system keyboard:
+  /// it keeps focus after every item, and a keyboard popping up each time would
+  /// cover the basket. A tap on the box brings the keyboard up for typing.
+  static final bool _android = defaultTargetPlatform == TargetPlatform.android;
+  bool _typing = false;
+
+  void _refocusSearch() {
+    if (_android && _typing && mounted) {
+      setState(() => _typing = false);
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    }
+    _searchFocus.requestFocus();
+  }
+
+  void _typeInSearch() {
+    if (!_android || _typing) return;
+    setState(() => _typing = true);
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+  }
   final _resultsScroll = ScrollController();
   List<Product> _results = const [];
   int _resultIndex = -1; // highlighted row in the results dropdown (-1 = none)
@@ -57,6 +79,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   final _numCtrl = TextEditingController();
   final _numFocus = FocusNode();
   _NumTarget _target = _NumTarget.qty;
+
+  /// Phone layout: the number pad is folded away until a quantity or discount
+  /// is being keyed, so the basket keeps the screen.
+  bool _phoneKeys = false;
 
   Catalogue get _cache => ref.read(catalogProvider);
   StockCache get _stock => ref.read(stockCacheProvider);
@@ -96,7 +122,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   void _load() {
     // No catalogue preload — products and prices are fetched fresh per action so
     // the till never shows stale data (a backend price/catalogue change is live).
-    _searchFocus.requestFocus();
+    _refocusSearch();
     _refreshParked();
   }
 
@@ -374,7 +400,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _debounce?.cancel();
     _search.clear();
     _setResults(const [], '');
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   // --------------------------------------------------------------- numpad
@@ -416,7 +442,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _numCtrl.clear();
     // Scanner-first: hand focus back to the search box so the next scan lands
     // there, not in the numpad.
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   // ---------------------------------------------------------- hold / recall
@@ -452,7 +478,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     showToast(context, 'Sale on hold. Use Recall when the customer is back.',
         ok: true);
     await _refreshParked();
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   /// POS-06: bring a held basket back. Lines are re-priced by the server for
@@ -503,7 +529,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       showToast(context,
           '$skipped item(s) could not be restored — their unit is no longer set up. Scan them again.');
     }
-    _searchFocus.requestFocus();
+    _refocusSearch();
   }
 
   Future<void> _pay() async {
@@ -513,18 +539,317 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       return;
     }
     await openPaymentSheet(context, ref);
-    if (mounted) _searchFocus.requestFocus();
+    if (mounted) _refocusSearch();
   }
 
   // --------------------------------------------------------------- build
 
+  /// Below this width the basket and the number pad no longer fit side by side:
+  /// phones, and tablets in portrait, get the one-column layout.
+  static const double _phoneBelow = 860;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return LayoutBuilder(builder: (context, box) {
+      if (box.maxWidth < _phoneBelow) return _phone(box);
+      // A 1024 x 768 till has ~1000 px: a narrower pad leaves the basket its room.
+      final side = box.maxWidth >= 1180 ? 340.0 : 290.0;
+      return Row(
+        children: [
+          Expanded(child: _left()),
+          SizedBox(width: side, child: _numpadPanel()),
+        ],
+      );
+    });
+  }
+
+  // --------------------------------------------------------------- phone
+
+  /// Phones and tablets in portrait: search, the basket as cards, and the
+  /// customer, hold/recall and PAY underneath — the number pad opens on demand.
+  /// A phone held sideways (little height) puts the controls beside the basket.
+  Widget _phone(BoxConstraints box) {
+    final cart = ref.watch(cartProvider);
+    final basket = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              _searchBar(),
+              const SizedBox(height: 10),
+              Expanded(child: _phoneBasket(cart)),
+            ],
+          ),
+          if (_results.isNotEmpty)
+            Positioned(top: 52, left: 0, right: 0, child: _resultsOverlay()),
+        ],
+      ),
+    );
+    if (box.maxHeight < 520) {
+      return Row(
+        children: [
+          Expanded(child: basket),
+          SizedBox(
+            width: 300,
+            child: Container(
+              decoration: const BoxDecoration(
+                  color: AppColors.panel, border: Border(left: BorderSide(color: AppColors.line))),
+              child: SingleChildScrollView(child: _phoneControls(cart)),
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
       children: [
-        Expanded(child: _left()),
-        SizedBox(width: 340, child: _numpadPanel()),
+        Expanded(child: basket),
+        Container(
+          decoration: const BoxDecoration(
+              color: AppColors.panel, border: Border(top: BorderSide(color: AppColors.line))),
+          // The pad and the footer never take more than two thirds of the height.
+          constraints: BoxConstraints(maxHeight: box.maxHeight * 0.75),
+          child: SingleChildScrollView(child: _phoneControls(cart)),
+        ),
       ],
+    );
+  }
+
+  Widget _phoneControls(CartState cart) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_phoneKeys) ...[
+            _targetToggle(),
+            _discountApprovalBar(cart),
+            const SizedBox(height: 8),
+            _numDisplay(),
+            const SizedBox(height: 8),
+            SizedBox(height: 250, child: _keys()),
+            const SizedBox(height: 10),
+          ],
+          Row(
+            children: [
+              Expanded(child: _customerChip(cart)),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: _phoneKeys ? 'Hide the number pad' : 'Number pad',
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(56, 52), padding: EdgeInsets.zero),
+                  onPressed: () => setState(() => _phoneKeys = !_phoneKeys),
+                  child: Icon(_phoneKeys ? Icons.keyboard_hide_outlined : Icons.dialpad),
+                ),
+              ),
+            ],
+          ),
+          // While keying, the pad needs the room: Hold and Recall come back with
+          // the pad closed, and PAY stays in view either way.
+          if (!_phoneKeys) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: cart.isEmpty ? null : _hold,
+                  icon: const Icon(Icons.pause_circle_outline, size: 18),
+                  label: const Text('Hold'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _recall,
+                  icon: const Icon(Icons.restore, size: 18),
+                  label: Text(_parkedCount > 0 ? 'Recall ($_parkedCount)' : 'Recall'),
+                ),
+              ),
+            ],
+          ),
+          ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: PayButton(
+              label: 'PAY · ${cart.lineCount} lines',
+              amount: formatAmount(cart.previewSubtotal),
+              onPressed: cart.isEmpty ? null : _pay,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _phoneBasket(CartState cart) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: AppColors.xlLineHard),
+      ),
+      child: cart.lines.isEmpty
+          ? _emptyGrid()
+          : ListView.separated(
+              itemCount: cart.lines.length,
+              separatorBuilder: (_, _) => const Divider(height: 1, color: AppColors.xlLine),
+              itemBuilder: (context, i) => _phoneRow(cart.lines[i], cart.selectedId),
+            ),
+    );
+  }
+
+  /// One basket line as a card: every action the till grid has — quantity,
+  /// unit, discount, remove and void — at a size a finger can hit.
+  Widget _phoneRow(CartLine line, String? selectedId) {
+    final selected = line.localId == selectedId;
+    final voided = line.voided;
+    final ctrl = ref.read(cartProvider.notifier);
+    final muted = voided ? AppColors.ink3 : AppColors.xlInk;
+    final strike = voided ? TextDecoration.lineThrough : null;
+
+    void edit(_NumTarget t) {
+      ctrl.select(line.localId);
+      setState(() {
+        _target = t;
+        _phoneKeys = true;
+      });
+      _numFocus.requestFocus();
+    }
+
+    Widget chip(Widget child, {VoidCallback? onTap, bool hi = false}) => InkWell(
+          borderRadius: AppRadii.brSm,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: hi ? AppColors.brandSoft : AppColors.panel2,
+              borderRadius: AppRadii.brSm,
+              border: Border.all(color: AppColors.line2),
+            ),
+            child: child,
+          ),
+        );
+
+    final qtyHi = selected && _target == _NumTarget.qty;
+    final discHi = selected && _target == _NumTarget.disc;
+
+    return Material(
+      color: selected ? AppColors.xlSel : AppColors.panel,
+      child: InkWell(
+        onTap: () => ctrl.select(line.localId),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(line.product.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: muted,
+                                  decoration: strike)),
+                        ),
+                        if (line.product.restrictedKind.isRestricted) ...[
+                          const SizedBox(width: 6),
+                          _agePill(line.product.restrictedKind.ageLabel),
+                        ],
+                        if (!voided) _shortStockTag(line),
+                      ],
+                    ),
+                    Text(line.product.code,
+                        style: const TextStyle(
+                            fontFamily: 'Consolas', fontSize: 11.5, color: Color(0xFF5F6368))),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        chip(
+                            NumText(
+                                '× ${formatAmount(line.quantity, decimals: line.unit.fractional ? 3 : 0)}',
+                                style: numStyle(size: 13.5, color: muted)),
+                            hi: qtyHi,
+                            onTap: voided ? null : () => edit(_NumTarget.qty)),
+                        chip(
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              Text(line.unit.code,
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight:
+                                          line.unitFactor == 1 ? FontWeight.w400 : FontWeight.w700,
+                                      color: line.unitFactor == 1
+                                          ? const Color(0xFF5F6368)
+                                          : AppColors.brand)),
+                              const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF9AA0A6)),
+                            ]),
+                            onTap: voided
+                                ? null
+                                : () {
+                                    ctrl.select(line.localId);
+                                    _pickUnit(line);
+                                  }),
+                        NumText(
+                            line.unitPricePreview == null
+                                ? '@ —'
+                                : '@ ${formatAmount(line.unitPricePreview!)}',
+                            style: numStyle(
+                                size: 12.5, weight: FontWeight.w400, color: const Color(0xFF5F6368))),
+                        chip(
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Text('Disc ',
+                                  style: TextStyle(fontSize: 11.5, color: AppColors.ink3)),
+                              _discountCell(line),
+                            ]),
+                            hi: discHi,
+                            onTap: voided ? null : () => edit(_NumTarget.disc)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: NumText(formatAmount(line.previewGross),
+                        style: numStyle(size: 15, weight: FontWeight.w800, color: muted)),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: voided ? 'Undo void' : 'Void',
+                        onPressed: () => ctrl.toggleVoid(line.localId),
+                        icon: Icon(voided ? Icons.check_box : Icons.check_box_outline_blank,
+                            color: voided ? AppColors.warn : AppColors.ink3),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove',
+                        onPressed: () => ctrl.removeLine(line.localId),
+                        icon: const Icon(Icons.close, color: AppColors.ink3),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -573,6 +898,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   controller: _search,
                   focusNode: _searchFocus,
                   autofocus: true,
+                  keyboardType: _android && !_typing ? TextInputType.none : null,
+                  onTap: _typeInSearch,
                   textInputAction: TextInputAction.go,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
@@ -684,42 +1011,32 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   Widget _grid() {
     final cart = ref.watch(cartProvider);
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.panel,
-        border: Border.all(color: AppColors.xlLineHard),
-      ),
-      child: Column(
-        children: [
-          _gridHeader(),
-          Expanded(
-            child: cart.lines.isEmpty
-                ? _emptyGrid()
-                : ListView.builder(
-                    itemCount: cart.lines.length,
-                    itemBuilder: (context, i) =>
-                        _gridRow(cart.lines[i], i + 1, cart.selectedId),
-                  ),
-          ),
-        ],
-      ),
-    );
+    return LayoutBuilder(builder: (context, box) {
+      final cols = _Cols.forWidth(box.maxWidth);
+      return Container(
+        decoration: BoxDecoration(
+          color: AppColors.panel,
+          border: Border.all(color: AppColors.xlLineHard),
+        ),
+        child: Column(
+          children: [
+            _gridHeader(cols),
+            Expanded(
+              child: cart.lines.isEmpty
+                  ? _emptyGrid()
+                  : ListView.builder(
+                      itemCount: cart.lines.length,
+                      itemBuilder: (context, i) =>
+                          _gridRow(cart.lines[i], i + 1, cart.selectedId, cols),
+                    ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
-  // Code + numeric columns carry generous FIXED widths sized to their content, so
-  // figures stay aligned and readable on any screen (a flexible numeric column
-  // drifts too wide on large monitors). Only ITEM flexes — the name column fills
-  // the remaining width. Widened vs the originals per the column-width request.
-  static const _wIdx = 36.0;
-  static const _wCode = 116.0;
-  static const _wUnit = 54.0;
-  static const _wQty = 88.0;
-  static const _wPrice = 128.0;
-  static const _wDisc = 82.0;
-  static const _wTotal = 136.0;
-  static const _wAct = 30.0;
-
-  Widget _gridHeader() {
+  Widget _gridHeader(_Cols c) {
     const h = TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
@@ -747,22 +1064,22 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       ),
       child: Row(
         children: [
-          cell('#', width: _wIdx, center: true),
-          cell('Code', width: _wCode),
+          if (!c.compact) cell('#', width: c.idx, center: true),
+          if (!c.compact) cell('Code', width: c.code),
           cell('Item', flex: 1),
-          cell('Unit', width: _wUnit, center: true),
-          cell('Qty', width: _wQty, right: true),
-          cell('Price', width: _wPrice, right: true),
-          cell('Disc', width: _wDisc, right: true),
-          cell('Total', width: _wTotal, right: true),
-          cell('', width: _wAct, center: true),
-          cell('V', width: _wAct, center: true),
+          cell('Unit', width: c.unit, center: true),
+          cell('Qty', width: c.qty, right: true),
+          cell('Price', width: c.price, right: true),
+          cell('Disc', width: c.disc, right: true),
+          cell('Total', width: c.total, right: true),
+          cell('', width: c.act, center: true),
+          cell('V', width: c.act, center: true),
         ],
       ),
     );
   }
 
-  Widget _gridRow(CartLine line, int idx, String? selectedId) {
+  Widget _gridRow(CartLine line, int idx, String? selectedId, _Cols c) {
     final selected = line.localId == selectedId;
     final voided = line.voided;
     final ctrl = ref.read(cartProvider.notifier);
@@ -778,7 +1095,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       final content = InkWell(
         onTap: onTap,
         child: Container(
-          height: 30,
+          // Compact rows carry the code under the name, so they need two lines.
+          height: c.compact ? 42 : 30,
           alignment: align,
           padding: const EdgeInsets.symmetric(horizontal: 9),
           decoration: BoxDecoration(
@@ -815,43 +1133,57 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       color: selected ? AppColors.xlSel : AppColors.panel,
       child: Row(
         children: [
+          if (!c.compact)
+            cell(
+                Text('$idx',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF9AA0A6))),
+                width: c.idx,
+                align: Alignment.center,
+                bg: AppColors.xlHead,
+                onTap: () => ctrl.select(line.localId)),
+          if (!c.compact)
+            cell(
+                Text(line.product.code,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 12,
+                        color: const Color(0xFF5F6368),
+                        decoration: strike)),
+                width: c.code,
+                onTap: () => ctrl.select(line.localId)),
           cell(
-              Text('$idx',
-                  style: const TextStyle(
-                      fontSize: 12, color: Color(0xFF9AA0A6))),
-              width: _wIdx,
-              align: Alignment.center,
-              bg: AppColors.xlHead,
-              onTap: () => ctrl.select(line.localId)),
-          cell(
-              Text(line.product.code,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontFamily: 'Consolas',
-                      fontSize: 12,
-                      color: const Color(0xFF5F6368),
-                      decoration: strike)),
-              width: _wCode,
-              onTap: () => ctrl.select(line.localId)),
-          cell(
-              Row(
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Flexible(
-                    child: Text(line.product.name,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(line.product.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: muted,
+                                decoration: strike)),
+                      ),
+                      if (line.product.restrictedKind.isRestricted) ...[
+                        const SizedBox(width: 6),
+                        _agePill(line.product.restrictedKind.ageLabel),
+                      ],
+                      if (!voided) _shortStockTag(line),
+                    ],
+                  ),
+                  if (c.compact)
+                    Text(line.product.code,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: muted,
-                            decoration: strike)),
-                  ),
-                  if (line.product.restrictedKind.isRestricted) ...[
-                    const SizedBox(width: 6),
-                    _agePill(line.product.restrictedKind.ageLabel),
-                  ],
-                  if (!voided) _shortStockTag(line),
+                        style: const TextStyle(
+                            fontFamily: 'Consolas', fontSize: 11, color: Color(0xFF5F6368))),
                 ],
               ),
               flex: 1,
@@ -877,7 +1209,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       size: 14, color: Color(0xFF9AA0A6)),
                 ],
               ),
-              width: _wUnit,
+              width: c.unit,
               align: Alignment.center,
               onTap: voided
                   ? null
@@ -890,7 +1222,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                   formatAmount(line.quantity,
                       decimals: line.unit.fractional ? 3 : 0),
                   style: numStyle(size: 13.5, color: muted)),
-              width: _wQty,
+              width: c.qty,
               align: Alignment.centerRight,
               bg: qtyHi ? AppColors.brandSoft : null,
               onTap: selectQty),
@@ -901,12 +1233,12 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
                       : formatAmount(line.unitPricePreview!),
                   style: numStyle(
                       size: 13.5, weight: FontWeight.w400, color: const Color(0xFF5F6368))),
-              width: _wPrice,
+              width: c.price,
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
               _discountCell(line),
-              width: _wDisc,
+              width: c.disc,
               align: Alignment.centerRight,
               bg: discHi ? AppColors.brandSoft : null,
               onTap: selectDisc),
@@ -914,20 +1246,20 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
               NumText(formatAmount(line.previewGross),
                   style: numStyle(
                       size: 13.5, weight: FontWeight.w700, color: muted)),
-              width: _wTotal,
+              width: c.total,
               align: Alignment.centerRight,
               onTap: () => ctrl.select(line.localId)),
           cell(
               Icon(Icons.close,
                   size: 14,
                   color: voided ? AppColors.ink3 : const Color(0xFFC4C9CF)),
-              width: _wAct,
+              width: c.act,
               align: Alignment.center,
               onTap: () => ctrl.removeLine(line.localId)),
           cell(
               Icon(voided ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 15, color: voided ? AppColors.warn : AppColors.ink3),
-              width: _wAct,
+              width: c.act,
               align: Alignment.center,
               onTap: () => ctrl.toggleVoid(line.localId)),
         ],
@@ -1149,7 +1481,14 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           const SizedBox(height: 8),
           _numDisplay(),
           const SizedBox(height: 8),
-          Expanded(child: _keys()),
+          // Keys fill a short screen and stop growing on a tall one.
+          Expanded(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380), child: _keys()),
+            ),
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -1382,7 +1721,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         controller: _numCtrl,
         focusNode: _numFocus,
         textAlign: TextAlign.right,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        // The keypad beside it does the typing on Android.
+        keyboardType: _android
+            ? TextInputType.none
+            : const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [decimalInputFormatter],
         onSubmitted: (_) => _applyNumpad(),
         style: numStyle(size: 26, weight: FontWeight.w800),
@@ -1404,19 +1746,30 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   }
 
   Widget _keys() {
-    final keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '<'];
+    const rows = [
+      ['7', '8', '9'],
+      ['4', '5', '6'],
+      ['1', '2', '3'],
+      ['.', '0', '<'],
+    ];
+    // Rows share the height the panel has, so no key is ever clipped — a fixed
+    // aspect ratio cut the bottom rows off on short screens.
     return Column(
       children: [
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 3,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 1.6,
-            physics: const NeverScrollableScrollPhysics(),
-            children: keys.map((k) => _key(k)).toList(),
+        for (var r = 0; r < rows.length; r++) ...[
+          if (r > 0) const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var c = 0; c < 3; c++) ...[
+                  if (c > 0) const SizedBox(width: 8),
+                  Expanded(child: _key(rows[r][c])),
+                ],
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 8),
         Row(
           children: [
@@ -1458,6 +1811,31 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       ),
     );
   }
+}
+
+/// The basket grid's column widths for the space it has. Numeric columns stay
+/// FIXED so figures line up; only the item name flexes. From ~900 px the full
+/// set; below it (a 1024 x 768 till, a tablet) the code moves under the name
+/// and the numbers tighten, so nothing overflows.
+class _Cols {
+  const _Cols({
+    required this.idx,
+    required this.code,
+    required this.unit,
+    required this.qty,
+    required this.price,
+    required this.disc,
+    required this.total,
+    required this.act,
+  });
+
+  final double idx, code, unit, qty, price, disc, total, act;
+
+  bool get compact => code == 0;
+
+  static _Cols forWidth(double width) => width >= 900
+      ? const _Cols(idx: 36, code: 116, unit: 54, qty: 88, price: 128, disc: 82, total: 136, act: 30)
+      : const _Cols(idx: 0, code: 0, unit: 48, qty: 64, price: 92, disc: 70, total: 104, act: 28);
 }
 
 /// The list of baskets on hold for this shift (POS-06), oldest first.

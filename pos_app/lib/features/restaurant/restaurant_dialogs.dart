@@ -1230,6 +1230,7 @@ class _StationPrintersDialogState extends State<_StationPrintersDialog> {
                 flex: 2,
                 child: DropdownButtonFormField<int>(
                   initialValue: cfg.widthFor(s.uid),
+                  isExpanded: true,
                   decoration: const InputDecoration(isDense: true, labelText: 'Paper'),
                   items: const [
                     DropdownMenuItem(value: 32, child: Text('58 mm')),

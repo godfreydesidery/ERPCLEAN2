@@ -85,18 +85,21 @@ class _TopBar extends ConsumerWidget {
     final shift = app.shift;
     // A tablet in portrait has no room for the chips; the branch and session
     // are still in the session menu.
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 900;
+    // A phone: the brand mark alone, and the mode switch as a dropdown.
+    final phone = width < 600;
     return Container(
       height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: EdgeInsets.symmetric(horizontal: phone ? 8 : 18),
       decoration: const BoxDecoration(
         color: AppColors.panel,
         border: Border(bottom: BorderSide(color: AppColors.line)),
       ),
       child: Row(
         children: [
-          const Brand(),
-          const SizedBox(width: 16),
+          if (!phone) const Brand(),
+          if (!phone) const SizedBox(width: 16),
           if (ctx != null && !compact)
             InfoChip(
                 icon: Icons.store_outlined,
@@ -109,18 +112,20 @@ class _TopBar extends ConsumerWidget {
                 label: 'Session',
                 value: shift.sessionNumber,
                 ok: true),
-          if (app.isWaiter)
+          if (app.isWaiter && !compact)
             const InfoChip(
                 icon: Icons.room_service_outlined, label: 'Waiter', value: 'Orders only'),
-          if (app.isKitchenOnly)
+          if (app.isKitchenOnly && !compact)
             const InfoChip(
                 icon: Icons.print_outlined, label: 'Kitchen printer', value: 'Prints slips'),
           const Spacer(),
           // A waiter works the restaurant only; the other modes sell over a till.
           if (!app.isWaiter && !app.isKitchenOnly)
-            const Flexible(
-                flex: 4,
-                child: FittedBox(fit: BoxFit.scaleDown, child: _ModeSwitch())),
+            compact
+                ? const _ModeMenu()
+                : const Flexible(
+                    flex: 4,
+                    child: FittedBox(fit: BoxFit.scaleDown, child: _ModeSwitch())),
           const Spacer(),
           IconButton(
             tooltip: 'Session menu',
@@ -135,6 +140,55 @@ class _TopBar extends ConsumerWidget {
   }
 }
 
+/// Switching mode mid-basket would orphan lines — guard it.
+void _switchMode(BuildContext context, WidgetRef ref, BusinessMode m) {
+  final mode = ref.read(appControllerProvider).mode;
+  if (!ref.read(cartProvider).isEmpty && m != mode) {
+    showToast(context, 'Finish or clear the current sale before switching mode.');
+    return;
+  }
+  ref.read(appControllerProvider.notifier).setMode(m);
+}
+
+/// The mode switch on a narrow screen: the current mode, tap to pick another.
+/// Scaled-down pills were unreadable on a phone.
+class _ModeMenu extends ConsumerWidget {
+  const _ModeMenu();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final modes = ref.watch(appControllerProvider.select((s) => s.modes));
+    final label = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.panel2,
+        borderRadius: AppRadii.brPill,
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${mode.glyph}  ${mode.label}',
+              style: const TextStyle(
+                  fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.ink)),
+          if (modes.length > 1) const Icon(Icons.arrow_drop_down, color: AppColors.ink2),
+        ],
+      ),
+    );
+    if (modes.length < 2) return label;
+    return PopupMenuButton<BusinessMode>(
+      tooltip: 'Change mode',
+      onSelected: (m) => _switchMode(context, ref, m),
+      itemBuilder: (_) => [
+        for (final m in modes)
+          CheckedPopupMenuItem<BusinessMode>(
+              value: m, checked: m == mode, child: Text('${m.glyph}  ${m.label}')),
+      ],
+      child: label,
+    );
+  }
+}
+
 class _ModeSwitch extends ConsumerWidget {
   const _ModeSwitch();
   @override
@@ -142,7 +196,6 @@ class _ModeSwitch extends ConsumerWidget {
     final mode = ref.watch(appControllerProvider.select((s) => s.mode));
     // A restaurant-only till (J COB 2026-10-30) offers no other register.
     final modes = ref.watch(appControllerProvider.select((s) => s.modes));
-    final cart = ref.watch(cartProvider);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -156,15 +209,7 @@ class _ModeSwitch extends ConsumerWidget {
           final active = mode == m;
           return InkWell(
             borderRadius: AppRadii.brPill,
-            onTap: () {
-              // Switching mode mid-basket would orphan lines — guard it.
-              if (!cart.isEmpty && m != mode) {
-                showToast(context,
-                    'Finish or clear the current sale before switching mode.');
-                return;
-              }
-              ref.read(appControllerProvider.notifier).setMode(m);
-            },
+            onTap: () => _switchMode(context, ref, m),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(

@@ -98,6 +98,11 @@ ThemeData buildAppTheme() {
       thickness: 1,
       space: 1,
     ),
+    // Dialogs size their own content; the default 40 px side margins only
+    // matter on a phone, where they cost a fifth of the width.
+    dialogTheme: const DialogThemeData(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.panel,
