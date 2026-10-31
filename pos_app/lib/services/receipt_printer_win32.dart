@@ -8,16 +8,21 @@ import 'dart:io' show Platform;
 import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
+import 'package:flutter/services.dart' show PlatformException;
+
+import 'bt_printer_android.dart';
 import 'receipt_printer.dart' show ReceiptPrinterException;
 
-/// Raw spooler printing exists on Windows only. This file is compiled on every
-/// target that has `dart:io` — Android and the other desktops included — so the
-/// answer has to be a runtime one, not a compile-time one.
-bool rawPrintingSupported() => Platform.isWindows;
+/// Raw printing exists on Windows (the spooler) and on Android (a paired
+/// Bluetooth printer — the built-in printer of most Android POS devices). This
+/// file is compiled on every target that has `dart:io`, so the answer has to be
+/// a runtime one, not a compile-time one.
+bool rawPrintingSupported() => Platform.isWindows || Platform.isAndroid;
 
 /// Enumerates installed printers with `EnumPrinters` (level 4 — fast, name-only)
 /// over local printers and connections. Returns an empty list off Windows.
 List<String> listPrinters() {
+  if (Platform.isAndroid) return AndroidBtPrinters.cached;
   if (!Platform.isWindows) return const <String>[];
   const flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
   const level = 4;
@@ -54,9 +59,10 @@ List<String> listPrinters() {
 /// `StartPagePrinter` -> `WritePrinter` -> `EndPagePrinter` -> `EndDocPrinter`
 /// -> `ClosePrinter`. Throws a user-safe [ReceiptPrinterException] on failure.
 Future<void> printRaw(String printerName, List<int> bytes) async {
+  if (Platform.isAndroid) return _printAndroid(printerName, bytes);
   if (!Platform.isWindows) {
     throw ReceiptPrinterException(
-        'Receipt printing is only available on the Windows desktop app.');
+        'Receipt printing is only available on the Windows and Android apps.');
   }
   if (printerName.trim().isEmpty) {
     throw ReceiptPrinterException('No printer selected.');
@@ -105,4 +111,23 @@ Future<void> printRaw(String printerName, List<int> bytes) async {
       ClosePrinter(hPrinter);
     }
   });
+}
+
+/// Android: the picker name carries the paired printer's Bluetooth address.
+Future<void> _printAndroid(String printerName, List<int> bytes) async {
+  final address = AndroidBtPrinters.addressOf(printerName);
+  if (address == null) {
+    throw ReceiptPrinterException('Choose the printer again in Setup: it is not a paired Bluetooth printer.');
+  }
+  if (bytes.isEmpty) return;
+  try {
+    await AndroidBtPrinters.print(address, bytes);
+  } on PlatformException catch (e) {
+    throw ReceiptPrinterException(e.message ?? 'Could not print to the Bluetooth printer.');
+  }
+}
+
+/// Re-reads the paired Bluetooth printers on Android; nothing to do on Windows.
+Future<void> refreshPrinters() async {
+  if (Platform.isAndroid) await AndroidBtPrinters.refresh();
 }

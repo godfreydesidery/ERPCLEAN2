@@ -9,3 +9,10 @@ bundle/images/*.tar.gz
 
 # LAN / Windows-service package - contains the built jar and the WinSW binary.
 lan/
+
+# Android release signing key for OrbixPOS (keystore + passwords). NEVER committed; back it up -
+# every future update of the Android app must be signed with this same key.
+android-signing/
+
+# Android app builds (OrbixPOS APK) - delivered by the owner, never committed.
+*.apk

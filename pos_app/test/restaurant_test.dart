@@ -6,6 +6,7 @@ import 'package:pos_app/features/restaurant/station_print_agent.dart';
 import 'package:pos_app/models/auth.dart';
 import 'package:pos_app/models/restaurant.dart';
 import 'package:pos_app/state/app_controller.dart';
+import 'package:pos_app/services/bt_printer_android.dart';
 import 'package:pos_app/services/network_printer.dart';
 import 'package:pos_app/services/receipt_printer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,6 +78,8 @@ class _FakeSpooler implements ReceiptPrinter {
   bool get supported => true;
   @override
   List<String> listPrinters() => const ['USB Kitchen'];
+  @override
+  Future<void> refresh() async {}
   @override
   Future<void> printRaw(String printerName, List<int> bytes) async => printed.add(printerName);
 }
@@ -431,6 +434,18 @@ void main() {
       final o = RestaurantOrder.fromJson(order({}));
       expect(o.waiterUid, isNull);
       expect(o.waiterName, 'Baraka');
+    });
+  });
+
+  group('Android Bluetooth printer names', () {
+    test('a picker name carries the address it prints to', () {
+      expect(AndroidBtPrinters.addressOf('InnerPrinter · 00:11:22:33:44:55'), '00:11:22:33:44:55');
+      expect(AndroidBtPrinters.addressOf('BlueTooth Printer · AA:BB:CC:dd:ee:ff'), 'AA:BB:CC:dd:ee:ff');
+    });
+
+    test('a Windows printer name, or a malformed one, carries none', () {
+      expect(AndroidBtPrinters.addressOf('EPSON TM-T20II Receipt'), isNull);
+      expect(AndroidBtPrinters.addressOf('Kitchen · not-an-address'), isNull);
     });
   });
 }
