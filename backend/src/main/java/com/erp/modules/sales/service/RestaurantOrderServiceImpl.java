@@ -903,9 +903,13 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
      */
     private Long requireWaiterFor(RestaurantOrder order, String waiterUid) {
         var user = users.findByUid(waiterUid.trim()).orElse(null);
-        var verdict = stepUpAuth.verifyAuthoriserUid(waiterUid.trim(), "RESTAURANT.ORDER.MANAGE",
-                order.getCompanyId());
-        if (user == null || !verdict.authorised()
+        // A waiter taking the table over for themselves is the signed-in caller, who already holds
+        // RESTAURANT.ORDER.MANAGE (the endpoint's gate). The step-up check refuses anyone vouching
+        // for themselves, so it is only for someone else — the same shortcut as servedBy().
+        boolean self = user != null && user.getId().equals(scope.actorId());
+        boolean mayTakeOrders = self || stepUpAuth.verifyAuthoriserUid(waiterUid.trim(),
+                "RESTAURANT.ORDER.MANAGE", order.getCompanyId()).authorised();
+        if (user == null || !mayTakeOrders
                 || !userLookup.isAssignedToBranch(user.getId(), order.getBranchId())) {
             throw new IllegalArgumentException(
                     "That person cannot take this table: they are not a waiter of this branch.");

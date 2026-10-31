@@ -857,6 +857,17 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         assertThat(orders.list(null, null, null).stream().filter(o -> o.uid().equals(order.uid())))
                 .singleElement().satisfies(o -> assertThat(o.waiterName()).isEqualTo("Neema Waiter"));
 
+        // A waiter signed in on their own takes a table over for themselves, with approval
+        // (the step-up check refuses self-vouching, so the server must not use it on them).
+        setWaiterCtx("resto_baraka");
+        RestaurantOrderDto back = orders.transfer(order.uid(),
+                new TransferRestaurantOrderRequest(baraka, baraka, rootUid));
+        assertThat(back.waiterUid()).isEqualTo(baraka);
+        setRootCtx();
+        moved = orders.transfer(order.uid(), new TransferRestaurantOrderRequest(neema, null, null));
+        assertThat(moved.waiterUid()).isEqualTo(neema);
+        setCashierCtx();
+
         // Not a waiter of the branch, or the same waiter again: refused.
         assertThatThrownBy(() -> orders.transfer(order.uid(),
                 new TransferRestaurantOrderRequest("01NOTAREALUSER0000000000XX", null, rootUid)))
@@ -995,6 +1006,13 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     private void setRootCtx() {
         RequestContext.set(new RequestContext.Principal(
                 rootId, "resto_root", true, company.getId(), branch.getId(), null, orgId));
+    }
+
+    /** A waiter signed in on their own device or login. */
+    private void setWaiterCtx(String username) {
+        AppUser w = users.findByUsername(username).orElseThrow();
+        RequestContext.set(new RequestContext.Principal(
+                w.getId(), username, false, company.getId(), branch.getId(), null, orgId));
     }
 
     private void setCashierCtx() {
