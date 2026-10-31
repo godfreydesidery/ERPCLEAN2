@@ -178,6 +178,17 @@
                                 <i class="bi bi-trash me-1" aria-hidden="true"></i>Deactivate
                               }
                             </button>
+                          } @else if (t.status === 'INACTIVE') {
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    (click)="reactivate(t)"
+                                    [disabled]="rowBusyUid() === t.uid"
+                                    [attr.aria-label]="'Activate till ' + t.name">
+                              @if (rowBusyUid() === t.uid) {
+                                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                              } @else {
+                                <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>Activate
+                              }
+                            </button>
                           }
                         </td>
                       }

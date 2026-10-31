@@ -117,6 +117,23 @@ public class PosTillServiceImpl implements PosTillService {
         audit.record(AuditEvent.of(AuditActions.POS_TILL_DEACTIVATE, "pos_tills", till.getId(), till.getUid()));
     }
 
+    @Override
+    public PosTillDto reactivateTill(String uid) {
+        var till = requireTill(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), till.getCompanyId());
+        if (till.getStatus() == MasterStatus.ACTIVE) {
+            throw new IllegalArgumentException("This till is already active.");
+        }
+        if (till.getStatus() != MasterStatus.INACTIVE) {
+            throw new IllegalArgumentException("Only a deactivated till can be activated again.");
+        }
+        till.setStatus(MasterStatus.ACTIVE);
+        till.setUpdatedAt(Instant.now());
+        till.setUpdatedBy(actorId());
+        audit.record(AuditEvent.of(AuditActions.POS_TILL_REACTIVATE, "pos_tills", till.getId(), till.getUid()));
+        return toDto(till);
+    }
+
     private PosTill requireTill(String uid) {
         return tills.findByUid(uid).orElseThrow(() -> NotFoundException.of("PosTill", uid));
     }

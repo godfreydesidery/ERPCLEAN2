@@ -16,4 +16,7 @@ public interface PosTillService {
     List<PosTillDto> listTillsByBranch(Long companyId, Long branchId);
 
     void deactivateTill(String uid);
+
+    /** Brings a deactivated till back into use; refused for an active or archived one. */
+    PosTillDto reactivateTill(String uid);
 }
