@@ -1,5 +1,6 @@
 package com.erp.api;
 
+import com.erp.modules.iam.domain.dto.ConfirmOwnPasswordRequest;
 import com.erp.modules.iam.domain.dto.ChangeOwnPasswordRequest;
 import com.erp.modules.iam.domain.dto.LoginRequest;
 import com.erp.modules.iam.domain.dto.MeResponse;
@@ -69,6 +70,18 @@ public class AuthController {
                                           HttpServletRequest httpRequest) {
         return auth.changeOwnPassword(request.currentPassword(), request.newPassword(),
                 httpRequest.getRemoteAddr());
+    }
+
+    /**
+     * "It is me" at a shared till (ADR-0067 D-4): the signed-in user re-types their own password.
+     * A wrong one counts towards lockout like a failed sign-in; nothing is issued.
+     */
+    @PostMapping("/me/confirm-password")
+    @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void confirmMyPassword(@Valid @RequestBody ConfirmOwnPasswordRequest request,
+                                  HttpServletRequest httpRequest) {
+        auth.confirmOwnPassword(request.password(), httpRequest.getRemoteAddr());
     }
 
     /** The caller's own switchable branches (ADR-0003 D-6) — self-scoped, no USER.VIEW required. */

@@ -23,6 +23,13 @@ class AuthService {
   Future<List<UserBranch>> myBranches() async =>
       asList(await _api.get('/auth/my-branches'), UserBranch.fromJson);
 
+  /// "It is me": the signed-in user's own password, re-typed at a till that asks
+  /// who is serving on every table (ADR-0067 D-4). Throws [ApiException] with a
+  /// user-safe message when it is wrong; a wrong one counts towards lockout.
+  Future<void> confirmOwnPassword(String password) async {
+    await _api.post('/auth/me/confirm-password', body: {'password': password});
+  }
+
   /// Best-effort logout: revoke the refresh token server-side, then wipe locally
   /// regardless of the network outcome.
   Future<void> logout() async {

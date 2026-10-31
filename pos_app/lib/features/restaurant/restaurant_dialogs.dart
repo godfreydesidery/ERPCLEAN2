@@ -8,6 +8,7 @@ import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/restaurant.dart';
 import '../../services/receipt_printer.dart';
+import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/on_screen_keyboard.dart';
 import '../../widgets/ui.dart';
@@ -536,6 +537,14 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
       _error = null;
     });
     try {
+      // The person signed in on this till confirms themselves with their own
+      // password: an approval check would refuse them as self-approval.
+      final me = ref.read(appControllerProvider).me;
+      if (me != null && _user.text.trim().toLowerCase() == me.username.toLowerCase()) {
+        await ref.read(authServiceProvider).confirmOwnPassword(_pass.text);
+        if (mounted) Navigator.pop(context, (uid: me.uid, name: me.displayName));
+        return;
+      }
       final v = await ref.read(stepUpServiceProvider).verify(
           username: _user.text.trim(),
           password: _pass.text,

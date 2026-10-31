@@ -119,4 +119,28 @@ class AuthChangeOwnPasswordTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("different");
     }
+
+    // ADR-0067 D-4: "it is me" at a till that asks who is serving on every table.
+
+    @Test
+    void confirmOwnPassword_right_changesNothing_andIssuesNothing() {
+        when(encoder.matches("Current123", "OLD-HASH")).thenReturn(true);
+
+        auth.confirmOwnPassword("Current123", "10.0.0.1");
+
+        assertThat(user.getPasswordHash()).isEqualTo("OLD-HASH");
+        verify(attempts, never()).recordFailure(anyLong(), anyString(), any());
+        verify(refreshTokens, never()).revokeAllForUser(anyLong(), any());
+        verify(jwt, never()).issueAccessToken(any(), any(), any());
+    }
+
+    @Test
+    void confirmOwnPassword_wrong_countsTowardsLockout() {
+        when(encoder.matches(anyString(), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> auth.confirmOwnPassword("guess", "10.0.0.1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not correct");
+        verify(attempts).recordFailure(eq(41L), eq("10.0.0.1"), any());
+    }
 }
