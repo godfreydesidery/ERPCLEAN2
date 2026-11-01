@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/config/app_config.dart';
+import 'package:pos_app/features/register/restaurant_register.dart';
 import 'package:pos_app/features/restaurant/restaurant_printing.dart';
 import 'package:pos_app/features/restaurant/slip_text.dart';
 import 'package:pos_app/features/restaurant/station_print_agent.dart';
@@ -307,6 +308,43 @@ void main() {
     test('a second print says REPRINT', () {
       final text = buildBillText(_bill(printCount: 3), companyName: 'C', branchName: '', width: 48);
       expect(text, contains('REPRINT 2'));
+    });
+  });
+
+  group('who is serving the order', () {
+    String? acting(WaiterPrompt prompt,
+            {bool waiterLogin = false,
+            bool sharedTill = true,
+            ({String uid, bool cashier})? confirmed,
+            String? serving}) =>
+        actingWaiterUid(
+            prompt: prompt,
+            waiterLogin: waiterLogin,
+            sharedTill: sharedTill,
+            meUid: 'CASHIER',
+            confirmed: confirmed,
+            servingUid: () => serving);
+
+    test("Don't ask: a waiter signed in with Who's serving? serves the order", () {
+      // Tulia Cafe: "Serving: samwel" on screen, yet the bill named the cashier.
+      expect(acting(WaiterPrompt.off, serving: 'SAMWEL'), 'SAMWEL');
+      expect(acting(WaiterPrompt.off), isNull, reason: 'nobody signed in: the cashier serves');
+    });
+
+    test('"Ask before a new order": the signed-in waiter serves', () {
+      expect(acting(WaiterPrompt.newOrder, serving: 'SAMWEL'), 'SAMWEL');
+    });
+
+    test('"Ask every time": whoever confirmed, the cashier as themselves', () {
+      expect(acting(WaiterPrompt.everyTable,
+          confirmed: (uid: 'SAMWEL', cashier: false), serving: 'NEEMA'), 'SAMWEL');
+      expect(acting(WaiterPrompt.everyTable, confirmed: (uid: 'CASHIER', cashier: true)), isNull);
+      expect(acting(WaiterPrompt.everyTable, serving: 'NEEMA'), isNull,
+          reason: "a Who's serving? sign-in does not stand in for the per-table confirm");
+    });
+
+    test('a waiter on their own device serves their orders', () {
+      expect(acting(WaiterPrompt.off, waiterLogin: true, sharedTill: false), 'CASHIER');
     });
   });
 
