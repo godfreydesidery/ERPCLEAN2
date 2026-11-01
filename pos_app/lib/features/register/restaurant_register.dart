@@ -33,6 +33,31 @@ import '../restaurant/station_print_agent.dart';
 /// The open order lives on the ERP, never on this till: every action asks the
 /// server and redraws from its answer, so a restart loses nothing and another
 /// device sees the same table.
+/// Who is serving the order on screen, for the server and the ownership rule;
+/// null for a cashier or manager acting on their own.
+///
+/// * "Ask every time": whoever confirmed with their password ([confirmed]).
+/// * A waiter signed in on their own: themselves.
+/// * A shared till: the waiter signed in with "Who's serving?" ([servingUid]),
+///   whether the till asks before a new order or the cashier chose to sign them
+///   in. Tulia Cafe 2026-11-01: on "Don't ask" the till showed "Serving: samwel"
+///   but opened the order as the cashier, so the bill named the cashier.
+String? actingWaiterUid({
+  required WaiterPrompt prompt,
+  required bool waiterLogin,
+  required bool sharedTill,
+  required String? meUid,
+  required ({String uid, bool cashier})? confirmed,
+  required String? Function() servingUid,
+}) {
+  if (prompt == WaiterPrompt.everyTable && confirmed != null) {
+    return confirmed.cashier ? null : confirmed.uid;
+  }
+  if (waiterLogin) return meUid;
+  if (sharedTill && prompt != WaiterPrompt.everyTable) return servingUid();
+  return null;
+}
+
 class RestaurantRegister extends ConsumerStatefulWidget {
   const RestaurantRegister({super.key});
   @override
@@ -240,12 +265,15 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   String? get _actingWaiterUid {
     final app = ref.read(appControllerProvider);
     final actor = _actor;
-    if (_prompt == WaiterPrompt.everyTable && actor != null) {
-      return actor.cashier ? null : actor.uid;
-    }
-    if (app.isWaiter) return app.me?.uid;
-    if (_sharedTill && _prompt == WaiterPrompt.newOrder) return _waiterUid;
-    return null;
+    return actingWaiterUid(
+      prompt: _prompt,
+      waiterLogin: app.isWaiter,
+      sharedTill: _sharedTill,
+      meUid: app.me?.uid,
+      confirmed: actor == null ? null : (uid: actor.uid, cashier: actor.cashier),
+      // Read only when it decides the answer: the getter also refreshes the idle clock.
+      servingUid: () => _waiterUid,
+    );
   }
 
   /// The waiter the server records as serving (open, send, fire): a waiter
