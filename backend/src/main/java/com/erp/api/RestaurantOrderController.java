@@ -6,6 +6,9 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantPaidOrderDto;
+import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -26,7 +29,9 @@ import com.erp.modules.sales.domain.exception.PosSaleFlowException;
 import com.erp.modules.sales.service.RestaurantOrderService;
 import com.erp.platform.common.api.ApiResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -69,6 +74,18 @@ public class RestaurantOrderController {
                                          @RequestParam(required = false) List<RestaurantOrderStatus> status,
                                          @RequestParam(required = false) String tableUid) {
         return orders.list(branchUid, status, tableUid);
+    }
+
+    /**
+     * The branch's bills paid on {@code date} (the company's business day; today when omitted),
+     * newest first — the till's "Completed" list.
+     */
+    @GetMapping("/paid")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
+    public List<RestaurantPaidOrderDto> paid(@RequestParam(required = false) String branchUid,
+                                         @RequestParam(required = false)
+                                         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return orders.listPaid(branchUid, date);
     }
 
     @GetMapping("/uid/{uid}")
@@ -178,6 +195,17 @@ public class RestaurantOrderController {
     public RestaurantBillDto bill(@PathVariable String uid,
                                   @Valid @RequestBody BillRestaurantOrderRequest request) {
         return orders.bill(uid, request);
+    }
+
+    /**
+     * Prices the order as it would be paid, with an optional order discount (percentage or
+     * amount). Read-only: nothing is billed, printed or counted.
+     */
+    @PostMapping("/uid/{uid}/quote")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
+    public RestaurantQuoteDto quote(@PathVariable String uid,
+                                    @Valid @RequestBody QuoteRestaurantOrderRequest request) {
+        return orders.quote(uid, request);
     }
 
     /**

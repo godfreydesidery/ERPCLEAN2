@@ -21,6 +21,9 @@ class PrintedSlips {
 
   bool has(PrepSlip slip) => _keys.contains(slip.key);
 
+  /// Releases a claim whose print failed, so it can be printed again.
+  void forget(PrepSlip slip) => _keys.remove(slip.key);
+
   void remember(PrepSlip slip) {
     _keys.remove(slip.key);
     _keys.add(slip.key);
@@ -69,20 +72,23 @@ class RestaurantPrinting {
   /// 3. neither: the station prints for itself — a kitchen PC running OrbixPOS
   ///    picks the slip up from the ERP (ADR-0066 D-6), and the Kitchen Display
   ///    shows it. That is not a failure here.
-  Future<List<SlipFailure>> printSlips(List<PrepSlip> slips) async {
+  ///
+  /// [onlyUnprinted]: skip slips this device has printed or is printing — the
+  /// station feed's mode. A reprint passes false and always prints.
+  Future<List<SlipFailure>> printSlips(List<PrepSlip> slips, {bool onlyUnprinted = false}) async {
     if (slips.isEmpty) return const [];
     final cfg = await loadConfig();
     final failures = <SlipFailure>[];
     for (final slip in slips) {
+      if (onlyUnprinted && PrintedSlips.instance.has(slip)) continue;
       final bytes = encodeSlip(buildSlipLines(slip, width: cfg.widthFor(slip.stationUid)));
       try {
         final local = cfg.stationPrinters[slip.stationUid];
         if (local != null && local.isNotEmpty) {
-          await spooler.printRaw(local, bytes);
-          PrintedSlips.instance.remember(slip);
+          await _claimWhile(slip, () => spooler.printRaw(local, bytes));
         } else if (slip.printerHost != null && slip.printerHost!.trim().isNotEmpty) {
-          await network.send(slip.printerHost!.trim(), slip.printerPort, bytes);
-          PrintedSlips.instance.remember(slip);
+          await _claimWhile(
+              slip, () => network.send(slip.printerHost!.trim(), slip.printerPort, bytes));
         }
       } on ReceiptPrinterException catch (e) {
         failures.add(SlipFailure(slip, e.message));
@@ -91,6 +97,22 @@ class RestaurantPrinting {
       }
     }
     return failures;
+  }
+
+  /// Marks [slip] printed BEFORE sending it, and releases the mark if sending
+  /// fails. Marking it only after the printer finished let the station feed on
+  /// the same till ("Print ALL slips here") pick the slip up mid-print — a
+  /// Bluetooth print takes seconds — and print it a second time (Cafe Tulia
+  /// 2026-11-01: "uki send inatoa order 2 badala ya moja").
+  Future<void> _claimWhile(PrepSlip slip, Future<void> Function() send) async {
+    final had = PrintedSlips.instance.has(slip);
+    PrintedSlips.instance.remember(slip);
+    try {
+      await send();
+    } catch (_) {
+      if (!had) PrintedSlips.instance.forget(slip);
+      rethrow;
+    }
   }
 
   /// The stations among [slips] that this device hands off — no printer chosen

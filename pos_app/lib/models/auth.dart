@@ -130,6 +130,8 @@ class Perms {
   static const saleCreate = 'POS.SALE.CREATE';
   static const saleVoid = 'POS.SALE.VOID';
   static const saleAgeOverride = 'POS.SALE.AGE_OVERRIDE';
+  /// Approves discounts above the ceiling, and complimentary sales.
+  static const discountOverride = 'SALES.DISCOUNT.OVERRIDE';
   static const sessionOpen = 'POS.SESSION.OPEN';
   static const sessionClose = 'POS.SESSION.CLOSE';
   static const sessionView = 'POS.SESSION.VIEW';

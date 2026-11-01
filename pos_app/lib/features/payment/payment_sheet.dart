@@ -177,6 +177,16 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// this is only ever about which button to show.
   bool _offerDiscountApproval = false;
 
+  /// Restaurant order discount (a percent OR an amount) and the server's exact
+  /// quote for it; the manager who approved it when the ceiling needs one.
+  double? _discPercent;
+  double? _discAmount;
+  RestaurantQuote? _quote;
+  String? _discAuthoriserUid;
+
+  /// The manager who approved a complimentary settlement, once asked.
+  String? _compAuthoriserUid;
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -186,7 +196,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
   RestaurantCheckout? get _resto => widget.restaurant;
 
-  double get _gross => _resto?.total ?? ref.read(cartProvider).previewSubtotal;
+  double get _gross =>
+      _resto != null ? (_quote?.grossTotal ?? _resto!.total) : ref.read(cartProvider).previewSubtotal;
 
   /// A line without a preview price makes the basket total indeterminate. A
   /// restaurant total comes from the server's bill, so it is always known.
@@ -354,6 +365,33 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       tendered = null;
     }
 
+    // Complimentary needs a manager unless the cashier may approve discounts.
+    final comp = (tenders ?? const <PosTender>[])
+        .where((t) => t.tenderType == TenderType.complimentary)
+        .fold(0.0, (s, t) => s + t.amount);
+    if (comp > 0) {
+      if (!app.can(Perms.discountOverride) && _compAuthoriserUid == null) {
+        final approval = await showManagerApproval(context, ref,
+            action: GatedAction.complimentary,
+            detail: 'Complimentary ${formatAmount(comp)}',
+            correlationId: _txnId);
+        if (approval == null || !mounted) return;
+        final uid = approval.authoriserUid?.trim() ?? '';
+        if (uid.isEmpty) {
+          showToast(context, 'That approval could not be applied. Try again.');
+          return;
+        }
+        _compAuthoriserUid = uid;
+      }
+      tenders = [
+        for (final t in tenders!)
+          t.tenderType == TenderType.complimentary && _compAuthoriserUid != null
+              ? PosTender(
+                  tenderType: t.tenderType, amount: t.amount, authorisedByUid: _compAuthoriserUid)
+              : t,
+      ];
+    }
+
     final resto = _resto;
     if (resto != null) {
       await _payRestaurantOrder(resto, session.uid,
@@ -446,8 +484,11 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       if (tenders != null && tenders.isNotEmpty)
         'tenders': tenders.map((t) => t.toJson()).toList(),
       'tenderedAmount': ?tendered,
-      'expectedTotal': resto.total,
+      'expectedTotal': _quote?.grossTotal ?? resto.total,
       'ageVerified': ageVerified,
+      'discountPercent': ?_discPercent,
+      'discountAmount': ?_discAmount,
+      'discountAuthorisedByUid': ?_discAuthoriserUid,
     };
     setState(() {
       _busy = true;
@@ -522,9 +563,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     // and only when there is in fact an unapproved discount it could be about.
     // Offering it after a 403 or a validation error would be a guess dressed up
     // as a remedy — the till does not know the ceiling and must not pretend to.
-    final canApprove = _resto == null &&
-        status == PosSaleFlowStatus.rejected &&
-        ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty;
+    final canApprove = status == PosSaleFlowStatus.rejected &&
+        (_resto == null
+            ? ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty
+            : (_quote?.discountTotal ?? 0) > 0 && _discAuthoriserUid == null);
+    // A refused complimentary approval is asked for again on the next attempt.
+    if (!undecided) _compAuthoriserUid = null;
 
     setState(() {
       _busy = false;
@@ -560,6 +604,26 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     // and two retries. Hide the affordance for the rest of this attempt instead.
     if (_busy || !_offerDiscountApproval) return;
     setState(() => _offerDiscountApproval = false);
+    if (_resto != null) {
+      final approval = await showManagerApproval(context, ref,
+          action: GatedAction.discountOverride,
+          detail: 'Discount ${formatAmount(_quote?.discountTotal ?? 0)}',
+          correlationId: _txnId);
+      if (approval == null || !mounted) return;
+      final uid = approval.authoriserUid?.trim() ?? '';
+      if (uid.isEmpty) {
+        showToast(context, 'That approval could not be applied. Try again.');
+        return;
+      }
+      setState(() {
+        _discAuthoriserUid = uid;
+        _rejection = null;
+        _serverDetail = null;
+      });
+      showToast(context, 'Approved by ${approval.approverLabel}.', ok: true);
+      await _complete();
+      return;
+    }
     final lines = ref.read(cartProvider).linesNeedingDiscountApproval;
     if (lines.isEmpty) return;
     final detail = lines
@@ -799,6 +863,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           TenderType.card => Icons.credit_card,
           TenderType.mobileMoney => Icons.smartphone,
           TenderType.cheque => Icons.receipt_long_outlined,
+          TenderType.complimentary => Icons.card_giftcard,
         };
         return Expanded(
           child: Padding(
@@ -821,11 +886,14 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                         size: 18,
                         color: active ? AppColors.brandD : AppColors.ink2),
                     const SizedBox(height: 4),
-                    Text(t.label,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: active ? AppColors.brandD : AppColors.ink2)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(t.label,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: active ? AppColors.brandD : AppColors.ink2)),
+                    ),
                   ],
                 ),
               ),
@@ -1050,7 +1118,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             ),
           ),
           const SizedBox(height: 12),
-          if (_resto != null) ...[_splitEvenly(), const SizedBox(height: 8)],
+          if (_resto != null) ...[
+            _discountRow(),
+            const SizedBox(height: 4),
+            _splitEvenly(),
+            const SizedBox(height: 8),
+          ],
           _quickCash(),
           const SizedBox(height: 12),
           if (compact)
@@ -1099,6 +1172,77 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// button keys in one share of what is still to pay, rounded UP to the
   /// currency's smallest unit so the last guest never comes up short; the
   /// cashier then picks the tender and taps Add tender for each guest.
+  /// Restaurant order discount: a percent or an amount, priced exactly by the
+  /// server (quote) before anything is paid.
+  Widget _discountRow() {
+    final off = _quote?.discountTotal ?? 0;
+    return Row(
+      children: [
+        const Text('Discount', style: TextStyle(color: AppColors.ink2, fontSize: 12.5)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: off > 0
+              ? Text(
+                  '− ${formatAmount(off)}${_discPercent != null ? ' (${formatAmount(_discPercent!, decimals: 0)}%)' : ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: numStyle(size: 13, weight: FontWeight.w700, color: AppColors.payD))
+              : const SizedBox.shrink(),
+        ),
+        if (off > 0)
+          IconButton(
+            tooltip: 'Remove discount',
+            visualDensity: VisualDensity.compact,
+            onPressed: _busy ? null : _clearDiscount,
+            icon: const Icon(Icons.close, size: 18),
+          ),
+        TextButton.icon(
+          onPressed: _busy ? null : _askDiscount,
+          icon: const Icon(Icons.percent, size: 16),
+          label: Text(off > 0 ? 'Change' : 'Add'),
+        ),
+      ],
+    );
+  }
+
+  void _clearDiscount() => setState(() {
+        _discPercent = null;
+        _discAmount = null;
+        _quote = null;
+        _discAuthoriserUid = null;
+        _tenders.clear();
+      });
+
+  Future<void> _askDiscount() async {
+    final resto = _resto;
+    if (resto == null) return;
+    final cart = ref.read(cartProvider);
+    final answer = await askOrderDiscount(context, currency: cart.currency);
+    if (answer == null || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final q = await ref.read(restaurantServiceProvider).quote(resto.order.uid,
+          customerId: cart.customer?.id,
+          currency: cart.currency,
+          percent: answer.percent,
+          amount: answer.amount);
+      if (!mounted) return;
+      setState(() {
+        _discPercent = answer.percent;
+        _discAmount = answer.amount;
+        _quote = q;
+        _discAuthoriserUid = null;
+        // The amount due changed: tenders keyed against the old total are dropped.
+        _tenders.clear();
+        _amountCtrl.clear();
+      });
+      showToast(context, 'Discount applied. Amount due ${formatAmount(q.grossTotal)}.', ok: true);
+    } on ApiException catch (e) {
+      if (mounted) showToast(context, e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Widget _splitEvenly() {
     final minor = minorUnitsFor(ref.read(cartProvider).currency);
     final factor = 1.0 * _pow10(minor);
@@ -1230,4 +1374,71 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       ),
     );
   }
+}
+
+
+/// The order discount a cashier keys: a percent or an amount, never both.
+Future<({double? percent, double? amount})?> askOrderDiscount(BuildContext context,
+    {required String currency}) {
+  final ctrl = TextEditingController();
+  var byPercent = true;
+  return showDialog<({double? percent, double? amount})>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final value = double.tryParse(ctrl.text.trim()) ?? 0;
+        final valid = value > 0 && (!byPercent || value <= 100);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+          title: const Text('Discount'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  segments: [
+                    const ButtonSegment(value: true, label: Text('Percent (%)')),
+                    ButtonSegment(value: false, label: Text('Amount ($currency)')),
+                  ],
+                  selected: {byPercent},
+                  onSelectionChanged: (v) => setState(() => byPercent = v.first),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [decimalInputFormatter],
+                  decoration: InputDecoration(
+                    labelText: byPercent ? 'Percent off' : 'Amount off',
+                    suffixText: byPercent ? '%' : currency,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (byPercent && value > 100)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text('Not more than 100%.',
+                        style: TextStyle(color: AppColors.danger, fontSize: 12)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            OrbixButton(
+              label: 'Apply',
+              onPressed: valid
+                  ? () => Navigator.pop(
+                      context, (percent: byPercent ? value : null, amount: byPercent ? null : value))
+                  : null,
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }

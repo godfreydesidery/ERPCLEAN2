@@ -69,6 +69,7 @@ class SalesPaymentTermsAndTenderDtoTest {
         assertThat(TenderType.valueOf("CHEQUE")).isEqualTo(TenderType.CHEQUE);
         assertThat(TenderType.valueOf("CARD")).isEqualTo(TenderType.CARD);
         assertThat(TenderType.values()).containsExactly(
-                TenderType.CASH, TenderType.MOBILE_MONEY, TenderType.CHEQUE, TenderType.CARD);
+                TenderType.CASH, TenderType.MOBILE_MONEY, TenderType.CHEQUE, TenderType.CARD,
+                TenderType.COMPLIMENTARY);
     }
 }

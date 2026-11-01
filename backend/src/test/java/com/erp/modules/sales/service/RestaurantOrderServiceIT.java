@@ -1,5 +1,9 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.sales.domain.dto.PosSaleRequest;
+import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
+import com.erp.modules.sales.domain.enums.TenderType;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -316,6 +320,140 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> orders.pay(paid.order().uid(), "resto-pay-2", payment(bill.grossTotal())))
                 .isInstanceOf(PosSaleFlowException.class)
                 .hasMessageContaining("already been paid");
+    }
+
+    // =========================================================================
+    // Order discount: quoted first, then charged exactly; percent or amount.
+    // =========================================================================
+
+    @Test
+    void discount_byPercentOrAmount_isQuotedThenChargedExactly() {
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(tacos);                 // 12,000 net
+        orders.addLine(order.uid(), item(latte));                    //  6,000 net
+        RestaurantQuoteDto full = orders.quote(order.uid(),
+                new QuoteRestaurantOrderRequest(customerId, "TZS", null, null));
+        BigDecimal gross = full.grossTotal();                        // + 18% VAT = 21,240
+        assertThat(gross).isEqualByComparingTo("21240");
+        assertThat(full.discountTotal()).isEqualByComparingTo("0");
+
+        // Off the VAT-inclusive total, whatever the price basis.
+        RestaurantQuoteDto tenPct = orders.quote(order.uid(),
+                new QuoteRestaurantOrderRequest(customerId, "TZS", new BigDecimal("10"), null));
+        assertThat(tenPct.grossTotal()).isEqualByComparingTo("19116");
+        assertThat(tenPct.discountTotal()).isEqualByComparingTo("2124");
+
+        RestaurantQuoteDto off = orders.quote(order.uid(),
+                new QuoteRestaurantOrderRequest(customerId, "TZS", null, new BigDecimal("5000")));
+        assertThat(off.grossTotal()).isEqualByComparingTo("16240");
+        assertThat(off.discountTotal()).isEqualByComparingTo("5000");
+        assertThat(orders.get(order.uid()).billPrintCount()).as("a quote prints nothing").isZero();
+
+        assertThatThrownBy(() -> orders.quote(order.uid(), new QuoteRestaurantOrderRequest(
+                customerId, "TZS", new BigDecimal("10"), new BigDecimal("100"))))
+                .hasMessageContaining("not both");
+        assertThatThrownBy(() -> orders.quote(order.uid(), new QuoteRestaurantOrderRequest(
+                customerId, "TZS", null, new BigDecimal("99999"))))
+                .hasMessageContaining("larger than the bill");
+
+        stock(tacos, latte);
+        setCashierCtx();
+        RestaurantPaymentDto paid = orders.pay(order.uid(), "resto-disc-1",
+                new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", null, null,
+                        off.grossTotal(), null, null, null, new BigDecimal("5000"), null));
+        assertThat(paid.invoice().grossTotalAmount()).isEqualByComparingTo("16240");
+        SalesInvoice invoice = invoiceRepo.findByUid(paid.invoice().uid()).orElseThrow();
+        assertThat(jdbc.queryForObject(
+                "select coalesce(sum(line_discount_amount),0) from sales_invoice_lines where invoice_id = ?",
+                BigDecimal.class, invoice.getId()))
+                .as("carried as ordinary line discounts, net of VAT on an exclusive price list")
+                .isCloseTo(new BigDecimal("4237.29"), org.assertj.core.data.Offset.offset(new BigDecimal("1.00")));
+    }
+
+    @Test
+    void discount_withoutTheQuotedTotal_isNotChargedAgainstTheUndiscountedBill() {
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(tacos);
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos);
+        setCashierCtx();
+        assertThatThrownBy(() -> orders.pay(order.uid(), null,
+                new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", null, null,
+                        bill.grossTotal(), null, null, new BigDecimal("10"), null, null)))
+                .isInstanceOfSatisfying(PosSaleFlowException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo("PRICE_CHANGED"));
+        assertThat(invoiceRepo.findAll()).isEmpty();
+    }
+
+    // =========================================================================
+    // Completed bills: today's paid orders, newest first.
+    // =========================================================================
+
+    @Test
+    void paidToday_listsTheDaysCompletedBills_andNotTheOpenOnes() {
+        setCashierCtx();
+        RestaurantOrderDto paidOrder = openWith(tacos);
+        RestaurantBillDto bill = orders.bill(paidOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos);
+        setCashierCtx();
+        orders.pay(paidOrder.uid(), "resto-today-1", payment(bill.grossTotal()));
+        orders.open(new CreateRestaurantOrderRequest(RestaurantOrderType.TAKEAWAY, null, null, null));
+
+        assertThat(orders.listPaid(null, null)).singleElement().satisfies(p -> {
+            assertThat(p.order().uid()).isEqualTo(paidOrder.uid());
+            assertThat(p.paidTotal()).isEqualByComparingTo(bill.grossTotal());
+            assertThat(p.invoiceNumber()).isNotBlank();
+        });
+        assertThat(orders.listPaid(null, java.time.LocalDate.now().minusDays(1)))
+                .as("yesterday had none").isEmpty();
+    }
+
+    // =========================================================================
+    // Complimentary: a manager's approval, and an expense instead of cash.
+    // =========================================================================
+
+    @Test
+    void complimentary_needsAManager_andPostsToTheExpenseAccountNotCash() {
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(tacos);
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos);
+        setCashierCtx();
+        var free = new PosSaleRequest.PosTender(TenderType.COMPLIMENTARY, bill.grossTotal(),
+                null, null, null, null, null);
+        assertThatThrownBy(() -> orders.pay(order.uid(), "resto-comp-1",
+                new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", List.of(free), null,
+                        bill.grossTotal(), null, null)))
+                .isInstanceOfSatisfying(PosSaleFlowException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo("COMPLIMENTARY_APPROVAL_REQUIRED"));
+        assertThat(invoiceRepo.findAll()).as("nothing was posted").isEmpty();
+
+        // The cashier may not name themselves.
+        String cashierUid = users.findById(cashierId).orElseThrow().getUid();
+        var self = new PosSaleRequest.PosTender(TenderType.COMPLIMENTARY, bill.grossTotal(),
+                null, null, null, null, null, cashierUid);
+        assertThatThrownBy(() -> orders.pay(order.uid(), "resto-comp-2",
+                new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", List.of(self), null,
+                        bill.grossTotal(), null, null)))
+                .isInstanceOf(PosSaleFlowException.class);
+
+        String managerUid = users.findById(rootId).orElseThrow().getUid();
+        var approved = new PosSaleRequest.PosTender(TenderType.COMPLIMENTARY, bill.grossTotal(),
+                null, null, null, null, null, managerUid);
+        RestaurantPaymentDto paid = orders.pay(order.uid(), "resto-comp-3",
+                new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", List.of(approved), null,
+                        bill.grossTotal(), null, null));
+        assertThat(paid.order().status()).isEqualTo(RestaurantOrderStatus.PAID);
+        assertThat(paid.invoice().grossTotalAmount()).isEqualByComparingTo(bill.grossTotal());
+
+        setRootCtx();
+        dispatchPending(DomainEventType.SALE_FINALISED, paid.invoice().uid());
+        BigDecimal toExpense = jdbc.queryForObject(
+                "select coalesce(sum(l.debit_amount),0) from journal_lines l "
+                        + "join chart_of_accounts a on a.id = l.account_id "
+                        + "where a.company_id = ? and a.account_code = '5176'",
+                BigDecimal.class, company.getId());
+        assertThat(toExpense).as("the free meal is an expense").isEqualByComparingTo(bill.grossTotal());
     }
 
     // =========================================================================

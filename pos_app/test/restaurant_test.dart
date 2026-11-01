@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/config/app_config.dart';
 import 'package:pos_app/features/register/restaurant_register.dart';
@@ -86,6 +88,19 @@ class _FakeSpooler implements ReceiptPrinter {
   Future<void> printRaw(String printerName, List<int> bytes) async => printed.add(printerName);
 }
 
+/// A Bluetooth printer that takes its time: each job finishes only when the
+/// test releases it.
+class _SlowSpooler extends _FakeSpooler {
+  final pending = <Completer<void>>[];
+  @override
+  Future<void> printRaw(String printerName, List<int> bytes) async {
+    final c = Completer<void>();
+    pending.add(c);
+    await c.future;
+    printed.add(printerName);
+  }
+}
+
 class _FailingOnceSpooler extends _FakeSpooler {
   bool _failed = false;
   @override
@@ -151,6 +166,59 @@ void main() {
       await agent.tick();
       expect(spool.printed, isEmpty);
       agent.dispose();
+    });
+
+    test('the feed on the same till does not print a slip that is still printing', () async {
+      // Cafe Tulia 2026-11-01: Send printed the slip over Bluetooth while the
+      // same till's "Print ALL slips here" feed fetched it, and printed it again.
+      final spool = _SlowSpooler();
+      final cfg = AppConfig(
+          baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'});
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      final direct = printing.printSlips([fired('L5')]);
+      await Future<void>.delayed(Duration.zero);
+      expect(spool.pending, hasLength(1), reason: 'the direct print is under way');
+
+      final agent = StationPrintAgent(
+          fetch: (station, since) async => (until: DateTime.now(), slips: [fired('L5')]),
+          printing: printing,
+          loadConfig: () async => cfg);
+      await agent.tick();
+      expect(spool.pending, hasLength(1), reason: 'the feed must not start a second print');
+
+      spool.pending.single.complete();
+      expect(await direct, isEmpty);
+      await agent.tick();
+      expect(spool.printed, ['USB Kitchen'], reason: 'printed exactly once');
+      agent.dispose();
+    });
+
+    test('a direct print that fails is left for the feed to retry', () async {
+      final spool = _FailingOnceSpooler();
+      final cfg = AppConfig(
+          baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}, agentStations: {'S1'});
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      expect(await printing.printSlips([fired('L6')]), hasLength(1));
+      expect(PrintedSlips.instance.has(fired('L6')), isFalse);
+      final agent = StationPrintAgent(
+          fetch: (station, since) async => (until: DateTime.now(), slips: [fired('L6')]),
+          printing: printing,
+          loadConfig: () async => cfg);
+      await agent.tick();
+      expect(spool.printed, ['USB Kitchen']);
+      agent.dispose();
+    });
+
+    test('a reprint still prints a slip printed before', () async {
+      final spool = _FakeSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool,
+          loadConfig: () async => AppConfig(baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}));
+      await printing.printSlips([fired('L8')]);
+      await printing.printSlips([fired('L8')]);
+      expect(spool.printed, ['USB Kitchen', 'USB Kitchen']);
     });
 
     test('a slip that fails to print is retried on the next round', () async {

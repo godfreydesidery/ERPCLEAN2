@@ -3,6 +3,7 @@ package com.erp.modules.sales.repository;
 import com.erp.modules.sales.domain.entity.RestaurantOrder;
 import com.erp.modules.sales.domain.enums.RestaurantOrderStatus;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +35,11 @@ public interface RestaurantOrderRepository extends JpaRepository<RestaurantOrder
     List<RestaurantOrder> findByCompanyIdAndBranchIdAndRestaurantTableIdAndStatusInOrderByOpenedAtAsc(
             Long companyId, Long branchId, Long restaurantTableId,
             Collection<RestaurantOrderStatus> statuses);
+
+    /** The orders paid in [from, to) — one business day's completed bills, newest first. */
+    List<RestaurantOrder> findByCompanyIdAndBranchIdAndStatusAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtDesc(
+            Long companyId, Long branchId, RestaurantOrderStatus status,
+            Instant from, Instant to);
 
     /** Another order already settled by this invoice — guards a reused idempotency key. */
     boolean existsBySalesInvoiceIdAndIdNot(Long salesInvoiceId, Long id);

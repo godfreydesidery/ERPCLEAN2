@@ -42,6 +42,8 @@ public enum GlConfigKey {
      * shortage account — an unmapped company is refused, not mis-posted.
      */
     POS_TILL_EXPENSE,
+    /** COMPLIMENTARY tenders debit this expense account (V110). */
+    COMPLIMENTARY_EXPENSE,
     // --- Fixed Assets increment (ADR-0030 D-3) ---
     FIXED_ASSETS,
     FIXED_ASSET_CLEARING,

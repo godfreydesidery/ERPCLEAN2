@@ -12,6 +12,7 @@ class PosTender {
     this.chequeId,
     this.mobileMoneyRef,
     this.cardRef,
+    this.authorisedByUid,
   });
 
   final TenderType tenderType;
@@ -22,6 +23,9 @@ class PosTender {
   final String? mobileMoneyRef;
   final String? cardRef;
 
+  /// Complimentary only: the manager who approved it (step-up authoriser uid).
+  final String? authorisedByUid;
+
   Map<String, dynamic> toJson() => {
         'tenderType': tenderType.wire,
         'amount': amount,
@@ -30,6 +34,7 @@ class PosTender {
         if (chequeId != null) 'chequeId': chequeId,
         if (mobileMoneyRef != null) 'mobileMoneyRef': mobileMoneyRef,
         if (cardRef != null) 'cardRef': cardRef,
+        if (authorisedByUid != null) 'authorisedByUid': authorisedByUid,
       };
 }
 
