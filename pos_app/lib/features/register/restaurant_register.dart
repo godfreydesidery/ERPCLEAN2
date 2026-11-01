@@ -71,6 +71,15 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   _Load _load = _Load.loading;
   List<RestaurantTable> _tables = const [];
   List<RestaurantOrder> _live = const [];
+
+  /// The floor shows the Orders board (every open order with its items, as at
+  /// Cafe Tulia's old till) instead of the table tiles.
+  bool _boardView = false;
+
+  /// Keeps the floor current while it is on screen: orders opened or added to
+  /// on other devices appear without pressing Refresh.
+  Timer? _floorTicker;
+  static const _floorEvery = Duration(seconds: 20);
   List<PrepStation> _stations = const [];
 
   /// The menu's choices (ADR-0066 D-4), and which items ask them (product uid →
@@ -178,6 +187,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     } else {
       _loadFloor();
       _browse();
+      _floorTicker = Timer.periodic(_floorEvery, (_) => _refreshLive());
     }
     _applyDeviceSettings();
   }
@@ -185,6 +195,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _floorTicker?.cancel();
     _waiterLock?.cancel();
     _q.dispose();
     _agent?.dispose();
@@ -351,6 +362,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         _stations = results[2] as List<PrepStation>;
         _load = _Load.ready;
       });
+      _ensureKnown(_live);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _load = e.isForbidden
@@ -383,6 +395,42 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     return [
       for (final uid in uids) ?_groups.where((g) => g.uid == uid).firstOrNull,
     ];
+  }
+
+  /// The quiet refresh behind [_floorTicker]: only while the floor is showing
+  /// and nothing else is under way. A missed refresh is not worth a message —
+  /// the next one tries again.
+  Future<void> _refreshLive() async {
+    if (!mounted || _order != null || _busy || _doing != null || _load != _Load.ready) return;
+    try {
+      final results = await Future.wait([_svc.listTables(), _svc.listLiveOrders()]);
+      if (!mounted || _order != null) return;
+      setState(() {
+        _tables = (results[0] as List<RestaurantTable>).where((t) => t.active).toList();
+        _live = results[1] as List<RestaurantOrder>;
+      });
+      _ensureKnown(_live);
+    } catch (_) {}
+  }
+
+  /// Loads and prices the products on open orders that the menu has not, so the
+  /// Orders board can price every line.
+  Future<void> _ensureKnown(List<RestaurantOrder> orders) async {
+    final missing = <String>{
+      for (final o in orders)
+        for (final l in o.activeLines)
+          if (!_seen.containsKey(l.productId) && l.productUid != null) l.productUid!,
+    };
+    if (missing.isEmpty) return;
+    final loaded = <Product>[];
+    for (final uid in missing.take(40)) {
+      try {
+        final p = await ref.read(catalogServiceProvider).getProduct(uid);
+        _seen[p.id] = p;
+        loaded.add(p);
+      } catch (_) {}
+    }
+    if (loaded.isNotEmpty && mounted) _refreshPrices(loaded);
   }
 
   Future<void> _browse() async {
@@ -1017,7 +1065,24 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: [
+                const ButtonSegment(
+                    value: false, icon: Icon(Icons.table_restaurant_outlined), label: Text('Tables')),
+                ButtonSegment(
+                    value: true,
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    label: Text('Orders (${_live.length})')),
+              ],
+              selected: {_boardView},
+              onSelectionChanged: (v) => setState(() => _boardView = v.first),
+            ),
+          ),
+          const SizedBox(height: 12),
           Expanded(child: _floorBody()),
         ],
       ),
@@ -1046,6 +1111,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       case _Load.ready:
         break;
     }
+    if (_boardView) return _ordersBoard();
     final narrow = MediaQuery.sizeOf(context).width < _tabletBreakpoint;
     final ordersPanel = _openOrdersPanel();
     final tablesView = _tables.isEmpty
@@ -1098,6 +1164,67 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       .where((n) => n.isNotEmpty)
       .toSet()
       .join(', ');
+
+  /// Every open order as a card with its items, waiter, time open and total —
+  /// what is on a table, and what a guest has just added, without opening it
+  /// (Cafe Tulia 2026-11-01). Oldest first: the longest wait leads.
+  Widget _ordersBoard() {
+    final waiters = _live.map((o) => o.waiterName).where((n) => n.isNotEmpty).toSet().toList()
+      ..sort();
+    final filter = waiters.contains(_waiterFilter) ? _waiterFilter : null;
+    final shown = _live.where((o) => filter == null || o.waiterName == filter).toList()
+      ..sort((a, b) {
+        final at = a.openedAt, bt = b.openedAt;
+        if (at == null || bt == null) return a.orderNumber.compareTo(b.orderNumber);
+        return at.compareTo(bt);
+      });
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (waiters.length > 1)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: DropdownButton<String?>(
+              value: filter,
+              isDense: true,
+              hint: const Text('All waiters', style: TextStyle(fontSize: 13)),
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('All waiters', style: TextStyle(fontSize: 13))),
+                for (final w in waiters)
+                  DropdownMenuItem<String?>(
+                      value: w, child: Text(w, style: const TextStyle(fontSize: 13))),
+              ],
+              onChanged: (v) => setState(() => _waiterFilter = v),
+            ),
+          ),
+        if (waiters.length > 1) const SizedBox(height: 8),
+        Expanded(
+          child: shown.isEmpty
+              ? const _FloorNotice(icon: Icons.receipt_long_outlined, text: 'No open orders.')
+              : GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 360,
+                    mainAxisExtent: 300,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: shown.length,
+                  itemBuilder: (context, i) {
+                    final o = shown[i];
+                    final billed = o.status == OrderStatus.billed && o.billedTotal != null;
+                    return OrderCard(
+                      order: o,
+                      amountOf: _lineAmount,
+                      total: billed ? o.billedTotal : _estimate(o),
+                      onTap: _busy ? null : () => _openExisting(o),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
 
   /// Every open order in the branch — tables and takeaways — with the waiter
   /// who serves it, so the cashier finds a bill by waiter (J COB 2026-10-30).
@@ -1407,16 +1534,23 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// A rough running total from the menu prices, until the bill gives the real
   /// one. Null when any item's price is not known yet.
   double? _estimate(RestaurantOrder order) {
-    final app = ref.read(appControllerProvider);
     var sum = 0.0;
     for (final l in order.activeLines) {
-      final p = _seen[l.productId];
-      final price = p == null ? null : _prices.priceFor(p.uid);
-      if (p == null || price == null || !price.isResolved) return null;
-      sum += l.quantity *
-          app.grossUnitPrice(price.amount!, p.vatStatus, vatInclusive: price.vatInclusive);
+      final amount = _lineAmount(l);
+      if (amount == null) return null;
+      sum += amount;
     }
     return sum;
+  }
+
+  /// One line's amount at the menu price (VAT-inclusive), or null while unknown.
+  double? _lineAmount(RestaurantOrderLine l) {
+    final p = _seen[l.productId];
+    final price = p == null ? null : _prices.priceFor(p.uid);
+    if (p == null || price == null || !price.isResolved) return null;
+    return l.quantity *
+        ref.read(appControllerProvider)
+            .grossUnitPrice(price.amount!, p.vatStatus, vatInclusive: price.vatInclusive);
   }
 
   // ---------------------------------------------------------------- ticket
@@ -1809,6 +1943,183 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
 }
 
 /// One table on the floor, coloured by its live state.
+/// How long an order has been open: "<1m", "51m", "1h 32m".
+String openFor(DateTime? openedAt, {DateTime? now}) {
+  if (openedAt == null) return '';
+  final d = (now ?? DateTime.now()).difference(openedAt.toLocal());
+  if (d.inMinutes < 1) return '<1m';
+  if (d.inHours < 1) return '${d.inMinutes}m';
+  return '${d.inHours}h ${d.inMinutes % 60}m';
+}
+
+/// One open order on the Orders board: where, who and how long at the top, the
+/// items in the middle (add-ons under their item; NEW = not yet sent to the
+/// kitchen, so a guest's addition stands out), the total at the bottom.
+class OrderCard extends StatelessWidget {
+  const OrderCard(
+      {super.key,
+      required this.order,
+      required this.amountOf,
+      required this.total,
+      required this.onTap});
+  final RestaurantOrder order;
+  final double? Function(RestaurantOrderLine) amountOf;
+  final double? total;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final billed = order.status == OrderStatus.billed;
+    final active = order.activeLines;
+    final rows = <RestaurantOrderLine>[];
+    for (final l in active.where((l) => !l.isAddOn)) {
+      rows.add(l);
+      rows.addAll(active.where((a) => a.parentLineUid == l.uid));
+    }
+    // An add-on whose item is gone still shows.
+    rows.addAll(active.where((a) => a.isAddOn && !rows.contains(a)));
+
+    Widget tag(String text, Color color) => Container(
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: .12), borderRadius: AppRadii.brPill),
+          child: Text(text,
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
+        );
+
+    return Material(
+      color: AppColors.panel,
+      borderRadius: AppRadii.brLg,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: AppRadii.brLg,
+            border: Border.all(color: billed ? AppColors.warn : AppColors.line2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                color: billed ? AppColors.warnSoft : AppColors.brandSoft,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(order.where,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                          Text(
+                              [order.orderNumber, openFor(order.openedAt)]
+                                  .where((s) => s.isNotEmpty)
+                                  .join(' · '),
+                              style: const TextStyle(fontSize: 12, color: AppColors.ink2)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (order.waiterName.isNotEmpty)
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 130),
+                            child: Text(order.waiterName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                          ),
+                        if (billed) tag('BILL PRINTED', AppColors.warn),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: rows.isEmpty
+                    ? const Center(
+                        child: Text('No items yet.', style: TextStyle(color: AppColors.ink3)))
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                        children: [
+                          for (final l in rows)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: l.isAddOn ? 40 : 28,
+                                    child: Text(
+                                        '${l.isAddOn ? '+ ' : ''}'
+                                        '${formatAmount(l.quantity, decimals: l.quantity % 1 == 0 ? 0 : 2)}',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: l.isAddOn ? 12.5 : 14)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text.rich(
+                                      TextSpan(children: [
+                                        TextSpan(text: l.productName),
+                                        if (l.isPending && !l.held)
+                                          WidgetSpan(child: tag('NEW', AppColors.brand)),
+                                        if (l.isPending && l.held)
+                                          WidgetSpan(child: tag('HELD', AppColors.ink3)),
+                                        if (!l.isPending && l.readyAt != null)
+                                          WidgetSpan(child: tag('READY', AppColors.ok)),
+                                      ]),
+                                      style: TextStyle(
+                                          fontSize: l.isAddOn ? 12.5 : 14,
+                                          fontWeight: l.isAddOn ? FontWeight.w400 : FontWeight.w600,
+                                          color: l.isAddOn ? AppColors.ink2 : AppColors.ink),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                      amountOf(l) == null ? '' : formatAmount(amountOf(l)!),
+                                      style: numStyle(
+                                          size: 12.5,
+                                          weight: FontWeight.w600,
+                                          color: AppColors.ink2)),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+                decoration: const BoxDecoration(
+                    color: AppColors.panel2, border: Border(top: BorderSide(color: AppColors.line))),
+                child: Row(
+                  children: [
+                    Text(billed ? 'BILL' : 'TOTAL',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink2)),
+                    const Spacer(),
+                    Text(total == null ? '—' : formatAmount(total!),
+                        style: numStyle(size: 17, weight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TableTile extends StatelessWidget {
   const _TableTile({required this.table, required this.onTap, this.waiter = ''});
   final RestaurantTable table;
