@@ -1070,18 +1070,24 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SlowWaitHint(active: _busy),
         OrbixButton(
             label: 'Add tender',
             icon: Icons.add,
             kind: BtnKind.ghost,
             block: true,
-            onPressed: _addTender),
+            onPressed: _busy ? null : _addTender),
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
           child: PayButton(
-            label: _ambiguous ? 'Retry this sale' : 'Complete sale',
+            label: _busy
+                ? 'Recording the sale…'
+                : _ambiguous
+                    ? 'Retry this sale'
+                    : 'Complete sale',
             amount: formatAmount(_gross),
+            busy: _busy,
             onPressed: _busy ? null : _complete,
           ),
         ),

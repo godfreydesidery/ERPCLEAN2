@@ -577,6 +577,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
+              SlowWaitHint(active: _busyScan),
               const SizedBox(height: 10),
               Expanded(child: _phoneBasket(cart)),
             ],
@@ -861,6 +862,8 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
+              // A scan waiting on a weak line: the hourglass alone is easy to miss.
+              SlowWaitHint(active: _busyScan),
               const SizedBox(height: 12),
               Expanded(child: _grid()),
             ],

@@ -82,6 +82,22 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   RestaurantOrder? _order;
   bool _busy = false;
 
+  /// The ticket action under way ('send', 'fire', 'bill'), for its spinner. It
+  /// spans the request AND the printing that follows, which [_busy] does not.
+  String? _doing;
+
+  /// Runs [body] as [what]; a nested action (Bill sending pending items first)
+  /// keeps the outer one's spinner.
+  Future<void> _doingWhile(String what, Future<void> Function() body) async {
+    if (_doing != null) return body();
+    setState(() => _doing = what);
+    try {
+      await body();
+    } finally {
+      if (mounted) setState(() => _doing = null);
+    }
+  }
+
   // ---------------------------------------------------------------- menu
   final _q = TextEditingController();
   List<Product> _menu = const [];
@@ -546,7 +562,9 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   }
 
   /// Fires held items: the one course waiting, or the one the waiter picks.
-  Future<void> _fire() async {
+  Future<void> _fire() => _doingWhile('fire', _fireNow);
+
+  Future<void> _fireNow() async {
     final order = _order;
     if (order == null) return;
     final courses = order.lines
@@ -582,7 +600,9 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     if (updated != null) _showOrder(updated);
   }
 
-  Future<void> _send({bool quiet = false}) async {
+  Future<void> _send({bool quiet = false}) => _doingWhile('send', () => _sendNow(quiet: quiet));
+
+  Future<void> _sendNow({bool quiet = false}) async {
     final order = _order;
     if (order == null) return;
     final waiterUid = _serverWaiterUid;
@@ -653,7 +673,9 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     return mounted;
   }
 
-  Future<void> _bill() async {
+  Future<void> _bill() => _doingWhile('bill', _billNow);
+
+  Future<void> _billNow() async {
     final order = _order;
     if (order == null) return;
     if (order.activeLines.isEmpty) {
@@ -889,7 +911,17 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       onPointerDown: (_) {
         if (_waiterLock != null) _armWaiterLock();
       },
-      child: _screen(),
+      child: Column(
+        children: [
+          // Shown only after a request has waited 5 s: a weak line otherwise
+          // looks like a frozen till.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SlowWaitHint(active: _busy),
+          ),
+          Expanded(child: _screen()),
+        ],
+      ),
     );
   }
 
@@ -1504,7 +1536,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     icon: Icons.soup_kitchen_outlined,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: toSend == 0 || _busy || _ro ? null : _send,
+                    busy: _doing == 'send',
+                    onPressed: toSend == 0 || _busy || _doing != null || _ro ? null : _send,
                   ),
                 ),
                 if (heldCount > 0) ...[
@@ -1515,7 +1548,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       icon: Icons.local_fire_department_outlined,
                       kind: BtnKind.ghost,
                       block: true,
-                      onPressed: _busy || _ro ? null : _fire,
+                      busy: _doing == 'fire',
+                      onPressed: _busy || _doing != null || _ro ? null : _fire,
                     ),
                   ),
                 ],
@@ -1526,7 +1560,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     icon: Icons.receipt_long_outlined,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: !hasItems || _busy || _ro ? null : _bill,
+                    busy: _doing == 'bill',
+                    onPressed: !hasItems || _busy || _doing != null || _ro ? null : _bill,
                   ),
                 ),
               ],

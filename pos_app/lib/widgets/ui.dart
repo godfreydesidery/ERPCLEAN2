@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -107,10 +109,13 @@ class OrbixButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (busy)
-          SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2, color: fg))
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: fg)),
+          )
         else if (icon != null)
           Padding(padding: const EdgeInsets.only(right: 8), child: Icon(icon, size: 18)),
         Flexible(
@@ -154,15 +159,20 @@ class PayButton extends StatelessWidget {
     required this.amount,
     this.onPressed,
     this.icon = Icons.payments_outlined,
+    this.busy = false,
   });
   final String label;
   final String amount;
   final VoidCallback? onPressed;
   final IconData icon;
 
+  /// Waiting for the ERP: a spinner in place of the icon, the button stays
+  /// bright (it is working, not unavailable) and ignores taps.
+  final bool busy;
+
   @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null;
+    final enabled = onPressed != null || busy;
     return Opacity(
       opacity: enabled ? 1 : .5,
       child: Material(
@@ -170,13 +180,19 @@ class PayButton extends StatelessWidget {
         borderRadius: AppRadii.brSm,
         child: InkWell(
           borderRadius: AppRadii.brSm,
-          onTap: onPressed,
+          onTap: busy ? null : onPressed,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: Colors.white, size: 20),
+                if (busy)
+                  const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                else
+                  Icon(icon, color: Colors.white, size: 20),
                 const SizedBox(width: 10),
                 Flexible(
                   child: Column(
@@ -204,6 +220,73 @@ class PayButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Slow connection — still waiting for the ERP…", shown once [active] has
+/// lasted [after]. On a weak line a request can take up to ~45 s (15 s to
+/// connect, 30 s to answer); without this a greyed-out button looks frozen and
+/// staff tap again or restart the app.
+class SlowWaitHint extends StatefulWidget {
+  const SlowWaitHint({super.key, required this.active, this.after = const Duration(seconds: 5)});
+  final bool active;
+  final Duration after;
+
+  @override
+  State<SlowWaitHint> createState() => _SlowWaitHintState();
+}
+
+class _SlowWaitHintState extends State<SlowWaitHint> {
+  Timer? _timer;
+  bool _slow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _arm();
+  }
+
+  @override
+  void didUpdateWidget(SlowWaitHint old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _arm();
+    if (!widget.active && old.active) {
+      _timer?.cancel();
+      _slow = false;
+    }
+  }
+
+  void _arm() {
+    _timer?.cancel();
+    _slow = false;
+    _timer = Timer(widget.after, () {
+      if (mounted) setState(() => _slow = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.active || !_slow) return const SizedBox.shrink();
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(Icons.network_check, size: 16, color: AppColors.warn),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text('Slow connection — still waiting for the ERP…',
+                style: TextStyle(
+                    color: AppColors.warn, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }
