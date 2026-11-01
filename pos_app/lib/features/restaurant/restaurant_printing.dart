@@ -74,7 +74,7 @@ class RestaurantPrinting {
     final cfg = await loadConfig();
     final failures = <SlipFailure>[];
     for (final slip in slips) {
-      final bytes = encodeEscPos(buildSlipText(slip, width: cfg.widthFor(slip.stationUid)));
+      final bytes = encodeSlip(buildSlipLines(slip, width: cfg.widthFor(slip.stationUid)));
       try {
         final local = cfg.stationPrinters[slip.stationUid];
         if (local != null && local.isNotEmpty) {
