@@ -144,6 +144,17 @@ public record PosSaleRequest(
             Long cashBankAccountId,
             Long chequeId,
             String mobileMoneyRef,
-            String cardRef
-    ) {}
+            String cardRef,
+            /** COMPLIMENTARY only: the manager's step-up {@code authoriserUid}. */
+            @jakarta.validation.constraints.Size(max = 26) String authorisedByUid
+    ) {
+
+        /** Back-compat: a tender with no complimentary approval. */
+        public PosTender(TenderType tenderType, BigDecimal amount, String reference,
+                         Long cashBankAccountId, Long chequeId, String mobileMoneyRef,
+                         String cardRef) {
+            this(tenderType, amount, reference, cashBankAccountId, chequeId, mobileMoneyRef,
+                    cardRef, null);
+        }
+    }
 }

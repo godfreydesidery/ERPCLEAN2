@@ -32,13 +32,17 @@ import org.springframework.stereotype.Component;
 @Component
 class RestaurantBillCalculator {
 
-    /** One line to price: a product in a unit, already combined across rounds. */
-    record Item(Long productId, Long unitId, BigDecimal quantity) {}
+    /** One line to price; {@code discount} is in the line's price basis, or null. */
+    record Item(Long productId, Long unitId, BigDecimal quantity, BigDecimal discount) {
+        Item(Long productId, Long unitId, BigDecimal quantity) {
+            this(productId, unitId, quantity, null);
+        }
+    }
 
-    /** A priced line; {@code unitGross} and {@code gross} are VAT-inclusive. */
+    /** A priced line; {@code gross} is VAT-inclusive, {@code raw} is price × quantity. */
     record PricedLine(Long productId, Long unitId, String productName, String unitName,
                       BigDecimal quantity, BigDecimal unitGross, BigDecimal net, BigDecimal vat,
-                      BigDecimal gross) {}
+                      BigDecimal gross, BigDecimal raw) {}
 
     record Priced(List<PricedLine> lines, BigDecimal net, BigDecimal vat, BigDecimal gross) {}
 
@@ -95,6 +99,9 @@ class RestaurantBillCalculator {
                     price.amount(), price.amount(),
                     product.getVatStatus(), vatRate, null);
             line.setPriceInclusive(price.vatInclusive());
+            if (item.discount() != null && item.discount().signum() > 0) {
+                line.setLineDiscountAmount(item.discount());
+            }
             lines.add(line);
             productNames.add(product.getName());
         }
@@ -110,7 +117,8 @@ class RestaurantBillCalculator {
                             l.getGrossAmount().scale(), RoundingMode.HALF_UP);
             priced.add(new PricedLine(l.getProductId(), l.getUnitId(), productNames.get(i),
                     l.getUnitName(), l.getQuantity(), unitGross,
-                    l.getNetAmount(), l.getVatAmount(), l.getGrossAmount()));
+                    l.getNetAmount(), l.getVatAmount(), l.getGrossAmount(),
+                    l.getUnitPriceAmount().multiply(l.getQuantity())));
         }
         return new Priced(priced, invoice.getNetTotalAmount(), invoice.getVatTotalAmount(),
                 invoice.getGrossTotalAmount());

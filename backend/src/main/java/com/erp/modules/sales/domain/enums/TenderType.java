@@ -6,10 +6,13 @@ package com.erp.modules.sales.domain.enums;
  * <p>v1 admits CASH and MOBILE_MONEY; ADR-0041 D3 adds CHEQUE and CARD so the immediate-payment
  * path can capture structured instrument links (cheque_id / card_ref) on sales_invoice_payments.
  * Only CASH accepts over-tender change (BR-SALES-07) — the paid-in-full invariant is unchanged.
+ *
+ * <p>COMPLIMENTARY (V110): goods given away; manager-approved, posts to COMPLIMENTARY_EXPENSE.
  */
 public enum TenderType {
     CASH,
     MOBILE_MONEY,
     CHEQUE,
-    CARD
+    CARD,
+    COMPLIMENTARY
 }

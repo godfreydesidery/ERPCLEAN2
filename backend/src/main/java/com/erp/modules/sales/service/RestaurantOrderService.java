@@ -6,6 +6,8 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -21,6 +23,7 @@ import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.VoidRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.enums.RestaurantOrderStatus;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -81,6 +84,19 @@ public interface RestaurantOrderService {
     RestaurantBillDto bill(String uid, BillRestaurantOrderRequest request);
 
     RestaurantPaymentDto pay(String uid, String idempotencyKey, PayRestaurantOrderRequest request);
+
+    /**
+     * Prices the order as it would be paid, with an optional order discount. Read-only: nothing
+     * is billed, printed or counted.
+     */
+    RestaurantQuoteDto quote(
+            String uid, QuoteRestaurantOrderRequest request);
+
+    /**
+     * The orders paid on {@code paidOn} (the company's business day; today when null) in the
+     * branch — the till's "Completed" bills — newest first.
+     */
+    List<RestaurantOrderDto> listPaid(String branchUid, LocalDate paidOn);
 
     RestaurantVoidResultDto cancel(String uid, CancelRestaurantOrderRequest request);
 

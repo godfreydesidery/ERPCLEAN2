@@ -16,6 +16,8 @@ import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
 import com.erp.modules.sales.domain.dto.SplitRestaurantOrderRequest;
@@ -61,10 +63,12 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -117,6 +121,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     private final ModifierGroupRepository modifierGroups;
     private final ModifierOptionRepository modifierOptions;
     private final ProductModifierGroupRepository productModifierGroups;
+    private final CompanyCalendar calendar;
 
     public RestaurantOrderServiceImpl(RestaurantOrderRepository orders,
                                       RestaurantOrderLineRepository lines,
@@ -140,7 +145,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                                       AuditService audit,
                                       ModifierGroupRepository modifierGroups,
                                       ModifierOptionRepository modifierOptions,
-                                      ProductModifierGroupRepository productModifierGroups) {
+                                      ProductModifierGroupRepository productModifierGroups,
+                                      CompanyCalendar calendar) {
         this.orders             = orders;
         this.lines              = lines;
         this.tables             = tables;
@@ -164,6 +170,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         this.modifierGroups     = modifierGroups;
         this.modifierOptions    = modifierOptions;
         this.productModifierGroups = productModifierGroups;
+        this.calendar = calendar;
     }
 
     // -------------------------------------------------------------------------
@@ -1060,20 +1067,28 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         }
         requireCustomer(order.getCompanyId(), customerId);
 
-        var items = combine(active);
-        var priced = calculator.price(order.getCompanyId(), order.getBranchId(), customerId,
-                req.currency(), items);
+        var discounted = priceWithDiscount(order, active, customerId, req.currency(),
+                req.discountPercent(), req.discountAmount());
+        var items = discounted.items();
+        var priced = discounted.priced();
+        boolean hasDiscount = discounted.discount().signum() > 0;
+        // With a discount, only the quoted total compares (the printed bill is undiscounted).
         BigDecimal expected = req.expectedTotal() != null
                 ? req.expectedTotal()
-                : order.getStatus() == RestaurantOrderStatus.BILLED ? order.getBilledTotalAmount() : null;
+                : !hasDiscount && order.getStatus() == RestaurantOrderStatus.BILLED
+                        ? order.getBilledTotalAmount() : null;
         if (expected != null && priced.gross().compareTo(expected) != 0) {
             throw priceChanged();
         }
 
         var sale = new PosSaleRequest(req.sessionUid(), customerId, null, req.currency(),
                 items.stream()
-                        .map(i -> new PosSaleRequest.LineItem(i.productId(), i.unitId(), i.quantity(),
-                                null, null))
+                        .map(i -> {
+                            boolean off = i.discount() != null && i.discount().signum() > 0;
+                            return new PosSaleRequest.LineItem(i.productId(), i.unitId(),
+                                    i.quantity(), null, off ? i.discount() : null,
+                                    off ? req.discountAuthorisedByUid() : null);
+                        })
                         .toList(),
                 req.tenders(), req.tenderedAmount(), saleNote(order), req.ageVerified(),
                 req.belowCostApproved(), null);
@@ -1097,8 +1112,75 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_PAY, "restaurant_orders",
                 order.getId(), order.getUid())
                 .detail(Map.of("invoiceUid", invoice.uid(),
-                        "grossTotal", invoice.grossTotalAmount().toPlainString())));
+                        "grossTotal", invoice.grossTotalAmount().toPlainString(),
+                        "discount", discounted.discount().toPlainString())));
         return new RestaurantPaymentDto(toDto(order), invoice);
+    }
+
+    /** The order priced as it would be paid, and the per-line discounts that achieve it. */
+    private record Discounted(RestaurantBillCalculator.Priced priced,
+                              List<RestaurantBillCalculator.Item> items,
+                              BigDecimal undiscounted, BigDecimal discount) {}
+
+    private Discounted priceWithDiscount(RestaurantOrder order, List<RestaurantOrderLine> active,
+                                         Long customerId, String currency,
+                                         BigDecimal percent, BigDecimal amount) {
+        var items = combine(active);
+        var base = calculator.price(order.getCompanyId(), order.getBranchId(), customerId,
+                currency, items);
+        BigDecimal target = RestaurantDiscount.target(base.gross(), percent, amount);
+        if (target.signum() == 0) {
+            return new Discounted(base, items, base.gross(), BigDecimal.ZERO);
+        }
+        var perLine = RestaurantDiscount.spread(base.lines(), base.gross(), target);
+        List<RestaurantBillCalculator.Item> withDiscount = new ArrayList<>(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            var it = items.get(i);
+            withDiscount.add(new RestaurantBillCalculator.Item(it.productId(), it.unitId(),
+                    it.quantity(), perLine.get(i)));
+        }
+        var priced = calculator.price(order.getCompanyId(), order.getBranchId(), customerId,
+                currency, withDiscount);
+        return new Discounted(priced, withDiscount, base.gross(),
+                base.gross().subtract(priced.gross()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RestaurantQuoteDto quote(
+            String uid, QuoteRestaurantOrderRequest req) {
+        var order = orders.findByCompanyIdAndUid(scope.companyId(), uid)
+                .orElseThrow(() -> NotFoundException.of("RestaurantOrder", uid));
+        scope.assertCanActOn(order.getCompanyId(), order.getBranchId());
+        if (!order.getStatus().isLive()) {
+            throw new IllegalArgumentException("This order is closed.");
+        }
+        var active = activeLines(order);
+        if (active.isEmpty()) {
+            throw new IllegalArgumentException("Add at least one item first.");
+        }
+        Long customerId = req.customerId() != null ? req.customerId() : order.getCustomerId();
+        if (req.customerId() != null) {
+            requireCustomer(order.getCompanyId(), req.customerId());
+        }
+        var d = priceWithDiscount(order, active, customerId, req.currency(),
+                req.discountPercent(), req.discountAmount());
+        return new RestaurantQuoteDto(order.getUid(),
+                req.currency(), d.undiscounted(), d.discount(), d.priced().net(),
+                d.priced().vat(), d.priced().gross());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RestaurantOrderDto> listPaid(String branchUid, LocalDate paidOn) {
+        Long companyId = scope.companyId();
+        Long branchId = scope.branchId(branchUid);
+        var day = paidOn != null ? paidOn : calendar.today(companyId);
+        return toDtos(orders
+                .findByCompanyIdAndBranchIdAndStatusAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtDesc(
+                        companyId, branchId, RestaurantOrderStatus.PAID,
+                        calendar.startOfDay(companyId, day),
+                        calendar.endOfDayExclusive(companyId, day)));
     }
 
     private static PosSaleFlowException priceChanged() {
