@@ -58,6 +58,12 @@ export class UserDetailComponent {
 
   // ── User header ──────────────────────────────────────────────────────────
   readonly user = signal<User | null>(null);
+
+  /** Waiter POS PIN (V111): set / reset / remove, for USER.MANAGE holders. */
+  readonly canManageUsers = computed(() => this.session.hasPermission('USER.MANAGE'));
+  readonly pinValue = signal('');
+  readonly pinSaving = signal(false);
+  readonly pinValid = computed(() => /^[0-9]{4}$/.test(this.pinValue()));
   readonly userState = signal<LoadState>('loading');
 
   // ── Branch assignments list ───────────────────────────────────────────────
@@ -163,6 +169,39 @@ export class UserDetailComponent {
         this.userState.set('idle');
       },
       error: () => this.userState.set('error'),
+    });
+  }
+
+  savePin(): void {
+    const u = this.user();
+    if (!u || !this.pinValid() || this.pinSaving()) {
+      return;
+    }
+    this.pinSaving.set(true);
+    this.userService.setPin(u.uid, this.pinValue()).subscribe({
+      next: () => {
+        this.pinSaving.set(false);
+        this.pinValue.set('');
+        this.user.set({ ...u, posPinSet: true });
+        this.alerts.success('POS PIN set', u.username);
+      },
+      error: () => this.pinSaving.set(false),
+    });
+  }
+
+  removePin(): void {
+    const u = this.user();
+    if (!u || this.pinSaving()) {
+      return;
+    }
+    this.pinSaving.set(true);
+    this.userService.clearPin(u.uid).subscribe({
+      next: () => {
+        this.pinSaving.set(false);
+        this.user.set({ ...u, posPinSet: false });
+        this.alerts.success('POS PIN removed', u.username);
+      },
+      error: () => this.pinSaving.set(false),
     });
   }
 

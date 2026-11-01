@@ -41,6 +41,51 @@
     }
   </header>
 
+  <!-- Waiter POS PIN (V111) -->
+  @if (canManageUsers() && user(); as u) {
+    <div class="erp-card mb-3">
+      <div class="erp-card__head">
+        <h2>POS PIN</h2>
+      </div>
+      <div class="erp-card__body">
+        <p class="small text-muted mb-2">
+          A 4-digit PIN lets a <strong>waiter</strong> sign in on the POS by tapping their name.
+          Cashiers and managers always use their password. Easy PINs (1111, 1234…) are refused.
+        </p>
+        <p class="small mb-2" aria-live="polite">
+          Status:
+          @if (u.posPinSet) {
+            <span class="status-tag status-tag--ok">PIN set</span>
+          } @else {
+            <span class="status-tag status-tag--neutral">No PIN</span>
+          }
+        </p>
+        <form class="row g-2 align-items-end" (ngSubmit)="savePin()" aria-label="Set the POS PIN">
+          <div class="col-auto">
+            <label class="form-label small text-muted mb-1" for="posPinInput">New PIN</label>
+            <input id="posPinInput" name="posPinInput" class="form-control font-monospace"
+                   type="password" inputmode="numeric" autocomplete="new-password"
+                   maxlength="4" size="6" pattern="[0-9]{4}"
+                   [ngModel]="pinValue()" (ngModelChange)="pinValue.set($event)"
+                   [disabled]="pinSaving()" />
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm"
+                    [disabled]="!pinValid() || pinSaving()">
+              {{ u.posPinSet ? 'Reset PIN' : 'Set PIN' }}
+            </button>
+          </div>
+          @if (u.posPinSet) {
+            <div class="col-auto">
+              <button type="button" class="btn btn-outline-danger btn-sm"
+                      (click)="removePin()" [disabled]="pinSaving()">Remove PIN</button>
+            </div>
+          }
+        </form>
+      </div>
+    </div>
+  }
+
   <!-- Company memberships panel -->
   <div class="erp-card mb-3">
     <div class="erp-card__head">
