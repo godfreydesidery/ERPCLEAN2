@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantPaidOrderDto;
 import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
@@ -96,7 +97,7 @@ public interface RestaurantOrderService {
      * The orders paid on {@code paidOn} (the company's business day; today when null) in the
      * branch — the till's "Completed" bills — newest first.
      */
-    List<RestaurantOrderDto> listPaid(String branchUid, LocalDate paidOn);
+    List<RestaurantPaidOrderDto> listPaid(String branchUid, LocalDate paidOn);
 
     RestaurantVoidResultDto cancel(String uid, CancelRestaurantOrderRequest request);
 

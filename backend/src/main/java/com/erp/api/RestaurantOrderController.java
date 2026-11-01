@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantPaidOrderDto;
 import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
@@ -81,7 +82,7 @@ public class RestaurantOrderController {
      */
     @GetMapping("/paid")
     @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE')")
-    public List<RestaurantOrderDto> paid(@RequestParam(required = false) String branchUid,
+    public List<RestaurantPaidOrderDto> paid(@RequestParam(required = false) String branchUid,
                                          @RequestParam(required = false)
                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return orders.listPaid(branchUid, date);

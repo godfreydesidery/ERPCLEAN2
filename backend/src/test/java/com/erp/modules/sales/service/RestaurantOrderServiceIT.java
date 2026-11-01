@@ -396,8 +396,11 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         orders.pay(paidOrder.uid(), "resto-today-1", payment(bill.grossTotal()));
         orders.open(new CreateRestaurantOrderRequest(RestaurantOrderType.TAKEAWAY, null, null, null));
 
-        assertThat(orders.listPaid(null, null)).extracting(RestaurantOrderDto::uid)
-                .containsExactly(paidOrder.uid());
+        assertThat(orders.listPaid(null, null)).singleElement().satisfies(p -> {
+            assertThat(p.order().uid()).isEqualTo(paidOrder.uid());
+            assertThat(p.paidTotal()).isEqualByComparingTo(bill.grossTotal());
+            assertThat(p.invoiceNumber()).isNotBlank();
+        });
         assertThat(orders.listPaid(null, java.time.LocalDate.now().minusDays(1)))
                 .as("yesterday had none").isEmpty();
     }

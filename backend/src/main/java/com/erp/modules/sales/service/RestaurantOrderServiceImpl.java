@@ -17,6 +17,7 @@ import com.erp.modules.sales.domain.dto.CreateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.FireRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.RestaurantPaidOrderDto;
 import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
 import com.erp.modules.sales.domain.dto.TransferRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantSplitResultDto;
@@ -1172,7 +1173,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<RestaurantOrderDto> listPaid(String branchUid, LocalDate paidOn) {
+    public List<RestaurantPaidOrderDto> listPaid(String branchUid, LocalDate paidOn) {
         Long companyId = scope.companyId();
         Long branchId = scope.branchId(branchUid);
         var day = paidOn != null ? paidOn : calendar.today(companyId);
@@ -1180,7 +1181,16 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                 .findByCompanyIdAndBranchIdAndStatusAndPaidAtGreaterThanEqualAndPaidAtLessThanOrderByPaidAtDesc(
                         companyId, branchId, RestaurantOrderStatus.PAID,
                         calendar.startOfDay(companyId, day),
-                        calendar.endOfDayExclusive(companyId, day)));
+                        calendar.endOfDayExclusive(companyId, day)))
+                .stream()
+                .map(o -> {
+                    var invoice = o.salesInvoiceUid() == null ? null
+                            : invoices.getByUid(o.salesInvoiceUid());
+                    return new RestaurantPaidOrderDto(o,
+                            invoice == null ? null : invoice.invoiceNumber(),
+                            invoice == null ? null : invoice.grossTotalAmount());
+                })
+                .toList();
     }
 
     private static PosSaleFlowException priceChanged() {
