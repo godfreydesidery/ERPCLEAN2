@@ -86,7 +86,9 @@ class StationPrintAgent {
       if (_retry.isEmpty) return;
       final batch = List.of(_retry);
       _retry.clear();
-      final failures = await printing.printSlips(batch);
+      // Re-checked at print time: this till may have started printing one of
+      // these itself since the feed answered.
+      final failures = await printing.printSlips(batch, onlyUnprinted: true);
       final failedKeys = {for (final f in failures) f.slip.key};
       for (final slip in batch) {
         final failed = failedKeys.contains(slip.key);
