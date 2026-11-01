@@ -178,6 +178,13 @@ class _SessionDrawer extends ConsumerWidget {
     // the server re-verifies the approver on every single request.
     final reportsVisible = _mayAskForAReport(app);
 
+    // A waiter sets or changes their own 4-digit sign-in PIN (V111).
+    if (app.isWaiter) {
+      out.add(_action(Icons.pin_outlined, 'Change my PIN',
+          'A 4-digit PIN to sign in with instead of your password',
+          enabled: true, onTap: () => _changeMyPin(context, ref)));
+    }
+
     if (reportsVisible) {
       out.add(_action(Icons.summarize_outlined, 'X-read',
           'Mid-shift drawer report — resets nothing',
@@ -269,6 +276,82 @@ class _SessionDrawer extends ConsumerWidget {
 
   /// One menu row. [enabled] false means "not right now" (a workflow state) —
   /// never "not allowed", which is handled by not building the row at all.
+  Future<void> _changeMyPin(BuildContext context, WidgetRef ref) async {
+    final current = TextEditingController();
+    final pin = TextEditingController();
+    final again = TextEditingController();
+    String? error;
+    var busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          Future<void> save() async {
+            if (pin.text != again.text) {
+              setState(() => error = 'The two new PINs do not match.');
+              return;
+            }
+            setState(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              await ref.read(authServiceProvider).changeMyPin(current.text, pin.text);
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              if (context.mounted) showToast(context, 'Your PIN is set.', ok: true);
+            } on ApiException catch (e) {
+              setState(() {
+                busy = false;
+                error = e.message;
+              });
+            }
+          }
+
+          final digits = [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)];
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+            title: const Text('Change my PIN'),
+            content: SizedBox(
+              width: 340,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OrbixField(
+                      label: 'Current PIN or password', controller: current, obscure: true),
+                  const SizedBox(height: 12),
+                  OrbixField(
+                      label: 'New PIN (4 digits)',
+                      controller: pin,
+                      obscure: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: digits),
+                  const SizedBox(height: 12),
+                  OrbixField(
+                      label: 'New PIN again',
+                      controller: again,
+                      obscure: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: digits),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(error!, style: const TextStyle(color: AppColors.danger, fontSize: 12.5)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              OrbixButton(label: 'Save PIN', busy: busy, onPressed: busy ? null : save),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _action(IconData icon, String title, String subtitle,
       {required bool enabled,
       String? disabledNote,

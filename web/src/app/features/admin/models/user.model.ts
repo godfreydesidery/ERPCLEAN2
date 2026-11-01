@@ -11,6 +11,8 @@ export interface User {
   status: string;
   locked: boolean;
   lastLoginAt: string | null;
+  /** A waiter POS PIN is set (V111). The PIN itself is never sent. */
+  posPinSet?: boolean;
 }
 
 export interface CreateUserRequest {

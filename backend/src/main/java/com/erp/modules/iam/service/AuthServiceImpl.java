@@ -125,6 +125,99 @@ public class AuthServiceImpl implements AuthService {
         return issueSession(user);
     }
 
+    @Override
+    public TokenResponse loginWithPin(String username, String pin, String ip) {
+        Instant now = Instant.now();
+        String raw = pin == null ? "" : pin;
+        AppUser user = findLoginUser(username).orElse(null);
+        if (user == null) {
+            passwordEncoder.matches(raw, dummyHash);
+            loginAttempts.recordUnknownUserFailure(username, ip, now);
+            throw AuthenticationException.invalidCredentials();
+        }
+        if (!user.isActive()) {
+            throw AuthenticationException.invalidCredentials();
+        }
+        if (user.isLocked(now)) {
+            throw new AuthenticationException(
+                    "Account is locked. Try again later or contact an administrator.");
+        }
+        assertTenantIsOpen(user);
+        boolean match;
+        if (user.hasPosPin()) {
+            match = passwordEncoder.matches(raw, user.getPosPinHash());
+        } else {
+            passwordEncoder.matches(raw, dummyHash); // same timing whether or not a PIN is set
+            match = false;
+        }
+        if (!match) {
+            // Counts towards the same lockout as a wrong password (5 → locked 15 min).
+            loginAttempts.recordFailure(user.getId(), ip, now);
+            throw new AuthenticationException("That PIN is not correct.");
+        }
+        Optional<Branch> branch = defaultBranch(user);
+        if (!isWaiterOnly(user, branch.map(b -> b.getCompany().getId()).orElse(null),
+                branch.map(Branch::getId).orElse(null), now)) {
+            throw new AuthenticationException("PIN sign-in is for waiters. Sign in with your password.");
+        }
+        loginAttempts.recordSuccess(user.getId(), ip, now);
+        return issueSession(user);
+    }
+
+    @Override
+    public void changeOwnPin(String currentSecret, String newPin, String ip) {
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal == null || principal.userId() == null) {
+            throw new AuthenticationException("Authentication is required.");
+        }
+        AppUser user = users.findScopedById(principal.userId())
+                .orElseThrow(AuthenticationException::invalidCredentials);
+        Instant now = Instant.now();
+        if (!user.isActive()) {
+            throw AuthenticationException.invalidCredentials();
+        }
+        if (user.isLocked(now)) {
+            throw new AuthenticationException(
+                    "Account is locked. Try again later or contact an administrator.");
+        }
+        String raw = currentSecret == null ? "" : currentSecret;
+        boolean proven = passwordEncoder.matches(raw, user.getPasswordHash())
+                || (user.hasPosPin() && passwordEncoder.matches(raw, user.getPosPinHash()));
+        if (!proven) {
+            loginAttempts.recordFailure(user.getId(), ip, now);
+            throw new IllegalArgumentException("That is not your current PIN or password.");
+        }
+        if (!isWaiterOnly(user, principal.companyId(), principal.branchId(), now)) {
+            throw new IllegalArgumentException("A PIN is only for waiters.");
+        }
+        PosPinPolicy.validate(newPin);
+        user.setPosPin(passwordEncoder.encode(newPin), now);
+        users.save(user);
+        // Never the PIN or its hash.
+        audit.record(AuditEvent.of(AuditActions.USER_POS_PIN_SET, "app_users",
+                        user.getId(), user.getUid())
+                .detail(java.util.Map.of("self", "true")));
+    }
+
+    /**
+     * A PIN signs in only a waiter: someone who takes restaurant orders and cannot open a till,
+     * in the scope the session will use. Root, cashiers and managers keep their passwords.
+     */
+    private boolean isWaiterOnly(AppUser user, Long companyId, Long branchId, Instant now) {
+        if (user.isRoot() || companyId == null) {
+            return false;
+        }
+        var codes = permissionResolver.resolve(user.getId(), companyId, branchId, now.toEpochMilli());
+        return codes.contains("RESTAURANT.ORDER.MANAGE") && !codes.contains("POS.SESSION.OPEN");
+    }
+
+    /** The user's default branch, if it can carry a session (see {@link #issueSession}). */
+    private Optional<Branch> defaultBranch(AppUser user) {
+        return userBranches.findByUserIdAndIsDefaultTrue(user.getId())
+                .map(UserBranch::getBranch)
+                .filter(Branch::isUsableForSession);
+    }
+
     /**
      * The account a sign-in name refers to (LUI-16).
      *
@@ -330,9 +423,7 @@ public class AuthServiceImpl implements AuthService {
         // The default branch scopes the session. F8 (ADR-0004 D-8): use isUsableForSession() so a
         // branch under an ARCHIVED company is also excluded — not just an archived branch itself.
         // Such a user lands with no active branch (read-only) until an admin assigns a live default.
-        Optional<Branch> activeBranch = userBranches.findByUserIdAndIsDefaultTrue(user.getId())
-                .map(UserBranch::getBranch)
-                .filter(Branch::isUsableForSession);
+        Optional<Branch> activeBranch = defaultBranch(user);
         Long companyId = activeBranch.map(b -> b.getCompany().getId()).orElse(null);
         Long branchId = activeBranch.map(Branch::getId).orElse(null);
 

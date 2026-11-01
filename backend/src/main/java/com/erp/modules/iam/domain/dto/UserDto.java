@@ -25,7 +25,9 @@ public record UserDto(
         boolean mustChangePassword,
         String passwordExpiresAt,
         String lastLoginIp,
-        Long employeeId) {
+        Long employeeId,
+        /** A waiter POS PIN is set (V111); the PIN itself is never sent. */
+        boolean posPinSet) {
 
     public static UserDto from(AppUser u) {
         Instant now = Instant.now();
@@ -46,6 +48,7 @@ public record UserDto(
                 u.isMustChangePassword(),
                 passwordExpiry,
                 u.getLastLoginIp(),
-                u.getEmployeeId());
+                u.getEmployeeId(),
+                u.hasPosPin());
     }
 }

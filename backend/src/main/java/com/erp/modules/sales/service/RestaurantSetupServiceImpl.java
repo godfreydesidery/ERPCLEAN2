@@ -310,7 +310,8 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
         // A live grant of the global WAITER role (ADR-0066 D-7) in this company, company-wide or for
         // this branch, held by an active user who is assigned to the branch.
         return jdbc.query("""
-                SELECT DISTINCT u.uid, u.display_name, u.username
+                SELECT DISTINCT u.uid, u.display_name, u.username,
+                       u.pos_pin_hash IS NOT NULL AS has_pin
                 FROM app_users u
                 JOIN user_role ur ON ur.user_id = u.id
                                  AND ur.company_id = ?
@@ -329,7 +330,8 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                 ORDER BY u.display_name
                 """,
                 (rs, i) -> new RestaurantWaiterDto(
-                        rs.getString("uid"), rs.getString("display_name"), rs.getString("username")),
+                        rs.getString("uid"), rs.getString("display_name"), rs.getString("username"),
+                        rs.getBoolean("has_pin")),
                 companyId, branchId, branchId);
     }
 

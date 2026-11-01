@@ -55,4 +55,14 @@ export class UserService {
   setPassword(uid: string, request: SetPasswordRequest): Observable<void> {
     return this.http.put<void>(`${this.base}/uid/${uid}/password`, request);
   }
+
+  /** Set or reset a waiter's 4-digit POS PIN. */
+  setPin(uid: string, pin: string): Observable<void> {
+    return this.http.put<void>(`${this.base}/uid/${uid}/pin`, { pin });
+  }
+
+  /** Remove a waiter's POS PIN; they sign in with their password again. */
+  clearPin(uid: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/uid/${uid}/pin`);
+  }
 }

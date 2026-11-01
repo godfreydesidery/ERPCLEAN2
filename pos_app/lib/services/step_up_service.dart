@@ -35,4 +35,15 @@ class StepUpService {
     );
     return AuthorityVerification.fromJson(asMap(data));
   }
+
+  /// "Who's serving?" with a waiter's PIN (V111): proves a waiter, never a
+  /// manager's approval.
+  Future<AuthorityVerification> verifyWaiterPin({
+    required String username,
+    required String pin,
+  }) async {
+    final data = await _api.post('/auth/verify-waiter-pin',
+        body: {'username': username, 'pin': pin});
+    return AuthorityVerification.fromJson(asMap(data));
+  }
 }

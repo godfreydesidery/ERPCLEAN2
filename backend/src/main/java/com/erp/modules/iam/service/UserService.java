@@ -45,4 +45,10 @@ public interface UserService {
 
     /** Admin-driven password reset (FR-IAM-10) — validated against the password policy. */
     void setPasswordByUid(String uid, SetPasswordRequest request);
+
+    /** A manager sets or resets a waiter's 4-digit POS PIN (V111). */
+    void setPosPinByUid(String uid, String pin);
+
+    /** A manager removes a waiter's POS PIN; they sign in with their password again. */
+    void clearPosPinByUid(String uid);
 }

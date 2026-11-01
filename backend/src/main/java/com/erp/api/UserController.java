@@ -2,6 +2,7 @@ package com.erp.api;
 
 import com.erp.modules.iam.domain.dto.CreateUserRequest;
 import com.erp.modules.iam.domain.dto.SetPasswordRequest;
+import com.erp.modules.iam.domain.dto.SetPosPinRequest;
 import com.erp.modules.iam.domain.dto.UpdateUserRequest;
 import com.erp.modules.iam.domain.dto.UserDto;
 import com.erp.modules.iam.service.UserService;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -98,5 +100,21 @@ public class UserController {
     @PreAuthorize("@perm.has('USER.MANAGE')")
     public void setPassword(@PathVariable String uid, @Valid @RequestBody SetPasswordRequest request) {
         users.setPasswordByUid(uid, request);
+    }
+
+    /** Set or reset a waiter's 4-digit POS PIN (V111). */
+    @PutMapping("/uid/{uid}/pin")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@perm.has('USER.MANAGE')")
+    public void setPosPin(@PathVariable String uid, @Valid @RequestBody SetPosPinRequest request) {
+        users.setPosPinByUid(uid, request.pin());
+    }
+
+    /** Remove a waiter's POS PIN; they sign in with their password again. */
+    @DeleteMapping("/uid/{uid}/pin")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@perm.has('USER.MANAGE')")
+    public void clearPosPin(@PathVariable String uid) {
+        users.clearPosPinByUid(uid);
     }
 }

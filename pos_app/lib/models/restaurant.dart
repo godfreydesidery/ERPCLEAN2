@@ -523,19 +523,25 @@ class ModifierGroup {
 /// the list so the tiles are there while nobody is signed in; the password is
 /// still typed and checked by the ERP.
 class RestaurantWaiter {
-  const RestaurantWaiter({required this.uid, required this.name, required this.username});
+  const RestaurantWaiter(
+      {required this.uid, required this.name, required this.username, this.hasPin = false});
 
   final String uid;
   final String name;
   final String username;
 
+  /// Signs in with a 4-digit PIN instead of the password (V111).
+  final bool hasPin;
+
   factory RestaurantWaiter.fromJson(Map<String, dynamic> j) => RestaurantWaiter(
         uid: asStrOr(j['uid']),
         name: asStrOr(j['name']),
         username: asStrOr(j['username']),
+        hasPin: asBool(j['hasPin']),
       );
 
-  Map<String, dynamic> toJson() => {'uid': uid, 'name': name, 'username': username};
+  Map<String, dynamic> toJson() =>
+      {'uid': uid, 'name': name, 'username': username, 'hasPin': hasPin};
 
   /// Whether a search for [q] (name or username, any case) finds this waiter.
   bool matches(String q) {

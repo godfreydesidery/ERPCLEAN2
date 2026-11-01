@@ -311,6 +311,30 @@ public class UserServiceImpl implements UserService {
         audit.record(AuditEvent.of(AuditActions.USER_PASSWORD_SET, "app_users", user.getId(), user.getUid()));
     }
 
+    @Override
+    public void setPosPinByUid(String uid, String pin) {
+        AppUser user = requireInScope(uid);
+        // A PIN signs in as this user, exactly like a password reset: the same ceiling applies.
+        RequestContext.Principal principal = RequestContext.get();
+        if (principal != null && !principal.root()) {
+            Long companyId = principal.companyId();
+            List<String> targetCodes = (companyId == null)
+                    ? List.of()
+                    : userRoles.resolvePermissionCodesAnyBranch(user.getId(), companyId);
+            authorityCeiling.assertCanConfer(principal, targetCodes);
+        }
+        PosPinPolicy.validate(pin);
+        user.setPosPin(passwordEncoder.encode(pin), Instant.now());
+        audit.record(AuditEvent.of(AuditActions.USER_POS_PIN_SET, "app_users", user.getId(), user.getUid()));
+    }
+
+    @Override
+    public void clearPosPinByUid(String uid) {
+        AppUser user = requireInScope(uid);
+        user.clearPosPin();
+        audit.record(AuditEvent.of(AuditActions.USER_POS_PIN_CLEAR, "app_users", user.getId(), user.getUid()));
+    }
+
     private AppUser requireByUid(String uid) {
         return Lookups.orNotFound(users.findByUid(uid), "User", uid);
     }
