@@ -1180,17 +1180,18 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       children: [
         const Text('Discount', style: TextStyle(color: AppColors.ink2, fontSize: 12.5)),
         const SizedBox(width: 8),
-        if (off > 0)
-          Flexible(
-            child: Text(
-                '− ${formatAmount(off)}${_discPercent != null ? ' (${formatAmount(_discPercent!, decimals: 0)}%)' : ''}',
-                overflow: TextOverflow.ellipsis,
-                style: numStyle(size: 13, weight: FontWeight.w700, color: AppColors.payD)),
-          ),
-        const Spacer(),
+        Expanded(
+          child: off > 0
+              ? Text(
+                  '− ${formatAmount(off)}${_discPercent != null ? ' (${formatAmount(_discPercent!, decimals: 0)}%)' : ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: numStyle(size: 13, weight: FontWeight.w700, color: AppColors.payD))
+              : const SizedBox.shrink(),
+        ),
         if (off > 0)
           IconButton(
             tooltip: 'Remove discount',
+            visualDensity: VisualDensity.compact,
             onPressed: _busy ? null : _clearDiscount,
             icon: const Icon(Icons.close, size: 18),
           ),
