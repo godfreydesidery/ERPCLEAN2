@@ -93,6 +93,26 @@ class RestaurantPrinting {
     return failures;
   }
 
+  /// The stations among [slips] that this device hands off — no printer chosen
+  /// here and no network address in the ERP — in order, without repeats.
+  ///
+  /// Such a slip is printed only if another device prints for the station (a
+  /// kitchen till with "Print ALL slips here"). On a till where nobody set the
+  /// station printers it is printed nowhere, so the caller has to say so: a
+  /// plain "Sent" read as printed at Tulia Cafe while the kitchen got nothing.
+  Future<List<String>> handedOff(List<PrepSlip> slips) async {
+    final cfg = await loadConfig();
+    final names = <String>[];
+    for (final slip in slips) {
+      final local = cfg.stationPrinters[slip.stationUid];
+      final host = slip.printerHost?.trim() ?? '';
+      if ((local == null || local.isEmpty) && host.isEmpty && !names.contains(slip.stationName)) {
+        names.add(slip.stationName);
+      }
+    }
+    return names;
+  }
+
   /// Prints the bill on this till's receipt printer. Returns null when it
   /// printed, else a message for the cashier.
   Future<String?> printBill(RestaurantBill bill, {PosContext? context}) async {
