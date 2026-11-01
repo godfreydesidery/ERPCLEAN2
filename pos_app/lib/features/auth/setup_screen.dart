@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -220,12 +221,16 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
                       ),
                     ),
                     if (_printers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                            'No printers detected (Windows desktop only).',
+                            defaultTargetPlatform == TargetPlatform.android
+                                ? "No paired printers. Pair the printer in Android's Bluetooth "
+                                    'settings, allow "Nearby devices" for OrbixPOS, then open '
+                                    'this screen again.'
+                                : 'No printers detected (Windows desktop only).',
                             style:
-                                TextStyle(color: AppColors.ink3, fontSize: 11)),
+                                const TextStyle(color: AppColors.ink3, fontSize: 11)),
                       ),
                     const SizedBox(height: 14),
                     _labeled(
