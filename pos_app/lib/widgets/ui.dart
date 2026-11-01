@@ -399,13 +399,15 @@ class Avatar extends StatelessWidget {
 }
 
 /// A toast at the bottom (`.toast`) — dark pill, optional ok (green) tint.
-void showToast(BuildContext context, String message, {bool ok = false}) {
+/// [duration]: longer for a message the reader has to act on.
+void showToast(BuildContext context, String message,
+    {bool ok = false, Duration duration = const Duration(seconds: 3)}) {
   final messenger = ScaffoldMessenger.of(context);
   messenger.clearSnackBars();
   messenger.showSnackBar(SnackBar(
     behavior: SnackBarBehavior.floating,
     backgroundColor: ok ? AppColors.payD : AppColors.ink,
-    duration: const Duration(seconds: 3),
+    duration: duration,
     width: 360,
     shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
     content: Row(

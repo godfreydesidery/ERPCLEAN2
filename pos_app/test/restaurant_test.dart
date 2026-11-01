@@ -348,6 +348,23 @@ void main() {
       expect(await printing.printSlips([_slip(station: 'Grill', uid: 'S3', host: null)]), isEmpty);
     });
 
+    test('slips with no printer here and no address are reported as handed off', () async {
+      final printing = RestaurantPrinting(
+        network: _FakeNetwork(),
+        spooler: _FakeSpooler(),
+        loadConfig: () async => AppConfig(
+            baseHost: 'http://x', stationPrinters: {'S1': 'ZJ80UB · 66:32:8A:3D:A6:FD'}),
+      );
+      final slips = [
+        _slip(station: 'KITCHEN', uid: 'S1', host: null),
+        _slip(station: 'BARISTA', uid: 'S2', host: null),
+        _slip(station: 'BARISTA', uid: 'S2', host: null),
+        _slip(station: 'Bar', uid: 'S3', host: '192.168.1.51'),
+        _slip(station: 'Grill', uid: 'S4', host: '  '),
+      ];
+      expect(await printing.handedOff(slips), ['BARISTA', 'Grill']);
+    });
+
     test('per-device settings survive a restart', () async {
       final cfg = AppConfig(baseHost: 'http://x', stationWidths: {'S1': 48, 'S2': 99},
           agentStations: {'S1'}, waiterPrompt: WaiterPrompt.everyTable, teamService: true);

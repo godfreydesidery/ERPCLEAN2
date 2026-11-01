@@ -573,8 +573,23 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       return;
     }
     final failures = await _printing.printSlips(slips);
+    final handedOff = await _printing.handedOff(slips);
     if (!mounted) return;
     if (failures.isEmpty) {
+      // A shared till is where the station printers are normally chosen, so a
+      // slip it did not print is a setup gap to point at. A waiter's own device
+      // relies on a kitchen till printing for every device; saying so each time
+      // would only nag.
+      if (handedOff.isNotEmpty && _sharedTill) {
+        final missing = handedOff.join(' and ');
+        showToast(
+            context,
+            '${okMessage ?? 'Sent'}, but $missing ${handedOff.length == 1 ? 'was' : 'were'} not '
+            'printed: no printer is chosen for ${handedOff.length == 1 ? 'it' : 'them'} on this '
+            'till. Choose one in Restaurant > Settings, then reprint.',
+            duration: const Duration(seconds: 6));
+        return;
+      }
       if (okMessage != null) {
         showToast(context, '$okMessage to ${slips.map((s) => s.stationName).join(' and ')}.',
             ok: true);
