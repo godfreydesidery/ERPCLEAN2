@@ -65,6 +65,13 @@ public class AppUser extends UidEntity {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    /** Waiter POS PIN, bcrypt-hashed (V111); null when none is set. */
+    @Column(name = "pos_pin_hash", length = 100)
+    private String posPinHash;
+
+    @Column(name = "pos_pin_set_at")
+    private Instant posPinSetAt;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -163,6 +170,20 @@ public class AppUser extends UidEntity {
     public void unlock() {
         this.failedLoginCount = 0;
         this.lockedUntil = null;
+    }
+
+    public boolean hasPosPin() {
+        return posPinHash != null;
+    }
+
+    public void setPosPin(String hash, Instant at) {
+        this.posPinHash = hash;
+        this.posPinSetAt = at;
+    }
+
+    public void clearPosPin() {
+        this.posPinHash = null;
+        this.posPinSetAt = null;
     }
 
     public boolean isActive() {

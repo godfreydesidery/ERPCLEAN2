@@ -343,6 +343,58 @@ public class StepUpAuthServiceImpl implements StepUpAuthService {
      * the audit row then carries no target row, only the attempted username in detail — mirroring
      * the unknown-user login path.
      */
+    @Override
+    public AuthorityVerificationDto verifyWaiterPin(String username, String pin) {
+        RequestContext.Principal caller = RequestContext.get();
+        if (caller == null || caller.userId() == null) {
+            throw new AuthenticationException("Authentication is required.");
+        }
+        Instant now = Instant.now();
+        String code = WAITER_PERMISSION;
+        String raw = pin == null ? "" : pin;
+        String attemptedUsername = username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        if (isThrottled(caller.userId(), now)) {
+            return refuse(code, attemptedUsername, null, "THROTTLED", THROTTLED_MESSAGE, false);
+        }
+        AppUser waiter = users.findByUsername(attemptedUsername).orElse(null);
+        if (waiter != null && !tenancy.isSameTenant(caller, waiter.getOrganisationId())) {
+            waiter = null;
+        }
+        if (waiter == null || !waiter.isActive() || waiter.isLocked(now) || !waiter.hasPosPin()) {
+            passwordEncoder.matches(raw, dummyHash);
+            return refuse(code, attemptedUsername, waiter, "BAD_PIN", CREDENTIALS_MESSAGE,
+                    countAgainst(caller.userId(), now));
+        }
+        if (!passwordEncoder.matches(raw, waiter.getPosPinHash())) {
+            return refuse(code, attemptedUsername, waiter, "BAD_PIN", CREDENTIALS_MESSAGE,
+                    countAgainst(caller.userId(), now));
+        }
+        if (waiter.getId().equals(caller.userId())) {
+            return refuse(code, attemptedUsername, waiter, "SELF_APPROVAL",
+                    NOT_AUTHORISED_MESSAGE, false);
+        }
+        RequestContext.Principal inCallerScope = new RequestContext.Principal(
+                waiter.getId(), waiter.getUsername(), waiter.isRoot(), caller.companyId(),
+                caller.branchId(), caller.ip(), waiter.getOrganisationId());
+        long millis = now.toEpochMilli();
+        boolean waiterOnly = !waiter.isRoot()
+                && permissionResolver.hasPermission(inCallerScope, WAITER_PERMISSION, millis)
+                && !permissionResolver.hasPermission(inCallerScope, "POS.SESSION.OPEN", millis);
+        if (!waiterOnly) {
+            return refuse(code, attemptedUsername, waiter, "NOT_A_WAITER", NOT_AUTHORISED_MESSAGE,
+                    countAgainst(caller.userId(), now));
+        }
+        throttles.remove(caller.userId());
+        audit.record(AuditEvent.of(AuditActions.AUTH_STEP_UP_SUCCESS, TARGET_TYPE,
+                        waiter.getId(), waiter.getUid())
+                .detail(auditDetail(code, attemptedUsername, "GRANTED_BY_PIN")));
+        return AuthorityVerificationDto.granted(
+                code, waiter.getUid(), waiter.getUsername(), waiter.getDisplayName());
+    }
+
+    /** What a waiter PIN can prove, and nothing more. */
+    private static final String WAITER_PERMISSION = "RESTAURANT.ORDER.MANAGE";
+
     private AuthorityVerificationDto refuse(String code,
                                             String attemptedUsername,
                                             AppUser authoriser,

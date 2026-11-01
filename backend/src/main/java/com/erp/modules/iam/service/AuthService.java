@@ -14,6 +14,15 @@ public interface AuthService {
 
     TokenResponse login(String username, String rawPassword, String ip);
 
+    /**
+     * POS sign-in with a 4-digit PIN (V111) — waiters only: a user who takes restaurant orders
+     * and cannot open a till. Same lockout, tenant and token rules as {@link #login}.
+     */
+    TokenResponse loginWithPin(String username, String pin, String ip);
+
+    /** The signed-in waiter sets or changes their own PIN, proving it with their PIN or password. */
+    void changeOwnPin(String currentSecret, String newPin, String ip);
+
     TokenResponse refresh(String rawRefreshToken);
 
     void logout(String rawRefreshToken);

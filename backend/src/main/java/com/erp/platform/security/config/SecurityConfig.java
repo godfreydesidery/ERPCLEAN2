@@ -42,7 +42,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(reg -> reg
                         // API endpoints: only auth + health are public; everything else needs a
                         // bearer token AND passes method-security (@PreAuthorize) on the controller.
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/refresh",
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/pin-login",
+                                "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout", "/api/v1/health")
                         .permitAll()
                         .requestMatchers("/api/**").authenticated()

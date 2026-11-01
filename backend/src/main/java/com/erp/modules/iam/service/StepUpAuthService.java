@@ -33,6 +33,13 @@ public interface StepUpAuthService {
                                              String permissionCode);
 
     /**
+     * "Who's serving?" with a waiter's 4-digit PIN (V111). Only ever proves a WAITER — someone
+     * holding {@code RESTAURANT.ORDER.MANAGE} who cannot open a till — so a PIN can never stand in
+     * for a manager's approval. Same throttle, timing and audit as {@link #verifyAuthority}.
+     */
+    AuthorityVerificationDto verifyWaiterPin(String username, String pin);
+
+    /**
      * Re-verify, server-side, a uid that a client claims came back from a successful
      * {@link #verifyAuthority} call.
      *
