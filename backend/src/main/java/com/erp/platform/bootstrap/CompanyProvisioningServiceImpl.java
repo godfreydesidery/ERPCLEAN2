@@ -19,6 +19,7 @@ import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
 import com.erp.modules.sales.service.SalesSettingsSeeder;
+import com.erp.modules.sales.service.ComplimentaryGlSeeder;
 import com.erp.modules.sales.service.TillExpenseGlSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
@@ -85,6 +86,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
     // never posts drawer spend to the cash-SHORTAGE variance account; the POS expense path also
     // self-heals an existing company on first use, so an upgrade needs no manual step.
     private final TillExpenseGlSeeder    tillExpenseGlSeeder;
+    private final ComplimentaryGlSeeder  complimentaryGlSeeder;
     private final CodeSequenceSeeder     codeSequenceSeeder;
 
     CompanyProvisioningServiceImpl(
@@ -110,6 +112,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
             ManufacturingGlSeeder  manufacturingGlSeeder,
             CurrencyEnablementSeeder currencyEnablementSeeder,
             TillExpenseGlSeeder    tillExpenseGlSeeder,
+            ComplimentaryGlSeeder  complimentaryGlSeeder,
             CodeSequenceSeeder     codeSequenceSeeder) {
         this.unitSeeder               = unitSeeder;
         this.taxRateSeeder            = taxRateSeeder;
@@ -133,6 +136,7 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         this.manufacturingGlSeeder    = manufacturingGlSeeder;
         this.currencyEnablementSeeder = currencyEnablementSeeder;
         this.tillExpenseGlSeeder      = tillExpenseGlSeeder;
+        this.complimentaryGlSeeder    = complimentaryGlSeeder;
         this.codeSequenceSeeder       = codeSequenceSeeder;
     }
 
@@ -222,6 +226,9 @@ class CompanyProvisioningServiceImpl implements CompanyProvisioningService {
         // Till-expense account 5175 + gl_configs[POS_TILL_EXPENSE] (V97). Runs after the CoA seed
         // above, which is what it adopts or extends.
         tillExpenseGlSeeder.seedDefaults(companyId);
+
+        // Complimentary-expense account 5176 + gl_configs[COMPLIMENTARY_EXPENSE] (V110).
+        complimentaryGlSeeder.seedDefaults(companyId);
 
         // Company currency allow-list (ADR-0039 D-9)
         currencyEnablementSeeder.seedDefaults(companyId, baseCurrency, defaultCurrency,

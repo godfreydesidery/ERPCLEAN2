@@ -339,6 +339,10 @@ public class GLPostingSafeInvoker {
      */
     private Long tenderGlAccountId(Long companyId, InvoicePostingTenderDto tender,
                                    ChartOfAccount cashAcct) {
+        // V110: complimentary is an expense, never cash.
+        if ("COMPLIMENTARY".equals(tender.tenderType())) {
+            return configResolver.resolve(companyId, GlConfigKey.COMPLIMENTARY_EXPENSE).getId();
+        }
         if (cashBankAccounts == null || tender.cashBankAccountId() == null) {
             return cashAcct.getId();
         }

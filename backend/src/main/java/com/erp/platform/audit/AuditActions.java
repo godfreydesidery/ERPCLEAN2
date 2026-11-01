@@ -458,6 +458,8 @@ public final class AuditActions {
     public static final String POS_SALE_RING             = "POS.SALE.RING";
     public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";
     public static final String POS_SALE_REVERSE          = "POS.SALE.REVERSE";
+    /** A sale (or part of one) settled as COMPLIMENTARY, with who approved it (V110). */
+    public static final String POS_SALE_COMPLIMENTARY    = "POS.SALE.COMPLIMENTARY";
     public static final String POS_REFUND                = "POS.REFUND";
     // Pricing rules
     public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";

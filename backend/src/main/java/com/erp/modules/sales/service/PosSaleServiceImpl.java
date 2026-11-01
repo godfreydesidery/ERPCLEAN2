@@ -37,6 +37,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
@@ -114,6 +115,8 @@ public class PosSaleServiceImpl implements PosSaleService {
      * instead of being reimplemented here.
      */
     private final StepUpAuthService      stepUpAuth;
+    private final ComplimentaryAuthorisationGuard complimentaryGuard;
+    private final ComplimentaryGlSeeder complimentaryGl;
 
     /** How long a reserved-but-unstamped marker may sit before it reads as abandoned, not in-flight. */
     private final Duration replayMaxAge;
@@ -135,6 +138,8 @@ public class PosSaleServiceImpl implements PosSaleService {
                                PermissionResolver permissionResolver,
                                AgentRepository agents,
                                StepUpAuthService stepUpAuth,
+                               ComplimentaryAuthorisationGuard complimentaryGuard,
+                               ComplimentaryGlSeeder complimentaryGl,
                                @Value("${erp.pos.sale.replay-max-age:PT15M}") Duration replayMaxAge,
                                @Value("${erp.pos.sale.max-age:PT12H}") Duration saleMaxAge,
                                @Value("${erp.pos.session.max-open-age:PT36H}") Duration maxOpenSessionAge) {
@@ -151,6 +156,8 @@ public class PosSaleServiceImpl implements PosSaleService {
         this.idempotency       = idempotency;
         this.permissionResolver = permissionResolver;
         this.stepUpAuth        = stepUpAuth;
+        this.complimentaryGuard = complimentaryGuard;
+        this.complimentaryGl   = complimentaryGl;
         this.replayMaxAge      = replayMaxAge;
         this.saleMaxAge        = saleMaxAge;
         this.maxOpenSessionAge = maxOpenSessionAge;
@@ -275,6 +282,7 @@ public class PosSaleServiceImpl implements PosSaleService {
             BigDecimal grossTotal = reloaded.getGrossTotalAmount();
             var tenders = req.tenders();
             if (tenders != null && !tenders.isEmpty()) {
+                authoriseComplimentary(companyId, reloaded, tenders);
                 BigDecimal tendered = BigDecimal.ZERO;
                 for (var t : tenders) {
                     invoiceService.addPayment(invoiceUid, new AddPaymentRequest(
@@ -580,6 +588,37 @@ public class PosSaleServiceImpl implements PosSaleService {
     }
 
     // -------------------------------------------------------------------------
+
+    /** V110: approval, amount and expense account for COMPLIMENTARY, before any payment is added. */
+    private void authoriseComplimentary(Long companyId, SalesInvoice invoice,
+                                        List<PosSaleRequest.PosTender> tenders) {
+        BigDecimal complimentary = BigDecimal.ZERO;
+        String authoriserUid = null;
+        for (var t : tenders) {
+            if (t.tenderType() == TenderType.COMPLIMENTARY) {
+                complimentary = complimentary.add(t.amount());
+                if (authoriserUid == null && t.authorisedByUid() != null
+                        && !t.authorisedByUid().isBlank()) {
+                    authoriserUid = t.authorisedByUid();
+                }
+            }
+        }
+        if (complimentary.signum() == 0) {
+            return;
+        }
+        if (complimentary.compareTo(invoice.getGrossTotalAmount()) > 0) {
+            throw PosSaleFlowException.rejected(
+                    "The complimentary amount is more than the sale.", "COMPLIMENTARY_TOO_LARGE");
+        }
+        complimentaryGuard.authorise(companyId, invoice.getId(), invoice.getUid(), complimentary,
+                authoriserUid);
+        complimentaryGl.ensureMapping(companyId);
+        if (!complimentaryGl.isMapped(companyId)) {
+            throw PosSaleFlowException.rejected(
+                    "Complimentary sales are not set up for this company yet. Ask finance to map a "
+                            + "Complimentary expense account.", "COMPLIMENTARY_NOT_SET_UP");
+        }
+    }
 
     /** Sum of the per-line discounts the till asked for, for the sale-level audit row. */
     private static BigDecimal totalLineDiscount(PosSaleRequest req) {

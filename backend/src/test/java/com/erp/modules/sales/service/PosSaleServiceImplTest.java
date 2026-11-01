@@ -99,6 +99,8 @@ class PosSaleServiceImplTest {
     private PermissionResolver          permissionResolver;
     private AgentRepository             agents;
     private StepUpAuthService           stepUpAuth;
+    private ComplimentaryAuthorisationGuard complimentaryGuard;
+    private ComplimentaryGlSeeder       complimentaryGl;
 
     private PosSaleServiceImpl service;
 
@@ -117,11 +119,14 @@ class PosSaleServiceImplTest {
         permissionResolver = mock(PermissionResolver.class);
         agents             = mock(AgentRepository.class);
         stepUpAuth         = mock(StepUpAuthService.class);
+        complimentaryGuard = mock(ComplimentaryAuthorisationGuard.class);
+        complimentaryGl    = mock(ComplimentaryGlSeeder.class);
 
         service = new PosSaleServiceImpl(
                 posSessionRepo, invoiceRepo, invoiceService, products, units,
                 customers, companies, scopeGuard, audit, idempotency, permissionResolver,
-                agents, stepUpAuth, REPLAY_MAX_AGE, SALE_MAX_AGE, MAX_OPEN_SESSION_AGE);
+                agents, stepUpAuth, complimentaryGuard, complimentaryGl,
+                REPLAY_MAX_AGE, SALE_MAX_AGE, MAX_OPEN_SESSION_AGE);
 
         // Common stubs: open session in company scope
         PosSession session = buildSession();

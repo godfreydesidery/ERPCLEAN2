@@ -27,6 +27,7 @@ import com.erp.modules.manufacturing.service.ManufacturingGlSeeder;
 import com.erp.modules.notifications.service.NotificationTypeSeeder;
 import com.erp.modules.products.service.UnitOfMeasureSeeder;
 import com.erp.modules.sales.service.SalesSettingsSeeder;
+import com.erp.modules.sales.service.ComplimentaryGlSeeder;
 import com.erp.modules.sales.service.TillExpenseGlSeeder;
 import com.erp.modules.sales.service.TaxRateSeeder;
 import com.erp.modules.stock.service.InventoryGlSeeder;
@@ -70,6 +71,7 @@ class CompanyProvisioningServiceImplTest {
     @Mock ManufacturingGlSeeder  manufacturingGlSeeder;
     @Mock CurrencyEnablementSeeder currencyEnablementSeeder;
     @Mock TillExpenseGlSeeder    tillExpenseGlSeeder;
+    @Mock ComplimentaryGlSeeder  complimentaryGlSeeder;
 
     private CompanyProvisioningServiceImpl service;
 
@@ -84,6 +86,7 @@ class CompanyProvisioningServiceImplTest {
                 // FIRST company only — a second company got no leave types at all.
                 leaveTypeSeeder, notificationTypeSeeder,
                 manufacturingGlSeeder, currencyEnablementSeeder, tillExpenseGlSeeder,
+                complimentaryGlSeeder,
                 // P5-6: provisioning now seeds the document-number sequences up front.
                 codeSequenceSeeder);
     }
@@ -120,6 +123,8 @@ class CompanyProvisioningServiceImplTest {
         // V97: the till-expense account + POS_TILL_EXPENSE mapping. Without it a new company would
         // post drawer spend to the cash-SHORTAGE variance account, exactly the defect V97 closes.
         verify(tillExpenseGlSeeder, times(1)).seedDefaults(companyId);
+        // V110: the complimentary-expense account + COMPLIMENTARY_EXPENSE mapping.
+        verify(complimentaryGlSeeder, times(1)).seedDefaults(companyId);
     }
 
     @Test

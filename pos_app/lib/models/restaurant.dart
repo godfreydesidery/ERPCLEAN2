@@ -543,3 +543,39 @@ class RestaurantWaiter {
     return t.isEmpty || name.toLowerCase().contains(t) || username.toLowerCase().contains(t);
   }
 }
+
+
+/// `POST /restaurant/orders/uid/{uid}/quote` — the order priced as it would be
+/// paid, with an order discount; [grossTotal] goes back as `expectedTotal`.
+class RestaurantQuote {
+  RestaurantQuote({
+    required this.undiscountedTotal,
+    required this.discountTotal,
+    required this.grossTotal,
+  });
+
+  final double undiscountedTotal;
+  final double discountTotal;
+  final double grossTotal;
+
+  factory RestaurantQuote.fromJson(Map<String, dynamic> j) => RestaurantQuote(
+        undiscountedTotal: asNumOr(j['undiscountedTotal']),
+        discountTotal: asNumOr(j['discountTotal']),
+        grossTotal: asNumOr(j['grossTotal']),
+      );
+}
+
+/// A completed order (`GET /restaurant/orders/paid`) with what was paid.
+class PaidOrder {
+  PaidOrder({required this.order, this.invoiceNumber, this.paidTotal});
+
+  final RestaurantOrder order;
+  final String? invoiceNumber;
+  final double? paidTotal;
+
+  factory PaidOrder.fromJson(Map<String, dynamic> j) => PaidOrder(
+        order: RestaurantOrder.fromJson(asMap(j['order'])),
+        invoiceNumber: asStr(j['invoiceNumber']),
+        paidTotal: j['paidTotal'] == null ? null : asNumOr(j['paidTotal']),
+      );
+}

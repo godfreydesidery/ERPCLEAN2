@@ -19,6 +19,7 @@ import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
 import '../payment/payment_sheet.dart';
+import '../receipt/receipt_view.dart';
 import '../restaurant/restaurant_dialogs.dart';
 import '../restaurant/restaurant_printing.dart';
 import '../restaurant/slip_text.dart';
@@ -75,6 +76,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// The floor shows the Orders board (every open order with its items, as at
   /// Cafe Tulia's old till) instead of the table tiles.
   bool _boardView = false;
+
+  /// The board shows today's completed (paid) bills instead of the open ones.
+  bool _completedView = false;
+  List<PaidOrder> _paidToday = const [];
 
   /// Keeps the floor current while it is on screen: orders opened or added to
   /// on other devices appear without pressing Refresh.
@@ -410,7 +415,29 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
         _live = results[1] as List<RestaurantOrder>;
       });
       _ensureKnown(_live);
+      if (_boardView && _completedView) await _loadPaidToday();
     } catch (_) {}
+  }
+
+  Future<void> _loadPaidToday() async {
+    try {
+      final paid = await _svc.listPaidToday();
+      if (!mounted) return;
+      setState(() => _paidToday = paid);
+      _ensureKnown([for (final p in paid) p.order]);
+    } on ApiException catch (e) {
+      if (mounted) showToast(context, e.message);
+    }
+  }
+
+  Future<void> _showPaidReceipt(PaidOrder p) async {
+    final invoiceUid = p.order.salesInvoiceUid;
+    if (invoiceUid == null) return;
+    final receipt = await _run(() => ref
+        .read(saleServiceProvider)
+        .loadReceipt(invoiceUid, clientTxnId: 'reprint-$invoiceUid'));
+    if (receipt == null || !mounted) return;
+    await showReceiptSheet(context, ref, receipt, reprint: true);
   }
 
   /// Loads and prices the products on open orders that the menu has not, so the
@@ -1169,22 +1196,45 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   /// what is on a table, and what a guest has just added, without opening it
   /// (Cafe Tulia 2026-11-01). Oldest first: the longest wait leads.
   Widget _ordersBoard() {
-    final waiters = _live.map((o) => o.waiterName).where((n) => n.isNotEmpty).toSet().toList()
+    final source = _completedView ? [for (final p in _paidToday) p.order] : _live;
+    final waiters = source.map((o) => o.waiterName).where((n) => n.isNotEmpty).toSet().toList()
       ..sort();
     final filter = waiters.contains(_waiterFilter) ? _waiterFilter : null;
-    final shown = _live.where((o) => filter == null || o.waiterName == filter).toList()
-      ..sort((a, b) {
+    final shown = source.where((o) => filter == null || o.waiterName == filter).toList();
+    if (!_completedView) {
+      shown.sort((a, b) {
         final at = a.openedAt, bt = b.openedAt;
         if (at == null || bt == null) return a.orderNumber.compareTo(b.orderNumber);
         return at.compareTo(bt);
       });
+    }
+    final paidByUid = {for (final p in _paidToday) p.order.uid: p};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (waiters.length > 1)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: DropdownButton<String?>(
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: false, label: Text('Pending (${_live.length})')),
+                ButtonSegment(
+                    value: true,
+                    label: Text(_completedView
+                        ? 'Completed today (${_paidToday.length})'
+                        : 'Completed today')),
+              ],
+              selected: {_completedView},
+              onSelectionChanged: (v) {
+                setState(() => _completedView = v.first);
+                if (_completedView) _loadPaidToday();
+              },
+            ),
+            if (waiters.length > 1)
+              DropdownButton<String?>(
               value: filter,
               isDense: true,
               hint: const Text('All waiters', style: TextStyle(fontSize: 13)),
@@ -1197,11 +1247,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
               ],
               onChanged: (v) => setState(() => _waiterFilter = v),
             ),
-          ),
-        if (waiters.length > 1) const SizedBox(height: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
         Expanded(
           child: shown.isEmpty
-              ? const _FloorNotice(icon: Icons.receipt_long_outlined, text: 'No open orders.')
+              ? _FloorNotice(
+                  icon: Icons.receipt_long_outlined,
+                  text: _completedView ? 'No bills paid today yet.' : 'No open orders.')
               : GridView.builder(
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 360,
@@ -1212,6 +1265,16 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                   itemCount: shown.length,
                   itemBuilder: (context, i) {
                     final o = shown[i];
+                    final paid = paidByUid[o.uid];
+                    if (_completedView && paid != null) {
+                      return OrderCard(
+                        order: o,
+                        amountOf: _lineAmount,
+                        total: paid.paidTotal,
+                        note: paid.invoiceNumber,
+                        onTap: _busy ? null : () => _showPaidReceipt(paid),
+                      );
+                    }
                     final billed = o.status == OrderStatus.billed && o.billedTotal != null;
                     return OrderCard(
                       order: o,
@@ -1961,8 +2024,12 @@ class OrderCard extends StatelessWidget {
       required this.order,
       required this.amountOf,
       required this.total,
-      required this.onTap});
+      required this.onTap,
+      this.note});
   final RestaurantOrder order;
+
+  /// Shown in place of the time open — a completed bill's invoice number.
+  final String? note;
   final double? Function(RestaurantOrderLine) amountOf;
   final double? total;
   final VoidCallback? onTap;
@@ -1970,6 +2037,7 @@ class OrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final billed = order.status == OrderStatus.billed;
+    final paid = order.status == OrderStatus.paid;
     final active = order.activeLines;
     final rows = <RestaurantOrderLine>[];
     for (final l in active.where((l) => !l.isAddOn)) {
@@ -2017,7 +2085,7 @@ class OrderCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                           Text(
-                              [order.orderNumber, openFor(order.openedAt)]
+                              [order.orderNumber, note ?? (paid ? '' : openFor(order.openedAt))]
                                   .where((s) => s.isNotEmpty)
                                   .join(' · '),
                               style: const TextStyle(fontSize: 12, color: AppColors.ink2)),
@@ -2038,6 +2106,7 @@ class OrderCard extends StatelessWidget {
                                     const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
                           ),
                         if (billed) tag('BILL PRINTED', AppColors.warn),
+                        if (paid) tag('PAID', AppColors.ok),
                       ],
                     ),
                   ],
@@ -2103,7 +2172,7 @@ class OrderCard extends StatelessWidget {
                     color: AppColors.panel2, border: Border(top: BorderSide(color: AppColors.line))),
                 child: Row(
                   children: [
-                    Text(billed ? 'BILL' : 'TOTAL',
+                    Text(paid ? 'PAID' : billed ? 'BILL' : 'TOTAL',
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.ink2)),
                     const Spacer(),
