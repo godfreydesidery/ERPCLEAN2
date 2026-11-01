@@ -329,21 +329,24 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Test
     void discount_byPercentOrAmount_isQuotedThenChargedExactly() {
         setCashierCtx();
-        RestaurantOrderDto order = openWith(tacos);                 // 12,000
-        orders.addLine(order.uid(), item(latte));                    //  6,000
+        RestaurantOrderDto order = openWith(tacos);                 // 12,000 net
+        orders.addLine(order.uid(), item(latte));                    //  6,000 net
         RestaurantQuoteDto full = orders.quote(order.uid(),
                 new QuoteRestaurantOrderRequest(customerId, "TZS", null, null));
-        assertThat(full.grossTotal()).isEqualByComparingTo("18000");
+        BigDecimal gross = full.grossTotal();                        // + 18% VAT = 21,240
+        assertThat(gross).isEqualByComparingTo("21240");
         assertThat(full.discountTotal()).isEqualByComparingTo("0");
 
+        // Off the VAT-inclusive total, whatever the price basis.
         RestaurantQuoteDto tenPct = orders.quote(order.uid(),
                 new QuoteRestaurantOrderRequest(customerId, "TZS", new BigDecimal("10"), null));
-        assertThat(tenPct.grossTotal()).isEqualByComparingTo("16200");
-        assertThat(tenPct.discountTotal()).isEqualByComparingTo("1800");
+        assertThat(tenPct.grossTotal()).isEqualByComparingTo("19116");
+        assertThat(tenPct.discountTotal()).isEqualByComparingTo("2124");
 
         RestaurantQuoteDto off = orders.quote(order.uid(),
                 new QuoteRestaurantOrderRequest(customerId, "TZS", null, new BigDecimal("5000")));
-        assertThat(off.grossTotal()).isEqualByComparingTo("13000");
+        assertThat(off.grossTotal()).isEqualByComparingTo("16240");
+        assertThat(off.discountTotal()).isEqualByComparingTo("5000");
         assertThat(orders.get(order.uid()).billPrintCount()).as("a quote prints nothing").isZero();
 
         assertThatThrownBy(() -> orders.quote(order.uid(), new QuoteRestaurantOrderRequest(
@@ -358,13 +361,13 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         RestaurantPaymentDto paid = orders.pay(order.uid(), "resto-disc-1",
                 new PayRestaurantOrderRequest(sessionUid, customerId, "TZS", null, null,
                         off.grossTotal(), null, null, null, new BigDecimal("5000"), null));
-        assertThat(paid.invoice().grossTotalAmount()).isEqualByComparingTo("13000");
+        assertThat(paid.invoice().grossTotalAmount()).isEqualByComparingTo("16240");
         SalesInvoice invoice = invoiceRepo.findByUid(paid.invoice().uid()).orElseThrow();
         assertThat(jdbc.queryForObject(
                 "select coalesce(sum(line_discount_amount),0) from sales_invoice_lines where invoice_id = ?",
                 BigDecimal.class, invoice.getId()))
-                .as("the discount is carried as ordinary line discounts")
-                .isEqualByComparingTo("5000");
+                .as("carried as ordinary line discounts, net of VAT on an exclusive price list")
+                .isCloseTo(new BigDecimal("4237.29"), org.assertj.core.data.Offset.offset(new BigDecimal("0.02")));
     }
 
     @Test
