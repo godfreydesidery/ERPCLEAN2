@@ -38,6 +38,17 @@ final class RestaurantDiscount {
         return BigDecimal.ZERO;
     }
 
+    /** The last line with any value (it absorbs rounding), or -1. */
+    static int lastWithValue(List<PricedLine> lines) {
+        int last = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).gross().signum() > 0) {
+                last = i;
+            }
+        }
+        return last;
+    }
+
     /** Per-line discounts (line basis) taking {@code target} off; the last line takes rounding. */
     static List<BigDecimal> spread(List<PricedLine> lines, BigDecimal gross, BigDecimal target) {
         List<BigDecimal> out = new ArrayList<>(lines.size());
@@ -45,12 +56,7 @@ final class RestaurantDiscount {
             lines.forEach(l -> out.add(BigDecimal.ZERO));
             return out;
         }
-        int last = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            if (lines.get(i).gross().signum() > 0) {
-                last = i;
-            }
-        }
+        int last = lastWithValue(lines);
         BigDecimal given = BigDecimal.ZERO;
         for (int i = 0; i < lines.size(); i++) {
             PricedLine l = lines.get(i);

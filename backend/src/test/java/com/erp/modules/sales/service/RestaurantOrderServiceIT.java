@@ -367,7 +367,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 "select coalesce(sum(line_discount_amount),0) from sales_invoice_lines where invoice_id = ?",
                 BigDecimal.class, invoice.getId()))
                 .as("carried as ordinary line discounts, net of VAT on an exclusive price list")
-                .isCloseTo(new BigDecimal("4237.29"), org.assertj.core.data.Offset.offset(new BigDecimal("0.02")));
+                .isCloseTo(new BigDecimal("4237.29"), org.assertj.core.data.Offset.offset(new BigDecimal("1.00")));
     }
 
     @Test

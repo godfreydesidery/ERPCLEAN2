@@ -68,6 +68,7 @@ import com.erp.platform.common.time.CompanyCalendar;
 import com.erp.platform.security.PermissionResolver;
 import com.erp.platform.security.RequestContext;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -1133,15 +1134,32 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         if (target.signum() == 0) {
             return new Discounted(base, items, base.gross(), BigDecimal.ZERO);
         }
-        var perLine = RestaurantDiscount.spread(base.lines(), base.gross(), target);
-        List<RestaurantBillCalculator.Item> withDiscount = new ArrayList<>(items.size());
-        for (int i = 0; i < items.size(); i++) {
-            var it = items.get(i);
-            withDiscount.add(new RestaurantBillCalculator.Item(it.productId(), it.unitId(),
-                    it.quantity(), perLine.get(i)));
+        List<BigDecimal> perLine = new ArrayList<>(
+                RestaurantDiscount.spread(base.lines(), base.gross(), target));
+        BigDecimal wanted = base.gross().subtract(target);
+        List<RestaurantBillCalculator.Item> withDiscount = null;
+        RestaurantBillCalculator.Priced priced = null;
+        // VAT is rounded after an exclusive-price discount, so the total can land a unit off:
+        // move the last line's discount by the leftover until the total is exact.
+        for (int pass = 0; pass < 3; pass++) {
+            withDiscount = new ArrayList<>(items.size());
+            for (int i = 0; i < items.size(); i++) {
+                var it = items.get(i);
+                withDiscount.add(new RestaurantBillCalculator.Item(it.productId(), it.unitId(),
+                        it.quantity(), perLine.get(i)));
+            }
+            priced = calculator.price(order.getCompanyId(), order.getBranchId(), customerId,
+                    currency, withDiscount);
+            BigDecimal leftover = priced.gross().subtract(wanted);
+            int last = RestaurantDiscount.lastWithValue(base.lines());
+            if (leftover.signum() == 0 || last < 0) {
+                break;
+            }
+            var line = base.lines().get(last);
+            BigDecimal nudge = leftover.multiply(line.raw())
+                    .divide(line.gross(), 2, RoundingMode.HALF_UP);
+            perLine.set(last, perLine.get(last).add(nudge).max(BigDecimal.ZERO).min(line.raw()));
         }
-        var priced = calculator.price(order.getCompanyId(), order.getBranchId(), customerId,
-                currency, withDiscount);
         return new Discounted(priced, withDiscount, base.gross(),
                 base.gross().subtract(priced.gross()));
     }
