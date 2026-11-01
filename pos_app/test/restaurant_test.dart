@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/config/app_config.dart';
 import 'package:pos_app/features/register/restaurant_register.dart';
 import 'package:pos_app/features/restaurant/restaurant_printing.dart';
+import 'package:pos_app/features/receipt/receipt_text.dart';
 import 'package:pos_app/features/restaurant/slip_text.dart';
 import 'package:pos_app/features/restaurant/station_print_agent.dart';
 import 'package:pos_app/models/auth.dart';
@@ -258,16 +259,67 @@ void main() {
 
   group('slip text', () {
     test('a kitchen/bar slip names the station, table and items — never a price', () {
-      final text = buildSlipText(_slip(), width: 32);
+      final text = buildSlipText(_slip(), width: 48);
       expect(text, contains('BAR'));
       expect(text, contains('TABLE T4'));
       expect(text, contains('ORD-0007'));
       expect(text, contains('2 x Pumpkin Spice Latte'));
       expect(text, contains('>> no sugar'));
+      expect(text, contains('Guests 3'));
       expect(text, isNot(contains('6,000')));
       for (final line in text.split('\n')) {
-        expect(line.length, lessThanOrEqualTo(32), reason: line);
+        expect(line.length, lessThanOrEqualTo(48), reason: line);
       }
+    });
+
+    test('station, table and items print large; every large line fits half the paper', () {
+      for (final width in [32, 48]) {
+        final lines = buildSlipLines(_slip(), width: width);
+        String sized(bool big) => lines.where((l) => l.big == big).map((l) => l.text).join('\n');
+        expect(sized(true), allOf(contains('BAR'), contains('TABLE T4'), contains('2 x Pumpkin'),
+            contains('>> no sugar'), contains('1 x Mango')));
+        expect(sized(false), allOf(contains('ORD-0007'), contains('Asha Waiter')));
+        expect(sized(false), isNot(contains('Pumpkin')));
+        for (final l in lines) {
+          expect(l.text.length, lessThanOrEqualTo(l.big ? width ~/ 2 : width), reason: l.text);
+        }
+      }
+    });
+
+    test('the printer gets large print switched on for large lines and off again', () {
+      const on = [0x1D, 0x21, 0x11];
+      const off = [0x1D, 0x21, 0x00];
+      int at(List<int> b, List<int> seq, [int from = 0]) {
+        for (var i = from; i + seq.length <= b.length; i++) {
+          var match = true;
+          for (var j = 0; j < seq.length; j++) {
+            if (b[i + j] != seq[j]) {
+              match = false;
+              break;
+            }
+          }
+          if (match) return i;
+        }
+        return -1;
+      }
+
+      final bytes = encodeSlip(const [
+        SlipLine('KITCHEN', big: true),
+        SlipLine('ORD-1 12:00'),
+        SlipLine('1 x Soup', big: true),
+      ]);
+      final first = at(bytes, on);
+      expect(first, greaterThanOrEqualTo(0));
+      expect(at(bytes, off, first), lessThan(at(bytes, 'ORD-1'.codeUnits)));
+      final second = at(bytes, on, first + 1);
+      expect(second, greaterThan(at(bytes, 'ORD-1'.codeUnits)));
+      expect(at(bytes, off, second), greaterThan(second), reason: 'large print is reset at the end');
+      expect(bytes.sublist(bytes.length - 4), [0x1D, 0x56, 0x42, 0x00]);
+    });
+
+    test('a bill stays normal size', () {
+      final text = buildBillText(_bill(), companyName: 'CAFE TULIA', branchName: '', width: 48);
+      expect(encodeEscPos(text).toString(), isNot(contains('29, 33, 17')));
     });
 
     test('add-ons print indented under their item; courses get headings', () {
@@ -280,9 +332,9 @@ void main() {
           PrepSlipLine(productName: 'Extra cheese', quantity: 2, addOn: true, course: 2),
         ],
       );
-      final text = buildSlipText(slip, width: 32).split('\n');
+      final text = buildSlipText(slip, width: 48).split('\n');
       final burger = text.indexWhere((l) => l.contains('2 x Burger'));
-      expect(text[burger + 1], '    + 2 Extra cheese');
+      expect(text[burger + 1], '  + 2 Extra cheese');
       expect(text.indexWhere((l) => l.contains('COURSE 2')), lessThan(burger));
       expect(text.where((l) => l.contains('COURSE')), hasLength(2));
     });
@@ -290,6 +342,7 @@ void main() {
     test('a VOID slip leads with the cancellation and says why', () {
       final text = buildSlipText(_slip(isVoid: true), width: 48);
       expect(text.split('\n')[1], contains('VOID - DO NOT MAKE'));
+      expect(buildSlipLines(_slip(isVoid: true), width: 48)[1].big, isTrue);
       expect(text, contains('Reason: Wrong item'));
     });
   });

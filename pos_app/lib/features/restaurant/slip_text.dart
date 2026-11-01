@@ -19,23 +19,41 @@ String _time(DateTime? at) =>
 List<String> _indented(String text, int by, int width) =>
     [for (final l in wrapText(text, width - by)) '${' ' * by}$l'];
 
+/// One printed line of a slip. A [big] line prints at double width and double
+/// height, so it is laid out at half the paper's columns.
+class SlipLine {
+  const SlipLine(this.text, {this.big = false});
+  final String text;
+  final bool big;
+}
+
 /// A slip for one prep station. Says WHAT to make (or stop making) and for
 /// WHOM — never a price. A VOID slip leads with the cancellation so a cook
 /// glancing at the rail cannot mistake it for a new order.
-String buildSlipText(PrepSlip slip, {required int width}) {
+///
+/// The station, the table and the items print LARGE, readable from across a
+/// kitchen; the order number, time and who sent it stay normal size (Cafe
+/// Tulia 2026-11-01: "order zitoke na font kubwa"). Bills and receipts are not
+/// slips and keep the normal size.
+List<SlipLine> buildSlipLines(PrepSlip slip, {required int width}) {
+  final big = width ~/ 2;
+  List<SlipLine> large(List<String> lines) => [for (final l in lines) SlipLine(l, big: true)];
+  List<SlipLine> normal(List<String> lines) => [for (final l in lines) SlipLine(l)];
+  List<SlipLine> largeCentered(String text) =>
+      large([for (final l in wrapText(text, big)) centered(l, big)]);
+
   final where = slip.takeaway ? 'TAKEAWAY' : 'TABLE ${slip.tableName ?? ''}'.trim();
-  final lines = <String>[
-    centered(slip.stationName.toUpperCase(), width),
-    if (slip.isVoid) ...[
-      centered('*** VOID - DO NOT MAKE ***', width),
-    ],
-    if (slip.reprint) centered('REPRINT', width),
-    doubleRule(width),
-    leftRight(where, slip.orderNumber, width),
-    if (slip.guestCount != null) leftRight('Guests', '${slip.guestCount}', width),
-    leftRight(slip.isVoid ? 'Voided' : 'Round ${slip.round}', _time(slip.at), width),
-    ...labelValue('By', slip.byName, width),
-    rule(width),
+  final lines = <SlipLine>[
+    ...largeCentered(slip.stationName.toUpperCase()),
+    if (slip.isVoid) ...largeCentered('VOID - DO NOT MAKE'),
+    if (slip.reprint) SlipLine(centered('REPRINT', width)),
+    SlipLine(doubleRule(width)),
+    ...largeCentered(where),
+    SlipLine(leftRight(slip.orderNumber, _time(slip.at), width)),
+    SlipLine(leftRight(slip.isVoid ? 'Voided' : 'Round ${slip.round}',
+        slip.guestCount == null ? '' : 'Guests ${slip.guestCount}', width)),
+    ...normal(labelValue('By', slip.byName, width)),
+    SlipLine(rule(width)),
   ];
   // Course headings only when the slip spans more than one course.
   final courses = slip.lines.where((l) => !l.addOn).map((l) => l.course).toSet();
@@ -43,24 +61,54 @@ String buildSlipText(PrepSlip slip, {required int width}) {
   for (final l in slip.lines) {
     if (l.addOn) {
       // An add-on belongs to the item above it: indented, never a line of its own.
-      lines.addAll(_indented('+ ${_qty(l.quantity)} ${l.productName}', 4, width));
+      lines.addAll(large(_indented('+ ${_qty(l.quantity)} ${l.productName}', 2, big)));
       continue;
     }
     if (courses.length > 1 && l.course != course) {
       course = l.course;
-      lines.add(centered('-- COURSE $course --', width));
+      lines.add(SlipLine(centered('-- COURSE $course --', width)));
     }
-    final head = '${_qty(l.quantity)} x ${l.productName}';
-    lines.addAll(wrapText(head, width));
+    lines.addAll(large(wrapText('${_qty(l.quantity)} x ${l.productName}', big)));
     if (l.note != null && l.note!.trim().isNotEmpty) {
-      lines.addAll(_indented('>> ${l.note!.trim()}', 2, width));
+      lines.addAll(large(_indented('>> ${l.note!.trim()}', 2, big)));
     }
     if (slip.isVoid && l.voidReason != null && l.voidReason!.trim().isNotEmpty) {
-      lines.addAll(_indented('Reason: ${l.voidReason!.trim()}', 2, width));
+      lines.addAll(normal(_indented('Reason: ${l.voidReason!.trim()}', 2, width)));
     }
   }
-  lines.add(rule(width));
-  return lines.join('\n');
+  lines.add(SlipLine(rule(width)));
+  return lines;
+}
+
+/// The slip as plain text (one string, large lines included at their half
+/// width) — for previews and tests; the printer gets [encodeSlip].
+String buildSlipText(PrepSlip slip, {required int width}) =>
+    buildSlipLines(slip, width: width).map((l) => l.text).join('\n');
+
+/// `GS ! 0x11` / `GS ! 0x00` — character size double width and height / normal.
+const List<int> escLargeOn = [0x1D, 0x21, 0x11];
+const List<int> escLargeOff = [0x1D, 0x21, 0x00];
+
+/// Encodes a slip as an ESC/POS job, switching large print on and off around
+/// the [SlipLine.big] lines; ends with feeds and a partial cut like a receipt.
+List<int> encodeSlip(List<SlipLine> lines) {
+  const lf = 0x0A;
+  final out = <int>[...escInit];
+  var large = false;
+  for (final l in lines) {
+    if (l.big != large) {
+      out.addAll(l.big ? escLargeOn : escLargeOff);
+      large = l.big;
+    }
+    out
+      ..addAll(asciiBytes(l.text))
+      ..add(lf);
+  }
+  if (large) out.addAll(escLargeOff);
+  out
+    ..addAll(const [lf, lf, lf])
+    ..addAll(escPartialCut);
+  return out;
 }
 
 /// The bill handed to the customer: itemised and priced by the server, and
