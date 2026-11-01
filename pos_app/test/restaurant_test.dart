@@ -588,7 +588,7 @@ void main() {
 
     test('server JSON', () {
       final w = RestaurantWaiter.fromJson({'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
-      expect(w.toJson(), {'uid': 'U1', 'name': 'Baraka', 'username': 'baraka'});
+      expect(w.toJson(), {'uid': 'U1', 'name': 'Baraka', 'username': 'baraka', 'hasPin': false});
     });
   });
 
