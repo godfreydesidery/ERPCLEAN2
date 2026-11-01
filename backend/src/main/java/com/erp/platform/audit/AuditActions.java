@@ -460,6 +460,10 @@ public final class AuditActions {
     public static final String POS_SALE_REVERSE          = "POS.SALE.REVERSE";
     /** A sale (or part of one) settled as COMPLIMENTARY, with who approved it (V110). */
     public static final String POS_SALE_COMPLIMENTARY    = "POS.SALE.COMPLIMENTARY";
+    /** A waiter's POS PIN set or changed (V111); never the PIN itself. */
+    public static final String USER_POS_PIN_SET          = "USER.POS_PIN.SET";
+    /** A waiter's POS PIN removed by a manager. */
+    public static final String USER_POS_PIN_CLEAR        = "USER.POS_PIN.CLEAR";
     public static final String POS_REFUND                = "POS.REFUND";
     // Pricing rules
     public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";

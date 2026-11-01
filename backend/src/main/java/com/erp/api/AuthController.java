@@ -1,9 +1,11 @@
 package com.erp.api;
 
+import com.erp.modules.iam.domain.dto.ChangeOwnPinRequest;
 import com.erp.modules.iam.domain.dto.ConfirmOwnPasswordRequest;
 import com.erp.modules.iam.domain.dto.ChangeOwnPasswordRequest;
 import com.erp.modules.iam.domain.dto.LoginRequest;
 import com.erp.modules.iam.domain.dto.MeResponse;
+import com.erp.modules.iam.domain.dto.PinLoginRequest;
 import com.erp.modules.iam.domain.dto.RefreshRequest;
 import com.erp.modules.iam.domain.dto.TokenResponse;
 import com.erp.modules.iam.domain.dto.UserBranchDto;
@@ -39,6 +41,16 @@ public class AuthController {
     public TokenResponse login(@Valid @RequestBody LoginRequest request,
                                HttpServletRequest httpRequest) {
         return auth.login(request.username(), request.password(), httpRequest.getRemoteAddr());
+    }
+
+    /**
+     * POS sign-in with a waiter's 4-digit PIN (V111). Waiters only — a cashier or manager is told
+     * to use their password. Wrong PINs count towards the same lockout as passwords.
+     */
+    @PostMapping("/pin-login")
+    public TokenResponse pinLogin(@Valid @RequestBody PinLoginRequest request,
+                                  HttpServletRequest httpRequest) {
+        return auth.loginWithPin(request.username(), request.pin(), httpRequest.getRemoteAddr());
     }
 
     @PostMapping("/refresh")
@@ -82,6 +94,15 @@ public class AuthController {
     public void confirmMyPassword(@Valid @RequestBody ConfirmOwnPasswordRequest request,
                                   HttpServletRequest httpRequest) {
         auth.confirmOwnPassword(request.password(), httpRequest.getRemoteAddr());
+    }
+
+    /** A waiter sets or changes their own POS PIN, proving it with the current PIN or password. */
+    @PostMapping("/me/pin")
+    @PreAuthorize("isAuthenticated()")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void changeMyPin(@Valid @RequestBody ChangeOwnPinRequest request,
+                            HttpServletRequest httpRequest) {
+        auth.changeOwnPin(request.currentSecret(), request.newPin(), httpRequest.getRemoteAddr());
     }
 
     /** The caller's own switchable branches (ADR-0003 D-6) — self-scoped, no USER.VIEW required. */

@@ -87,4 +87,19 @@ describe('UserService', () => {
     expect(req.request.body.displayName).toBe('Jane Doe');
     req.flush({});
   });
+
+  it('sets a waiter POS PIN via PUT /users/uid/{uid}/pin', () => {
+    service.setPin('U1', '2580').subscribe();
+    const req = httpMock.expectOne(`${base}/uid/U1/pin`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ pin: '2580' });
+    req.flush(null, { status: 204, statusText: 'No Content' });
+  });
+
+  it('removes a waiter POS PIN via DELETE /users/uid/{uid}/pin', () => {
+    service.clearPin('U1').subscribe();
+    const req = httpMock.expectOne(`${base}/uid/U1/pin`);
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null, { status: 204, statusText: 'No Content' });
+  });
 });

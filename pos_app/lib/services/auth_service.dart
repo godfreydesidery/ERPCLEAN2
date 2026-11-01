@@ -18,6 +18,21 @@ class AuthService {
     return bundle;
   }
 
+  /// A waiter's 4-digit PIN sign-in (V111) — waiters only; the server refuses others.
+  Future<TokenBundle> pinLogin(String username, String pin) async {
+    final data = await _api.post('/auth/pin-login',
+        body: {'username': username, 'pin': pin}, noAuth: true);
+    final bundle = TokenBundle.fromJson(asMap(data));
+    await _tokens.setSession(bundle);
+    return bundle;
+  }
+
+  /// The signed-in waiter sets or changes their own PIN, proving it with the
+  /// current PIN or their password.
+  Future<void> changeMyPin(String currentSecret, String newPin) async {
+    await _api.post('/auth/me/pin', body: {'currentSecret': currentSecret, 'newPin': newPin});
+  }
+
   Future<Me> me() async => Me.fromJson(asMap(await _api.get('/auth/me')));
 
   Future<List<UserBranch>> myBranches() async =>

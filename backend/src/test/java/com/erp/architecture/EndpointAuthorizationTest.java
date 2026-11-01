@@ -26,6 +26,8 @@ class EndpointAuthorizationTest {
     /** Public-by-design handlers: "ControllerSimpleName#method". Keep this list short and reviewed. */
     private static final Set<String> PUBLIC_HANDLERS = Set.of(
             "AuthController#login",
+            // V111: a waiter's PIN sign-in - same lockout and tenant rules as #login.
+            "AuthController#pinLogin",
             "AuthController#refresh",
             "AuthController#logout",
             "HealthController#health",

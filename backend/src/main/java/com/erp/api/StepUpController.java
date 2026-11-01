@@ -2,6 +2,7 @@ package com.erp.api;
 
 import com.erp.modules.iam.domain.dto.AuthorityVerificationDto;
 import com.erp.modules.iam.domain.dto.VerifyAuthorityRequest;
+import com.erp.modules.iam.domain.dto.VerifyWaiterPinRequest;
 import com.erp.modules.iam.service.StepUpAuthService;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -43,5 +44,15 @@ public class StepUpController {
     public AuthorityVerificationDto verifyAuthority(@Valid @RequestBody VerifyAuthorityRequest request) {
         return stepUp.verifyAuthority(
                 request.username(), request.password(), request.permissionCode());
+    }
+
+    /**
+     * "Who's serving?" with a waiter's PIN (V111). Proves only a waiter, never a manager's
+     * approval; same throttle and answer shape as {@link #verifyAuthority}.
+     */
+    @PostMapping("/verify-waiter-pin")
+    @PreAuthorize("isAuthenticated()")
+    public AuthorityVerificationDto verifyWaiterPin(@Valid @RequestBody VerifyWaiterPinRequest request) {
+        return stepUp.verifyWaiterPin(request.username(), request.pin());
     }
 }

@@ -193,6 +193,23 @@ class AppController extends Notifier<AppData> {
     }
   }
 
+  /// A waiter's PIN sign-in. Returns null when signed in, else the message for
+  /// the PIN pad (which stays open for another try).
+  Future<String?> loginWithPin(String username, String pin) async {
+    state = state.copyWith(busy: true, clearError: true, serverUnreachable: false);
+    try {
+      await ref.read(authServiceProvider).pinLogin(username.trim(), pin);
+      await _afterAuth();
+      return null;
+    } on ApiException catch (e) {
+      state = state.copyWith(busy: false, serverUnreachable: e.isUnreachable);
+      return e.message;
+    } catch (e) {
+      state = state.copyWith(busy: false);
+      return _friendly(e);
+    }
+  }
+
   /// Resolve identity + numeric context + cart reference data after a successful
   /// authentication, then land on the open-shift screen.
   Future<void> _afterAuth() async {
