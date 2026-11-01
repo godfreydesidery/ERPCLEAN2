@@ -11,6 +11,7 @@ import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/on_screen_keyboard.dart';
+import '../../widgets/pin_pad.dart';
 import '../../widgets/ui.dart';
 import 'restaurant_printing.dart';
 import 'waiter_tiles.dart';
@@ -500,7 +501,31 @@ class _WaiterSignInDialogState extends ConsumerState<_WaiterSignInDialog> {
     super.dispose();
   }
 
-  void _pick(RestaurantWaiter w) {
+  Future<void> _pick(RestaurantWaiter w) async {
+    if (w.hasPin) {
+      ({String uid, String name})? who;
+      final outcome = await showPinPad(context, name: w.name, onPin: (pin) async {
+        try {
+          final v = await ref
+              .read(stepUpServiceProvider)
+              .verifyWaiterPin(username: w.username, pin: pin);
+          final uid = v.authoriserUid?.trim() ?? '';
+          if (!v.authorised || uid.isEmpty) {
+            return v.message.isEmpty ? 'That PIN was not accepted.' : v.message;
+          }
+          who = (uid: uid, name: v.approverLabel);
+          return null;
+        } on ApiException catch (e) {
+          return e.message;
+        }
+      });
+      if (!mounted) return;
+      if (outcome == PinPadOutcome.done && who != null) {
+        Navigator.pop(context, who);
+        return;
+      }
+      if (outcome != PinPadOutcome.usePassword) return;
+    }
     setState(() {
       _user.text = w.username;
       _pass.clear();

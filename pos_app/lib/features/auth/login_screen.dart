@@ -7,6 +7,7 @@ import '../../core/version.dart';
 import '../../models/restaurant.dart';
 import '../../state/app_controller.dart';
 import '../../widgets/on_screen_keyboard.dart';
+import '../../widgets/pin_pad.dart';
 import '../../widgets/ui.dart';
 import '../restaurant/waiter_tiles.dart';
 import 'setup_screen.dart';
@@ -104,8 +105,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(appControllerProvider.notifier).login(_user.text, _pass.text);
   }
 
-  /// A waiter tapped their tile: their username is in, type the password.
-  void _pick(RestaurantWaiter w) {
+  /// A waiter tapped their tile: their PIN if they have one, else the password.
+  Future<void> _pick(RestaurantWaiter w) async {
+    if (w.hasPin) {
+      final outcome = await showPinPad(context,
+          name: w.name,
+          onPin: (pin) => ref.read(appControllerProvider.notifier).loginWithPin(w.username, pin));
+      if (outcome != PinPadOutcome.usePassword || !mounted) return;
+    }
     setState(() {
       _user.text = w.username;
       _pass.clear();
@@ -218,7 +225,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         const Text('Waiters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        const Text('Tap your name, then type your password.',
+        const Text('Tap your name, then enter your PIN or password.',
             style: TextStyle(color: AppColors.ink2)),
         const SizedBox(height: 12),
         if (_waiters.length > 6) ...[
