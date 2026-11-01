@@ -30,6 +30,20 @@ class RestaurantService {
       asList(await _api.get(_orders, query: {'tableUid': tableUid}),
           RestaurantOrder.fromJson);
 
+  /// Today's paid orders in the branch (the "Completed" bills), newest first.
+  Future<List<PaidOrder>> listPaidToday() async =>
+      asList(await _api.get('$_orders/paid'), PaidOrder.fromJson);
+
+  /// The order priced as it would be paid, with an optional discount. Read-only.
+  Future<RestaurantQuote> quote(String uid,
+          {String? customerId, required String currency, double? percent, double? amount}) async =>
+      RestaurantQuote.fromJson(asMap(await _api.post('$_orders/uid/$uid/quote', body: {
+        'customerId': ?customerId,
+        'currency': currency,
+        'discountPercent': ?percent,
+        'discountAmount': ?amount,
+      })));
+
   Future<RestaurantOrder> get(String uid) async =>
       RestaurantOrder.fromJson(asMap(await _api.get('$_orders/uid/$uid')));
 

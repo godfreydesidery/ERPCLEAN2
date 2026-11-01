@@ -7,7 +7,10 @@ enum TenderType {
   cash('CASH', 'Cash'),
   mobileMoney('MOBILE_MONEY', 'Mobile'),
   cheque('CHEQUE', 'Cheque'),
-  card('CARD', 'Card');
+  card('CARD', 'Card'),
+
+  /// Given away (V110): needs a manager's discount approval; no money moves.
+  complimentary('COMPLIMENTARY', 'Complimentary');
 
   const TenderType(this.wire, this.label);
   final String wire;

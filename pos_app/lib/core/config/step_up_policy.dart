@@ -69,6 +69,9 @@ enum GatedAction {
   /// A line discount the server has refused as above the company's ceiling.
   discountOverride,
 
+  /// Settling a sale as complimentary (given away, V110).
+  complimentary,
+
   /// Giving up on an unfinished sale whose outcome is still unknown.
   abandonUnfinishedSale,
 
@@ -174,6 +177,13 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'SALES.DISCOUNT.OVERRIDE',
     title: 'Manager approval — discount',
     purpose: 'Allow a discount larger than a cashier may give alone.',
+  ),
+  GatedAction.complimentary: StepUpRule(
+    requiresApproval: true,
+    // Must equal ComplimentaryAuthorisationGuard.PERMISSION (= SALES.DISCOUNT.OVERRIDE).
+    permissionCode: 'SALES.DISCOUNT.OVERRIDE',
+    title: 'Manager approval — complimentary',
+    purpose: 'Give this away: nothing is paid, the cost goes to complimentary expense.',
   ),
   GatedAction.payout: StepUpRule(
     requiresApproval: true,
