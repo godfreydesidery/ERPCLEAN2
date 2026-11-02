@@ -35,6 +35,12 @@ public interface ProductService {
 
     Page<ProductDto> list(Long companyId, String q, Pageable pageable);
 
+    /** {@link #list(Long, String, Pageable)} within one category; a blank category lists all. */
+    Page<ProductDto> list(Long companyId, String q, String category, Pageable pageable);
+
+    /** The categories of the company's active, sellable products, one per name, sorted. */
+    List<String> listCategories(Long companyId);
+
     ProductDto updateByUid(String uid, UpdateProductRequest req);
 
     /**

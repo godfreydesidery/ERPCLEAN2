@@ -1,5 +1,6 @@
 import '../core/api/api_client.dart';
 import '../core/json.dart';
+import '../models/dashboard.dart';
 import '../models/sale.dart';
 
 /// The POS sale path (§09): ring (with idempotency), whole-sale reverse, and the
@@ -100,5 +101,14 @@ class SaleService {
       'size': size,
     });
     return asList(data, SalesInvoice.fromJson);
+  }
+
+  /// The till's sales dashboard for [from]..[to] at the active branch
+  /// (SALES.INVOICE.VIEW).
+  Future<PosDashboard> dashboard(DateTime from, DateTime to) async {
+    String day(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return PosDashboard.fromJson(asMap(await _api
+        .get('/pos/dashboard', query: {'fromDate': day(from), 'toDate': day(to)})));
   }
 }

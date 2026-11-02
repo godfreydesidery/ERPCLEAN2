@@ -290,6 +290,10 @@ String buildReceiptText({
       // The wire token spelled out (MOBILE MONEY), not the till's short label.
       lines.addAll(labelValue(p.tenderType.wire.replaceAll('_', ' '),
           formatAmount(p.amount), width));
+      final givenTo = p.reference?.trim() ?? '';
+      if (p.tenderType == TenderType.complimentary && givenTo.isNotEmpty) {
+        lines.addAll(wrapText('Given to: $givenTo', width));
+      }
     }
     if (receipt.changeDue > 0) {
       lines.addAll(
