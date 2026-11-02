@@ -215,6 +215,30 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<ProductDto> list(Long companyId, String q, String category, Pageable pageable) {
+        if (category == null || category.isBlank()) {
+            return list(companyId, q, pageable);
+        }
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String term = q == null || q.isBlank() ? null : q;
+        return products.searchInCategory(companyId, term, category.trim(), pageable)
+                .map(ProductDto::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> listCategories(Long companyId) {
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        // One entry per category however it was typed ("Drinks", "drinks"), sorted by name.
+        Map<String, String> byKey = new java.util.TreeMap<>();
+        for (String c : products.findCategories(companyId)) {
+            byKey.putIfAbsent(c.toLowerCase(java.util.Locale.ROOT), c);
+        }
+        return List.copyOf(byKey.values());
+    }
+
+    @Override
     public ProductDto updateByUid(String uid, UpdateProductRequest req) {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());

@@ -78,6 +78,34 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                          Pageable pageable);
 
     /**
+     * {@link #search} within one category (the till's category buttons). The category matches
+     * trimmed and case-insensitive, the way {@link #findCategories} lists it.
+     */
+    @Query("""
+            SELECT p FROM Product p
+            WHERE p.companyId = :companyId
+              AND LOWER(TRIM(p.category)) = LOWER(TRIM(:category))
+              AND (:q IS NULL OR
+                   LOWER(p.name) LIKE LOWER(CONCAT('%', :q, '%'))
+                   OR LOWER(p.code) LIKE LOWER(CONCAT('%', :q, '%'))
+                   OR EXISTS (SELECT 1 FROM ProductBarcode b
+                              WHERE b.product = p AND b.barcode = :q))
+            """)
+    Page<Product> searchInCategory(@Param("companyId") Long companyId,
+                                   @Param("q") String q,
+                                   @Param("category") String category,
+                                   Pageable pageable);
+
+    /** The categories of the company's active, sellable products, trimmed (may differ in case). */
+    @Query("""
+            SELECT DISTINCT TRIM(p.category) FROM Product p
+            WHERE p.companyId = :companyId AND p.sellable = true
+              AND p.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+              AND p.category IS NOT NULL AND TRIM(p.category) <> ''
+            """)
+    List<String> findCategories(@Param("companyId") Long companyId);
+
+    /**
      * Resolves a product uid to its owning company id — used by {@code ScopeGuard.companyIdOf}
      * (ADR-0007 D-10). Single-column JPQL projection avoids loading the full entity.
      */

@@ -69,9 +69,17 @@ public class ProductController {
     @PreAuthorize("@perm.hasOrMember('PRODUCT.VIEW')")
     public ApiResponse<List<ProductDto>> list(@RequestParam Long companyId,
                                               @RequestParam(required = false) String q,
+                                              @RequestParam(required = false) String category,
                                               Pageable pageable) {
-        Page<ProductDto> page = productService.list(companyId, q, pageable);
+        Page<ProductDto> page = productService.list(companyId, q, category, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
+    }
+
+    /** The product categories (departments) in use, for the till's category buttons. */
+    @GetMapping("/categories")
+    @PreAuthorize("@perm.hasOrMember('PRODUCT.VIEW')")
+    public List<String> categories(@RequestParam Long companyId) {
+        return productService.listCategories(companyId);
     }
 
     @GetMapping("/uid/{uid}")
