@@ -20,6 +20,7 @@ import '../../state/catalog_cache.dart';
 import '../../state/price_cache.dart';
 import '../../state/providers.dart';
 import '../../state/stock_cache.dart';
+import '../../widgets/category_bar.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
 import '../payment/payment_sheet.dart';
@@ -73,6 +74,10 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
   /// nothing, and a cashier reads nothing as "fine".
   String _resultsQuery = '';
 
+  /// The product categories, and the one whose items are listed (null = none).
+  List<String> _categories = const [];
+  String? _category;
+
   // The numpad box is a real editable field: the hardware keyboard types into it
   // (once a Qty/Disc cell is tapped) AND the on-screen keys drive the same
   // controller. Enter applies it to the selected line.
@@ -124,7 +129,56 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     // the till never shows stale data (a backend price/catalogue change is live).
     _refocusSearch();
     _refreshParked();
+    _loadCategories();
   }
+
+  Future<void> _loadCategories() async {
+    try {
+      final c = await ref.read(catalogServiceProvider).listCategories(_companyId);
+      if (mounted) setState(() => _categories = c);
+    } catch (_) {
+      // No buttons; scanning and search still work.
+    }
+  }
+
+  /// A category button lists that category's items in the results dropdown;
+  /// "All" (or the same button again) closes it.
+  Future<void> _pickCategory(String? c) async {
+    _debounce?.cancel();
+    _search.clear();
+    setState(() => _category = c);
+    if (c == null) {
+      _setResults(const [], '');
+      _refocusSearch();
+      return;
+    }
+    try {
+      final hits = await ref
+          .read(catalogServiceProvider)
+          .searchProducts(_companyId, category: c, size: 100);
+      if (!mounted || _category != c) return;
+      _setResults(hits, '');
+      _refreshPrices(hits);
+      if (hits.isEmpty) showToast(context, 'Nothing in $c yet.');
+    } on ApiException catch (e) {
+      if (mounted) {
+        showToast(context, e.isUnreachable ? ApiException.unreachableMessage : e.message);
+      }
+    }
+    _refocusSearch();
+  }
+
+  /// The results dropdown sits under the search bar and, when shown, the
+  /// category buttons.
+  double get _resultsTop => 52 + (_categories.isEmpty ? 0 : CategoryBar.height + 8);
+
+  Widget _categoryRow() => _categories.isEmpty
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: CategoryBar(
+              categories: _categories, selected: _category, onSelected: _pickCategory),
+        );
 
   @override
   void dispose() {
@@ -300,6 +354,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
 
   void _onChanged(String v) {
     _debounce?.cancel();
+    if (_category != null) setState(() => _category = null);
     final q = v.trim();
     if (q.isEmpty) {
       _setResults(const [], '');
@@ -400,6 +455,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     _debounce?.cancel();
     _search.clear();
     _setResults(const [], '');
+    if (_category != null) setState(() => _category = null);
     _refocusSearch();
   }
 
@@ -577,13 +633,14 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
+              _categoryRow(),
               SlowWaitHint(active: _busyScan),
               const SizedBox(height: 10),
               Expanded(child: _phoneBasket(cart)),
             ],
           ),
           if (_results.isNotEmpty)
-            Positioned(top: 52, left: 0, right: 0, child: _resultsOverlay()),
+            Positioned(top: _resultsTop, left: 0, right: 0, child: _resultsOverlay()),
         ],
       ),
     );
@@ -862,6 +919,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           Column(
             children: [
               _searchBar(),
+              _categoryRow(),
               // A scan waiting on a weak line: the hourglass alone is easy to miss.
               SlowWaitHint(active: _busyScan),
               const SizedBox(height: 12),
@@ -873,7 +931,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           // the grid would occlude it).
           if (_results.isNotEmpty)
             Positioned(
-              top: 52,
+              top: _resultsTop,
               left: 0,
               right: 0,
               child: _resultsOverlay(),

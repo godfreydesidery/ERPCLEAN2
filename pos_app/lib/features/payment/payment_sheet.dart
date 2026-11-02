@@ -187,6 +187,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   /// The manager who approved a complimentary settlement, once asked.
   String? _compAuthoriserUid;
 
+  /// Who a complimentary settlement was given to, once asked. Printed on the
+  /// receipt; travels as the tender's reference.
+  String? _compGivenTo;
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -223,11 +227,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   void _addTender() {
     final amt = _typed > 0 ? _typed : _remaining;
     if (amt <= 0) return;
-    setState(() {
-      _tenders.add(PosTender(tenderType: _type, amount: amt));
-      _amountCtrl.clear();
-    });
-    _amountFocus.requestFocus();
+    setState(() => _tenders.add(PosTender(tenderType: _type, amount: amt)));
+    // What is still to pay goes in the box, ready for the next payment type.
+    final left = _hasUnpriced ? 0.0 : _remaining;
+    _setAmount(left > 0
+        ? left.toStringAsFixed(minorUnitsFor(ref.read(cartProvider).currency))
+        : '');
   }
 
   void _removeTender(int i) => setState(() => _tenders.removeAt(i));
@@ -312,6 +317,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     final session = app.shift;
     if (session == null) return;
 
+    // A split payment: the amount still in the box is the last part, with or
+    // without Add tender (Tulia 2026-11-02: split "haifanyi kazi").
+    if (_tenders.isNotEmpty && _typed > 0) {
+      setState(() {
+        _tenders.add(PosTender(tenderType: _type, amount: _typed));
+        _amountCtrl.clear();
+      });
+    }
+
     final hasUnpriced = _hasUnpriced;
     final knownGross = !hasUnpriced && _gross > 0;
 
@@ -365,15 +379,21 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       tendered = null;
     }
 
-    // Complimentary needs a manager unless the cashier may approve discounts.
+    // Complimentary names who it was given to, and needs a manager unless the
+    // cashier may approve discounts.
     final comp = (tenders ?? const <PosTender>[])
         .where((t) => t.tenderType == TenderType.complimentary)
         .fold(0.0, (s, t) => s + t.amount);
     if (comp > 0) {
+      if (_compGivenTo == null) {
+        final who = await askComplimentaryGivenTo(context);
+        if (who == null || !mounted) return;
+        _compGivenTo = who;
+      }
       if (!app.can(Perms.discountOverride) && _compAuthoriserUid == null) {
         final approval = await showManagerApproval(context, ref,
             action: GatedAction.complimentary,
-            detail: 'Complimentary ${formatAmount(comp)}',
+            detail: 'Complimentary ${formatAmount(comp)} for $_compGivenTo',
             correlationId: _txnId);
         if (approval == null || !mounted) return;
         final uid = approval.authoriserUid?.trim() ?? '';
@@ -385,9 +405,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       }
       tenders = [
         for (final t in tenders!)
-          t.tenderType == TenderType.complimentary && _compAuthoriserUid != null
+          t.tenderType == TenderType.complimentary
               ? PosTender(
-                  tenderType: t.tenderType, amount: t.amount, authorisedByUid: _compAuthoriserUid)
+                  tenderType: t.tenderType,
+                  amount: t.amount,
+                  reference: _compGivenTo,
+                  authorisedByUid: _compAuthoriserUid)
               : t,
       ];
     }
@@ -836,6 +859,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           const Divider(),
           _summaryRow('Total', _gross, bold: true),
           _summaryRow('Paid', _paid),
+          if (_tenders.isNotEmpty && !_hasUnpriced && _remaining > 0)
+            _summaryRow('Remaining', _remaining, bold: true),
           if (change > 0) _summaryRow('Change', change, accent: true),
           if (_ambiguous) ...[
             const SizedBox(height: 10),
@@ -1436,6 +1461,44 @@ Future<({double? percent, double? amount})?> askOrderDiscount(BuildContext conte
                       context, (percent: byPercent ? value : null, amount: byPercent ? null : value))
                   : null,
             ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Who a complimentary settlement was given to (Tulia 2026-11-02), printed on
+/// the receipt. Null when cancelled.
+Future<String?> askComplimentaryGivenTo(BuildContext context) {
+  final name = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final value = name.text.trim();
+        void done() => Navigator.pop(context, value);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+          title: const Text('Complimentary — given to'),
+          content: SizedBox(
+            width: 340,
+            child: TextField(
+              controller: name,
+              autofocus: true,
+              maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'Who is this for?',
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => value.isEmpty ? null : done(),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            OrbixButton(label: 'Continue', onPressed: value.isEmpty ? null : done),
           ],
         );
       },

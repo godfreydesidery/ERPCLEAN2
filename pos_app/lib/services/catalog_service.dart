@@ -12,16 +12,24 @@ class CatalogService {
   Future<List<Product>> searchProducts(
     String companyId, {
     String? q,
+    String? category,
     int page = 0,
     int size = 50,
   }) async {
     final data = await _api.get('/products', query: {
       'companyId': companyId,
       'q': q,
+      'category': ?category,
       'page': page,
       'size': size,
     });
     return asList(data, Product.fromJson);
+  }
+
+  /// The product categories (departments) in use, for the category buttons.
+  Future<List<String>> listCategories(String companyId) async {
+    final data = await _api.get('/products/categories', query: {'companyId': companyId});
+    return data is List ? [for (final c in data) if (c is String && c.trim().isNotEmpty) c] : const [];
   }
 
   Future<Product> getProduct(String uid) async =>
@@ -141,5 +149,62 @@ class CatalogService {
       }
     }
     return out;
+  }
+
+  // ------------------------------------------------- adding a product (PRODUCT.MANAGE)
+
+  /// The company's default price list (else the first), or null when there is
+  /// none. Same choice as the HQ app's new-item screen.
+  Future<({String uid, String currency, bool includesVat})?> defaultPriceList(
+      String companyId) async {
+    final lists = await _api.get('/price-lists', query: {'companyId': companyId, 'size': 100});
+    if (lists is! List || lists.isEmpty) return null;
+    final maps = [for (final l in lists) if (l is Map) l.cast<String, dynamic>()];
+    if (maps.isEmpty) return null;
+    final pick = maps.firstWhere((l) => asBool(l['isDefault']), orElse: () => maps.first);
+    return (
+      uid: asStrOr(pick['uid']),
+      currency: asStrOr(pick['currency'], 'TZS'),
+      includesVat: asBool(pick['priceIncludesVat']),
+    );
+  }
+
+  /// Creates a sellable product (Tulia 2026-11-02). A blank [code] lets the
+  /// server number it. Returns the new product's uid.
+  Future<String> createProduct({
+    required String companyUid,
+    required String name,
+    required String baseUnitUid,
+    String? code,
+    String? category,
+    bool vatable = true,
+    bool stockable = true,
+  }) async {
+    final data = asMap(await _api.post('/products', body: {
+      'companyUid': companyUid,
+      if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
+      'name': name.trim(),
+      'type': 'GOODS',
+      'sellable': true,
+      'stockable': stockable,
+      'baseUnitUid': baseUnitUid,
+      'vatStatus': vatable ? 'STANDARD' : 'EXEMPT',
+      if (category != null && category.trim().isNotEmpty) 'category': category.trim(),
+    }));
+    return asStrOr(data['uid']);
+  }
+
+  /// The selling price of [productUid]'s base unit on [priceListUid].
+  Future<void> setPrice(String productUid,
+      {required String priceListUid, required double amount, required String currency}) async {
+    await _api.post('/products/uid/$productUid/prices', body: {
+      'priceListUid': priceListUid,
+      'price': {'amount': amount.toStringAsFixed(2), 'currency': currency},
+    });
+  }
+
+  Future<void> addBarcode(String productUid, String barcode) async {
+    await _api.post('/products/uid/$productUid/barcodes',
+        body: {'barcode': barcode.trim(), 'primary': true});
   }
 }

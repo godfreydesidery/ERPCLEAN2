@@ -16,6 +16,7 @@ import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/price_cache.dart';
 import '../../state/providers.dart';
+import '../../widgets/category_bar.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
 import '../payment/payment_sheet.dart';
@@ -116,6 +117,10 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   final _q = TextEditingController();
   List<Product> _menu = const [];
   bool _menuLoading = true;
+
+  /// The product categories, and the one the menu shows (null = all).
+  List<String> _categories = const [];
+  String? _category;
   Timer? _debounce;
 
   /// Products seen on the menu, by id — for the age question at payment.
@@ -192,6 +197,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     } else {
       _loadFloor();
       _browse();
+      _loadCategories();
       _floorTicker = Timer.periodic(_floorEvery, (_) => _refreshLive());
     }
     _applyDeviceSettings();
@@ -460,11 +466,25 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     if (loaded.isNotEmpty && mounted) _refreshPrices(loaded);
   }
 
+  Future<void> _loadCategories() async {
+    try {
+      final c = await ref.read(catalogServiceProvider).listCategories(_companyId);
+      if (mounted) setState(() => _categories = c);
+    } catch (_) {
+      // No buttons; the menu and its search still work.
+    }
+  }
+
+  void _pickCategory(String? c) {
+    setState(() => _category = c);
+    _filter(_q.text);
+  }
+
   Future<void> _browse() async {
     try {
       final hits = await ref
           .read(catalogServiceProvider)
-          .searchProducts(_companyId, size: 120);
+          .searchProducts(_companyId, category: _category, size: 120);
       _setMenu(hits);
     } catch (_) {
       if (mounted) setState(() => _menu = const []);
@@ -483,7 +503,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       try {
         final hits = await ref
             .read(catalogServiceProvider)
-            .searchProducts(_companyId, q: s, size: 120);
+            .searchProducts(_companyId, q: s, category: _category, size: 120);
         _setMenu(hits);
       } catch (_) {}
     });
@@ -1502,6 +1522,11 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
               ),
             ],
           ),
+          if (_categories.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            CategoryBar(
+                categories: _categories, selected: _category, onSelected: _pickCategory),
+          ],
           const SizedBox(height: 14),
           if (_menuLoading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
