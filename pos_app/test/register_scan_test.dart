@@ -184,10 +184,13 @@ class _FakeCatalog implements CatalogService {
   Future<Product> getProduct(String uid) async =>
       all.firstWhere((p) => p.uid == uid);
 
+  @override
+  Future<List<String>> listCategories(String companyId) async => const [];
+
   /// Mirrors the backend: name/code contains, or an exact barcode match.
   @override
   Future<List<Product>> searchProducts(String companyId,
-      {String? q, int page = 0, int size = 50}) async {
+      {String? q, String? category, int page = 0, int size = 50}) async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
     if (offline) throw _down;
     final s = (q ?? '').toLowerCase();

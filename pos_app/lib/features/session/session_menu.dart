@@ -22,6 +22,8 @@ import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
+import '../catalog/add_product_dialog.dart';
+import '../dashboard/dashboard_screen.dart';
 import '../receipt/receipt_view.dart';
 import '../receipt/report_text.dart';
 
@@ -208,6 +210,14 @@ class _SessionDrawer extends ConsumerWidget {
       out.add(_action(Icons.receipt_long_outlined, "Today's sales",
           'Look up & reprint a receipt',
           enabled: true, onTap: () => _todaysSales(context, ref)));
+      out.add(_action(Icons.insights_outlined, 'Sales dashboard',
+          'Sales by day, payment type and department',
+          enabled: true, onTap: () => showDashboard(context)));
+    }
+    if (app.can(Perms.productManage)) {
+      out.add(_action(Icons.add_box_outlined, 'Add a product',
+          'Name, price, department — sellable straight away',
+          enabled: true, onTap: () => _addProduct(context)));
     }
     out.add(_action(Icons.history, 'Recent receipts',
         'Reprint from this device (offline)',
@@ -563,6 +573,13 @@ class _SessionDrawer extends ConsumerWidget {
       builder: (_) => _ExpenseDialog(sessionUid: uid, currency: app.currency),
     );
     ref.read(appControllerProvider.notifier).refreshShift();
+  }
+
+  Future<void> _addProduct(BuildContext context) async {
+    final name = await showAddProductDialog(context);
+    if (name != null && context.mounted) {
+      showToast(context, '$name added. Search for it to sell it.', ok: true);
+    }
   }
 
   Future<void> _todaysSales(BuildContext context, WidgetRef ref) async {
