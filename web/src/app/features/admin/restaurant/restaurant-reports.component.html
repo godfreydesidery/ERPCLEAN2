@@ -2,8 +2,9 @@
   <header class="page-head">
     <h1><i class="bi bi-person-badge me-2" aria-hidden="true"></i>Restaurant Reports</h1>
     <p class="subtitle">
-      Sales, bills paid and pending bills — for one waiter or all of them. The waiter is whoever
-      opened the order.
+      Sales, bills paid and pending bills — as a summary or in detail, for one waiter or all of
+      them — plus sales by hour and day, and how bills were paid. The waiter is whoever holds the
+      order.
     </p>
   </header>
 
@@ -14,13 +15,29 @@
     </div>
   } @else {
 
-    <div class="btn-group mb-3" role="group" aria-label="Report">
-      @for (k of kinds; track k.kind) {
-        <button type="button" class="btn"
-                [class.btn-primary]="kind() === k.kind"
-                [class.btn-outline-primary]="kind() !== k.kind"
-                [attr.aria-pressed]="kind() === k.kind"
-                (click)="setKind(k.kind)">{{ k.label }}</button>
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <div class="btn-group flex-wrap" role="group" aria-label="Report">
+        @for (t of tabs; track t.tab) {
+          <button type="button" class="btn"
+                  [class.btn-primary]="tab() === t.tab"
+                  [class.btn-outline-primary]="tab() !== t.tab"
+                  [attr.aria-pressed]="tab() === t.tab"
+                  (click)="setTab(t.tab)">{{ t.label }}</button>
+        }
+      </div>
+      @if (hasViews()) {
+        <div class="btn-group btn-group-sm" role="group" aria-label="Summary or detail">
+          <button type="button" class="btn"
+                  [class.btn-secondary]="view() === 'summary'"
+                  [class.btn-outline-secondary]="view() !== 'summary'"
+                  [attr.aria-pressed]="view() === 'summary'"
+                  (click)="setView('summary')">Summary</button>
+          <button type="button" class="btn"
+                  [class.btn-secondary]="view() === 'detail'"
+                  [class.btn-outline-secondary]="view() !== 'detail'"
+                  [attr.aria-pressed]="view() === 'detail'"
+                  (click)="setView('detail')">Detail</button>
+        </div>
       }
     </div>
 
@@ -47,7 +64,7 @@
                      [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" required />
             </div>
           }
-          @if (canFilterWaiter()) {
+          @if (showWaiter()) {
             <div class="col-sm-6 col-lg-3">
               <label class="form-label" for="rr-waiter">
                 Waiter <span class="text-muted small">(optional)</span>
@@ -291,6 +308,401 @@
           <p class="small text-muted mt-2 mb-0">
             An open order has no amount until its bill is printed.
           </p>
+        }
+
+        <!-- Sales by waiter — detail -->
+        @if (kind() === 'waiter-items' && waiterItems(); as r) {
+          <h2 class="h5">Sales by waiter — items</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Waiter: {{ r.waiterName ?? 'All waiters' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Items on each waiter's paid bills</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Item</th>
+                  <th scope="col">Unit</th>
+                  <th scope="col" class="num">Quantity</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              @for (w of r.waiters; track w.waiterUid) {
+                <tbody>
+                  <tr class="table-light">
+                    <th scope="rowgroup" colspan="3">{{ w.waiterName }} · {{ fmtCount(w.bills) }} bills</th>
+                    <td></td>
+                    <td class="num mono fw-semibold">{{ fmtMoney(w.amount) }}</td>
+                  </tr>
+                  @for (row of itemsOf(r, w.waiterUid); track $index) {
+                    <tr>
+                      <td class="mono">{{ row.code }}</td>
+                      <td>{{ row.name }}</td>
+                      <td>{{ row.unit }}</td>
+                      <td class="num mono">{{ fmtCount(row.quantity) }}</td>
+                      <td class="num mono">{{ fmtMoney(row.amount) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              } @empty {
+                <tbody>
+                  <tr><td colspan="5" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
+                </tbody>
+              }
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td colspan="4" class="text-end">Total</td>
+                  <td class="num mono">{{ fmtMoney(r.totalAmount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        }
+
+        <!-- Bills paid — summary -->
+        @if (kind() === 'bills-summary' && billsSummary(); as r) {
+          <h2 class="h5">Bills paid — summary</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Waiter: {{ r.waiterName ?? 'All waiters' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Bills paid per waiter, by how they were paid</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Waiter</th>
+                  <th scope="col" class="num">Bills</th>
+                  <th scope="col" class="num">Guests</th>
+                  @for (t of r.tenderTypes; track t) {
+                    <th scope="col" class="num">{{ tenderLabel(t) }}</th>
+                  }
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.waiterUid) {
+                  <tr>
+                    <td>{{ row.waiterName }}</td>
+                    <td class="num mono">{{ fmtCount(row.bills) }}</td>
+                    <td class="num mono">{{ fmtCount(row.guests) }}</td>
+                    @for (a of row.tenders; track $index) {
+                      <td class="num mono">{{ fmtMoney(a) }}</td>
+                    }
+                    <td class="num mono">{{ fmtMoney(row.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td [attr.colspan]="4 + r.tenderTypes.length" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td class="text-end">Totals</td>
+                  <td class="num mono">{{ fmtCount(r.totals.bills) }}</td>
+                  <td class="num mono">{{ fmtCount(r.totals.guests) }}</td>
+                  @for (a of r.totals.tenders; track $index) {
+                    <td class="num mono">{{ fmtMoney(a) }}</td>
+                  }
+                  <td class="num mono">{{ fmtMoney(r.totals.amount) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="small text-muted mt-2 mb-0">A voided receipt is left out. Amounts are net of change.</p>
+        }
+
+        <!-- Pending bills — summary -->
+        @if (kind() === 'pending-summary' && pendingSummary(); as r) {
+          <h2 class="h5">Pending bills — summary</h2>
+          <p class="text-muted small mb-3">
+            Orders not yet paid, as of {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+            · Waiter: {{ r.waiterName ?? 'All waiters' }} · Currency: {{ r.currency }}
+          </p>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Orders not yet paid, per waiter</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Waiter</th>
+                  <th scope="col" class="num">Open</th>
+                  <th scope="col" class="num">Bill printed</th>
+                  <th scope="col" class="num">Items</th>
+                  <th scope="col" class="num">Printed bills</th>
+                  <th scope="col">Waiting since</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of r.rows; track row.waiterUid) {
+                  <tr>
+                    <td>{{ row.waiterName }}</td>
+                    <td class="num mono">{{ fmtCount(row.open) }}</td>
+                    <td class="num mono">{{ fmtCount(row.billed) }}</td>
+                    <td class="num mono">{{ fmtCount(row.items) }}</td>
+                    <td class="num mono">{{ fmtMoney(row.billedAmount) }}</td>
+                    <td class="mono">{{ row.oldestOpenedAt ?? '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="6" class="text-center text-muted py-4">No pending bills.</td></tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr class="fw-semibold">
+                  <td class="text-end">Totals</td>
+                  <td class="num mono">{{ fmtCount(r.totals.open) }}</td>
+                  <td class="num mono">{{ fmtCount(r.totals.billed) }}</td>
+                  <td class="num mono">{{ fmtCount(r.totals.items) }}</td>
+                  <td class="num mono">{{ fmtMoney(r.totals.billedAmount) }}</td>
+                  <td class="mono">{{ r.totals.oldestOpenedAt ?? '' }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p class="small text-muted mt-2 mb-0">
+            An open order has no amount until its bill is printed.
+          </p>
+        }
+
+        <!-- Sales by hour and day of the week -->
+        @if (kind() === 'daypart' && daypart(); as r) {
+          <h2 class="h5">Sales by hour &amp; day</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Branch: {{ r.branchName ?? 'All branches' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+          @for (section of [{ title: 'By hour of the day', head: 'Time', slots: r.hours }, { title: 'By day of the week', head: 'Day', slots: r.weekdays }]; track section.title) {
+            <h3 class="h6 mt-3">{{ section.title }}</h3>
+            <div class="erp-table-wrap mb-3">
+              <table class="erp-table">
+                <caption class="visually-hidden">Sales {{ section.title.toLowerCase() }}, by department</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{{ section.head }}</th>
+                    <th scope="col" class="num">Receipts</th>
+                    <th scope="col" class="num">Sales</th>
+                    <th scope="col" class="num">Average per day</th>
+                    @for (d of r.departments; track $index) {
+                      <th scope="col" class="num">{{ d }}</th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (s of section.slots; track s.label) {
+                    <tr>
+                      <th scope="row" class="fw-normal">{{ s.label }}</th>
+                      <td class="num mono">{{ fmtCount(s.receipts) }}</td>
+                      <td class="num mono">{{ fmtMoney(s.sales) }}</td>
+                      <td class="num mono">{{ fmtMoney(s.averagePerDay) }}</td>
+                      @for (a of s.departmentSales; track $index) {
+                        <td class="num mono">{{ fmtMoney(a) }}</td>
+                      }
+                    </tr>
+                  } @empty {
+                    <tr><td [attr.colspan]="4 + r.departments.length" class="text-center text-muted py-4">No sales in this period.</td></tr>
+                  }
+                </tbody>
+                <tfoot>
+                  <tr class="fw-semibold">
+                    <td class="text-end">Totals</td>
+                    <td class="num mono">{{ fmtCount(r.totals.receipts) }}</td>
+                    <td class="num mono">{{ fmtMoney(r.totals.sales) }}</td>
+                    <td class="num mono">{{ fmtMoney(r.totals.averagePerDay) }}</td>
+                    @for (a of r.totals.departmentSales; track $index) {
+                      <td class="num mono">{{ fmtMoney(a) }}</td>
+                    }
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          }
+          <p class="small text-muted mb-0">
+            A sale counts at the time it was paid. "Average per day" divides by the number of such
+            days in the period.
+          </p>
+        }
+
+        <!-- Payments & completion -->
+        @if (kind() === 'payments' && payments(); as r) {
+          <h2 class="h5">Payments &amp; completion</h2>
+          <p class="text-muted small mb-3">
+            Period: {{ r.fromDate }} to {{ r.toDate }} · Branch: {{ r.branchName ?? 'All branches' }}
+            · Currency: {{ r.currency }} · Generated: {{ r.generatedAt | date:'dd/MM/yyyy HH:mm' }}
+          </p>
+
+          <div class="row g-3 mb-3">
+            <div class="col-lg-7">
+              <h3 class="h6">How bills were paid</h3>
+              <div class="erp-table-wrap">
+                <table class="erp-table">
+                  <caption class="visually-hidden">Payments by type</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Paid by</th>
+                      <th scope="col" class="num">Payments</th>
+                      <th scope="col" class="num">Amount</th>
+                      <th scope="col" class="num">Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (t of r.tenders; track t.tenderType) {
+                      <tr>
+                        <td>{{ tenderLabel(t.tenderType) }}</td>
+                        <td class="num mono">{{ fmtCount(t.payments) }}</td>
+                        <td class="num mono">{{ fmtMoney(t.amount) }}</td>
+                        <td class="num mono">{{ fmtPct(t.share) }}</td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="4" class="text-center text-muted py-4">No payments in this period.</td></tr>
+                    }
+                  </tbody>
+                  <tfoot>
+                    <tr class="fw-semibold">
+                      <td colspan="2" class="text-end">Total</td>
+                      <td class="num mono">{{ fmtMoney(r.totalPaid) }}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <h3 class="h6">Orders opened in this period</h3>
+              <div class="erp-card">
+                <div class="erp-card__body">
+                  <dl class="row mb-0 small">
+                    <dt class="col-7">Opened</dt><dd class="col-5 text-end mono">{{ fmtCount(r.completion.opened) }}</dd>
+                    <dt class="col-7">Paid</dt><dd class="col-5 text-end mono">{{ fmtCount(r.completion.paid) }}</dd>
+                    <dt class="col-7">Cancelled</dt><dd class="col-5 text-end mono">{{ fmtCount(r.completion.cancelled) }}</dd>
+                    <dt class="col-7">Still open or unpaid</dt><dd class="col-5 text-end mono">{{ fmtCount(r.completion.pending) }}</dd>
+                    <dt class="col-7">Completed (paid ÷ opened)</dt><dd class="col-5 text-end mono fw-semibold mb-0">{{ fmtPct(r.completion.completionRate) }}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="h6">Refunds at the till · {{ fmtMoney(r.refundTotal) }}</h3>
+          <div class="erp-table-wrap mb-3">
+            <table class="erp-table">
+              <caption class="visually-hidden">Cash refunded at the till</caption>
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Receipt</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col">By</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (x of r.refunds; track $index) {
+                  <tr>
+                    <td class="mono">{{ x.at }}</td>
+                    <td class="mono">{{ x.receiptNumber ?? '—' }}</td>
+                    <td>{{ x.reason }}</td>
+                    <td>{{ x.by }}</td>
+                    <td class="num mono">{{ fmtMoney(x.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="5" class="text-center text-muted py-3">No refunds.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="h6">Receipts voided · {{ fmtMoney(r.voidedReceiptTotal) }}</h3>
+          <div class="erp-table-wrap mb-3">
+            <table class="erp-table">
+              <caption class="visually-hidden">Receipts sold in this period and voided since</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Sold</th>
+                  <th scope="col">Receipt</th>
+                  <th scope="col">By</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (x of r.voidedReceipts; track $index) {
+                  <tr>
+                    <td class="mono">{{ x.soldAt }}</td>
+                    <td class="mono">{{ x.receiptNumber }}</td>
+                    <td>{{ x.by }}</td>
+                    <td class="num mono">{{ fmtMoney(x.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="text-center text-muted py-3">No voided receipts.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="h6">Orders cancelled · {{ fmtCount(r.cancelledOrders.length) }}</h3>
+          <div class="erp-table-wrap mb-3">
+            <table class="erp-table">
+              <caption class="visually-hidden">Orders cancelled in this period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Cancelled</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Table</th>
+                  <th scope="col">Waiter</th>
+                  <th scope="col">Opened</th>
+                  <th scope="col">Reason</th>
+                  <th scope="col" class="num">Items</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (x of r.cancelledOrders; track $index) {
+                  <tr>
+                    <td class="mono">{{ x.cancelledAt }}</td>
+                    <td class="mono">{{ x.orderNumber }}</td>
+                    <td>{{ x.servedAt }}</td>
+                    <td>{{ x.waiterName }}</td>
+                    <td class="mono">{{ x.openedAt }}</td>
+                    <td>{{ x.reason }}</td>
+                    <td class="num mono">{{ fmtCount(x.items) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7" class="text-center text-muted py-3">No cancelled orders.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="h6">Items voided · {{ fmtCount(r.voidedItems.length) }}</h3>
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Order items voided in this period</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Voided</th>
+                  <th scope="col">Order</th>
+                  <th scope="col">Table</th>
+                  <th scope="col">Waiter</th>
+                  <th scope="col">Item</th>
+                  <th scope="col" class="num">Quantity</th>
+                  <th scope="col">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (x of r.voidedItems; track $index) {
+                  <tr>
+                    <td class="mono">{{ x.voidedAt }}</td>
+                    <td class="mono">{{ x.orderNumber }}</td>
+                    <td>{{ x.servedAt }}</td>
+                    <td>{{ x.waiterName }}</td>
+                    <td>{{ x.productName }}</td>
+                    <td class="num mono">{{ fmtCount(x.quantity) }}</td>
+                    <td>{{ x.reason }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7" class="text-center text-muted py-3">No voided items.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
         }
       }
     }

@@ -11,7 +11,17 @@ import { throwError } from 'rxjs';
 import { RestaurantReportsComponent } from './restaurant-reports.component';
 import { REPORT_PERMS, reportsBed, stubReportService } from './restaurant-reports.testing';
 
-type Calls = 'waiterSales' | 'bills' | 'pendingBills' | 'export' | 'waiters';
+type Calls =
+  | 'waiterSales'
+  | 'waiterItems'
+  | 'bills'
+  | 'billsSummary'
+  | 'pendingBills'
+  | 'pendingSummary'
+  | 'daypart'
+  | 'payments'
+  | 'export'
+  | 'waiters';
 
 /** The bed with every service call a spy (answering the fixtures unless overridden). */
 function makeReportsBed(
@@ -21,8 +31,13 @@ function makeReportsBed(
   const stub = stubReportService();
   const svc = {
     waiterSales: overrides.waiterSales ?? vi.fn(stub.waiterSales),
+    waiterItems: overrides.waiterItems ?? vi.fn(stub.waiterItems),
     bills: overrides.bills ?? vi.fn(stub.bills),
+    billsSummary: overrides.billsSummary ?? vi.fn(stub.billsSummary),
     pendingBills: overrides.pendingBills ?? vi.fn(stub.pendingBills),
+    pendingSummary: overrides.pendingSummary ?? vi.fn(stub.pendingSummary),
+    daypart: overrides.daypart ?? vi.fn(stub.daypart),
+    payments: overrides.payments ?? vi.fn(stub.payments),
     export: overrides.export ?? vi.fn(stub.export),
     waiters: overrides.waiters ?? vi.fn(stub.waiters),
   };
@@ -107,6 +122,97 @@ describe('RestaurantReportsComponent', () => {
     fixture.detectChanges();
     fixture.componentInstance.run();
     expect(fixture.componentInstance.state()).toBe('forbidden');
+  });
+
+  it('Detail on Sales by waiter lists each waiter\'s items under a subtotal', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setView('detail');
+    expect(comp.kind()).toBe('waiter-items');
+    comp.run();
+    fixture.detectChanges();
+
+    expect(svc.waiterItems).toHaveBeenCalled();
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Neema Ali · 1 bills');
+    expect(text).toContain('Tacos');
+    expect(text).toContain('111,000.00');
+  });
+
+  it('a tab opens in the view last chosen: Bills paid summary splits by payment type', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setTab('bills');
+    expect(comp.kind()).toBe('bills-summary');
+    comp.run();
+    fixture.detectChanges();
+
+    expect(svc.billsSummary).toHaveBeenCalled();
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Mobile money');
+    expect(text).toContain('Complimentary');
+    expect(text).toContain('40,000.00');
+
+    comp.setView('detail');
+    comp.setTab('pending');
+    expect(comp.kind()).toBe('pending-bills');
+  });
+
+  it('Pending bills summary needs no dates and shows who has been waiting longest', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setKind('pending-summary');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#rr-from')).toBeNull();
+    comp.run();
+    fixture.detectChanges();
+    expect(svc.pendingSummary).toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('2026-10-30 19:00');
+  });
+
+  it('Sales by hour & day shows a column per department and hides the waiter filter', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setTab('daypart');
+    fixture.detectChanges();
+    expect(comp.hasViews()).toBe(false);
+    expect(fixture.nativeElement.querySelector('#rr-waiter')).toBeNull();
+    comp.run();
+    fixture.detectChanges();
+
+    expect(svc.daypart).toHaveBeenCalled();
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('12:00-13:00');
+    expect(text).toContain('Friday');
+    expect(text).toContain('Drinks');
+    expect(text).toContain('22,200.00');
+  });
+
+  it('Payments & completion shows payment shares, completion and what did not end in a sale', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setTab('payments');
+    comp.run();
+    fixture.detectChanges();
+
+    expect(svc.payments).toHaveBeenCalled();
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('63.1%');
+    expect(text).toContain('75%');
+    expect(text).toContain('Cold food');
+    expect(text).toContain('INV-0011');
+    expect(text).toContain('Customer left');
+    expect(text).toContain('Wrong order');
   });
 
   it('export passes the report kind and format', () => {

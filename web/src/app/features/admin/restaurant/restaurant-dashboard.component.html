@@ -1,0 +1,278 @@
+<section class="admin-page">
+  <header class="page-head">
+    <h1><i class="bi bi-speedometer2 me-2" aria-hidden="true"></i>Restaurant Dashboard</h1>
+    <p class="subtitle">
+      How the restaurant is doing: sales, guests, discounts and voids against the period before,
+      what is open right now, and where the sales came from.
+    </p>
+  </header>
+
+  @if (!canView()) {
+    <div class="erp-empty" role="alert">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to view the restaurant dashboard.
+    </div>
+  } @else {
+    <!-- Filters -->
+    <div class="erp-card mb-3">
+      <div class="erp-card__body">
+        <div class="row g-3 align-items-end">
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rd-from">From date</label>
+            <input id="rd-from" name="rd-from" type="date" class="form-control"
+                   [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rd-to">To date</label>
+            <input id="rd-to" name="rd-to" type="date" class="form-control"
+                   [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rd-branch">
+              Branch <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker id="rd-branch" name="rd-branch"
+                            [(ngModel)]="branchUid"
+                            [options]="branchOptions()"
+                            placeholder="All branches" />
+          </div>
+          <div class="col-auto">
+            <button type="button" class="btn btn-primary" (click)="load()"
+                    [disabled]="state() === 'loading' || !fromDate() || !toDate()">
+              <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+            </button>
+          </div>
+          <div class="col-auto">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Quick date ranges">
+              @for (q of quickRanges; track q.key) {
+                <button type="button" class="btn btn-outline-secondary" (click)="setRange(q.key)">{{ q.label }}</button>
+              }
+            </div>
+          </div>
+          @if (canExport()) {
+            <div class="col-auto ms-lg-auto">
+              <div class="btn-group btn-group-sm" role="group" aria-label="Download the flash report">
+                <button type="button" class="btn btn-outline-secondary"
+                        (click)="exportFlash('PDF')" [disabled]="exporting() || !data()">
+                  <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Flash report PDF
+                </button>
+                <button type="button" class="btn btn-outline-secondary"
+                        (click)="exportFlash('XLSX')" [disabled]="exporting() || !data()">
+                  <i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Flash report Excel
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    @switch (state()) {
+      @case ('loading') {
+        <p class="text-muted d-flex align-items-center gap-2" aria-live="polite">
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading the dashboard…
+        </p>
+      }
+      @case ('error') {
+        <p class="text-danger" role="alert">
+          <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>
+          Could not load the dashboard. Please try again.
+        </p>
+      }
+      @case ('forbidden') {
+        <div class="erp-empty">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          You don't have permission to view the restaurant dashboard.
+        </div>
+      }
+    }
+
+    @if (data(); as d) {
+      <p class="text-muted small mb-3">
+        {{ d.fromDate === d.toDate ? d.fromDate : d.fromDate + ' to ' + d.toDate }}
+        · {{ d.branchName ?? 'All branches' }} · Amounts in {{ d.currency }}
+        · Compared with {{ d.previousFromDate === d.previousToDate ? d.previousFromDate : d.previousFromDate + ' to ' + d.previousToDate }}
+      </p>
+
+      <!-- KPI tiles -->
+      <h2 class="visually-hidden">Key figures</h2>
+      <div class="row g-3 mb-4">
+        @for (t of tiles(); track t.key) {
+          <div class="col-6 col-md-4 col-xl-2">
+            <div class="erp-kpi h-100">
+              <div class="erp-kpi__label">{{ t.label }}</div>
+              <div class="erp-kpi__value mono">{{ t.value }}</div>
+              @if (t.change !== null) {
+                <div [class]="'erp-kpi__delta ' + changeClass(t)">
+                  {{ fmtChange(t.change) }} <span class="fw-normal text-muted">vs before</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+
+      <div class="row g-3 mb-3">
+        <!-- Right now -->
+        <div class="col-lg-4">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Right now</h2></div>
+            <div class="erp-card__body">
+              <dl class="row mb-2">
+                <dt class="col-8 fw-normal">Tables open</dt>
+                <dd class="col-4 text-end mono fw-semibold">{{ fmtCount(d.live.openOrders) }}</dd>
+                <dt class="col-8 fw-normal">Bills printed, not paid</dt>
+                <dd class="col-4 text-end mono fw-semibold">{{ fmtCount(d.live.billedOrders) }}</dd>
+                <dt class="col-8 fw-normal">Waiting to be paid</dt>
+                <dd class="col-4 text-end mono fw-semibold mb-0">{{ fmtMoney(d.live.billedAmount) }}</dd>
+              </dl>
+              <a routerLink="/admin/restaurant/reports" [queryParams]="{ report: 'pending-summary' }" class="small">
+                See pending bills<span class="visually-hidden"> by waiter</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sales trend -->
+        <div class="col-lg-8">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Sales by day</h2></div>
+            <div class="erp-card__body">
+              @if (trend(); as t) {
+                <app-trend-chart [labels]="t.labels" [series]="t.series" [unit]="d.currency"
+                                 label="Sales by day" [height]="220" />
+              } @else {
+                <p class="text-muted mb-0">
+                  Choose more than one day to see the trend. Sales for the period:
+                  <strong class="mono">{{ d.currency }} {{ fmtMoney(d.current.sales) }}</strong>
+                </p>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Busy hours</h2></div>
+            <div class="erp-card__body">
+              @if (hourRows().length) {
+                <app-bar-list [rows]="hourRows()" [unit]="d.currency" label="Sales by hour of the day" />
+              } @else {
+                <p class="text-muted mb-0">No sales in this period.</p>
+              }
+              <a routerLink="/admin/restaurant/reports" [queryParams]="{ report: 'daypart' }" class="small d-inline-block mt-2">
+                Sales by hour &amp; day, per department
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Days of the week</h2></div>
+            <div class="erp-card__body">
+              @if (weekdayRows().length) {
+                <app-bar-list [rows]="weekdayRows()" [unit]="d.currency" label="Average sales per day of the week" />
+              } @else {
+                <p class="text-muted mb-0">No sales in this period.</p>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Departments</h2></div>
+            <div class="erp-card__body">
+              @if (departmentRows().length) {
+                <app-bar-list [rows]="departmentRows()" [unit]="d.currency" label="Sales by department" />
+              } @else {
+                <p class="text-muted mb-0">No sales in this period.</p>
+              }
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Best sellers</h2></div>
+            <div class="erp-card__body">
+              @if (itemRows().length) {
+                <app-bar-list [rows]="itemRows()" [unit]="d.currency" label="Best-selling items by sales" />
+              } @else {
+                <p class="text-muted mb-0">No sales in this period.</p>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>Waiters</h2></div>
+            <div class="erp-card__body">
+              @if (waiterRows().length) {
+                <app-bar-list [rows]="waiterRows()" [unit]="d.currency" label="Sales by waiter" />
+              } @else {
+                <p class="text-muted mb-0">No sales in this period.</p>
+              }
+              <a routerLink="/admin/restaurant/reports" [queryParams]="{ report: 'waiter-sales' }" class="small d-inline-block mt-2">
+                Sales by waiter report
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="erp-card h-100">
+            <div class="erp-card__head"><h2>How bills were paid</h2></div>
+            <div class="erp-card__body">
+              @if (tenderRows().length) {
+                <app-bar-list [rows]="tenderRows()" [unit]="d.currency" label="Payments by type" />
+              } @else {
+                <p class="text-muted mb-0">No payments in this period.</p>
+              }
+              <a routerLink="/admin/restaurant/reports" [queryParams]="{ report: 'payments' }" class="small d-inline-block mt-2">
+                Payments &amp; completion report
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Complimentary -->
+      <div class="erp-card mb-3">
+        <div class="erp-card__head"><h2>Complimentary</h2></div>
+        <div class="erp-card__body">
+          <div class="erp-table-wrap">
+            <table class="erp-table">
+              <caption class="visually-hidden">Bills given as complimentary, and who they were given to</caption>
+              <thead>
+                <tr>
+                  <th scope="col">When</th>
+                  <th scope="col">Receipt</th>
+                  <th scope="col">Given to</th>
+                  <th scope="col" class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of d.complimentary; track $index) {
+                  <tr>
+                    <td class="mono">{{ c.at }}</td>
+                    <td class="mono">{{ c.receiptNumber }}</td>
+                    <td>{{ c.givenTo || '—' }}</td>
+                    <td class="num mono">{{ fmtMoney(c.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="text-center text-muted py-3">Nothing was given as complimentary.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    }
+  }
+</section>

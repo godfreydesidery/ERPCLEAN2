@@ -18,7 +18,10 @@ describe('RestaurantReportsComponent — a11y', () => {
     await assertA11y(fixture);
   }, 20_000);
 
-  for (const kind of ['waiter-sales', 'bills', 'pending-bills'] as RestaurantReportKind[]) {
+  for (const kind of [
+    'waiter-sales', 'waiter-items', 'bills', 'bills-summary', 'pending-bills', 'pending-summary',
+    'daypart', 'payments',
+  ] as RestaurantReportKind[]) {
     it(`has no axe violations with ${kind} populated`, async () => {
       reportsBed(REPORT_PERMS, stubReportService());
       const fixture = TestBed.createComponent(RestaurantReportsComponent);
