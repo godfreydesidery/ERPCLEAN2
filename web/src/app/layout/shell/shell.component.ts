@@ -516,7 +516,8 @@ export class ShellComponent {
         { label: 'Restaurant Orders', route: '/admin/restaurant/orders', icon: 'bi-receipt', available: true, permission: 'RESTAURANT.ORDER.MANAGE' },
         { label: 'Kitchen Display', route: '/admin/restaurant/kitchen', icon: 'bi-fire', available: true, permission: 'RESTAURANT.KITCHEN.MANAGE' },
         { label: 'Restaurant Setup', route: '/admin/restaurant/setup', icon: 'bi-cup-hot', available: true, permission: 'RESTAURANT.SETUP.MANAGE' },
-        { label: 'Restaurant Reports', route: '/admin/restaurant/reports', icon: 'bi-person-badge', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['waiter', 'waiter sales', 'bills', 'pending bills'] },
+        { label: 'Restaurant Dashboard', route: '/admin/restaurant/dashboard', icon: 'bi-speedometer2', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['flash report', 'daily summary', 'restaurant sales', 'busy hours'] },
+        { label: 'Restaurant Reports', route: '/admin/restaurant/reports', icon: 'bi-person-badge', available: true, permission: 'SALES.INVOICE.VIEW', keywords: ['waiter', 'waiter sales', 'bills', 'pending bills', 'sales by hour', 'payments', 'cancelled orders', 'voided items'] },
       ],
     },
   ];

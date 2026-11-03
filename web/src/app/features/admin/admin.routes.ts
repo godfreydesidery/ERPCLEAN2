@@ -1209,6 +1209,15 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () =>
       import('./restaurant/restaurant-reports.component').then((m) => m.RestaurantReportsComponent),
   },
+  // Restaurant dashboard (2026-11-03) — same code as the reports and its endpoint.
+  {
+    path: 'restaurant/dashboard',
+    canActivate: [requirePermission('SALES.INVOICE.VIEW')],
+    loadComponent: () =>
+      import('./restaurant/restaurant-dashboard.component').then(
+        (m) => m.RestaurantDashboardComponent,
+      ),
+  },
   // ── Stock Transfers ─────────────────���──────────────────────────��──────────
   {
     path: 'stock-transfers',
