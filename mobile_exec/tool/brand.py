@@ -20,6 +20,10 @@ A brand is a folder ``brands/<id>/`` holding ONE hand-written file,
                                            dist/build-hq.ps1 offers it and asks
                                            to confirm. Empty for orbix: the
                                            generic app asks on first launch.
+      "icon": "icon.png",                  optional - the customer's own logo,
+                                           a square image in brands/<id>/; it
+                                           becomes the launcher icon (rounded
+                                           like the others) instead of "mark"
       "palette": { ... }                   optional - exact overrides for any
                                            derived shade (the Orbix brand pins
                                            its hand-tuned teal this way)
@@ -223,6 +227,26 @@ def render_icon(size: int, mark: str, rgb: tuple[int, int, int]):
     return img.resize((size, size), Image.LANCZOS)
 
 
+def render_logo_icon(size: int, path: str):
+    """The customer's own logo as a launcher icon: centre-cropped to a square,
+    corners rounded exactly like the letter icons."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        sys.exit("Pillow is required for icons:  python -m pip install Pillow")
+    logo = Image.open(path).convert("RGBA")
+    side = min(logo.size)
+    left, top = (logo.width - side) // 2, (logo.height - side) // 2
+    big = size * SS
+    logo = logo.crop((left, top, left + side, top + side)).resize((big, big), Image.LANCZOS)
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, big - 1, big - 1),
+                                           radius=int(CORNER_RADIUS * big), fill=255)
+    img = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    img.paste(logo, (0, 0), mask)
+    return img.resize((size, size), Image.LANCZOS)
+
+
 # ---------------------------------------------------------------------------
 # brand files
 # ---------------------------------------------------------------------------
@@ -243,6 +267,8 @@ def load(brand_id: str) -> dict:
         sys.exit(f"{brand_id}: id must be lowercase letters/digits, starting with a letter")
     if len(b["mark"]) != 1:
         sys.exit(f"{brand_id}: \"mark\" must be a single character")
+    if b.get("icon") and not os.path.isfile(os.path.join(BRANDS, brand_id, b["icon"])):
+        sys.exit(f"{brand_id}: icon '{b['icon']}' is not in brands/{brand_id}/")
     return b
 
 
@@ -286,8 +312,9 @@ def generate(brand_id: str) -> None:
         res = os.path.join(out, "android", "res")
         for density, size in DENSITIES:
             os.makedirs(os.path.join(res, density))
-            render_icon(size, b["mark"], palette["primary"]).save(
-                os.path.join(res, density, "ic_launcher.png"), optimize=True)
+            icon = (render_logo_icon(size, os.path.join(BRANDS, brand_id, b["icon"]))
+                    if b.get("icon") else render_icon(size, b["mark"], palette["primary"]))
+            icon.save(os.path.join(res, density, "ic_launcher.png"), optimize=True)
         values = os.path.join(res, "values")
         os.makedirs(values)
         head = ('<?xml version="1.0" encoding="utf-8"?>\n'

@@ -19,6 +19,8 @@ import 'package:orbix_hq/features/operations_screen.dart';
 import 'package:orbix_hq/features/pack_sizes.dart';
 import 'package:orbix_hq/features/products_screen.dart';
 import 'package:orbix_hq/features/receive_goods_screen.dart';
+import 'package:orbix_hq/features/restaurant_dashboard_screen.dart';
+import 'package:orbix_hq/features/restaurant_reports_screen.dart';
 import 'package:orbix_hq/features/reports_screen.dart';
 import 'package:orbix_hq/features/sales_report_screen.dart';
 import 'package:orbix_hq/features/settings_screen.dart';
@@ -43,6 +45,8 @@ Map<String, Widget> buildScreens() => <String, Widget>{
       'pack sizes': const PackSizesScreen(),
       'products': const ProductsScreen(),
       'x read': const TillReportScreen(),
+      'restaurant dashboard': const RestaurantDashboardScreen(),
+      'restaurant reports': const RestaurantReportsScreen(),
       'settings': SettingsScreen(onSignOut: () {}),
     };
 
