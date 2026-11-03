@@ -3,10 +3,14 @@ package com.erp.modules.sales.service;
 import com.erp.modules.reporting.domain.dto.ReportCompanyHeaderDto;
 import com.erp.modules.sales.domain.dto.RestaurantBillRowDto;
 import com.erp.modules.sales.domain.dto.RestaurantBillsReportDto;
+import com.erp.modules.sales.domain.dto.RestaurantBillsSummaryDto;
 import com.erp.modules.sales.domain.dto.RestaurantPendingBillRowDto;
 import com.erp.modules.sales.domain.dto.RestaurantPendingBillsReportDto;
+import com.erp.modules.sales.domain.dto.RestaurantPendingSummaryDto;
+import com.erp.modules.sales.domain.dto.WaiterItemsReportDto;
 import com.erp.modules.sales.domain.dto.WaiterSalesReportDto;
 import com.erp.modules.sales.domain.dto.WaiterSalesRowDto;
+import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.security.BranchReadGuard;
 import com.erp.platform.security.BranchReadScope;
@@ -22,7 +26,13 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -175,7 +185,7 @@ public class RestaurantReportQuery {
         scopeGuard.assertCanActIn(principal, companyId);
         Header header = loadHeader(companyId);
         ZoneId zone = header.zone();
-        Filter f = filter(principal, companyId, waiterUid, branchUid);
+        Filter f = filter(principal, companyId, waiterUid, branchUid, "o.branch_id");
         List<Object> params = new ArrayList<>(List.of(companyId));
         params.addAll(f.params);
         List<RestaurantPendingBillRowDto> rows = jdbc.query("""
@@ -221,9 +231,233 @@ public class RestaurantReportQuery {
                 rows, open, billed, billedAmount, Instant.now().toString());
     }
 
+    // ---------------------------------------------------------------- waiter items (detail)
+
+    /** The items on each waiter's paid bills: sales by waiter in detail. */
+    public WaiterItemsReportDto waiterItems(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                            String waiterUid, String branchUid) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
+        String gross = BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", "i.fx_rate",
+                w.baseScale);
+        List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
+        params.addAll(w.params);
+        List<WaiterItemsReportDto.Row> lines = jdbc.query("""
+                SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
+                       COALESCE(p.code, MAX(l.product_code)) AS code,
+                       COALESCE(p.name, MAX(l.product_name)) AS name,
+                       MAX(l.unit_name) AS unit,
+                       SUM(l.quantity) AS quantity,
+                       COALESCE(SUM(""" + gross + """
+                ), 0) AS amount
+                FROM restaurant_orders o
+                JOIN sales_invoices i      ON i.id = o.sales_invoice_id
+                JOIN sales_invoice_lines l ON l.invoice_id = i.id
+                JOIN app_users u           ON u.id = COALESCE(o.served_by, o.opened_by)
+                LEFT JOIN products p       ON p.id = l.product_id
+                WHERE o.company_id = ?
+                  AND o.status = 'PAID'
+                  AND i.status = 'FINALISED'
+                  AND o.paid_at >= ? AND o.paid_at < ?
+                """ + w.filterSql + """
+
+                GROUP BY u.uid, u.display_name, l.product_id, l.unit_id, p.code, p.name
+                ORDER BY amount DESC, name
+                """,
+                (rs, i) -> new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
+                        rs.getString("waiter_name"), rs.getString("code"), rs.getString("name"),
+                        rs.getString("unit"), rs.getBigDecimal("quantity"),
+                        rs.getBigDecimal("amount")),
+                params.toArray());
+
+        // Waiters biggest first, by the same lines; bills counted from the orders.
+        Map<String, Long> bills = new HashMap<>();
+        jdbc.query("""
+                SELECT u.uid AS waiter_uid, COUNT(*) AS bills
+                FROM restaurant_orders o
+                JOIN sales_invoices i ON i.id = o.sales_invoice_id
+                JOIN app_users u      ON u.id = COALESCE(o.served_by, o.opened_by)
+                WHERE o.company_id = ?
+                  AND o.status = 'PAID'
+                  AND i.status = 'FINALISED'
+                  AND o.paid_at >= ? AND o.paid_at < ?
+                """ + w.filterSql + """
+
+                GROUP BY u.uid
+                """,
+                rs -> {
+                    bills.put(rs.getString("waiter_uid"), rs.getLong("bills"));
+                },
+                params.toArray());
+        Map<String, WaiterItemsReportDto.Subtotal> subtotals =
+                new LinkedHashMap<>();
+        for (WaiterItemsReportDto.Row r : lines) {
+            WaiterItemsReportDto.Subtotal s = subtotals.get(r.waiterUid());
+            BigDecimal before = s == null ? BigDecimal.ZERO : s.amount();
+            subtotals.put(r.waiterUid(), new WaiterItemsReportDto.Subtotal(r.waiterUid(),
+                    r.waiterName(), bills.getOrDefault(r.waiterUid(), 0L),
+                    before.add(r.amount())));
+        }
+        List<WaiterItemsReportDto.Subtotal> waiters = new ArrayList<>(subtotals.values());
+        waiters.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : a.waiterName().compareToIgnoreCase(b.waiterName());
+        });
+        List<WaiterItemsReportDto.Row> rows = new ArrayList<>(lines.size());
+        BigDecimal total = BigDecimal.ZERO;
+        for (WaiterItemsReportDto.Subtotal s : waiters) {
+            for (WaiterItemsReportDto.Row r : lines) {
+                if (r.waiterUid().equals(s.waiterUid())) {
+                    rows.add(r);
+                }
+            }
+            total = total.add(s.amount());
+        }
+        return new WaiterItemsReportDto(w.header.dto(), fromDate.toString(), toDate.toString(),
+                w.waiterName, w.header.baseCurrency, rows, waiters, total,
+                Instant.now().toString());
+    }
+
+    // ---------------------------------------------------------------- bills (summary)
+
+    /** Bills paid per waiter, the amount split by how it was paid. Voided receipts left out. */
+    public RestaurantBillsSummaryDto billsSummary(Long companyId, LocalDate fromDate,
+                                                  LocalDate toDate, String waiterUid,
+                                                  String branchUid) {
+        WaiterSalesReportDto sales = waiterSales(companyId, fromDate, toDate, waiterUid, branchUid);
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
+        String paid = BaseCurrencySql.toBase("(p.amount - COALESCE(p.change_amount, 0))",
+                "i.fx_rate", w.baseScale);
+        List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
+        params.addAll(w.params);
+        // waiter uid -> tender -> amount
+        Map<String, Map<String, BigDecimal>> byWaiter = new HashMap<>();
+        Set<String> seen = new HashSet<>();
+        jdbc.query("""
+                SELECT u.uid AS waiter_uid, p.tender_type AS tender,
+                       COALESCE(SUM(""" + paid + """
+                ), 0) AS amount
+                FROM restaurant_orders o
+                JOIN sales_invoices i          ON i.id = o.sales_invoice_id
+                JOIN sales_invoice_payments p  ON p.invoice_id = i.id
+                JOIN app_users u               ON u.id = COALESCE(o.served_by, o.opened_by)
+                WHERE o.company_id = ?
+                  AND o.status = 'PAID'
+                  AND i.status = 'FINALISED'
+                  AND o.paid_at >= ? AND o.paid_at < ?
+                """ + w.filterSql + """
+
+                GROUP BY u.uid, p.tender_type
+                """,
+                rs -> {
+                    String tender = rs.getString("tender");
+                    seen.add(tender);
+                    byWaiter.computeIfAbsent(rs.getString("waiter_uid"),
+                            k -> new HashMap<>()).put(tender, rs.getBigDecimal("amount"));
+                },
+                params.toArray());
+
+        // Payment types in their usual order, only those used; any unknown type last.
+        List<String> tenderTypes = new ArrayList<>();
+        for (TenderType t
+                : TenderType.values()) {
+            if (seen.remove(t.name())) {
+                tenderTypes.add(t.name());
+            }
+        }
+        seen.stream().sorted().forEach(tenderTypes::add);
+
+        List<RestaurantBillsSummaryDto.Row> rows = new ArrayList<>();
+        BigDecimal[] totals = new BigDecimal[tenderTypes.size()];
+        Arrays.fill(totals, BigDecimal.ZERO);
+        for (WaiterSalesRowDto r : sales.rows()) {
+            Map<String, BigDecimal> mine = byWaiter.getOrDefault(r.waiterUid(),
+                    Map.of());
+            List<BigDecimal> tenders = new ArrayList<>();
+            for (int t = 0; t < tenderTypes.size(); t++) {
+                BigDecimal a = mine.getOrDefault(tenderTypes.get(t), BigDecimal.ZERO);
+                tenders.add(a);
+                totals[t] = totals[t].add(a);
+            }
+            rows.add(new RestaurantBillsSummaryDto.Row(r.waiterUid(), r.waiterName(), r.bills(),
+                    r.guests(), tenders, r.amount()));
+        }
+        WaiterSalesRowDto t = sales.totals();
+        return new RestaurantBillsSummaryDto(sales.company(), sales.fromDate(), sales.toDate(),
+                sales.waiterName(), sales.currency(), tenderTypes, rows,
+                new RestaurantBillsSummaryDto.Row(null, "TOTAL", t.bills(), t.guests(),
+                        List.of(totals), t.amount()),
+                Instant.now().toString());
+    }
+
+    // ---------------------------------------------------------------- pending (summary)
+
+    /** Pending bills right now, per waiter. No date window, like the detail. */
+    public RestaurantPendingSummaryDto pendingSummary(Long companyId, String waiterUid,
+                                                      String branchUid) {
+        RequestContext.Principal principal = RequestContext.get();
+        scopeGuard.assertCanActIn(principal, companyId);
+        Header header = loadHeader(companyId);
+        ZoneId zone = header.zone();
+        Filter f = filter(principal, companyId, waiterUid, branchUid, "o.branch_id");
+        List<Object> params = new ArrayList<>(List.of(companyId));
+        params.addAll(f.params);
+        List<RestaurantPendingSummaryDto.Row> rows = jdbc.query("""
+                SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
+                       COUNT(*) FILTER (WHERE o.status = 'OPEN')   AS open_count,
+                       COUNT(*) FILTER (WHERE o.status = 'BILLED') AS billed_count,
+                       COALESCE(SUM(li.items), 0) AS items,
+                       COALESCE(SUM(o.billed_total_amount)
+                                FILTER (WHERE o.status = 'BILLED'), 0) AS billed_amount,
+                       MIN(o.opened_at) AS oldest
+                FROM restaurant_orders o
+                JOIN app_users u ON u.id = COALESCE(o.served_by, o.opened_by)
+                LEFT JOIN LATERAL (
+                    SELECT SUM(l.quantity) AS items FROM restaurant_order_lines l
+                     WHERE l.restaurant_order_id = o.id
+                       AND l.status <> 'VOIDED'
+                       AND l.parent_line_id IS NULL) li ON true
+                WHERE o.company_id = ?
+                  AND o.status IN ('OPEN', 'BILLED')
+                """ + f.sql + """
+
+                GROUP BY u.uid, u.display_name
+                ORDER BY billed_amount DESC, u.display_name
+                """,
+                (rs, i) -> new RestaurantPendingSummaryDto.Row(rs.getString("waiter_uid"),
+                        rs.getString("waiter_name"), rs.getLong("open_count"),
+                        rs.getLong("billed_count"), rs.getBigDecimal("items"),
+                        rs.getBigDecimal("billed_amount"), when(rs, "oldest", zone)),
+                params.toArray());
+
+        long open = 0;
+        long billed = 0;
+        BigDecimal items = BigDecimal.ZERO;
+        BigDecimal amount = BigDecimal.ZERO;
+        String oldest = null;
+        for (RestaurantPendingSummaryDto.Row r : rows) {
+            open += r.open();
+            billed += r.billed();
+            items = items.add(r.items());
+            amount = amount.add(r.billedAmount());
+            if (r.oldestOpenedAt() != null
+                    && (oldest == null || r.oldestOpenedAt().compareTo(oldest) < 0)) {
+                oldest = r.oldestOpenedAt();
+            }
+        }
+        return new RestaurantPendingSummaryDto(header.dto(), f.waiterName, header.baseCurrency,
+                rows, new RestaurantPendingSummaryDto.Row(null, "TOTAL", open, billed, items,
+                        amount, oldest),
+                Instant.now().toString());
+    }
+
+    /** The branch filter alone, on {@code branchColumn}, for queries outside this class. */
+    public Filter branchFilter(Long companyId, String branchUid, String branchColumn) {
+        return filter(RequestContext.get(), companyId, null, branchUid, branchColumn);
+    }
+
     // ---------------------------------------------------------------- shared
 
-    private record Header(String name, String legalName, String taxId, String vrn,
+    record Header(String name, String legalName, String taxId, String vrn,
                           String contactPhone, String contactEmail, String addressLine1,
                           String addressLine2, String city, String region, String country,
                           String timeZone, String baseCurrency) {
@@ -237,15 +471,25 @@ public class RestaurantReportQuery {
         }
     }
 
-    /** The waiter and branch filters, as SQL on {@code o.} with their parameters. */
-    private record Filter(String sql, List<Object> params, String waiterName) {}
+    /** The waiter and branch filters, as SQL with their parameters. */
+    record Filter(String sql, List<Object> params, String waiterName, String branchName) {}
 
-    private record Window(Header header, ZoneId zone, OffsetDateTime from, OffsetDateTime to,
-                          String filterSql, List<Object> params, String waiterName,
-                          int baseScale) {}
+    record Window(Header header, ZoneId zone, OffsetDateTime from, OffsetDateTime to,
+                  String filterSql, List<Object> params, String waiterName, String branchName,
+                  int baseScale) {}
 
     private Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
                           String branchUid) {
+        return window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id");
+    }
+
+    /**
+     * The date window and filters; {@code branchColumn} is the branch column the SQL filters on.
+     * Public, like {@link #branchFilter}, so a call through the transactional proxy reaches the
+     * target rather than the proxy's empty fields.
+     */
+    public Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
+                  String branchUid, String branchColumn) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
         if (fromDate == null || toDate == null) {
@@ -256,30 +500,33 @@ public class RestaurantReportQuery {
         }
         Header header = loadHeader(companyId);
         ZoneId zone = header.zone();
-        Filter f = filter(principal, companyId, waiterUid, branchUid);
+        Filter f = filter(principal, companyId, waiterUid, branchUid, branchColumn);
         return new Window(header, zone,
                 fromDate.atStartOfDay(zone).toOffsetDateTime(),
                 toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
-                f.sql, f.params, f.waiterName, BaseCurrencySql.baseScale(jdbc, companyId));
+                f.sql, f.params, f.waiterName, f.branchName, BaseCurrencySql.baseScale(jdbc, companyId));
     }
 
     private Filter filter(RequestContext.Principal principal, Long companyId, String waiterUid,
-                          String branchUid) {
+                          String branchUid, String branchColumn) {
         Long branchId = null;
+        String branchName = null;
         if (branchUid != null && !branchUid.isBlank()) {
-            List<Long> found = jdbc.queryForList(
-                    "SELECT id FROM branches WHERE uid = ? AND company_id = ?",
-                    Long.class, branchUid.trim(), companyId);
+            List<Object[]> found = jdbc.query(
+                    "SELECT id, name FROM branches WHERE uid = ? AND company_id = ?",
+                    (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("name")},
+                    branchUid.trim(), companyId);
             if (found.isEmpty()) {
                 throw NotFoundException.of("Branch", branchUid);
             }
-            branchId = found.get(0);
+            branchId = (Long) found.get(0)[0];
+            branchName = (String) found.get(0)[1];
         }
         BranchReadScope scope = branchGuard.readScope(principal, companyId, branchId);
-        StringBuilder sql = new StringBuilder(scope.sql("o.branch_id"));
+        StringBuilder sql = new StringBuilder(scope.sql(branchColumn));
         List<Object> params = new ArrayList<>();
         if (branchId != null) {
-            sql.append(" AND o.branch_id = ?");
+            sql.append(" AND ").append(branchColumn).append(" = ?");
             params.add(branchId);
         }
         String waiterName = null;
@@ -296,10 +543,10 @@ public class RestaurantReportQuery {
             params.add(found.get(0)[0]);
             waiterName = (String) found.get(0)[1];
         }
-        return new Filter(sql.toString(), params, waiterName);
+        return new Filter(sql.toString(), params, waiterName, branchName);
     }
 
-    private Header loadHeader(Long companyId) {
+    Header loadHeader(Long companyId) {
         List<Header> found = jdbc.query("""
                 SELECT name, legal_name, tax_id, vrn, contact_phone, contact_email,
                        address_line1, address_line2, city, region, country, time_zone,
@@ -319,7 +566,7 @@ public class RestaurantReportQuery {
         return found.get(0);
     }
 
-    private static String when(ResultSet rs, String column, ZoneId zone) throws SQLException {
+    static String when(ResultSet rs, String column, ZoneId zone) throws SQLException {
         OffsetDateTime t = rs.getObject(column, OffsetDateTime.class);
         return t == null ? null : t.atZoneSameInstant(zone).format(WHEN);
     }

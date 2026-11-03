@@ -74,6 +74,7 @@ import com.erp.modules.sales.domain.dto.StationSlipsDto;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
 import com.erp.modules.sales.domain.dto.RestaurantVoidResultDto;
 import com.erp.modules.sales.domain.dto.VoidRestaurantOrderLineRequest;
+import com.erp.modules.sales.domain.dto.RestaurantDashboardDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
@@ -153,6 +154,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantMenuService   menu;
     @Autowired private RestaurantKitchenService kitchenDisplay;
     @Autowired private RestaurantReportQuery   reports;
+    @Autowired private RestaurantInsightsQuery insights;
     @Autowired private JdbcTemplate            jdbc;
 
     private Company company;
@@ -988,6 +990,113 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         });
         assertThat(reports.pendingBills(company.getId(), waiterUid, null).rows())
                 .as("filtered to the waiter, whose only order is paid").isEmpty();
+    }
+
+    @Test
+    void dashboardAndInsightReports_addUpToTheSalesTheyCover() {
+        setRootCtx();
+        String juma = waiter("resto_juma", "Juma Waiter");
+
+        // Juma's table of three: tacos and a latte, billed and paid.
+        setCashierCtx();
+        RestaurantOrderDto served = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 3, null, juma));
+        orders.addLine(served.uid(), item(tacos));
+        orders.addLine(served.uid(), item(latte));
+        RestaurantBillDto bill = orders.bill(served.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte);
+        setCashierCtx();
+        orders.pay(served.uid(), "resto-insights-pay", payment(bill.grossTotal()));
+        BigDecimal gross = bill.grossTotal();
+
+        // A table cancelled before anything was sent, and one still open with one latte voided.
+        orders.cancel(openWith(cake).uid(), null);
+        RestaurantOrderDto open = orders.open(new CreateRestaurantOrderRequest(null, table1.uid(), null, null));
+        orders.addLine(open.uid(), new AddRestaurantOrderLineRequest(latte.id(), pcsId, new BigDecimal("2"), null));
+        orders.send(open.uid());
+        setRootCtx();
+        orders.voidLine(open.uid(), orders.get(open.uid()).lines().get(0).uid(),
+                new VoidRestaurantOrderLineRequest("Spilt", BigDecimal.ONE, null));
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+
+        var d = insights.dashboard(co, today, today, null);
+        assertThat(d.current().sales()).isEqualByComparingTo(gross);
+        assertThat(d.current().receipts()).isEqualTo(1);
+        assertThat(d.current().orders()).isEqualTo(1);
+        assertThat(d.current().guests()).isEqualTo(3);
+        assertThat(d.current().spendPerGuest()).isEqualByComparingTo(
+                gross.divide(BigDecimal.valueOf(3), 2, java.math.RoundingMode.HALF_EVEN));
+        assertThat(d.current().cancelledOrders()).isEqualTo(1);
+        assertThat(d.current().voidedItems()).isEqualByComparingTo("1");
+        assertThat(d.current().voidedReceipts()).isZero();
+        assertThat(d.previous().sales()).as("nothing sold yesterday").isEqualByComparingTo("0");
+        assertThat(d.live().openOrders()).isEqualTo(1);
+        assertThat(d.days()).singleElement().satisfies(x -> assertThat(x.sales()).isEqualByComparingTo(gross));
+        assertThat(d.hours()).hasSize(24);
+        assertThat(d.hours().stream().map(RestaurantDashboardDto.Hour::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(gross);
+        assertThat(d.weekdays()).hasSize(7);
+        assertThat(d.weekdays().get(today.getDayOfWeek().getValue() - 1).days()).isEqualTo(1);
+        assertThat(d.departments()).extracting(RestaurantDashboardDto.Department::name)
+                .containsExactlyInAnyOrder("Food", "Drinks");
+        assertThat(d.departments().stream().map(RestaurantDashboardDto.Department::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(gross);
+        assertThat(d.topItems()).hasSize(2);
+        assertThat(d.waiters()).as("every receipt came from a table order: no counter row")
+                .singleElement().satisfies(w -> assertThat(w.waiterName()).isEqualTo("Juma Waiter"));
+        assertThat(d.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(gross);
+
+        var hours = insights.daypart(co, today, today, null);
+        assertThat(hours.totals().sales()).isEqualByComparingTo(gross);
+        assertThat(hours.totals().receipts()).isEqualTo(1);
+        assertThat(hours.departments()).containsExactlyInAnyOrder("Food", "Drinks");
+        assertThat(hours.weekdays()).hasSize(7);
+
+        var pay = insights.payments(co, today, today, null);
+        assertThat(pay.totalPaid()).isEqualByComparingTo(gross);
+        assertThat(pay.tenders()).singleElement()
+                .satisfies(t -> assertThat(t.share()).isEqualByComparingTo("100"));
+        assertThat(pay.completion().opened()).isEqualTo(3);
+        assertThat(pay.completion().paid()).isEqualTo(1);
+        assertThat(pay.completion().cancelled()).isEqualTo(1);
+        assertThat(pay.completion().pending()).isEqualTo(1);
+        assertThat(pay.cancelledOrders()).hasSize(1);
+        assertThat(pay.voidedItems()).singleElement().satisfies(v -> {
+            assertThat(v.reason()).isEqualTo("Spilt");
+            assertThat(v.quantity()).isEqualByComparingTo("1");
+            assertThat(v.productName()).isEqualTo(latte.name());
+        });
+
+        var items = reports.waiterItems(co, today, today, null, null);
+        assertThat(items.rows()).hasSize(2);
+        assertThat(items.waiters()).singleElement().satisfies(w -> {
+            assertThat(w.waiterName()).isEqualTo("Juma Waiter");
+            assertThat(w.bills()).isEqualTo(1);
+        });
+        assertThat(items.totalAmount()).isEqualByComparingTo(gross);
+
+        var summary = reports.billsSummary(co, today, today, null, null);
+        assertThat(summary.rows()).singleElement().satisfies(r -> {
+            assertThat(r.bills()).isEqualTo(1);
+            assertThat(r.guests()).isEqualTo(3);
+            assertThat(r.amount()).isEqualByComparingTo(gross);
+            assertThat(r.tenders().stream().reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .isEqualByComparingTo(gross);
+        });
+        assertThat(summary.tenderTypes()).hasSize(1);
+
+        var pending = reports.pendingSummary(co, null, null);
+        assertThat(pending.rows()).singleElement().satisfies(r -> {
+            assertThat(r.waiterName()).isEqualTo("Asha Waiter");
+            assertThat(r.open()).isEqualTo(1);
+            assertThat(r.billed()).isZero();
+            assertThat(r.items()).as("two lattes, one voided").isEqualByComparingTo("1");
+            assertThat(r.oldestOpenedAt()).isNotBlank();
+        });
+        assertThat(reports.pendingSummary(co, juma, null).rows()).isEmpty();
     }
 
     // =========================================================================
