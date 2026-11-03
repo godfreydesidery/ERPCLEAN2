@@ -50,13 +50,22 @@ class RestaurantService {
   /// Opens an order at [tableUid], or a takeaway when it is null.
   /// [waiterUid]: the waiter signed in on this shared till (ADR-0066 D-8); the
   /// server re-verifies it and records them as the order's server.
-  Future<RestaurantOrder> open({String? tableUid, int? guestCount, String? waiterUid}) async =>
+  /// [customerName]: whose table it is, printed on the bill; blank = none.
+  Future<RestaurantOrder> open(
+          {String? tableUid, int? guestCount, String? waiterUid, String? customerName}) async =>
       RestaurantOrder.fromJson(asMap(await _api.post(_orders, body: {
         'orderType': tableUid == null ? 'TAKEAWAY' : 'DINE_IN',
         'tableUid': ?tableUid,
         'guestCount': ?guestCount,
         'waiterUid': ?waiterUid,
+        if (customerName != null && customerName.trim().isNotEmpty)
+          'customerName': customerName.trim(),
       })));
+
+  /// Sets whose table it is; '' removes the name.
+  Future<RestaurantOrder> setCustomerName(String uid, String customerName) async =>
+      RestaurantOrder.fromJson(asMap(
+          await _api.patch('$_orders/uid/$uid', body: {'customerName': customerName.trim()})));
 
   Future<RestaurantOrder> moveTo(String uid, String tableUid) async =>
       RestaurantOrder.fromJson(asMap(

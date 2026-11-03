@@ -582,16 +582,8 @@ class _SessionDrawer extends ConsumerWidget {
     }
   }
 
-  Future<void> _todaysSales(BuildContext context, WidgetRef ref) async {
-    final app = ref.read(appControllerProvider);
-    final ctx = app.context;
-    if (ctx == null) return;
-    showDialog(
-      context: context,
-      builder: (_) =>
-          _TodaysSalesDialog(companyId: ctx.companyId, branchId: ctx.branchId),
-    );
-  }
+  Future<void> _todaysSales(BuildContext context, WidgetRef ref) =>
+      showTodaysSales(context, ref);
 
   Future<void> _recent(BuildContext context, WidgetRef ref) async {
     final receipts = await ref.read(receiptJournalProvider).recent();
@@ -1318,6 +1310,17 @@ class _ExpenseDialogState extends ConsumerState<_ExpenseDialog> {
 }
 
 // ============================================================ today's sales
+
+/// Today's sales at the active branch: look up and reprint a receipt. Needs no
+/// shift, so the open-shift screen offers it too.
+Future<void> showTodaysSales(BuildContext context, WidgetRef ref) async {
+  final ctx = ref.read(appControllerProvider).context;
+  if (ctx == null) return;
+  showDialog(
+    context: context,
+    builder: (_) => _TodaysSalesDialog(companyId: ctx.companyId, branchId: ctx.branchId),
+  );
+}
 
 class _TodaysSalesDialog extends ConsumerStatefulWidget {
   const _TodaysSalesDialog({required this.companyId, required this.branchId});
