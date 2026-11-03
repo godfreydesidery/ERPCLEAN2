@@ -69,6 +69,16 @@ describe('RestaurantOrdersComponent', () => {
     expect(c.itemCount(order)).toBe(2);
   });
 
+  it('shows whose table it is under the table', () => {
+    const restaurant = makeBed();
+    restaurant.listOrders.mockReturnValue(of([{ ...order, customerName: 'Acme Ltd' }]));
+    const fixture = TestBed.createComponent(RestaurantOrdersComponent);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Table T1');
+    expect(text).toContain('Acme Ltd');
+  });
+
   it('asks for a reason before cancelling an order with sent items', () => {
     const restaurant = makeBed();
     const fixture = TestBed.createComponent(RestaurantOrdersComponent);

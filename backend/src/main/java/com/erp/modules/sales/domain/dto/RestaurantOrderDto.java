@@ -41,5 +41,7 @@ public record RestaurantOrderDto(
         String waiterUid,
         String waiterName,
         /** When it was transferred to them; null while the opener still holds it. */
-        Instant waiterSince
+        Instant waiterSince,
+        /** Who is at the table, as typed (a person or a company); null when not given. */
+        String customerName
 ) {}

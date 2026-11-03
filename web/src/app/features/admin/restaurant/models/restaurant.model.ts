@@ -128,6 +128,8 @@ export interface RestaurantOrderDto {
   waiterUid?: string | null;
   waiterName?: string | null;
   waiterSince?: string | null;
+  /** Who is at the table, as typed (a person or a company); absent from a server before V112. */
+  customerName?: string | null;
   openedAt: string;
   billedAt: string | null;
   billedTotalAmount: number | null;

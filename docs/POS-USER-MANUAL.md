@@ -1291,10 +1291,12 @@ If the floor says **No tables are set up for this branch**, a manager has not ad
 
 ### 3.2 Open an order
 
-- **At a table:** tap a **Free** table. Type **How many?** guests (or skip) and the order opens. Tapping an **Occupied** table opens its order; if it has more than one, choose which, or choose **New order at this table**.
+- **At a table:** tap a **Free** table. If you like, type the **Customer name** first — a person (*Mr Juma*) or a company sitting at the table (*Acme Ltd*). Then tap **How many?** guests (or **Skip**) and the order opens. Tapping an **Occupied** table opens its order; if it has more than one, choose which, or choose **New order at this table**.
 - **Takeaway:** tap **New takeaway**. To come back to it, tap it in **Open orders**.
 
-The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the order number (for example `ORD-0012`), the number of guests and the waiter. **Floor** (top-left) goes back to the floor — the order stays open.
+The order screen shows the **menu** on the left and the **order** on the right (on a narrow tablet they are two tabs, **Menu** and the order). The order header shows the table (or *Takeaway*), the customer name when one was given, the order number (for example `ORD-0012`), the number of guests and the waiter. **Floor** (top-left) goes back to the floor — the order stays open.
+
+**Customer name.** Tap the person button beside **More** (top-right of the order) to add the name, change it, or **Remove** it. It works for takeaways too. The name shows on the order's card on the floor, and the bill prints it as **Customer** under the table. The keyboard button in the name box shows on-screen keys on a till with no keyboard. Split the bill and the new check keeps the same name; change it there if it is someone else's.
 
 ### 3.3 Add items
 

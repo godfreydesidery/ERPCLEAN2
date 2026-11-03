@@ -12,6 +12,7 @@ import java.util.List;
  *
  * @param unsentLineCount items on the bill that never went to a prep station — the till may ask
  *                        "send first?"
+ * @param customerName    who is at the table, as typed; printed under the table when given
  */
 public record RestaurantBillDto(
         String orderUid,
@@ -27,7 +28,8 @@ public record RestaurantBillDto(
         BigDecimal netTotal,
         BigDecimal vatTotal,
         BigDecimal grossTotal,
-        int unsentLineCount
+        int unsentLineCount,
+        String customerName
 ) {
     /** {@code unitPrice} and {@code amount} are VAT-inclusive. */
     public record Line(String productName, String unitName, BigDecimal quantity,

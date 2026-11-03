@@ -52,6 +52,11 @@ public class RestaurantOrder extends UidEntity {
     @Setter
     private Long customerId;
 
+    /** Who is at the table, as typed: a person or a company. Printed on the bill. */
+    @Column(name = "customer_name", length = 120)
+    @Setter
+    private String customerName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private RestaurantOrderStatus status = RestaurantOrderStatus.OPEN;

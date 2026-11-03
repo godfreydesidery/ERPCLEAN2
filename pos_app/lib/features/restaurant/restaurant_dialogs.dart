@@ -21,43 +21,163 @@ import 'waiter_tiles.dart';
 
 // ---------------------------------------------------------------- guests
 
-/// How many guests at the table. Returns null when backed out; 0 = skip.
-Future<int?> askGuestCount(BuildContext context, String tableName) {
-  return showDialog<int>(
+/// How many guests at the table, and optionally whose table it is (a person
+/// or a company, printed on the bill). Returns null when backed out;
+/// guests 0 = skip. The name is trimmed; '' = none given.
+Future<({int guests, String name})?> askGuestCount(BuildContext context, String tableName) {
+  return showDialog<({int guests, String name})>(
     context: context,
-    builder: (_) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
-      title: Text('Table $tableName — how many guests?'),
-      content: SizedBox(
-        width: 360,
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (var n = 1; n <= 12; n++)
-              SizedBox(
-                width: 72,
-                height: 52,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context, n),
-                  child: Text('$n',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700)),
+    builder: (context) => _NameKeys(
+      builder: (nameField, name) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        title: Text('Table $tableName — how many guests?'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                nameField,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var n = 1; n <= 12; n++)
+                      SizedBox(
+                        width: 72,
+                        height: 52,
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              Navigator.pop(context, (guests: n, name: name.text.trim())),
+                          child: Text('$n',
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, (guests: 0, name: name.text.trim())),
+              child: const Text('Skip')),
+        ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        TextButton(
-            onPressed: () => Navigator.pop(context, 0),
-            child: const Text('Skip')),
-      ],
     ),
   );
+}
+
+/// Whose table it is — a person or a company — printed on the bill. Returns
+/// the trimmed name ('' removes it), or null when backed out.
+Future<String?> askCustomerName(BuildContext context, RestaurantOrder order) {
+  return showDialog<String>(
+    context: context,
+    builder: (context) => _NameKeys(
+      initial: order.customerName ?? '',
+      autofocus: true,
+      onEnter: (name) => Navigator.pop(context, name.trim()),
+      builder: (nameField, name) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+        title: Text('${order.where} — customer name'),
+        content: SizedBox(width: 400, child: SingleChildScrollView(child: nameField)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          if ((order.customerName ?? '').isNotEmpty)
+            TextButton(
+                onPressed: () => Navigator.pop(context, ''), child: const Text('Remove')),
+          OrbixButton(
+              label: 'Save', onPressed: () => Navigator.pop(context, name.text.trim())),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The customer-name field, with on-screen keys behind its keyboard button for
+/// a touch till with no keyboard. Off by default, so a tablet's own keyboard
+/// is not covered by a second one. Owns its controller: it outlives the
+/// dialog's closing animation.
+class _NameKeys extends StatefulWidget {
+  const _NameKeys({
+    required this.builder,
+    this.initial = '',
+    this.autofocus = false,
+    this.onEnter,
+  });
+
+  final Widget Function(Widget nameField, TextEditingController name) builder;
+  final String initial;
+  final bool autofocus;
+  final void Function(String name)? onEnter;
+
+  @override
+  State<_NameKeys> createState() => _NameKeysState();
+}
+
+class _NameKeysState extends State<_NameKeys> {
+  late final TextEditingController _name = TextEditingController(text: widget.initial);
+  bool _keys = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _enter() {
+    final onEnter = widget.onEnter;
+    if (onEnter != null) {
+      onEnter(_name.text);
+    } else {
+      setState(() => _keys = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('customer-name'),
+            controller: _name,
+            autofocus: widget.autofocus,
+            maxLength: 120,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Customer name (optional)',
+              hintText: 'A person or a company',
+              prefixIcon: const Icon(Icons.person_outline),
+              suffixIcon: IconButton(
+                tooltip: _keys ? 'Hide keys' : 'On-screen keys',
+                icon: Icon(_keys ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined),
+                onPressed: () => setState(() => _keys = !_keys),
+              ),
+            ),
+            onSubmitted: (_) => _enter(),
+          ),
+          if (_keys)
+            OnScreenKeyboard(
+              controller: _name,
+              keyHeight: 40,
+              enterLabel: widget.onEnter == null ? 'Done' : 'Save',
+              onEnter: _enter,
+            ),
+        ],
+      ),
+      _name,
+    );
+  }
 }
 
 // ---------------------------------------------------------------- busy table
@@ -79,7 +199,10 @@ Future<({RestaurantOrder? order})?> pickOrderAtTable(
             for (final o in orders)
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
-                title: Text(o.orderNumber),
+                title: Text([
+                  o.orderNumber,
+                  if ((o.customerName ?? '').isNotEmpty) o.customerName!,
+                ].join(' · ')),
                 subtitle: Text('${o.waiterName} · '
                     '${o.activeLines.length} items'
                     '${o.status == OrderStatus.billed ? ' · bill printed' : ''}'),

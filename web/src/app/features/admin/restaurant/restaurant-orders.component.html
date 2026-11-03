@@ -75,7 +75,12 @@
                         {{ o.orderNumber }}
                       </button>
                     </td>
-                    <td>{{ where(o) }}</td>
+                    <td>
+                      {{ where(o) }}
+                      @if (o.customerName) {
+                        <div class="small text-muted">{{ o.customerName }}</div>
+                      }
+                    </td>
                     <td class="text-muted">{{ o.openedAt | appDate: 'datetime' }} · {{ o.waiterName || o.openedByName }}</td>
                     <td class="text-end">{{ itemCount(o) }}</td>
                     <td>{{ statusLabel(o) }}</td>

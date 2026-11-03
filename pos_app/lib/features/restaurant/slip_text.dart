@@ -131,6 +131,7 @@ String buildBillText(
     if (bill.printCount > 1) centered('REPRINT ${bill.printCount - 1}', width),
     doubleRule(width),
     leftRight(where, bill.orderNumber, width),
+    if ((bill.customerName ?? '').isNotEmpty) ...labelValue('Customer', bill.customerName!, width),
     if (bill.guestCount != null) leftRight('Guests', '${bill.guestCount}', width),
     ...labelValue('Served by', bill.serverName, width),
     leftRight('Date', _time(bill.billedAt), width),

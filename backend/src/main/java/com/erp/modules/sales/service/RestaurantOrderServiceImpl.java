@@ -228,6 +228,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                 type, tableId, servedBy(companyId, req.waiterUid()));
         order.setGuestCount(req.guestCount());
         order.setNotes(blankToNull(req.notes()));
+        order.setCustomerName(blankToNull(req.customerName()));
         order = orders.save(order);
         audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_OPEN, "restaurant_orders",
                 order.getId(), order.getUid())
@@ -251,6 +252,10 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         }
         if (req.notes() != null) {
             order.setNotes(blankToNull(req.notes()));
+        }
+        if (req.customerName() != null) {
+            order.setCustomerName(blankToNull(req.customerName()));
+            detail.put("customerName", req.customerName().strip());
         }
         touch(order);
         audit.record(AuditEvent.of(AuditActions.RESTAURANT_ORDER_UPDATE, "restaurant_orders",
@@ -806,6 +811,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                 numberGen.nextRestaurantOrder(source.getCompanyId()), source.getOrderType(),
                 source.getRestaurantTableId(), actor);
         created.setCustomerId(source.getCustomerId());
+        created.setCustomerName(source.getCustomerName());
         created = orders.save(created);
 
         int lineNo = 0;
@@ -1021,7 +1027,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         return new RestaurantBillDto(order.getUid(), order.getOrderNumber(), order.getOrderType(),
                 tableName(order), order.getGuestCount(), nameOf(order.currentWaiter()), now,
                 order.getBillPrintCount(), req.currency(), billLines,
-                priced.net(), priced.vat(), priced.gross(), unsent);
+                priced.net(), priced.vat(), priced.gross(), unsent, order.getCustomerName());
     }
 
     // -------------------------------------------------------------------------
@@ -1511,7 +1517,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                     o.getPaidAt(), o.getSalesInvoiceUid(), o.getCancelledAt(), o.getCancelReason(),
                     o.getNotes(), pending, lineDtos,
                     userUids.get(o.currentWaiter()),
-                    names.getOrDefault(o.currentWaiter(), UNNAMED), o.getServedSince()));
+                    names.getOrDefault(o.currentWaiter(), UNNAMED), o.getServedSince(),
+                    o.getCustomerName()));
         }
         return out;
     }

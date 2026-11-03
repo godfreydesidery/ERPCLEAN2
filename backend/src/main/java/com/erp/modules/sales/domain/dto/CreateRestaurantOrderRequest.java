@@ -12,17 +12,25 @@ import jakarta.validation.constraints.Size;
  * <p>{@code waiterUid}: the waiter who signed in on a shared till (ADR-0066 D-8). The server
  * re-verifies that it names a real user of this company holding {@code RESTAURANT.ORDER.MANAGE},
  * and records them as the order's server. Null = the signed-in user.
+ *
+ * <p>{@code customerName}: who is at the table, as typed (a person or a company); optional.
  */
 public record CreateRestaurantOrderRequest(
         RestaurantOrderType orderType,
         String tableUid,
         @Min(1) @Max(999) Short guestCount,
         @Size(max = 500) String notes,
-        @Size(max = 26) String waiterUid
+        @Size(max = 26) String waiterUid,
+        @Size(max = 120) String customerName
 ) {
 
     public CreateRestaurantOrderRequest(RestaurantOrderType orderType, String tableUid,
                                         Short guestCount, String notes) {
-        this(orderType, tableUid, guestCount, notes, null);
+        this(orderType, tableUid, guestCount, notes, null, null);
+    }
+
+    public CreateRestaurantOrderRequest(RestaurantOrderType orderType, String tableUid,
+                                        Short guestCount, String notes, String waiterUid) {
+        this(orderType, tableUid, guestCount, notes, waiterUid, null);
     }
 }
