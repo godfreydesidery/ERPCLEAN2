@@ -56,6 +56,7 @@ import com.erp.modules.sales.domain.dto.KitchenTicketDto;
 import com.erp.modules.sales.domain.dto.ModifierGroupDto;
 import com.erp.modules.sales.domain.dto.SaveModifierGroupRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
+import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
@@ -610,6 +611,35 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     // =========================================================================
     // Phase 3 (ADR-0066): split checks, merge orders, recipe deduction.
     // =========================================================================
+
+    @Test
+    void customerName_isKeptOnTheOrder_printedOnTheBill_andCarriedToASplitCheck() {
+        // Cafe Tulia 2026-11-03: the bill should say whose it is, a person or a company.
+        setCashierCtx();
+        RestaurantOrderDto order = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 4, null, null, "  Mr Juma  "));
+        assertThat(order.customerName()).as("trimmed").isEqualTo("Mr Juma");
+
+        order = orders.update(order.uid(), new UpdateRestaurantOrderRequest(null, null, null, "Acme Ltd"));
+        assertThat(order.customerName()).isEqualTo("Acme Ltd");
+        order = orders.update(order.uid(), new UpdateRestaurantOrderRequest(null, (short) 5, null));
+        assertThat(order.customerName()).as("not sent = left as it is").isEqualTo("Acme Ltd");
+
+        orders.addLine(order.uid(), item(tacos));
+        order = orders.addLine(order.uid(),
+                new AddRestaurantOrderLineRequest(latte.id(), pcsId, new BigDecimal("2"), null));
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(null, "TZS"));
+        assertThat(bill.customerName()).isEqualTo("Acme Ltd");
+
+        RestaurantSplitResultDto split = orders.split(order.uid(), new SplitRestaurantOrderRequest(
+                List.of(new SplitRestaurantOrderRequest.Item(lineFor(order, latte).uid(), BigDecimal.ONE))));
+        assertThat(split.created().customerName()).isEqualTo("Acme Ltd");
+
+        order = orders.update(order.uid(), new UpdateRestaurantOrderRequest(null, null, null, " "));
+        assertThat(order.customerName()).as("blank clears it").isNull();
+        assertThat(orders.bill(order.uid(), new BillRestaurantOrderRequest(null, "TZS")).customerName())
+                .isNull();
+    }
 
     @Test
     void split_movesChosenItemsToANewCheck_andEachCheckPaysItsOwnShare() {

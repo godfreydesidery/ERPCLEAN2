@@ -580,11 +580,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       }
     }
     if (!await _ensureWaiter() || !mounted) return;
-    final guests = await askGuestCount(context, t.name);
-    if (guests == null || !mounted) return;
+    final asked = await askGuestCount(context, t.name);
+    if (asked == null || !mounted) return;
     final waiterUid = _serverWaiterUid;
     final opened = await _run(() => _svc.open(
-        tableUid: t.uid, guestCount: guests == 0 ? null : guests, waiterUid: waiterUid));
+        tableUid: t.uid,
+        guestCount: asked.guests == 0 ? null : asked.guests,
+        waiterUid: waiterUid,
+        customerName: asked.name));
     if (opened != null) _showOrder(opened);
   }
 
@@ -980,6 +983,16 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
     showToast(context, '${order.where} is now served by ${to.name}.', ok: true);
   }
 
+  /// Whose table it is (Tulia 2026-11-03): printed on the bill.
+  Future<void> _customerName() async {
+    final order = _order;
+    if (order == null) return;
+    final name = await askCustomerName(context, order);
+    if (name == null || name == (order.customerName ?? '') || !mounted) return;
+    final saved = await _run(() => _svc.setCustomerName(order.uid, name));
+    if (saved != null) _showOrder(saved);
+  }
+
   Future<void> _moveTable() async {
     final order = _order;
     if (order == null || order.takeaway) return;
@@ -1368,7 +1381,9 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       leading: Icon(o.takeaway
                           ? Icons.takeout_dining_outlined
                           : Icons.table_restaurant_outlined),
-                      title: Text('${o.where} · ${o.orderNumber}',
+                      title: Text(
+                          [o.where, o.orderNumber, if ((o.customerName ?? '').isNotEmpty) o.customerName!]
+                              .join(' · '),
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       subtitle: Text([
                         if (o.waiterName.isNotEmpty) o.waiterName,
@@ -1671,6 +1686,14 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                       Text(order.where,
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w700)),
+                      if ((order.customerName ?? '').isNotEmpty)
+                        Text(order.customerName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.brand)),
                       Text(
                           '${order.orderNumber}'
                           '${order.guestCount != null ? ' · ${order.guestCount} guests' : ''}'
@@ -1680,6 +1703,17 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
                     ],
                   ),
                 ),
+                if (!_ro)
+                  IconButton(
+                    key: const ValueKey('order-customer-name'),
+                    tooltip: (order.customerName ?? '').isEmpty
+                        ? 'Add customer name'
+                        : 'Change customer name',
+                    icon: Icon((order.customerName ?? '').isEmpty
+                        ? Icons.person_add_alt_outlined
+                        : Icons.person_outline),
+                    onPressed: _busy ? null : _customerName,
+                  ),
                 PopupMenuButton<String>(
                   tooltip: 'More',
                   enabled: !_busy,
@@ -2109,6 +2143,14 @@ class OrderCard extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                          if ((order.customerName ?? '').isNotEmpty)
+                            Text(order.customerName!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.brand)),
                           Text(
                               [order.orderNumber, note ?? (paid ? '' : openFor(order.openedAt))]
                                   .where((s) => s.isNotEmpty)

@@ -192,6 +192,7 @@ class RestaurantOrder {
     this.tableUid,
     this.tableName,
     this.guestCount,
+    this.customerName,
     required this.openedByName,
     this.waiterUid,
     String waiterName = '',
@@ -211,6 +212,10 @@ class RestaurantOrder {
   final String? tableUid;
   final String? tableName;
   final int? guestCount;
+
+  /// Whose table it is, as typed (a person or a company). Null when not
+  /// given, or from a server older than 1.11.3.
+  final String? customerName;
   final String openedByName;
 
   /// The waiter holding the order now (ADR-0067): the last one it was moved
@@ -240,6 +245,7 @@ class RestaurantOrder {
         tableUid: asStr(j['tableUid']),
         tableName: asStr(j['tableName']),
         guestCount: asInt(j['guestCount']),
+        customerName: asStr(j['customerName']),
         openedByName: asStrOr(j['openedByName']),
         waiterUid: asStr(j['waiterUid']),
         waiterName: asStrOr(j['waiterName']),
@@ -362,6 +368,7 @@ class RestaurantBill {
     required this.vatTotal,
     required this.grossTotal,
     required this.unsentLineCount,
+    this.customerName,
   });
 
   final String orderUid;
@@ -379,6 +386,9 @@ class RestaurantBill {
   final double grossTotal;
   final int unsentLineCount;
 
+  /// Whose table it is, printed under the table; null when not given.
+  final String? customerName;
+
   factory RestaurantBill.fromJson(Map<String, dynamic> j) => RestaurantBill(
         orderUid: asStrOr(j['orderUid']),
         orderNumber: asStrOr(j['orderNumber']),
@@ -394,6 +404,7 @@ class RestaurantBill {
         vatTotal: asNumOr(j['vatTotal']),
         grossTotal: asNumOr(j['grossTotal']),
         unsentLineCount: asIntOr(j['unsentLineCount']),
+        customerName: asStr(j['customerName']),
       );
 }
 
