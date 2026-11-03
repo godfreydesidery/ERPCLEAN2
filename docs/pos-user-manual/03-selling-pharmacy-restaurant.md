@@ -203,7 +203,7 @@ A sent item cannot be edited — the kitchen already has it. Tap **Void** on the
 ### 3.7 Bill and pay
 
 - **Bill** prints the bill on this till's receipt printer (the receipt printer from *Setup*). If any items have not been sent yet, the till asks whether to send them first. The table turns **Bill printed** and the total reads **Bill**. If the printer fails, the bill is shown on screen so you can still tell the customer the total; **Reprint bill** prints it again.
-- **PAY** opens the normal payment screen (Chapter 5) with the bill total; its title names the table, the order and the waiter. **Split evenly** (**÷2**, **÷3**, **÷4**) divides the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor. The receipt shows **WAITER** and **TABLE / ORDER** under the cashier.
+- **PAY** opens the normal payment screen (Chapter 5) with the bill total; its title names the table, the order and the waiter. **Split bill** takes the bill in several payment types at once (for example part cash, part card, the rest mobile), and **÷2**, **÷3**, **÷4** beside it divide the amount into equal payments, each taken by any tender. When payment completes, the receipt prints, the order closes and you return to the floor. The receipt shows **WAITER** and **TABLE / ORDER** under the cashier.
 
 If an item is added after the bill was printed, the order goes back to open and the bill must be printed again. If prices changed in the ERP since the bill, the payment is refused with a message — print the bill again.
 
@@ -273,7 +273,7 @@ These settings are kept on this device only.
 | Remove a line | **✕** at the end of the line | **✕** before sending; **Void** after (a VOID slip prints) |
 | Fire the order to the kitchen | — | **Send (N)**; held courses with **Fire (N)** |
 | Print the bill | — | **Bill** (this till's receipt printer) |
-| Take payment | **PAY** (right-hand panel) | **PAY** (bottom of the order); **÷2 ÷3 ÷4** to split evenly |
+| Take payment | **PAY** (right-hand panel) | **PAY** (bottom of the order); **Split bill** for several payment types, **÷2 ÷3 ÷4** to split evenly |
 | Switch register | Top-bar switcher — only when the sale is empty | Top-bar switcher — open orders stay on the ERP |
 
 > **One more reminder.** The patient/prescriber/Rx details are saved as a **note** on the sale for the back office; they are not printed on the receipt and do not change the price. The ERP server is always the authority on price, VAT and totals.
