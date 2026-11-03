@@ -55,6 +55,7 @@ The **Payment** screen has two halves.
 | Amount box | A dark box at the top where the amount you are entering appears. It shows a faint **0** until you enter something. The cursor is already in it, so you can **type the amount on the keyboard** — digits and one decimal point, no commas (type `10000`, not `10,000`). Pressing **Enter** here is the same as pressing **Complete sale**. |
 | Quick-cash buttons | A grid of suggested amounts: **Exact** (the exact total) and the total rounded up to common notes — for a total of 12,500 the buttons are **Exact**, **13,000**, **14,000**, **15,000** and **20,000**. One tap fills the amount box. |
 | Number pad | Keys **0**–**9** for typing an amount by touch or mouse. **C** clears the amount box; the backspace key (⌫) deletes the last digit. The pad and the keyboard edit the same box. |
+| **Split bill** | Opens a form for paying one bill several ways at once — an amount for **Cash**, **Mobile**, **Cheque**, **Card** and **Complimentary** — and completes the sale when the bill is covered (see split payments below). On a restaurant order the **÷2 ÷3 ÷4** buttons sit beside it. |
 | **Add tender** | Records the amount in the box as one payment of the selected type, and adds it to the tender list. If the box is empty, it adds the **remaining balance** as that type. Use this for split payments (see below). |
 | **Complete sale** | The big green button (it also shows the total) that finishes the sale, sends it to the server, and shows the receipt. |
 
@@ -125,9 +126,19 @@ If you do enter an amount, it must be the full total; for part-payments use **Ad
 
 **Why it exists.** Customers do not always have enough of one tender. Splitting lets a single basket be settled however the customer can actually pay, while still producing one sale and one receipt.
 
-**How it works.** You add each payment one at a time with **Add tender**. The **Paid** figure grows as you add tenders; you keep adding until **Paid** reaches (or passes) the **Total**. Then you press **Complete sale**.
+**How it works.** The quickest way is **Split bill**: you enter every part on one form and the sale completes when they add up to the bill. You can also add each payment one at a time with **Add tender**.
 
-To take a split payment:
+To take a split payment with **Split bill**:
+
+1. Press **PAY** to open the **Payment** screen.
+2. Press **Split bill** (under the amount box). The **Split the bill** form opens, showing the **Amount due** and one line per payment type.
+3. Type each part on its line — for a bill of 35,000, for example, `10000` on **Cash** and `15000` on **Card**.
+4. For the last part, press **Rest** beside its type (for example **Mobile**): it fills in exactly what is still to pay. **Remaining** shows what is left until the bill is covered; if cash is more than needed, **Change (cash)** shows what to give back.
+5. Press **Complete sale** on the form. It stays greyed out until the bill is covered. The sale completes and the receipt comes up, ready to print, listing each payment.
+
+A **Complimentary** part still asks who it was given to, and needs a manager if you may not approve it yourself. To change the parts before completing, press **Split bill** again — the form opens with the amounts already entered.
+
+To take a split payment one payment at a time with **Add tender**:
 
 1. Press **PAY** to open the **Payment** screen.
 2. Choose the tender type for the first payment (for example click **Mobile**).
@@ -145,6 +156,7 @@ To take a split payment:
 
 | What you see | What to do |
 | --- | --- |
+| **Complete sale** on the **Split the bill** form stays greyed out | The parts do not yet cover the bill — look at **Remaining** and enter the rest. If it says *"Only cash gives change"*, the card, mobile, cheque and complimentary parts add up to more than the bill: lower them and let **Cash** take the extra. |
 | *"Tendered … is less than the total …."* when you press **Complete sale** | The payments you added do not yet cover the **Total**. Add another tender for the shortfall, then press **Complete sale** again. |
 | You added the wrong amount or wrong type | Click the **×** on that row in the tender list to remove it, then add it again correctly. |
 | The customer changes their mind about how to pay | Remove the tenders with **×** and start the payment again, or close the **Payment** screen (the **×** at the top, or **Esc**) to return to the basket. |

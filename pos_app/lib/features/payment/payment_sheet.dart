@@ -883,13 +883,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     return Row(
       children: TenderType.values.map((t) {
         final active = _type == t;
-        final icon = switch (t) {
-          TenderType.cash => Icons.payments_outlined,
-          TenderType.card => Icons.credit_card,
-          TenderType.mobileMoney => Icons.smartphone,
-          TenderType.cheque => Icons.receipt_long_outlined,
-          TenderType.complimentary => Icons.card_giftcard,
-        };
+        final icon = tenderIcon(t);
         return Expanded(
           child: Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -1146,9 +1140,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           if (_resto != null) ...[
             _discountRow(),
             const SizedBox(height: 4),
-            _splitEvenly(),
-            const SizedBox(height: 8),
           ],
+          _splitRow(),
+          const SizedBox(height: 8),
           _quickCash(),
           const SizedBox(height: 12),
           if (compact)
@@ -1193,10 +1187,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     );
   }
 
-  /// Splitting a bill evenly (ADR-0066 D-2): one sale, several payments. Each
-  /// button keys in one share of what is still to pay, rounded UP to the
-  /// currency's smallest unit so the last guest never comes up short; the
-  /// cashier then picks the tender and taps Add tender for each guest.
   /// Restaurant order discount: a percent or an amount, priced exactly by the
   /// server (quote) before anything is paid.
   Widget _discountRow() {
@@ -1268,23 +1258,83 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     }
   }
 
-  Widget _splitEvenly() {
+  /// Split bill, and on a restaurant order the even-share buttons beside it.
+  /// "Split evenly" used to be a plain label here, and a cashier tapping it got
+  /// nothing (Tulia 2026-11-03).
+  ///
+  /// Splitting a bill evenly (ADR-0066 D-2): one sale, several payments. Each
+  /// ÷ button keys in one share of what is still to pay, rounded UP to the
+  /// currency's smallest unit so the last guest never comes up short; the
+  /// cashier then picks the tender and taps Add tender for each guest.
+  Widget _splitRow() {
     final minor = minorUnitsFor(ref.read(cartProvider).currency);
     final factor = 1.0 * _pow10(minor);
     return Row(
       children: [
-        const Text('Split evenly', style: TextStyle(color: AppColors.ink2, fontSize: 12.5)),
-        const Spacer(),
-        for (final n in const [2, 3, 4])
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: _quickBtnSized('÷$n', () {
-              final share = (_remaining / n * factor).ceil() / factor;
-              _setAmount(share.toStringAsFixed(minor));
-            }),
-          ),
+        Expanded(child: SizedBox(height: 34, child: _splitBillBtn())),
+        if (_resto != null)
+          for (final n in const [2, 3, 4])
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: _quickBtnSized('÷$n', () {
+                final share = (_remaining / n * factor).ceil() / factor;
+                _setAmount(share.toStringAsFixed(minor));
+              }),
+            ),
       ],
     );
+  }
+
+  Widget _splitBillBtn() {
+    return Material(
+      color: AppColors.brandSoft,
+      borderRadius: AppRadii.brSm,
+      child: InkWell(
+        borderRadius: AppRadii.brSm,
+        onTap: _busy ? null : _splitBill,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: AppRadii.brSm,
+            border: Border.all(color: AppColors.brand),
+          ),
+          child: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.call_split, size: 16, color: AppColors.brandD),
+                SizedBox(width: 6),
+                Text('Split bill',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.brandD)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Breaks the bill across payment types — e.g. 35,000 as 10,000 cash +
+  /// 15,000 card + 10,000 mobile — and completes the sale once every shilling
+  /// is covered, so the receipt comes straight up for printing.
+  Future<void> _splitBill() async {
+    if (_hasUnpriced) {
+      showToast(context, 'An item has no price yet, so the total is not known. Fix the price first.');
+      return;
+    }
+    final parts = await showSplitBill(context,
+        due: _gross, currency: ref.read(cartProvider).currency, initial: _tenders);
+    if (parts == null || !mounted) return;
+    setState(() {
+      _tenders
+        ..clear()
+        ..addAll(parts);
+      _amountCtrl.clear();
+    });
+    await _complete();
   }
 
   static int _pow10(int n) {
@@ -1296,7 +1346,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   }
 
   Widget _quickBtnSized(String label, VoidCallback onTap) =>
-      SizedBox(width: 52, height: 34, child: _quickBtn(label, onTap));
+      SizedBox(width: 46, height: 34, child: _quickBtn(label, onTap));
 
   Widget _quickCash() {
     final presets = _presets(_gross);
@@ -1499,6 +1549,155 @@ Future<String?> askComplimentaryGivenTo(BuildContext context) {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             OrbixButton(label: 'Continue', onPressed: value.isEmpty ? null : done),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+IconData tenderIcon(TenderType t) => switch (t) {
+      TenderType.cash => Icons.payments_outlined,
+      TenderType.card => Icons.credit_card,
+      TenderType.mobileMoney => Icons.smartphone,
+      TenderType.cheque => Icons.receipt_long_outlined,
+      TenderType.complimentary => Icons.card_giftcard,
+    };
+
+/// What stops a split from completing, or null when it covers the bill. Only
+/// cash gives change, so the other types may not add up to more than is due.
+String? splitBillProblem(double due, Map<TenderType, double> parts) {
+  final total = parts.values.fold(0.0, (s, v) => s + v);
+  final nonCash = parts.entries
+      .where((e) => e.key != TenderType.cash)
+      .fold(0.0, (s, e) => s + e.value);
+  if (total <= 0) return 'Enter the amount for each payment type.';
+  if (nonCash > due + 0.0001) {
+    return 'Only cash gives change. Card, mobile, cheque and complimentary '
+        'together cannot be more than ${formatAmount(due)}.';
+  }
+  if (total + 0.0001 < due) return 'Still to pay: ${formatAmount(due - total)}.';
+  return null;
+}
+
+/// Split bill (Tulia 2026-11-03): one amount per payment type. Null when
+/// cancelled; otherwise the parts, in the order the types are listed.
+Future<List<PosTender>?> showSplitBill(BuildContext context,
+    {required double due, required String currency, List<PosTender> initial = const []}) {
+  final minor = minorUnitsFor(currency);
+  final ctrls = {
+    for (final t in TenderType.values)
+      t: TextEditingController(text: () {
+        final v = initial
+            .where((p) => p.tenderType == t)
+            .fold(0.0, (s, p) => s + p.amount);
+        return v > 0 ? v.toStringAsFixed(minor) : '';
+      }()),
+  };
+  return showDialog<List<PosTender>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        final parts = {
+          for (final e in ctrls.entries) e.key: double.tryParse(e.value.text.trim()) ?? 0.0,
+        };
+        final total = parts.values.fold(0.0, (s, v) => s + v);
+        final problem = splitBillProblem(due, parts);
+        final change = problem == null ? total - due : 0.0;
+
+        void fillRest(TenderType t) {
+          final others = total - parts[t]!;
+          final rest = due - others;
+          if (rest <= 0) return;
+          final s = rest.toStringAsFixed(minor);
+          ctrls[t]!.value =
+              TextEditingValue(text: s, selection: TextSelection.collapsed(offset: s.length));
+          setState(() {});
+        }
+
+        void done() => Navigator.pop(context, [
+              for (final t in TenderType.values)
+                if (parts[t]! > 0) PosTender(tenderType: t, amount: parts[t]!),
+            ]);
+
+        Widget row(TenderType t) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(tenderIcon(t), size: 20, color: AppColors.ink2),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                      width: 110,
+                      child: Text(t.label, style: const TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(
+                    child: TextField(
+                      key: ValueKey('split-${t.wire}'),
+                      controller: ctrls[t],
+                      textAlign: TextAlign.right,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [decimalInputFormatter],
+                      decoration: const InputDecoration(isDense: true, hintText: '0'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  TextButton(
+                    key: ValueKey('split-rest-${t.wire}'),
+                    onPressed: total + 0.0001 < due ? () => fillRest(t) : null,
+                    child: const Text('Rest'),
+                  ),
+                ],
+              ),
+            );
+
+        Widget sum(String label, double v, {Color? color}) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        style: TextStyle(fontWeight: FontWeight.w700, color: color ?? AppColors.ink2)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(formatAmount(v),
+                      style: numStyle(weight: FontWeight.w800, color: color ?? AppColors.ink)),
+                ],
+              ),
+            );
+
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+          title: const Text('Split the bill'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  sum('Amount due ($currency)', due),
+                  const SizedBox(height: 12),
+                  for (final t in TenderType.values) row(t),
+                  const Divider(),
+                  sum('Entered', total),
+                  if (total + 0.0001 < due)
+                    sum('Remaining', due - total, color: AppColors.danger)
+                  else if (change > 0.0001)
+                    sum('Change (cash)', change, color: AppColors.payD),
+                  if (problem != null && total > 0 && total + 0.0001 >= due) ...[
+                    const SizedBox(height: 6),
+                    Text(problem, style: const TextStyle(color: AppColors.danger, fontSize: 12.5)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            OrbixButton(
+                label: 'Complete sale',
+                icon: Icons.check,
+                onPressed: problem == null ? done : null),
           ],
         );
       },
