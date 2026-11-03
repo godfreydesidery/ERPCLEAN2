@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- GENERATED from brands/tulia/brand.json by tool/brand.py. -->
 <resources>
-    <string name="app_name">Cafe Tulia</string>
-    <color name="hq_brand_teal">#7C2D12</color>
+    <string name="app_name">Café Tulia</string>
+    <color name="hq_brand_teal">#4A2A1B</color>
 </resources>

@@ -136,7 +136,7 @@ function Get-Brand {
         Default  = $default
         Defines  = $defines
         AppId    = $(if ($Id -eq $Generic) { $BaseAppId } else { "$BaseAppId.$Id" })
-        FileBase = ("$($b.appName)" -replace '[^A-Za-z0-9]', '')
+        FileBase = ("$($b.appName)".Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}', '' -replace '[^A-Za-z0-9]', '')
         Server   = ''
     }
 }

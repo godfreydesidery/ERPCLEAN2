@@ -1,8 +1,9 @@
 {
   "id": "tulia",
-  "appName": "Cafe Tulia",
+  "appName": "Café Tulia",
   "company": "Tulia Ltd",
   "mark": "T",
-  "color": "#7C2D12",
+  "color": "#4A2A1B",
+  "icon": "icon.png",
   "server": "http://51.20.154.248:8081"
 }
