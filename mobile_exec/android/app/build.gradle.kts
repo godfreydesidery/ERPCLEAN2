@@ -5,6 +5,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+
+// The release signing key, never the debug key (owner, 2026-11-03 - as OrbixPOS). Kept outside
+// git: android/key.properties (git-ignored; dist/build-hq.ps1 copies it from dist/android-signing)
+// names the keystore and its passwords. Every update of a brand's app must be signed with this
+// same key, or phones refuse it as an update.
+val keyProperties = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseKey = keyProperties.getProperty("storeFile") != null
+
 android {
     namespace = "net.otapp.orbix.hq"
     compileSdk = flutter.compileSdkVersion
@@ -55,14 +67,34 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = file(keyProperties.getProperty("storeFile"))
+                storePassword = keyProperties.getProperty("storePassword")
+                keyAlias = keyProperties.getProperty("keyAlias")
+                keyPassword = keyProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // DEMO BUILD ONLY. A real release keystore (and a signingConfig that reads it
-            // from a secret store, never from git) is REQUIRED before any non-demo
-            // distribution of OrbixHQ — Play Store, client handover, or QA sideload.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Never the debug key. Without android/key.properties a release build stops below.
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
+    }
+}
+
+// A release APK without the release key would be unsigned or debug-signed: refuse to build it.
+gradle.taskGraph.whenReady {
+    val release = allTasks.any { it.name.contains("Release") && it.project == project }
+    if (release && !hasReleaseKey) {
+        throw GradleException(
+            "No release signing key: create android/key.properties (see dist/android-signing). " +
+                "Release builds are never signed with the debug key.")
     }
 }
 

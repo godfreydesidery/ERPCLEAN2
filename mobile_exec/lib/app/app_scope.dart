@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../core/session.dart';
 import '../services/catalog_service.dart';
 import '../services/operations_service.dart';
+import '../services/restaurant_service.dart';
 import '../services/sales_service.dart';
 import '../services/stock_service.dart';
 
@@ -14,12 +15,14 @@ class AppScope extends InheritedNotifier<Session> {
         stock = StockService(session),
         sales = SalesService(session),
         operations = OperationsService(session),
+        restaurant = RestaurantService(session),
         super(notifier: session);
 
   final CatalogService catalog;
   final StockService stock;
   final SalesService sales;
   final OperationsService operations;
+  final RestaurantService restaurant;
 
   Session get session => notifier!;
 

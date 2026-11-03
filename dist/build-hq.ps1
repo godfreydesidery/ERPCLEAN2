@@ -136,7 +136,7 @@ function Get-Brand {
         Default  = $default
         Defines  = $defines
         AppId    = $(if ($Id -eq $Generic) { $BaseAppId } else { "$BaseAppId.$Id" })
-        FileBase = ("$($b.appName)" -replace '[^A-Za-z0-9]', '')
+        FileBase = ("$($b.appName)".Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}', '' -replace '[^A-Za-z0-9]', '')
         Server   = ''
     }
 }
@@ -275,7 +275,17 @@ if ($Dirty.Count -gt 0) {
     Write-Warn "mobile_exec has $($Dirty.Count) uncommitted change(s) - they WILL be in this build"
     $Commit = "$Commit+uncommitted"
 }
-Write-Warn 'release builds are still signed with the DEBUG key - a real release keystore is required before store/client distribution'
+# The release key, never the debug key: phones only accept an update signed like the install.
+$KeyProps    = Join-Path $AppDir 'android\key.properties'
+$KeySource   = Join-Path $ScriptDir 'android-signing\orbixhq-key.properties'
+if (-not (Test-Path $KeyProps)) {
+    if (-not (Test-Path $KeySource)) {
+        Stop-WithError ("No OrbixHQ release key: $KeySource is missing. Restore dist\android-signing " +
+            'from its backup. Release builds are never signed with the debug key.')
+    }
+    Copy-Item $KeySource $KeyProps
+}
+Write-Ok 'signing with the OrbixHQ release key (dist\android-signing)'
 
 # ---------------------------------------------------------------------------
 Write-Step 'Fetching packages'
@@ -324,6 +334,7 @@ foreach ($b in $Brands) {
         branch        = $GitBranch
         builtAt       = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
         sha256        = $sha
+        signedWith    = 'OrbixHQ release key (CN=OrbixHQ, O=OTAPP, C=TZ)'
     }
     $json = $record | ConvertTo-Json
     [IO.File]::WriteAllText(($b.ApkPath -replace '\.apk$', '.json'), $json + "`n", (New-Object System.Text.UTF8Encoding($false)))

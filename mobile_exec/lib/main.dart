@@ -18,6 +18,8 @@ import 'features/sign_in_screen.dart';
 import 'features/stock_adjustment_screen.dart';
 import 'features/stock_report_screen.dart';
 import 'features/stock_valuation_screen.dart';
+import 'features/restaurant_dashboard_screen.dart';
+import 'features/restaurant_reports_screen.dart';
 import 'features/till_report_screen.dart';
 
 Future<void> main() async {
@@ -119,6 +121,9 @@ class _ShellState extends State<_Shell> {
       'packs' => const PackSizesScreen(),
       'products' => const ProductsScreen(),
       'till' => const TillReportScreen(),
+      'restaurant' => RestaurantDashboardScreen(
+          onOpenReports: () => _navigate('restaurant-reports')),
+      'restaurant-reports' => const RestaurantReportsScreen(),
       _ => const StockValuationScreen(),
     };
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
