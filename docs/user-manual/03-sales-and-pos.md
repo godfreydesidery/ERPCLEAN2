@@ -945,3 +945,51 @@ The screen opens on today. Optionally pick a date range, a **Branch** and a **Ca
 - Payments are counted on the day they were taken, by the person who took them, for sales rung at a till or settled at the counter. A voided sale's payment is not counted.
 - Not included: payments received later against credit invoices (Receivables receipts), till payouts and expenses, and the opening float. To balance one drawer, use the session's X-read / Z-read.
 - Exports additionally require `REPORT.EXPORT`.
+
+### 10.3 Restaurant Dashboard and Flash Report
+
+Navigate to **Point of Sale > Restaurant Dashboard** (`/admin/restaurant/dashboard`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "flash report", "daily summary" or "busy hours".
+
+The screen opens on today. Pick a **From date** and **To date**, or tap **Today**, **Yesterday**, **Last 7 days** or **This month**; optionally choose a **Branch** (left empty, it covers every branch you may see), then click **Refresh**. A range can be at most one year.
+
+- **Key figures** — Sales, Receipts, Average receipt, Table orders paid, Guests, Spend per guest, Discounts, Complimentary, Refunds, Receipts voided, Orders cancelled and Items voided. Each shows how it changed against the same number of days just before (for **Today**, against yesterday), marked green when the change is good and red when it is not — for discounts, refunds and voids, *down* is good. No change is shown when the earlier figure was zero.
+- **Right now** — tables open, bills printed but not paid, and the money waiting to be paid. This part always shows the present moment, whatever dates are chosen.
+- **Sales by day** (for a range of two days or more), **Busy hours**, **Days of the week** (the average per day, so a month with five Mondays compares fairly), **Departments** (the product's category), **Best sellers**, **Waiters** and **How bills were paid**.
+- **Complimentary** — every bill settled as complimentary, with its receipt, time and who it was given to.
+
+Links under the cards open the matching report in **Restaurant Reports** (10.4).
+
+**Flash Report.** **Flash report PDF** and **Flash report Excel** download the dashboard as a one-page daily summary: every key figure next to the earlier period and the change, then right now, payments, departments, best sellers, waiters and complimentary bills. Downloading requires `REPORT.EXPORT` as well.
+
+How the figures are counted:
+
+- **Sales** are finalised receipts at their full amount including VAT, after discounts, in the company's base currency, counted at the time they were paid. A receipt voided afterwards is left out of sales and counted under **Receipts voided**.
+- **Table orders**, **Guests** and **Waiters** come from restaurant orders paid in the period. Sales rung up without a table order appear in the waiter list as **Counter sales (no table order)**, so the waiter list adds up to total sales.
+- **Spend per guest** is what the tables that gave a guest count spent, divided by those guests.
+- **Discounts** are everything taken off the bills, including VAT. **Complimentary** is what was settled with the Complimentary payment type. **Refunds** are cash paid back at a till as a refund payout.
+- The waiter is whoever holds the table: whoever opened it, or the waiter it was last moved to.
+- Not shown: staff (labour) cost, meal periods (breakfast, lunch, dinner) and menu profitability.
+
+### 10.4 Restaurant Reports
+
+Navigate to **Point of Sale > Restaurant Reports** (`/admin/restaurant/reports`). Requires `SALES.INVOICE.VIEW`; exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`. Choose a report along the top, set the filters, then click **Run report**. Filters: **From date** and **To date**; **Waiter** (shown to users who also manage restaurant orders or setup); **Branch** (optional — empty means every branch you may see).
+
+The first three reports have a **Summary** / **Detail** switch:
+
+| Report | Summary | Detail |
+|---|---|---|
+| **Sales by waiter** | Per waiter: bills, guests, average bill and amount | The items each waiter sold — item, unit, quantity and amount — with a subtotal per waiter |
+| **Bills paid** | Per waiter: bills, guests and the amount split by payment type (Cash, Mobile money, Card, Cheque, Complimentary) | Every bill: when paid, order, table, waiter, cashier, receipt, how it was paid and amount |
+| **Pending bills** | Per waiter: orders open, bills printed, items, the amount on the printed bills and the oldest order | Every order not yet paid, with its status and items |
+
+**Pending bills** has no dates: it shows what is unpaid now. An open order has no amount until its bill is printed. In **Bills paid**, a voided receipt is listed in the detail (marked *Void*) but left out of every total.
+
+**Sales by hour & day** — sales for each hour of the day, then for each day of the week, each split by department, with the number of receipts and the average per day. Use it to see the busy hours and the busy days when planning staff and offers.
+
+**Payments & completion** — for the period:
+
+- **Payments**: each payment type, the number of payments, the amount and its share of the total.
+- **Order completion**: of the orders opened in the period, how many were paid, cancelled or are still waiting, and the completion rate (paid ÷ opened).
+- **Refunds** (cash paid back at a till), **Voided receipts**, **Cancelled orders** and **Voided items**, each with when, who and the reason given.
+
+*Sales by hour & day* and *Payments & completion* have no waiter filter. Amounts in every restaurant report are in the company's base currency.

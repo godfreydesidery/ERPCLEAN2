@@ -88,6 +88,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [Creating and retiring tills](#creating-and-retiring-tills)
     - [Provisioning cashiers — who is allowed to sell](#provisioning-cashiers--who-is-allowed-to-sell)
     - [End-of-day close-out across tills](#end-of-day-close-out-across-tills)
+    - [Restaurant dashboard and reports (ERP web app)](#restaurant-dashboard-and-reports-erp-web-app)
     - [Quick reference](#quick-reference-1)
 
 ---
@@ -2772,6 +2773,17 @@ When every till's session is **RECONCILED**, the store's cash is accounted for t
 
 ---
 
+## Restaurant dashboard and reports (ERP web app)
+
+Restaurant figures are read in the **ERP web app**, not on the till. Sign in on a computer with a manager's account and open **Point of Sale**:
+
+- **Restaurant Dashboard** — today's (or any period's) sales, receipts, guests, spend per guest, discounts, complimentary, refunds, voids and cancellations, each compared with the period before; tables open and bills waiting to be paid right now; busy hours, days of the week, departments, best sellers, waiters and payment types. **Flash report PDF** / **Flash report Excel** print it as a one-page daily summary.
+- **Restaurant Reports** — **Sales by waiter**, **Bills paid** and **Pending bills**, each as a **Summary** (per waiter) or **Detail** (per item or per bill); **Sales by hour & day** by department; and **Payments & completion** — payment types, orders paid vs cancelled, refunds, voided receipts, cancelled orders and voided items with their reasons. Every report downloads as PDF, Excel or CSV.
+
+The waiter is whoever holds the table when it is paid (see *Whose table is it?* in the Restaurant chapter).
+
+---
+
 ## Quick reference
 
 | Job | Where | Who can do it (standard roles) |
@@ -2787,5 +2799,6 @@ When every till's session is **RECONCILED**, the store's cash is accounted for t
 | Review / reprint a sale | Session menu → **Today's sales** or **Recent receipts** | Anyone signed in |
 | Close (count) a drawer | Session menu → **Close session** | Cashier (own shift) |
 | Free a till a cashier left open | ERP web app → **POS Sessions** → **Close Session** | Branch Manager |
+| Restaurant sales, waiters, pending bills, flash report | ERP web app → **Point of Sale** → **Restaurant Dashboard** / **Restaurant Reports** | Managers with sales-report access |
 | Reconcile (post the variance) | ERP web app → **POS Sessions** → **Reconcile** (or on the till, for your own shift) | Branch Manager |
 | Set up a cashier to sell | ERP web app | Administrator |
