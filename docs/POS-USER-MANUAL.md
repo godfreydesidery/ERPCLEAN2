@@ -299,7 +299,7 @@ From left to right, the top bar contains:
 - **The branch chip** — a small pill with a shop icon showing the **branch** you are working in, with your **company** name beside it. A branch is the specific shop or location this till belongs to. You do not switch branches from here.
 - **The session chip** — a green pill reading **Session** followed by your session number (for example `POS-0001`). It confirms your till session is open. If it shows a dash (**—**) instead of a number, the till reopened your shift without being able to load its details — see the *Starting and Ending a Shift* chapter (Chapter 2).
 - **The mode switcher** — a pill-shaped switch in the centre showing the three business modes (**🛒 Supermarket**, **💊 Pharmacy**, **🍽 Restaurant**). The mode you are in is highlighted.
-- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Till expense**, **Today's sales**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
+- **The session menu button** — the **☰** icon toward the right (tooltip **Session menu**). Click it to open the **Session** panel that slides in from the right. This holds the shift actions: **X-read**, **Cash payout**, **Till expense**, **Today's sales**, **Sales dashboard**, **Recent receipts**, **Close session**, **Reconcile (Z-read)**, and **Z-read (reprint)** — each one only if your account is allowed to use it. These are covered in Chapter 2.
 - **Your avatar** — a small round badge on the far right showing your initials, so you can see at a glance who is signed in.
 
 > **Messages.** Short messages ("toasts") appear for a few seconds near the bottom of the screen — dark for information and problems, green when something succeeded. Read them; the *Troubleshooting* chapter (Chapter 7) explains each one.
@@ -405,6 +405,8 @@ OPEN  →  CLOSED  →  RECONCILED
 ### Step by step
 
 1. Check the header. Under the **Open shift** title you will see your **company · branch**. Make sure this is the branch you mean to sell on. (To change who you are, use the **Sign out** icon at the top right.) If an amber strip says "Using branch … — we couldn't confirm your usual branch", check that the branch named is correct before you go on.
+
+   > **Only want to look at sales?** If your account may view sales invoices (managers usually can), two buttons sit under the company · branch line: **Sales dashboard** and **Today's sales**. They open straight from this screen — **you do not need to choose a till or open a shift**. Opening a shift just to look would start a real cash session that someone then has to close and reconcile. Close the dashboard (the back arrow) to come back here.
 2. Under **Business mode**, choose how this till should behave by clicking one of the three cards:
 
    | Mode | Card label | Best for |
@@ -533,6 +535,7 @@ Below the facts is the list of actions. **You only see the actions your account 
 | **Cash payout** | Records cash leaving the drawer (a paid-out, for example a drop to the safe). Reason required; a manager approves it at the till. | Cashiers allowed to open shifts. Only while the session is OPEN. |
 | **Till expense** | Records cash paid out of the drawer for a business expense, under a category (transport, cleaning, …). A manager approves it at the till. | Anyone allowed to record till expenses (the standard Cashier role is). Only while the session is OPEN. |
 | **Today's sales** | Lists today's sales at this branch and reprints a receipt. | Anyone allowed to view sales invoices. |
+| **Sales dashboard** | This branch's sales for today, yesterday, the last 7 days, this month or chosen dates: the total, number of sales, average sale, and sales per day, per payment type and per department. No cost or profit. Also on the **Open shift** screen, without a shift. | Anyone allowed to view sales invoices. |
 | **Recent receipts** | Reprints a receipt saved on **this device** (works offline). | Everyone. |
 | **Close session** | Count the drawer; the server computes the variance. | Anyone allowed to close sessions. Only while OPEN. |
 | **Reconcile (Z-read)** | Posts the variance to the accounts and finalises the session. | **Supervisors only.** Only after the session is CLOSED. |

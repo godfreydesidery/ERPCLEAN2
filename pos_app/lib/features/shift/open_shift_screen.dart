@@ -11,6 +11,8 @@ import '../../models/pos.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/ui.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../session/session_menu.dart';
 
 class OpenShiftScreen extends ConsumerStatefulWidget {
   const OpenShiftScreen({super.key});
@@ -152,6 +154,27 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppColors.ink2),
               ),
+              // A manager looks at sales without opening a shift: opening one just
+              // to look starts a real cash session someone must close and reconcile.
+              if (app.can(Perms.salesInvoiceView)) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => showDashboard(context),
+                      icon: const Icon(Icons.insights_outlined, size: 18),
+                      label: const Text('Sales dashboard'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => showTodaysSales(context, ref),
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: const Text("Today's sales"),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
