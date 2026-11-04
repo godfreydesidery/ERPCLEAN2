@@ -69,13 +69,16 @@ class StationPrintAgent {
     _running = true;
     try {
       final cfg = await loadConfig();
+      await PrintedSlips.instance.restore();
       for (final station in cfg.agentStations) {
         try {
           final since = _cursor[station];
           final res = await fetch(station, since?.subtract(overlap));
           _cursor[station] = res.until;
           for (final slip in res.slips) {
-            if (!PrintedSlips.instance.has(slip) && !_retry.any((r) => r.key == slip.key)) {
+            if (!PrintedSlips.instance.has(slip) &&
+                !PrintedSlips.instance.printing(slip) &&
+                !_retry.any((r) => r.key == slip.key)) {
               _retry.add(slip);
             }
           }
@@ -87,12 +90,15 @@ class StationPrintAgent {
       final batch = List.of(_retry);
       _retry.clear();
       // Re-checked at print time: this till may have started printing one of
-      // these itself since the feed answered.
-      final failures = await printing.printSlips(batch, onlyUnprinted: true);
+      // these itself since the feed answered; those are left to that print.
+      final printed = <String>{};
+      final failures = await printing.printSlips(batch,
+          mode: SlipPrintMode.feed, onPrinted: (slip) => printed.add(slip.key));
       final failedKeys = {for (final f in failures) f.slip.key};
       for (final slip in batch) {
         final failed = failedKeys.contains(slip.key);
         if (failed) _retry.add(slip);
+        if (!failed && !printed.contains(slip.key)) continue; // printed by this till's own Send
         _note(
             failed
                 ? '${slip.stationName}: ${slip.orderNumber} did not print — retrying'

@@ -217,8 +217,18 @@ void main() {
           network: _FakeNetwork(), spooler: spool,
           loadConfig: () async => AppConfig(baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}));
       await printing.printSlips([fired('L8')]);
-      await printing.printSlips([fired('L8')]);
+      await printing.printSlips([fired('L8')], mode: SlipPrintMode.reprint);
       expect(spool.printed, ['USB Kitchen', 'USB Kitchen']);
+    });
+
+    test('sending the same slip again does not print it again', () async {
+      final spool = _FakeSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool,
+          loadConfig: () async => AppConfig(baseHost: 'http://x', stationPrinters: {'S1': 'USB Kitchen'}));
+      expect(await printing.printSlips([fired('L10')]), isEmpty);
+      expect(await printing.printSlips([fired('L10')]), isEmpty);
+      expect(spool.printed, ['USB Kitchen']);
     });
 
     test('a slip that fails to print is retried on the next round', () async {
@@ -239,6 +249,147 @@ void main() {
       await agent.tick();
       expect(spool.printed, ['USB Kitchen']);
       agent.dispose();
+    });
+  });
+
+  // Cafe Tulia 2026-11-04: on the counter till, which prints its own Send AND
+  // "Print ALL slips here" for the kitchen and the bar, both slips sometimes
+  // came out twice. The first five tests here printed extra copies before the fix.
+  group('one paper per slip on a till that also prints for every till', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      PrintedSlips.instance.clear();
+    });
+
+    PrepSlip slipFor(String station, String name, String line) => PrepSlip(
+          isVoid: false, stationUid: station, stationName: name, printerPort: 9100,
+          orderNumber: 'ORD-0042', takeaway: false, tableName: 'T4', round: 1, reprint: false,
+          byName: 'Samwel', lines: [PrepSlipLine(productName: 'Item $line', quantity: 1)],
+          lineUids: [line]);
+    final kitchen = slipFor('S1', 'Kitchen', 'L1');
+    final bar = slipFor('S2', 'Bar', 'L2');
+    final cfg = AppConfig(
+        baseHost: 'http://x',
+        stationPrinters: {'S1': 'ZJ80 Kitchen', 'S2': 'ZJ80 Bar'},
+        agentStations: {'S1', 'S2'});
+
+    StationPrintAgent feedOf(RestaurantPrinting printing) => StationPrintAgent(
+        fetch: (station, since) async =>
+            (until: DateTime.now(), slips: [if (station == 'S1') kitchen else bar]),
+        printing: printing,
+        loadConfig: () async => cfg);
+
+    /// Lets the slow printer finish its jobs one by one, as the Bluetooth
+    /// queue does, until nothing is waiting.
+    Future<void> printAll(_SlowSpooler spool) async {
+      for (var i = 0; i < 50; i++) {
+        await pumpEventQueue();
+        final waiting = spool.pending.where((c) => !c.isCompleted).toList();
+        if (waiting.isEmpty) return;
+        waiting.first.complete();
+      }
+    }
+
+    test('the feed starts first, then Send answers: each slip prints once', () async {
+      final spool = _SlowSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      final agent = feedOf(printing);
+      final feed = agent.tick();
+      await pumpEventQueue();
+      expect(spool.pending, hasLength(1), reason: 'the feed is printing the kitchen slip');
+
+      final send = printing.printSlips([kitchen, bar]);
+      await printAll(spool);
+      expect(await send, isEmpty, reason: 'Send reports the slips the feed printed as printed');
+      await feed;
+      expect(spool.printed..sort(), ['ZJ80 Bar', 'ZJ80 Kitchen']);
+      agent.dispose();
+    });
+
+    test('Send starts first, the feed asks mid-print: each slip prints once', () async {
+      final spool = _SlowSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      final send = printing.printSlips([kitchen, bar]);
+      await pumpEventQueue();
+      expect(spool.pending, hasLength(1), reason: 'Send is printing the kitchen slip');
+
+      final agent = feedOf(printing);
+      await agent.tick();
+      expect(spool.pending, hasLength(1),
+          reason: 'the bar slip is claimed by Send though it has not started');
+      await printAll(spool);
+      expect(await send, isEmpty);
+      expect(spool.printed, ['ZJ80 Kitchen', 'ZJ80 Bar']);
+      expect(agent.log.value, isEmpty, reason: 'the feed printed nothing, so it logs nothing');
+      agent.dispose();
+    });
+
+    test('a print the feed started and lost is reported to Send, and retried', () async {
+      final spool = _SlowSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      final agent = feedOf(printing);
+      final feed = agent.tick();
+      await pumpEventQueue();
+      final send = printing.printSlips([kitchen]);
+      await pumpEventQueue();
+      spool.pending.first
+          .completeError(ReceiptPrinterException('The kitchen printer is out of paper.'));
+      final failures = await send;
+      expect(failures.single.message, 'The kitchen printer is out of paper.');
+      await printAll(spool);
+      await feed;
+      expect(PrintedSlips.instance.has(kitchen), isFalse);
+      final next = agent.tick(); // the next ask
+      await printAll(spool);
+      await next;
+      expect(PrintedSlips.instance.has(kitchen), isTrue);
+      expect(spool.printed, ['ZJ80 Bar', 'ZJ80 Kitchen']);
+      agent.dispose();
+    });
+
+    test('Reprint in the "did not print" box after the feed retried: no extra copy', () async {
+      final spool = _FailingOnceSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      expect(await printing.printSlips([kitchen]), hasLength(1), reason: 'Send failed');
+      final agent = feedOf(printing);
+      await agent.tick();
+      expect(spool.printed, ['ZJ80 Kitchen', 'ZJ80 Bar'], reason: 'the feed retried it');
+      expect(await printing.printSlips([kitchen]), isEmpty, reason: 'the box says Printed');
+      expect(spool.printed, hasLength(2));
+      agent.dispose();
+    });
+
+    test('after a restart the feed does not print the last minute again', () async {
+      final spool = _FakeSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      await printing.printSlips([kitchen, bar]);
+      await pumpEventQueue(); // saved on the device
+      PrintedSlips.instance.clear(); // the app is closed and opened again
+
+      final agent = feedOf(printing);
+      await agent.tick();
+      expect(spool.printed, ['ZJ80 Kitchen', 'ZJ80 Bar']);
+      agent.dispose();
+    });
+
+    test('slips without line ids (an older server) still print every time on Send', () async {
+      final spool = _FakeSpooler();
+      final printing = RestaurantPrinting(
+          network: _FakeNetwork(), spooler: spool, loadConfig: () async => cfg);
+      final noIds = PrepSlip(
+          isVoid: false, stationUid: 'S1', stationName: 'Kitchen', printerPort: 9100,
+          orderNumber: 'ORD-0042', takeaway: false, round: 1, reprint: false,
+          byName: 'Samwel', lines: [PrepSlipLine(productName: 'Chai', quantity: 1)]);
+      await printing.printSlips([noIds]);
+      await printing.printSlips([noIds]);
+      expect(spool.printed, hasLength(2));
+      expect(await printing.printSlips([noIds], mode: SlipPrintMode.feed), isEmpty);
+      expect(spool.printed, hasLength(2), reason: 'the feed cannot tell repeats apart');
     });
   });
 
