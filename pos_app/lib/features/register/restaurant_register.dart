@@ -711,14 +711,16 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
   }
 
   /// Prints slips; reports the ones that failed with a reprint per station.
-  Future<void> _printSlips(List<PrepSlip> slips, {String? okMessage}) async {
+  /// [mode]: each slip once (Send, Fire, Void), or always ([SlipPrintMode.reprint]).
+  Future<void> _printSlips(List<PrepSlip> slips,
+      {String? okMessage, SlipPrintMode mode = SlipPrintMode.once}) async {
     if (slips.isEmpty) {
       if (okMessage != null && mounted) {
         showToast(context, '$okMessage. No kitchen or bar printer is set up for this branch.');
       }
       return;
     }
-    final failures = await _printing.printSlips(slips);
+    final failures = await _printing.printSlips(slips, mode: mode);
     final handedOff = await _printing.handedOff(slips);
     if (!mounted) return;
     if (failures.isEmpty) {
@@ -742,6 +744,8 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       }
       return;
     }
+    // Once, not reprint: on a till that also prints for every till, the
+    // station feed may have printed the slip since; then this says Printed.
     await showSlipFailures(context, failures, (slip) async {
       final again = await _printing.printSlips([slip]);
       return again.isEmpty ? null : again.first.message;
@@ -757,7 +761,7 @@ class _RestaurantRegisterState extends ConsumerState<RestaurantRegister> {
       showToast(context, 'Nothing has been sent for this order yet.');
       return;
     }
-    await _printSlips(slips, okMessage: 'Reprinted');
+    await _printSlips(slips, okMessage: 'Reprinted', mode: SlipPrintMode.reprint);
   }
 
   /// Unsent items before billing/paying: offer to send them first. Returns

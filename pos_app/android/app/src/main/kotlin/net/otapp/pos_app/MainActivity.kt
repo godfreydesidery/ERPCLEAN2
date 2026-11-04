@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -145,6 +146,7 @@ class MainActivity : FlutterActivity() {
             if (bt.isDiscovering) bt.cancelDiscovery()
         } catch (_: SecurityException) {
         }
+        val started = SystemClock.elapsedRealtime()
         val socket = try {
             connect(bt.getRemoteDevice(address))
         } catch (e: Exception) {
@@ -152,25 +154,41 @@ class MainActivity : FlutterActivity() {
             return "Could not reach the printer. Check it is switched on, paired, and not " +
                 "connected to another phone or till."
         }
-        return try {
-            socket.use {
-                val out = it.outputStream
-                // Small chunks: cheap printers have small buffers and drop a long burst.
-                var at = 0
-                while (at < bytes.size) {
-                    val n = minOf(512, bytes.size - at)
-                    out.write(bytes, at, n)
-                    out.flush()
-                    at += n
-                    if (at < bytes.size) Thread.sleep(15)
-                }
-                // Let the printer drain its buffer before the link drops, or the tail is lost.
-                Thread.sleep((400L + bytes.size / 8).coerceAtMost(2000L))
+        var at = 0
+        try {
+            val out = socket.outputStream
+            // Small chunks: cheap printers have small buffers and drop a long burst.
+            while (at < bytes.size) {
+                val n = minOf(512, bytes.size - at)
+                out.write(bytes, at, n)
+                out.flush()
+                at += n
+                if (at < bytes.size) Thread.sleep(15)
             }
-            null
         } catch (e: Exception) {
-            Log.w(TAG, "Bluetooth write to $address failed", e)
-            "The printer connected but did not take the receipt. Check its paper and print again."
+            Log.w(TAG, "Bluetooth write to $address failed after $at of ${bytes.size} bytes", e)
+            closeQuietly(socket)
+            return "The printer connected but did not take the receipt. Check its paper and print again."
+        }
+        // Every byte is with the printer now. Nothing below may report a failure: a "failed"
+        // job is printed again, and this one is already on paper (Cafe Tulia 2026-11-04).
+        try {
+            // Let the printer drain its buffer before the link drops, or the tail is lost.
+            Thread.sleep((400L + bytes.size / 8).coerceAtMost(2000L))
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        closeQuietly(socket)
+        Log.i(TAG, "Printed ${bytes.size} bytes to $address (way ${working[address]}) in " +
+            "${SystemClock.elapsedRealtime() - started} ms")
+        return null
+    }
+
+    private fun closeQuietly(socket: BluetoothSocket) {
+        try {
+            socket.close()
+        } catch (e: Exception) {
+            Log.i(TAG, "Bluetooth close failed (job already sent)", e)
         }
     }
 
