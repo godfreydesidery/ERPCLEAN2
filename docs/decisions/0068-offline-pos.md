@@ -51,7 +51,9 @@ Facts from the code that shape this design (verified 2026-11-07):
      permission `POS.OFFLINE.SWITCH`, confirmed by their **password** (not the 4-digit PIN — see D-7).
    - **Coming back:** when the server answers again, the till says so, finishes the current basket
      offline, then returns to online and starts syncing — at the latest after a **grace period of
-     5 minutes**. A till cannot stay offline on a working connection.
+     5 minutes**. A till cannot stay offline on a working connection. After a **manual** switch the
+     server counts as back only when it answers within **1.5 seconds** — otherwise the slow line the
+     manager switched away from would undo the switch at once (owner ruling 2026-11-07).
    - Every switch is recorded (who, when, which till, reason `UNREACHABLE` / `MANUAL`) and listed on
      the review screen (D-8).
 
@@ -80,8 +82,10 @@ the key in the device's secure key store; the product and price cache is not.
 - **Tenders offline: cash, mobile money, card.** Mobile money and card **require a reference** (the
   transaction reference / terminal approval number). **Blocked offline:** credit sales,
   complimentary, discounts, reversals and refunds — anything that needs a manager's approval.
-- Numbered **provisionally per till**: `OFF-<till code>-<sequence>`, e.g. `OFF-T2-000153`. The
-  receipt is printed marked **OFFLINE** with that number.
+- Numbered **provisionally per till and device**: `OFF-<till code><2-character device tag>-<6-digit
+  sequence>`, e.g. `OFF-T2K7-000153`. The device tag stops a reinstalled device, or a second device
+  running as the same till, from reusing a number the server already holds (owner ruling
+  2026-11-07). The receipt is printed marked **OFFLINE** with that number.
 - Written to a **durable on-device queue** before the receipt prints, each with its own
   Idempotency-Key (the `pending_sale_store` principle, extended from one slot to a queue). Clearing
   app data with unsynced sales is refused with a warning.
@@ -139,7 +143,14 @@ payment, so waiter and bill reports stay complete. The detailed design is writte
 - The till derives its **own** verifier on the device at each successful online sign-in (a slow
   key-derivation of the password or PIN with a per-device salt). The server's password hashes are
   **never** sent to a device.
-- A user blocked or removed on the server drops off the till's list at the next sync.
+- A user whose online sign-in is refused (disabled, locked, removed) loses their offline verifier at
+  once; any verifier expires **14 days** after that user's last online sign-in on the till. Signing
+  out does not delete it.
+- 5 wrong offline tries lock that user out offline for 15 minutes.
+- Each offline sale records **who rang it** (`rungByUid`, audit trail); the invoice is created by the
+  user who syncs, and syncing needs a real online sign-in — never stale credentials.
+- **In phase 1** (owner ruling 2026-11-07, moved from phase 3): without it, a till that restarts
+  during an outage — a power cut — could not sell until the server was back.
 - Users may sign in offline with the **PIN** or password they use online (owner ruling: the PIN's
   guessing weakness is accepted for sign-in, since offline selling allows no approvals).
 - The manual Online→Offline switch (D-1) needs a manager's **password**: a 4-digit PIN verifier
@@ -171,9 +182,9 @@ are already posted.
 
 | Phase | Scope | Rough size |
 |---|---|---|
-| 1 | Quick sales offline: cache, switch, offline sale + queue, provisional offline shift, sync endpoint, review list, migration | 2–3 weeks |
+| 1 | Quick sales offline: cache, switch, offline sale + queue, provisional offline shift, offline sign-in (D-7), sync endpoint, review list, migration | 3–4 weeks |
 | 2 | Restaurant on a single till offline | ~2 weeks |
-| 3 | Offline sign-in hardening, manager-password switch, incremental cache refresh | ~1 week |
+| 3 | Incremental cache refresh, a bulk barcode/pack endpoint for the cache | ~1 week |
 
 Each phase ships on its own and is rehearsed on a restored client copy before it reaches a client.
 
