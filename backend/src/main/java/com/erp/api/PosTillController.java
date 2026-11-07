@@ -2,6 +2,7 @@ package com.erp.api;
 
 import com.erp.modules.sales.domain.dto.CreatePosTillRequest;
 import com.erp.modules.sales.domain.dto.PosTillDto;
+import com.erp.modules.sales.domain.dto.SetTillOfflineRequest;
 import com.erp.modules.sales.service.PosTillService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -58,6 +60,14 @@ public class PosTillController {
     }
 
     /** Brings a deactivated till back into use (the reverse of deactivate, audited the same way). */
+    /** ADR-0068 D-1: allow or stop offline selling on this till. */
+    @PutMapping("/uid/{uid}/offline")
+    @PreAuthorize("@perm.scoped(#uid,'postill','POS.TILL.MANAGE')")
+    public PosTillDto setOffline(@PathVariable String uid,
+                                 @Valid @RequestBody SetTillOfflineRequest request) {
+        return tillService.setOfflineAllowed(uid, request.offlineAllowed());
+    }
+
     @PostMapping("/uid/{uid}/reactivate")
     @PreAuthorize("@perm.scoped(#uid,'postill','POS.TILL.MANAGE')")
     public PosTillDto reactivate(@PathVariable String uid) {

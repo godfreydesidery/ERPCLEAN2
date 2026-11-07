@@ -8,10 +8,12 @@ import '../../core/api/api_exception.dart';
 import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/pos.dart';
+import '../../offline/offline_controller.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../widgets/ui.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../offline/offline_widgets.dart';
 import '../session/session_menu.dart';
 
 class OpenShiftScreen extends ConsumerStatefulWidget {
@@ -65,9 +67,15 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
       return;
     }
     final float = double.tryParse(_float.text.trim()) ?? 0;
+    // The till row travels with the shift: its code numbers offline sales and
+    // its setting says whether it may sell offline (ERP ADR-0068).
+    PosTill? till;
+    try {
+      till = (await _tills).where((t) => t.uid == _tillUid).firstOrNull;
+    } catch (_) {/* the open below reports the real problem */}
     await ref
         .read(appControllerProvider.notifier)
-        .openShift(_tillUid!, float, app.mode);
+        .openShift(_tillUid!, float, app.mode, till: till);
     final err = ref.read(appControllerProvider).error;
     if (err != null && mounted) showToast(context, err);
   }
@@ -94,6 +102,7 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
                       const SizedBox(height: 14),
                       BranchFallbackBanner(app.context!.branch.name),
                     ],
+                    const OfflineStatusStrip(padding: EdgeInsets.only(top: 14)),
                     if (app.notice != null) ...[
                       const SizedBox(height: 14),
                       NoticeStrip(app.notice!,
@@ -310,10 +319,26 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
             child: Center(child: CircularProgressIndicator()),
           );
         }
-        if (snap.hasError) {
+        final offline = ref.watch(offlineControllerProvider.select((s) => s.offline));
+        if (snap.hasError || offline) {
           final e = snap.error;
-          final msg = e is ApiException ? e.message : 'Could not load tills.';
-          return _emptyBox(Icons.error_outline, msg, retry: true);
+          final unreachable = offline || (e is ApiException && e.isUnreachable);
+          final msg = offline
+              ? 'The till is offline, so the till list cannot be read.'
+              : e is ApiException
+                  ? e.message
+                  : 'Could not load tills.';
+          return Column(
+            children: [
+              _emptyBox(Icons.error_outline, msg, retry: !offline),
+              // ERP ADR-0068 D-4: with no server, a shift can still be opened —
+              // provisionally, on this device's own till — if it may sell offline.
+              if (unreachable) ...[
+                const SizedBox(height: 12),
+                _offlineShiftCard(app),
+              ],
+            ],
+          );
         }
         final tills = (snap.data ?? []).where((t) => t.isActive).toList();
         if (tills.isEmpty) {
@@ -426,6 +451,81 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
         ],
       ),
     );
+  }
+
+  /// Opening (or resuming) a shift with no server (ERP ADR-0068 D-4), on the till
+  /// this device last ran a shift on. The server creates the shift at sync.
+  Widget _offlineShiftCard(AppData app) {
+    final off = ref.watch(offlineControllerProvider);
+    final ctrl = ref.read(offlineControllerProvider.notifier);
+    final till = ctrl.currentTill;
+    Widget note(String text) => NoticeStrip(text);
+    if (till == null) {
+      return note('No till has been used on this device yet, so an offline shift cannot be '
+          'opened. Wait for the connection.');
+    }
+    if (!till.offlineAllowed) {
+      return note('${till.name} is not allowed to sell offline. Wait for the connection.');
+    }
+    final mine = till.isHeldBy(app.cashierId) && till.openSessionUid != null;
+    if (till.hasOpenSession && !mine) {
+      return note('${till.name} has a shift open on the server (${till.occupantHolder}), so '
+          'an offline shift cannot be opened on it.');
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.dangerSoft,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: const Color(0xFFFCA5A5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(mine ? 'Resume your shift on ${till.name} offline' : 'Sell offline on ${till.name}',
+              style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.danger)),
+          const SizedBox(height: 4),
+          Text(
+            mine
+                ? 'Your shift is still open on the server. Sales are kept on this till and '
+                    'added to that shift when the connection is back.'
+                : 'Opens a provisional shift with the float below. Sales are kept on this '
+                    'till; the server creates the shift and posts them when the connection '
+                    'is back.',
+            style: const TextStyle(color: AppColors.ink2, fontSize: 12.5),
+          ),
+          const SizedBox(height: 10),
+          OrbixButton(
+            label: mine
+                ? 'Resume offline'
+                : (off.offline ? 'Open offline shift' : 'Switch to offline and open shift'),
+            icon: Icons.cloud_off,
+            busy: app.busy,
+            onPressed: app.busy ? null : () => _openOffline(till, mine: mine),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openOffline(PosTill till, {required bool mine}) async {
+    final ctrl = ref.read(offlineControllerProvider.notifier);
+    if (!ref.read(offlineControllerProvider).offline) {
+      if (!await switchToOffline(context, ref)) return;
+    }
+    if (!mounted) return;
+    final app = ref.read(appControllerProvider);
+    final notifier = ref.read(appControllerProvider.notifier);
+    if (mine) {
+      notifier.resumeShiftOffline(till, app.mode);
+      await ctrl.attachPeriodToCurrentShift();
+      return;
+    }
+    final float = double.tryParse(_float.text.trim()) ?? 0;
+    await notifier.openOfflineShift(float, app.mode);
+    final err = ref.read(appControllerProvider).error;
+    if (err != null && mounted) showToast(context, err);
   }
 
   /// [phone]: the float above a full-width Open session button.
@@ -631,6 +731,12 @@ class _OpenShiftScreenState extends ConsumerState<OpenShiftScreen> {
   /// The real cash-up on an orphaned shift, reached from the shift dialog and
   /// from a failed resume — one path so both count the drawer the same way.
   Future<void> _cashUp(PosTill t, String sessionUid, AppData app) async {
+    // ERP ADR-0068 D-4: not while this device holds offline sales of the shift.
+    if (!await checkShiftSynced(
+        context, ref, PosSession.fromOpenTill(t, sessionUid: sessionUid))) {
+      return;
+    }
+    if (!mounted) return;
     final closed = await showDialog<bool>(
       context: context,
       builder: (_) => _CashUpDialog(

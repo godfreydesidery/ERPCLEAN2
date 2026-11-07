@@ -213,6 +213,27 @@ export class PosTillListComponent {
     });
   }
 
+  // ── Offline selling (ADR-0068) ─────────────────────────────────────────────
+
+  toggleOffline(till: PosTillDto): void {
+    if (this.rowBusyUid() !== null || !this.canManage()) return;
+    const next = !till.offlineAllowed;
+    this.rowBusyUid.set(till.uid);
+    this.posService.setTillOffline(till.uid, next).subscribe({
+      next: (updated) => {
+        this.rowBusyUid.set(null);
+        this.rows.update((rows) =>
+          rows.map((r) => (r.uid === till.uid ? { ...r, offlineAllowed: updated.offlineAllowed ?? next } : r)),
+        );
+        this.alerts.success(next ? 'Offline selling allowed' : 'Offline selling turned off', till.name);
+      },
+      error: (err: unknown) => {
+        this.rowBusyUid.set(null);
+        this.alerts.error('Could not change offline selling', this.messageFrom(err, 'Unknown error.'));
+      },
+    });
+  }
+
   // ── Display helpers ────────────────────────────────────────────────────────
 
   branchName(branchId: string): string {

@@ -105,12 +105,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(appControllerProvider.notifier).login(_user.text, _pass.text);
   }
 
+  /// ERP ADR-0068 D-7: signing in without the server, against this till's own
+  /// verifier from the user's last online sign-in here.
+  void _submitOffline() {
+    if (_user.text.trim().isEmpty || _pass.text.isEmpty) return;
+    ref.read(appControllerProvider.notifier).loginOffline(_user.text, _pass.text);
+  }
+
   /// A waiter tapped their tile: their PIN if they have one, else the password.
   Future<void> _pick(RestaurantWaiter w) async {
     if (w.hasPin) {
       final outcome = await showPinPad(context,
           name: w.name,
-          onPin: (pin) => ref.read(appControllerProvider.notifier).loginWithPin(w.username, pin));
+          onPin: (pin) {
+            final app = ref.read(appControllerProvider.notifier);
+            // No server: the PIN is checked against this till's own verifier.
+            return ref.read(appControllerProvider).offlineSignInAvailable
+                ? app.loginOffline(w.username, pin, pin: true)
+                : app.loginWithPin(w.username, pin);
+          });
       if (outcome != PinPadOutcome.usePassword || !mounted) return;
     }
     setState(() {
@@ -300,6 +313,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               busy: app.busy,
               onPressed: app.busy ? null : _submit,
             ),
+            if (app.offlineSignInAvailable) ...[
+              const SizedBox(height: 14),
+              Container(
+                key: const ValueKey('offline-sign-in'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerSoft,
+                  borderRadius: AppRadii.brSm,
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('No connection to the ERP',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.danger)),
+                    const SizedBox(height: 4),
+                    const Text(
+                        'If you signed in on this till while it was online in the last 14 days, '
+                        'you can sign in offline and keep selling. Sales are kept on the till and '
+                        'sent once you sign in online again.',
+                        style: TextStyle(color: AppColors.ink2, fontSize: 12.5)),
+                    const SizedBox(height: 10),
+                    OrbixButton(
+                      label: 'Sign in offline',
+                      icon: Icons.cloud_off,
+                      kind: BtnKind.danger,
+                      block: true,
+                      busy: app.busy,
+                      onPressed: app.busy ? null : _submitOffline,
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Center(
               child: TextButton.icon(

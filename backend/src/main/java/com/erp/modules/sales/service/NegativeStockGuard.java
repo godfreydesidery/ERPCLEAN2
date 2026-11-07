@@ -144,6 +144,40 @@ public class NegativeStockGuard {
         }
     }
 
+    /**
+     * ADR-0068 D-5: the offline-sale side of {@link #assertAvailable}. The goods have already left
+     * with the customer, so nothing is refused — but the quantity is still CLAIMED, exactly as for an
+     * online sale, because the stock handler releases the claim unconditionally when it posts the
+     * movement. Skipping the claim here would make that release subtract a claim that never existed.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void claimWithoutBlocking(Long companyId, Long branchId, Long productId, String productUid,
+                                     boolean productStockable, BigDecimal qtyRequestedBase) {
+        if (!productStockable || explosion.shouldExplodeAtIssue(productUid, productStockable)) {
+            return;
+        }
+        if (qtyRequestedBase == null || qtyRequestedBase.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        stock.reserve(companyId, branchId, productId, qtyRequestedBase, null /* system claim */);
+    }
+
+    /**
+     * How far below zero this product's AVAILABLE stock now is at the branch (on hand minus claims),
+     * or zero when it is not short — after an offline sale's claim has been taken. Used to flag an
+     * oversold offline sale for a manager (ADR-0068 D-5). Products that never move their own stock
+     * (non-stockable, or exploded into components at issue) are never short.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public BigDecimal shortfallAfterClaim(Long companyId, Long branchId, Long productId,
+                                          String productUid, boolean productStockable) {
+        if (!productStockable || explosion.shouldExplodeAtIssue(productUid, productStockable)) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal available = stock.getAvailability(companyId, branchId, productId).availableQty();
+        return available.signum() < 0 ? available.negate() : BigDecimal.ZERO;
+    }
+
     /** Trims a quantity to its sensible precision — whole units print without a decimal point. */
     private static String formatQty(BigDecimal qty) {
         return qty.stripTrailingZeros().toPlainString();

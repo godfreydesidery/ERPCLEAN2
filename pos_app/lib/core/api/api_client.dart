@@ -44,6 +44,11 @@ class ApiClient {
   /// Invoked when a 401 could not be refreshed away — the app routes to login.
   void Function()? onAuthLost;
 
+  /// Invoked when a request got no answer at all (network down, timeout). The
+  /// offline controller then probes the server and, when it is really gone,
+  /// offers the cashier offline selling (ERP ADR-0068 D-1).
+  void Function()? onUnreachable;
+
   // ---------------------------------------------------------------- interceptors
 
   Future<void> _onRequest(
@@ -157,7 +162,9 @@ class ApiClient {
       final res = await call();
       return unwrapData(res.data);
     } on DioException catch (e) {
-      throw ApiException.fromDio(e);
+      final ex = ApiException.fromDio(e);
+      if (ex.isUnreachable) onUnreachable?.call();
+      throw ex;
     }
   }
 

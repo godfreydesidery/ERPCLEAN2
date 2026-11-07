@@ -34,5 +34,7 @@ public record PosTillDto(
         String openSessionUid,
         Long openSessionCashierId,
         String openSessionCashierName,
-        Instant openSessionOpenedAt
+        Instant openSessionOpenedAt,
+        /** ADR-0068 D-1 (V114): may this till keep selling while the server is unreachable? */
+        boolean offlineAllowed
 ) {}

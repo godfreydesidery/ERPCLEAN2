@@ -139,6 +139,10 @@
             <i class="bi bi-cash-register" aria-hidden="true"></i> No tills configured for this branch yet.
           </div>
         } @else {
+          <p id="offlineHint" class="text-muted small mb-2">
+            <i class="bi bi-wifi-off me-1" aria-hidden="true"></i>
+            Allow offline selling: when on, this till keeps selling cash, mobile money and card sales while it cannot reach the server, and sends them when it can. Sales made offline are listed for a manager to review.
+          </p>
           <div class="erp-card">
             <div class="erp-table-wrap">
               <table class="erp-table">
@@ -148,6 +152,7 @@
                     <th scope="col">Name</th>
                     <th scope="col">Branch</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Offline selling</th>
                     @if (canManage()) {
                       <th scope="col"><span class="visually-hidden">Actions</span></th>
                     }
@@ -164,6 +169,23 @@
                               [class.status-tag--neutral]="t.status === 'ARCHIVED'">
                           <span class="status-tag__dot"></span>{{ t.status }}
                         </span>
+                      </td>
+                      <td>
+                        @if (canManage()) {
+                          <div class="form-check form-switch mb-0">
+                            <input type="checkbox" role="switch" class="form-check-input"
+                                   [id]="'offline-' + t.uid"
+                                   [checked]="!!t.offlineAllowed"
+                                   [disabled]="rowBusyUid() === t.uid"
+                                   [attr.aria-describedby]="'offlineHint'"
+                                   (change)="toggleOffline(t)" />
+                            <label class="form-check-label" [for]="'offline-' + t.uid">
+                              <span class="visually-hidden">Allow offline selling on {{ t.name }}: </span>{{ t.offlineAllowed ? 'On' : 'Off' }}
+                            </label>
+                          </div>
+                        } @else {
+                          {{ t.offlineAllowed ? 'On' : 'Off' }}
+                        }
                       </td>
                       @if (canManage()) {
                         <td>
