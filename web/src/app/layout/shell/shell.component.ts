@@ -137,6 +137,20 @@ export class ShellComponent {
         { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: true, permission: 'AUDIT.VIEW' },
       ],
     },
+    // Platform operator only: ORG.CREATE is a platform permission (root holds it implicitly).
+    {
+      label: 'Platform',
+      items: [
+        {
+          label: 'Tenants',
+          route: '/admin/platform/tenants',
+          icon: 'bi-buildings',
+          available: true,
+          permission: 'ORG.CREATE',
+          keywords: ['organisations', 'organizations', 'new tenant', 'suspend', 'platform'],
+        },
+      ],
+    },
     {
       label: 'Parties',
       items: [

@@ -1,0 +1,360 @@
+<section class="admin-page">
+  <header class="page-head d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+      <h1 class="h4 mb-1">Platform: Tenants</h1>
+      <p class="text-muted mb-0">Every organisation on this system. Create a new one or suspend access.</p>
+    </div>
+    @if (!showForm()) {
+      <button type="button" class="btn btn-primary" (click)="openForm()">
+        <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New tenant
+      </button>
+    }
+  </header>
+
+  @if (created(); as c) {
+    <div class="erp-card mb-3" role="status" aria-labelledby="createdTitle">
+      <div class="erp-card__body">
+        <h2 id="createdTitle" class="h6 mb-2">Organisation created: {{ c.organisationName }}</h2>
+        <p class="mb-1">Give the administrator this sign-in name, together with the password you set:</p>
+        <p class="signin-name mono mb-0" data-testid="signin-name">{{ c.signInName }}</p>
+      </div>
+    </div>
+  }
+
+  @if (showForm()) {
+    <form class="erp-card mb-3" (ngSubmit)="create()" novalidate aria-labelledby="newTenantTitle">
+      <div class="erp-card__head"><h2 id="newTenantTitle">New tenant</h2></div>
+      <div class="erp-card__body">
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Organisation</legend>
+          <div class="row g-2">
+            <div class="col-sm-8">
+              <label class="form-label small mb-1" for="organisationName">Organisation name <span aria-hidden="true">*</span></label>
+              <input id="organisationName" name="organisationName" type="text" class="form-control" maxlength="160"
+                     required [(ngModel)]="organisationName"
+                     [attr.aria-invalid]="submitted() && !organisationName().trim() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && !organisationName().trim() ? 'organisationNameErr' : null" />
+              @if (submitted() && !organisationName().trim()) {
+                <p id="organisationNameErr" class="text-danger small mb-0">Enter the organisation name.</p>
+              }
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small mb-1" for="timeZone">Time zone</label>
+              <input id="timeZone" name="timeZone" type="text" class="form-control" maxlength="64"
+                     [(ngModel)]="timeZone" aria-describedby="timeZoneHelp" />
+              <p id="timeZoneHelp" class="small text-muted mb-0">For example Africa/Dar_es_Salaam. Left empty, the system default is used.</p>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Company</legend>
+          <div class="row g-2">
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="companyCode">Company code <span aria-hidden="true">*</span></label>
+              <input id="companyCode" name="companyCode" type="text" class="form-control" maxlength="20"
+                     required [(ngModel)]="companyCode"
+                     [attr.aria-invalid]="submitted() && !companyCode().trim() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && !companyCode().trim() ? 'companyCodeErr' : null" />
+              @if (submitted() && !companyCode().trim()) {
+                <p id="companyCodeErr" class="text-danger small mb-0">Enter a company code.</p>
+              }
+            </div>
+            <div class="col-sm-9">
+              <label class="form-label small mb-1" for="companyName">Company name <span aria-hidden="true">*</span></label>
+              <input id="companyName" name="companyName" type="text" class="form-control" maxlength="160"
+                     required [(ngModel)]="companyName"
+                     [attr.aria-invalid]="submitted() && !companyName().trim() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && !companyName().trim() ? 'companyNameErr' : null" />
+              @if (submitted() && !companyName().trim()) {
+                <p id="companyNameErr" class="text-danger small mb-0">Enter the company name.</p>
+              }
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="companyLegalName">Registered legal name</label>
+              <input id="companyLegalName" name="companyLegalName" type="text" class="form-control" maxlength="200"
+                     [(ngModel)]="companyLegalName" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="companyTaxId">Tax ID (TIN)</label>
+              <input id="companyTaxId" name="companyTaxId" type="text" class="form-control" maxlength="60"
+                     [(ngModel)]="companyTaxId" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="companyVrn">VAT registration number (VRN)</label>
+              <input id="companyVrn" name="companyVrn" type="text" class="form-control" maxlength="40"
+                     [(ngModel)]="companyVrn" />
+            </div>
+          </div>
+          <p class="small text-muted mt-1 mb-0">
+            If the tax ID is left empty, none is recorded and printed documents show no tax ID line. It can be added later on the Companies screen.
+          </p>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Branch</legend>
+          <div class="row g-2">
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="branchCode">Branch code <span aria-hidden="true">*</span></label>
+              <input id="branchCode" name="branchCode" type="text" class="form-control" maxlength="20"
+                     required [(ngModel)]="branchCode"
+                     [attr.aria-invalid]="submitted() && !branchCode().trim() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && !branchCode().trim() ? 'branchCodeErr' : null" />
+              @if (submitted() && !branchCode().trim()) {
+                <p id="branchCodeErr" class="text-danger small mb-0">Enter a branch code.</p>
+              }
+            </div>
+            <div class="col-sm-9">
+              <label class="form-label small mb-1" for="branchName">Branch name <span aria-hidden="true">*</span></label>
+              <input id="branchName" name="branchName" type="text" class="form-control" maxlength="160"
+                     required [(ngModel)]="branchName"
+                     [attr.aria-invalid]="submitted() && !branchName().trim() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && !branchName().trim() ? 'branchNameErr' : null" />
+              @if (submitted() && !branchName().trim()) {
+                <p id="branchNameErr" class="text-danger small mb-0">Enter the branch name.</p>
+              }
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Administrator</legend>
+          <div class="row g-2">
+            <div class="col-sm-4">
+              <label class="form-label small mb-1" for="adminUsername">Username <span aria-hidden="true">*</span></label>
+              <input id="adminUsername" name="adminUsername" type="text" class="form-control" maxlength="60"
+                     autocomplete="off" required [(ngModel)]="adminUsername"
+                     [attr.aria-invalid]="(submitted() || adminUsername().includes('@')) && usernameError() ? 'true' : null"
+                     [attr.aria-describedby]="'adminUsernameHelp' + ((submitted() || adminUsername().includes('@')) && usernameError() ? ' adminUsernameErr' : '')" />
+              <p id="adminUsernameHelp" class="small text-muted mb-0">
+                Type only the first part. The organisation's sign-in alias is added automatically.
+              </p>
+              @if ((submitted() || adminUsername().includes('@')) && usernameError(); as msg) {
+                <p id="adminUsernameErr" class="text-danger small mb-0">{{ msg }}</p>
+              }
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small mb-1" for="adminDisplayName">Display name</label>
+              <input id="adminDisplayName" name="adminDisplayName" type="text" class="form-control" maxlength="160"
+                     [(ngModel)]="adminDisplayName" />
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label small mb-1" for="adminPassword">Password <span aria-hidden="true">*</span></label>
+              <input id="adminPassword" name="adminPassword" type="password" class="form-control" maxlength="200"
+                     autocomplete="new-password" required [(ngModel)]="adminPassword"
+                     [attr.aria-invalid]="submitted() && passwordError() ? 'true' : null"
+                     [attr.aria-describedby]="'adminPasswordHelp' + (submitted() && passwordError() ? ' adminPasswordErr' : '')" />
+              <p id="adminPasswordHelp" class="small text-muted mb-0">At least 12 characters. Hand it over securely; it is not shown again.</p>
+              @if (submitted() && passwordError(); as msg) {
+                <p id="adminPasswordErr" class="text-danger small mb-0">{{ msg }}</p>
+              }
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Trading set-up</legend>
+          <p class="small text-muted mb-2">All optional. Anything left empty is not created and can be added later.</p>
+          <div class="row g-2">
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="priceListCode">Price list code</label>
+              <input id="priceListCode" name="priceListCode" type="text" class="form-control" maxlength="20"
+                     [(ngModel)]="priceListCode"
+                     [attr.aria-invalid]="submitted() && priceListPairError() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && priceListPairError() ? 'priceListPairErr' : null" />
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label small mb-1" for="priceListName">Price list name</label>
+              <input id="priceListName" name="priceListName" type="text" class="form-control" maxlength="120"
+                     [(ngModel)]="priceListName"
+                     [attr.aria-invalid]="submitted() && priceListPairError() ? 'true' : null"
+                     [attr.aria-describedby]="submitted() && priceListPairError() ? 'priceListPairErr' : null" />
+            </div>
+            <div class="col-12">
+              @if (submitted() && priceListPairError(); as msg) {
+                <p id="priceListPairErr" class="text-danger small mb-0">{{ msg }}</p>
+              }
+            </div>
+            @if (priceListNamed()) {
+              <div class="col-12">
+                <fieldset aria-describedby="vatHelp">
+                  <legend class="form-label small mb-1">Do the prices on this list include VAT? <span aria-hidden="true">*</span></legend>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="vatYes" name="priceListIncludesVat"
+                           value="yes" [(ngModel)]="priceListIncludesVat" />
+                    <label class="form-check-label" for="vatYes">Yes, prices include VAT</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="vatNo" name="priceListIncludesVat"
+                           value="no" [(ngModel)]="priceListIncludesVat" />
+                    <label class="form-check-label" for="vatNo">No, VAT is added on top</label>
+                  </div>
+                  <p id="vatHelp" class="small text-muted mb-0">
+                    Choose carefully: it cannot be corrected on sales that have already been made.
+                  </p>
+                  @if (submitted() && priceListVatError(); as msg) {
+                    <p id="vatErr" class="text-danger small mb-0">{{ msg }}</p>
+                  }
+                </fieldset>
+              </div>
+            }
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="walkInCustomerName">Walk-in customer name</label>
+              <input id="walkInCustomerName" name="walkInCustomerName" type="text" class="form-control" maxlength="200"
+                     [(ngModel)]="walkInCustomerName" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="posTillName">First till name</label>
+              <input id="posTillName" name="posTillName" type="text" class="form-control" maxlength="60"
+                     [(ngModel)]="posTillName" aria-describedby="tillHelp" />
+              <p id="tillHelp" class="small text-muted mb-0">Till names must be unique across the whole company, so include the branch, for example "Main Counter 1".</p>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Currency</legend>
+          <div class="row g-2">
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="baseCurrency">Base currency</label>
+              <input id="baseCurrency" name="baseCurrency" type="text" class="form-control" maxlength="3"
+                     [(ngModel)]="baseCurrency" aria-describedby="currencyHelp" />
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label small mb-1" for="defaultCurrency">Default currency</label>
+              <input id="defaultCurrency" name="defaultCurrency" type="text" class="form-control" maxlength="3"
+                     [(ngModel)]="defaultCurrency" />
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" for="enabledCurrencies">Enabled currencies</label>
+              <input id="enabledCurrencies" name="enabledCurrencies" type="text" class="form-control"
+                     [(ngModel)]="enabledCurrencies" aria-describedby="currencyHelp" />
+            </div>
+          </div>
+          <p id="currencyHelp" class="small text-muted mt-1 mb-0">
+            Use 3-letter codes, separated by commas for the enabled list. Left empty, the system defaults are used.
+          </p>
+        </fieldset>
+
+        @if (formError(); as msg) {
+          <p class="text-danger mb-2" role="alert">{{ msg }}</p>
+        }
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary" [disabled]="saving()">
+            @if (saving()) {
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Creating…
+            } @else {
+              Create tenant
+            }
+          </button>
+          <button type="button" class="btn btn-outline-secondary" [disabled]="saving()" (click)="closeForm()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  }
+
+  @if (confirmTarget(); as t) {
+    <div class="erp-card mb-3" role="alertdialog" aria-labelledby="tenantConfirmTitle"
+         aria-describedby="tenantConfirmText" (keydown.escape)="cancelConfirm()">
+      <div class="erp-card__head">
+        <h2 id="tenantConfirmTitle">
+          @if (confirmAction() === 'suspend') { Suspend {{ t.name }}? } @else { Reactivate {{ t.name }}? }
+        </h2>
+      </div>
+      <div class="erp-card__body">
+        <p id="tenantConfirmText" class="small mb-2">
+          @if (confirmAction() === 'suspend') {
+            Nobody in {{ t.name }} will be able to sign in until it is reactivated. Their data is kept.
+          } @else {
+            People in {{ t.name }} will be able to sign in again.
+          }
+        </p>
+        @if (actionError(); as msg) {
+          <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+        }
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-primary" [disabled]="acting()" (click)="confirm()">
+            @if (confirmAction() === 'suspend') { Yes, suspend } @else { Yes, reactivate }
+          </button>
+          <button id="tenantConfirmCancel" type="button" class="btn btn-outline-secondary"
+                  [disabled]="acting()" (click)="cancelConfirm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @switch (state()) {
+    @case ('loading') {
+      <p class="state text-muted d-flex align-items-center gap-2" aria-live="polite">
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading tenants…
+      </p>
+    }
+    @case ('error') {
+      <p class="state text-danger" role="alert">
+        Could not load tenants. Please try again.
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-2" (click)="load()">Retry</button>
+      </p>
+    }
+    @default {
+      @if (tenants().length === 0) {
+        <div class="erp-empty">
+          <i class="bi bi-buildings" aria-hidden="true"></i>
+          No tenants yet. Create the first one above.
+        </div>
+      } @else {
+        <div class="erp-table-wrap">
+          <table class="erp-table">
+            <caption class="sr-only">Tenant organisations</caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Alias</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Companies</th>
+                <th scope="col">Users</th>
+                @if (canSuspend()) {
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of tenants(); track t.uid) {
+                <tr>
+                  <td>{{ t.name }}</td>
+                  <td class="mono">{{ t.alias ?? 'None' }}</td>
+                  <td>
+                    <span class="status-tag"
+                          [class.status-tag--ok]="t.status === 'ACTIVE'"
+                          [class.status-tag--neutral]="t.status !== 'ACTIVE'">
+                      {{ t.status === 'ACTIVE' ? 'Active' : 'Suspended' }}
+                    </span>
+                  </td>
+                  <td>{{ t.createdAt | date: 'mediumDate' }}</td>
+                  <td>{{ t.companyCount }}</td>
+                  <td>{{ t.userCount }}</td>
+                  @if (canSuspend()) {
+                    <td>
+                      @if (t.status === 'ACTIVE') {
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                [disabled]="confirmTarget() !== null"
+                                (click)="askConfirm(t, 'suspend')"
+                                [attr.aria-label]="'Suspend ' + t.name">Suspend</button>
+                      } @else {
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                [disabled]="confirmTarget() !== null"
+                                (click)="askConfirm(t, 'resume')"
+                                [attr.aria-label]="'Reactivate ' + t.name">Reactivate</button>
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  }
+</section>
