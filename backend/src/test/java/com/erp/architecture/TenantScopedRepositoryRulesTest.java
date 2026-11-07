@@ -138,6 +138,7 @@ class TenantScopedRepositoryRulesTest {
         a("AssetDisposalRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
         a("AssetRevaluationRepository#findByFixedAssetIdOrderByRevaluationDateAsc", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("AssetRevaluationRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
+        a("AuditRepository#latestAt", "tenant-departure rules (R-8): timestamp of a platform action on one organisation row; returns no row data, platform operator only");
         a("AuditRepository#lockItem", "advisory-lock helper keyed on a caller-built string, touches no tenant rows");
         a("BankReconciliationRepository#findByCashBankAccountId", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("BankReconciliationRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
@@ -244,6 +245,7 @@ class TenantScopedRepositoryRulesTest {
         a("DocumentBrandingRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
         a("DocumentTemplateRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
         a("DomainEventRepository#claimPendingForUpdate", "outbox dispatcher: platform job deliberately drains all tenants");
+        a("DomainEventRepository#deleteDispatchedBefore", "outbox retention: platform job purges old DISPATCHED rows across all tenants, returns a count only");
         a("DomainEventRepository#countByStatus", "outbox metrics, platform-wide, no row data");
         a("DomainEventRepository#existsByAggregateTypeAndAggregateIdAndEventTypeAndStatusIn", "outbox de-dup keyed on an aggregate id already resolved by the caller");
         a("DomainEventRepository#findPendingBatch", "outbox dispatcher: platform job deliberately drains all tenants");
