@@ -50,8 +50,22 @@ public record OfflineSyncRequest(
             /** The total the till showed the customer; compared, never trusted, at sync. */
             @NotNull BigDecimal grossTotal,
             Boolean ageVerified,
-            @Size(max = 500) String notes
-    ) {}
+            @Size(max = 500) String notes,
+            /**
+             * Who rang the sale on the till (offline sign-in, D-7). Recorded in the audit trail; the
+             * invoice itself is created by the user who syncs. Optional — absent on older tills.
+             */
+            @Size(max = 26) String rungByUid
+    ) {
+        /** Back-compat: a till that does not send who rang the sale. */
+        public OfflineSale(String idempotencyKey, String offlineNumber, Instant soldAt,
+                           String sessionUid, String sessionClientKey, Long customerId,
+                           String currency, List<Line> lines, List<Tender> tenders,
+                           BigDecimal grossTotal, Boolean ageVerified, String notes) {
+            this(idempotencyKey, offlineNumber, soldAt, sessionUid, sessionClientKey, customerId,
+                    currency, lines, tenders, grossTotal, ageVerified, notes, null);
+        }
+    }
 
     /** A line at the price the till charged and that price's VAT stance. */
     public record Line(

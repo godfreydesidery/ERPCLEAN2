@@ -314,6 +314,7 @@ public class PosOfflineSaleIngestor {
         detail.put("gross", posted.grossTotalAmount().toPlainString());
         detail.put("tillGross", sale.grossTotal().toPlainString());
         detail.put("flags", String.join(",", flags));
+        detail.put("rungByUid", sale.rungByUid() == null ? "" : sale.rungByUid());
         audit.record(AuditEvent.of(AuditActions.POS_OFFLINE_SALE_SYNC, "sales_invoices",
                 invoice.getId(), invoice.getUid()).detail(detail));
 
