@@ -279,6 +279,12 @@ public class AuthServiceImpl implements AuthService {
         if (!user.isActive()) {
             throw AuthenticationException.invalidCredentials();
         }
+        // A suspended tenant (P5-3) must stop at the next refresh, not merely at the next password
+        // sign-in. Without this a refresh token - rotated on every use, seven days each time - kept
+        // a suspended customer's tills and browsers signed in indefinitely, and "enforced at login"
+        // only ever caught the people who had signed out. Access tokens already issued still run out
+        // their 15 minutes, which is the documented behaviour.
+        assertTenantIsOpen(user);
 
         // Rotate: mint a successor, mark the old one rotated and pointing at it.
         TokenResponse response = issueSession(user);

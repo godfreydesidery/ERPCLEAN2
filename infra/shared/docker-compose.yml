@@ -1,0 +1,173 @@
+# Shared multi-tenant server (MULTITENANCY-PLAN.md D-11, R-5): API + Postgres 15 + Caddy.
+#
+# A NEW deployment for customer #2 onward. It runs the SAME image and code as every other install
+# (no tenancy-mode flag, plan section 0) - the differences below are .env and topology only.
+# Single-tenant installs (infra/prod, infra/qa, dist/) are untouched by this directory.
+#
+# Runbooks: docs/ops/shared-instance.md (onboarding, upgrade) and docs/ops/shared-instance-pitr.md
+# (WAL archiving, base backups, point-in-time restore).
+#
+# One-time setup on the host:
+#   1. cp infra/shared/.env.example infra/shared/.env   and fill in EVERY placeholder.
+#   2. Generate the RS256 key pair into infra/shared/jwt-keys/ (see docs/ops/shared-instance.md).
+#   3. docker compose -f infra/shared/docker-compose.yml up -d --build
+
+name: erp-shared
+
+services:
+
+  # -----------------------------------------------------------------------
+  # PostgreSQL 15 with continuous WAL archiving (archive_mode=on).
+  # Every completed WAL segment is copied to the wal-archive volume; pitr/base-backup.sh takes
+  # base backups into the basebackups volume. Together they allow restore to any moment since the
+  # oldest retained base backup. In production the two backup volumes must NOT share a disk with
+  # db-data: see docs/ops/shared-instance-pitr.md section 1.
+  # -----------------------------------------------------------------------
+  # One-shot: a fresh named volume is root-owned and the postgres user must write the archive and
+  # base-backup volumes. Runs to completion before db starts; idempotent.
+  volume-init:
+    image: postgres:15-alpine
+    user: root
+    restart: "no"
+    command: ["sh", "-c", "chown postgres:postgres /wal-archive /basebackups && chmod 700 /wal-archive /basebackups"]
+    volumes:
+      - wal-archive:/wal-archive
+      - basebackups:/basebackups
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      # --- connection budget: see "Connection arithmetic" in docs/ops/shared-instance.md ---
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-256MB}
+      # --- WAL archiving for point-in-time recovery ---
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      # Never overwrite an archived segment; write to a temp name then rename so a half-copied
+      # file can never be mistaken for a complete one. A non-zero exit makes Postgres retry.
+      - -c
+      - archive_command=test ! -f /wal-archive/%f && cp %p /wal-archive/%f.tmp && mv /wal-archive/%f.tmp /wal-archive/%f
+      # Upper bound on data at risk on a quiet server: a segment is forced out at least this often.
+      - -c
+      - archive_timeout=${PG_ARCHIVE_TIMEOUT:-300}
+      - -c
+      - max_wal_senders=4
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - wal-archive:/wal-archive
+      - basebackups:/basebackups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # Postgres is NOT published to the host. Emergency DBA access:
+    #   docker compose -f infra/shared/docker-compose.yml exec db psql -U "$POSTGRES_USER" "$POSTGRES_DB"
+
+  # -----------------------------------------------------------------------
+  # ERPCLEAN2 API + embedded SPA. EXACTLY ONE NODE - do not scale, do not add a second API service.
+  #
+  # Why: the scheduled jobs (the outbox dispatcher and the midnight standing-order sweep, P8-6)
+  # take no lock. Two nodes would each dispatch the same outbox events and each generate the same
+  # standing orders for every tenant: duplicate sales orders and double postings.
+  # Multi-node needs scheduler locks first (a plan follow-up) - an application change, not config.
+  #
+  # Enforced here two ways: replicas is pinned to 1, and container_name is set - Compose refuses
+  # `up --scale api=2` for a service with a fixed container name. Do not remove either line.
+  # -----------------------------------------------------------------------
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/prod/Dockerfile
+    image: erpclean2:${ERP_IMAGE_TAG:-shared}
+    container_name: ${COMPOSE_PROJECT_NAME:-erp-shared}-api
+    restart: unless-stopped
+    deploy:
+      replicas: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ERP_API_PORT: "8081"
+      # Stable RS256 key from a mounted secret. Key paths come from .env.
+      ERP_JWT_SIGNING_MODE: file
+      # The API docs surface stays off on a server that holds several customers' data.
+      ERP_SWAGGER_ENABLED: "false"
+      # Fiscalisation stays OFF (D-8, R-1): the server refuses to create a tenant while a provider
+      # is enabled. 'none' is the only value valid here until the real TRA adapter exists.
+      ERP_FISCAL_PROVIDER: none
+      ERP_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      ERP_DB_USER: ${POSTGRES_USER}
+      ERP_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Pool sizing - arithmetic in docs/ops/shared-instance.md. Defaults suit ~5-20 small tenants.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${ERP_DB_POOL_MAX:-20}
+      SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: ${ERP_DB_POOL_MIN_IDLE:-5}
+      SPRING_TASK_SCHEDULING_POOL_SIZE: ${ERP_SCHEDULER_POOL_SIZE:-4}
+      # application-prod.yml exposes only health,info; the per-tenant metric
+      # erp.outbox.failed.by.tenant needs prometheus. Management port 9090 only - see ports below.
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
+      # Outbox retention: one domain_events table carries every tenant's history here, so the
+      # opt-in purge of old DISPATCHED events is ON (floor 30 days; 0 = off, the default elsewhere).
+      ERP_OUTBOX_RETENTION_DAYS: ${ERP_OUTBOX_RETENTION_DAYS:-90}
+    ports:
+      # Management/actuator port: loopback ONLY. Never publish 9090 on 0.0.0.0 and never route it
+      # through Caddy - /actuator exposes health detail and per-tenant metrics. Scrape it from the host or from
+      # a container on this compose network.
+      - "127.0.0.1:${ERP_MGMT_HOST_PORT:-9090}:9090"
+      # 8081 is deliberately NOT published: Caddy reaches the API over the compose network.
+    volumes:
+      - ${ERP_JWT_KEY_DIR:-./jwt-keys}:/run/secrets/jwt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/actuator/health/readiness >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+
+  # -----------------------------------------------------------------------
+  # Caddy - TLS termination. Routes ONLY to the API port; the management port is never proxied.
+  # -----------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      ERP_PUBLIC_HOST: ${ERP_PUBLIC_HOST}
+      ERP_CADDY_TLS: ${ERP_CADDY_TLS:-internal}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  db-data:
+    name: ${ERP_SHARED_VOLUME_PREFIX:-erp-shared}-db-data
+  wal-archive:
+    name: ${ERP_SHARED_VOLUME_PREFIX:-erp-shared}-wal-archive
+  basebackups:
+    name: ${ERP_SHARED_VOLUME_PREFIX:-erp-shared}-basebackups
+  caddy-data:
+    name: ${ERP_SHARED_VOLUME_PREFIX:-erp-shared}-caddy-data
+  caddy-config:
+    name: ${ERP_SHARED_VOLUME_PREFIX:-erp-shared}-caddy-config

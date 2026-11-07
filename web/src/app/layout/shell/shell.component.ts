@@ -8,6 +8,7 @@ import { LoadingService } from '../../core/feedback/loading.service';
 import { ToastContainerComponent } from '../../core/feedback/toast-container.component';
 import { AlertHostComponent } from '../../core/feedback/alert-host.component';
 import { UserBranch } from '../../features/admin/models/user-branch.model';
+import { OrganisationService } from '../../features/admin/organisation/organisation.service';
 import { NavSearchComponent, NavDestination } from './nav-search.component';
 
 /**
@@ -69,6 +70,16 @@ export class ShellComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
+  private readonly organisations = inject(OrganisationService);
+  /** The organisation this session is in (home, or the tenant entered). */
+  readonly currentOrgAlias = signal<string | null>(null);
+  /**
+   * At home in the PLATFORM organisation (owner, 2026-11-07): it holds no business data, so the
+   * sidebar shows platform administration only. Inside an entered tenant everything is back.
+   */
+  readonly atPlatformHome = computed(
+    () => this.currentOrgAlias() === 'platform' && this.session.platformTenant() === null,
+  );
   protected readonly loading = inject(LoadingService);
 
   readonly health = signal<{ status: string; service: string } | null>(null);
@@ -83,7 +94,19 @@ export class ShellComponent {
    * The branch from the loaded list whose branchUid matches the session's activeBranchUid.
    * Falls back to the default branch, then to the first in the list. Null until branches load.
    */
+  /** The tenant the platform operator has entered, or null at home (owner, 2026-11-07). */
+  readonly enteredTenant = computed(() => this.session.platformTenant());
+
   readonly activeBranch = computed<UserBranch | null>(() => {
+    const entered = this.session.platformTenant();
+    if (entered && entered.branchUid === this.session.activeBranchUid()) {
+      // Not one of the operator's own assignments, so it is not in the list below.
+      return {
+        id: '', uid: '', userUid: '', companyUid: '', assignedAt: '', isDefault: false,
+        branchUid: entered.branchUid, branchName: entered.branchName,
+        branchCode: entered.branchCode,
+      };
+    }
     const list = this.branches();
     if (list.length === 0) return null;
     const activeUid = this.session.activeBranchUid();
@@ -135,6 +158,20 @@ export class ShellComponent {
           permission: 'ROLE.VIEW',
         },
         { label: 'Audit', route: '/admin/audit', icon: 'bi-clipboard-data', available: true, permission: 'AUDIT.VIEW' },
+      ],
+    },
+    // Platform operator only: ORG.CREATE is a platform permission (root holds it implicitly).
+    {
+      label: 'Platform',
+      items: [
+        {
+          label: 'Tenants',
+          route: '/admin/platform/tenants',
+          icon: 'bi-buildings',
+          available: true,
+          permission: 'ORG.CREATE',
+          keywords: ['organisations', 'organizations', 'new tenant', 'suspend', 'platform'],
+        },
       ],
     },
     {
@@ -528,11 +565,23 @@ export class ShellComponent {
    * Groups whose items are all filtered out are dropped entirely, so a user never sees a group
    * header with no items under it (UI/UX: no dangling empty groups).
    */
+  /** What platform administration consists of; everything else is a tenant's business. */
+  private static readonly PLATFORM_HOME_ROUTES = new Set([
+    '/admin/platform/tenants',
+    '/admin/users',
+    '/admin/roles',
+    '/admin/audit',
+  ]);
+
   readonly nav = computed<readonly NavGroup[]>(() =>
     this.allNav
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => this.isNavItemVisible(item)),
+        items: group.items.filter(
+          (item) =>
+            this.isNavItemVisible(item) &&
+            (!this.atPlatformHome() || ShellComponent.PLATFORM_HOME_ROUTES.has(item.route)),
+        ),
       }))
       .filter((group) => group.items.length > 0),
   );
@@ -567,6 +616,12 @@ export class ShellComponent {
   );
 
   constructor() {
+    if (this.session.isAuthenticated()) {
+      this.organisations.current().subscribe({
+        next: (o) => this.currentOrgAlias.set(o.alias ?? null),
+        error: () => this.currentOrgAlias.set(null),
+      });
+    }
     this.healthService.getHealth().subscribe({
       next: (h) => {
         this.health.set(h);
@@ -586,7 +641,26 @@ export class ShellComponent {
     }
   }
 
+  /** Full reload, so every cached list and permission set is rebuilt. A seam for specs. */
+  protected navigate(url: string): void {
+    window.location.assign(url);
+  }
+
+  /** Leaves the entered tenant: back to the operator's own default branch, app reloaded. */
+  returnHome(): void {
+    this.session.setPlatformTenant(null);
+    this.session.setActiveBranchUid(null);
+    this.navigate('/admin/platform/tenants');
+  }
+
   onBranchPick(branchUid: string): void {
+    if (this.session.platformTenant()) {
+      // Picking one of the operator's OWN branches from inside a tenant leaves that tenant.
+      this.session.setPlatformTenant(null);
+      this.session.setActiveBranchUid(branchUid);
+      this.navigate('/admin/home');
+      return;
+    }
     const active = this.activeBranch();
     if (active?.branchUid === branchUid) {
       this.branchMenuOpen.set(false);

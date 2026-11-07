@@ -120,19 +120,42 @@ class BranchOverrideTenancyTest {
     }
 
     @Test
-    @DisplayName("P3-1 · a branch in another organisation is refused, root included")
-    void crossTenantOverrideIsRefused() throws Exception {
-        userRow(HOME_ORG, true);                                   // root, per the DATABASE
+    @DisplayName("P3-1 · a NON-root caller is refused a branch in another organisation")
+    void crossTenantOverrideIsRefusedForNonRoot() throws Exception {
+        userRow(HOME_ORG, false);
         when(companyTenants.organisationOf(TARGET_COMPANY)).thenReturn(OTHER_ORG);
-        liveAssignment();                                          // assignment is fine — tenancy is not
+        liveAssignment();                                          // even with an assignment row
 
         filter.doFilter(request, response, chain);
 
-        // The chain must not run: a session built on a foreign company would have P3-11 refuse every
-        // action inside it, which reads as a broken screen rather than as a boundary.
         verify(chain, never()).doFilter(any(), any());
         verify(errorResponder).handle(any(), any(), any());
         verify(audit, never()).recordIndependent(any());
+    }
+
+    @Test
+    @DisplayName("Owner 2026-11-07 · root ENTERS another tenant: runs as that tenant, audited with both")
+    void rootEntersAnotherTenantAndIsAudited() throws Exception {
+        userRow(HOME_ORG, true);                                   // root, per the DATABASE
+        when(companyTenants.organisationOf(TARGET_COMPANY)).thenReturn(OTHER_ORG);
+        java.util.concurrent.atomic.AtomicReference<RequestContext.Principal> seen =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        org.mockito.Mockito.doAnswer(inv -> { seen.set(RequestContext.get()); return null; })
+                .when(chain).doFilter(any(), any());
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(any(), any());
+        assertThat(seen.get().organisationId()).as("the request runs as the TARGET tenant")
+                .isEqualTo(OTHER_ORG);
+        assertThat(seen.get().companyId()).isEqualTo(TARGET_COMPANY);
+        assertThat(seen.get().root()).isTrue();
+        org.mockito.ArgumentCaptor<com.erp.platform.audit.AuditEvent> ev =
+                org.mockito.ArgumentCaptor.forClass(com.erp.platform.audit.AuditEvent.class);
+        verify(audit).recordIndependent(ev.capture());
+        String detail = String.valueOf(ev.getValue().detail());
+        assertThat(detail).contains("crossTenant=true")
+                .contains("fromOrganisationId=" + HOME_ORG).contains("toOrganisationId=" + OTHER_ORG);
     }
 
     @Test

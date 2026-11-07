@@ -1,0 +1,10 @@
+/* Platform tenants — relies on the global ERP kit (.admin-page, .page-head, .erp-table, .status-tag). */
+.state {
+  padding: 1rem 0;
+}
+
+.signin-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  word-break: break-all;
+}

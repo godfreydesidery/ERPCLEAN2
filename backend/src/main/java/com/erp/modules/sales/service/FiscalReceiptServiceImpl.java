@@ -55,6 +55,11 @@ public class FiscalReceiptServiceImpl implements FiscalReceiptService {
     private final FiscalisationProvider provider;
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
+    private final com.erp.modules.iam.repository.OrganisationRepository organisations;
+
+    /** Shown on the receipt row when the shared-server rule (R-1) withholds the provider call. */
+    static final String SHARED_SERVER_MESSAGE =
+            "Fiscal receipts are not available on a shared server; contact your administrator.";
 
     public FiscalReceiptServiceImpl(FiscalReceiptRepository fiscalReceipts,
                                     SalesInvoiceRepository invoices,
@@ -63,7 +68,8 @@ public class FiscalReceiptServiceImpl implements FiscalReceiptService {
                                     CustomerRepository customers,
                                     FiscalisationProvider provider,
                                     ScopeGuard scopeGuard,
-                                    AuditService audit) {
+                                    AuditService audit,
+                                    com.erp.modules.iam.repository.OrganisationRepository organisations) {
         this.fiscalReceipts = fiscalReceipts;
         this.invoices = invoices;
         this.lines = lines;
@@ -72,6 +78,7 @@ public class FiscalReceiptServiceImpl implements FiscalReceiptService {
         this.provider = provider;
         this.scopeGuard = scopeGuard;
         this.audit = audit;
+        this.organisations = organisations;
     }
 
     @Override
@@ -112,7 +119,17 @@ public class FiscalReceiptServiceImpl implements FiscalReceiptService {
                         "invoiceUid", inv.getUid(),
                         "providerCode", provider.providerCode())));
 
-        FiscalisationResult result = provider.fiscalise(data);
+        // R-1 (MULTITENANCY-PLAN §14.1, D-8): the provider is ONE global setting, so with more than
+        // one organisation on the server it would fiscalise every tenant's sales under the same
+        // device and TIN. Tenant creation is already refused while a provider is on; this covers a
+        // provider switched on AFTER the second tenant exists. Nothing is sent: the row is recorded
+        // NOT_CONFIGURED, which is honest (no receipt was issued) and retryable.
+        //
+        // Inert on every single-customer install: exactly one organisation, so the provider is
+        // called exactly as before.
+        FiscalisationResult result = organisations.count() > 1
+                ? FiscalisationResult.notConfigured(SHARED_SERVER_MESSAGE)
+                : provider.fiscalise(data);
         Instant now = Instant.now();
         Long actor = actorId();
 

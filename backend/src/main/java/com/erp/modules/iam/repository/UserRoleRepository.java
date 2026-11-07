@@ -52,6 +52,19 @@ public interface UserRoleRepository extends JpaRepository<UserRole, Long> {
             @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
 
     /**
+     * Like {@link #countActiveHoldersInOrganisation} but NON-root holders only: the customer's own
+     * administrators, which must exist before the platform operator leaves (owner, 2026-11-07).
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(DISTINCT ur.userId) FROM UserRole ur "
+          + "JOIN AppUser u ON u.id = ur.userId "
+          + "WHERE ur.revokedAt IS NULL AND ur.role.code = :roleCode AND u.root = false "
+          + "AND u.organisationId = :organisationId AND u.status = com.erp.platform.common.domain.MasterStatus.ACTIVE")
+    long countActiveNonRootHoldersInOrganisation(
+            @org.springframework.data.repository.query.Param("roleCode") String roleCode,
+            @org.springframework.data.repository.query.Param("organisationId") Long organisationId);
+
+    /**
      * Distinct users holding an active grant of {@code roleId}, in any company or branch. Used by
      * {@code PermissionResolver.invalidateRole} to evict exactly the cached permission sets a
      * role-permission edit invalidates, instead of clearing the cache for the whole tenant.

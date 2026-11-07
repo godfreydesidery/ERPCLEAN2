@@ -1,5 +1,11 @@
 # Onboarding a tenant onto the shared instance
 
+> **⚠ Superseded in part (2026-11-07).** Written before P4-3 and the §14 readiness work. Two things below
+> are no longer true: **a tenant administrator created through `POST /api/v1/organisations` is NOT root**
+> (it holds `ORG_ADMIN`; only bootstrap's `rootadmin` is root and is the platform operator), and **there is
+> now a platform console** (web: Platform → Tenants). Follow [shared-instance.md](shared-instance.md) for
+> the shared server; read this file for the request bodies and the 2026-08-15 probe results only.
+
 *Written 2026-08-15. Every command below was executed against a throwaway two-tenant stack before
 this document was published; the response bodies are copied from that run, not composed. Where a
 step could not be executed it says so.*
@@ -739,3 +745,4 @@ Two notes from doing exactly this:
 - [backup-restore.md](backup-restore.md) — and note that on a shared instance **restore is not
   per-tenant**: rolling one customer back drops the schema both customers live in.
 - `MULTITENANCY-PLAN.md` D-11 — the shared-instance decision and what it reopened.
+- [shared-instance.md](shared-instance.md) / [shared-instance-pitr.md](shared-instance-pitr.md) - the shared multi-tenant server (`infra/shared/`): its stack, and whole-instance point-in-time restore with the one-tenant support procedure.

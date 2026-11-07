@@ -74,12 +74,28 @@ public final class AuditActions {
 
     /** A tenant was provisioned by the platform operator (ADR-0062 P5-2). */
     public static final String ORG_CREATE = "ORG.CREATE";
+    /** The platform organisation was created and the operator moved into it (2026-11-07). */
+    public static final String ORG_PLATFORM_CREATE = "ORG.PLATFORM.CREATE";
 
     /** A tenant was suspended - it can no longer log in (P5-3). */
     public static final String ORG_SUSPEND = "ORG.SUSPEND";
 
     /** A suspended tenant was restored (P5-3). */
     public static final String ORG_RESUME = "ORG.RESUME";
+
+    /**
+     * A tenant's data was exported in full (R-7). Written only after the archive was completely
+     * produced; a purge is refused unless one exists AFTER the latest suspension.
+     */
+    public static final String ORG_EXPORT = "ORG.EXPORT";
+
+    /**
+     * A tenant's data was deleted on departure (R-8). Written in the same transaction as the
+     * deletes. It records who, when, the organisation's uid and name, and per-table row counts, and
+     * references nothing that the purge removed (the target id is a plain number, not a foreign
+     * key; the actor is the platform operator).
+     */
+    public static final String ORG_PURGE = "ORG.PURGE";
 
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";

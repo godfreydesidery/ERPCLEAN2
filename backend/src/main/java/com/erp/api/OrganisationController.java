@@ -1,7 +1,12 @@
 package com.erp.api;
 
 import com.erp.modules.iam.domain.dto.OrganisationDto;
+import com.erp.modules.iam.domain.dto.PurgeTenantRequestDto;
+import com.erp.modules.iam.domain.dto.TenantPurgeReportDto;
 import com.erp.modules.iam.service.OrganisationService;
+import com.erp.modules.iam.service.TenantDepartureService;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrganisationController {
 
     private final OrganisationService organisations;
+    private final TenantDepartureService departure;
 
-    public OrganisationController(OrganisationService organisations) {
+    public OrganisationController(OrganisationService organisations,
+                                  TenantDepartureService departure) {
         this.organisations = organisations;
+        this.departure = departure;
     }
 
     @GetMapping
@@ -74,6 +82,72 @@ public class OrganisationController {
     @PreAuthorize("@perm.has('ORG.SUSPEND')")
     public OrganisationDto resume(@PathVariable String uid) {
         return organisations.setStatus(uid, true);
+    }
+
+    /**
+     * Every tenant on the instance, for the platform console (MULTITENANCY-PLAN §14.2 R-2). Gated on
+     * {@code ORG.CREATE}: only whoever may create tenants may list them.
+     */
+    @GetMapping("/tenants")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public List<com.erp.modules.iam.domain.dto.TenantSummaryDto> tenants() {
+        return organisations.listTenants();
+    }
+
+    /**
+     * Streams a zip of every row of one organisation (R-7). Platform operator only: gated on
+     * {@code ORG.SUSPEND} (a {@code platform}-module code) and re-checked in the service.
+     *
+     * <p>Returns {@code void} and writes the response itself, so {@code ApiResponseAdvice} has no
+     * body to wrap; a refusal is raised before the first byte and is an ordinary JSON error.
+     */
+    @PostMapping("/uid/{uid}/export")
+    @PreAuthorize("@perm.has('ORG.SUSPEND')")
+    public void export(@PathVariable String uid, HttpServletResponse response) throws IOException {
+        departure.exportTenant(uid, fileName -> {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            response.setHeader("Cache-Control", "no-store");
+            return response.getOutputStream();
+        });
+    }
+
+    /**
+     * Deletes a departed tenant's data (R-8). Dry run by default: with no body, or
+     * {@code dryRun: true}, it only reports per-table counts. A real purge needs
+     * {@code dryRun: false} and {@code confirmName} equal to the organisation's name, and is
+     * refused unless the organisation has been suspended for 30 days and exported since.
+     *
+     * <p>Gated on {@code ORG.CREATE}, a {@code platform}-module code no tenant administrator can
+     * hold, and re-checked in the service.
+     */
+    @PostMapping("/uid/{uid}/purge")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public TenantPurgeReportDto purge(@PathVariable String uid,
+                                      @RequestBody(required = false) PurgeTenantRequestDto request) {
+        return departure.purgeTenant(uid, request);
+    }
+
+    /**
+     * Where the platform operator enters a tenant (owner, 2026-11-07): its default branch. Gated
+     * like the tenant list; the switch itself is the ordinary X-Branch-Uid header.
+     */
+    @GetMapping("/uid/{uid}/entry")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public com.erp.modules.iam.domain.dto.TenantEntryDto entry(@PathVariable String uid) {
+        return organisations.entryPoint(uid);
+    }
+
+    /**
+     * Creates the platform organisation and moves the signed-in root operator into it (owner,
+     * 2026-11-07). Platform operator only; the confirmation is the current organisation's name.
+     */
+    @PostMapping("/platform")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public OrganisationDto createPlatform(
+            @Valid @RequestBody com.erp.modules.iam.domain.dto.CreatePlatformOrganisationRequest request) {
+        return organisations.createPlatformOrganisation(request);
     }
 
     @GetMapping("/current")

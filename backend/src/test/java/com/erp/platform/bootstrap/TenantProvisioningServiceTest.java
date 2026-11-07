@@ -115,7 +115,8 @@ class TenantProvisioningServiceTest {
         service = new TenantProvisioningService(organisations, companies, branches, users,
                 userBranches, userCompanies, passwordEncoder, companyProvisioning,
                 stockLocationSeeder, pettyCashFundSeeder, priceListProvisioner,
-                walkInCustomerProvisioner, posTillProvisioner, roles, userRoles);
+                walkInCustomerProvisioner, posTillProvisioner, roles, userRoles,
+                org.mockito.Mockito.mock(com.erp.modules.iam.repository.RefreshTokenRepository.class));
 
         // provisionDefaults takes a PRIMITIVE long, so the saved company must carry an id or the
         // service unboxes a null.
@@ -434,7 +435,8 @@ class TenantProvisioningServiceTest {
                 new DefaultPriceListProvisioner(priceLists),
                 new WalkInCustomerProvisioner(customers, partyCodeGenerator),
                 new PosTillProvisioner(cashAccounts, tills, salesNumberGenerator),
-                roles, userRoles);
+                roles, userRoles,
+                org.mockito.Mockito.mock(com.erp.modules.iam.repository.RefreshTokenRepository.class));
 
         withRealProvisioners.provision(new TenantProvisioningService.NewTenantRequest(
                 "Tembo Group", "Africa/Dar_es_Salaam",

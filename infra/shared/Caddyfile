@@ -1,0 +1,26 @@
+# Caddy for the shared server. Same shape as infra/prod/Caddyfile, but containerised: the upstream
+# is the api service on the compose network.
+#
+# ERP_CADDY_TLS (from .env):
+#   internal            self-signed (Caddy's internal CA). Default; browsers warn.
+#   you@example.com     the ACME contact email: Caddy issues and renews a Let's Encrypt cert.
+#                       ERP_PUBLIC_HOST must then be a real domain whose A record is this box.
+#
+# Only the API port (8081) is proxied. The management port (9090: actuator, Prometheus) is
+# deliberately not reachable through this proxy.
+{
+	auto_https disable_redirects
+}
+
+{$ERP_PUBLIC_HOST}:80 {
+	redir https://{host}{uri} permanent
+}
+
+{$ERP_PUBLIC_HOST}:443 {
+	tls {$ERP_CADDY_TLS:internal}
+	encode gzip
+	# Management paths must never be served publicly even if someone later maps the port.
+	@actuator path /actuator /actuator/*
+	respond @actuator 404
+	reverse_proxy api:8081
+}
