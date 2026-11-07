@@ -1,6 +1,8 @@
 package com.erp.api;
 
 import com.erp.modules.iam.domain.dto.OrganisationDto;
+import com.erp.modules.iam.domain.dto.PurgeTenantRequestDto;
+import com.erp.modules.iam.domain.dto.TenantPurgeReportDto;
 import com.erp.modules.iam.service.OrganisationService;
 import com.erp.modules.iam.service.TenantDepartureService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -108,6 +110,22 @@ public class OrganisationController {
             response.setHeader("Cache-Control", "no-store");
             return response.getOutputStream();
         });
+    }
+
+    /**
+     * Deletes a departed tenant's data (R-8). Dry run by default: with no body, or
+     * {@code dryRun: true}, it only reports per-table counts. A real purge needs
+     * {@code dryRun: false} and {@code confirmName} equal to the organisation's name, and is
+     * refused unless the organisation has been suspended for 30 days and exported since.
+     *
+     * <p>Gated on {@code ORG.CREATE}, a {@code platform}-module code no tenant administrator can
+     * hold, and re-checked in the service.
+     */
+    @PostMapping("/uid/{uid}/purge")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public TenantPurgeReportDto purge(@PathVariable String uid,
+                                      @RequestBody(required = false) PurgeTenantRequestDto request) {
+        return departure.purgeTenant(uid, request);
     }
 
     @GetMapping("/current")

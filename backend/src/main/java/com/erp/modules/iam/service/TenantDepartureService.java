@@ -1,5 +1,7 @@
 package com.erp.modules.iam.service;
 
+import com.erp.modules.iam.domain.dto.PurgeTenantRequestDto;
+import com.erp.modules.iam.domain.dto.TenantPurgeReportDto;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -23,4 +25,18 @@ public interface TenantDepartureService {
      * Audited as {@code ORG.EXPORT} only once the archive is complete.
      */
     void exportTenant(String uid, ExportSink sink) throws IOException;
+
+    /**
+     * Dry-runs (the default) or performs the deletion of a departed tenant (R-8).
+     *
+     * <p>A real purge is refused unless ALL hold: the organisation is suspended; at least 30 days
+     * have passed since its latest {@code ORG.SUSPEND} audit row with no later {@code ORG.RESUME};
+     * a completed {@code ORG.EXPORT} was audited after that suspension; it is neither the caller's
+     * own organisation nor a platform operator's; and {@code confirmName} is its exact name.
+     *
+     * <p>A dry run deletes nothing and reports the per-table counts in deletion order plus which of
+     * the rules above would currently refuse a real run (it needs no confirmation name, but is still
+     * refused outright for the caller's own or a platform organisation).
+     */
+    TenantPurgeReportDto purgeTenant(String uid, PurgeTenantRequestDto request);
 }

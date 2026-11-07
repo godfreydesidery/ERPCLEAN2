@@ -489,4 +489,356 @@ class TenantExportPurgeIT extends PostgresIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'ORG.EXPORT'",
                 Long.class)).as("a refused export is not an export").isZero();
     }
+
+    // ----------------------------------------------------------------------------------------
+    // R-8 purge
+    // ----------------------------------------------------------------------------------------
+
+    private void suspend(Tenant t) {
+        actingAsOperator();
+        organisationService.setStatus(t.org().getUid(), false);
+    }
+
+    private void resume(Tenant t) {
+        actingAsOperator();
+        organisationService.setStatus(t.org().getUid(), true);
+    }
+
+    /** There is no suspended-at column; the rule reads the audit row, so the test moves THAT. */
+    private void backdateSuspension(Tenant t, int days) {
+        jdbc.update("UPDATE audit_logs SET at = now() - (? * interval '1 day') "
+                + "WHERE action = 'ORG.SUSPEND' AND target_type = 'organisations' AND target_id = ?",
+                days, t.org().getId());
+    }
+
+    private com.erp.modules.iam.domain.dto.TenantPurgeReportDto purge(Tenant t, Boolean dryRun,
+                                                                      String confirm) {
+        return departure.purgeTenant(t.org().getUid(),
+                new com.erp.modules.iam.domain.dto.PurgeTenantRequestDto(dryRun, confirm));
+    }
+
+    /** Moves the {@code nth} (0-based, by id) audit row of {@code action} about B to N days ago. */
+    private void setAuditAge(String action, int nth, int days) {
+        List<Long> ids = jdbc.queryForList("SELECT id FROM audit_logs WHERE action = ? "
+                + "AND target_type = 'organisations' AND target_id = ? ORDER BY id", Long.class,
+                action, b.org().getId());
+        jdbc.update("UPDATE audit_logs SET at = now() - (? * interval '1 day') WHERE id = ?",
+                days, ids.get(nth));
+    }
+
+    /** Suspended 31 days ago, then exported: every departure rule satisfied. */
+    private void makeEligible(Tenant t) throws IOException {
+        suspend(t);
+        backdateSuspension(t, 31);
+        actingAsOperator();
+        exportOf(t);
+    }
+
+    /** Row text digest per tenant table: byte-for-byte comparison of a tenant's data. */
+    private Map<String, String> digests(Tenant t) {
+        Map<String, String> out = new TreeMap<>();
+        for (TenantTable table : plan(t).tables()) {
+            out.put(table.name(), jdbc.queryForObject("SELECT coalesce(md5(string_agg(x::text, '|' "
+                    + "ORDER BY x::text)), '-') FROM \"" + table.name() + "\" x WHERE "
+                    + table.rowFilterSql(), String.class));
+        }
+        return out;
+    }
+
+    /** Total rows per table in the whole database (every tenant, plus global). */
+    private Map<String, Long> totals() {
+        Map<String, Long> out = new TreeMap<>();
+        for (String t : jdbc.queryForList("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
+                  AND table_name <> 'flyway_schema_history'
+                """, String.class)) {
+            out.put(t, jdbc.queryForObject("SELECT count(*) FROM \"" + t + "\"", Long.class));
+        }
+        return out;
+    }
+
+    @Test
+    @DisplayName("R-8 · every refusal holds, and each one leaves B exactly as it was")
+    void purgeIsRefusedUnlessEveryRuleHolds() throws IOException {
+        Map<String, Long> beforeB = counts(b);
+        Map<String, Long> beforeAll = totals();
+        String name = b.org().getName();
+
+        // 1. not suspended
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, name))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("suspended");
+        var dry = purge(b, true, null);
+        assertThat(dry.eligible()).isFalse();
+        assertThat(dry.blockers()).anyMatch(s -> s.contains("suspended first"));
+
+        // 2. suspended, but only just, and never exported
+        suspend(b);
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, name))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("30 days");
+        assertThat(purge(b, true, null).blockers()).anyMatch(s -> s.contains("30 days"));
+
+        // 3. past 30 days, but no export after the suspension
+        backdateSuspension(b, 31);
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, name))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("export");
+
+        // 4. suspend (50d ago) -> export (40d ago) -> resume (35d ago) -> suspend again (31d ago).
+        //    Past 30 days and exported, but the only export predates the LATEST suspension.
+        exportOf(b);
+        resume(b);
+        suspend(b);
+        setAuditAge("ORG.SUSPEND", 0, 50);
+        setAuditAge("ORG.EXPORT", 0, 40);
+        setAuditAge("ORG.RESUME", 0, 35);
+        setAuditAge("ORG.SUSPEND", 1, 31);
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, name))
+                .as("an export made BEFORE the latest suspension is not a departure export")
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("export");
+
+        // 5. a fresh export after that suspension: everything holds except the confirmation name
+        exportOf(b);
+        actingAsOperator();
+        assertThat(purge(b, true, null).eligible()).isTrue();
+        assertThatThrownBy(() -> purge(b, false, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> purge(b, false, name.toLowerCase()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> purge(b, false, name + " "))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        // 6. the caller's own organisation (a root principal whose home is B)...
+        RequestContext.set(new RequestContext.Principal(operator.getId(), "operator", true,
+                b.companyId(), b.branchId(), "127.0.0.1", b.org().getId()));
+        assertThatThrownBy(() -> purge(b, false, name))
+                .as("own organisation, even when every other rule holds")
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+        // ...the platform organisation, from a root principal whose home is elsewhere...
+        RequestContext.set(new RequestContext.Principal(operator.getId(), "operator", true,
+                a.companyId(), a.branchId(), "127.0.0.1", a.org().getId()));
+        assertThatThrownBy(() -> departure.purgeTenant(platform.getUid(),
+                new com.erp.modules.iam.domain.dto.PurgeTenantRequestDto(false, platform.getName())))
+                .as("the platform operator's organisation")
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+        actingAsOperator();
+        // ...and a tenant that merely contains a root user counts as a platform organisation too.
+        AppUser rootInA = new AppUser("rootina-" + tag, passwordEncoder.encode("Operator!Pass123"),
+                "Root In A");
+        rootInA.setOrganisationId(a.org().getId());
+        rootInA.setRoot(true);
+        users.save(rootInA);
+        assertThatThrownBy(() -> departure.purgeTenant(a.org().getUid(),
+                new com.erp.modules.iam.domain.dto.PurgeTenantRequestDto(true, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+
+        // 7. a caller who is not the platform operator
+        actingAsTenantAdmin(a);
+        assertThatThrownBy(() -> purge(b, false, name)).isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> purge(b, true, null)).isInstanceOf(NotFoundException.class);
+        RequestContext.clear();
+        assertThatThrownBy(() -> purge(b, false, name)).isInstanceOf(NotFoundException.class);
+
+        // Nothing moved: B's rows are what they were (audit rows aside, which the test itself and
+        // the suspend/export calls legitimately added), and no purge row exists.
+        Map<String, Long> afterB = counts(b);
+        afterB.keySet().stream().filter(k -> !k.equals("audit_logs"))
+                .forEach(k -> assertThat(afterB.get(k)).as(k).isEqualTo(beforeB.get(k)));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'ORG.PURGE'",
+                Long.class)).isZero();
+        Map<String, Long> afterAll = totals();
+        afterAll.keySet().stream().filter(k -> !k.equals("audit_logs") && !k.equals("app_users"))
+                .forEach(k -> assertThat(afterAll.get(k)).as(k).isEqualTo(beforeAll.get(k)));
+    }
+
+    @Test
+    @DisplayName("R-8 · a dry run reports the counts in deletion order and deletes nothing")
+    void dryRunDeletesNothing() throws IOException {
+        makeEligible(b);
+        Map<String, Long> dbB = counts(b);
+        Map<String, Long> allBefore = totals();
+        Map<String, String> digestA = digests(a);
+        Map<String, String> digestB = digests(b);
+        actingAsOperator();
+
+        for (var report : List.of(purge(b, true, null),
+                departure.purgeTenant(b.org().getUid(), null),
+                purge(b, null, null))) {
+            assertThat(report.dryRun()).isTrue();
+            assertThat(report.eligible()).isTrue();
+            assertThat(report.blockers()).isEmpty();
+            assertThat(report.tables().stream().map(t -> t.table()).toList())
+                    .as("deletion order").isEqualTo(
+                            plan(b).tables().stream().map(TenantTable::name).toList());
+            Map<String, Long> reported = new TreeMap<>();
+            report.tables().forEach(t -> reported.put(t.table(), t.rows()));
+            assertThat(reported).isEqualTo(dbB);
+            assertThat(report.totalRows())
+                    .isEqualTo(dbB.values().stream().mapToLong(Long::longValue).sum());
+            assertThat(report.tables().get(report.tables().size() - 1).table())
+                    .isEqualTo("organisations");
+        }
+
+        assertThat(totals()).as("a dry run changes no table").isEqualTo(allBefore);
+        assertThat(digests(a)).isEqualTo(digestA);
+        assertThat(digests(b)).isEqualTo(digestB);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'ORG.PURGE'",
+                Long.class)).isZero();
+    }
+
+    @Test
+    @DisplayName("R-8 · a real purge removes every row of B, none of A's, and leaves the ORG.PURGE row")
+    void purgeRemovesOnlyTheTenant() throws IOException {
+        makeEligible(b);
+        TenantDataPlan planB = plan(b);
+        Map<String, Long> dbB = counts(b);
+        Map<String, Long> totalsBefore = totals();
+        Map<String, String> digestA = digests(a);
+        Map<String, Long> countsA = counts(a);
+        Long platformUsers = jdbc.queryForObject(
+                "SELECT count(*) FROM app_users WHERE organisation_id = ?", Long.class,
+                platform.getId());
+        Long globalRoles = jdbc.queryForObject(
+                "SELECT count(*) FROM roles WHERE organisation_id IS NULL", Long.class);
+        Long permissions = jdbc.queryForObject("SELECT count(*) FROM permissions", Long.class);
+
+        // The self-reference and the mutual cycle really are populated, so they are really tested.
+        assertThat(dbB.get("approval_request_steps")).isGreaterThan(0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chart_of_accounts WHERE parent_id IS NOT "
+                + "NULL AND company_id = ?", Long.class, b.companyId())).isGreaterThan(0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM approval_request_steps WHERE "
+                + "resolving_decision_id IS NOT NULL AND company_id = ?", Long.class, b.companyId()))
+                .isGreaterThan(0);
+
+        actingAsOperator();
+        var report = purge(b, false, b.org().getName());
+
+        assertThat(report.dryRun()).isFalse();
+        Map<String, Long> deleted = new TreeMap<>();
+        report.tables().forEach(t -> deleted.put(t.table(), t.rows()));
+        assertThat(deleted).as("rows deleted == rows the dry run counted").isEqualTo(dbB);
+
+        // Every table in the whole database lost exactly B's rows - no more, no fewer.
+        Map<String, Long> totalsAfter = totals();
+        for (TenantTable t : planB.tables()) {
+            long expected = totalsBefore.get(t.name()) - dbB.get(t.name());
+            if (t.name().equals("audit_logs")) {
+                expected += 1;   // the surviving ORG.PURGE row
+            }
+            assertThat(totalsAfter.get(t.name())).as("rows left in %s", t.name()).isEqualTo(expected);
+        }
+        planB.globalTables().forEach(g -> assertThat(totalsAfter.get(g)).as(g)
+                .isEqualTo(totalsBefore.get(g)));
+
+        // B is gone by its own identity, too.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM organisations WHERE id = ?", Long.class,
+                b.org().getId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM companies WHERE id = ?", Long.class,
+                b.companyId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM app_users WHERE id = ?", Long.class,
+                b.adminId())).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM app_users WHERE username LIKE '%@' || ?", Long.class,
+                b.org().getAlias())).as("the <user>@<alias> usernames are free again").isZero();
+
+        // A is byte-for-byte what it was; so is everything global and the platform's own.
+        assertThat(counts(a)).isEqualTo(countsA);
+        assertThat(digests(a)).isEqualTo(digestA);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM app_users WHERE organisation_id = ?",
+                Long.class, platform.getId())).isEqualTo(platformUsers);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM roles WHERE organisation_id IS NULL",
+                Long.class)).isEqualTo(globalRoles);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM permissions", Long.class))
+                .isEqualTo(permissions);
+
+        // The ORG.PURGE row survived: who, when, which organisation, per-table counts, no dangling FK.
+        Map<String, Object> row = jdbc.queryForMap("""
+                SELECT actor_user_id, target_type, target_id, target_uid, at,
+                       detail ->> 'organisationUid' AS uid, detail ->> 'organisationName' AS name,
+                       detail ->> 'totalRows' AS total,
+                       detail -> 'rowsDeletedByTable' ->> 'products' AS products
+                FROM audit_logs WHERE action = 'ORG.PURGE'
+                """);
+        assertThat(row.get("actor_user_id")).isEqualTo(operator.getId());
+        assertThat(row.get("target_type")).isEqualTo("organisations");
+        assertThat(row.get("target_id")).isEqualTo(b.org().getId());
+        assertThat(row.get("target_uid")).isEqualTo(b.org().getUid());
+        assertThat(row.get("at")).isNotNull();
+        assertThat(row.get("uid")).isEqualTo(b.org().getUid());
+        assertThat(row.get("name")).isEqualTo(b.org().getName());
+        assertThat(row.get("total")).isEqualTo(String.valueOf(report.totalRows()));
+        assertThat(row.get("products")).isEqualTo("1");
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM audit_logs l JOIN app_users u ON u.id = l.actor_user_id
+                WHERE l.action = 'ORG.PURGE'
+                """, Long.class)).as("the actor is the surviving operator").isEqualTo(1L);
+        // The platform's lifecycle trail about B survived too.
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM audit_logs WHERE target_type = 'organisations' AND target_id = ?
+                  AND action IN ('ORG.SUSPEND', 'ORG.EXPORT')
+                """, Long.class, b.org().getId())).isEqualTo(2L);
+
+        // B's uid names nothing now.
+        assertThatThrownBy(() -> purge(b, true, null)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("R-8 · if the database refuses one delete, NOTHING is deleted")
+    void aLateFailureRollsBackEverything() throws IOException {
+        makeEligible(b);
+        Map<String, Long> totalsBefore = totals();
+        Map<String, String> digestB = digests(b);
+
+        // A row of tenant A that points at B's administrator. Isolation says this cannot happen;
+        // the point is that if it ever does, the user delete - one of the LAST statements - fails
+        // and the earlier deletes of hundreds of rows must roll back with it.
+        int planted = jdbc.update("UPDATE user_company SET assigned_by = ? WHERE company_id = ?",
+                b.adminId(), a.companyId());
+        assertThat(planted).as("the cross-tenant reference exists").isGreaterThan(0);
+        Map<String, Long> totalsWithPlant = totals();
+
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, b.org().getName()))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("Nothing was deleted");
+
+        assertThat(totals()).as("rolled back in full").isEqualTo(totalsWithPlant);
+        assertThat(totalsWithPlant).isEqualTo(totalsBefore);
+        assertThat(digests(b)).isEqualTo(digestB);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'ORG.PURGE'",
+                Long.class)).as("no purge row for a purge that did not happen").isZero();
+    }
+
+    @Test
+    @DisplayName("R-8 · a trigger that fires on DELETE blocks the purge; triggers are never disabled")
+    void deleteTriggerBlocksPurge() throws IOException {
+        makeEligible(b);
+        Map<String, Long> totalsBefore = totals();
+        jdbc.execute("CREATE FUNCTION tmp_block_branch_delete() RETURNS trigger LANGUAGE plpgsql AS "
+                + "$$ BEGIN RAISE EXCEPTION 'blocked'; END $$");
+        jdbc.execute("CREATE TRIGGER tmp_block_branch_delete BEFORE DELETE ON branches "
+                + "FOR EACH ROW EXECUTE FUNCTION tmp_block_branch_delete()");
+        try {
+            assertThat(plan(b).deletionBlockers()).anyMatch(s -> s.contains("tmp_block_branch_delete"));
+            actingAsOperator();
+            var dry = purge(b, true, null);
+            assertThat(dry.eligible()).isFalse();
+            assertThatThrownBy(() -> purge(b, false, b.org().getName()))
+                    .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+            assertThat(totals()).isEqualTo(totalsBefore);
+            assertThat(jdbc.queryForObject(
+                    "SELECT tgenabled::text FROM pg_trigger WHERE tgname = 'tmp_block_branch_delete'",
+                    String.class)).as("still enabled: purge never disables a trigger").isEqualTo("O");
+        } finally {
+            jdbc.execute("DROP TRIGGER tmp_block_branch_delete ON branches");
+            jdbc.execute("DROP FUNCTION tmp_block_branch_delete()");
+        }
+    }
 }

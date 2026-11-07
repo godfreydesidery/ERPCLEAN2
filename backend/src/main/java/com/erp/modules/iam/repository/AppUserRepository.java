@@ -16,6 +16,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     boolean existsByUsername(String username);
 
+    /** Whether an organisation is a platform operator's home (it holds an {@code is_root} user). */
+    boolean existsByOrganisationIdAndRootTrue(Long organisationId);
+
     List<AppUser> findAllByOrderByUsername();
 
     /**

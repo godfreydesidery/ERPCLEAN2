@@ -87,6 +87,14 @@ public final class AuditActions {
      */
     public static final String ORG_EXPORT = "ORG.EXPORT";
 
+    /**
+     * A tenant's data was deleted on departure (R-8). Written in the same transaction as the
+     * deletes. It records who, when, the organisation's uid and name, and per-table row counts, and
+     * references nothing that the purge removed (the target id is a plain number, not a foreign
+     * key; the actor is the platform operator).
+     */
+    public static final String ORG_PURGE = "ORG.PURGE";
+
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
     public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";
