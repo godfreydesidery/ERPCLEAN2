@@ -345,6 +345,16 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         boolean issuesStock = (inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.DIRECT
                 || inv.getOrigin() == com.erp.modules.sales.domain.enums.DocumentOrigin.POS);
 
+        // ADR-0068 D-5: an offline sale (marked by the sync path BEFORE finalise, never by an API
+        // caller) already happened and was paid for on a till that could not reach this server.
+        // It is posted under its own rules: stock is still claimed but never refused, the below-cost
+        // block does not apply, and the business date is the time it was SOLD. What it broke is
+        // flagged for a manager by the sync service instead.
+        boolean offline = inv.isSoldOffline();
+        if (offline && inv.getFinalisedAt() == null) {
+            throw new IllegalStateException("An offline sale must carry the time it was sold.");
+        }
+
         // Owner decision 2026-07-05 (V87, sales_settings.allow_negative_stock): synchronous
         // negative-stock pre-check — THE enforcement point (see NegativeStockGuard javadoc). Stock
         // for this invoice is deducted later, asynchronously, by SaleIssueStockHandler; the check
@@ -363,10 +373,17 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             for (Map.Entry<Long, BigDecimal> perProduct : requestedByProduct.entrySet()) {
                 Product product = products.findByCompanyIdAndId(inv.getCompanyId(), perProduct.getKey())
                         .orElseThrow(() -> new NotFoundException("Product not found."));
-                negativeStockGuard.assertAvailable(
-                        inv.getCompanyId(), inv.getBranchId(),
-                        product.getId(), product.getUid(), product.isStockable(),
-                        product.getName(), perProduct.getValue());
+                if (offline) {
+                    negativeStockGuard.claimWithoutBlocking(
+                            inv.getCompanyId(), inv.getBranchId(),
+                            product.getId(), product.getUid(), product.isStockable(),
+                            perProduct.getValue());
+                } else {
+                    negativeStockGuard.assertAvailable(
+                            inv.getCompanyId(), inv.getBranchId(),
+                            product.getId(), product.getUid(), product.isStockable(),
+                            product.getName(), perProduct.getValue());
+                }
             }
         }
 
@@ -387,7 +404,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // goods the customer physically holds, with no way to raise the invoice and no override
         // under BLOCK. Below-cost order billing is a pricing question to catch on the order, not a
         // reason to refuse the paperwork after the goods have gone.
-        if (issuesStock) {
+        if (issuesStock && !offline) {
             belowCostGuard.assertNotBelowCost(
                     inv.getCompanyId(), inv.getBranchId(), inv.getId(), inv.getUid(),
                     lineList.stream()
@@ -406,7 +423,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // rate on the same posting date, so the stamped base equals the posted-journal base.
         ConvertedAmount fxConv = fxConverter.toBase(
                 inv.getGrossTotalAmount(), inv.getCurrency().value(), inv.getCompanyId(),
-                calendar.today(inv.getCompanyId()));
+                offline ? calendar.dateOf(inv.getCompanyId(), inv.getFinalisedAt())
+                        : calendar.today(inv.getCompanyId()));
         inv.setFxRate(fxConv.rate());
         inv.setBaseGrossTotalAmount(fxConv.baseAmount());
         inv.setRateAt(fxConv.rateAt());
@@ -513,7 +531,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         String number = codeGen.next(inv.getCompanyId());
         inv.setInvoiceNumber(number);
         inv.setStatus(InvoiceStatus.FINALISED);
-        inv.setFinalisedAt(Instant.now());
+        if (!offline) {
+            inv.setFinalisedAt(Instant.now());   // an offline sale keeps the time it was sold
+        }
         inv.setFinalisedBy(actorId());
         inv.setUpdatedAt(Instant.now());
         inv.setUpdatedBy(actorId());
@@ -738,6 +758,36 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     @Override
     public SalesInvoiceLineDto addLine(String invoiceUid, AddInvoiceLineRequest req) {
+        return addLineInternal(invoiceUid, req, null);
+    }
+
+    @Override
+    public SalesInvoiceLineDto addOfflineLine(String invoiceUid, AddInvoiceLineRequest req,
+                                              boolean chargedPriceInclusive) {
+        if (req.unitPriceOverride() == null) {
+            throw new IllegalArgumentException("An offline sale line must carry the price it was sold at.");
+        }
+        if (req.lineDiscountAmount() != null || req.lineDiscountPercent() != null
+                || req.discountAuthorisedByUid() != null) {
+            throw new IllegalArgumentException("Discounts are not allowed on offline sales.");
+        }
+        SalesInvoice inv = requireInvoice(invoiceUid);
+        if (!inv.isSoldOffline()) {
+            throw new IllegalStateException("Only an offline sale can take a line at its till price.");
+        }
+        return addLineInternal(invoiceUid, req, chargedPriceInclusive);
+    }
+
+    /**
+     * Shared body of {@link #addLine} and {@link #addOfflineLine}. {@code offlineInclusive} is null
+     * for every online caller. For an offline sale (ADR-0068 D-3) it is the VAT stance of the price
+     * the till charged: the line keeps that price and stance — the customer has already paid it — and
+     * a difference from today's list price is marked as an override on the line and flagged for a
+     * manager by the sync, instead of demanding SALES.INVOICE.OVERRIDE from a till that sold offline.
+     */
+    private SalesInvoiceLineDto addLineInternal(String invoiceUid, AddInvoiceLineRequest req,
+                                                Boolean offlineInclusive) {
+        boolean offline = offlineInclusive != null;
         SalesInvoice inv = requireInvoice(invoiceUid);
         scopeGuard.assertCanActIn(RequestContext.get(), inv.getCompanyId());
         assertDraft(inv, "add a line to");
@@ -784,8 +834,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         // on SALES.INVOICE.OVERRIDE). Letting add-line accept any price ungated would have made that
         // gate decorative. When the catalogue had no price, the resolver returned the stated price
         // itself, so this is false and no permission is demanded — there was nothing to override.
-        boolean overridesListPrice = statedPrice != null && statedPrice.compareTo(listPrice) != 0;
-        if (overridesListPrice && !permissionResolver.hasPermission(
+        boolean overridesListPrice = statedPrice != null && (statedPrice.compareTo(listPrice) != 0
+                || (offline && offlineInclusive != resolvedPrice.vatInclusive()));
+        if (overridesListPrice && !offline && !permissionResolver.hasPermission(
                 RequestContext.get(), "SALES.INVOICE.OVERRIDE", System.currentTimeMillis())) {
             throw new IllegalArgumentException(
                     "This product already has a catalogue price. Add the line at that price, then "
@@ -810,7 +861,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 listPrice, appliedPrice,   // applied = list unless a permitted override was stated
                 product.getVatStatus(), vatRate,
                 actorId());
-        line.setPriceInclusive(resolvedPrice.vatInclusive());
+        line.setPriceInclusive(offline ? offlineInclusive : resolvedPrice.vatInclusive());
         // Stamp the override marks exactly as the dedicated override-price endpoint does, so a price
         // changed at add-line time is as visible on the document as one changed afterwards.
         if (overridesListPrice) {
@@ -877,7 +928,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
             overrideDetail.put("listPrice", listPrice.toPlainString());
             overrideDetail.put("appliedPrice", appliedPrice.toPlainString());
             // Tells the two routes apart without needing a second action code.
-            overrideDetail.put("overriddenOn", "LINE_ADD");
+            overrideDetail.put("overriddenOn", offline ? "OFFLINE_SYNC" : "LINE_ADD");
             audit.record(AuditEvent.of(AuditActions.SALES_INVOICE_LINE_OVERRIDE,
                             "sales_invoice_lines", inv.getId(), inv.getUid())
                     .detail(overrideDetail));

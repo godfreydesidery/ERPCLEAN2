@@ -95,7 +95,32 @@ public class PosSession extends UidEntity {
     @Setter
     private Long updatedBy;
 
+    /** ADR-0068 D-4 (V114): true when the till opened this shift while offline. */
+    @Column(name = "opened_offline", nullable = false, updatable = false)
+    private boolean openedOffline = false;
+
+    /** The till's own key for an offline-opened shift; makes its creation at sync idempotent. */
+    @Column(name = "offline_client_key", length = 64, updatable = false)
+    private String offlineClientKey;
+
     protected PosSession() {}
+
+    /**
+     * A shift the till opened while offline (ADR-0068 D-4), created on the server at sync. It keeps
+     * the till's own opening time — the offline sales inside it happened after that moment — and the
+     * till's key, so a repeated sync finds this row instead of opening a second shift.
+     */
+    public static PosSession openedOffline(Long companyId, Long branchId, Long posTillId,
+                                           Long cashierId, String sessionNumber,
+                                           BigDecimal openingFloatAmount, Instant openedAt,
+                                           String offlineClientKey, Long createdBy) {
+        PosSession s = new PosSession(companyId, branchId, posTillId, cashierId, sessionNumber,
+                openingFloatAmount, createdBy);
+        s.openedAt = openedAt;
+        s.openedOffline = true;
+        s.offlineClientKey = offlineClientKey;
+        return s;
+    }
 
     public PosSession(Long companyId, Long branchId, Long posTillId, Long cashierId,
                       String sessionNumber, BigDecimal openingFloatAmount, Long createdBy) {
