@@ -538,6 +538,18 @@ The hint beneath the switch reads *"When on, a sale is blocked if there isn't en
 
 > **Allow until configured, then block by default.** A brand-new company that has **never opened and saved** Sales Settings is *not* yet guarded — its sales are allowed to oversell until you configure the screen. The moment you save Sales Settings for the first time, the switch defaults to **Block**, so a saved company blocks negative-stock sales unless you deliberately turn the switch off.
 
+### Till shift time limit
+
+**What this control does.** A till stops taking sales on a shift (POS session) that has been open too long. The cashier sees *"This till session has been open too long to take new sales. Close and reconcile it, then open a new session."* — nothing is charged. The limit exists so that each cash count and Z-report covers one trading day. Open restaurant bills are **not** lost: they are not tied to a shift, so after closing the old shift and opening a new one, the bill can be paid as normal.
+
+**The choices.**
+
+- **Use the server setting** (the default) — the limit set on the server, normally **36 hours**. The hint under the control shows the actual number.
+- **Set my own limit** — enter a whole number of hours from **12 to 168** (one week).
+- **No limit** — a shift can stay open for days. Its cash count and Z-report then cover every day it was open, so differences are harder to trace. Choose this only if the business deliberately does not close shifts daily.
+
+**To change it:** choose the **Company**, pick an option under **Till shift time limit** (and the hours, for *Set my own limit*), then click **Save Settings**. The new limit applies to the next sale on every till of that company — no till update or restart is needed. Same permission: `SALES.SETTINGS.MANAGE`.
+
 ---
 
 ## Fiscal / EFD Configuration

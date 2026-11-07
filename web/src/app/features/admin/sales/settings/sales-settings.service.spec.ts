@@ -50,6 +50,9 @@ describe('SalesSettingsService', () => {
       // server refuses a ceiling sent on its own.
       discountApprovalAction: 'OFF' as const,
       maxDiscountPercent: null,
+      // V113: the session-limit mode and its hours are one policy too.
+      posSessionLimitMode: 'SERVER_SETTING' as const,
+      posSessionMaxOpenHours: null,
     };
     let result: unknown;
     service.update(body).subscribe((r) => (result = r));

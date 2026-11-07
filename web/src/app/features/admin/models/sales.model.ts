@@ -269,7 +269,24 @@ export interface SalesSettingsDto {
    * failure repeated.
    */
   maxDiscountPercent: number | null;
+  /** How this company limits the age of an open till shift (V113). */
+  posSessionLimitMode: PosSessionLimitMode;
+  /** The company's own limit in hours — set only when the mode is HOURS, else null. */
+  posSessionMaxOpenHours: number | null;
+  /** The limit the till actually enforces, in hours. 0 = no limit. Read-only. */
+  posSessionMaxOpenHoursEffective: number;
+  /** The server setting in hours (0 = no limit), whatever this company chose. Read-only. */
+  posSessionServerDefaultHours: number;
 }
+
+/**
+ * How a company limits the age of an open till shift before it stops taking sales (V113). Mirrors
+ * the backend `PosSessionLimitMode` enum; serialised as the enum NAME.
+ *  - SERVER_SETTING — use the server's limit (36 hours unless changed)
+ *  - NO_LIMIT       — a shift may stay open indefinitely
+ *  - HOURS          — this company's own limit, 12–168 hours
+ */
+export type PosSessionLimitMode = 'SERVER_SETTING' | 'NO_LIMIT' | 'HOURS';
 
 export interface UpdateSalesSettingsRequest {
   companyUid: string;
@@ -286,6 +303,13 @@ export interface UpdateSalesSettingsRequest {
   discountApprovalAction: DiscountApprovalAction;
   /** Null is a real instruction alongside a stance: "no ceiling configured" (enforced as zero). */
   maxDiscountPercent: number | null;
+  /**
+   * V113: the mode and its hours are ONE policy, like the discount pair. Omitting the mode means
+   * "leave the stored limit alone"; hours sent without a mode are refused.
+   */
+  posSessionLimitMode: PosSessionLimitMode;
+  /** Required (12–168) with HOURS; send null with the other modes. */
+  posSessionMaxOpenHours: number | null;
 }
 
 // ── FiscalReceiptDto (D-6: EFD / fiscal receipts, ADR-0049) ───────────────────

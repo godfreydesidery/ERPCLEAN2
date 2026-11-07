@@ -4,6 +4,7 @@ import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.sales.domain.dto.SalesSettingsDto;
 import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.entity.SalesSettings;
+import com.erp.modules.sales.domain.enums.PosSessionLimitMode;
 import com.erp.modules.sales.repository.SalesSettingsRepository;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.money.CurrencyCode;
@@ -20,13 +21,16 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
     private final SalesSettingsRepository settings;
     private final CompanyRepository       companies;
     private final ScopeGuard              scopeGuard;
+    private final PosSessionAgePolicy     sessionAgePolicy;
 
     public SalesSettingsServiceImpl(SalesSettingsRepository settings,
                                     CompanyRepository companies,
-                                    ScopeGuard scopeGuard) {
-        this.settings   = settings;
-        this.companies  = companies;
-        this.scopeGuard = scopeGuard;
+                                    ScopeGuard scopeGuard,
+                                    PosSessionAgePolicy sessionAgePolicy) {
+        this.settings         = settings;
+        this.companies        = companies;
+        this.scopeGuard       = scopeGuard;
+        this.sessionAgePolicy = sessionAgePolicy;
     }
 
     @Override
@@ -36,7 +40,7 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         SalesSettings s = settings.findByCompanyId(companyId)
                 .orElseGet(() -> defaultSettings(companyId));
-        return SalesSettingsDto.from(s);
+        return toDto(s);
     }
 
     @Override
@@ -44,6 +48,7 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
         Long companyId = resolveCompanyId(req.companyUid());
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
         rejectCeilingWithoutStance(req);
+        Integer sessionHours = resolveSessionHours(req);
 
         SalesSettings s = settings.findByCompanyId(companyId)
                 .orElseGet(() -> {
@@ -75,12 +80,17 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
             s.setDiscountApprovalAction(req.discountApprovalAction());
             s.setMaxDiscountPercent(req.maxDiscountPercent());
         }
+        // V113: absent mode = leave the stored limit alone, for the same reason as the discount
+        // policy above. A present mode is applied as one policy with its hours.
+        if (req.posSessionLimitMode() != null) {
+            s.setPosSessionMaxOpenHours(sessionHours);
+        }
         if (req.currency() != null && !req.currency().isBlank()) {
             s.setCurrency(CurrencyCode.ofNullable(req.currency()));
         }
         s.setUpdatedAt(Instant.now());
         s.setUpdatedBy(actorId());
-        return SalesSettingsDto.from(settings.save(s));
+        return toDto(settings.save(s));
     }
 
     // -------------------------------------------------------------------------
@@ -105,6 +115,47 @@ public class SalesSettingsServiceImpl implements SalesSettingsService {
                     "maxDiscountPercent: a maximum discount percent only takes effect together with "
                     + "the discount approval action. Send both, or neither.");
         }
+    }
+
+    /**
+     * The V113 storage value for the requested session limit (NULL = server setting, 0 = no limit,
+     * 12–168 = own hours), or {@code null} when the mode is absent and nothing is to change.
+     *
+     * <p>Checked here rather than by bean validation because the hours rule depends on the mode,
+     * and an in-process caller skips {@code @Valid} anyway; the database CHECK would otherwise
+     * surface as an unexplained failure instead of a message the admin can act on. Hours without a
+     * mode are refused for the same reason a discount ceiling without its stance is: the request
+     * would answer 200 OK and change nothing.
+     */
+    private static Integer resolveSessionHours(UpdateSalesSettingsRequest req) {
+        PosSessionLimitMode mode = req.posSessionLimitMode();
+        if (mode == null) {
+            if (req.posSessionMaxOpenHours() != null) {
+                throw new IllegalArgumentException(
+                        "posSessionMaxOpenHours: the till session limit only takes effect together "
+                        + "with posSessionLimitMode. Send both, or neither.");
+            }
+            return null;
+        }
+        return switch (mode) {
+            case SERVER_SETTING -> null;
+            case NO_LIMIT -> 0;
+            case HOURS -> {
+                Integer hours = req.posSessionMaxOpenHours();
+                if (hours == null
+                        || hours < UpdateSalesSettingsRequest.SESSION_HOURS_MIN
+                        || hours > UpdateSalesSettingsRequest.SESSION_HOURS_MAX) {
+                    throw new IllegalArgumentException(UpdateSalesSettingsRequest.SESSION_HOURS_MESSAGE);
+                }
+                yield hours;
+            }
+        };
+    }
+
+    private SalesSettingsDto toDto(SalesSettings s) {
+        return SalesSettingsDto.from(s,
+                sessionAgePolicy.effectiveHours(s.getPosSessionMaxOpenHours()),
+                sessionAgePolicy.serverDefaultHours());
     }
 
     /** Returns an unsaved default; callers within a readOnly tx get a transient fallback. */

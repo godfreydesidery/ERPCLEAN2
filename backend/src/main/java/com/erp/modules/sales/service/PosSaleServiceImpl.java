@@ -72,7 +72,8 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code erp.pos.sale.replay-max-age}, a client-declared {@code capturedAt} older than
  * {@code erp.pos.sale.max-age}, and a session that has been open longer than
  * {@code erp.pos.session.max-open-age}. Each is configurable and each is disabled by setting it to
- * zero, so a shop with unusual hours can turn one off without a code change.
+ * zero, so a shop with unusual hours can turn one off without a code change. The session limit can
+ * also be set per company on the Sales Settings screen (V113, {@link PosSessionAgePolicy}).
  */
 @Service
 @Transactional
@@ -122,8 +123,11 @@ public class PosSaleServiceImpl implements PosSaleService {
     private final Duration replayMaxAge;
     /** How old a client-declared basket capture may be before the sale is refused. */
     private final Duration saleMaxAge;
-    /** How long a session may stay OPEN before it stops accepting new sales. */
-    private final Duration maxOpenSessionAge;
+    /**
+     * How long a session may stay OPEN before it stops accepting new sales — per company since V113,
+     * falling back to {@code erp.pos.session.max-open-age}.
+     */
+    private final PosSessionAgePolicy sessionAgePolicy;
 
     public PosSaleServiceImpl(PosSessionRepository posSessionRepo,
                                SalesInvoiceRepository invoiceRepo,
@@ -142,7 +146,7 @@ public class PosSaleServiceImpl implements PosSaleService {
                                ComplimentaryGlSeeder complimentaryGl,
                                @Value("${erp.pos.sale.replay-max-age:PT15M}") Duration replayMaxAge,
                                @Value("${erp.pos.sale.max-age:PT12H}") Duration saleMaxAge,
-                               @Value("${erp.pos.session.max-open-age:PT36H}") Duration maxOpenSessionAge) {
+                               PosSessionAgePolicy sessionAgePolicy) {
         this.agents            = agents;
         this.posSessionRepo    = posSessionRepo;
         this.invoiceRepo       = invoiceRepo;
@@ -160,7 +164,7 @@ public class PosSaleServiceImpl implements PosSaleService {
         this.complimentaryGl   = complimentaryGl;
         this.replayMaxAge      = replayMaxAge;
         this.saleMaxAge        = saleMaxAge;
-        this.maxOpenSessionAge = maxOpenSessionAge;
+        this.sessionAgePolicy  = sessionAgePolicy;
     }
 
     @Override
@@ -558,7 +562,7 @@ public class PosSaleServiceImpl implements PosSaleService {
                     "This till session is closed, so no more sales can be rung on it."
                     + " Open a new session to keep selling.");
         }
-        if (isOlderThan(session.getOpenedAt(), maxOpenSessionAge)) {
+        if (isOlderThan(session.getOpenedAt(), sessionAgePolicy.maxOpenAge(session.getCompanyId()))) {
             throw PosSaleFlowException.staleReplay(
                     "This till session has been open too long to take new sales."
                     + " Close and reconcile it, then open a new session.");

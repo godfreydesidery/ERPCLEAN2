@@ -191,6 +191,51 @@
                     </div>
                   }
 
+                  <!--
+                    Till shift time limit (V113). The hours box appears only with "Set my own limit";
+                    with the other choices a number would do nothing.
+                  -->
+                  <div class="mb-3">
+                    <label class="form-label small text-muted mb-1" for="posSessionLimitMode">
+                      Till shift time limit
+                    </label>
+                    <select id="posSessionLimitMode" name="posSessionLimitMode"
+                            class="form-select"
+                            style="max-width:320px"
+                            aria-describedby="posSessionLimitHint"
+                            [ngModel]="fSessionLimitMode()"
+                            (ngModelChange)="fSessionLimitMode.set($event)"
+                            [disabled]="saving() || !canEdit()">
+                      @for (opt of sessionLimitOptions; track opt.value) {
+                        <option [value]="opt.value">{{ opt.label }}</option>
+                      }
+                    </select>
+                    <span class="hint" id="posSessionLimitHint">
+                      {{ sessionLimitHint() }} To keep selling, close and reconcile the shift, then open a new one.
+                    </span>
+                  </div>
+
+                  @if (sessionHoursApply()) {
+                    <div class="mb-3">
+                      <label class="form-label small text-muted mb-1" for="posSessionMaxOpenHours">
+                        Hours a shift may stay open
+                      </label>
+                      <input id="posSessionMaxOpenHours" name="posSessionMaxOpenHours" type="number"
+                             class="form-control"
+                             style="max-width:320px"
+                             placeholder="e.g. 24"
+                             inputmode="numeric"
+                             min="12" max="168" step="1"
+                             aria-describedby="posSessionHoursHint"
+                             [ngModel]="fSessionHours()"
+                             (ngModelChange)="fSessionHours.set(String($event ?? ''))"
+                             [disabled]="saving() || !canEdit()" />
+                      <span class="hint" id="posSessionHoursHint">
+                        Whole hours, from 12 to 168 (one week).
+                      </span>
+                    </div>
+                  }
+
                   @if (saveError(); as msg) {
                     <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
                   }
