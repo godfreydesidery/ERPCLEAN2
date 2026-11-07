@@ -64,7 +64,37 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        // Offline POS (ERP ADR-0068): the queue of unsynced offline sales is encrypted at rest
+        // with a key that lives only in the Android Keystore. See OfflineKeystore below.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orbix/keystore")
+            .setMethodCallHandler { call, result ->
+                val bytes = call.argument<ByteArray>("bytes")
+                if (bytes == null || (call.method != "seal" && call.method != "open")) {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                crypto.execute {
+                    val out = try {
+                        if (call.method == "seal") OfflineKeystore.seal(bytes) else OfflineKeystore.open(bytes)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Keystore ${call.method} failed", e)
+                        null
+                    }
+                    runOnUiThread {
+                        if (out != null) result.success(out)
+                        else result.error(
+                            "KEYSTORE",
+                            if (call.method == "seal") "This device could not encrypt the offline sales."
+                            else "The offline sales on this device could not be opened.",
+                            null,
+                        )
+                    }
+                }
+            }
     }
+
+    /** Keystore work runs here, never behind a slow Bluetooth print on [io]. */
+    private val crypto = Executors.newSingleThreadExecutor()
 
     private fun adapter(): BluetoothAdapter? =
         (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?)?.adapter
@@ -194,5 +224,56 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val TAG = "OrbixPrint"
+    }
+}
+
+/**
+ * AES-256-GCM with a key generated inside the Android Keystore and never exported (ERP ADR-0068,
+ * owner ruling: the offline-sales queue is encrypted with a key in the device's secure key store).
+ * Sealed form: a 12-byte IV followed by the ciphertext and its 16-byte tag, so a tampered or
+ * truncated blob fails to open instead of decrypting to garbage.
+ */
+object OfflineKeystore {
+    private const val ALIAS = "orbixpos.offline.v1"
+    private const val STORE = "AndroidKeyStore"
+    private const val IV_LEN = 12
+    private const val TAG_BITS = 128
+
+    private fun key(): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance(STORE).apply { load(null) }
+        (ks.getEntry(ALIAS, null) as? java.security.KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val gen = javax.crypto.KeyGenerator.getInstance(
+            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, STORE)
+        gen.init(
+            android.security.keystore.KeyGenParameterSpec.Builder(
+                ALIAS,
+                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
+                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+        )
+        return gen.generateKey()
+    }
+
+    fun seal(plain: ByteArray): ByteArray {
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key())
+        val iv = cipher.iv
+        val body = cipher.doFinal(plain)
+        return iv + body
+    }
+
+    fun open(sealed: ByteArray): ByteArray {
+        require(sealed.size > IV_LEN) { "Sealed data is too short." }
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            javax.crypto.Cipher.DECRYPT_MODE,
+            key(),
+            javax.crypto.spec.GCMParameterSpec(TAG_BITS, sealed, 0, IV_LEN),
+        )
+        return cipher.doFinal(sealed, IV_LEN, sealed.size - IV_LEN)
     }
 }

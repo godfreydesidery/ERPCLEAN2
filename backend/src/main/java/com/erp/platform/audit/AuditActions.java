@@ -481,6 +481,17 @@ public final class AuditActions {
     /** A waiter's POS PIN removed by a manager. */
     public static final String USER_POS_PIN_CLEAR        = "USER.POS_PIN.CLEAR";
     public static final String POS_REFUND                = "POS.REFUND";
+    // Offline POS (ADR-0068, V114)
+    /** A till's offline period was recorded at sync (who switched, why). */
+    public static final String POS_OFFLINE_SWITCH        = "POS.OFFLINE.SWITCH";
+    /** A shift the till opened offline was created on the server at sync. */
+    public static final String POS_OFFLINE_SESSION_OPEN  = "POS.OFFLINE.SESSION_OPEN";
+    /** An offline sale was posted at sync, with any review flags. */
+    public static final String POS_OFFLINE_SALE_SYNC     = "POS.OFFLINE.SALE_SYNC";
+    /** An offline sale could not be posted and was held for a manager. */
+    public static final String POS_OFFLINE_SALE_HELD     = "POS.OFFLINE.SALE_HELD";
+    /** A manager acknowledged an item on the offline review list. */
+    public static final String POS_OFFLINE_REVIEW_ACK    = "POS.OFFLINE.REVIEW_ACK";
     // Pricing rules
     public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";
     public static final String PRICING_TIER_UPDATE       = "PRICING.TIER.UPDATE";

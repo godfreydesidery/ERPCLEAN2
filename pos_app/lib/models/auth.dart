@@ -139,6 +139,8 @@ class Perms {
   static const expenseRecord = 'POS.EXPENSE.RECORD';
   static const tillView = 'POS.TILL.VIEW';
   static const tillManage = 'POS.TILL.MANAGE';
+  /// Switch a till offline by hand while the server answers (ADR-0068 D-1).
+  static const offlineSwitch = 'POS.OFFLINE.SWITCH';
   // restaurant orders (ERP ADR-0065)
   static const restaurantOrderManage = 'RESTAURANT.ORDER.MANAGE';
   static const restaurantOrderVoid = 'RESTAURANT.ORDER.VOID';

@@ -1185,6 +1185,12 @@ export const ADMIN_ROUTES: Routes = [
       import('./pos/pos-session-detail.component').then((m) => m.PosSessionDetailComponent),
   },
   {
+    path: 'pos/offline-review',
+    canActivate: [requirePermission('POS.OFFLINE.REVIEW')],
+    loadComponent: () =>
+      import('./pos/offline-review.component').then((m) => m.OfflineReviewComponent),
+  },
+  {
     path: 'pos/sell',
     canActivate: [requirePermission('POS.SALE.CREATE')],
     loadComponent: () =>

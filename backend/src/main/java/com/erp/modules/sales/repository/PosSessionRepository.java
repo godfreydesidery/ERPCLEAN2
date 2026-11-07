@@ -14,6 +14,12 @@ public interface PosSessionRepository extends JpaRepository<PosSession, Long> {
 
     Optional<PosSession> findByUid(String uid);
 
+    /** Company-scoped by-id lookup (tenant rule: never a bare findById in a service). */
+    Optional<PosSession> findByCompanyIdAndId(Long companyId, Long id);
+
+    /** ADR-0068 D-4: the server shift created for a shift a till opened offline. */
+    Optional<PosSession> findByCompanyIdAndOfflineClientKey(Long companyId, String offlineClientKey);
+
     @Query("SELECT s.companyId FROM PosSession s WHERE s.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
 

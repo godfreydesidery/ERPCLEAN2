@@ -9,6 +9,7 @@ import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/context.dart';
 import '../../models/sale.dart';
+import '../../offline/offline_controller.dart';
 import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
@@ -122,11 +123,16 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
     // manager) OR SALES.INVOICE.VOID (a supervisor, who does not). Showing only
     // the first would hide the button from exactly the person the refund policy
     // sends the cashier to find.
+    // ERP ADR-0068 D-3: no reversals or refunds offline, and none of a sale the
+    // server has not posted yet — there is nothing on the server to reverse.
+    final offline = ref.watch(offlineControllerProvider.select((s) => s.offline));
     final canReverse = (app.can(Perms.saleVoid) || supervisor) &&
         (supervisor || ownShift) &&
         (app.shift?.status.isOpen ?? false) &&
         !_reversed &&
-        !r.invoice.status.isVoid;
+        !r.invoice.status.isVoid &&
+        !offline &&
+        !r.invoice.awaitingSync;
     final voided = _reversed || r.invoice.status.isVoid;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
@@ -143,7 +149,12 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                       color: voided ? AppColors.danger : AppColors.pay),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(voided ? 'Sale reversed' : 'Sale complete',
+                    child: Text(
+                        voided
+                            ? 'Sale reversed'
+                            : r.invoice.awaitingSync
+                                ? 'Sale recorded offline'
+                                : 'Sale complete',
                         style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w700)),
                   ),
