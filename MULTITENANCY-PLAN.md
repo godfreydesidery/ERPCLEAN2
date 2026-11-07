@@ -2513,13 +2513,13 @@ table) is the only one left and waits on DDL approval. Branch `feat/shared-insta
 | # | Status | Evidence |
 |---|---|---|
 | R-1 | **Done** | Tenant creation 409 while a provider is on; with >1 organisation no receipt reaches a provider (NOT_CONFIGURED). Unit tests. |
-| R-2 | **Done** | `GET /organisations/tenants` (ORG.CREATE, root only) + web Platform → Tenants (list, create, suspend/reactivate); 15 specs incl. axe. |
+| R-2 | **Done** | `GET /organisations/tenants` (ORG.CREATE, root only) + web Platform → Tenants (list, create, suspend/reactivate); 15 specs incl. axe. While only one organisation exists, creating another requires typing its exact name (owner 2026-11-07: protects single-customer servers). |
 | R-3 | **Done** | `TenantScopedRepositoryRulesTest` (surefire; 430 reviewed allowlist entries; proven to bite) + `TenantIsolationSweepIT` (411/418 GETs as tenant A, ~8,000 uid-path calls with B's uids, 0 leaks; calibrated against B's own admin). |
 | R-4 | **Done** | `kid` (RFC 7638 thumbprint), verify-only previous keys (`ERP_JWT_PREVIOUS_PUBLIC_KEY_PATHS`), legacy kid-less tokens accepted; runbook. |
 | R-5 | **Done, not booted as a full stack** | `infra/shared/` + `docs/ops/shared-instance.md`; one node enforced; compose/Caddy validated only. |
 | R-6 | **Done** | WAL archiving + base backups + PITR scripts; timed drill twice (2.5 GB restore to scratch 34 s). One-tenant repair = documented procedure, not run on the ERP schema. |
 | R-7 | **Done** | `POST /organisations/uid/{uid}/export` (ORG.SUSPEND, root only): streamed zip, CSV per table + manifest; credential columns redacted. |
-| R-8 | **Done** | `POST /organisations/uid/{uid}/purge` (ORG.CREATE, root only): dry run default; suspended ≥30 d + export after suspension + exact name; FK-ordered, one transaction. |
+| R-8 | **Done** | `POST /organisations/uid/{uid}/purge` (ORG.CREATE, root only): dry run default; suspended ≥30 d + export after suspension + exact name; FK-ordered, one transaction. **Owner 2026-11-07: audit rows are never deleted** — a tenant with any audit history of its own is refused (checked again inside the purge transaction), so in practice only a never-used tenant is removable; a used one stays suspended and exported. Invariant 7 holds with no exception. |
 | R-9 | **Open** | Needs the backup-code table — DDL to the owner first. |
 | R-10 | **Done** | `ERP_MAIL_FROM`: tenant name as display name, company contact as Reply-To; unset = unchanged. |
 | Outbox | **Done** | Fair batch across companies; opt-in purge of old DISPATCHED events (`ERP_OUTBOX_RETENTION_DAYS`, floor 30, ON at 90 in `infra/shared`). |

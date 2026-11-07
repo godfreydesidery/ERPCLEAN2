@@ -145,7 +145,10 @@ scrape_configs:
 ## 4 - Create a tenant
 
 Only the platform operator (`rootadmin`) may do this: `POST /api/v1/organisations` is gated on
-`ORG.CREATE`. A platform web console (R-2) is coming; until it ships this is an HTTP call. The full
+`ORG.CREATE`. Use the web console (**Platform → Tenants → New tenant**) or the HTTP call. While the
+server holds only ONE organisation (i.e. for the first customer), the console asks you to type that
+organisation's exact name before it will create another: on a customer's own single-tenant server that
+step is what stops a second organisation being created by mistake. The full
 worked example, with measured responses and the verification checklist, is
 [tenant-onboarding.md](tenant-onboarding.md) - read its section 3 (alias, collisions) first. Two parts of
 that document predate the platform tier and are superseded here: tenant administrators are no longer
@@ -218,6 +221,16 @@ Suspension bites **at sign-in and at the next token refresh**, not per request: 
 is refused at its next refresh. An access token already issued keeps working until it expires (at most
 15 minutes). Verified by `AuthServiceImplIT.refresh_afterTheTenantIsSuspended_isRefused`. Nothing is deleted. Use it for non-payment, an incident, or the
 grace period before departure (R-8). Resume restores sign-in immediately.
+
+### Departure: export, then (rarely) delete
+
+When a customer leaves: suspend, then **export** (`POST /api/v1/organisations/uid/{uid}/export`,
+platform operator only) and hand over / archive the zip. **Audit records are never deleted** (owner,
+2026-11-07), so the delete (`POST .../purge`) refuses any tenant with audit history of its own, which in
+practice is every tenant that was ever signed in to. A used tenant therefore stays suspended, with its
+data exported; only a tenant that was provisioned and never used can be removed (after 30 days'
+suspension, an export after the suspension, and its exact name). Always run the dry run first
+(`{"dryRun": true}`): it lists every reason the delete would refuse.
 
 ## 6 - Upgrade
 

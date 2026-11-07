@@ -26,6 +26,24 @@
       <div class="erp-card__head"><h2 id="newTenantTitle">New tenant</h2></div>
       <div class="erp-card__body">
 
+        @if (onlyOrganisation(); as only) {
+          <div class="alert alert-warning mb-3" role="note" aria-labelledby="sharedWarnTitle">
+            <p id="sharedWarnTitle" class="fw-semibold mb-1">This server holds one organisation: {{ only.name }}</p>
+            <p class="mb-2">Creating another turns it into a shared server for several customers. That cannot easily
+              be undone. Only continue if this is the shared server, not a customer's own server.</p>
+            <label class="form-label small mb-1" for="sharedConfirm">Type <strong>{{ only.name }}</strong> to confirm</label>
+            <input id="sharedConfirm" name="sharedConfirm" type="text" class="form-control" autocomplete="off"
+                   [(ngModel)]="sharedConfirm"
+                   [attr.aria-invalid]="submitted() && sharedConfirmError() ? 'true' : null"
+                   [attr.aria-describedby]="submitted() && sharedConfirmError() ? 'sharedConfirmErr' : null" />
+            @if (submitted() && sharedConfirmError(); as msg) {
+              <p id="sharedConfirmErr" class="text-danger small mb-0 mt-1">{{ msg }}</p>
+            }
+          </div>
+        } @else if (submitted() && sharedConfirmError(); as msg) {
+          <p class="text-danger mb-3" role="alert">{{ msg }}</p>
+        }
+
         <fieldset class="mb-3" [disabled]="saving()">
           <legend class="h6">Organisation</legend>
           <div class="row g-2">

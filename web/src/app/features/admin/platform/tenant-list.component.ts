@@ -62,6 +62,24 @@ export class TenantListComponent {
   readonly defaultCurrency = signal('');
   readonly enabledCurrencies = signal('');
 
+  /**
+   * Guard for single-customer servers (owner, 2026-11-07). While this server holds only ONE
+   * organisation, creating another turns a customer's own server into a shared one, which cannot
+   * easily be undone. So the operator must type the current organisation's exact name first. On a
+   * real shared server this only applies to the very first customer.
+   */
+  readonly sharedConfirm = signal('');
+  readonly onlyOrganisation = computed<TenantSummary | null>(() =>
+    this.state() === 'ready' && this.tenants().length === 1 ? this.tenants()[0] : null,
+  );
+  readonly sharedConfirmError = computed<string | null>(() => {
+    // Fail closed: without the list we cannot tell how many organisations exist.
+    if (this.state() !== 'ready') return 'The tenant list must load before a new organisation can be created.';
+    const only = this.onlyOrganisation();
+    if (!only) return null;
+    return this.sharedConfirm().trim() === only.name ? null : `Type "${only.name}" exactly to confirm.`;
+  });
+
   readonly priceListNamed = computed(
     () => this.priceListCode().trim() !== '' || this.priceListName().trim() !== '',
   );
@@ -147,6 +165,7 @@ export class TenantListComponent {
     this.created.set(null);
     this.formError.set(null);
     this.submitted.set(false);
+    this.sharedConfirm.set('');
     this.showForm.set(true);
   }
 
@@ -202,7 +221,8 @@ export class TenantListComponent {
       this.usernameError() !== null ||
       this.passwordError() !== null ||
       this.priceListPairError() !== null ||
-      this.priceListVatError() !== null
+      this.priceListVatError() !== null ||
+      this.sharedConfirmError() !== null
     );
   }
 
@@ -243,6 +263,7 @@ export class TenantListComponent {
       this.enabledCurrencies,
     ].forEach((s) => s.set(''));
     this.priceListIncludesVat.set('');
+    this.sharedConfirm.set('');
     this.submitted.set(false);
   }
 

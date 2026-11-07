@@ -45,6 +45,8 @@ describe('TenantListComponent', () => {
     comp.branchName.set('Head Office');
     comp.adminUsername.set('owner');
     comp.adminPassword.set('a-long-password-1');
+    // setup() defaults to ONE organisation, where creating another needs its exact name typed.
+    comp.sharedConfirm.set(tenant().name);
   }
 
   afterEach(() => {
@@ -219,6 +221,56 @@ describe('TenantListComponent', () => {
       .flush({ errors: ['Fiscalisation is switched on.'] }, { status: 409, statusText: 'Conflict' });
     expect(comp.formError()).toBe('Fiscalisation is switched on.');
     expect(comp.saving()).toBe(false);
+  });
+
+  it('on a one-organisation server, refuses to create until the current name is typed exactly', () => {
+    setup([tenant()]);
+    comp.openForm();
+    fillRequired();
+    comp.sharedConfirm.set('');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('This server holds one organisation');
+    comp.create();
+    http.expectNone(base);
+    expect(comp.formError()).toBe('Please correct the fields marked below.');
+
+    comp.sharedConfirm.set(tenant().name.toLowerCase() + ' ');
+    comp.create();
+    http.expectNone(base);
+
+    comp.sharedConfirm.set(tenant().name);
+    comp.create();
+    http.expectOne(base).flush({ uid: 'T9', name: 'Beta Ltd', alias: 'beta', status: 'ACTIVE' });
+    http.expectOne(`${base}/tenants`).flush([tenant()]);
+  });
+
+  it('with two or more organisations, asks for no confirmation name', () => {
+    setup([tenant(), tenant({ uid: 'T2', name: 'Second Customer' })]);
+    comp.openForm();
+    fillRequired();
+    comp.sharedConfirm.set('');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#sharedConfirm')).toBeNull();
+    comp.create();
+    http.expectOne(base).flush({ uid: 'T9', name: 'Beta Ltd', alias: 'beta', status: 'ACTIVE' });
+    http.expectOne(`${base}/tenants`).flush([tenant()]);
+  });
+
+  it('refuses to create while the tenant list has not loaded (fail closed)', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const session = TestBed.inject(SessionStore);
+    session.clear();
+    session.setPermissions(['ORG.CREATE', 'ORG.SUSPEND']);
+    fixture = TestBed.createComponent(TenantListComponent);
+    comp = fixture.componentInstance;
+    http = TestBed.inject(HttpTestingController);
+    http.expectOne(`${base}/tenants`).flush({ errors: ['x'] }, { status: 500, statusText: 'Error' });
+    fixture.detectChanges();
+    comp.openForm();
+    fillRequired();
+    comp.create();
+    http.expectNone(base);
+    expect(comp.sharedConfirmError()).toContain('must load');
   });
 
   it('has no axe violations (list, form and confirm dialog open)', async () => {
