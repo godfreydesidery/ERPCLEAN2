@@ -32,11 +32,23 @@ public class EmailSender {
 
     private final JavaMailSender                mailSender;
     private final NotificationDeliveryRepository deliveries;
+    private final com.erp.modules.iam.repository.CompanyRepository companies;
+    /**
+     * The platform's one sending address (MULTITENANCY-PLAN §14.2 R-10, P8-5), from
+     * {@code erp.mail.from} / env {@code ERP_MAIL_FROM}. Blank = the identity headers below are not
+     * set at all, which is exactly what every installation does today.
+     */
+    private final String platformFrom;
 
     public EmailSender(JavaMailSender mailSender,
-                       NotificationDeliveryRepository deliveries) {
-        this.mailSender  = mailSender;
-        this.deliveries  = deliveries;
+                       NotificationDeliveryRepository deliveries,
+                       com.erp.modules.iam.repository.CompanyRepository companies,
+                       @org.springframework.beans.factory.annotation.Value("${erp.mail.from:}")
+                       String platformFrom) {
+        this.mailSender   = mailSender;
+        this.deliveries   = deliveries;
+        this.companies    = companies;
+        this.platformFrom = platformFrom == null ? "" : platformFrom.strip();
     }
 
     /**
@@ -59,6 +71,7 @@ public class EmailSender {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
             helper.setTo(toEmail);
+            applyTenantIdentity(helper, notification.getCompanyId());
             helper.setSubject(notification.getTitle());
             helper.setText(notification.getBody(), false);
             mailSender.send(msg);
@@ -72,5 +85,50 @@ public class EmailSender {
             log.warn("EmailSender: FAILED notification uid={} to {}: {}",
                      notification.getUid(), toEmail, err);
         }
+    }
+
+    /**
+     * Per-tenant identity on one shared sending address (R-10, P8-5).
+     *
+     * <p>On a shared server every tenant's mail leaves from the same address, so the address cannot
+     * say who it is from. The display name does — the tenant's (organisation's) name — and a reply
+     * goes to the company's own contact email rather than to a platform mailbox nobody reads. The
+     * address itself stays the platform's: sending AS a customer's domain would fail SPF/DKIM and
+     * land in spam.
+     *
+     * <p>Does nothing unless {@code erp.mail.from} is configured, so an installation that already
+     * sends mail keeps its headers exactly as they are.
+     */
+    void applyTenantIdentity(MimeMessageHelper helper, Long companyId) throws Exception {
+        if (platformFrom.isEmpty()) {
+            return;
+        }
+        var company = companyId == null ? java.util.Optional.<com.erp.modules.iam.domain.entity.Company>empty()
+                : companies.findScopedById(companyId);
+        String displayName = company
+                .map(c -> c.getOrganisation() != null ? c.getOrganisation().getName() : c.getName())
+                .map(EmailSender::headerSafe)
+                .orElse(null);
+        if (displayName == null || displayName.isEmpty()) {
+            helper.setFrom(platformFrom);
+        } else {
+            helper.setFrom(platformFrom, displayName);
+        }
+        String replyTo = company.map(com.erp.modules.iam.domain.entity.Company::getContactEmail)
+                .map(String::strip).orElse("");
+        if (!replyTo.isEmpty()) {
+            try {
+                helper.setReplyTo(new jakarta.mail.internet.InternetAddress(replyTo, true));
+            } catch (jakarta.mail.internet.AddressException bad) {
+                // A mistyped contact email must not cost the message; send without Reply-To.
+                log.warn("EmailSender: company {} has an invalid contact email; no Reply-To set.",
+                        companyId);
+            }
+        }
+    }
+
+    /** No CR/LF in a header value, whatever was typed into a name field. */
+    private static String headerSafe(String value) {
+        return value.replaceAll("[\r\n]+", " ").strip();
     }
 }
