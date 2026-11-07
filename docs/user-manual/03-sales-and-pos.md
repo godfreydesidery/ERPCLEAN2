@@ -767,6 +767,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
 - If the chosen session has been closed in the meantime, the sale is rejected with **"This POS session is not OPEN."** so you know to re-open or re-select an OPEN session.
+- If the session has been open longer than the company's **till shift time limit** (36 hours unless changed in **Sales Settings**), the sale is rejected with *"This till session has been open too long to take new sales."* Nothing is charged: close and reconcile the session, open a new one, and ring or pay the sale again. Open restaurant bills carry over to the new session.
 - If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
 
 #### Splitting payment across tenders

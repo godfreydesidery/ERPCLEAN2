@@ -94,7 +94,8 @@ class NegativeStockSettingCrossLayerContractTest {
 
     /** {@code allowNegativeStock} as the Sales Settings API (and therefore the screen) reports it. */
     private boolean apiReportsBackorderAllowed() {
-        return new SalesSettingsServiceImpl(settings, companies, scopeGuard)
+        return new SalesSettingsServiceImpl(settings, companies, scopeGuard,
+                new PosSessionAgePolicy(settings, java.time.Duration.ofHours(36)))
                 .getByCompanyUid(COMPANY_UID)
                 .allowNegativeStock();
     }

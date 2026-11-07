@@ -82,6 +82,16 @@ public class SalesSettings extends UidEntity {
     @Setter
     private BigDecimal maxDiscountPercent;
 
+    /**
+     * How many hours a till session may stay open and still take sales (V113). {@code null} (the
+     * default) = use the server setting {@code erp.pos.session.max-open-age}; {@code 0} = no limit;
+     * otherwise 12–168 (DB CHECK). Resolved by {@code PosSessionAgePolicy}; surfaced on the API as
+     * {@code PosSessionLimitMode} + hours.
+     */
+    @Column(name = "pos_session_max_open_hours")
+    @Setter
+    private Integer posSessionMaxOpenHours;
+
     @Column(name = "currency", nullable = false, length = 3)
     @Setter
     private CurrencyCode currency = CurrencyCode.of("TZS");

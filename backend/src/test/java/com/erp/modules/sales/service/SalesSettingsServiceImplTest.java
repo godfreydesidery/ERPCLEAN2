@@ -12,6 +12,7 @@ import com.erp.modules.sales.domain.dto.SalesSettingsDto;
 import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.entity.SalesSettings;
 import com.erp.modules.sales.domain.enums.DiscountApprovalAction;
+import com.erp.modules.sales.domain.enums.PosSessionLimitMode;
 import com.erp.modules.sales.repository.SalesSettingsRepository;
 import com.erp.platform.security.RequestContext;
 import com.erp.platform.security.ScopeGuard;
@@ -41,6 +42,7 @@ class SalesSettingsServiceImplTest {
     @Mock SalesSettingsRepository settings;
     @Mock CompanyRepository companies;
     @Mock ScopeGuard scopeGuard;
+    @Mock PosSessionAgePolicy sessionAgePolicy;
 
     @InjectMocks SalesSettingsServiceImpl service;
 
@@ -240,6 +242,121 @@ class SalesSettingsServiceImplTest {
         assertThat(dto.allowNegativeStock())
                 .as("company opts into backorder — negative stock no longer blocked")
                 .isTrue();
+    }
+
+    // ── Till-session limit (V113) ────────────────────────────────────────────
+    //
+    // Mode + hours are one policy. Absent mode = leave alone: an older client must never reset a
+    // configured limit — that would drop the company back to the server default and could block
+    // its tills at the pay screen without anyone choosing it.
+
+    @Test
+    void update_sessionModeAbsent_leavesConfiguredLimitAlone() {
+        SalesSettings existing = existingRow();
+        existing.setPosSessionMaxOpenHours(72);
+
+        service.update(new UpdateSalesSettingsRequest(
+                COMPANY_UID, false, null, "TZS", false));   // pre-V113 shape: no session fields
+
+        assertThat(existing.getPosSessionMaxOpenHours()).isEqualTo(72);
+    }
+
+    @Test
+    void update_serverSetting_clearsToNull_andReportsTheServerValue() {
+        SalesSettings existing = existingRow();
+        existing.setPosSessionMaxOpenHours(72);
+        when(sessionAgePolicy.effectiveHours(null)).thenReturn(36);
+        when(sessionAgePolicy.serverDefaultHours()).thenReturn(36);
+
+        SalesSettingsDto dto = service.update(session(PosSessionLimitMode.SERVER_SETTING, null));
+        assertThat(dto.posSessionServerDefaultHours()).isEqualTo(36);
+
+        assertThat(existing.getPosSessionMaxOpenHours()).isNull();
+        assertThat(dto.posSessionLimitMode()).isEqualTo(PosSessionLimitMode.SERVER_SETTING);
+        assertThat(dto.posSessionMaxOpenHours()).isNull();
+        assertThat(dto.posSessionMaxOpenHoursEffective())
+                .as("the screen shows the server value the till now enforces")
+                .isEqualTo(36);
+    }
+
+    @Test
+    void update_noLimit_storesZero_andReportsNoLimit() {
+        SalesSettings existing = existingRow();
+        when(sessionAgePolicy.effectiveHours(0)).thenReturn(0);
+
+        // Hours sent alongside NO_LIMIT (a stale box on the screen) are ignored, not stored.
+        SalesSettingsDto dto = service.update(session(PosSessionLimitMode.NO_LIMIT, 48));
+
+        assertThat(existing.getPosSessionMaxOpenHours()).isZero();
+        assertThat(dto.posSessionLimitMode()).isEqualTo(PosSessionLimitMode.NO_LIMIT);
+        assertThat(dto.posSessionMaxOpenHours()).isNull();
+        assertThat(dto.posSessionMaxOpenHoursEffective()).isZero();
+    }
+
+    @Test
+    void update_hours_isStoredAndReported() {
+        SalesSettings existing = existingRow();
+        when(sessionAgePolicy.effectiveHours(72)).thenReturn(72);
+
+        SalesSettingsDto dto = service.update(session(PosSessionLimitMode.HOURS, 72));
+
+        assertThat(existing.getPosSessionMaxOpenHours()).isEqualTo(72);
+        assertThat(dto.posSessionLimitMode()).isEqualTo(PosSessionLimitMode.HOURS);
+        assertThat(dto.posSessionMaxOpenHours()).isEqualTo(72);
+        assertThat(dto.posSessionMaxOpenHoursEffective()).isEqualTo(72);
+    }
+
+    @Test
+    void update_hoursAtBounds_areAccepted() {
+        SalesSettings existing = existingRow();
+
+        service.update(session(PosSessionLimitMode.HOURS, 12));
+        assertThat(existing.getPosSessionMaxOpenHours()).isEqualTo(12);
+        service.update(session(PosSessionLimitMode.HOURS, 168));
+        assertThat(existing.getPosSessionMaxOpenHours()).isEqualTo(168);
+    }
+
+    @Test
+    void update_hoursMissingOrOutOfRange_isRefusedWithoutSaving() {
+        Company company = company(COMPANY_ID);
+        when(companies.findByUid(COMPANY_UID)).thenReturn(Optional.of(company));
+
+        for (Integer bad : new Integer[] {null, 0, 11, 169}) {
+            assertThatThrownBy(() -> service.update(session(PosSessionLimitMode.HOURS, bad)))
+                    .as("hours=%s", bad)
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage(UpdateSalesSettingsRequest.SESSION_HOURS_MESSAGE);
+        }
+        verify(settings, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** Hours on their own would answer 200 OK and change nothing — refused, like a lone ceiling. */
+    @Test
+    void update_hoursWithoutMode_isRefused() {
+        Company company = company(COMPANY_ID);
+        when(companies.findByUid(COMPANY_UID)).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.update(session(null, 48)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Send both, or neither");
+        verify(settings, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void get_reportsModeFromStorage() {
+        SalesSettings existing = new SalesSettings(COMPANY_ID, 1L);
+        existing.setPosSessionMaxOpenHours(0);
+        Company company = company(COMPANY_ID);
+        when(companies.findByUid(COMPANY_UID)).thenReturn(Optional.of(company));
+        when(settings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.of(existing));
+
+        assertThat(service.getByCompanyUid(COMPANY_UID).posSessionLimitMode())
+                .isEqualTo(PosSessionLimitMode.NO_LIMIT);
+    }
+
+    private static UpdateSalesSettingsRequest session(PosSessionLimitMode mode, Integer hours) {
+        return new UpdateSalesSettingsRequest(
+                COMPANY_UID, false, null, "TZS", false, null, null, null, mode, hours);
     }
 
     // -------------------------------------------------------------------------

@@ -30,6 +30,10 @@ const STUB_SETTINGS = {
   belowCostAction: 'OFF',
   discountApprovalAction: 'OFF',
   maxDiscountPercent: null,
+  posSessionLimitMode: 'SERVER_SETTING',
+  posSessionMaxOpenHours: null,
+  posSessionMaxOpenHoursEffective: 36,
+  posSessionServerDefaultHours: 36,
 };
 
 function makeBed() {
@@ -123,6 +127,9 @@ describe('SalesSettingsComponent', () => {
       // The discount pair always travels together — the server refuses half of it.
       discountApprovalAction: 'OFF',
       maxDiscountPercent: null,
+      // The session-limit pair also always travels together (V113).
+      posSessionLimitMode: 'SERVER_SETTING',
+      posSessionMaxOpenHours: null,
     });
 
     putReq.flush({ ...STUB_SETTINGS, soApprovalEnabled: true, soApprovalThresholdAmount: 7500 });
@@ -392,6 +399,8 @@ describe('SalesSettingsComponent', () => {
       belowCostAction: _omitted,
       discountApprovalAction: _alsoOmitted,
       maxDiscountPercent: _ceilingOmitted,
+      posSessionLimitMode: _modeOmitted,
+      posSessionMaxOpenHours: _hoursOmitted,
       ...legacySettings
     } = STUB_SETTINGS;
     http.expectOne(`${BASE}/by-company/CO1`).flush(legacySettings);
@@ -401,11 +410,101 @@ describe('SalesSettingsComponent', () => {
     // Same rule for the discount policy: no value in the response = the server enforces OFF.
     expect(fixture.componentInstance.fDiscountApprovalAction()).toBe('OFF');
     expect(fixture.componentInstance.fMaxDiscountPercent()).toBe('');
+    // And a response without the session limit is a company on the server setting.
+    expect(fixture.componentInstance.fSessionLimitMode()).toBe('SERVER_SETTING');
 
     // ngModel writes the control value on a microtask — settle before reading the rendered <select>.
     await fixture.whenStable();
     fixture.detectChanges();
     const select = fixture.nativeElement.querySelector('#belowCostAction') as HTMLSelectElement;
     expect(select.value).toBe('OFF');
+  });
+
+  // ── Till shift time limit (V113) ──────────────────────────────────────────
+
+  it('server-setting choice names the real server limit, and no hours box is shown', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush({ ...STUB_SETTINGS, posSessionServerDefaultHours: 36 });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('label[for="posSessionLimitMode"]')).not.toBeNull();
+    const hint = fixture.nativeElement.querySelector('#posSessionLimitHint').textContent;
+    expect(hint).toContain('36 hours');
+    expect(hint).toContain('To keep selling, close and reconcile the shift');
+    expect(fixture.nativeElement.querySelector('#posSessionMaxOpenHours')).toBeNull();
+  });
+
+  it('own limit: loads the stored hours, shows a labelled box, and saves the pair', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush({
+      ...STUB_SETTINGS, posSessionLimitMode: 'HOURS', posSessionMaxOpenHours: 48,
+      posSessionMaxOpenHoursEffective: 48,
+    });
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.fSessionLimitMode()).toBe('HOURS');
+    expect(comp.fSessionHours()).toBe('48');
+    expect(fixture.nativeElement.querySelector('label[for="posSessionMaxOpenHours"]')).not.toBeNull();
+
+    comp.fSessionHours.set('72');
+    comp.save();
+
+    const putReq = http.expectOne(BASE);
+    expect(putReq.request.body.posSessionLimitMode).toBe('HOURS');
+    expect(putReq.request.body.posSessionMaxOpenHours).toBe(72);
+    putReq.flush({ ...STUB_SETTINGS, posSessionLimitMode: 'HOURS', posSessionMaxOpenHours: 72 });
+  });
+
+  it('no limit: warns what it means and sends no hours', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush(STUB_SETTINGS);
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    comp.fSessionLimitMode.set('NO_LIMIT');
+    comp.fSessionHours.set('48');   // a stale box must not travel with NO_LIMIT
+    fixture.detectChanges();
+    const noLimitHint = fixture.nativeElement.querySelector('#posSessionLimitHint').textContent;
+    expect(noLimitHint).toContain('cover every day it was open');
+    // With no limit the till never stops, so the "how to keep selling" advice must not appear.
+    expect(noLimitHint).not.toContain('To keep selling');
+
+    comp.save();
+    const putReq = http.expectOne(BASE);
+    expect(putReq.request.body.posSessionLimitMode).toBe('NO_LIMIT');
+    expect(putReq.request.body.posSessionMaxOpenHours).toBeNull();
+    putReq.flush({ ...STUB_SETTINGS, posSessionLimitMode: 'NO_LIMIT', posSessionMaxOpenHoursEffective: 0 });
+  });
+
+  it('refuses own-limit hours outside 12–168 or not whole, before sending anything', () => {
+    makeBed();
+    http = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(SalesSettingsComponent);
+    fixture.detectChanges();
+    http.expectOne(`${BASE}/by-company/CO1`).flush(STUB_SETTINGS);
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    comp.fSessionLimitMode.set('HOURS');
+    for (const bad of ['', '0', '11', '169', '24.5', 'abc']) {
+      comp.fSessionHours.set(bad);
+      comp.save();
+      expect(comp.saveError()).toContain('between 12 and 168 hours');
+      http.expectNone(BASE);
+    }
   });
 });

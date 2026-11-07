@@ -188,7 +188,8 @@ class DiscountPolicySettingCrossLayerContractTest {
     // -------------------------------------------------------------------------
 
     private SalesSettingsDto apiReports() {
-        return new SalesSettingsServiceImpl(settings, companies, scopeGuard)
+        return new SalesSettingsServiceImpl(settings, companies, scopeGuard,
+                new PosSessionAgePolicy(settings, java.time.Duration.ofHours(36)))
                 .getByCompanyUid(COMPANY_UID);
     }
 

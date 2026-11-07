@@ -28,6 +28,7 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
 import com.erp.modules.sales.domain.entity.PosSaleIdempotency;
 import com.erp.modules.sales.domain.entity.PosSession;
+import com.erp.modules.sales.domain.entity.SalesSettings;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
 import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.PosSaleFlowStatus;
@@ -37,6 +38,7 @@ import com.erp.modules.sales.domain.enums.TenderType;
 import com.erp.modules.sales.domain.exception.PosSaleFlowException;
 import com.erp.modules.sales.repository.PosSaleIdempotencyRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
+import com.erp.modules.sales.repository.SalesSettingsRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
@@ -101,6 +103,7 @@ class PosSaleServiceImplTest {
     private StepUpAuthService           stepUpAuth;
     private ComplimentaryAuthorisationGuard complimentaryGuard;
     private ComplimentaryGlSeeder       complimentaryGl;
+    private SalesSettingsRepository     salesSettings;
 
     private PosSaleServiceImpl service;
 
@@ -121,12 +124,14 @@ class PosSaleServiceImplTest {
         stepUpAuth         = mock(StepUpAuthService.class);
         complimentaryGuard = mock(ComplimentaryAuthorisationGuard.class);
         complimentaryGl    = mock(ComplimentaryGlSeeder.class);
+        salesSettings      = mock(SalesSettingsRepository.class);   // no row → server default
 
         service = new PosSaleServiceImpl(
                 posSessionRepo, invoiceRepo, invoiceService, products, units,
                 customers, companies, scopeGuard, audit, idempotency, permissionResolver,
                 agents, stepUpAuth, complimentaryGuard, complimentaryGl,
-                REPLAY_MAX_AGE, SALE_MAX_AGE, MAX_OPEN_SESSION_AGE);
+                REPLAY_MAX_AGE, SALE_MAX_AGE,
+                new PosSessionAgePolicy(salesSettings, MAX_OPEN_SESSION_AGE));
 
         // Common stubs: open session in company scope
         PosSession session = buildSession();
@@ -513,6 +518,61 @@ class PosSaleServiceImplTest {
                 .isInstanceOf(PosSaleFlowException.class)
                 .extracting(e -> ((PosSaleFlowException) e).getStatus())
                 .isEqualTo(PosSaleFlowStatus.STALE_REPLAY);
+    }
+
+    /**
+     * V113: a company limit SHORTER than the server default wins — a 20-hour-old session is refused
+     * for a company that set 12 h, although the server default (36 h) would still allow it.
+     */
+    @Test
+    void processSale_companyLimitShorterThanServerDefault_refusesEarlier() {
+        companyLimitHours(12);
+        PosSession session = buildSession();
+        when(session.getOpenedAt()).thenReturn(Instant.now().minus(Duration.ofHours(20)));
+        when(posSessionRepo.findByUid(SESSION_UID)).thenReturn(Optional.of(session));
+        PosSaleRequest req = request(null);
+
+        assertThatThrownBy(() -> service.processSale(null, req))
+                .isInstanceOf(PosSaleFlowException.class)
+                .extracting(e -> ((PosSaleFlowException) e).getStatus())
+                .isEqualTo(PosSaleFlowStatus.STALE_REPLAY);
+    }
+
+    /**
+     * V113, the Cafe Tulia case: a company limit LONGER than the server default lets a 40-hour-old
+     * session keep selling, where the server default (36 h) would have refused it at the pay screen.
+     */
+    @Test
+    void processSale_companyLimitLongerThanServerDefault_stillSells() {
+        companyLimitHours(72);
+        Product p = product(RestrictedKind.NONE);
+        when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(p));
+        PosSession session = buildSession();
+        when(session.getOpenedAt()).thenReturn(Instant.now().minus(Duration.ofHours(40)));
+        when(posSessionRepo.findByUid(SESSION_UID)).thenReturn(Optional.of(session));
+
+        assertThatCode(() -> service.processSale(null, request(null)))
+                .doesNotThrowAnyException();
+    }
+
+    /** V113 "no limit": a session open for a week still sells. */
+    @Test
+    void processSale_companyNoLimit_sellsOnAWeekOldSession() {
+        companyLimitHours(0);
+        Product p = product(RestrictedKind.NONE);
+        when(products.findById(PRODUCT_ID)).thenReturn(Optional.of(p));
+        PosSession session = buildSession();
+        when(session.getOpenedAt()).thenReturn(Instant.now().minus(Duration.ofDays(7)));
+        when(posSessionRepo.findByUid(SESSION_UID)).thenReturn(Optional.of(session));
+
+        assertThatCode(() -> service.processSale(null, request(null)))
+                .doesNotThrowAnyException();
+    }
+
+    private void companyLimitHours(int hours) {
+        SalesSettings row = mock(SalesSettings.class);
+        when(row.getPosSessionMaxOpenHours()).thenReturn(hours);
+        when(salesSettings.findByCompanyId(COMPANY_ID)).thenReturn(Optional.of(row));
     }
 
     // =========================================================================
