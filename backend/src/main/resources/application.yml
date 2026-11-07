@@ -115,6 +115,9 @@ erp:
     signing-mode: ${ERP_JWT_SIGNING_MODE:dev-in-memory}
     private-key-location: ${ERP_JWT_PRIVATE_KEY:}
     public-key-location: ${ERP_JWT_PUBLIC_KEY:}
+    # Rotation overlap: comma-separated PEM public-key paths accepted for VERIFICATION only
+    # (selected by the token's kid). Empty = no overlap. See docs/ops/jwt-keys.md.
+    previous-public-key-paths: ${ERP_JWT_PREVIOUS_PUBLIC_KEY_PATHS:}
     access-token-ttl-minutes: 15
     refresh-token-ttl-days: 7
     issuer: erp-api
