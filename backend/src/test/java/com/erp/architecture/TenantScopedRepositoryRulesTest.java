@@ -340,6 +340,8 @@ class TenantScopedRepositoryRulesTest {
         a("PettyCashTransactionRepository#findByPettyCashFundIdOrderByTxnDateDescIdDesc", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("PettyCashTransactionRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
         a("PipelineStageRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
+        a("PosOfflineReviewRepository#findBySalesInvoiceId", "offline review rows of one sales invoice; the invoice id is already resolved in the caller company (test assertions only today)");
+        a("PosOfflineReviewRepository#findByUid", "uid lookup; PosOfflineSyncServiceImpl.acknowledge scope-checks the loaded review (assertCanActIn + same branch)");
         a("PosSessionPayoutRepository#findByPosSessionIdOrderByCreatedAtAscIdAsc", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("PosSessionPayoutRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
         a("PosSessionPayoutRepository#payoutBreakdownForSession", "keyed on a POS session id already resolved in the caller company and branch");
