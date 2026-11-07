@@ -110,4 +110,16 @@ public interface AuditRepository
     @Query(value = "SELECT 1 FROM (SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))) l",
             nativeQuery = true)
     Integer lockItem(@Param("key") String key);
+
+    /**
+     * When {@code action} was last recorded against one target row; null if never. Used by the
+     * tenant-departure rules (R-7/R-8), which measure "suspended for 30 days" and "exported after
+     * suspension" from this table because there is no suspended-at column. The target is a
+     * platform-level row (an organisation), so this is deliberately not company-scoped.
+     */
+    @Query("SELECT MAX(a.at) FROM AuditLog a WHERE a.action = :action "
+            + "AND a.targetType = :targetType AND a.targetId = :targetId")
+    java.time.Instant latestAt(@Param("action") String action,
+                               @Param("targetType") String targetType,
+                               @Param("targetId") Long targetId);
 }

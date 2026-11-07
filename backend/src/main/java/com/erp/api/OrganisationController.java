@@ -2,6 +2,9 @@ package com.erp.api;
 
 import com.erp.modules.iam.domain.dto.OrganisationDto;
 import com.erp.modules.iam.service.OrganisationService;
+import com.erp.modules.iam.service.TenantDepartureService;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,9 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrganisationController {
 
     private final OrganisationService organisations;
+    private final TenantDepartureService departure;
 
-    public OrganisationController(OrganisationService organisations) {
+    public OrganisationController(OrganisationService organisations,
+                                  TenantDepartureService departure) {
         this.organisations = organisations;
+        this.departure = departure;
     }
 
     @GetMapping
@@ -84,6 +90,24 @@ public class OrganisationController {
     @PreAuthorize("@perm.has('ORG.CREATE')")
     public List<com.erp.modules.iam.domain.dto.TenantSummaryDto> tenants() {
         return organisations.listTenants();
+    }
+
+    /**
+     * Streams a zip of every row of one organisation (R-7). Platform operator only: gated on
+     * {@code ORG.SUSPEND} (a {@code platform}-module code) and re-checked in the service.
+     *
+     * <p>Returns {@code void} and writes the response itself, so {@code ApiResponseAdvice} has no
+     * body to wrap; a refusal is raised before the first byte and is an ordinary JSON error.
+     */
+    @PostMapping("/uid/{uid}/export")
+    @PreAuthorize("@perm.has('ORG.SUSPEND')")
+    public void export(@PathVariable String uid, HttpServletResponse response) throws IOException {
+        departure.exportTenant(uid, fileName -> {
+            response.setContentType("application/zip");
+            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            response.setHeader("Cache-Control", "no-store");
+            return response.getOutputStream();
+        });
     }
 
     @GetMapping("/current")

@@ -140,6 +140,15 @@ public class AuditReadService {
                 a.getIp());
     }
 
+    /**
+     * The most recent time {@code action} was recorded against the given row of {@code targetType},
+     * if ever. Read-only, no tenant predicate: the only callers are the platform operator's
+     * departure checks on an organisation row.
+     */
+    public java.util.Optional<Instant> latestAt(String action, String targetType, Long targetId) {
+        return java.util.Optional.ofNullable(audit.latestAt(action, targetType, targetId));
+    }
+
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s;
     }

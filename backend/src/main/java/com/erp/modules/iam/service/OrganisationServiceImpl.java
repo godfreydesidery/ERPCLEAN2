@@ -206,7 +206,7 @@ public class OrganisationServiceImpl implements OrganisationService {
      * genuinely closes the hole is that a tenant's administrator is no longer created root
      * ({@code TenantProvisioningService}); this states the rule that fix relies on.
      */
-    private static boolean isPlatformOperator(RequestContext.Principal caller) {
+    static boolean isPlatformOperator(RequestContext.Principal caller) {
         return caller != null && caller.root();
     }
 

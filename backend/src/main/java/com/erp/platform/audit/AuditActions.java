@@ -81,6 +81,12 @@ public final class AuditActions {
     /** A suspended tenant was restored (P5-3). */
     public static final String ORG_RESUME = "ORG.RESUME";
 
+    /**
+     * A tenant's data was exported in full (R-7). Written only after the archive was completely
+     * produced; a purge is refused unless one exists AFTER the latest suspension.
+     */
+    public static final String ORG_EXPORT = "ORG.EXPORT";
+
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
     public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";
