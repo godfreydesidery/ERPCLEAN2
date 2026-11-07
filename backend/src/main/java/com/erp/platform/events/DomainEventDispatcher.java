@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -97,11 +96,14 @@ public class DomainEventDispatcher {
      */
     @Scheduled(fixedDelayString = "${erp.outbox.poll-interval-ms:1000}")
     void poll() {
-        List<DomainEvent> batch = repository.findPendingBatch(
-                maxAttempts, PageRequest.of(0, BATCH_SIZE));
+        // Interleaved across companies (outbox fairness, MULTITENANCY-PLAN §14): one tenant's
+        // backlog no longer holds every other tenant's events behind it. Identical to the old
+        // oldest-first order on a single-company install. dispatchOne re-claims each id under
+        // FOR UPDATE SKIP LOCKED, so reading ids rather than entities loses nothing.
+        List<Long> batch = repository.findFairPendingBatchIds(maxAttempts, BATCH_SIZE);
         DomainEventDispatcher proxy = self.getObject();
-        for (DomainEvent event : batch) {
-            proxy.dispatchOne(event.getId());
+        for (Long eventId : batch) {
+            proxy.dispatchOne(eventId);
         }
     }
 

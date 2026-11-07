@@ -38,6 +38,53 @@ public interface DomainEventRepository extends JpaRepository<DomainEvent, Long> 
     List<DomainEvent> findPendingBatch(@Param("attemptCap") int attemptCap, Pageable pageable);
 
     /**
+     * Ids of the next batch of dispatchable PENDING events, interleaved ACROSS companies
+     * (MULTITENANCY-PLAN §14, outbox fairness).
+     *
+     * <p>{@link #findPendingBatch} is strictly oldest-first, so on a shared instance one tenant's
+     * burst — a bulk import, a month-end posting run — queues every other tenant's sales behind it
+     * for as long as the burst lasts. This takes each company's oldest event first, then each
+     * company's second, and so on: a quiet tenant's next sale is never more than one round behind.
+     *
+     * <p>Order WITHIN a company is unchanged (occurred_at, then id), which is the only order any
+     * handler relies on — the stock and GL handlers read their own company's state. On an install
+     * with a single company the result is identical to {@link #findPendingBatch}.
+     *
+     * <p>Cost: the window runs over the PENDING set only, which the partial
+     * {@code ix_domain_events_pending} index bounds; that set is near-empty in steady state.
+     *
+     * <p>Unscoped by design: the dispatcher is the platform's own worker and serves every tenant.
+     */
+    @Query(value = """
+            SELECT id FROM (
+                SELECT id, occurred_at,
+                       ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY occurred_at, id) AS rn
+                FROM domain_events
+                WHERE status = 'PENDING' AND attempt_count < :attemptCap
+            ) pending
+            ORDER BY rn, occurred_at, id
+            LIMIT :batchSize
+            """, nativeQuery = true)
+    List<Long> findFairPendingBatchIds(@Param("attemptCap") int attemptCap,
+                                       @Param("batchSize") int batchSize);
+
+    /**
+     * Deletes up to {@code batchSize} DISPATCHED events older than {@code cutoff}
+     * ({@link OutboxRetention}). Never touches PENDING or FAILED rows: those are work still owed
+     * and the evidence of work that failed. Oldest ids first, so repeated calls walk forward.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = """
+            DELETE FROM domain_events
+            WHERE id IN (
+                SELECT id FROM domain_events
+                WHERE status = 'DISPATCHED' AND dispatched_at < :cutoff
+                ORDER BY id
+                LIMIT :batchSize)
+            """, nativeQuery = true)
+    int deleteDispatchedBefore(@Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
+
+    /**
      * Multi-instance-safe single-row claim (ADR-0009 D-4/D-scaling). Locks the row {@code FOR UPDATE
      * SKIP LOCKED} so a concurrent poller on another instance skips it (returns empty) rather than
      * blocking or double-dispatching. Returns empty when the row is no longer PENDING or is held by
