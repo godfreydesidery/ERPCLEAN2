@@ -61,6 +61,23 @@ class Company {
         region: asStr(j['region']),
         country: asStr(j['country']),
       );
+
+  /// Round-trips through [Company.fromJson] (the offline sign-in profile).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'name': name,
+        'baseCurrency': baseCurrency,
+        'taxId': taxId,
+        'vrn': vrn,
+        'contactPhone': contactPhone,
+        'contactEmail': contactEmail,
+        'addressLine1': addressLine1,
+        'addressLine2': addressLine2,
+        'city': city,
+        'region': region,
+        'country': country,
+      };
 }
 
 /// `GET /branches?companyUid` — carries the numeric `id` the POS queries need.
@@ -96,6 +113,18 @@ class Branch {
         isDefault: asBool(j['isDefault']),
         status: asStrOr(j['status'], 'ACTIVE'),
       );
+
+  /// Round-trips through [Branch.fromJson] (the offline sign-in profile).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'companyId': companyId,
+        'companyUid': companyUid,
+        'code': code,
+        'name': name,
+        'isDefault': isDefault,
+        'status': status,
+      };
 }
 
 /// The fully-resolved operating context for a POS shift: the org, the active
@@ -118,6 +147,20 @@ class PosContext {
   /// company default (or the first branch). Surfaced to the operator as a
   /// non-blocking warning so a cashier notices they may be on the wrong branch.
   final bool branchFallback;
+
+  /// Round-trips through [PosContext.fromJson] — kept with an offline sign-in
+  /// verifier so the till can work offline in the branch the user last used.
+  Map<String, dynamic> toJson() => {
+        'organisationUid': organisationUid,
+        'company': company.toJson(),
+        'branch': branch.toJson(),
+      };
+
+  factory PosContext.fromJson(Map<String, dynamic> j) => PosContext(
+        organisationUid: asStrOr(j['organisationUid']),
+        company: Company.fromJson(asMap(j['company'])),
+        branch: Branch.fromJson(asMap(j['branch'])),
+      );
 
   String get companyId => company.id;
   String get companyUid => company.uid;

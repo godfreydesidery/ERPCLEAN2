@@ -245,6 +245,44 @@ public class BelowCostGuard {
         }
     }
 
+    /**
+     * ADR-0068 (offline POS): which lines of an OFFLINE sale went out at or below cost, for the
+     * manager review list. Never throws and writes no audit — the sale already happened and is posted
+     * regardless; the sync flags it instead. Empty when the company's policy is OFF (online, OFF means
+     * no check at all) or nothing is below cost. Each entry names the product, the net price per base
+     * unit it was sold at and its average cost; the review list is manager-only, so the cost may show.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<String> offlineBelowCostDetails(Long companyId, Long branchId, List<PricedLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return List.of();
+        }
+        BelowCostAction action = settings.findByCompanyId(companyId)
+                .map(SalesSettings::getBelowCostAction)
+                .orElse(BelowCostAction.OFF);
+        if (action == BelowCostAction.OFF) {
+            return List.of();
+        }
+        Map<Long, BigDecimal> avgCosts = costs.avgCosts(companyId, branchId, distinctProductIds(lines));
+        List<String> details = new ArrayList<>();
+        for (PricedLine line : lines) {
+            BigDecimal netUnitPrice = netUnitPrice(line);
+            BigDecimal unitCost = avgCosts.get(line.productId());
+            if (netUnitPrice == null || unitCost == null || unitCost.signum() <= 0) {
+                continue;   // unknown cost never flags, as it never rejects online
+            }
+            if (netUnitPrice.compareTo(unitCost) <= 0) {
+                details.add(line.productName() + ": sold at " + plain(netUnitPrice)
+                        + " (net per unit), average cost " + plain(unitCost));
+            }
+        }
+        return details;
+    }
+
+    private static String plain(BigDecimal v) {
+        return v.stripTrailingZeros().toPlainString();
+    }
+
     private static List<Long> distinctProductIds(List<PricedLine> lines) {
         Set<Long> ids = new LinkedHashSet<>();
         for (PricedLine line : lines) {

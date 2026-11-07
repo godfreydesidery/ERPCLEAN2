@@ -77,6 +77,14 @@ public interface SalesInvoiceService {
     // --- Lines ---
     SalesInvoiceLineDto addLine(String invoiceUid, AddInvoiceLineRequest req);
 
+    /**
+     * ADR-0068 D-3/D-5: adds a line to an OFFLINE sale at the price the till charged
+     * ({@code unitPriceOverride}) and that price's VAT stance. Only for a draft the offline sync has
+     * marked as sold offline; no discounts. Not exposed through any controller.
+     */
+    SalesInvoiceLineDto addOfflineLine(String invoiceUid, AddInvoiceLineRequest req,
+                                       boolean chargedPriceInclusive);
+
     SalesInvoiceLineDto updateLine(String invoiceUid, String lineUid, UpdateInvoiceLineRequest req);
 
     void removeLine(String invoiceUid, String lineUid);

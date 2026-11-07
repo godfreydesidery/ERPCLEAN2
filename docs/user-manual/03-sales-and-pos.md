@@ -821,6 +821,16 @@ The **X-Read** card on the session detail page shows running totals without clos
 
 Click the refresh icon to reload the X-read at any time.
 
+### Offline selling (tills that keep selling without the server)
+
+A till can be allowed to keep selling cash, mobile money and card sales while it cannot reach the server — for example when the internet is down. It keeps those sales on the till and sends them when the server is back; the ERP records each one once, at the price the customer paid and at the time it was sold.
+
+- **Allow it per till.** **POS › Tills**, the **Offline selling** switch (permission `POS.TILL.MANAGE`). Every till starts with it **off**.
+- **Review what was sold offline.** **POS › Offline Sales Review** (permission `POS.OFFLINE.REVIEW`, held by Sales Managers and Branch Managers) lists, for the active branch, offline sales recorded at a different price from today's, sales that took stock below zero, sales sold below cost (when the below-cost policy is on), sales dated in a closed accounting period, and sales the ERP **held** without recording — with the sale exactly as it was rung. It also lists every offline period (till, who switched, why, how long, how many sales). **Acknowledge** each item once you have looked at it; nothing on the list blocks the books.
+- **Switching a till offline by hand** on a slow but working connection needs a manager with `POS.OFFLINE.SWITCH`, confirmed by password at the till.
+
+The cashier's side is described in the OrbixPOS user manual, chapter *Selling Offline*.
+
 ### 9.7 Close a session (end of day)
 
 **What closing a session means.** Closing a session is the end-of-shift step where the cashier physically counts the cash in the drawer and enters the counted amount. The system compares this to the expected cash (computed from the opening float plus all sales minus all payouts) and calculates the variance. A zero variance means the drawer balances perfectly. A positive variance (more cash than expected) is a till surplus. A negative variance (less cash than expected) is a till shortage. The session moves to `CLOSED` but the variance is not yet posted to the General Ledger — that happens at reconciliation.

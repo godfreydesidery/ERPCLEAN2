@@ -96,6 +96,8 @@ class SalesInvoice {
     required this.notes,
     this.posSessionId,
     this.createdByName,
+    this.soldOffline = false,
+    this.offlineNumber,
   });
 
   final String id;
@@ -122,6 +124,17 @@ class SalesInvoice {
   /// names the person who made the sale rather than whoever is reprinting it.
   final String? createdByName;
 
+  /// ERP ADR-0068: rung while the till was offline. The receipt is marked
+  /// OFFLINE on every print, including reprints.
+  final bool soldOffline;
+
+  /// The till's provisional number (`OFF-…`). Before sync it is also the
+  /// [invoiceNumber]; after sync [invoiceNumber] is the real one.
+  final String? offlineNumber;
+
+  /// True while the server has not yet posted this offline sale.
+  bool get awaitingSync => soldOffline && invoiceNumber == offlineNumber;
+
   factory SalesInvoice.fromJson(Map<String, dynamic> j) => SalesInvoice(
         id: asStrOr(j['id']),
         uid: asStrOr(j['uid']),
@@ -139,6 +152,8 @@ class SalesInvoice {
         notes: asStr(j['notes']),
         posSessionId: asStr(j['posSessionId']),
         createdByName: asStr(j['createdByName']),
+        soldOffline: asBool(j['soldOffline']),
+        offlineNumber: asStr(j['offlineNumber']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -158,6 +173,8 @@ class SalesInvoice {
         'notes': notes,
         'posSessionId': posSessionId,
         'createdByName': createdByName,
+        'soldOffline': soldOffline,
+        'offlineNumber': offlineNumber,
       };
 }
 

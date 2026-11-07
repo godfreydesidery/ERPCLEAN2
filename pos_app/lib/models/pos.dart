@@ -17,6 +17,7 @@ class PosTill {
     this.openSessionCashierId,
     this.openSessionCashierName,
     this.openSessionOpenedAt,
+    this.offlineAllowed = false,
   });
 
   final String id;
@@ -46,6 +47,11 @@ class PosTill {
   /// (never an id) for a cashier it can no longer name, so it prints as-is —
   /// null only when the till is free, or against a server that predates it.
   final String? openSessionCashierName;
+
+  /// ERP ADR-0068 D-1 (V114): an admin allowed this till to keep selling while
+  /// the server is unreachable. False against a server that predates it, so an
+  /// older ERP never sees a till go offline.
+  final bool offlineAllowed;
 
   bool get isActive => status == 'ACTIVE';
 
@@ -77,6 +83,45 @@ class PosTill {
         openSessionCashierId: asStr(j['openSessionCashierId']),
         openSessionCashierName: asStr(j['openSessionCashierName']),
         openSessionOpenedAt: asDate(j['openSessionOpenedAt']),
+        offlineAllowed: asBool(j['offlineAllowed']),
+      );
+
+  /// Round-trips through [PosTill.fromJson] — the till kept in the offline
+  /// cache so a shift can be opened on it while the server is unreachable.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'companyId': companyId,
+        'branchId': branchId,
+        'code': code,
+        'name': name,
+        'cashBankAccountId': cashBankAccountId,
+        'status': status,
+        'hasOpenSession': hasOpenSession,
+        'openSessionUid': openSessionUid,
+        'openSessionCashierId': openSessionCashierId,
+        'openSessionCashierName': openSessionCashierName,
+        'openSessionOpenedAt': openSessionOpenedAt?.toUtc().toIso8601String(),
+        'offlineAllowed': offlineAllowed,
+      };
+
+  /// The same till with its occupancy replaced (after this device opened or
+  /// closed a shift on it), so the cached copy does not go stale.
+  PosTill withOccupancy({String? sessionUid, String? cashierId, DateTime? openedAt}) => PosTill(
+        id: id,
+        uid: uid,
+        companyId: companyId,
+        branchId: branchId,
+        code: code,
+        name: name,
+        cashBankAccountId: cashBankAccountId,
+        status: status,
+        hasOpenSession: sessionUid != null,
+        openSessionUid: sessionUid,
+        openSessionCashierId: sessionUid == null ? null : cashierId,
+        openSessionCashierName: null,
+        openSessionOpenedAt: sessionUid == null ? null : openedAt,
+        offlineAllowed: offlineAllowed,
       );
 }
 

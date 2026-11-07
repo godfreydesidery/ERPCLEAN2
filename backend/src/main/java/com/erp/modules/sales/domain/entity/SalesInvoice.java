@@ -231,6 +231,21 @@ public class SalesInvoice extends UidEntity {
     @Setter
     private Long posSessionId;
 
+    /**
+     * ADR-0068 (V114): rung on a till while it was offline and posted later through the sync path.
+     * {@code finalisedAt} is then the time it was SOLD on the till; {@code syncedAt} is when the
+     * server received it. A DB CHECK requires the offline number and sync time whenever this is set.
+     */
+    @Column(name = "sold_offline", nullable = false)
+    private boolean soldOffline = false;
+
+    /** The till's provisional number printed on the offline receipt, e.g. {@code OFF-T2-000153}. */
+    @Column(name = "offline_number", length = 40)
+    private String offlineNumber;
+
+    @Column(name = "synced_at")
+    private Instant syncedAt;
+
     // --- ADR-0040 D-3 — ship-to / bill-to address snapshot fields ---
     /** FK → customer_addresses.id; nullable — delivery address used for this invoice. */
     @Column(name = "ship_to_address_id")
@@ -278,5 +293,27 @@ public class SalesInvoice extends UidEntity {
         this.agentId = agentId;
         this.currency = CurrencyCode.of(currency);
         this.createdBy = createdBy;
+    }
+
+    /**
+     * Marks this DRAFT invoice as an offline sale arriving through the sync path (ADR-0068 D-5),
+     * before any line is added. {@code soldAt} — the time it was sold on the till — becomes its
+     * business time: finalise keeps it as {@code finalisedAt} instead of stamping "now", so reports,
+     * the Z-read and the GL see the sale on the day and hour it happened.
+     */
+    public void markSoldOffline(String offlineNumber, Instant soldAt, Instant syncedAt) {
+        if (offlineNumber == null || offlineNumber.isBlank()) {
+            throw new IllegalArgumentException("An offline sale needs its offline receipt number.");
+        }
+        if (soldAt == null) {
+            throw new IllegalArgumentException("An offline sale needs the time it was sold.");
+        }
+        if (this.soldOffline) {
+            throw new IllegalStateException("This invoice is already marked as an offline sale.");
+        }
+        this.soldOffline = true;
+        this.offlineNumber = offlineNumber;
+        this.finalisedAt = soldAt;
+        this.syncedAt = syncedAt;
     }
 }

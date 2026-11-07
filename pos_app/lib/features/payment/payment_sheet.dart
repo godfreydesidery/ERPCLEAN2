@@ -11,6 +11,7 @@ import '../../models/auth.dart';
 import '../../models/enums.dart';
 import '../../models/restaurant.dart';
 import '../../models/sale.dart';
+import '../../offline/offline_controller.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../state/price_cache.dart';
@@ -19,13 +20,25 @@ import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
+import '../offline/offline_payment_sheet.dart';
+import '../offline/offline_widgets.dart';
 import '../receipt/receipt_view.dart';
 import '../register/pickers.dart';
 import 'pending_sale_recovery.dart';
 
+/// Set by the online sheet when the cashier chose to finish an unanswered sale
+/// offline: the Idempotency-Key of that attempt (ERP ADR-0068).
+String? _offlineHandoffKey;
+
 /// Opens the payment modal. On a completed sale it clears the basket lines and
 /// shows the receipt.
+///
+/// While the till is offline (ERP ADR-0068) the offline payment sheet takes the
+/// payment instead: cash, mobile money or card, kept on the till until sync.
 Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
+  if (ref.read(offlineControllerProvider).offline) {
+    return openOfflinePaymentSheet(context, ref);
+  }
   // An earlier attempt whose outcome is still unknown must be settled FIRST.
   // Ringing a new basket on top of one is how the same sale gets charged twice.
   if (!await resolvePendingSale(context, ref)) return;
@@ -40,11 +53,23 @@ Future<void> openPaymentSheet(BuildContext context, WidgetRef ref) async {
     await showCustomerPicker(context, ref);
     if (!context.mounted || ref.read(cartProvider).customer == null) return;
   }
+  _offlineHandoffKey = null;
   final receipt = await showDialog<Receipt>(
     context: context,
     barrierDismissible: false,
     builder: (_) => const _PaymentSheet(),
   );
+  final handoff = _offlineHandoffKey;
+  _offlineHandoffKey = null;
+  if (receipt == null && handoff != null && context.mounted) {
+    // The server stopped answering mid-sale and the cashier chose to finish it
+    // offline. Same key: if the attempt did land, the sync answers
+    // ALREADY_POSTED instead of booking it twice.
+    if (await switchToOffline(context, ref) && context.mounted) {
+      await openOfflinePaymentSheet(context, ref, reuseKey: handoff);
+    }
+    return;
+  }
   if (receipt != null) {
     // Next sale: back to the walk-in customer (POS-15) and fresh prices (POS-18).
     ref.read(cartProvider.notifier).clearLines();
@@ -81,6 +106,12 @@ class RestaurantCheckout {
 /// order has been paid (and shown), or null when the cashier backed out.
 Future<Receipt?> openRestaurantPaymentSheet(
     BuildContext context, WidgetRef ref, RestaurantCheckout checkout) async {
+  // Restaurant orders live on the server (offline phase 2 is not built).
+  if (ref.read(offlineControllerProvider).offline) {
+    showToast(context, 'Restaurant orders need the server. The order is safe and can be '
+        'paid when the till is back online.');
+    return null;
+  }
   // An unresolved supermarket sale from earlier still blocks the drawer.
   if (!await resolvePendingSale(context, ref)) return null;
   if (!context.mounted) return null;
@@ -869,6 +900,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               const SizedBox(height: 6),
               _serverDetailNote(_serverDetail!),
             ],
+            _finishOfflineOffer(),
           ],
           if (_rejection != null) ...[
             const SizedBox(height: 10),
@@ -1011,6 +1043,30 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         'same receipt back, never a second charge.',
         style: TextStyle(
             color: AppColors.warn, fontSize: 12.5, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  /// ERP ADR-0068: the connection died under this sale and the probe confirmed
+  /// the server is gone. On a till allowed offline the cashier may finish the
+  /// sale offline, under the SAME key — so if the attempt did reach the server,
+  /// the sync answers ALREADY_POSTED instead of charging twice.
+  Widget _finishOfflineOffer() {
+    final s = ref.watch(offlineControllerProvider);
+    if (_resto != null || !s.serverDown || !s.tillAllowed || _busy) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: OrbixButton(
+        label: 'No connection — finish this sale offline',
+        icon: Icons.cloud_off,
+        kind: BtnKind.ghost,
+        block: true,
+        onPressed: () {
+          _offlineHandoffKey = _txnId;
+          Navigator.of(context).pop();
+        },
       ),
     );
   }

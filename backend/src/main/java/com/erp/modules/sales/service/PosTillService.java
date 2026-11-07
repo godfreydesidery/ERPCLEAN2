@@ -19,4 +19,7 @@ public interface PosTillService {
 
     /** Brings a deactivated till back into use; refused for an active or archived one. */
     PosTillDto reactivateTill(String uid);
+
+    /** ADR-0068 D-1: allow or stop offline selling on this till. */
+    PosTillDto setOfflineAllowed(String uid, boolean offlineAllowed);
 }

@@ -134,6 +134,20 @@ public class PosTillServiceImpl implements PosTillService {
         return toDto(till);
     }
 
+    @Override
+    public PosTillDto setOfflineAllowed(String uid, boolean offlineAllowed) {
+        var till = requireTill(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), till.getCompanyId());
+        if (till.isOfflineAllowed() != offlineAllowed) {
+            till.setOfflineAllowed(offlineAllowed);
+            till.setUpdatedAt(Instant.now());
+            till.setUpdatedBy(actorId());
+            audit.record(AuditEvent.of(AuditActions.POS_TILL_UPDATE, "pos_tills", till.getId(), till.getUid())
+                    .detail(java.util.Map.of("offlineAllowed", String.valueOf(offlineAllowed))));
+        }
+        return toDto(till);
+    }
+
     private PosTill requireTill(String uid) {
         return tills.findByUid(uid).orElseThrow(() -> NotFoundException.of("PosTill", uid));
     }
@@ -190,7 +204,8 @@ public class PosTillServiceImpl implements PosTillService {
                 open.map(PosSession::getUid).orElse(null),
                 cashierId,
                 cashierId == null ? null : cashierNames.getOrDefault(cashierId, UNNAMED_CASHIER),
-                open.map(PosSession::getOpenedAt).orElse(null));
+                open.map(PosSession::getOpenedAt).orElse(null),
+                t.isOfflineAllowed());
     }
 
     /** One IAM lookup for the cashiers holding the given sessions; empty when none are held. */

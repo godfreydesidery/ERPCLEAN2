@@ -442,6 +442,13 @@ class CartController extends Notifier<CartState> {
   void select(String localId) => state = state.copyWith(selectedId: localId);
 
   void setCustomer(Customer c) => state = state.copyWith(customer: c);
+
+  /// Back to the default (walk-in) customer — the only customer an offline
+  /// sale may have (ERP ADR-0068). The caller re-prices the basket.
+  void resetCustomer() {
+    final c = _defaultCustomer;
+    if (c != null) state = state.copyWith(customer: c);
+  }
   void setAgent(Agent a) => state = state.copyWith(agent: a);
   void setCurrency(String c) => state = state.copyWith(currency: c);
   void setNotes(String? n) =>

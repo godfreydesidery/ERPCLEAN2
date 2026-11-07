@@ -29,6 +29,29 @@ class ReceiptJournal {
     }).toList();
   }
 
+  /// An offline sale has synced (ERP ADR-0068): its journalled receipt now
+  /// carries the real invoice number and uid. The OFFLINE mark and the offline
+  /// number stay, so a reprint still shows how the sale was made.
+  Future<void> markSynced(String offlineNumber,
+      {required String? invoiceUid, required String? invoiceNumber}) async {
+    if (invoiceNumber == null || invoiceNumber.isEmpty) return;
+    final p = await SharedPreferences.getInstance();
+    final list = p.getStringList(_key) ?? <String>[];
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      final m = (jsonDecode(list[i]) as Map).cast<String, dynamic>();
+      final inv = (m['invoice'] as Map?)?.cast<String, dynamic>();
+      if (inv != null && inv['offlineNumber'] == offlineNumber) {
+        inv['invoiceNumber'] = invoiceNumber;
+        if (invoiceUid != null && invoiceUid.isNotEmpty) inv['uid'] = invoiceUid;
+        m['invoice'] = inv;
+        list[i] = jsonEncode(m);
+        changed = true;
+      }
+    }
+    if (changed) await p.setStringList(_key, list);
+  }
+
   /// Mark a journalled receipt as VOID after its sale is reversed, so an offline
   /// reprint shows the reversed state (not a stale full-value "Sale complete").
   Future<void> markReversed(String invoiceUid) async {

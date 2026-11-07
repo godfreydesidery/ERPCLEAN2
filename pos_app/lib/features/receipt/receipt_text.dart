@@ -187,6 +187,13 @@ String buildReceiptText({
   }
   if (branchName.isNotEmpty) lines.add(centered(branchName, width));
 
+  // ERP ADR-0068: a sale rung while the till was offline is marked as such on
+  // every print — the first one and every reprint, before and after sync.
+  if (inv.soldOffline) {
+    lines.add(doubleRule(width));
+    lines.add(centered('*** OFFLINE SALE ***', width));
+  }
+
   // Customer block
   lines.add(doubleRule(width));
   final customer = (inv.customerName ?? '').trim();
@@ -196,6 +203,10 @@ String buildReceiptText({
   // Receipt block
   lines.add(doubleRule(width));
   lines.addAll(labelValue('RECEIPT NO:', inv.invoiceNumber, width));
+  final offNo = inv.offlineNumber?.trim() ?? '';
+  if (inv.soldOffline && offNo.isNotEmpty && offNo != inv.invoiceNumber) {
+    lines.addAll(labelValue('OFFLINE NO:', offNo, width));
+  }
   lines.addAll(labelValue(
       'RECEIPT DATE:', DateFormat('dd-MM-yyyy').format(when), width));
   lines.addAll(labelValue(
@@ -304,6 +315,13 @@ String buildReceiptText({
   // Footer
   lines.add('');
   lines.add(centered('Thank you!', width));
+  if (inv.awaitingSync) {
+    lines.add('');
+    for (final wrapped in wrapText(
+        'Sold offline. The ERP records this sale when the till reconnects.', width)) {
+      lines.add(centered(wrapped, width));
+    }
+  }
   if (reversed) {
     lines.add('');
     lines.add(centered('*** REVERSED ***', width));
