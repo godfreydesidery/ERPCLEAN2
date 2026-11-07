@@ -132,6 +132,15 @@ public class TenantDepartureServiceImpl implements TenantDepartureService {
         if (dryRun) {
             PurgeReport report = purger.dryRun(ref);
             List<String> all = new ArrayList<>(blockers);
+            // Audit rows are never deleted (owner, 2026-11-07), so a tenant with any history of its
+            // own is not removable. The real purge refuses this inside its transaction too.
+            boolean hasHistory = report.tables().stream()
+                    .anyMatch(t -> t.table().equals("audit_logs") && t.rows() > 0);
+            if (hasHistory) {
+                all.add("This organisation has an audit history, and audit records are never "
+                        + "deleted, so it cannot be removed. Keep it suspended; its data can still "
+                        + "be exported.");
+            }
             if (!report.blockers().isEmpty()) {
                 log.error("Purge dry run for organisation {}: plan blockers {}", org.getId(),
                         report.blockers());

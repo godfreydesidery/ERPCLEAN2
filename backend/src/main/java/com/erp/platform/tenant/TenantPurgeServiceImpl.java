@@ -43,6 +43,13 @@ class TenantPurgeServiceImpl implements TenantPurgeService {
 
     private static final Logger log = LoggerFactory.getLogger(TenantPurgeServiceImpl.class);
 
+    static final String AUDIT_TABLE = "audit_logs";
+
+    /** Shown when the tenant has audit history: audit rows are never deleted (invariant 7). */
+    static final String AUDIT_HISTORY_REFUSAL = "This organisation has an audit history, and audit "
+            + "records are never deleted, so it cannot be removed. Keep it suspended; its data can "
+            + "still be exported.";
+
     private static final String FRIENDLY_REFUSAL =
             "This organisation's data could not be removed. Nothing was deleted. "
                     + "The technical reason has been logged.";
@@ -108,7 +115,27 @@ class TenantPurgeServiceImpl implements TenantPurgeService {
                     throw new ConflictException(FRIENDLY_REFUSAL);
                 }
 
+                // AUDIT ROWS ARE NEVER DELETED (owner, 2026-11-07; CLAUDE.md invariant 7). Checked
+                // here, inside the purge transaction, rather than only in the departure rules: a
+                // sign-in attempt by one of the tenant's users between the dry run and this point
+                // writes a new row, and this is the last place that can still refuse cleanly.
+                TenantTable auditTable = plan.tables().stream()
+                        .filter(x -> x.name().equals(AUDIT_TABLE)).findFirst().orElse(null);
+                if (auditTable != null) {
+                    Long history = jdbc.queryForObject("SELECT count(*) FROM "
+                            + TenantDataCatalogImpl.q(AUDIT_TABLE) + " WHERE "
+                            + auditTable.rowFilterSql(), Long.class);
+                    if (history != null && history > 0) {
+                        log.warn("Purge of organisation {} refused: {} audit row(s) of its own",
+                                org.id(), history);
+                        throw new ConflictException(AUDIT_HISTORY_REFUSAL);
+                    }
+                }
+
                 for (CycleBreak cb : plan.cycleBreaks()) {
+                    if (cb.table().equals(AUDIT_TABLE)) {
+                        throw new IllegalStateException("A purge must never modify audit rows.");
+                    }
                     TenantTable t = plan.tables().stream()
                             .filter(x -> x.name().equals(cb.table())).findFirst().orElseThrow();
                     String set = String.join(", ", cb.columns().stream()
@@ -122,6 +149,11 @@ class TenantPurgeServiceImpl implements TenantPurgeService {
                 List<TableCount> counts = new ArrayList<>();
                 long total = 0;
                 for (TenantTable t : plan.tables()) {
+                    if (t.name().equals(AUDIT_TABLE)) {
+                        // Proven empty above; reported as zero, never deleted from.
+                        counts.add(new TableCount(t.name(), 0));
+                        continue;
+                    }
                     int rows = jdbc.update("DELETE FROM " + TenantDataCatalogImpl.q(t.name())
                             + " WHERE " + t.rowFilterSql());
                     counts.add(new TableCount(t.name(), rows));

@@ -532,6 +532,17 @@ class TenantExportPurgeIT extends PostgresIntegrationTest {
         backdateSuspension(t, 31);
         actingAsOperator();
         exportOf(t);
+        // Audit rows are never deleted (owner, 2026-11-07), so only a never-used tenant is removable.
+        // The fixture planted a login row; remove it HERE, in the test, to model a tenant that was
+        // provisioned and never signed in to - the only kind the purge may delete.
+        clearAuditHistory(t);
+    }
+
+    /** Test-only: drops the tenant's OWN audit rows (not the operator's lifecycle rows about it). */
+    private void clearAuditHistory(Tenant t) {
+        TenantTable audit = plan(t).tables().stream().filter(x -> x.name().equals("audit_logs"))
+                .findFirst().orElseThrow();
+        jdbc.update("DELETE FROM audit_logs WHERE " + audit.rowFilterSql());
     }
 
     /** Row text digest per tenant table: byte-for-byte comparison of a tenant's data. */
@@ -604,9 +615,22 @@ class TenantExportPurgeIT extends PostgresIntegrationTest {
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
                 .hasMessageContaining("export");
 
-        // 5. a fresh export after that suspension: everything holds except the confirmation name
+        // 5. a fresh export after that suspension. B still has audit history of its own (the planted
+        //    login row): audit rows are never deleted, so B is NOT removable - dry run and real both.
         exportOf(b);
         actingAsOperator();
+        var withHistory = purge(b, true, null);
+        assertThat(withHistory.eligible()).isFalse();
+        assertThat(withHistory.blockers()).anyMatch(m -> m.contains("audit history"));
+        Long auditBefore = jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class);
+        assertThatThrownBy(() -> purge(b, false, name))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("audit history");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs", Long.class))
+                .as("not one audit row deleted").isEqualTo(auditBefore);
+
+        // 5b. a never-used tenant: everything holds except the confirmation name
+        clearAuditHistory(b);
         assertThat(purge(b, true, null).eligible()).isTrue();
         assertThatThrownBy(() -> purge(b, false, null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -656,6 +680,25 @@ class TenantExportPurgeIT extends PostgresIntegrationTest {
         Map<String, Long> afterAll = totals();
         afterAll.keySet().stream().filter(k -> !k.equals("audit_logs") && !k.equals("app_users"))
                 .forEach(k -> assertThat(afterAll.get(k)).as(k).isEqualTo(beforeAll.get(k)));
+    }
+
+    @Test
+    @DisplayName("R-8 · an audit row that appears after eligibility still stops the purge, in its transaction")
+    void aLateAuditRowStopsThePurge() throws IOException {
+        makeEligible(b);
+        // e.g. a sign-in attempt by one of B's users after the operator's dry run.
+        jdbc.update("INSERT INTO audit_logs (actor_user_id, action, target_type, target_id) "
+                + "VALUES (?, 'LOGIN.FAIL', 'app_users', ?)", b.adminId(), b.adminId());
+        Map<String, Long> before = totals();
+        Map<String, String> digestB = digests(b);
+
+        actingAsOperator();
+        assertThatThrownBy(() -> purge(b, false, b.org().getName()))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("audit history");
+
+        assertThat(totals()).as("nothing deleted anywhere").isEqualTo(before);
+        assertThat(digests(b)).isEqualTo(digestB);
     }
 
     @Test
