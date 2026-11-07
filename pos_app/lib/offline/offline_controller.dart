@@ -18,6 +18,7 @@ import 'offline_models.dart';
 import 'offline_providers.dart';
 import 'offline_queue.dart';
 import 'offline_sale.dart';
+import 'offline_sign_in.dart';
 import 'secret_cipher.dart';
 
 const _uuid = Uuid();
@@ -116,6 +117,7 @@ class OfflineState {
     this.pricesAsOf,
     this.queueReadable = true,
     this.firstUnsyncedSoldAt,
+    this.offlineSession = false,
   });
 
   final bool offline;
@@ -158,6 +160,14 @@ class OfflineState {
   /// The oldest unsynced offline sale: the 24-hour limit counts from it.
   final DateTime? firstUnsyncedSoldAt;
 
+  /// The signed-in user signed in OFFLINE (D-7): there is no server session,
+  /// so nothing syncs until they sign in online.
+  final bool offlineSession;
+
+  /// The server is back but the user signed in offline: they must sign in
+  /// online before the offline sales can be sent.
+  bool get needsOnlineSignIn => offlineSession && serverBack;
+
   bool get serverBack => serverBackAt != null;
   DateTime? get onlineBy => serverBackAt?.add(kReturnGrace);
 
@@ -184,6 +194,7 @@ class OfflineState {
     bool? queueReadable,
     DateTime? firstUnsyncedSoldAt,
     bool clearFirstUnsynced = false,
+    bool? offlineSession,
   }) =>
       OfflineState(
         offline: offline ?? this.offline,
@@ -207,6 +218,7 @@ class OfflineState {
         firstUnsyncedSoldAt: clearFirstUnsynced
             ? null
             : (firstUnsyncedSoldAt ?? this.firstUnsyncedSoldAt),
+        offlineSession: offlineSession ?? this.offlineSession,
       );
 }
 
@@ -220,7 +232,12 @@ class OfflineController extends Notifier<OfflineState> {
   Timer? _syncTimer;
   bool _probing = false;
   bool _paymentOpen = false;
+
+  /// An ONLINE sign-in is in place (a real server session). Sync needs it.
   bool _signedIn = false;
+
+  /// The user signed in offline (D-7). Never syncs on those credentials.
+  bool _offlineSession = false;
   int _syncFailures = 0;
 
   /// The clock — replaced in tests.
@@ -285,6 +302,8 @@ class OfflineController extends Notifier<OfflineState> {
   /// catalogue refresh, and send anything waiting.
   Future<void> signedIn() async {
     _signedIn = true;
+    _offlineSession = false;
+    state = state.copyWith(offlineSession: false);
     ref.read(apiClientProvider).onUnreachable = onUnreachable;
     await _queue.load();
     await _catalog.load();
@@ -302,6 +321,7 @@ class OfflineController extends Notifier<OfflineState> {
   /// Signing out ends any offline period (it is sent with the next sync).
   Future<void> signedOut() async {
     _signedIn = false;
+    _offlineSession = false;
     if (state.offline) await _endPeriod();
     _cancelAll();
     state = OfflineState(
@@ -401,9 +421,15 @@ class OfflineController extends Notifier<OfflineState> {
           _graceTimer?.cancel();
           _graceTimer = Timer(kReturnGrace, _graceExpired);
         }
-        // Nothing being rung (no basket to finish), or the grace is over: back
-        // online now. Never under an open payment.
-        if (!_paymentOpen && (ref.read(cartProvider).isEmpty || _graceOver)) {
+        // Signed in offline: the cashier is asked to sign in online (the strip
+        // says so); only once the grace is over and nothing is being rung is
+        // the sign-in forced. Otherwise: nothing being rung, or the grace is
+        // over — back online now. Never under an open payment.
+        if (_offlineSession) {
+          if (!_paymentOpen && _graceOver && ref.read(cartProvider).isEmpty) {
+            unawaited(requestOnlineSignIn());
+          }
+        } else if (!_paymentOpen && (ref.read(cartProvider).isEmpty || _graceOver)) {
           unawaited(returnOnline());
         }
       } else if (state.serverBackAt != null) {
@@ -441,6 +467,10 @@ class OfflineController extends Notifier<OfflineState> {
     if (!state.offline) return;
     // A payment on screen finishes first; paymentClosed() completes the return.
     if (_paymentOpen) return;
+    if (_offlineSession) {
+      if (ref.read(cartProvider).isEmpty) unawaited(requestOnlineSignIn());
+      return;
+    }
     unawaited(returnOnline());
   }
 
@@ -522,9 +552,11 @@ class OfflineController extends Notifier<OfflineState> {
     }
   }
 
-  /// Back to online selling, then sync (D-1 "coming back").
+  /// Back to online selling, then sync (D-1 "coming back"). A user who signed
+  /// in offline has no server session: they are sent to sign in online first.
   Future<void> returnOnline() async {
     if (!state.offline) return;
+    if (_offlineSession) return requestOnlineSignIn();
     _probeTimer?.cancel();
     _graceTimer?.cancel();
     await _endPeriod();
@@ -547,7 +579,150 @@ class OfflineController extends Notifier<OfflineState> {
   /// moment to return online.
   void basketDone() {
     if (!state.offline || !state.serverBack || _paymentOpen) return;
+    if (_offlineSession) {
+      if (_graceOver && ref.read(cartProvider).isEmpty) unawaited(requestOnlineSignIn());
+      return;
+    }
     if (ref.read(cartProvider).isEmpty || _graceOver) unawaited(returnOnline());
+  }
+
+  // ---------------------------------------------------------------- offline sign-in
+
+  /// Whether the sign-in screen should offer offline sign-in: the server does
+  /// not answer, this device's till may sell offline, and someone is known.
+  Future<bool> offlineSignInAvailable() async {
+    final store = ref.read(offlineSignInStoreProvider);
+    await store.load();
+    await _catalog.load();
+    final till = _catalog.snapshot.till;
+    if (till == null || !till.offlineAllowed) return false;
+    if (store.knownUsers(clock()).isEmpty) return false;
+    Duration? latency;
+    try {
+      latency = await ref.read(reachabilityProbeProvider)();
+    } catch (_) {
+      latency = null;
+    }
+    return latency == null;
+  }
+
+  /// Checks an offline sign-in (D-7). Allowed only while the server does not
+  /// answer, only on a till allowed offline, and only for a known user of this
+  /// till's branch who may sell. Returns the user, or the message to show.
+  Future<({KnownUser? user, String? error})> verifyOfflineSignIn(String username, String secret,
+      {required bool pin}) async {
+    final store = ref.read(offlineSignInStoreProvider);
+    await store.load();
+    await _catalog.load();
+    await _queue.load();
+    final till = _catalog.snapshot.till;
+    if (till == null || !till.offlineAllowed) {
+      return (user: null, error: 'This till is not allowed to sell offline.');
+    }
+    Duration? latency;
+    try {
+      latency = await ref.read(reachabilityProbeProvider)();
+    } catch (_) {
+      latency = null;
+    }
+    if (latency != null) {
+      return (user: null, error: 'The server answers — sign in as usual.');
+    }
+    final r = await store.verify(username, secret, pin: pin, now: clock());
+    final u = r.user;
+    if (r.outcome != OfflineSignInOutcome.ok || u == null) return (user: null, error: r.message);
+    if (!u.canSellOffline) {
+      return (user: null, error: 'Offline sign-in is for people who run a till and sell.');
+    }
+    if (u.context.branchId != till.branchId) {
+      return (user: null, error: 'You last signed in at another branch, so you cannot sign in '
+          'offline on this till.');
+    }
+    if (_catalog.snapshot.walkIn == null || _catalog.snapshot.isEmpty) {
+      return (user: null, error: 'This till has no saved products or prices yet, so it cannot '
+          'sell offline.');
+    }
+    return (user: u, error: null);
+  }
+
+  /// The user signed in offline: the till is offline from here on, continuing
+  /// the offline period still open on the device (an app restart mid-outage),
+  /// or starting one.
+  Future<void> enterOfflineSession(KnownUser user) async {
+    _signedIn = false;
+    _offlineSession = true;
+    await _queue.load();
+    await _catalog.load();
+    final till = currentTill ?? _catalog.snapshot.till;
+    if (till == null) throw OfflineSaleRefused('This till is not allowed to sell offline.');
+    final open = _queue.snapshot.periods
+        .where((p) => !p.ended && p.tillUid == till.uid)
+        .toList();
+    if (open.isNotEmpty) {
+      final p = open.last;
+      state = state.copyWith(
+        offline: true,
+        reason: p.reason,
+        periodKey: p.clientKey,
+        startedAt: p.startedAt,
+        switchedByUid: p.switchedByUid,
+        clearServerBack: true,
+        serverDown: false,
+        tillAllowed: true,
+        offlineSession: true,
+      );
+      _publishQueue();
+      _startProbeTimer();
+    } else {
+      await _enter(till, OfflineReason.unreachable, null);
+      state = state.copyWith(offlineSession: true);
+    }
+    if (ref.read(appControllerProvider).shift != null) await attachPeriodToCurrentShift();
+  }
+
+  /// The server is back and the user signed in offline: end the offline period
+  /// and send them to sign in online. The queue (and the open shift, kept on
+  /// the till row) wait safely on the device; nothing syncs until then.
+  Future<void> requestOnlineSignIn() async {
+    if (!_offlineSession) return;
+    _probeTimer?.cancel();
+    _graceTimer?.cancel();
+    await _endPeriod();
+    _offlineSession = false;
+    state = state.copyWith(offline: false, clearPeriod: true, serverDown: false, offlineSession: false);
+    _publishQueue();
+    ref.read(appControllerProvider.notifier).offlineSessionEnded();
+  }
+
+  /// The shift held on [till] by this device, rebuilt from disk: a shift
+  /// opened offline from the queue (its float and time), else the server shift
+  /// the till row names.
+  PosSession restoreShift(PosTill till) {
+    final uid = till.openSessionUid!;
+    final key = uid.startsWith(kOfflineShiftPrefix) ? uid.substring(kOfflineShiftPrefix.length) : null;
+    if (key != null) {
+      for (final s in _queue.snapshot.shifts) {
+        if (s.clientKey != key) continue;
+        if (s.adopted) break;
+        return PosSession(
+          id: '',
+          uid: uid,
+          posTillId: till.id,
+          cashierId: s.cashierId,
+          sessionNumber: 'Offline shift',
+          status: PosSessionStatus.open,
+          openedAt: s.openedAt,
+          closedAt: null,
+          reconciledAt: null,
+          openingFloatAmount: s.openingFloat,
+          countedCashAmount: null,
+          expectedCashAmount: null,
+          varianceAmount: null,
+          notes: null,
+        );
+      }
+    }
+    return PosSession.fromOpenTill(till, sessionUid: uid);
   }
 
   // ---------------------------------------------------------------- selling
@@ -628,6 +803,7 @@ class OfflineController extends Notifier<OfflineState> {
         cashierName: app.me?.displayName ?? '',
         periodKey: state.periodKey,
         cashTendered: cash > 0 ? cash : null,
+        rungByUid: app.me?.uid,
       ),
     );
     state = state.copyWith(firstOfflineSaleAt: state.firstOfflineSaleAt ?? sale.soldAt);
@@ -663,6 +839,10 @@ class OfflineController extends Notifier<OfflineState> {
     ));
     final period = state.periodKey;
     if (period != null) await _queue.attachPeriodToShift(period, clientKey: key);
+    // The device's till row now says this cashier holds it, so an app restart
+    // (or a sign-in offline) resumes this shift instead of opening another.
+    await tillChanged(till.withOccupancy(
+        sessionUid: '$kOfflineShiftPrefix$key', cashierId: app.cashierId, openedAt: at));
     return PosSession(
       id: '',
       uid: '$kOfflineShiftPrefix$key',
@@ -710,6 +890,8 @@ class OfflineController extends Notifier<OfflineState> {
   /// Returns an error message, or null when the queue went through (or there
   /// was nothing to send). Retries on its own with backoff after a failure.
   Future<String?> syncNow() async {
+    // Never on the credentials of an offline sign-in (D-7): sign in online first.
+    if (_offlineSession) return 'Sign in online to send the offline sales.';
     if (state.offline || state.syncing || !_signedIn) return null;
     final ctx = ref.read(appControllerProvider).context;
     if (ctx == null) return null;

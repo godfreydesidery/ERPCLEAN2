@@ -11,6 +11,7 @@ import 'offline/blob_store.dart';
 import 'offline/offline_catalog.dart';
 import 'offline/offline_providers.dart';
 import 'offline/offline_queue.dart';
+import 'offline/offline_sign_in.dart';
 import 'offline/secret_cipher.dart';
 
 Future<void> main() async {
@@ -38,10 +39,13 @@ Future<List<Override>> _offlineStorage() async {
     Hive.init(dir.path);
     final catalog =
         OfflineCatalog(await HiveBlobStore.open('offline_catalog', compactEachWrite: true));
-    final queue = OfflineQueue(await HiveBlobStore.open('offline_queue'), platformCipher());
+    final cipher = platformCipher();
+    final queue = OfflineQueue(await HiveBlobStore.open('offline_queue'), cipher);
+    final users = OfflineSignInStore(await HiveBlobStore.open('offline_users'), cipher);
     return [
       offlineCatalogProvider.overrideWithValue(catalog),
       offlineQueueProvider.overrideWithValue(queue),
+      offlineSignInStoreProvider.overrideWithValue(users),
     ];
   } catch (e) {
     debugPrint('POS offline storage unavailable: $e');

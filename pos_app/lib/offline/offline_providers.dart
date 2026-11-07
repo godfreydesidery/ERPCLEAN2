@@ -4,6 +4,7 @@ import '../state/providers.dart';
 import 'blob_store.dart';
 import 'offline_catalog.dart';
 import 'offline_queue.dart';
+import 'offline_sign_in.dart';
 import 'reachability.dart';
 import 'secret_cipher_stub.dart';
 
@@ -19,6 +20,12 @@ final offlineCatalogProvider =
 /// refuses offline sales instead of keeping them in memory or in the clear.
 final offlineQueueProvider = Provider<OfflineQueue>(
     (ref) => OfflineQueue(MemoryBlobStore(), const UnavailableCipher()));
+
+/// Offline sign-in verifiers (ADR-0068 D-7), sealed with the device key store.
+/// Like the queue, the default can store nothing: a build without a key store
+/// offers no offline sign-in.
+final offlineSignInStoreProvider = Provider<OfflineSignInStore>(
+    (ref) => OfflineSignInStore(MemoryBlobStore(), const UnavailableCipher()));
 
 /// The till's reachability check against the configured ERP.
 final reachabilityProbeProvider = Provider<ReachabilityProbe>((ref) {

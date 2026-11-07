@@ -1834,10 +1834,10 @@ Future<bool> confirmSignOutWhileOffline(BuildContext context, WidgetRef ref) asy
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
       title: const Text('Sign out?'),
       content: Text(off.offline
-          ? 'The till is offline. Signing in again needs the server, so after signing out '
-              'nobody can sell on this till until the connection is back. The '
-              '${off.waiting} offline sale${off.waiting == 1 ? '' : 's'} stay safely on the '
-              'device.'
+          ? 'The till is offline. After signing out, only people who signed in on this till '
+              'while it was online in the last 14 days can sign in again until the connection '
+              'is back. The ${off.waiting} offline sale${off.waiting == 1 ? '' : 's'} stay '
+              'safely on the device.'
           : '${off.waiting} offline sale${off.waiting == 1 ? ' is' : 's are'} still waiting to '
               'sync. They stay safely on the device and are sent after the next sign-in.'),
       actions: [

@@ -141,6 +141,7 @@ void main() {
       expect(w.keys.toSet(), {
         'idempotencyKey', 'offlineNumber', 'soldAt', 'sessionUid', 'sessionClientKey',
         'customerId', 'currency', 'lines', 'tenders', 'grossTotal', 'ageVerified', 'notes',
+        'rungByUid',
       });
       expect((w['lines'] as List).single,
           {'productId': '1', 'unitId': '2', 'quantity': 1.0, 'unitPrice': 1000.0, 'priceInclusive': false});

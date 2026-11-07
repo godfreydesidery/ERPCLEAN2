@@ -42,6 +42,9 @@ dependencies:
   # Offline POS (ADR-0068): the on-device stores live in the app-support folder,
   # not Documents (which Windows may sync to OneDrive). Already locked transitively.
   path_provider: ^2.1.5
+  # Offline sign-in verifiers (ADR-0068 D-7): PBKDF2-HMAC-SHA256 in pure Dart.
+  # Already locked transitively.
+  crypto: ^3.0.6
   intl: ^0.20.2
   uuid: ^4.5.3
   collection: ^1.19.1

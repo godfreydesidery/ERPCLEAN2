@@ -169,6 +169,7 @@ class OfflineSale {
     this.cashierName = '',
     this.periodKey,
     this.cashTendered,
+    this.rungByUid,
   });
 
   final String idempotencyKey;
@@ -208,6 +209,10 @@ class OfflineSale {
   /// Cash the customer handed over (for the change line on a reprint).
   final double? cashTendered;
 
+  /// Who rang it (user uid) — whether they signed in online or offline. The
+  /// server records it in the audit trail; it still posts as the syncing user.
+  final String? rungByUid;
+
   OfflineSale copyWith({String? sessionUid, bool clearClientKey = false}) => OfflineSale(
         idempotencyKey: idempotencyKey,
         offlineNumber: offlineNumber,
@@ -227,6 +232,7 @@ class OfflineSale {
         cashierName: cashierName,
         periodKey: periodKey,
         cashTendered: cashTendered,
+        rungByUid: rungByUid,
       );
 
   Map<String, dynamic> toWire() => {
@@ -242,6 +248,7 @@ class OfflineSale {
         'grossTotal': grossTotal,
         'ageVerified': ageVerified,
         'notes': notes,
+        'rungByUid': rungByUid,
       };
 
   Map<String, dynamic> toJson() => {
@@ -263,6 +270,7 @@ class OfflineSale {
         'cashierName': cashierName,
         'periodKey': periodKey,
         'cashTendered': cashTendered,
+        'rungByUid': rungByUid,
       };
 
   factory OfflineSale.fromJson(Map<String, dynamic> j) => OfflineSale(
@@ -284,6 +292,7 @@ class OfflineSale {
         cashierName: asStrOr(j['cashierName']),
         periodKey: asStr(j['periodKey']),
         cashTendered: asNum(j['cashTendered']),
+        rungByUid: asStr(j['rungByUid']),
       );
 }
 

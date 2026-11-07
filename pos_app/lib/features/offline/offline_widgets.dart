@@ -8,6 +8,7 @@ import '../../offline/offline_controller.dart';
 import '../../offline/offline_queue.dart';
 import '../../offline/secret_cipher.dart';
 import '../../state/app_controller.dart';
+import '../../state/cart_controller.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
 import 'sync_sheet.dart';
@@ -140,14 +141,36 @@ class OfflineStatusStrip extends ConsumerWidget {
           if (capSoon)
             Text('Offline selling stops at ${_hm(cap)} unless the till reaches the server.',
                 style: t(AppColors.warn, bold: true)),
-          if (s.serverBack)
+          if (s.offlineSession && !s.serverBack)
+            Text('Signed in offline: sales are sent after the next online sign-in.',
+                style: t(AppColors.danger)),
+          if (s.needsOnlineSignIn)
+            Text(
+              'The server is back. Finish this sale, then sign in online so the offline '
+              'sales can be sent (by ${_hm(s.onlineBy)} at the latest).',
+              style: t(AppColors.ok, bold: true),
+            )
+          else if (s.serverBack)
             Text(
               'The server is back. Finish this sale — the till returns online after it '
               '(by ${_hm(s.onlineBy)} at the latest).',
               style: t(AppColors.ok, bold: true),
             ),
         ],
-        actions: [details],
+        actions: [
+          if (s.needsOnlineSignIn)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: OrbixButton(
+                label: 'Sign in online',
+                icon: Icons.login,
+                onPressed: ref.watch(cartProvider).isEmpty
+                    ? () => ref.read(offlineControllerProvider.notifier).requestOnlineSignIn()
+                    : null,
+              ),
+            ),
+          details,
+        ],
       );
     }
 
