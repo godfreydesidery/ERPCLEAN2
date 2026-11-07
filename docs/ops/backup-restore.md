@@ -227,3 +227,5 @@ So on a shared instance:
   unproven and slow. Cost it before promising it.
 - **Per-tenant export (D-6 / P5-4).** On departure a customer must **never** be handed a dump.
   There is no per-organisation extract, so there is nothing to hand over yet.
+
+> Shared multi-tenant server (`infra/shared/`): backups there are WAL archiving + base backups with point-in-time restore, not the dumps described below - see [shared-instance-pitr.md](shared-instance-pitr.md).
