@@ -64,6 +64,7 @@ class FiscalReceiptServiceImplTest {
     @Mock FiscalisationProvider provider;
     @Mock ScopeGuard scopeGuard;
     @Mock AuditService audit;
+    @Mock com.erp.modules.iam.repository.OrganisationRepository organisations;
 
     @InjectMocks FiscalReceiptServiceImpl service;
 
@@ -110,6 +111,28 @@ class FiscalReceiptServiceImplTest {
         assertThat(dto.errorDetail()).isNotBlank();
         // Created once (reserve the row) + saved again after the outcome is applied.
         verify(fiscalReceipts, times(2)).save(any());
+    }
+
+    /**
+     * R-1 (MULTITENANCY-PLAN §14.1, D-8): with a second organisation on the server, the one global
+     * provider would fiscalise that tenant's sales under the first tenant's device and TIN. The
+     * provider is never called; the row is recorded NOT_CONFIGURED, which is retryable.
+     */
+    @Test
+    void issue_moreThanOneOrganisation_neverCallsTheProvider() {
+        SalesInvoice inv = finalisedInvoice(500L, INVOICE_UID);
+        when(invoices.findByUid(INVOICE_UID)).thenReturn(Optional.of(inv));
+        when(fiscalReceipts.findBySalesInvoiceId(500L)).thenReturn(Optional.empty());
+        when(fiscalReceipts.save(any())).thenAnswer(a -> a.getArgument(0));
+        stubInvoiceDataLookups(inv);
+        when(provider.providerCode()).thenReturn("SIMULATED");
+        when(organisations.count()).thenReturn(2L);
+
+        FiscalReceiptDto dto = service.issue(INVOICE_UID);
+
+        assertThat(dto.status()).isEqualTo("NOT_CONFIGURED");
+        assertThat(dto.fiscalNumber()).isNull();
+        org.mockito.Mockito.verify(provider, org.mockito.Mockito.never()).fiscalise(any());
     }
 
     @Test

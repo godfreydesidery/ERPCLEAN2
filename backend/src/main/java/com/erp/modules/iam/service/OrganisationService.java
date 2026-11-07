@@ -29,4 +29,10 @@ public interface OrganisationService {
      * with a message that says nothing about billing or suspension.
      */
     OrganisationDto setStatus(String uid, boolean active);
+
+    /**
+     * Every tenant on the instance, for the platform console (MULTITENANCY-PLAN §14.2 R-2).
+     * Platform operator only; anyone else is told the resource does not exist.
+     */
+    List<com.erp.modules.iam.domain.dto.TenantSummaryDto> listTenants();
 }

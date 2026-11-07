@@ -90,6 +90,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      */
     List<AppUser> findByRootFalseAndOrganisationIdOrderByUsername(Long organisationId);
 
+    /** How many accounts a tenant has — the platform console's tenant list (R-2). */
+    long countByOrganisationId(Long organisationId);
+
     /**
      * Every user of one tenant, root users included, plus any not yet attributed (ADR-0062 P3-8).
      *

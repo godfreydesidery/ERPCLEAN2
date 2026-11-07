@@ -21,13 +21,22 @@ public class OrganisationServiceImpl implements OrganisationService {
     private final OrganisationRepository organisations;
     private final com.erp.platform.bootstrap.TenantProvisioningService provisioning;
     private final com.erp.platform.audit.AuditService audit;
+    private final com.erp.platform.fiscal.FiscalisationProperties fiscal;
+    private final com.erp.modules.iam.repository.CompanyRepository companies;
+    private final com.erp.modules.iam.repository.AppUserRepository users;
 
     public OrganisationServiceImpl(OrganisationRepository organisations,
                                    com.erp.platform.bootstrap.TenantProvisioningService provisioning,
-                                   com.erp.platform.audit.AuditService audit) {
+                                   com.erp.platform.audit.AuditService audit,
+                                   com.erp.platform.fiscal.FiscalisationProperties fiscal,
+                                   com.erp.modules.iam.repository.CompanyRepository companies,
+                                   com.erp.modules.iam.repository.AppUserRepository users) {
         this.organisations = organisations;
         this.provisioning = provisioning;
         this.audit = audit;
+        this.fiscal = fiscal;
+        this.companies = companies;
+        this.users = users;
     }
 
     @Override
@@ -50,6 +59,20 @@ public class OrganisationServiceImpl implements OrganisationService {
     @Override
     @Transactional
     public OrganisationDto createTenant(CreateTenantRequest request) {
+        // R-1 (MULTITENANCY-PLAN §14.1, D-8): THE SHARED SERVER DOES NOT FISCALISE. The fiscal
+        // provider is ONE global setting for the whole JVM (erp.fiscal.provider), so a second tenant
+        // on a fiscalising server would have its sales sent under the first tenant's device and TIN
+        // - a receipt issued in somebody else's name. Per-tenant provider settings arrive with the
+        // real TRA adapter; until then the two cannot coexist, and the refusal is here, at the only
+        // place a tenant is born. The reverse direction (a provider switched on once two tenants
+        // exist) is refused at issue time in FiscalReceiptServiceImpl.
+        //
+        // Checked against the CONFIGURED provider, not a tenant count: a single-customer install with
+        // a provider never reaches this endpoint at all, so nothing there changes.
+        if (!"none".equals(fiscal.effectiveProvider())) {
+            throw new ConflictException("A new organisation cannot be created on this server while "
+                    + "fiscal receipts are switched on. Switch fiscalisation off first.");
+        }
         // P5-2 (ADR-0062). Delegates to the SAME service bootstrap uses, so there is one seeding path
         // and no second copy to drift. The two tenants are no longer IDENTICAL, and deliberately so:
         // an operator is present here, so this path can carry a tax identity, a price list, a
@@ -202,6 +225,23 @@ public class OrganisationServiceImpl implements OrganisationService {
      */
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    @Override
+    public List<com.erp.modules.iam.domain.dto.TenantSummaryDto> listTenants() {
+        // Same rule as setStatus: the endpoint is gated on a platform-module code, and this states
+        // it again in the service so the list cannot be reached by a code being granted by mistake.
+        // NOT FOUND rather than FORBIDDEN, for the same existence-oracle reason.
+        if (!isPlatformOperator(RequestContext.get())) {
+            throw new NotFoundException("Organisation not found.");
+        }
+        return organisations.findAll(Sort.by("name")).stream()
+                .map(o -> new com.erp.modules.iam.domain.dto.TenantSummaryDto(
+                        o.getUid(), o.getName(), o.getAlias(), o.getStatus().name(),
+                        o.getCreatedAt(),
+                        companies.countByOrganisationId(o.getId()),
+                        users.countByOrganisationId(o.getId())))
+                .toList();
     }
 
     @Override

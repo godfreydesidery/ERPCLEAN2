@@ -76,6 +76,16 @@ public class OrganisationController {
         return organisations.setStatus(uid, true);
     }
 
+    /**
+     * Every tenant on the instance, for the platform console (MULTITENANCY-PLAN §14.2 R-2). Gated on
+     * {@code ORG.CREATE}: only whoever may create tenants may list them.
+     */
+    @GetMapping("/tenants")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public List<com.erp.modules.iam.domain.dto.TenantSummaryDto> tenants() {
+        return organisations.listTenants();
+    }
+
     @GetMapping("/current")
     @PreAuthorize("isAuthenticated()")
     public OrganisationDto current() {

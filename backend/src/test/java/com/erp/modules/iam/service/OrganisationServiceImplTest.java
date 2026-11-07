@@ -46,12 +46,14 @@ class OrganisationServiceImplTest {
     @Mock OrganisationRepository organisations;
     @Mock TenantProvisioningService provisioning;
     @Mock AuditService audit;
+    @Mock com.erp.modules.iam.repository.CompanyRepository companies;
+    @Mock com.erp.modules.iam.repository.AppUserRepository users;
 
     private OrganisationServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new OrganisationServiceImpl(organisations, provisioning, audit);
+        service = serviceWithFiscalProvider(null);
         // lenient: the setStatus cases below never reach createTenant, and strict stubs would fail
         // them for a stub they were never meant to use.
         lenient().when(provisioning.provision(any())).thenReturn(
@@ -281,6 +283,71 @@ class OrganisationServiceImplTest {
     }
 
     // -------------------------------------------------------------------------
+
+    // -------------------------------------------------------------------------
+    // R-1 — the shared server does not fiscalise (MULTITENANCY-PLAN §14.1, D-8)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("R-1: no tenant is created while a fiscal provider is switched on")
+    void tenantCreationIsRefusedWhileAFiscalProviderIsOn() {
+        OrganisationServiceImpl fiscalising = serviceWithFiscalProvider("simulated");
+
+        assertThatThrownBy(() -> fiscalising.createTenant(request(
+                null, null, null, null, null, null, null)))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("fiscal");
+        // Refused BEFORE anything is provisioned — not a half-created tenant rolled back later.
+        verify(provisioning, org.mockito.Mockito.never()).provision(any());
+    }
+
+    @Test
+    @DisplayName("R-1: an explicit 'none' provider is the same as no provider")
+    void tenantCreationIsAllowedWithProviderNone() {
+        serviceWithFiscalProvider("  NONE ").createTenant(request(
+                null, null, null, null, null, null, null));
+        verify(provisioning).provision(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // listTenants — the platform console (R-2)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("R-2: a tenant caller is told the tenant list does not exist")
+    void aTenantCannotListTenants() {
+        actingAs(1L, false);
+        assertThatThrownBy(() -> service.listTenants())
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class);
+        verify(organisations, org.mockito.Mockito.never()).findAll(
+                any(org.springframework.data.domain.Sort.class));
+    }
+
+    @Test
+    @DisplayName("R-2: the platform operator sees every tenant with its size")
+    void thePlatformOperatorListsEveryTenant() {
+        actingAs(1L, true);
+        Organisation a = organisation(1L, "Vendor");
+        Organisation b = organisation(2L, "Customer Two");
+        when(organisations.findAll(any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of(a, b));
+        when(companies.countByOrganisationId(1L)).thenReturn(1L);
+        when(companies.countByOrganisationId(2L)).thenReturn(3L);
+        when(users.countByOrganisationId(1L)).thenReturn(1L);
+        when(users.countByOrganisationId(2L)).thenReturn(14L);
+
+        var tenants = service.listTenants();
+
+        assertThat(tenants).hasSize(2);
+        assertThat(tenants.get(1).name()).isEqualTo("Customer Two");
+        assertThat(tenants.get(1).companyCount()).isEqualTo(3L);
+        assertThat(tenants.get(1).userCount()).isEqualTo(14L);
+    }
+
+    private OrganisationServiceImpl serviceWithFiscalProvider(String provider) {
+        return new OrganisationServiceImpl(organisations, provisioning, audit,
+                new com.erp.platform.fiscal.FiscalisationProperties(provider), companies, users);
+    }
 
     /** An organisation with an id, which a mock repository never assigns. */
     private static Organisation organisation(Long id, String name) {
