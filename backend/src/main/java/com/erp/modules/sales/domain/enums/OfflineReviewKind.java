@@ -8,6 +8,8 @@ public enum OfflineReviewKind {
     NEGATIVE_STOCK,
     /** Posted, but the day it was sold falls in a closed fiscal period (GL goes to exceptions). */
     CLOSED_PERIOD,
+    /** Posted, with a line at or below average cost while the company's below-cost policy is on. */
+    BELOW_COST,
     /** NOT posted: something offline selling never permits; kept with the sale as rung. */
     HELD
 }

@@ -108,7 +108,8 @@ CREATE TABLE pos_offline_reviews (
     CONSTRAINT fk_pos_offline_review_session  FOREIGN KEY (pos_session_id)   REFERENCES pos_sessions(id),
     CONSTRAINT fk_pos_offline_review_invoice  FOREIGN KEY (sales_invoice_id) REFERENCES sales_invoices(id),
     CONSTRAINT fk_pos_offline_review_ack_by   FOREIGN KEY (acknowledged_by)  REFERENCES app_users(id),
-    CONSTRAINT chk_pos_offline_review_kind    CHECK (kind IN ('PRICE_DIFFERENCE','NEGATIVE_STOCK','CLOSED_PERIOD','HELD')),
+    CONSTRAINT chk_pos_offline_review_kind    CHECK (kind IN ('PRICE_DIFFERENCE','NEGATIVE_STOCK',
+                                                              'CLOSED_PERIOD','BELOW_COST','HELD')),
     CONSTRAINT chk_pos_offline_review_status  CHECK (status IN ('OPEN','ACKNOWLEDGED')),
     CONSTRAINT chk_pos_offline_review_ack     CHECK (status <> 'ACKNOWLEDGED'
                                                      OR (acknowledged_by IS NOT NULL AND acknowledged_at IS NOT NULL)),

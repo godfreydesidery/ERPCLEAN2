@@ -32,6 +32,7 @@ import com.erp.modules.sales.repository.PosOfflinePeriodRepository;
 import com.erp.modules.sales.repository.PosOfflineReviewRepository;
 import com.erp.modules.sales.repository.PosSaleIdempotencyRepository;
 import com.erp.modules.sales.repository.PosSessionRepository;
+import com.erp.modules.sales.repository.SalesInvoiceLineRepository;
 import com.erp.modules.sales.repository.SalesInvoiceRepository;
 import com.erp.platform.audit.AuditActions;
 import com.erp.platform.audit.AuditEvent;
@@ -83,6 +84,8 @@ public class PosOfflineSaleIngestor {
     private final PosOfflineReviewRepository reviews;
     private final PosOfflinePeriodRepository periods;
     private final NegativeStockGuard stockGuard;
+    private final BelowCostGuard belowCostGuard;
+    private final SalesInvoiceLineRepository invoiceLines;
     private final FiscalCalendarService fiscalCalendar;
     private final CompanyCalendar calendar;
     private final SalesDepthNumberGenerator numberGen;
@@ -95,7 +98,8 @@ public class PosOfflineSaleIngestor {
                                   PosSaleIdempotencyRepository idempotency,
                                   PosOfflineReviewRepository reviews,
                                   PosOfflinePeriodRepository periods,
-                                  NegativeStockGuard stockGuard,
+                                  NegativeStockGuard stockGuard, BelowCostGuard belowCostGuard,
+                                  SalesInvoiceLineRepository invoiceLines,
                                   FiscalCalendarService fiscalCalendar, CompanyCalendar calendar,
                                   SalesDepthNumberGenerator numberGen, AuditService audit) {
         this.sessions = sessions;
@@ -109,6 +113,8 @@ public class PosOfflineSaleIngestor {
         this.reviews = reviews;
         this.periods = periods;
         this.stockGuard = stockGuard;
+        this.belowCostGuard = belowCostGuard;
+        this.invoiceLines = invoiceLines;
         this.fiscalCalendar = fiscalCalendar;
         this.calendar = calendar;
         this.numberGen = numberGen;
@@ -279,6 +285,17 @@ public class PosOfflineSaleIngestor {
             reviews.save(PosOfflineReview.flagged(companyId, till.getBranchId(), till.getId(),
                     sessionId, invoice.getId(), sale.offlineNumber(),
                     OfflineReviewKind.NEGATIVE_STOCK, String.join("; ", shortNotes), actor));
+        }
+        List<String> belowCost = belowCostGuard.offlineBelowCostDetails(companyId, till.getBranchId(),
+                invoiceLines.findByInvoiceIdOrderByLineNo(invoice.getId()).stream()
+                        .map(l -> new BelowCostGuard.PricedLine(l.getProductId(), l.getProductName(),
+                                l.getNetAmount(), l.getQtyInBase()))
+                        .toList());
+        if (!belowCost.isEmpty()) {
+            flags.add(OfflineReviewKind.BELOW_COST.name());
+            reviews.save(PosOfflineReview.flagged(companyId, till.getBranchId(), till.getId(),
+                    sessionId, invoice.getId(), sale.offlineNumber(),
+                    OfflineReviewKind.BELOW_COST, String.join("; ", belowCost), actor));
         }
         LocalDate soldOn = calendar.dateOf(companyId, sale.soldAt());
         if (isClosedPeriod(companyId, soldOn)) {

@@ -47,6 +47,7 @@ import com.erp.modules.sales.domain.dto.PosTillDto;
 import com.erp.modules.sales.domain.dto.UpdateSalesSettingsRequest;
 import com.erp.modules.sales.domain.entity.PosSession;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
+import com.erp.modules.sales.domain.enums.BelowCostAction;
 import com.erp.modules.sales.domain.enums.DocumentOrigin;
 import com.erp.modules.sales.domain.enums.InvoiceStatus;
 import com.erp.modules.sales.domain.enums.OfflinePeriodReason;
@@ -243,6 +244,42 @@ class PosOfflineSyncIT extends PostgresIntegrationTest {
                 .as("the goods already left: a company that blocks negative stock still gets the sale")
                 .isEqualTo("POSTED");
         assertThat(r.flags()).containsExactly(OfflineReviewKind.NEGATIVE_STOCK.name());
+    }
+
+    @Test
+    void belowCostOfflineSale_postsUnderBlock_andIsFlagged() {
+        setRootCtx();
+        salesSettingsService.update(new UpdateSalesSettingsRequest(
+                company.getUid(), false, null, "TZS", false, BelowCostAction.BLOCK));
+        setCashierCtx();
+        // Received at a cost of 100 a unit; the till sold it offline at 80.
+        ProductDto salt = stocked("Salt", "500", "10");
+        var sale = sale("OFF-T1-000008", Instant.now().minusSeconds(120), salt, "1", "80");
+
+        var r = offlineService.sync(batch(List.of(), List.of(sale))).sales().get(0);
+
+        assertThat(r.status())
+                .as("the money is already taken: BLOCK cannot refuse an offline sale")
+                .isEqualTo("POSTED");
+        assertThat(r.flags()).contains(OfflineReviewKind.BELOW_COST.name(),
+                OfflineReviewKind.PRICE_DIFFERENCE.name());
+        assertThat(reviewRepo.findBySalesInvoiceId(
+                        invoiceRepo.findByUid(r.invoiceUid()).orElseThrow().getId()))
+                .filteredOn(x -> x.getKind() == OfflineReviewKind.BELOW_COST)
+                .singleElement()
+                .satisfies(x -> assertThat(x.getDetail()).contains("Salt").contains("80").contains("100"));
+    }
+
+    @Test
+    void belowCostOfflineSale_isNotFlagged_whenThePolicyIsOff() {
+        ProductDto pepper = stocked("Pepper", "500", "10");
+        var sale = sale("OFF-T1-000009", Instant.now().minusSeconds(120), pepper, "1", "80");
+
+        var r = offlineService.sync(batch(List.of(), List.of(sale))).sales().get(0);
+
+        assertThat(r.flags())
+                .as("OFF means no below-cost check, online and offline alike")
+                .doesNotContain(OfflineReviewKind.BELOW_COST.name());
     }
 
     @Test
