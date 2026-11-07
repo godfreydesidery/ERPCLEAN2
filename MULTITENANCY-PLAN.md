@@ -445,8 +445,9 @@ because `FiscalisationProperties` is a single global provider config in one JVM.
 root short-circuits every permission check — harmless on separate stacks, a cross-customer authority
 hole on a shared one. **That is fixed before customer #2 exists**, ahead of D-4, D-5 and D-6.
 
-Still outstanding as *measurements* rather than decisions: **P0-1c** and **P1-0**, both covered by
-[`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
+~~Still outstanding as *measurements* rather than decisions: **P0-1c** and **P1-0**~~ — **stale; both were
+measured 2026-08-14** on QA and the live client (19 blocks, zero errors; see P0-1c below and the change log),
+with [`docs/ops/multitenancy-phase0-measurements.sql`](docs/ops/multitenancy-phase0-measurements.sql).
 
 ### D-1 · What happens to the existing customers? — **RESOLVED 2026-08-14: (a) new customers only**
 
@@ -1637,7 +1638,9 @@ make it true, and they must land before any predicate in Phase 3 is written.
       `roles.findAllByOrderByName()` with no predicate at all, so a plain equality here would hide
       **all twelve shipped bundles from every tenant** — the roles screen would show a customer only
       the roles they authored themselves, and the ones they actually use would vanish.
-- [x] **P3-6** DONE 2026-08-14 (create half; `/companies/accessible` gating still open). Org assert in `CompanyServiceImpl.create`; gate `/companies/accessible`, currently
+- [x] **P3-6** DONE 2026-08-14 (create half); **`/companies/accessible` half closed by P3-8** (`b9d957dd`: a foreign
+      `organisationUid` is NOT FOUND, root included; covered by `TwoOrganisationIsolationIT`). A permission gate was
+      rejected 2026-11-07 — about ten screens incl. cashiers call it. Org assert in `CompanyServiceImpl.create`; gate `/companies/accessible`, currently
       `isAuthenticated()` only (`G3`).
 - [x] **P3-7** DONE 2026-08-14. Rewrite `OrganisationServiceImpl.current()` and `list()` off the principal (`G5`).
 - [x] **P3-8** DONE 2026-08-15 (spine half in batch 2, read half same day) — the two that mattered most, both in the authorisation spine
@@ -1933,7 +1936,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       per-company SQL seeders are already covered by `CompanyProvisioningServiceImpl.provisionDefaults`
       — this is the only gap.)*
 - [x] **P5-6** **Pre-seed `code_sequence` and `party_code_sequence` rows during provisioning.**
-      **DONE 2026-08-15** (commit `0202d044`) — `CodeSequenceSeeder` creates all 30 kinds during provisioning, hooked into `CompanyProvisioningService`. `CodeSequenceSeederCoversAllKindsTest` re-derives the true set from source and fails on divergence in both directions, verified against a dropped kind. Note: `party_code_sequence` is NOT covered — only `code_sequence`. That half remains open.
+      **DONE 2026-08-15** (commit `0202d044`) — `CodeSequenceSeeder` creates all 30 kinds during provisioning, hooked into `CompanyProvisioningService`. `CodeSequenceSeederCoversAllKindsTest` re-derives the true set from source and fails on divergence in both directions, verified against a dropped kind. ~~Note: `party_code_sequence` is NOT covered~~ — **closed by `13e721cb`**: `CodeSequenceSeeder.PARTY_KINDS` seeds all four party kinds too.
       Every number generator does `findByCompanyIdAndEntityKindForUpdate(...).orElseGet(save(new ...))`
       — e.g. `ApBillNumberGenerator.java:31-32` and three more in the same file. `PESSIMISTIC_WRITE`
       on a row that does not exist locks nothing, so two clerks raising the first document of a kind
@@ -2014,7 +2017,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
 
 ### Phase 8 — Operations
 
-- [ ] **P8-1** Per-tenant backup/restore (D-5).
+- [x] **P8-1** Per-tenant backup/restore (D-5). **DONE 2026-11-07 as R-6 + R-7** (§14).
       **NOT LIVE (audit 2026-08-15)** — a whole-database restore IS this tenant's restore while there is one tenant. Becomes real with tenant #2 (D-5).
 - [x] **P8-2 DONE 2026-08-15 — the rejection is recorded**, which is what this item asked for
       ("or a recorded rejection"). See **D-4**: rejected with a named trigger (the first database
@@ -2035,7 +2038,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       **DONE 2026-08-15.** `erp.outbox.failed.by.tenant`, a `MultiGauge` tagged by organisation. `domain_events` carries `company_id` and not `organisation_id`, so the rollup maps company → tenant through the cached `CompanyTenantIndex` — no schema change. Events with no company are tagged `unattributed` rather than dropped.
       **NOT LIVE (audit 2026-08-15)** — single-tenant global gauges still answer "whose outbox is stuck", because there is one tenant.
       and "who is generating the load" are unanswerable.
-- [ ] **P8-5** Per-tenant mail identity. A single global sender with no per-tenant from-address
+- [x] **P8-5** **DONE 2026-11-07 as R-10** (§14). Per-tenant mail identity. A single global sender with no per-tenant from-address
       **NOT LIVE (audit 2026-08-15)** — mail is unconfigured on every estate; the `EmailSender` bean is never created.
       means every customer's notifications leave under the platform's identity, and a misdirected
       email carries no clue whose it was.
@@ -2046,7 +2049,7 @@ make it true, and they must land before any predicate in Phase 3 is written.
       but do not repair it with a global system principal (`G14`). **Note the multi-node hazard when
       repairing it:** `@Scheduled(cron='0 0 0 * * *')` at `:193` iterates `findDueForGeneration(today)`
       with no lock and **creates sales orders** — two app nodes would double-generate for every tenant.
-- [ ] **P8-7** **JWT signing-key custody.** `docs/ops/jwt-keys.md` already states that `private.pem`
+- [x] **P8-7** **DONE 2026-11-07 as R-4** (§14). **JWT signing-key custody.** `docs/ops/jwt-keys.md` already states that `private.pem`
       "can forge tokens for any user on this deployment" — that sentence changes meaning from one
       customer to **every** customer. Move it to a real secret store before the shared instance takes
       a second tenant, and update the blast-radius framing in that document.
@@ -2504,7 +2507,29 @@ departure (R-7, R-8), then the extras (R-9, R-10).
 **Follow-ups, not blocking customer #2:** per-tenant fairness in the outbox (`ORDER BY occurredAt`,
 batch 100, serial), an outbox purge path, multi-node operation (scheduler locks).
 
-**Status:** planned only. The owner asked that no code be changed yet (2026-10-31).
+**Status (2026-11-07): built, except R-9.** The owner asked for every item that needs no migration; R-9 (backup-code
+table) is the only one left and waits on DDL approval. Branch `feat/shared-instance-readiness`.
+
+| # | Status | Evidence |
+|---|---|---|
+| R-1 | **Done** | Tenant creation 409 while a provider is on; with >1 organisation no receipt reaches a provider (NOT_CONFIGURED). Unit tests. |
+| R-2 | **Done** | `GET /organisations/tenants` (ORG.CREATE, root only) + web Platform → Tenants (list, create, suspend/reactivate); 15 specs incl. axe. |
+| R-3 | **Done** | `TenantScopedRepositoryRulesTest` (surefire; 430 reviewed allowlist entries; proven to bite) + `TenantIsolationSweepIT` (411/418 GETs as tenant A, ~8,000 uid-path calls with B's uids, 0 leaks; calibrated against B's own admin). |
+| R-4 | **Done** | `kid` (RFC 7638 thumbprint), verify-only previous keys (`ERP_JWT_PREVIOUS_PUBLIC_KEY_PATHS`), legacy kid-less tokens accepted; runbook. |
+| R-5 | **Done, not booted as a full stack** | `infra/shared/` + `docs/ops/shared-instance.md`; one node enforced; compose/Caddy validated only. |
+| R-6 | **Done** | WAL archiving + base backups + PITR scripts; timed drill twice (2.5 GB restore to scratch 34 s). One-tenant repair = documented procedure, not run on the ERP schema. |
+| R-7 | **Done** | `POST /organisations/uid/{uid}/export` (ORG.SUSPEND, root only): streamed zip, CSV per table + manifest; credential columns redacted. |
+| R-8 | **Done** | `POST /organisations/uid/{uid}/purge` (ORG.CREATE, root only): dry run default; suspended ≥30 d + export after suspension + exact name; FK-ordered, one transaction. |
+| R-9 | **Open** | Needs the backup-code table — DDL to the owner first. |
+| R-10 | **Done** | `ERP_MAIL_FROM`: tenant name as display name, company contact as Reply-To; unset = unchanged. |
+| Outbox | **Done** | Fair batch across companies; opt-in purge of old DISPATCHED events (`ERP_OUTBOX_RETENTION_DAYS`, floor 30, ON at 90 in `infra/shared`). |
+| Found in passing | **Fixed** | A suspended tenant kept refreshing its sessions indefinitely; `refresh()` now checks tenant status. Platform permission group hidden from tenant role editors (P4-1e follow-up). |
+
+**Rehearsed on the restored Kilimanjaro copy (round 9):** no migration, 0 WARN/ERROR; single-customer checks 17/17
+(pre-upgrade tokens still accepted, online sale through the outbox to GL and stock); then, on the throwaway copy turned
+into a shared server, a second tenant, suspension at sign-in and refresh, and the **departure drill on real data**:
+export 92,961 rows in 1.5 s, purge in 2.8 s, zero Kilimanjaro rows left, the other tenant byte-identical, clean restart.
+Log: `D:/My_Works/ERP/db-dumps/rehearsal-restaurant-20261024.txt`.
 
 ---
 

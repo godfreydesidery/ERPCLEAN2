@@ -1,5 +1,11 @@
 # Onboarding a tenant onto the shared instance
 
+> **⚠ Superseded in part (2026-11-07).** Written before P4-3 and the §14 readiness work. Two things below
+> are no longer true: **a tenant administrator created through `POST /api/v1/organisations` is NOT root**
+> (it holds `ORG_ADMIN`; only bootstrap's `rootadmin` is root and is the platform operator), and **there is
+> now a platform console** (web: Platform → Tenants). Follow [shared-instance.md](shared-instance.md) for
+> the shared server; read this file for the request bodies and the 2026-08-15 probe results only.
+
 *Written 2026-08-15. Every command below was executed against a throwaway two-tenant stack before
 this document was published; the response bodies are copied from that run, not composed. Where a
 step could not be executed it says so.*
