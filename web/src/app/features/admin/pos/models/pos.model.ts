@@ -24,6 +24,40 @@ export interface PosTillDto {
   openSessionUid?: string | null;
   openSessionCashierId?: string | null;
   openSessionOpenedAt?: string | null;
+  /** ADR-0068: till may keep selling while it cannot reach the server. */
+  offlineAllowed?: boolean;
+}
+
+// ── Offline POS (ADR-0068) ────────────────────────────────────────────────────
+
+export type OfflineReviewKind = 'PRICE_DIFFERENCE' | 'NEGATIVE_STOCK' | 'CLOSED_PERIOD' | 'BELOW_COST' | 'HELD';
+export type OfflineReviewStatus = 'OPEN' | 'ACKNOWLEDGED';
+
+export interface OfflineReviewDto {
+  uid: string;
+  kind: OfflineReviewKind;
+  status: OfflineReviewStatus;
+  offlineNumber: string | null;
+  detail: string | null;
+  tillName: string | null;
+  invoiceUid: string | null;
+  invoiceNumber: string | null;
+  /** JSON string, HELD items only. Display only — never evaluated. */
+  heldRequest: string | null;
+  createdAt: string;
+  acknowledgedByName: string | null;
+  acknowledgedAt: string | null;
+  acknowledgeNote: string | null;
+}
+
+export interface OfflinePeriodDto {
+  uid: string;
+  tillName: string | null;
+  reason: 'UNREACHABLE' | 'MANUAL';
+  switchedByName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  salesCount: number;
 }
 
 // ── PosSessionDto ─────────────────────────────────────────────────────────────

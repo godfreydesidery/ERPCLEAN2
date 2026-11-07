@@ -8,6 +8,9 @@ import { SalesInvoiceDto } from '../models/sales.model';
 import {
   CloseSessionRequest,
   CreatePosTillRequest,
+  OfflinePeriodDto,
+  OfflineReviewDto,
+  OfflineReviewStatus,
   OpenSessionRequest,
   PosPayoutRequest,
   PosSaleRequest,
@@ -18,6 +21,11 @@ import {
   XReadDto,
   ZReadDto,
 } from './models/pos.model';
+
+export interface PagedRows<T> {
+  rows: T[];
+  meta: PageMeta;
+}
 
 export interface PosSessionPage {
   rows: PosSessionDto[];
@@ -35,6 +43,8 @@ export class PosService {
   private readonly tillBase = `${environment.apiBaseUrl}/pos/tills`;
   private readonly sessionBase = `${environment.apiBaseUrl}/pos/sessions`;
   private readonly saleBase = `${environment.apiBaseUrl}/pos/sales`;
+  private readonly offlineReviewBase = `${environment.apiBaseUrl}/pos/offline-reviews`;
+  private readonly offlinePeriodBase = `${environment.apiBaseUrl}/pos/offline-periods`;
 
   // ── Tills ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +71,41 @@ export class PosService {
   /** Bring a deactivated till back into use. */
   reactivateTill(uid: string): Observable<PosTillDto> {
     return this.http.post<PosTillDto>(`${this.tillBase}/uid/${uid}/reactivate`, {});
+  }
+
+  /** Allow / disallow offline selling on a till (POS.TILL.MANAGE). */
+  setTillOffline(uid: string, offlineAllowed: boolean): Observable<PosTillDto> {
+    return this.http.put<PosTillDto>(`${this.tillBase}/uid/${uid}/offline`, { offlineAllowed });
+  }
+
+  // ── Offline review (ADR-0068) ─────────────────────────────────────────────
+
+  listOfflineReviews(status: OfflineReviewStatus, page = 0, size = 20): Observable<PagedRows<OfflineReviewDto>> {
+    const params = new HttpParams().set('status', status).set('page', String(page)).set('size', String(size));
+    return this.pagedGet<OfflineReviewDto>(this.offlineReviewBase, params, page, size);
+  }
+
+  acknowledgeOfflineReview(uid: string, note?: string): Observable<OfflineReviewDto> {
+    const trimmed = note?.trim();
+    return this.http.post<OfflineReviewDto>(
+      `${this.offlineReviewBase}/uid/${uid}/acknowledge`,
+      trimmed ? { note: trimmed } : {},
+    );
+  }
+
+  listOfflinePeriods(page = 0, size = 20): Observable<PagedRows<OfflinePeriodDto>> {
+    const params = new HttpParams().set('page', String(page)).set('size', String(size));
+    return this.pagedGet<OfflinePeriodDto>(this.offlinePeriodBase, params, page, size);
+  }
+
+  private pagedGet<T>(url: string, params: HttpParams, page: number, size: number): Observable<PagedRows<T>> {
+    const context = new HttpContext().set(SKIP_UNWRAP, true);
+    return this.http.get<ApiResponse<T[]>>(url, { params, context }).pipe(
+      map((env) => ({
+        rows: env.data ?? [],
+        meta: env.meta ?? { page, size, totalElements: env.data?.length ?? 0, totalPages: 1, hasNext: false },
+      })),
+    );
   }
 
   // ── Sessions ──────────────────────────────────────────────────────────────
