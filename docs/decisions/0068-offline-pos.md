@@ -115,7 +115,10 @@ For each sale the server:
    - `PRICE_DIFFERENCE` — charged price ≠ server price at sync;
    - `NEGATIVE_STOCK` — stock went below zero (also covers two tills selling the last item);
    - `CLOSED_PERIOD` — the sold date falls in a closed fiscal period (the GL posting goes to the
-     existing posting-exception flow).
+     existing posting-exception flow);
+   - `BELOW_COST` — a line went out at or below average cost while the company's below-cost policy
+     is WARN, APPROVE or BLOCK (owner decision 2026-11-07; OFF flags nothing, as online). The
+     below-cost block itself does not apply to an offline sale.
 4. Still **refuses** what offline selling never permits (a credit sale, a complimentary or discount
    line, a till without `offline_allowed`, a cashier who is not a user of that branch) — such a
    sale is held on the review list for a manager, never silently posted or dropped.
@@ -309,7 +312,8 @@ CREATE TABLE pos_offline_reviews (
     CONSTRAINT fk_pos_offline_review_session  FOREIGN KEY (pos_session_id)   REFERENCES pos_sessions(id),
     CONSTRAINT fk_pos_offline_review_invoice  FOREIGN KEY (sales_invoice_id) REFERENCES sales_invoices(id),
     CONSTRAINT fk_pos_offline_review_ack_by   FOREIGN KEY (acknowledged_by)  REFERENCES app_users(id),
-    CONSTRAINT chk_pos_offline_review_kind    CHECK (kind IN ('PRICE_DIFFERENCE','NEGATIVE_STOCK','CLOSED_PERIOD','HELD')),
+    CONSTRAINT chk_pos_offline_review_kind    CHECK (kind IN ('PRICE_DIFFERENCE','NEGATIVE_STOCK',
+                                                              'CLOSED_PERIOD','BELOW_COST','HELD')),
     CONSTRAINT chk_pos_offline_review_status  CHECK (status IN ('OPEN','ACKNOWLEDGED')),
     CONSTRAINT chk_pos_offline_review_ack     CHECK (status <> 'ACKNOWLEDGED'
                                                      OR (acknowledged_by IS NOT NULL AND acknowledged_at IS NOT NULL)),
