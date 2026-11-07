@@ -12,6 +12,7 @@ import '../../core/barcode.dart';
 import '../../core/config/step_up_policy.dart';
 import '../../core/money.dart';
 import '../../models/catalog.dart';
+import '../../offline/offline_controller.dart';
 import '../../state/app_controller.dart';
 import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
@@ -492,6 +493,9 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
     final ctrl = ref.read(cartProvider.notifier);
     if (_target == _NumTarget.qty) {
       ctrl.setQuantity(id, val);
+    } else if (ref.read(offlineControllerProvider).offline && val > 0) {
+      // ERP ADR-0068 D-3: no discounts offline — nobody can approve one.
+      showToast(context, 'Discounts cannot be given while the till is offline.');
     } else {
       ctrl.setDiscount(id, val);
     }

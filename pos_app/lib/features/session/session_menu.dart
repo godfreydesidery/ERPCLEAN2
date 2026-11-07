@@ -16,12 +16,14 @@ import '../../models/enums.dart';
 import '../../models/pos.dart';
 import '../../models/restaurant.dart';
 import '../../models/sale.dart';
+import '../../offline/offline_controller.dart';
 import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
 import '../../state/providers.dart';
 import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
+import '../offline/sync_sheet.dart';
 import '../catalog/add_product_dialog.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../receipt/receipt_view.dart';
@@ -144,7 +146,9 @@ class _SessionDrawer extends ConsumerWidget {
                     icon: Icons.logout,
                     kind: BtnKind.ghost,
                     block: true,
-                    onPressed: () {
+                    onPressed: () async {
+                      if (!await confirmSignOutWhileOffline(context, ref)) return;
+                      if (!context.mounted) return;
                       Navigator.pop(context);
                       ref.read(appControllerProvider.notifier).logout();
                     }),
@@ -180,44 +184,76 @@ class _SessionDrawer extends ConsumerWidget {
     // the server re-verifies the approver on every single request.
     final reportsVisible = _mayAskForAReport(app);
 
+    // ERP ADR-0068: while the till is offline, everything that needs the server
+    // stays in the menu (a workflow state, not a permission) but is disabled.
+    final off = ref.watch(offlineControllerProvider);
+    final offline = off.offline;
+    const needsServer = 'Needs the server — the till is offline';
+    if (!app.isWaiter &&
+        (off.tillAllowed || off.offline || off.waiting > 0 || off.held.isNotEmpty ||
+            !off.queueReadable)) {
+      out.add(_action(
+          off.offline ? Icons.cloud_off : Icons.cloud_upload_outlined,
+          'Offline sales',
+          off.offline
+              ? 'OFFLINE · ${off.waiting} waiting to sync'
+              : off.waiting > 0
+                  ? '${off.waiting} waiting to sync'
+                  : 'Sync, held sales, go offline',
+          enabled: true, onTap: () {
+        Navigator.pop(context);
+        showOfflineSyncSheet(context);
+      }));
+    }
+
     // A waiter sets or changes their own 4-digit sign-in PIN (V111).
     if (app.isWaiter) {
       out.add(_action(Icons.pin_outlined, 'Change my PIN',
           'A 4-digit PIN to sign in with instead of your password',
-          enabled: true, onTap: () => _changeMyPin(context, ref)));
+          enabled: !offline,
+          disabledNote: needsServer,
+          onTap: () => _changeMyPin(context, ref)));
     }
 
     if (reportsVisible) {
       out.add(_action(Icons.summarize_outlined, 'X-read',
           'Mid-shift drawer report — resets nothing',
-          enabled: s != null, onTap: () => _xRead(context, ref)));
+          enabled: s != null && !offline,
+          disabledNote: offline ? needsServer : null,
+          onTap: () => _xRead(context, ref)));
     }
     if (app.can(Perms.sessionOpen)) {
       out.add(_action(Icons.payments_outlined, 'Cash payout',
           'Cash paid out of the drawer — manager approves',
-          enabled: s != null && s.status.isOpen,
-          disabledNote: 'Only while the session is open',
+          enabled: s != null && s.status.isOpen && !offline,
+          disabledNote: offline ? needsServer : 'Only while the session is open',
           onTap: () => _payout(context, ref)));
     }
     if (app.can(Perms.expenseRecord)) {
       out.add(_action(Icons.receipt_outlined, 'Till expense',
           'Cash paid out for the business — by category',
-          enabled: s != null && s.status.isOpen,
-          disabledNote: 'Only while the session is open',
+          enabled: s != null && s.status.isOpen && !offline,
+          disabledNote: offline ? needsServer : 'Only while the session is open',
           onTap: () => _expense(context, ref)));
     }
     if (app.can(Perms.salesInvoiceView)) {
       out.add(_action(Icons.receipt_long_outlined, "Today's sales",
           'Look up & reprint a receipt',
-          enabled: true, onTap: () => _todaysSales(context, ref)));
+          enabled: !offline,
+          disabledNote: needsServer,
+          onTap: () => _todaysSales(context, ref)));
       out.add(_action(Icons.insights_outlined, 'Sales dashboard',
           'Sales by day, payment type and department',
-          enabled: true, onTap: () => showDashboard(context)));
+          enabled: !offline,
+          disabledNote: needsServer,
+          onTap: () => showDashboard(context)));
     }
     if (app.can(Perms.productManage)) {
       out.add(_action(Icons.add_box_outlined, 'Add a product',
           'Name, price, department — sellable straight away',
-          enabled: true, onTap: () => _addProduct(context)));
+          enabled: !offline,
+          disabledNote: needsServer,
+          onTap: () => _addProduct(context)));
     }
     out.add(_action(Icons.history, 'Recent receipts',
         'Reprint from this device (offline)',
@@ -228,15 +264,15 @@ class _SessionDrawer extends ConsumerWidget {
     if (app.can(Perms.sessionClose)) {
       out.add(_action(Icons.lock_outline, 'Close session',
           'Count the drawer → variance',
-          enabled: s != null && s.status.isOpen,
-          disabledNote: 'The session is already closed',
+          enabled: s != null && s.status.isOpen && !offline,
+          disabledNote: offline ? needsServer : 'The session is already closed',
           onTap: () => _close(context, ref)));
     }
     if (app.can(Perms.sessionReconcile)) {
       out.add(_action(Icons.fact_check_outlined, 'Reconcile (Z-read)',
           'Post the variance — this is final',
-          enabled: s != null && s.status.isClosed,
-          disabledNote: 'Close the session first',
+          enabled: s != null && s.status.isClosed && !offline,
+          disabledNote: offline ? needsServer : 'Close the session first',
           onTap: () => _reconcile(context, ref)));
     }
     // Reprinting the Z-read is a READ (P3 made it repeatable), so a holder of
@@ -248,8 +284,8 @@ class _SessionDrawer extends ConsumerWidget {
     if (reportsVisible) {
       out.add(_action(Icons.print_outlined, 'Z-read (reprint)',
           'The final figures for a reconciled session',
-          enabled: s != null && s.status.isReconciled,
-          disabledNote: 'Available once the session is reconciled',
+          enabled: s != null && s.status.isReconciled && !offline,
+          disabledNote: offline ? needsServer : 'Available once the session is reconciled',
           onTap: () => _zReadReprint(context, ref)));
     }
     return out;
@@ -598,6 +634,10 @@ class _SessionDrawer extends ConsumerWidget {
     final app = ref.read(appControllerProvider);
     final uid = app.shift?.uid;
     if (uid == null) return;
+    // ERP ADR-0068 D-4: the Z-report must be complete, so a shift closes only
+    // after every offline sale rung in it has reached the server.
+    if (!await checkShiftSynced(context, ref, app.shift)) return;
+    if (!context.mounted) return;
     if (!await _confirmOpenRestaurantOrders(context, ref)) return;
     if (!context.mounted) return;
     Navigator.pop(context); // close the drawer
@@ -1747,4 +1787,65 @@ class _ReconcileDialogState extends ConsumerState<_ReconcileDialog> {
       ],
     );
   }
+}
+
+/// ERP ADR-0068 D-4: closing a shift waits until its offline sales are on the
+/// server, so the Z-report counts them. True when the close may go ahead;
+/// otherwise the cashier is told why (plainly) and offered the sync.
+Future<bool> checkShiftSynced(BuildContext context, WidgetRef ref, PosSession? shift) async {
+  final ctrl = ref.read(offlineControllerProvider.notifier);
+  if (!ctrl.shiftHasUnsynced(shift)) return true;
+  final openedOffline = offlineShiftKeyOf(shift) != null;
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: const Text('Sync before closing'),
+      content: Text(openedOffline
+          ? 'This shift was opened offline. It can be closed once it and its sales have '
+              'reached the server.'
+          : 'This shift still has offline sales that have not reached the server. Close it '
+              'once they have synced, so the Z-report includes them.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext), child: const Text('Back')),
+        OrbixButton(
+          label: 'Sync now',
+          icon: Icons.cloud_upload_outlined,
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            ref.read(offlineControllerProvider.notifier).syncNow();
+          },
+        ),
+      ],
+    ),
+  );
+  return false;
+}
+
+/// Signing out while offline (or with offline sales still waiting) is allowed,
+/// but the cashier is told what it means first: signing in needs the server.
+Future<bool> confirmSignOutWhileOffline(BuildContext context, WidgetRef ref) async {
+  final off = ref.read(offlineControllerProvider);
+  if (!off.offline && off.waiting == 0) return true;
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
+      title: const Text('Sign out?'),
+      content: Text(off.offline
+          ? 'The till is offline. Signing in again needs the server, so after signing out '
+              'nobody can sell on this till until the connection is back. The '
+              '${off.waiting} offline sale${off.waiting == 1 ? '' : 's'} stay safely on the '
+              'device.'
+          : '${off.waiting} offline sale${off.waiting == 1 ? ' is' : 's are'} still waiting to '
+              'sync. They stay safely on the device and are sent after the next sign-in.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Back')),
+        OrbixButton(label: 'Sign out', onPressed: () => Navigator.pop(dialogContext, true)),
+      ],
+    ),
+  );
+  return go == true;
 }

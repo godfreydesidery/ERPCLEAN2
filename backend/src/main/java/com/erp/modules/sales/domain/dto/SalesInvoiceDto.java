@@ -63,7 +63,11 @@ public record SalesInvoiceDto(
         Long updatedBy,
         // SAL-28: the customer's uid, so a client can ask the price resolver for THIS customer's
         // price. Additive; null where the caller did not resolve it.
-        String customerUid
+        String customerUid,
+        // ADR-0068: rung on a till while offline; the offline receipt number it printed. Additive —
+        // lets a reprint from the server keep the OFFLINE mark and the number the customer holds.
+        boolean soldOffline,
+        String offlineNumber
 ) {
 
     /** Build from entity with enriched customer, agent, and optional route fields. */
@@ -138,7 +142,9 @@ public record SalesInvoiceDto(
                 inv.getCreatedBy(),
                 inv.getUpdatedAt() != null ? inv.getUpdatedAt().toString() : null,
                 inv.getUpdatedBy(),
-                customerUid
+                customerUid,
+                inv.isSoldOffline(),
+                inv.getOfflineNumber()
         );
     }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,7 @@ import '../models/context.dart';
 import '../models/enums.dart';
 import '../models/parties.dart';
 import '../models/pos.dart';
+import '../offline/offline_controller.dart';
 import '../services/receipt_printer.dart';
 import 'providers.dart';
 
@@ -37,6 +40,7 @@ class AppData {
     this.vatRates = const {},
     this.restaurantOnly = false,
     this.serverUnreachable = false,
+    this.till,
   });
 
   final AppPhase phase;
@@ -71,6 +75,11 @@ class AppData {
   /// The last sign-in could not reach the ERP at all. The sign-in screen then
   /// shows Server setup, which is otherwise hidden behind seven taps.
   final bool serverUnreachable;
+
+  /// The till the open shift runs on — its code numbers offline sales and its
+  /// `offlineAllowed` decides whether it may sell offline (ERP ADR-0068). Null
+  /// when it is not known (no shift, or a resume that could not read the till).
+  final PosTill? till;
 
   /// The registers this till offers.
   List<BusinessMode> get modes =>
@@ -127,6 +136,8 @@ class AppData {
     Map<String, double>? vatRates,
     bool? restaurantOnly,
     bool? serverUnreachable,
+    PosTill? till,
+    bool clearTill = false,
   }) {
     return AppData(
       phase: phase ?? this.phase,
@@ -144,6 +155,7 @@ class AppData {
       vatRates: vatRates ?? this.vatRates,
       restaurantOnly: restaurantOnly ?? this.restaurantOnly,
       serverUnreachable: serverUnreachable ?? this.serverUnreachable,
+      till: clearTill ? null : (till ?? this.till),
     );
   }
 }
@@ -283,6 +295,20 @@ class AppController extends Notifier<AppData> {
           'If your till shows as in use, open it again from the list below.';
     }
 
+    // The till behind a resumed shift: its code numbers offline sales and its
+    // setting says whether it may sell offline. Best effort — a cashier without
+    // POS.TILL.VIEW still resumes; that till then simply cannot go offline.
+    PosTill? till;
+    if (resumable != null) {
+      final tillId = resumable.posTillId;
+      try {
+        final tills = await ref
+            .read(tillServiceProvider)
+            .listByBranch(context.companyId, context.branchId);
+        till = tills.where((t) => t.id == tillId).firstOrNull;
+      } catch (_) {/* no till detail: no offline selling on this shift */}
+    }
+
     // A waiter has no till to open: straight to the restaurant floor.
     final waiter = AppData.isWaiterLogin(me) || AppData.isKitchenLogin(me);
     final config = await AppConfig.load();
@@ -304,7 +330,12 @@ class AppController extends Notifier<AppData> {
       unitsByUid: unitsByUid,
       currency: currency,
       vatRates: vatRates,
+      till: till,
+      clearTill: till == null,
     );
+    final offline = ref.read(offlineControllerProvider.notifier);
+    if (till != null) await offline.tillChanged(till);
+    unawaited(offline.signedIn());
   }
 
   void setMode(BusinessMode mode) {
@@ -341,20 +372,53 @@ class AppController extends Notifier<AppData> {
   }
 
   /// Open a shift on [tillUid] with [openingFloat] in the chosen [mode].
+  ///
+  /// [till] is the till row picked on the open-shift screen; it is kept so the
+  /// shift can sell offline later if that till allows it (ERP ADR-0068).
   Future<void> openShift(
-      String tillUid, double openingFloat, BusinessMode mode) async {
+      String tillUid, double openingFloat, BusinessMode mode, {PosTill? till}) async {
     state = state.copyWith(busy: true, clearError: true);
     try {
       final session =
           await ref.read(sessionServiceProvider).open(tillUid, openingFloat);
+      final held = till?.withOccupancy(
+          sessionUid: session.uid, cashierId: state.cashierId, openedAt: session.openedAt);
       state = state.copyWith(
           phase: AppPhase.register,
           shift: session,
           mode: state.restaurantOnly ? BusinessMode.restaurant : mode,
-          busy: false);
+          busy: false,
+          till: held,
+          clearTill: held == null);
+      await ref.read(offlineControllerProvider.notifier).tillChanged(held);
     } on ApiException catch (e) {
       state = state.copyWith(busy: false, error: e.message);
     }
+  }
+
+  /// Opens a provisional shift while the till is offline (ERP ADR-0068 D-4):
+  /// the server creates it at sync and the sales rung in it land inside it.
+  Future<void> openOfflineShift(double openingFloat, BusinessMode mode) async {
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final offline = ref.read(offlineControllerProvider.notifier);
+      final session = await offline.openOfflineShift(openingFloat);
+      final till = offline.currentTill;
+      state = state.copyWith(
+          phase: AppPhase.register,
+          shift: session,
+          mode: state.restaurantOnly ? BusinessMode.restaurant : mode,
+          busy: false,
+          till: till,
+          clearNotice: true);
+    } catch (e) {
+      state = state.copyWith(busy: false, error: _friendly(e));
+    }
+  }
+
+  /// Re-reads the till row (its offline setting can change in the office).
+  void refreshTill(PosTill till) {
+    if (state.till?.uid == till.uid) state = state.copyWith(till: till);
   }
 
   /// Pick up a shift this cashier already has open on a till — the recovery path
@@ -374,7 +438,7 @@ class AppController extends Notifier<AppData> {
     try {
       final session =
           await ref.read(sessionServiceProvider).getByUid(sessionUid);
-      _enterShift(session, mode);
+      _enterShift(session, mode, till: fallbackTill);
     } on ApiException catch (e) {
       // A 404/409 IS an answer about the session and must not be papered over;
       // a refusal or a dead line is not.
@@ -383,7 +447,8 @@ class AppController extends Notifier<AppData> {
         debugPrint('POS resume read failed: ${e.statusCode} ${e.message}');
         _enterShift(
             PosSession.fromOpenTill(fallbackTill, sessionUid: sessionUid),
-            mode);
+            mode,
+            till: fallbackTill);
         return;
       }
       state = state.copyWith(busy: false, error: e.message);
@@ -397,13 +462,27 @@ class AppController extends Notifier<AppData> {
 
   /// Land in the register on [session], clearing the login-time shift notice —
   /// whatever it warned about, we are now in the shift it was about.
-  void _enterShift(PosSession session, BusinessMode mode) {
+  void _enterShift(PosSession session, BusinessMode mode, {PosTill? till}) {
     state = state.copyWith(
         phase: AppPhase.register,
         shift: session,
         mode: state.restaurantOnly ? BusinessMode.restaurant : mode,
         busy: false,
-        clearNotice: true);
+        clearNotice: true,
+        till: till,
+        clearTill: till == null);
+    if (till != null) {
+      unawaited(ref.read(offlineControllerProvider.notifier).tillChanged(till));
+    }
+  }
+
+  /// Resumes this cashier's own server shift while the till is offline (the
+  /// line went down while they were on the open-shift screen). Built from the
+  /// cached till row, exactly like the online fallback in [resumeShift].
+  void resumeShiftOffline(PosTill till, BusinessMode mode) {
+    final uid = till.openSessionUid;
+    if (uid == null) return;
+    _enterShift(PosSession.fromOpenTill(till, sessionUid: uid), mode, till: till);
   }
 
   /// Replace the current shift snapshot (after payout/close/x-read refresh).
@@ -420,10 +499,17 @@ class AppController extends Notifier<AppData> {
   }
 
   /// After a session is reconciled (terminal), drop back to the open-shift screen.
-  void endShift() =>
-      state = state.copyWith(phase: AppPhase.openShift, clearShift: true);
+  void endShift() {
+    final till = state.till;
+    state = state.copyWith(phase: AppPhase.openShift, clearShift: true, clearTill: true);
+    // The device's cached copy of the till must not keep saying it is occupied.
+    if (till != null) {
+      unawaited(ref.read(offlineControllerProvider.notifier).tillChanged(till.withOccupancy()));
+    }
+  }
 
   Future<void> logout() async {
+    await ref.read(offlineControllerProvider.notifier).signedOut();
     try {
       await ref.read(authServiceProvider).logout();
     } catch (_) {}
@@ -433,6 +519,7 @@ class AppController extends Notifier<AppData> {
 
   /// A 401 that could not be refreshed away — force re-login.
   void onAuthLost() {
+    unawaited(ref.read(offlineControllerProvider.notifier).signedOut());
     ref.read(apiClientProvider).branchUidOverride = null;
     state = const AppData(
       phase: AppPhase.login,

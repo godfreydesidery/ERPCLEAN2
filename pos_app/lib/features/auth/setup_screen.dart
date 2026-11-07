@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/api/erp_tls.dart';
 import '../../core/config/app_config.dart';
+import '../../offline/offline_providers.dart';
 import '../../services/receipt_printer.dart';
 import '../receipt/receipt_text.dart';
 import '../../state/providers.dart';
@@ -125,6 +126,24 @@ class _SetupDialogState extends ConsumerState<_SetupDialog> {
 
   Future<void> _save() async {
     final host = _trim(_host.text);
+    // ERP ADR-0068: offline sales on this device belong to the server they were
+    // rung for. Pointing the till at another server now would strand them, so
+    // the change waits until they have synced.
+    if (host != ref.read(baseHostProvider)) {
+      final queue = ref.read(offlineQueueProvider);
+      await queue.load();
+      final waiting = queue.snapshot.waiting;
+      if (waiting > 0 || !queue.readable) {
+        if (mounted) {
+          showToast(
+              context,
+              '$waiting offline sale${waiting == 1 ? ' is' : 's are'} still waiting for the '
+              'current server. Sync them before changing the server.',
+              duration: const Duration(seconds: 6));
+        }
+        return;
+      }
+    }
     ref.read(baseHostProvider.notifier).set(host);
     await AppConfig(
       baseHost: host,

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../models/enums.dart';
+import '../../offline/offline_controller.dart';
 import '../../state/app_controller.dart';
 import '../../state/cart_controller.dart';
 import '../../widgets/ui.dart';
+import '../offline/offline_widgets.dart';
 import '../payment/pending_sale_recovery.dart';
 import '../session/session_menu.dart';
 import 'pharmacy_register.dart';
@@ -31,13 +33,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           );
       // Surface an interrupted sale as soon as the till is back at the register,
       // rather than waiting until the cashier next reaches the payment sheet.
-      if (mounted) resolvePendingSale(context, ref);
+      // Offline it cannot be checked; the offline payment sheet warns instead.
+      if (mounted && !ref.read(offlineControllerProvider).offline) {
+        resolvePendingSale(context, ref);
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(appControllerProvider.select((s) => s.mode));
+    final offline = ref.watch(offlineControllerProvider.select((s) => s.offline));
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -45,14 +51,76 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           children: [
             const _TopBar(),
             const _BranchFallbackStrip(),
+            // ERP ADR-0068: the always-visible OFFLINE banner / connection strip.
+            const OfflineStatusStrip(),
             Expanded(
               child: switch (mode) {
                 BusinessMode.supermarket => const SupermarketRegister(),
                 BusinessMode.pharmacy => const PharmacyRegister(),
-                BusinessMode.restaurant => const RestaurantRegister(),
+                // Restaurant orders live on the server; offline phase 2 (one till
+                // running the restaurant) is not built yet.
+                BusinessMode.restaurant =>
+                  offline ? const _RestaurantOffline() : const RestaurantRegister(),
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The restaurant register while the till is offline (ERP ADR-0068 phase 1).
+///
+/// Restaurant orders — tables, kitchen and bar slips, bills — live on the
+/// server, so they cannot be worked offline yet. Nothing is lost: every open
+/// order stays on the server exactly as it was and is billed when the till is
+/// back. Quick sales can still be rung offline on the other register.
+class _RestaurantOffline extends ConsumerWidget {
+  const _RestaurantOffline();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final app = ref.watch(appControllerProvider);
+    final quick = app.modes.contains(BusinessMode.supermarket);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off, size: 46, color: AppColors.danger),
+              const SizedBox(height: 12),
+              const Text('Restaurant orders need the server',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              const Text(
+                'Tables, kitchen and bar slips and bills are kept on the server, so they '
+                'cannot be worked while the till is offline. Open orders are safe — nothing '
+                'is lost — and are billed as usual once the till is back online.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.ink2),
+              ),
+              const SizedBox(height: 18),
+              if (quick)
+                OrbixButton(
+                  label: 'Use the quick-sale register',
+                  icon: Icons.shopping_cart_outlined,
+                  large: true,
+                  onPressed: () =>
+                      ref.read(appControllerProvider.notifier).setMode(BusinessMode.supermarket),
+                )
+              else
+                const Text(
+                  'This till runs the restaurant only, so it cannot sell until it is back online.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600),
+                ),
+            ],
+          ),
         ),
       ),
     );

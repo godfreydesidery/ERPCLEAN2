@@ -26,6 +26,20 @@ class CatalogService {
     return asList(data, Product.fromJson);
   }
 
+  /// One page of the whole catalogue in a stable order (by id), for the
+  /// offline cache (ERP ADR-0068 D-2): unsorted pages can shift under a
+  /// concurrent edit and skip a product.
+  Future<List<Product>> listProductsPage(String companyId,
+      {required int page, int size = 200}) async {
+    final data = await _api.get('/products', query: {
+      'companyId': companyId,
+      'page': page,
+      'size': size,
+      'sort': 'id,asc',
+    });
+    return asList(data, Product.fromJson);
+  }
+
   /// The product categories (departments) in use, for the category buttons.
   Future<List<String>> listCategories(String companyId) async {
     final data = await _api.get('/products/categories', query: {'companyId': companyId});
@@ -125,6 +139,12 @@ class CatalogService {
   Future<List<ProductPack>> listPacks(String productUid) async =>
       asList(await _api.get('/products/uid/$productUid/bulk-packs'),
           ProductPack.fromJson);
+
+  /// Every barcode of a product (the offline cache's daily sweep, ADR-0068 D-2).
+  /// There is no company-wide barcode list, so this is one request per product.
+  Future<List<ProductBarcode>> listBarcodes(String productUid) async =>
+      asList(await _api.get('/products/uid/$productUid/barcodes'),
+          ProductBarcode.fromJson);
 
   /// VAT rates by `vatStatus`, as a **fraction** (e.g. 0.18 = 18%). Lets the
   /// preview show VAT-inclusive totals that match the server's gross. Needs
