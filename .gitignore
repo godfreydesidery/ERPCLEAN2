@@ -90,3 +90,7 @@ dist/OrbixPOS-*-windows/
 # Python bytecode from the docs tooling (docs/tools/*.py) — a build artefact.
 __pycache__/
 *.pyc
+
+# Shared server (infra/shared): .env and jwt-keys/ are never committed.
+infra/shared/.env
+infra/shared/jwt-keys/
