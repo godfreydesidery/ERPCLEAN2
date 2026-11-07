@@ -7,6 +7,7 @@ import { Company } from '../../models/company.model';
 import {
   BelowCostAction,
   DiscountApprovalAction,
+  PosSessionLimitMode,
   SalesSettingsDto,
   UpdateSalesSettingsRequest,
 } from '../../models/sales.model';
@@ -124,6 +125,41 @@ export class SalesSettingsComponent {
       : 'The most a salesperson may take off a line without help. Anything above it follows the policy above.',
   );
 
+  // ── Till shift time limit (V113) ───────────────────────────────────────────
+  // A till refuses new sales on a shift that has been open longer than this, so each cash count and
+  // Z-report covers one trading day. The mode and its hours travel together on every save.
+
+  readonly fSessionLimitMode = signal<PosSessionLimitMode>('SERVER_SETTING');
+  /** Raw text of the hours box, so an in-progress entry is never coerced. Used only with HOURS. */
+  readonly fSessionHours = signal('');
+
+  readonly sessionLimitOptions: ReadonlyArray<{ value: PosSessionLimitMode; label: string }> = [
+    { value: 'SERVER_SETTING', label: 'Use the server setting' },
+    { value: 'HOURS', label: 'Set my own limit' },
+    { value: 'NO_LIMIT', label: 'No limit' },
+  ];
+
+  /** The server's own limit, as the API reports it (0 = no limit). */
+  readonly serverSessionHours = computed(() => this.settings()?.posSessionServerDefaultHours ?? 36);
+
+  readonly sessionHoursApply = computed(() => this.fSessionLimitMode() === 'HOURS');
+
+  /** The plain-language consequence of the selected mode. */
+  readonly sessionLimitHint = computed(() => {
+    switch (this.fSessionLimitMode()) {
+      case 'SERVER_SETTING': {
+        const h = this.serverSessionHours();
+        return h > 0
+          ? `Tills stop taking sales on a shift that has been open for more than ${h} hours.`
+          : 'The server sets no limit, so a shift can stay open for days.';
+      }
+      case 'HOURS':
+        return 'Tills stop taking sales on a shift that has been open longer than the hours below.';
+      case 'NO_LIMIT':
+        return 'A shift can stay open for days. Its cash count and Z-report then cover every day it was open.';
+    }
+  });
+
   // ── Save state ─────────────────────────────────────────────────────────────
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -198,6 +234,13 @@ export class SalesSettingsComponent {
         ? ''
         : String(s.maxDiscountPercent),
     );
+    // A response without the field (older API) is a company on the server setting.
+    this.fSessionLimitMode.set(s.posSessionLimitMode ?? 'SERVER_SETTING');
+    this.fSessionHours.set(
+      s.posSessionMaxOpenHours === null || s.posSessionMaxOpenHours === undefined
+        ? ''
+        : String(s.posSessionMaxOpenHours),
+    );
   }
 
   save(): void {
@@ -218,6 +261,12 @@ export class SalesSettingsComponent {
       return;
     }
 
+    const sessionHours = this.parseSessionHours();
+    if (sessionHours === 'invalid') {
+      this.saveError.set('Enter a till shift limit between 12 and 168 hours, in whole hours.');
+      return;
+    }
+
     this.saving.set(true);
     this.saveError.set(null);
 
@@ -232,6 +281,9 @@ export class SalesSettingsComponent {
       // ceiling sent on its own (it used to answer 200 OK and save nothing — UAT finding #3).
       discountApprovalAction: this.fDiscountApprovalAction(),
       maxDiscountPercent: ceiling,
+      // Always BOTH, like the discount pair: the server leaves the limit alone without a mode.
+      posSessionLimitMode: this.fSessionLimitMode(),
+      posSessionMaxOpenHours: sessionHours,
     };
 
     this.settingsService.update(request).subscribe({
@@ -263,6 +315,18 @@ export class SalesSettingsComponent {
     const value = Number(raw);
     if (!Number.isFinite(value) || value < 0 || value > 100) return 'invalid';
     return value;
+  }
+
+  /**
+   * The hours to send: a whole number 12–168 with HOURS, `null` with any other mode (the server
+   * ignores hours there), or `'invalid'` when HOURS is chosen and the box holds anything else.
+   */
+  private parseSessionHours(): number | null | 'invalid' {
+    if (this.fSessionLimitMode() !== 'HOURS') return null;
+    const raw = this.fSessionHours().trim();
+    if (!/^\d{1,3}$/.test(raw)) return 'invalid';
+    const value = Number(raw);
+    return value >= 12 && value <= 168 ? value : 'invalid';
   }
 
   private messageFrom(err: unknown, fallback: string): string {

@@ -2,6 +2,7 @@ package com.erp.modules.sales.domain.dto;
 
 import com.erp.modules.sales.domain.enums.BelowCostAction;
 import com.erp.modules.sales.domain.enums.DiscountApprovalAction;
+import com.erp.modules.sales.domain.enums.PosSessionLimitMode;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -45,8 +46,41 @@ public record UpdateSalesSettingsRequest(
         @DecimalMax(value = "100", message = "The maximum discount must be between 0 and 100 percent.")
         @Digits(integer = 3, fraction = 2,
                 message = "The maximum discount may have at most two decimal places.")
-        BigDecimal maxDiscountPercent
+        BigDecimal maxDiscountPercent,
+        /**
+         * How this company limits the age of an open till session (V113). Omitted / {@code null}
+         * means "leave the stored limit alone" and takes {@code posSessionMaxOpenHours} with it —
+         * the same one-policy rule as the discount stance and its ceiling, so a client that
+         * predates V113 can never reset a configured limit by not knowing the field.
+         */
+        PosSessionLimitMode posSessionLimitMode,
+        /**
+         * The limit in hours, 12–168. Required with {@link PosSessionLimitMode#HOURS} and ignored
+         * with any other mode; checked in {@code SalesSettingsServiceImpl} because the rule depends
+         * on the mode.
+         */
+        Integer posSessionMaxOpenHours
 ) {
+
+    /** Smallest company till-session limit, in hours. Mirrors the V113 CHECK. */
+    public static final int SESSION_HOURS_MIN = 12;
+    /** Largest company till-session limit, in hours (one week). Mirrors the V113 CHECK. */
+    public static final int SESSION_HOURS_MAX = 168;
+
+    /** Shown to the admin as-is. */
+    public static final String SESSION_HOURS_MESSAGE =
+            "Enter a till session limit between 12 and 168 hours.";
+
+    /** Back-compat: callers that predate the per-company session limit (V113) leave it untouched. */
+    public UpdateSalesSettingsRequest(String companyUid, boolean soApprovalEnabled,
+                                      BigDecimal soApprovalThresholdAmount, String currency,
+                                      boolean allowNegativeStock, BelowCostAction belowCostAction,
+                                      DiscountApprovalAction discountApprovalAction,
+                                      BigDecimal maxDiscountPercent) {
+        this(companyUid, soApprovalEnabled, soApprovalThresholdAmount, currency,
+                allowNegativeStock, belowCostAction, discountApprovalAction, maxDiscountPercent,
+                null, null);
+    }
 
     /** Back-compat: callers that predate the below-cost policy (V93) leave it untouched. */
     public UpdateSalesSettingsRequest(String companyUid, boolean soApprovalEnabled,
