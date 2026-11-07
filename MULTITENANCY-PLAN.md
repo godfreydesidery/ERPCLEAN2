@@ -504,6 +504,12 @@ operator row needs either NULL or a sentinel organisation — and therefore the 
 > platform operator belongs to the sentinel organisation, not to NULL). Stage 1 is P3-1 + P3-2 and is
 > a **prerequisite of P5-1**, not a parallel task — see §8.
 
+> **⚠ D-2 AMENDED by the owner, 2026-11-07:** the platform operator (`is_root`) may now **switch into any tenant,
+> read and write** (Platform → Tenants → Enter). The request then runs AS that tenant (its organisation becomes the
+> principal's), and every request made inside writes a `BRANCH.SWITCH` audit row naming both organisations, on the
+> tenant's own trail. Tenant administrators are never root and stay confined. This reverses P3-1/P3-11 **for root
+> only**; the risk was stated and accepted: one root password opens every customer's books. `RootEntersTenantIT`.
+
 ### D-3 · Do the shipped role bundles stay global? — **RESOLVED 2026-08-14: yes, and the ceiling rule changes**
 
 `AuthorityCeiling` permits only root to grant an `is_system` role, and all twelve shipped bundles

@@ -19,6 +19,13 @@ export class SessionStore {
     sessionStorage.getItem('erp.activeBranchUid'),
   );
   private readonly userSig = signal<AuthUser | null>(this.readUser());
+  /**
+   * The tenant the platform operator has ENTERED (owner, 2026-11-07), or null at home. Kept beside
+   * activeBranchUid: the entered branch is not one of the operator's own assignments, so the shell
+   * cannot name it from /auth/my-branches, and the banner must survive a page refresh.
+   */
+  private readonly platformTenantSig = signal<EnteredTenant | null>(this.readPlatformTenant());
+  readonly platformTenant = this.platformTenantSig.asReadonly();
   private readonly permissionsSig = signal<string[]>(this.readPermissions());
 
   readonly accessToken = this.accessTokenSig.asReadonly();
@@ -73,6 +80,15 @@ export class SessionStore {
     this.setItem('erp.accessToken', token, this.accessTokenSig);
   }
 
+  setPlatformTenant(t: EnteredTenant | null): void {
+    this.platformTenantSig.set(t);
+    if (t) {
+      sessionStorage.setItem('erp.platformTenant', JSON.stringify(t));
+    } else {
+      sessionStorage.removeItem('erp.platformTenant');
+    }
+  }
+
   setActiveBranchUid(uid: string | null): void {
     this.setItem('erp.activeBranchUid', uid, this.activeBranchUidSig);
   }
@@ -83,6 +99,7 @@ export class SessionStore {
     this.activeBranchUidSig.set(null);
     this.userSig.set(null);
     this.permissionsSig.set([]);
+    this.platformTenantSig.set(null);
     [
       'erp.accessToken',
       'erp.refreshToken',
@@ -90,6 +107,7 @@ export class SessionStore {
       'erp.user',
       'erp.permissions',
       'erp.sessionOwner',
+      'erp.platformTenant',
     ].forEach((k) => sessionStorage.removeItem(k));
   }
 
@@ -106,6 +124,16 @@ export class SessionStore {
     }
   }
 
+  private readPlatformTenant(): EnteredTenant | null {
+    const raw = sessionStorage.getItem('erp.platformTenant');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as EnteredTenant;
+    } catch {
+      return null;
+    }
+  }
+
   private readUser(): AuthUser | null {
     const raw = sessionStorage.getItem('erp.user');
     return raw ? (JSON.parse(raw) as AuthUser) : null;
@@ -115,4 +143,13 @@ export class SessionStore {
     const raw = sessionStorage.getItem('erp.permissions');
     return raw ? (JSON.parse(raw) as string[]) : [];
   }
+}
+
+/** A tenant the platform operator has entered (owner, 2026-11-07). */
+export interface EnteredTenant {
+  organisationUid: string;
+  organisationName: string;
+  branchUid: string;
+  branchName: string;
+  branchCode: string;
 }

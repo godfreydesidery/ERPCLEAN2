@@ -16,5 +16,11 @@ public record TenantSummaryDto(
         String status,
         Instant createdAt,
         long companyCount,
-        long userCount) {
+        long userCount,
+        /**
+         * True for the organisation the caller is working in right now: its home, or the tenant it
+         * has entered. The console offers neither Enter nor Suspend on that row (the server refuses
+         * suspending it anyway).
+         */
+        boolean current) {
 }

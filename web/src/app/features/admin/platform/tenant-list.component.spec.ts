@@ -273,6 +273,39 @@ describe('TenantListComponent', () => {
     expect(comp.sharedConfirmError()).toContain('must load');
   });
 
+  it('root sees Enter on other tenants, nothing on the current row; non-root sees no Enter', () => {
+    setup([tenant({ uid: 'T0', name: 'Home Org', current: true }), tenant()]);
+    expect(fixture.nativeElement.querySelector('[aria-label="Enter Acme Traders"]')).toBeNull();
+    TestBed.inject(SessionStore).setSession('a', 'r', {
+      uid: 'U-ROOT', username: 'rootadmin', displayName: 'Root', isRoot: true,
+      activeCompanyUid: 'C', activeBranchUid: 'B', hasBranch: true,
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label="Enter Acme Traders"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Enter Home Org"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Suspend Home Org"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('You are here');
+  });
+
+  it('Enter switches to the tenant branch, remembers the tenant, then reloads', () => {
+    setup([tenant()]);
+    const s = TestBed.inject(SessionStore);
+    s.setSession('a', 'r', {
+      uid: 'U-ROOT', username: 'rootadmin', displayName: 'Root', isRoot: true,
+      activeCompanyUid: 'C', activeBranchUid: 'B', hasBranch: true,
+    });
+    const nav = vi.spyOn(comp as unknown as { navigate: (u: string) => void }, 'navigate')
+      .mockImplementation(() => undefined);
+    comp.enter(tenant());
+    http.expectOne(`${base}/uid/T1/entry`).flush({
+      organisationUid: 'T1', organisationName: 'Acme Traders', companyName: 'Acme',
+      branchUid: 'BR-ACME', branchName: 'Acme HQ', branchCode: 'AHQ',
+    });
+    expect(s.activeBranchUid()).toBe('BR-ACME');
+    expect(s.platformTenant()?.organisationName).toBe('Acme Traders');
+    expect(nav).toHaveBeenCalledWith('/admin/home');
+  });
+
   it('has no axe violations (list, form and confirm dialog open)', async () => {
     setup();
     comp.openForm();

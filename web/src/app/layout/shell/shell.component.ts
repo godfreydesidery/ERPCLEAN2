@@ -83,7 +83,19 @@ export class ShellComponent {
    * The branch from the loaded list whose branchUid matches the session's activeBranchUid.
    * Falls back to the default branch, then to the first in the list. Null until branches load.
    */
+  /** The tenant the platform operator has entered, or null at home (owner, 2026-11-07). */
+  readonly enteredTenant = computed(() => this.session.platformTenant());
+
   readonly activeBranch = computed<UserBranch | null>(() => {
+    const entered = this.session.platformTenant();
+    if (entered && entered.branchUid === this.session.activeBranchUid()) {
+      // Not one of the operator's own assignments, so it is not in the list below.
+      return {
+        id: '', uid: '', userUid: '', companyUid: '', assignedAt: '', isDefault: false,
+        branchUid: entered.branchUid, branchName: entered.branchName,
+        branchCode: entered.branchCode,
+      };
+    }
     const list = this.branches();
     if (list.length === 0) return null;
     const activeUid = this.session.activeBranchUid();
@@ -599,7 +611,26 @@ export class ShellComponent {
     }
   }
 
+  /** Full reload, so every cached list and permission set is rebuilt. A seam for specs. */
+  protected navigate(url: string): void {
+    window.location.assign(url);
+  }
+
+  /** Leaves the entered tenant: back to the operator's own default branch, app reloaded. */
+  returnHome(): void {
+    this.session.setPlatformTenant(null);
+    this.session.setActiveBranchUid(null);
+    this.navigate('/admin/platform/tenants');
+  }
+
   onBranchPick(branchUid: string): void {
+    if (this.session.platformTenant()) {
+      // Picking one of the operator's OWN branches from inside a tenant leaves that tenant.
+      this.session.setPlatformTenant(null);
+      this.session.setActiveBranchUid(branchUid);
+      this.navigate('/admin/home');
+      return;
+    }
     const active = this.activeBranch();
     if (active?.branchUid === branchUid) {
       this.branchMenuOpen.set(false);

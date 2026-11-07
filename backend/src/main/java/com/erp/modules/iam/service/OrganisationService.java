@@ -35,4 +35,10 @@ public interface OrganisationService {
      * Platform operator only; anyone else is told the resource does not exist.
      */
     List<com.erp.modules.iam.domain.dto.TenantSummaryDto> listTenants();
+
+    /**
+     * The branch the platform operator enters a tenant through: the default branch of the tenant's
+     * first company (owner, 2026-11-07). Platform operator only; anyone else gets NOT FOUND.
+     */
+    com.erp.modules.iam.domain.dto.TenantEntryDto entryPoint(String organisationUid);
 }

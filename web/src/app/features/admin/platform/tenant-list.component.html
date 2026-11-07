@@ -321,6 +321,9 @@
           No tenants yet. Create the first one above.
         </div>
       } @else {
+        @if (enterError(); as msg) {
+          <p class="text-danger mb-2" role="alert">{{ msg }}</p>
+        }
         <div class="erp-table-wrap">
           <table class="erp-table">
             <caption class="sr-only">Tenant organisations</caption>
@@ -332,7 +335,7 @@
                 <th scope="col">Created</th>
                 <th scope="col">Companies</th>
                 <th scope="col">Users</th>
-                @if (canSuspend()) {
+                @if (canSuspend() || canEnter()) {
                   <th scope="col"><span class="sr-only">Actions</span></th>
                 }
               </tr>
@@ -340,7 +343,10 @@
             <tbody>
               @for (t of tenants(); track t.uid) {
                 <tr>
-                  <td>{{ t.name }}</td>
+                  <td>
+                    {{ t.name }}
+                    @if (t.current) { <span class="status-tag status-tag--neutral ms-1">You are here</span> }
+                  </td>
                   <td class="mono">{{ t.alias ?? 'None' }}</td>
                   <td>
                     <span class="status-tag"
@@ -352,9 +358,18 @@
                   <td>{{ t.createdAt | date: 'mediumDate' }}</td>
                   <td>{{ t.companyCount }}</td>
                   <td>{{ t.userCount }}</td>
-                  @if (canSuspend()) {
-                    <td>
-                      @if (t.status === 'ACTIVE') {
+                  @if (canSuspend() || canEnter()) {
+                    <td class="text-nowrap">
+                      @if (canEnter() && !t.current) {
+                        <button type="button" class="btn btn-sm btn-outline-primary me-1"
+                                [disabled]="entering() !== null"
+                                (click)="enter(t)"
+                                [attr.aria-label]="'Enter ' + t.name">
+                          {{ entering() === t.uid ? 'Opening…' : 'Enter' }}
+                        </button>
+                      }
+                      @if (!canSuspend() || t.current) {
+                      } @else if (t.status === 'ACTIVE') {
                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                 [disabled]="confirmTarget() !== null"
                                 (click)="askConfirm(t, 'suspend')"

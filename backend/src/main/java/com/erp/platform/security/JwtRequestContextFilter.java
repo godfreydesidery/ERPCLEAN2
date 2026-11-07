@@ -160,7 +160,16 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                                 .detail(Map.of(
                                         "fromCompanyId", String.valueOf(mintedCompanyId),
                                         "toCompanyId",   String.valueOf(principal.companyId()),
-                                        "isRoot",        String.valueOf(principal.root()))));
+                                        "isRoot",        String.valueOf(principal.root()),
+                                        // Root inside ANOTHER tenant (owner, 2026-11-07): name
+                                        // both organisations so the trail stands on its own.
+                                        "fromOrganisationId",
+                                        String.valueOf(scope.get().getOrganisationId()),
+                                        "toOrganisationId",
+                                        String.valueOf(principal.organisationId()),
+                                        "crossTenant", String.valueOf(!java.util.Objects.equals(
+                                                scope.get().getOrganisationId(),
+                                                principal.organisationId())))));
                     } catch (RuntimeException ex) {
                         // Never take the request down because the audit write failed.
                         log.warn("Branch-switch audit failed for user={} branch={}: {}",
@@ -202,23 +211,33 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
                 .filter(Branch::isUsableForSession)
                 .orElseThrow(() -> new AccessDeniedException("Branch not available."));
 
-        // P3-1 (ADR-0062): the tenant check comes FIRST and applies to root. Everything below is
-        // about which branch inside your own organisation you may sit in; this is about whether the
-        // branch is yours to sit in at all. Root is included deliberately - `is_root` is
-        // deployment-global, so without this a root user of any tenant could header-switch into any
-        // other tenant's branch. P3-11 would then refuse each subsequent action, but the session
-        // would already be built on a foreign company: a broken session that looks like a bug rather
-        // than a boundary. Fail here, at the door.
+        // P3-1 (ADR-0062), AMENDED by the owner 2026-11-07: the tenant check still comes FIRST,
+        // but root is no longer included. The owner reversed D-2 for root: the platform operator
+        // (`is_root`, which no API can grant and which tenant administrators never hold) may switch
+        // INTO any tenant, read and write. Every request made from inside another tenant writes a
+        // BRANCH.SWITCH audit row naming both organisations (doFilterInternal).
         //
-        // Same asymmetric rule as canActIn - a positive mismatch only, so an account whose
-        // organisation is not yet stamped is not locked out of branch switching by missing data.
-        if (tenancy.isForeignTenant(
+        // A NON-root caller is refused exactly as before, with the same message as an unavailable
+        // branch so it does not confirm that the uid exists in some other tenant. Same asymmetric
+        // rule as canActIn: a positive mismatch only.
+        Long branchOrganisationId = companyTenants.organisationOf(branch.getCompany().getId());
+        boolean foreign = tenancy.isForeignTenant(
                 new RequestContext.Principal(userId, username, root, branch.getCompany().getId(),
                         branch.getId(), ip, organisationId),
-                companyTenants.organisationOf(branch.getCompany().getId()))) {
-            // Deliberately the SAME message as an unavailable branch: distinguishing them would
-            // confirm to a caller that a branch uid exists in some other tenant.
+                branchOrganisationId);
+        if (foreign && !root) {
             throw new AccessDeniedException("Branch not available.");
+        }
+        if (foreign) {
+            // ROOT ENTERS ANOTHER TENANT. The request runs AS that tenant: the principal's
+            // organisation becomes the branch's, so every org-scoped read, list and check (users,
+            // roles, companies, canActIn) sees one consistent tenant, and audit rows written during
+            // the request are stamped with it - the tenant's own audit log shows what the operator
+            // did. Without this the company would be the tenant's while the organisation stayed the
+            // operator's, and canActIn would refuse every action as cross-tenant.
+            return new RequestContext.Principal(
+                    userId, username, true, branch.getCompany().getId(), branch.getId(), ip,
+                    branchOrganisationId);
         }
 
         // P3-14: the assignment must still be LIVE. The previous finder filtered on neither
@@ -233,8 +252,8 @@ public class JwtRequestContextFilter extends OncePerRequestFilter {
             throw new AccessDeniedException("You are not assigned to that branch.");
         }
 
-        // The organisation follows the USER, not the branch they switched into. A branch override
-        // changes the active company/branch; it must never change which tenant the caller is.
+        // Inside the caller's own tenant the organisation follows the USER. Only root's switch into
+        // ANOTHER tenant (above) changes it.
         return new RequestContext.Principal(
                 userId, username, root, branch.getCompany().getId(), branch.getId(), ip,
                 organisationId);

@@ -24,19 +24,22 @@ public class OrganisationServiceImpl implements OrganisationService {
     private final com.erp.platform.fiscal.FiscalisationProperties fiscal;
     private final com.erp.modules.iam.repository.CompanyRepository companies;
     private final com.erp.modules.iam.repository.AppUserRepository users;
+    private final com.erp.modules.iam.repository.BranchRepository branches;
 
     public OrganisationServiceImpl(OrganisationRepository organisations,
                                    com.erp.platform.bootstrap.TenantProvisioningService provisioning,
                                    com.erp.platform.audit.AuditService audit,
                                    com.erp.platform.fiscal.FiscalisationProperties fiscal,
                                    com.erp.modules.iam.repository.CompanyRepository companies,
-                                   com.erp.modules.iam.repository.AppUserRepository users) {
+                                   com.erp.modules.iam.repository.AppUserRepository users,
+                                   com.erp.modules.iam.repository.BranchRepository branches) {
         this.organisations = organisations;
         this.provisioning = provisioning;
         this.audit = audit;
         this.fiscal = fiscal;
         this.companies = companies;
         this.users = users;
+        this.branches = branches;
     }
 
     @Override
@@ -232,16 +235,35 @@ public class OrganisationServiceImpl implements OrganisationService {
         // Same rule as setStatus: the endpoint is gated on a platform-module code, and this states
         // it again in the service so the list cannot be reached by a code being granted by mistake.
         // NOT FOUND rather than FORBIDDEN, for the same existence-oracle reason.
-        if (!isPlatformOperator(RequestContext.get())) {
+        RequestContext.Principal caller = RequestContext.get();
+        if (!isPlatformOperator(caller)) {
             throw new NotFoundException("Organisation not found.");
         }
+        Long callerOrg = caller.organisationId();
         return organisations.findAll(Sort.by("name")).stream()
                 .map(o -> new com.erp.modules.iam.domain.dto.TenantSummaryDto(
                         o.getUid(), o.getName(), o.getAlias(), o.getStatus().name(),
                         o.getCreatedAt(),
                         companies.countByOrganisationId(o.getId()),
-                        users.countByOrganisationId(o.getId())))
+                        users.countByOrganisationId(o.getId()),
+                        o.getId().equals(callerOrg)))
                 .toList();
+    }
+
+    @Override
+    public com.erp.modules.iam.domain.dto.TenantEntryDto entryPoint(String organisationUid) {
+        if (!isPlatformOperator(RequestContext.get())) {
+            throw new NotFoundException("Organisation not found.");
+        }
+        var org = organisations.findByUid(organisationUid)
+                .orElseThrow(() -> new NotFoundException("Organisation not found."));
+        var company = companies.findByOrganisationIdOrderByName(org.getId()).stream().findFirst()
+                .orElseThrow(() -> new NotFoundException("This organisation has no company yet."));
+        var branch = branches.findByCompanyIdAndIsDefaultTrue(company.getId())
+                .or(() -> branches.findByCompanyIdOrderByName(company.getId()).stream().findFirst())
+                .orElseThrow(() -> new NotFoundException("This organisation has no branch yet."));
+        return new com.erp.modules.iam.domain.dto.TenantEntryDto(org.getUid(), org.getName(),
+                company.getName(), branch.getUid(), branch.getName(), branch.getCode());
     }
 
     @Override

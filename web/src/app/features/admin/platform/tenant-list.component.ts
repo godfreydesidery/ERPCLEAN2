@@ -25,6 +25,10 @@ export class TenantListComponent {
   readonly tenants = signal<TenantSummary[]>([]);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly canSuspend = computed(() => this.session.hasPermission('ORG.SUSPEND'));
+  /** Root only: switching into another tenant is the platform operator's, read and write. */
+  readonly canEnter = computed(() => this.session.user()?.isRoot === true);
+  readonly entering = signal<string | null>(null);
+  readonly enterError = signal<string | null>(null);
 
   // Suspend / reactivate confirm
   readonly confirmTarget = signal<TenantSummary | null>(null);
@@ -121,6 +125,41 @@ export class TenantListComponent {
         this.state.set('ready');
       },
       error: () => this.state.set('error'),
+    });
+  }
+
+  /** Full reload, so every cached list and permission set is rebuilt. A seam for specs. */
+  protected navigate(url: string): void {
+    window.location.assign(url);
+  }
+
+  // ── Enter a tenant (owner, 2026-11-07) ────────────────────────────────────
+
+  /**
+   * Switches into the tenant's default branch and reloads the app, so every screen, cached list
+   * and permission set is rebuilt for that tenant. Everything done inside is recorded on the
+   * tenant's own audit trail by the server.
+   */
+  enter(t: TenantSummary): void {
+    if (this.entering()) return;
+    this.enterError.set(null);
+    this.entering.set(t.uid);
+    this.service.entry(t.uid).subscribe({
+      next: (e) => {
+        this.session.setPlatformTenant({
+          organisationUid: e.organisationUid,
+          organisationName: e.organisationName,
+          branchUid: e.branchUid,
+          branchName: e.branchName,
+          branchCode: e.branchCode,
+        });
+        this.session.setActiveBranchUid(e.branchUid);
+        this.navigate('/admin/home');
+      },
+      error: (err) => {
+        this.entering.set(null);
+        this.enterError.set(this.messageFrom(err, 'Could not open this organisation.'));
+      },
     });
   }
 

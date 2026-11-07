@@ -128,6 +128,16 @@ public class OrganisationController {
         return departure.purgeTenant(uid, request);
     }
 
+    /**
+     * Where the platform operator enters a tenant (owner, 2026-11-07): its default branch. Gated
+     * like the tenant list; the switch itself is the ordinary X-Branch-Uid header.
+     */
+    @GetMapping("/uid/{uid}/entry")
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public com.erp.modules.iam.domain.dto.TenantEntryDto entry(@PathVariable String uid) {
+        return organisations.entryPoint(uid);
+    }
+
     @GetMapping("/current")
     @PreAuthorize("isAuthenticated()")
     public OrganisationDto current() {

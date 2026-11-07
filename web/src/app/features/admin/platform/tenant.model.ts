@@ -7,6 +7,8 @@ export interface TenantSummary {
   createdAt: string;
   companyCount: number;
   userCount: number;
+  /** The organisation the caller is working in right now (home, or the tenant entered). */
+  current?: boolean;
 }
 
 /** Mirrors the backend CreateTenantRequest. Optional fields are omitted when blank. */
@@ -31,4 +33,14 @@ export interface CreateTenantRequest {
   priceListIncludesVat?: boolean;
   walkInCustomerName?: string;
   posTillName?: string;
+}
+
+/** Where the platform operator lands when it enters a tenant (GET /organisations/uid/{uid}/entry). */
+export interface TenantEntry {
+  organisationUid: string;
+  organisationName: string;
+  companyName: string;
+  branchUid: string;
+  branchName: string;
+  branchCode: string;
 }

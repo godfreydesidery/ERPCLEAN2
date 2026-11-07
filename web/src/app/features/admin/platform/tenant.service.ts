@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { Organisation } from '../models/organisation.model';
-import { CreateTenantRequest, TenantSummary } from './tenant.model';
+import { CreateTenantRequest, TenantEntry, TenantSummary } from './tenant.model';
 
 /** Platform-operator API client for tenant organisations. Typed to the unwrapped DTOs. */
 @Injectable({ providedIn: 'root' })
@@ -21,6 +21,11 @@ export class TenantService {
 
   suspend(uid: string): Observable<Organisation> {
     return this.http.post<Organisation>(`${this.base}/uid/${uid}/suspend`, {});
+  }
+
+  /** The branch the platform operator enters this tenant through (its default branch). */
+  entry(uid: string): Observable<TenantEntry> {
+    return this.http.get<TenantEntry>(`${this.base}/uid/${uid}/entry`);
   }
 
   resume(uid: string): Observable<Organisation> {

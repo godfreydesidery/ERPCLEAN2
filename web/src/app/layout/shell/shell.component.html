@@ -185,6 +185,17 @@
   <!-- Main content -->
   <main class="shell-main">
     <div class="shell-main-inner">
+      @if (enteredTenant(); as et) {
+        <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mb-3" role="status"
+             data-testid="entered-tenant-banner">
+          <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+          <span class="flex-grow-1">
+            <strong>Platform operator:</strong> you are working inside <strong>{{ et.organisationName }}</strong>
+            ({{ et.branchName }}). Everything you do here is recorded in their audit log.
+          </span>
+          <button type="button" class="btn btn-sm btn-dark" (click)="returnHome()">Return to my organisation</button>
+        </div>
+      }
       <router-outlet />
     </div>
   </main>
